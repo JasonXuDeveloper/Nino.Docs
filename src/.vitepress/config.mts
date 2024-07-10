@@ -112,4 +112,7 @@ export default defineConfig({
     vite: {
         plugins: [MarkdownPreview()],
     },
+    sitemap: {
+        hostname: 'https://nino.xgamedev.net'
+    }
 })
