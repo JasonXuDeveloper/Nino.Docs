@@ -19,7 +19,7 @@ features:
     details: By using Source Generator Nino automatically generated serialization and deserialization functions while the user is writing the program<small class="bottom-small">The generated code is transparent and support non-JIT platforms like NativeAOT natively</small>
     link: ./#
   - title: Powerful yet versatile
-    details: Support serializing and deserializing various data structures, incl. but not limit to primitives, structs, classes, collections, dictionaries, etc.<small class="bottom-small">Besides Nino also supports serialization and deserialization objects with polymorphism</small>
+    details: Support serializing and deserializing various data structures, incl. but not limited to primitives, structs, classes, collections, dictionaries, etc.<small class="bottom-small">Besides Nino also supports serialization and deserialization objects with polymorphism</small>
     link: ./#
 ---
 
