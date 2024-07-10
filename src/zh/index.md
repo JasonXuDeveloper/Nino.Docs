@@ -4,15 +4,15 @@ layout: home
 
 hero:
   name: "Nino"
-  text: "Definite useful and high performance serialization library for any C# projects, including but not limited to .NET Core apps or Unity/Godot games."
-  tagline: My great project tagline
+  text: ""
+  tagline: 实用的高性能C#序列化库，包括但不限于对.NET Core 程序或Unity/Godot游戏带来令人难以置信的效益。
   actions:
     - theme: brand
       text: Markdown Examples
-      link: /markdown-examples
+      link: /zh/markdown-examples
     - theme: alt
       text: API Examples
-      link: /api-examples
+      link: /zh/api-examples
 
 features:
   - title: Feature A
