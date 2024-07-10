@@ -14,10 +14,13 @@ hero:
 features:
   - title: 比快更快
     details: 序列化与反序列化性能完胜JSON、Protobuf、MessagePack等常规方案<small class="bottom-small">大部分压测数据优于MemoryPack等同类方案</small>
+    link: ./#
   - title: 简单好用
     details: 通过Source Generator技术在用户编写代码时自动生成所需的数据序列化与反序列化函数<small class="bottom-small">生成代码透明可见且轻松支持NativeAOT等非JIT环境</small>
+    link: ./#
   - title: 功能强大
     details: 支持多种数据类型的序列化与反序列化，包括但不限于基础类型、结构体、类、集合、字典等<small class="bottom-small">除此之外还支持序列化与反序列化多态类型</small>
+    link: ./#
 ---
 
 <style>

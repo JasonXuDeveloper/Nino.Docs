@@ -1,9 +1,9 @@
 import {defineConfig} from 'vitepress'
-import { head } from './configs'
+import {head} from './configs'
 import MarkdownPreview from 'vite-plugin-markdown-preview'
 
 function getNav(locale: string) {
-    let map ={
+    let map = {
         zh: {
             home: '首页',
             examples: '示例'
@@ -31,21 +31,6 @@ function getSidebar(locale: string) {
     ]
 }
 
-function getComment(locale: string) {
-    return {
-        repo: 'JasonXuDeveloper/Nino',
-        repoId: 'R_kgDOHOxiXQ',
-        mapping: 'number',
-        term: '122',
-        reactionsEnabled: true,
-        emitMetadata: false,
-        inputPosition: 'top',
-        lang: locale,
-        loading: 'lazy',
-        crossorigin: 'anonymous',
-    }
-}
-
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
     title: "Nino",
@@ -71,7 +56,6 @@ export default defineConfig({
                     level: 'deep',
                     label: 'Table of Contents',
                 },
-                comment: getComment('en')
             }
         },
         zh: {
@@ -84,8 +68,7 @@ export default defineConfig({
                 outline: {
                     level: 'deep',
                     label: '目录',
-                },
-                comment: getComment('zh-CN')
+                }
             }
         }
     },
@@ -93,12 +76,61 @@ export default defineConfig({
         editLink: {
             pattern: 'https://github.com/JasonXuDeveloper/Nino.Docs/edit/main/src/:path'
         },
+        comment: {
+            repo: 'JasonXuDeveloper/Nino',
+            repoId: 'R_kgDOHOxiXQ',
+            category: 'General',
+            categoryId: 'DIC_kwDOHOxiXc4CgstZ',
+        },
         search: {
             provider: 'algolia',
             options: {
                 appId: 'UUCETICZ00',
                 apiKey: 'ba3dc36e88d8d3922e3abc1c58407edf',
-                indexName: 'nino'
+                indexName: 'nino',
+                locales: {
+                    zh: {
+                        placeholder: '搜索文档',
+                        translations: {
+                            button: {
+                                buttonText: '搜索文档',
+                                buttonAriaLabel: '搜索文档'
+                            },
+                            modal: {
+                                searchBox: {
+                                    resetButtonTitle: '清除查询条件',
+                                    resetButtonAriaLabel: '清除查询条件',
+                                    cancelButtonText: '取消',
+                                    cancelButtonAriaLabel: '取消'
+                                },
+                                startScreen: {
+                                    recentSearchesTitle: '搜索历史',
+                                    noRecentSearchesText: '没有搜索历史',
+                                    saveRecentSearchButtonTitle: '保存至搜索历史',
+                                    removeRecentSearchButtonTitle: '从搜索历史中移除',
+                                    favoriteSearchesTitle: '收藏',
+                                    removeFavoriteSearchButtonTitle: '从收藏中移除'
+                                },
+                                errorScreen: {
+                                    titleText: '无法获取结果',
+                                    helpText: '你可能需要检查你的网络连接'
+                                },
+                                footer: {
+                                    selectText: '选择',
+                                    navigateText: '切换',
+                                    closeText: '关闭',
+                                    searchByText: '搜索提供者'
+                                },
+                                noResultsScreen: {
+                                    noResultsText: '无法找到相关结果',
+                                    suggestedQueryText: '你可以尝试查询',
+                                    reportMissingResultsText: '你认为该查询应该有结果？',
+                                    reportMissingResultsLinkText: '点击反馈'
+                                }
+                            }
+                        }
+                    }
+                }
             }
         },
         socialLinks: [

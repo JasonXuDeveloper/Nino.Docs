@@ -1,25 +1,26 @@
 <script setup lang="ts">
-import { useData } from 'vitepress'
+import {useData} from 'vitepress'
 import DefaultTheme from 'vitepress/theme'
-import { nextTick, provide } from 'vue'
+import {nextTick, provide} from 'vue'
 import Giscus from '@giscus/vue'
 
-import { usePageId } from '../composables'
+import {usePageId} from '../composables'
 
-import MNavVisitor from './MNavVisitor.vue'
 import MDocFooter from './MDocFooter.vue'
 
-const { Layout } = DefaultTheme
-const { isDark, theme, frontmatter } = useData()
+const {Layout} = DefaultTheme
+const {isDark, theme, frontmatter, lang} = useData()
 const pageId = usePageId()
 
-const { comment } = theme.value
+const {comment} = theme.value
+//check if lang is en
+const l = lang.value !== 'en' ? 'zh-CN' : 'en'
 
 const enableTransitions = () =>
-  'startViewTransition' in document &&
-  window.matchMedia('(prefers-reduced-motion: no-preference)').matches
+    'startViewTransition' in document &&
+    window.matchMedia('(prefers-reduced-motion: no-preference)').matches
 
-provide('toggle-appearance', async ({ clientX: x, clientY: y }: MouseEvent) => {
+provide('toggle-appearance', async ({clientX: x, clientY: y}: MouseEvent) => {
   if (!enableTransitions()) {
     isDark.value = !isDark.value
     return
@@ -28,8 +29,8 @@ provide('toggle-appearance', async ({ clientX: x, clientY: y }: MouseEvent) => {
   const clipPath = [
     `circle(0px at ${x}px ${y}px)`,
     `circle(${Math.hypot(
-      Math.max(x, innerWidth - x),
-      Math.max(y, innerHeight - y),
+        Math.max(x, innerWidth - x),
+        Math.max(y, innerHeight - y),
     )}px at ${x}px ${y}px)`,
   ]
 
@@ -40,12 +41,12 @@ provide('toggle-appearance', async ({ clientX: x, clientY: y }: MouseEvent) => {
   }).ready
 
   document.documentElement.animate(
-    { clipPath: isDark.value ? clipPath.reverse() : clipPath },
-    {
-      duration: 300,
-      easing: 'ease-in',
-      pseudoElement: `::view-transition-${isDark.value ? 'old' : 'new'}(root)`,
-    },
+      {clipPath: isDark.value ? clipPath.reverse() : clipPath},
+      {
+        duration: 300,
+        easing: 'ease-in',
+        pseudoElement: `::view-transition-${isDark.value ? 'old' : 'new'}(root)`,
+      },
   )
 })
 </script>
@@ -57,30 +58,30 @@ provide('toggle-appearance', async ({ clientX: x, clientY: y }: MouseEvent) => {
       https://vitepress.dev/zh/guide/extending-default-theme#layout-slots
       https://github.com/vuejs/vitepress/blob/main/src/client/theme-default/Layout.vue
     -->
-    <template #nav-bar-title-after>
-      <MNavVisitor />
+    <template #nav-bar-content-after>
+      <a href="https://www.nuget.org/packages/Nino" target="_blank" style="margin-left: 1rem"><img src='https://img.shields.io/nuget/v/Nino?label=Nino' alt="nuget"></a>
     </template>
 
     <template v-if="comment && frontmatter.comment !== false" #doc-footer-before>
       <div class="doc-comments">
         <Giscus
-          id="comments"
-          mapping="specific"
-          :term="pageId"
-          strict="1"
-          reactionsEnabled="1"
-          emitMetadata="0"
-          inputPosition="top"
-          :theme="isDark ? 'dark' : 'light'"
-          lang="zh-CN"
-          loading="lazy"
-          v-bind="{ ...comment }"
+            id="comments"
+            mapping="specific"
+            :term="pageId"
+            strict="1"
+            reactionsEnabled="1"
+            emitMetadata="0"
+            inputPosition="top"
+            :theme="isDark ? 'dark' : 'light'"
+            :lang="l"
+            loading="lazy"
+            v-bind="{ ...comment }"
         />
       </div>
     </template>
 
     <template #doc-after>
-      <MDocFooter />
+      <MDocFooter/>
     </template>
   </Layout>
 </template>
