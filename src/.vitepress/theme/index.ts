@@ -6,6 +6,7 @@ import { createMediumZoomProvider } from './composables/useMediumZoom'
 
 import MLayout from './components/MLayout.vue'
 import MNavLinks from './components/MNavLinks.vue'
+import BarChart from './components/BarChart.vue'
 
 import './styles/index.scss'
 
@@ -30,6 +31,7 @@ export default {
 
     app.provide('DEV', process.env.NODE_ENV === 'development')
 
+    app.component('BarChart', BarChart)
     app.component('MNavLinks', MNavLinks)
 
     if (typeof window !== 'undefined') {

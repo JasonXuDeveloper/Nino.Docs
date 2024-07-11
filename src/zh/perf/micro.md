@@ -3,6 +3,7 @@ title: 微基准测试
 lang: zh
 outline: deep
 ---
+
 # 微基准测试
 
 本页包含了`Nino`与`MessagePack`以及`MemoryPack`的性能对比数据
@@ -100,6 +101,113 @@ Runtime=.NET 8.0  IterationCount=10  WarmupCount=3
 ```
 
 ## 测试结果
+
+测试结果为序列化和反序列化上述数据的耗时，单位为纳秒，结果越低越好
+
+### 柱状图
+
+<script setup>
+const options = {
+  responsive: true,
+};
+const simpleClassData = {
+  labels: [
+    'SimpleClass 序列化', 'SimpleClass 反序列化'
+  ],
+  datasets: [
+    {
+      label: 'MessagePack',
+      backgroundColor: '#f87979',
+      data: [1296.4875, 1148.2660]
+    },
+    {
+      label: 'MemoryPack',
+      backgroundColor: '#7f79f8',
+      data: [425.2460, 449.8288]
+    },
+    {
+      label: 'Nino',
+      backgroundColor: '#79f8b4',
+      data: [207.5860, 298.9580]
+    }
+  ]
+};
+const simpleStructData = {
+  labels: [
+    'SimpleStruct 序列化', 'SimpleStruct 反序列化'
+  ],
+  datasets: [
+    {
+      label: 'MessagePack',
+      backgroundColor: '#f87979',
+      data: [93.2237, 47.3220]
+    },
+    {
+      label: 'MemoryPack',
+      backgroundColor: '#7f79f8',
+      data: [4.2233, 1.5991]
+    },
+    {
+      label: 'Nino',
+      backgroundColor: '#79f8b4',
+      data: [4.1687, 0.5910]
+    }
+  ]
+};
+const simpleClassesData = {
+  labels: [
+    'SimpleClasses 序列化', 'SimpleClasses 反序列化'
+  ],
+  datasets: [
+    {
+      label: 'MessagePack',
+      backgroundColor: '#f87979',
+      data: [37935.0473, 34063.6150]
+    },
+    {
+      label: 'MemoryPack',
+      backgroundColor: '#7f79f8',
+      data: [12568.2318, 12436.6578]
+    },
+    {
+      label: 'Nino',
+      backgroundColor: '#79f8b4',
+      data: [5404.4797, 9177.5588]
+    }
+  ]
+};
+const simpleStructsData = {
+  labels: [
+    'SimpleStructs 序列化', 'SimpleStructs 反序列化'
+  ],
+  datasets: [
+    {
+      label: 'MessagePack',
+      backgroundColor: '#f87979',
+      data: [2264.9154, 924.2507]
+    },
+    {
+      label: 'MemoryPack',
+      backgroundColor: '#7f79f8',
+      data: [36.5122, 53.9092]
+    },
+    {
+      label: 'Nino',
+      backgroundColor: '#79f8b4',
+      data: [29.5231, 31.7620]
+    }
+  ]
+};
+</script>
+
+<BarChart :chartData="simpleClassData" :chartOptions="options"/>
+<BarChart :chartData="simpleStructData" :chartOptions="options"/>
+<BarChart :chartData="simpleClassesData" :chartOptions="options"/>
+<BarChart :chartData="simpleStructsData" :chartOptions="options"/>
+
+
+
+### 表格数据
 
 | Method                              |           Mean |            Min |            Max | Ratio |     Size |
 |-------------------------------------|---------------:|---------------:|---------------:|------:|---------:|

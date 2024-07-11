@@ -1,6 +1,7 @@
-import {defineConfig} from 'vitepress'
 import {head} from './configs'
 import MarkdownPreview from 'vite-plugin-markdown-preview'
+import {withMermaid} from "vitepress-plugin-mermaid";
+import {defineConfig} from "vitepress";
 
 function getNav(locale: string) {
     let map = {
@@ -60,7 +61,7 @@ function getSidebar(locale: string) {
 }
 
 // https://vitepress.dev/reference/site-config
-export default defineConfig({
+export default withMermaid(defineConfig({
     title: "Nino",
     description: "Definite useful and high performance serialization library for any C# projects, including but not limited to .NET Core apps or Unity/Godot games.",
     lastUpdated: true,
@@ -195,4 +196,4 @@ export default defineConfig({
     sitemap: {
         hostname: 'https://nino.xgamedev.net'
     }
-})
+}))
