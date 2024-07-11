@@ -182,14 +182,17 @@ Deserializer.Deserialize(bytes, out List<BaseClass> result);
   [NinoType]
   public class SampleClass
   {
-    public int Id; //可以换成一切内存大小为4字节的unmanaged类型（如标准enum）
-    public List<float> Data; //float和int内存大小一致，可以换成List<int>，但不能是List<double>
+    //float和int内存大小一致，可以换成List<int>，但不能是List<double>
+    public List<float> Data; // [!code --]
+    public List<int> Data; // [!code ++]
   }
   
   [NinoType]
   public class SampleClass2
   {
-    public SampleClass Data; // 这里的Data字段类型不能修改为其他类型
+    // 这里的Data字段类型不能修改为其他类型
+    public SampleClass Data; // [!code --]
+    public SampleClass2 Data; // [!code warning]
   }
   ```
   :::
