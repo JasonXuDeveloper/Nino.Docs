@@ -58,9 +58,6 @@ provide('toggle-appearance', async ({clientX: x, clientY: y}: MouseEvent) => {
       https://vitepress.dev/zh/guide/extending-default-theme#layout-slots
       https://github.com/vuejs/vitepress/blob/main/src/client/theme-default/Layout.vue
     -->
-    <template #nav-bar-content-after>
-      <a href="https://www.nuget.org/packages/Nino" target="_blank" style="margin-left: 1rem"><img src='https://img.shields.io/nuget/v/Nino?label=Nino' alt="nuget"></a>
-    </template>
 
     <template v-if="comment && frontmatter.comment !== false" #doc-footer-before>
       <div class="doc-comments">
