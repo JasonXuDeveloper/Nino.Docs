@@ -6,26 +6,48 @@ function getNav(locale: string) {
     let map = {
         zh: {
             home: '首页',
-            examples: '示例'
+            start: '使用文档',
+            perf: '性能测试',
         },
         en: {
             home: 'Home',
-            examples: 'Examples'
+            start: 'Documentation',
+            perf: 'Performance',
         }
     }
     return [
         {text: map[locale]['home'], link: `/${locale}/`},
-        {text: map[locale]['examples'], link: `/${locale}/markdown-examples`}
+        {text: map[locale]['start'], link: `/${locale}/start`},
+        {text: map[locale]['perf'], link: `/${locale}/perf/`},
     ]
 }
 
 function getSidebar(locale: string) {
+    let map = {
+        zh: {
+            start: '使用文档',
+            perf: '性能测试',
+            perf_micro: '微基准测试',
+        },
+        en: {
+            start: 'Documentation',
+            perf: 'Performance',
+            perf_micro: 'Microbenchmark',
+        }
+    }
     return [
         {
-            text: 'Examples',
+            text: map[locale]['start'],
+            link: `/${locale}/start`,
+        },
+        {
+            text: map[locale]['perf'],
+            link: `/${locale}/perf/`,
             items: [
-                {text: 'Markdown Examples', link: `/${locale}/markdown-examples`},
-                {text: 'Runtime API Examples', link: `/${locale}/api-examples`}
+                {
+                    text: map[locale]['perf_micro'],
+                    link: `/${locale}/perf/micro`
+                }
             ]
         }
     ]
@@ -68,7 +90,26 @@ export default defineConfig({
                 outline: {
                     level: 'deep',
                     label: '目录',
-                }
+                },
+                lastUpdated: {
+                    text: '最后更新于',
+                    formatOptions: {
+                        dateStyle: 'short',
+                        timeStyle: 'medium',
+                    },
+                },
+                docFooter: {
+                    prev: '上一篇',
+                    next: '下一篇',
+                },
+                editLink: {
+                    text: '在 GitHub 上编辑此页',
+                },
+                returnToTopLabel: '回到顶部',
+                sidebarMenuLabel: '菜单',
+                darkModeSwitchLabel: '主题',
+                lightModeSwitchTitle: '切换到浅色模式',
+                darkModeSwitchTitle: '切换到深色模式',
             }
         }
     },

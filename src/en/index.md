@@ -9,17 +9,17 @@ hero:
     - text: Quick Start
       link: /en/start
     - text: Performance Analysis
-      link: /en/performance
+      link: /en/perf/
       theme: alt
 features:
   - title: Faster than fast
-    details: Serialization and deserialization runs faster than JSON, Protobuf, MessagePack, etc. trivial solutions<small class="bottom-small">Most benchmark results are better than MemoryPack and other similar solutions</small>
+    details: Serialization and deserialization runs significantly faster than JSON, Protobuf, MessagePack, etc. trivial solutions<small class="bottom-small">Most benchmark results are better than MemoryPack and other similar solutions</small>
     link: ./#
   - title: Easy to use
-    details: By using Source Generator Nino automatically generated serialization and deserialization functions while the user is writing the program<small class="bottom-small">The generated code is transparent and support non-JIT platforms like NativeAOT natively</small>
+    details: By using Source Generator, Nino automatically generates serialization and deserialization functions while the user is writing the program<small class="bottom-small">The generated code is transparent and support non JIT platforms like NativeAOT natively</small>
     link: ./#
   - title: Powerful yet versatile
-    details: Support serializing and deserializing various data structures, incl. but not limited to primitives, structs, classes, collections, dictionaries, etc.<small class="bottom-small">Besides Nino also supports serialization and deserialization objects with polymorphism</small>
+    details: Support serializing and deserializing various data structures, i.e. primitives, structs, classes, collections, dictionaries, etc.<small class="bottom-small">Besides Nino also supports serializing and deserializing objects with polymorphism</small>
     link: ./#
 ---
 
