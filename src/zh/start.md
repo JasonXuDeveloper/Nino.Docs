@@ -174,11 +174,13 @@ Deserializer.Deserialize(bytes, out List<BaseClass> result);
 
 ## 版本兼容
 - 可以给已序列化的相同类型的字段/属性改名
-- 可以给已序列化的字段/属性改成相同内存大小的unmanaged struct（`int`->`uint`，`int`->`float`，`List<long>`->`List<double>`，`List<int[]>`->`List<float[]`）
+- 可以给已序列化的字段/属性改成相同内存大小的unmanaged struct（`int`->`uint`，`int`->`float`，`List<long>`->`List<double>`，`List<int[]>`->`List<float[]>`）
   ::: danger
-  Nino会在反序列化对象时进行类型校验，所以不能修改修饰类型为非unmanaged type的字段/属性，例如
-  
-  ```csharp{12}
+  Nino会在反序列化对象时进行类型校验，所以不能修改修饰类型为非unmanaged type的字段/属性
+  :::
+
+  ::: code-group
+  ```csharp [允许的修改]
   [NinoType]
   public class SampleClass
   {
@@ -186,7 +188,9 @@ Deserializer.Deserialize(bytes, out List<BaseClass> result);
     public List<float> Data; // [!code --]
     public List<int> Data; // [!code ++]
   }
+  ```
   
+  ```csharp [无效的修改]
   [NinoType]
   public class SampleClass2
   {
@@ -196,6 +200,8 @@ Deserializer.Deserialize(bytes, out List<BaseClass> result);
   }
   ```
   :::
+
+
 - 可以添加不被序列化/反序列化的新的字段/属性（既使用`[NinoIgnore]`修饰或在`[NinoType(false)]`的情况下不标记`[NinoMember]`）
   ::: warning
   不支持给unmanaged struct添加引用类型成员
