@@ -92,7 +92,7 @@ public struct SampleStruct
 
 ```csharp{1,5}
 [NinoType(false)]
-public class SampleStruct
+public class SampleClass
 {
   public int Id;
   [NinoMember(1)]
@@ -107,7 +107,7 @@ public class SampleStruct
 
 ```csharp{1,4}
 [NinoType]
-public class SampleStruct
+public class SampleClass
 {
   [NinoIgnore]
   public int Id;
