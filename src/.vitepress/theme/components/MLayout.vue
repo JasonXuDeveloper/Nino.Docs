@@ -59,7 +59,7 @@ provide('toggle-appearance', async ({clientX: x, clientY: y}: MouseEvent) => {
       https://github.com/vuejs/vitepress/blob/main/src/client/theme-default/Layout.vue
     -->
 
-    <template v-if="comment && frontmatter.comment !== false" #doc-footer-before>
+    <template v-if="comment && frontmatter.comment !== false" #doc-after>
       <div class="doc-comments">
         <Giscus
             id="comments"

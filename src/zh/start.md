@@ -159,7 +159,7 @@ public class DerivedClass : BaseClass
 ::: info
 这样一来我们可以随便序列化一个`BaseClass`集合，在反序列化时Nino依然能正常还原出每个元素的真实类型：
 
-```csharp{3}
+```csharp{7}
 var list = new List<BaseClass> 
             { 
                 new BaseClass { Id = 1 }, 
@@ -174,7 +174,7 @@ Deserializer.Deserialize(bytes, out List<BaseClass> result);
 
 ## 版本兼容
 - 可以给已序列化的相同类型的字段/属性改名
-- 可以给已序列化的字段/属性改成相同内存大小的unmanaged struct（`int`->`uint`，`int`->`float`，`List<long>`->`List<double`，`List<int[]>`->`List<float[]`）
+- 可以给已序列化的字段/属性改成相同内存大小的unmanaged struct（`int`->`uint`，`int`->`float`，`List<long>`->`List<double>`，`List<int[]>`->`List<float[]`）
   ::: danger
   Nino会在反序列化对象时进行类型校验，所以不能修改修饰类型为非unmanaged type的字段/属性，例如
   
