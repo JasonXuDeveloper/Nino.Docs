@@ -104,6 +104,7 @@ export default defineConfig({
                 },
                 editLink: {
                     text: '在 GitHub 上编辑此页',
+                    pattern: 'https://github.com/JasonXuDeveloper/Nino.Docs/edit/main/src/:path'
                 },
                 returnToTopLabel: '回到顶部',
                 sidebarMenuLabel: '菜单',
