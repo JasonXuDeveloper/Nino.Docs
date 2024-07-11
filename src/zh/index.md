@@ -4,7 +4,7 @@ layoutClass: 'm-home-layout'
 hero:
   name: "Nino"
   text: ""
-  tagline: 实用的高性能C#序列化库，包括但不限于对.NET Core 应用或Unity/Godot游戏带来令人难以置信的效益。
+  tagline: 实用的高性能C#序列化库，包括但不限于对.NET Core 应用或Unity/Godot游戏带来令人难以置信的收益。
   actions:
     - text: 快速开始
       link: /zh/start
