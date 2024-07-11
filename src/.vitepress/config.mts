@@ -8,17 +8,24 @@ function getNav(locale: string) {
             home: '首页',
             start: '使用文档',
             perf: '性能测试',
+            perf_micro: '微基准测试',
         },
         en: {
             home: 'Home',
             start: 'Documentation',
             perf: 'Performance',
+            perf_micro: 'Microbenchmark',
         }
     }
     return [
         {text: map[locale]['home'], link: `/${locale}/`},
         {text: map[locale]['start'], link: `/${locale}/start`},
-        {text: map[locale]['perf'], link: `/${locale}/perf/`},
+        {
+            text: map[locale]['perf'],
+            items: [
+                {text: map[locale]['perf_micro'], link: `/${locale}/perf/micro`}
+            ]
+        },
     ]
 }
 
@@ -42,7 +49,6 @@ function getSidebar(locale: string) {
         },
         {
             text: map[locale]['perf'],
-            link: `/${locale}/perf/`,
             items: [
                 {
                     text: map[locale]['perf_micro'],

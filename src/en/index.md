@@ -9,7 +9,7 @@ hero:
     - text: Quick Start
       link: /en/start
     - text: Performance Analysis
-      link: /en/perf/
+      link: /en/perf/micro
       theme: alt
 features:
   - title: Faster than fast

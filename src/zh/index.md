@@ -9,7 +9,7 @@ hero:
     - text: 快速开始
       link: /zh/start
     - text: 性能对比
-      link: /zh/perf/
+      link: /zh/perf/micro
       theme: alt
 features:
   - title: 比快更快
