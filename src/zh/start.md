@@ -184,13 +184,13 @@ Deserializer.Deserialize(bytes, out List<BaseClass> result);
   [NinoType]
   public class SampleClass
   {
-    //float和int内存大小一致，可以换成List<int>，但不能是List<double>
+    //float和int内存大小一致，可以换成List<int>
     public List<float> Data; // [!code --]
     public List<int> Data; // [!code ++]
   }
   ```
   
-  ```csharp [错误的修改]
+  ```csharp [禁止的修改]
   [NinoType]
   public class SampleClass2
   {

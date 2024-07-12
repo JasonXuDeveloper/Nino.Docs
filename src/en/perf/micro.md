@@ -1,14 +1,14 @@
 ---
-title: 微基准测试
-lang: zh
+title: Microbenchmark
+lang: en
 outline: deep
 ---
 
-# 微基准测试
+# Microbenchmark
 
-本页包含了`Nino`与`MessagePack`以及`MemoryPack`的性能对比数据
+This page contains performance comparison data between `Nino`, `MessagePack`, and `MemoryPack`
 
-## 数据结构
+## Data Structures
 
 ::: code-group
 ```csharp [Simple Class]
@@ -46,9 +46,9 @@ public partial struct SimpleStruct
 ```
 
 :::
-## 数据生成
+## Data Generation
 
-### 生成函数
+### Generation Function
 ::: code-group
 ```csharp [Simple Class]
 public static SimpleClass Create()
@@ -79,7 +79,7 @@ public static SimpleStruct Create()
 ```
 :::
 
-### 测试数据
+### Benchmark Data
 
 ```csharp
 _simpleClass = SimpleClass.Create();
@@ -89,7 +89,7 @@ _simpleStructs = Enumerable.Range(0, 30).Select(_ => SimpleStruct.Create()).ToAr
 ```
 
 
-## 测试环境
+## Benchmark Environment
 ```
 BenchmarkDotNet v0.13.12, macOS Sonoma 14.4 (23E214) [Darwin 23.4.0]
 Apple M1, 1 CPU, 8 logical and 8 physical cores
@@ -100,11 +100,11 @@ Apple M1, 1 CPU, 8 logical and 8 physical cores
 Runtime=.NET 8.0  IterationCount=10  WarmupCount=3  
 ```
 
-## 测试结果
+## Benchmark Result
 
-测试结果为序列化和反序列化上述数据的耗时，单位为纳秒，结果越低越好
+Results are the time taken to serialize and deserialize the above data, in nanoseconds, the lower the better
 
-### 柱状图
+### Bar Chart
 
 <script setup>
 const options = {
@@ -112,7 +112,7 @@ const options = {
 };
 const simpleClassData = {
   labels: [
-    'SimpleClass 序列化', 'SimpleClass 反序列化'
+    'SimpleClass Serialization', 'SimpleClass Deserialization'
   ],
   datasets: [
     {
@@ -134,7 +134,7 @@ const simpleClassData = {
 };
 const simpleStructData = {
   labels: [
-    'SimpleStruct 序列化', 'SimpleStruct 反序列化'
+    'SimpleStruct Serialization', 'SimpleStruct Deserialization'
   ],
   datasets: [
     {
@@ -156,7 +156,7 @@ const simpleStructData = {
 };
 const simpleClassesData = {
   labels: [
-    'SimpleClasses 序列化', 'SimpleClasses 反序列化'
+    'SimpleClasses Serialization', 'SimpleClasses Deserialization'
   ],
   datasets: [
     {
@@ -178,7 +178,7 @@ const simpleClassesData = {
 };
 const simpleStructsData = {
   labels: [
-    'SimpleStructs 序列化', 'SimpleStructs 反序列化'
+    'SimpleStructs Serialization', 'SimpleStructs Deserialization'
   ],
   datasets: [
     {
@@ -207,7 +207,7 @@ const simpleStructsData = {
 
 
 
-### 表格数据
+### Results Table
 
 | Method                              |           Mean |            Min |            Max | Ratio |     Size |
 |-------------------------------------|---------------:|---------------:|---------------:|------:|---------:|
