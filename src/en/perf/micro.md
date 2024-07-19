@@ -209,6 +209,9 @@ const simpleStructsData = {
 
 ### Results Table
 
+
+<div class="container" style="overflow-y: auto;">
+
 | Method                              |           Mean |            Min |            Max | Ratio |     Size |
 |-------------------------------------|---------------:|---------------:|---------------:|------:|---------:|
 | MessagePackDeserializeSimpleClass   |  1,148.2660 ns |  1,139.8289 ns |  1,154.8804 ns |  1.00 |        - |
@@ -242,3 +245,15 @@ const simpleStructsData = {
 | MessagePackSerializeSimpleStructs   |  2,264.9154 ns |  2,262.4969 ns |  2,267.9900 ns |  1.00 |    483 B |
 | MemoryPackSerializeSimpleStructs    |     36.5122 ns |     35.8662 ns |     37.0155 ns |  0.02 |    484 B |
 | NinoSerializeSimpleStructs          |     29.5231 ns |     29.1184 ns |     30.0484 ns |  0.01 |    486 B |
+
+</div>
+
+<style>
+.container {
+    -ms-overflow-style: none;  /* Internet Explorer 10+ */
+    scrollbar-width: none;  /* Firefox */
+}
+.container::-webkit-scrollbar { 
+    display: none;  /* Safari and Chrome */
+}
+</style>
