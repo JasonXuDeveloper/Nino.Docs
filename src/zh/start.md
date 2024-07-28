@@ -176,7 +176,9 @@ Deserializer.Deserialize(bytes, out List<BaseClass> result);
 - 可以给已序列化的相同类型的字段/属性改名
 - 可以给已序列化的字段/属性改成相同内存大小的unmanaged struct（`int`->`uint`，`int`->`float`，`List<long>`->`List<double>`，`List<int[]>`->`List<float[]>`）
   ::: danger
-  Nino会在反序列化对象时进行类型校验，所以不能修改修饰类型为非unmanaged type的字段/属性
+  Nino会在反序列化对象时进行类型校验，所以不能修改类型为引用类型的字段/属性
+
+  Nino允许将是值类型的字段/属性的类型修改为另一个值类型（例如`public MyStruct val` 可以修改为 `public MyStruct2 val`，但需要确保`MyStruct`和`MyStruct2`都是值类型，且内部内存结构一致）
   :::
 
   ::: code-group
