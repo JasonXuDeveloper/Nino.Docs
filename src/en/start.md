@@ -177,7 +177,9 @@ Deserializer.Deserialize(bytes, out List<BaseClass> result);
 - Renaming fields/properties of the same type that have been serialized is allowed
 - Changing the type of serialized fields/properties to an unmanaged struct of the same memory size (`int`->`uint`, `int`->`float`, `List<long>`->`List<double>`, `List<int[]>`->`List<float[]>`) is allowed
   ::: danger
-  Nino performs type checking when deserializing objects, so you cannot modify fields/properties that are not unmanaged types
+  Nino performs type checking when deserializing objects, so you cannot modify fields/properties that are declared in reference types.
+
+  Nino allows you to change the declared type of a field/property if and only if the previous and the latest declared type of this field/property is a structural type.
   :::
 
   ::: code-group
@@ -195,7 +197,7 @@ Deserializer.Deserialize(bytes, out List<BaseClass> result);
   [NinoType]
   public class SampleClass2
   {
-    // The Data field type cannot be modified to another type
+    // The Data field type cannot be modified to another reference type
     public SampleClass Data; // [!code --]
     public SampleClass2 Data; // [!code warning]
   }
