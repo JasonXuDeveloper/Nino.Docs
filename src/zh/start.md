@@ -15,10 +15,10 @@ outline: deep
 Nino支持.NET 5.0 及以上版本的项目，或.NET Standard 2.0 及以上版本的项目
 :::
 
-- Nino支持通过NuGet包管理器进行安装，可以在Visual Studio或Rider中在NuGet插件中搜索`Nino`并安装
+- Nino支持通过NuGet包管理器进行安装，可以在Visual Studio或Rider中在NuGet管理中搜索`Nino`并安装
 - 除此之外，也可以使用命令行工具`dotnet`进行安装：
     ```shell
-    dotnet add package Nino --version 2.0.3
+    dotnet add package Nino
     ```
 
 ::: warning
