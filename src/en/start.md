@@ -173,7 +173,7 @@ Deserializer.Deserialize(bytes, out List<BaseClass> result);
 ```
 :::
 
-### Version Compatibility
+## Version Compatibility
 - Renaming fields/properties of the same type that have been serialized is allowed
 - Changing the type of serialized fields/properties to an unmanaged struct of the same memory size (`int`->`uint`, `int`->`float`, `List<long>`->`List<double>`, `List<int[]>`->`List<float[]>`) is allowed
   ::: danger
@@ -209,9 +209,9 @@ Deserializer.Deserialize(bytes, out List<BaseClass> result);
   :::
 - **Deleting** serialized fields/properties is **not allowed**
 
-### Serialization
+## Serialization
 
-#### Standard Usage
+### Standard Usage
 
 ```csharp
 byte[] Serializer.Serialize(NinoSerializableType val);
@@ -232,7 +232,7 @@ Please note that the `IBufferWriter<byte>` interface is used to write serialized
 > For example, you can encapsulate an `IBufferWriter<byte>` type with MemoryStream or NetworkStream
 
 
-### Deserialization
+## Deserialization
 
 ```csharp
 void Deserializer.Deserialize(ReadOnlySpan<byte> data, out NinoSerializableType value);
@@ -241,7 +241,7 @@ void Deserializer.Deserialize(ReadOnlySpan<byte> data, out NinoSerializableType 
 > The data can not only be passed as `byte[]`, but also as `ArraySegment<byte>` or `Span<byte>`
 
 
-#### Standard Usage
+### Standard Usage
 ```csharp
 //assuming byteArr is byte[]
 Deserializer.Deserialize(byteArr, out ObjClass obj);
@@ -256,7 +256,7 @@ ObjClass obj;
 if(data.IsSingleSegment)
 {
   Span<byte> dataSpan = data.FirstSpan;
-  Deserializer.Deserialize(dataSpan, out ObjClass obj);
+  Deserializer.Deserialize(dataSpan, out obj);
 }
 //If the data is not in a single contiguous memory block, we need to copy it to a single contiguous memory block first
 else
@@ -266,14 +266,14 @@ else
     //Allocate on the stack
     Span<byte> stackMemory = stackalloc byte[(int)data.Length];
     data.CopyTo(stackMemory);
-    Deserializer.Deserialize(stackMemory, out ObjClass obj);
+    Deserializer.Deserialize(stackMemory, out obj);
   }
   else
   {
     //Allocate on the heap, use object pool
     byte[] arr = ArrayPool<byte>.Shared.Rent((int)data.Length);
     data.CopyTo(arr);
-    Deserializer.Deserialize(arr, out ObjClass obj);
+    Deserializer.Deserialize(arr, out obj);
     ArrayPool<byte>.Shared.Return(arr);
   }
 }
