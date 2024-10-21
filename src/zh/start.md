@@ -257,7 +257,7 @@ ObjClass obj;
 if(data.IsSingleSegment)
 {
   Span<byte> dataSpan = data.FirstSpan;
-  Deserializer.Deserialize(dataSpan, out ObjClass obj);
+  Deserializer.Deserialize(dataSpan, out obj);
 }
 //如果数据不在一块完整的连续内存，我们需要先复制到一块连续内存
 else
@@ -267,14 +267,14 @@ else
     //栈上分配
     Span<byte> stackMemory = stackalloc byte[(int)data.Length];
     data.CopyTo(stackMemory);
-    Deserializer.Deserialize(stackMemory, out ObjClass obj);
+    Deserializer.Deserialize(stackMemory, out obj);
   }
   else
   {
     //堆上分配，搭配对象池
     byte[] arr = ArrayPool<byte>.Shared.Rent((int)data.Length);
     data.CopyTo(arr);
-    Deserializer.Deserialize(arr, out ObjClass obj);
+    Deserializer.Deserialize(arr, out obj);
     ArrayPool<byte>.Shared.Return(arr);
   }
 }
