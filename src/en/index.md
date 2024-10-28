@@ -7,7 +7,7 @@ hero:
   tagline: Definite useful and high performance serialization library for any C# projects, including but not limited to .NET Core apps or Unity/Godot games.
   actions:
     - text: Quick Start
-      link: /en/start
+      link: /en/doc/start
     - text: Performance Analysis
       link: /en/perf/micro
       theme: alt

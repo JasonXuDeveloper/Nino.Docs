@@ -110,93 +110,80 @@ Runtime=.NET 8.0  IterationCount=10  WarmupCount=3
 const options = {
   responsive: true,
 };
-const simpleClassData = {
-  labels: [
-    'SimpleClass 序列化', 'SimpleClass 反序列化'
+const bench = {
+  "msgpack":[
+    1136.2657,
+    1871.5678,
+    33904.6509,
+    59839.6868,
+    48.3331,
+    144.9043,
+    849.0543,
+    4030.4682
   ],
-  datasets: [
+  "memorypack":[
+    410.4403,
+    419.5725,
+    14161.3611,
+    11740.4484,
+    1.6112,
+    3.9498,
+    48.5860,
+    35.7185
+  ],
+  "nino":[
+    412.8562,
+    188.8688,
+    12953.3525,
+    5210.3862,
+    0.5299,
+    3.6388,
+    26.7749,
+    28.7374
+  ]
+};
+function getDataset(s, d){
+  return [
     {
       label: 'MessagePack',
       backgroundColor: '#f87979',
-      data: [2106.8237, 1143.9211]
+      data: [bench["msgpack"][s], bench["msgpack"][d]]
     },
     {
       label: 'MemoryPack',
       backgroundColor: '#7f79f8',
-      data: [412.2793, 415.9840]
+      data: [bench["memorypack"][s], bench["memorypack"][d]]
     },
     {
       label: 'Nino',
       backgroundColor: '#79f8b4',
-      data: [229.6169, 298.0485]
+      data: [bench["nino"][s], bench["nino"][d]]
     }
   ]
+}
+const simpleClassData = {
+  labels: [
+    'SimpleClass 序列化', 'SimpleClass 反序列化'
+  ],
+  datasets: getDataset(1, 0)
 };
 const simpleStructData = {
   labels: [
     'SimpleStruct 序列化', 'SimpleStruct 反序列化'
   ],
-  datasets: [
-    {
-      label: 'MessagePack',
-      backgroundColor: '#f87979',
-      data: [154.2944, 48.8596]
-    },
-    {
-      label: 'MemoryPack',
-      backgroundColor: '#7f79f8',
-      data: [4.0231, 1.6226]
-    },
-    {
-      label: 'Nino',
-      backgroundColor: '#79f8b4',
-      data: [3.2994, 0.5649]
-    }
-  ]
+  datasets: getDataset(5, 4)
 };
 const simpleClassesData = {
   labels: [
     'SimpleClasses 序列化', 'SimpleClasses 反序列化'
   ],
-  datasets: [
-    {
-      label: 'MessagePack',
-      backgroundColor: '#f87979',
-      data: [60958.8440, 34073.3532]
-    },
-    {
-      label: 'MemoryPack',
-      backgroundColor: '#7f79f8',
-      data: [11422.3475, 12290.2177]
-    },
-    {
-      label: 'Nino',
-      backgroundColor: '#79f8b4',
-      data: [5415.0241, 9174.3446]
-    }
-  ]
+  datasets: getDataset(3, 2)
 };
 const simpleStructsData = {
   labels: [
     'SimpleStructs 序列化', 'SimpleStructs 反序列化'
   ],
-  datasets: [
-    {
-      label: 'MessagePack',
-      backgroundColor: '#f87979',
-      data: [4547.5040, 852.9569]
-    },
-    {
-      label: 'MemoryPack',
-      backgroundColor: '#7f79f8',
-      data: [36.6025, 48.9702]
-    },
-    {
-      label: 'Nino',
-      backgroundColor: '#79f8b4',
-      data: [28.9929, 31.9655]
-    }
-  ]
+  datasets: getDataset(7, 6)
 };
 </script>
 
@@ -211,39 +198,39 @@ const simpleStructsData = {
 
 <div class="container" style="overflow-y: auto;">
 
-| Method                              |           Mean |       Error |      StdDev |            Min |            Max | Ratio | RatioSD |  Payload |
-|-------------------------------------|---------------:|------------:|------------:|---------------:|---------------:|------:|--------:|---------:|
-| MessagePackDeserializeSimpleClass   |  1,143.9211 ns |  16.1659 ns |   9.6200 ns |  1,136.1986 ns |  1,163.1313 ns |  1.00 |    0.00 |        - |
-| MemoryPackDeserializeSimpleClass    |    415.9840 ns |   4.3499 ns |   2.8772 ns |    412.5200 ns |    420.1489 ns |  0.36 |    0.00 |        - |
-| NinoDeserializeSimpleClass          |    298.0485 ns |   3.0089 ns |   1.9902 ns |    296.1641 ns |    300.8748 ns |  0.26 |    0.00 |        - |
-|                                     |                |             |             |                |                |       |         |          |
-| MessagePackSerializeSimpleClass     |  2,106.8237 ns | 311.3631 ns | 205.9474 ns |  1,965.2651 ns |  2,500.4037 ns |  1.00 |    0.00 |    674 B |
-| MemoryPackSerializeSimpleClass      |    412.2793 ns |   3.6694 ns |   2.1836 ns |    408.7637 ns |    415.8436 ns |  0.20 |    0.02 |    730 B |
-| NinoSerializeSimpleClass            |    229.6169 ns |   1.9565 ns |   1.1643 ns |    228.0030 ns |    231.3166 ns |  0.11 |    0.01 |    738 B |
-|                                     |                |             |             |                |                |       |         |          |
-| MessagePackDeserializeSimpleClasses | 34,073.3532 ns | 263.1596 ns | 156.6020 ns | 33,927.4699 ns | 34,399.0987 ns |  1.00 |    0.00 |        - |
-| MemoryPackDeserializeSimpleClasses  | 12,290.2177 ns | 112.1596 ns |  74.1866 ns | 12,204.9885 ns | 12,384.6556 ns |  0.36 |    0.00 |        - |
-| NinoDeserializeSimpleClasses        |  9,174.3446 ns |  85.4543 ns |  56.5227 ns |  9,113.9577 ns |  9,270.8155 ns |  0.27 |    0.00 |        - |
-|                                     |                |             |             |                |                |       |         |          |
-| MessagePackSerializeSimpleClasses   | 60,958.8440 ns | 488.5614 ns | 323.1531 ns | 60,472.8038 ns | 61,521.7412 ns |  1.00 |    0.00 | 19.75 KB |
-| MemoryPackSerializeSimpleClasses    | 11,422.3475 ns | 100.8657 ns |  66.7164 ns | 11,359.0374 ns | 11,556.3049 ns |  0.19 |    0.00 | 21.39 KB |
-| NinoSerializeSimpleClasses          |  5,415.0241 ns |  51.6538 ns |  34.1658 ns |  5,377.3324 ns |  5,473.7482 ns |  0.09 |    0.00 | 21.63 KB |
-|                                     |                |             |             |                |                |       |         |          |
-| MessagePackDeserializeSimpleStruct  |     48.8596 ns |   0.4929 ns |   0.2578 ns |     48.6193 ns |     49.2249 ns |  1.00 |    0.00 |        - |
-| MemoryPackDeserializeSimpleStruct   |      1.6226 ns |   0.0218 ns |   0.0144 ns |      1.6078 ns |      1.6447 ns |  0.03 |    0.00 |        - |
-| NinoDeserializeSimpleStruct         |      0.5649 ns |   0.0130 ns |   0.0086 ns |      0.5568 ns |      0.5772 ns |  0.01 |    0.00 |        - |
-|                                     |                |             |             |                |                |       |         |          |
-| MessagePackSerializeSimpleStruct    |    154.2944 ns |   1.8234 ns |   1.2060 ns |    152.9772 ns |    156.5525 ns |  1.00 |    0.00 |     16 B |
-| MemoryPackSerializeSimpleStruct     |      4.0231 ns |   0.0395 ns |   0.0261 ns |      3.9796 ns |      4.0619 ns |  0.03 |    0.00 |     16 B |
-| NinoSerializeSimpleStruct           |      3.2994 ns |   0.0400 ns |   0.0209 ns |      3.2657 ns |      3.3307 ns |  0.02 |    0.00 |     16 B |
-|                                     |                |             |             |                |                |       |         |          |
-| MessagePackDeserializeSimpleStructs |    852.9569 ns |   9.4730 ns |   5.6373 ns |    847.3035 ns |    864.4550 ns |  1.00 |    0.00 |        - |
-| MemoryPackDeserializeSimpleStructs  |     48.9702 ns |   1.0181 ns |   0.5325 ns |     48.4226 ns |     50.0060 ns |  0.06 |    0.00 |        - |
-| NinoDeserializeSimpleStructs        |     31.9655 ns |   0.2854 ns |   0.1493 ns |     31.7017 ns |     32.1070 ns |  0.04 |    0.00 |        - |
-|                                     |                |             |             |                |                |       |         |          |
-| MessagePackSerializeSimpleStructs   |  4,547.5040 ns |  55.6864 ns |  36.8331 ns |  4,504.2184 ns |  4,594.6798 ns | 1.000 |    0.00 |    483 B |
-| MemoryPackSerializeSimpleStructs    |     36.6025 ns |   0.6121 ns |   0.3201 ns |     36.1424 ns |     36.9414 ns | 0.008 |    0.00 |    484 B |
-| NinoSerializeSimpleStructs          |     28.9929 ns |   0.7809 ns |   0.5165 ns |     28.4835 ns |     29.7630 ns | 0.006 |    0.00 |    486 B |
+| Method                              | Mean           | Error       | StdDev      | Min            | Max            | Ratio | Payload |
+|------------------------------------ |---------------:|------------:|------------:|---------------:|---------------:|------:|--------:|
+| MessagePackDeserializeSimpleClass   |  1,136.2657 ns |   1.1671 ns |   0.6945 ns |  1,135.0927 ns |  1,137.0287 ns |  1.00 |       - |
+| MemoryPackDeserializeSimpleClass    |    410.4403 ns |   0.8699 ns |   0.5754 ns |    409.6905 ns |    411.4832 ns |  0.36 |       - |
+| NinoDeserializeSimpleClass          |    412.8562 ns |   1.9615 ns |   1.2974 ns |    410.5808 ns |    414.7145 ns |  0.36 |       - |
+|                                     |                |             |             |                |                |       |         |
+| MessagePackSerializeSimpleClass     |  1,871.5678 ns |   7.7533 ns |   5.1283 ns |  1,860.9761 ns |  1,877.6836 ns |  1.00 |    674B |
+| MemoryPackSerializeSimpleClass      |    419.5725 ns |  31.4231 ns |  18.6994 ns |    410.0792 ns |    463.1201 ns |  0.22 |    730B |
+| NinoSerializeSimpleClass            |    188.8688 ns |   0.8833 ns |   0.5843 ns |    187.4881 ns |    189.3958 ns |  0.10 |    738B |
+|                                     |                |             |             |                |                |       |         |
+| MessagePackDeserializeSimpleClasses | 33,904.6509 ns |  32.8095 ns |  21.7015 ns | 33,869.6263 ns | 33,939.5676 ns |  1.00 |       - |
+| MemoryPackDeserializeSimpleClasses  | 14,161.3611 ns |  41.4687 ns |  24.6773 ns | 14,142.5870 ns | 14,208.2545 ns |  0.42 |       - |
+| NinoDeserializeSimpleClasses        | 12,953.3525 ns |  33.2459 ns |  19.7841 ns | 12,939.5669 ns | 12,999.1932 ns |  0.38 |       - |
+|                                     |                |             |             |                |                |       |         |
+| MessagePackSerializeSimpleClasses   | 59,839.6868 ns | 226.5035 ns | 149.8180 ns | 59,567.5735 ns | 60,061.6277 ns |  1.00 | 19.75KB |
+| MemoryPackSerializeSimpleClasses    | 11,740.4484 ns |  78.1940 ns |  51.7205 ns | 11,636.6908 ns | 11,806.3005 ns |  0.20 | 21.39KB |
+| NinoSerializeSimpleClasses          |  5,210.3862 ns |  29.4638 ns |  19.4885 ns |  5,168.0587 ns |  5,235.1119 ns |  0.09 | 21.63KB |
+|                                     |                |             |             |                |                |       |         |
+| MessagePackDeserializeSimpleStruct  |     48.3331 ns |   0.0211 ns |   0.0126 ns |     48.3183 ns |     48.3607 ns |  1.00 |       - |
+| MemoryPackDeserializeSimpleStruct   |      1.6112 ns |   0.0016 ns |   0.0009 ns |      1.6103 ns |      1.6133 ns |  0.03 |       - |
+| NinoDeserializeSimpleStruct         |      0.5299 ns |   0.0015 ns |   0.0010 ns |      0.5292 ns |      0.5315 ns |  0.01 |       - |
+|                                     |                |             |             |                |                |       |         |
+| MessagePackSerializeSimpleStruct    |    144.9043 ns |   0.0909 ns |   0.0601 ns |    144.8253 ns |    145.0088 ns |  1.00 |     16B |
+| MemoryPackSerializeSimpleStruct     |      3.9498 ns |   0.0136 ns |   0.0090 ns |      3.9253 ns |      3.9555 ns |  0.03 |     16B |
+| NinoSerializeSimpleStruct           |      3.6388 ns |   0.0100 ns |   0.0052 ns |      3.6298 ns |      3.6481 ns |  0.03 |     16B |
+|                                     |                |             |             |                |                |       |         |
+| MessagePackDeserializeSimpleStructs |    849.0543 ns |   1.1185 ns |   0.6656 ns |    848.3950 ns |    850.4543 ns |  1.00 |       - |
+| MemoryPackDeserializeSimpleStructs  |     48.5860 ns |   0.3531 ns |   0.2101 ns |     48.4330 ns |     48.9597 ns |  0.06 |       - |
+| NinoDeserializeSimpleStructs        |     26.7749 ns |   0.1823 ns |   0.1085 ns |     26.5572 ns |     26.8512 ns |  0.03 |       - |
+|                                     |                |             |             |                |                |       |         |
+| MessagePackSerializeSimpleStructs   |  4,030.4682 ns |  24.7602 ns |  16.3773 ns |  4,012.0767 ns |  4,056.3513 ns | 1.000 |    483B |
+| MemoryPackSerializeSimpleStructs    |     35.7185 ns |   0.2794 ns |   0.1461 ns |     35.5804 ns |     35.9146 ns | 0.009 |    484B |
+| NinoSerializeSimpleStructs          |     28.7374 ns |   0.2275 ns |   0.1504 ns |     28.5790 ns |     28.9201 ns | 0.007 |    486B |
 
 </div>
 

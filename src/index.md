@@ -1,3 +1,5 @@
 <script setup>
-window.location.href = '/en/'
+if (typeof window !== 'undefined') {
+  window.location.href = '/en/';
+}
 </script>

@@ -1,52 +1,81 @@
-import {head} from './configs'
-import MarkdownPreview from 'vite-plugin-markdown-preview'
-import {withMermaid} from "vitepress-plugin-mermaid";
-import {defineConfig} from "vitepress";
+import { head } from './configs'
+import { MarkdownPreview } from 'vite-plugin-markdown-preview'
+import { withMermaid } from "vitepress-plugin-mermaid";
+import { defineConfig } from "vitepress";
+
+let map = {
+    zh: {
+        home: '首页',
+        doc: '使用文档',
+        start: '快速开始',
+        types: '支持类型',
+        basic: '基础用法',
+        advanced: '进阶用法',
+        limit: '限制',
+        perf: '性能测试',
+        perf_micro: '微基准测试',
+    },
+    en: {
+        home: 'Home',
+        doc: 'Documentation',
+        start: 'Quick Start',
+        types: 'Supported Types',
+        basic: 'Basic Usage',
+        advanced: 'Advanced Usage',
+        limit: 'Limitation',
+        perf: 'Performance',
+        perf_micro: 'Microbenchmark',
+    }
+}
 
 function getNav(locale: string) {
-    let map = {
-        zh: {
-            home: '首页',
-            start: '使用文档',
-            perf: '性能测试',
-            perf_micro: '微基准测试',
-        },
-        en: {
-            home: 'Home',
-            start: 'Documentation',
-            perf: 'Performance',
-            perf_micro: 'Microbenchmark',
-        }
-    }
     return [
-        {text: map[locale]['home'], link: `/${locale}/`},
-        {text: map[locale]['start'], link: `/${locale}/start`},
+        { text: map[locale]['home'], link: `/${locale}/` },
+        {
+            text: map[locale]['doc'],
+            items: [
+                { text: map[locale]['start'], link: `/${locale}/doc/start` },
+                { text: map[locale]['types'], link: `/${locale}/doc/types` },
+                { text: map[locale]['basic'], link: `/${locale}/doc/basic` },
+                { text: map[locale]['advanced'], link: `/${locale}/doc/advanced` },
+                { text: map[locale]['limit'], link: `/${locale}/doc/limit` }
+            ]
+        },
         {
             text: map[locale]['perf'],
             items: [
-                {text: map[locale]['perf_micro'], link: `/${locale}/perf/micro`}
+                { text: map[locale]['perf_micro'], link: `/${locale}/perf/micro` }
             ]
         },
     ]
 }
 
 function getSidebar(locale: string) {
-    let map = {
-        zh: {
-            start: '使用文档',
-            perf: '性能测试',
-            perf_micro: '微基准测试',
-        },
-        en: {
-            start: 'Documentation',
-            perf: 'Performance',
-            perf_micro: 'Microbenchmark',
-        }
-    }
     return [
         {
-            text: map[locale]['start'],
-            link: `/${locale}/start`,
+            text: map[locale]['doc'],
+            items: [
+                {
+                    text: map[locale]['start'],
+                    link: `/${locale}/doc/start`
+                },
+                {
+                    text: map[locale]['types'],
+                    link: `/${locale}/doc/types`
+                },
+                {
+                    text: map[locale]['basic'],
+                    link: `/${locale}/doc/basic`
+                },
+                {
+                    text: map[locale]['advanced'],
+                    link: `/${locale}/doc/advanced`
+                },
+                {
+                    text: map[locale]['limit'],
+                    link: `/${locale}/doc/limit`
+                }
+            ]
         },
         {
             text: map[locale]['perf'],
@@ -183,7 +212,7 @@ export default withMermaid(defineConfig({
             }
         },
         socialLinks: [
-            {icon: 'github', link: 'https://github.com/JasonXuDeveloper/Nino'}
+            { icon: 'github', link: 'https://github.com/JasonXuDeveloper/Nino' }
         ],
         footer: {
             // message: 'Released under the MIT License.',
@@ -192,8 +221,16 @@ export default withMermaid(defineConfig({
     },
     vite: {
         plugins: [MarkdownPreview()],
+        css: {
+            preprocessorOptions: {
+                scss: {
+                    silenceDeprecations: ["legacy-js-api"],
+                    api: 'modern-compiler' // or "modern"
+                }
+            }
+        }
     },
     sitemap: {
         hostname: 'https://nino.xgamedev.net'
-    }
+    },
 }))
