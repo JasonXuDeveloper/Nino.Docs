@@ -107,131 +107,85 @@ Runtime=.NET 8.0  IterationCount=10  WarmupCount=3
 ### 柱状图
 
 <script setup>
-const options = {
-  responsive: true,
-};
-const bench = {
-  "msgpack":[
-    1136.2657,
-    1871.5678,
-    33904.6509,
-    59839.6868,
-    48.3331,
-    144.9043,
-    849.0543,
-    4030.4682
-  ],
-  "memorypack":[
-    410.4403,
-    419.5725,
-    14161.3611,
-    11740.4484,
-    1.6112,
-    3.9498,
-    48.5860,
-    35.7185
-  ],
-  "nino":[
-    412.8562,
-    188.8688,
-    12953.3525,
-    5210.3862,
-    0.5299,
-    3.6388,
-    26.7749,
-    28.7374
-  ]
-};
-function getDataset(s, d){
-  return [
+import { getBench, getDataset } from '/js/bench.js';
+import { onMounted } from 'vue';
+import Chart from 'chart.js/auto'
+
+onMounted(() => {
+  const table = document.getElementById("bench");
+  const bench = getBench(table);
+  const options = {
+    responsive: true,
+  };
+
+  new Chart(
+    document.getElementById('simple_class'),
     {
-      label: 'MessagePack',
-      backgroundColor: '#f87979',
-      data: [bench["msgpack"][s], bench["msgpack"][d]]
-    },
-    {
-      label: 'MemoryPack',
-      backgroundColor: '#7f79f8',
-      data: [bench["memorypack"][s], bench["memorypack"][d]]
-    },
-    {
-      label: 'Nino',
-      backgroundColor: '#79f8b4',
-      data: [bench["nino"][s], bench["nino"][d]]
+      type: 'bar',
+      data: {
+        labels: [
+                  'SimpleClass 序列化', 'SimpleClass 反序列化'
+                ],
+        datasets: getDataset(bench, 1, 0)
+      },
+      options: options
     }
-  ]
-}
-const simpleClassData = {
-  labels: [
-    'SimpleClass 序列化', 'SimpleClass 反序列化'
-  ],
-  datasets: getDataset(1, 0)
-};
-const simpleStructData = {
-  labels: [
-    'SimpleStruct 序列化', 'SimpleStruct 反序列化'
-  ],
-  datasets: getDataset(5, 4)
-};
-const simpleClassesData = {
-  labels: [
-    'SimpleClasses 序列化', 'SimpleClasses 反序列化'
-  ],
-  datasets: getDataset(3, 2)
-};
-const simpleStructsData = {
-  labels: [
-    'SimpleStructs 序列化', 'SimpleStructs 反序列化'
-  ],
-  datasets: getDataset(7, 6)
-};
+  );
+
+  new Chart(
+    document.getElementById('simple_struct'),
+    {
+      type: 'bar',
+      data: {
+        labels: [
+                  'SimpleStruct 序列化', 'SimpleStruct 反序列化'
+                ],
+        datasets: getDataset(bench, 5, 4)
+      },
+      options: options
+    }
+  );
+
+  new Chart(
+    document.getElementById('simple_classes'),
+    {
+      type: 'bar',
+      data: {
+        labels: [
+                  'SimpleClasses 序列化', 'SimpleClasses 反序列化'
+                ],
+        datasets: getDataset(bench, 3, 2)
+      },
+      options: options
+    }
+  );
+
+  new Chart(
+    document.getElementById('simple_structs'),
+    {
+      type: 'bar',
+      data: {
+        labels: [
+                  'SimpleStructs 序列化', 'SimpleStructs 反序列化'
+                ],
+        datasets: getDataset(bench, 7, 6)
+      },
+      options: options
+    }
+  );
+});
+
 </script>
 
-<BarChart :chartData="simpleClassData" :chartOptions="options"/>
-<BarChart :chartData="simpleStructData" :chartOptions="options"/>
-<BarChart :chartData="simpleClassesData" :chartOptions="options"/>
-<BarChart :chartData="simpleStructsData" :chartOptions="options"/>
-
+<canvas id="simple_class"></canvas>
+<canvas id="simple_struct"></canvas>
+<canvas id="simple_classes"></canvas>
+<canvas id="simple_structs"></canvas>
 
 
 ### 表格数据
-
-<div class="container" style="overflow-y: auto;">
-
-| Method                              | Mean           | Error       | StdDev      | Min            | Max            | Ratio | Payload |
-|------------------------------------ |---------------:|------------:|------------:|---------------:|---------------:|------:|--------:|
-| MessagePackDeserializeSimpleClass   |  1,136.2657 ns |   1.1671 ns |   0.6945 ns |  1,135.0927 ns |  1,137.0287 ns |  1.00 |       - |
-| MemoryPackDeserializeSimpleClass    |    410.4403 ns |   0.8699 ns |   0.5754 ns |    409.6905 ns |    411.4832 ns |  0.36 |       - |
-| NinoDeserializeSimpleClass          |    412.8562 ns |   1.9615 ns |   1.2974 ns |    410.5808 ns |    414.7145 ns |  0.36 |       - |
-|                                     |                |             |             |                |                |       |         |
-| MessagePackSerializeSimpleClass     |  1,871.5678 ns |   7.7533 ns |   5.1283 ns |  1,860.9761 ns |  1,877.6836 ns |  1.00 |    674B |
-| MemoryPackSerializeSimpleClass      |    419.5725 ns |  31.4231 ns |  18.6994 ns |    410.0792 ns |    463.1201 ns |  0.22 |    730B |
-| NinoSerializeSimpleClass            |    188.8688 ns |   0.8833 ns |   0.5843 ns |    187.4881 ns |    189.3958 ns |  0.10 |    738B |
-|                                     |                |             |             |                |                |       |         |
-| MessagePackDeserializeSimpleClasses | 33,904.6509 ns |  32.8095 ns |  21.7015 ns | 33,869.6263 ns | 33,939.5676 ns |  1.00 |       - |
-| MemoryPackDeserializeSimpleClasses  | 14,161.3611 ns |  41.4687 ns |  24.6773 ns | 14,142.5870 ns | 14,208.2545 ns |  0.42 |       - |
-| NinoDeserializeSimpleClasses        | 12,953.3525 ns |  33.2459 ns |  19.7841 ns | 12,939.5669 ns | 12,999.1932 ns |  0.38 |       - |
-|                                     |                |             |             |                |                |       |         |
-| MessagePackSerializeSimpleClasses   | 59,839.6868 ns | 226.5035 ns | 149.8180 ns | 59,567.5735 ns | 60,061.6277 ns |  1.00 | 19.75KB |
-| MemoryPackSerializeSimpleClasses    | 11,740.4484 ns |  78.1940 ns |  51.7205 ns | 11,636.6908 ns | 11,806.3005 ns |  0.20 | 21.39KB |
-| NinoSerializeSimpleClasses          |  5,210.3862 ns |  29.4638 ns |  19.4885 ns |  5,168.0587 ns |  5,235.1119 ns |  0.09 | 21.63KB |
-|                                     |                |             |             |                |                |       |         |
-| MessagePackDeserializeSimpleStruct  |     48.3331 ns |   0.0211 ns |   0.0126 ns |     48.3183 ns |     48.3607 ns |  1.00 |       - |
-| MemoryPackDeserializeSimpleStruct   |      1.6112 ns |   0.0016 ns |   0.0009 ns |      1.6103 ns |      1.6133 ns |  0.03 |       - |
-| NinoDeserializeSimpleStruct         |      0.5299 ns |   0.0015 ns |   0.0010 ns |      0.5292 ns |      0.5315 ns |  0.01 |       - |
-|                                     |                |             |             |                |                |       |         |
-| MessagePackSerializeSimpleStruct    |    144.9043 ns |   0.0909 ns |   0.0601 ns |    144.8253 ns |    145.0088 ns |  1.00 |     16B |
-| MemoryPackSerializeSimpleStruct     |      3.9498 ns |   0.0136 ns |   0.0090 ns |      3.9253 ns |      3.9555 ns |  0.03 |     16B |
-| NinoSerializeSimpleStruct           |      3.6388 ns |   0.0100 ns |   0.0052 ns |      3.6298 ns |      3.6481 ns |  0.03 |     16B |
-|                                     |                |             |             |                |                |       |         |
-| MessagePackDeserializeSimpleStructs |    849.0543 ns |   1.1185 ns |   0.6656 ns |    848.3950 ns |    850.4543 ns |  1.00 |       - |
-| MemoryPackDeserializeSimpleStructs  |     48.5860 ns |   0.3531 ns |   0.2101 ns |     48.4330 ns |     48.9597 ns |  0.06 |       - |
-| NinoDeserializeSimpleStructs        |     26.7749 ns |   0.1823 ns |   0.1085 ns |     26.5572 ns |     26.8512 ns |  0.03 |       - |
-|                                     |                |             |             |                |                |       |         |
-| MessagePackSerializeSimpleStructs   |  4,030.4682 ns |  24.7602 ns |  16.3773 ns |  4,012.0767 ns |  4,056.3513 ns | 1.000 |    483B |
-| MemoryPackSerializeSimpleStructs    |     35.7185 ns |   0.2794 ns |   0.1461 ns |     35.5804 ns |     35.9146 ns | 0.009 |    484B |
-| NinoSerializeSimpleStructs          |     28.7374 ns |   0.2275 ns |   0.1504 ns |     28.5790 ns |     28.9201 ns | 0.007 |    486B |
-
+<div class="container" id="bench" style="overflow-y: auto;">
+<!--@include: @/perf/bench.md-->
 </div>
 
 <style>
