@@ -1,3 +1,4 @@
+
 | Method                              | Mean            | Error       | StdDev      | Ratio  | RatioSD | Payload |
 |------------------------------------ |----------------:|------------:|------------:|-------:|--------:|--------:|
 | MessagePackDeserializeSimpleClass   |   1,184.5140 ns |   2.1443 ns |   2.2021 ns |   3.48 |    0.01 |       - |
