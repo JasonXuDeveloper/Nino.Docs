@@ -1,11 +1,11 @@
 ---
-title: 支持类型
+title: 类型系统
 lang: zh
 outline: deep
 ---
-# 支持类型
+# 类型系统
 
-本页包含了运行时可序列化的类型列表。此外，本页还包含了如何定义自定义可序列化类型和版本兼容性。
+本页包含了运行时可序列化的类型。此外，本页还包含了如何定义自定义可序列化类型和版本兼容性。
 
 ## 可序列化类型
 
@@ -23,26 +23,31 @@ Nino支持序列化一切[unmanaged type](https://learn.microsoft.com/en-us/dotn
 - Guid
 - Vector
 - Matrix
-- 等其他基础数值结构
+- 非托管struct
+- 非托管泛型struct
+- 非托管record struct
+- 非托管泛型record struct
 
 ::: info
 Nino 也支持String类型
 :::
 
 ::: info
-只包含unmanaged类型字段的用户自定义`struct`也被视为unmanaged类型，可以被Nino自动序列化
+只包含unmanaged类型字段的用户自定义`struct`、`struct<T>`（`T`是非托管类型）、`record struct`、`record struct<T>`（`T`是非托管类型）也被视为unmanaged类型（非托管结构体），Nino可以自动将其序列化
 
-对于自定义的unmanaged struct，Nino会自动序列化和反序列化结构中的所有字段，序列化和反序列化的顺序由结构中字段的顺序决定。Nino不支持显式指定要排除哪些字段或在反序列化时使用哪个构造函数
+对于自定义的非托管结构体，Nino会自动序列化和反序列化结构中的所有字段，序列化和反序列化的顺序由结构中字段的顺序决定（或`[StructLayout(LayoutKind.Explicit)]`来指定）。
+
+Nino不支持显式指定要排除哪些字段或在反序列化时使用哪个构造函数
 :::
 
 
 ### 自定义类型
 
-如果需要序列化非unmanaged类型，请给`class`、`struct`或`record`添加`[NinoType]`特性，以便Nino生成序列化和反序列化函数，例如：
+如果需要序列化托管类型（即不是上述类型），请给`class`、`struct`、`record`、`record struct`添加`[NinoType]`特性，以便Nino生成序列化和反序列化函数，例如：
 
 
 ::: code-group
-```csharp{1} [自定义托管结构]
+```csharp{1} [自定义托管Struct]
 [NinoType]
 public struct SampleStruct
 {
@@ -53,6 +58,10 @@ public struct SampleStruct
 ```csharp{1} [自定义Record]
 [NinoType]
 public record SampleRecord(int Id, string Name);
+```
+```csharp{1} [自定义Record Struct]
+[NinoType]
+public record struct SampleRecord(int Id, string Name);
 ```
 ```csharp{1} [自定义类]
 [NinoType]
@@ -65,12 +74,12 @@ public class SampleClass
 :::
 
 ::: info
-`[NinoType]`特性默认会收集对应`类`/`结构`所有public的字段及包含getter与setter的属性。如果是`record`，则会在此之上收集主要构造函数的参数
+`[NinoType]`特性默认会收集对应`类`或`结构体`所有public的字段及包含getter与setter的属性。如果是`record`或`record struct`，则会在此之上收集主要构造函数的参数
 
 若希望手动标记需要序列化的成员请使用`[NinoType(false)]`修饰类或结构体并用`[NinoMember(id)]`修饰需要序列化的成员（标签内部需要传入一个数字参数，即序列化和反序列化时该成员的位置，收集顺序是按标签的数字从小到大排序的）：
 
 ::: code-group
-```csharp{1,5} [常用示范]
+```csharp{1,5} [常规示范]
 [NinoType(false)]
 public class SampleClass
 {
@@ -85,7 +94,12 @@ public record SampleRecord(
                 [NinoMember(2)] int Id,
                 [NinoMember(1)] string Name);
 ```
-:::
+```csharp{1,3,4} [Record Struct示范]
+[NinoType(false)]
+public record struct SampleRecord(
+                [NinoMember(2)] int Id,
+                [NinoMember(1)] string Name);
+```
 :::
 
 ::: info
@@ -104,7 +118,73 @@ public class SampleClass
 :::
 
 ::: warning
-`[NinoIgnore]` **不** 适用于record的主要构造函数参数，也 **不** 适用于非托管结构的字段。
+`[NinoIgnore]` **不适用** 于record的主要构造函数参数，也 **不适用** 于非托管结构的字段。
+:::
+
+### 泛型类型
+
+Nino支持序列化和反序列化泛型类型，例如：
+
+::: code-group
+```csharp{1} [泛型struct]
+[NinoType]
+public struct GenericStruct<T>
+{
+    public T Val;
+}
+```
+```csharp{1} [泛型类]
+[NinoType]
+public class Generic<T>
+{
+    public T Val;
+}
+```
+```csharp{1} [泛型record]
+[NinoType]
+public record SimpleRecord6<T>(int Id, T Data);
+```
+```csharp{1} [泛型record struct]
+[NinoType]
+public record struct SimpleRecordStruct2<T>(int Id, T Data);
+```
+:::
+
+::: info
+
+Nino还支持对泛型参数进行约束：
+```csharp{1,2}
+[NinoType]
+public class ComplexGeneric<T> where T : IList
+{
+    public T Val;
+}
+```
+
+:::
+
+::: info
+
+Nino还支持对使用泛型参数声明的泛型类型成员进行序列化和反序列化，例如：
+
+```csharp{1,4}
+[NinoType]
+public class ComplexGeneric2<T>
+{
+    public Generic<T> Val;
+}
+```
+:::
+
+::: warning
+Nino会在定义泛型实例类型时生成对应的函数，需要确保实例化的泛型参数是可以被序列化的类型，例如：
+
+```csharp
+Generic<int> generic = new Generic<int>();
+Generic<string> generic = new Generic<string>();
+Generic<List<int>> generic = new Generic<List<int>>();
+```
+:::
 
 ### 集合类型
 
@@ -128,7 +208,7 @@ Nino支持序列化和反序列化嵌套的可序列化类型，例如：
 
 ### 多态类型
 
-Nino支持序列化和反序列化多态类型，需要注意的是，每个需要序列化的类型（基类或派生类）都需要使用`[NinoType]`特性修饰，例如：
+Nino支持序列化和反序列化多态类型，需要注意的是，每个需要序列化的类型（接口、基类或派生类）都需要使用`[NinoType]`特性修饰，例如：
 
 ```csharp{1,7,8}
 [NinoType]
@@ -204,7 +284,7 @@ public class Derived : Base
   ::: danger
   Nino会在反序列化对象时进行类型校验，所以不能修改类型为引用类型的字段/属性
 
-  Nino允许将是值类型的字段/属性的类型修改为另一个值类型（例如`public MyStruct val` 可以修改为 `public MyStruct2 val`，但需要确保`MyStruct`和`MyStruct2`都是值类型，且内部内存结构一致）
+  Nino允许将是值类型（结构体）的字段/属性的类型修改为另一个值类型（例如`public MyStruct val` 可以修改为 `public MyStruct2 val`，但需要确保`MyStruct`和`MyStruct2`都是值类型，且内部内存结构一致）
   :::
 
   ::: code-group

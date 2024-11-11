@@ -8,7 +8,7 @@ let map = {
         home: '首页',
         doc: '使用文档',
         start: '快速开始',
-        types: '支持类型',
+        types: '类型系统',
         basic: '基础用法',
         advanced: '进阶用法',
         limit: '限制',
@@ -19,7 +19,7 @@ let map = {
         home: 'Home',
         doc: 'Documentation',
         start: 'Quick Start',
-        types: 'Supported Types',
+        types: 'Type System',
         basic: 'Basic Usage',
         advanced: 'Advanced Usage',
         limit: 'Limitation',
@@ -228,6 +228,11 @@ export default withMermaid(defineConfig({
                     api: 'modern-compiler' // or "modern"
                 }
             }
+        },
+        optimizeDeps: {
+            include: [
+                'mermaid'
+            ]
         }
     },
     sitemap: {

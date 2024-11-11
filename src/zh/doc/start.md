@@ -21,6 +21,12 @@ Nino支持.NET 5.0 及以上版本的项目，或.NET Standard 2.0 及以上版�
     dotnet add package Nino
     ```
 
+::: info
+Nino需要安装两个NuGet包：`Nino.Generator`和`Nino.Serialization`，二者缺一不可
+
+直接在NuGet管理器中安装`Nino`会自动安装这两个包
+:::
+
 ::: warning
 请注意，此方法不支持.NET Framework项目，同时不支持无法使用`Source Generator`的IDE（如Visual Studio Code）
 :::

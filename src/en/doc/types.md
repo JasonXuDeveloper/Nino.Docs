@@ -1,11 +1,11 @@
 ---
-title: Supported Types
+title: Type System
 lang: en
 outline: deep
 ---
-# Supported Types
+# Type System
 
-This page consists of a list of types that are serializable in the runtime. In addition, this page includes how to define a custom serializable type and versioning.
+This page consists of explanations on types that are serializable in the runtime. In addition, this page includes how to define a custom serializable type and versioning.
 
 
 
@@ -25,25 +25,30 @@ Nino supports serializing all [unmanaged types](https://learn.microsoft.com/en-u
 - Guid
 - Vector
 - Matrix
-- Other primitive types
+- unmanaged struct
+- unmanaged generic struct
+- unmanaged record struct
+- unmanaged generic record struct
 
 ::: info
 Nino also supports the String type
 :::
 
 ::: info
-A user-defined `struct` that only has fields of unmanaged types is also considered an unmanaged type, and can be serialized by Nino automatically.
+User-defined `struct`, `struct<T>` (where `T` is an unmanaged type), `record struct`, and `record struct<T>` that only contain fields of unmanaged types are also considered unmanaged types (unmanaged structs), and Nino can automatically serialize them.
 
-For custom unmanaged structs, Nino will automatically serialize and deserialize all fields in the struct, and the order of serialization and deserialization is determined by the order of the fields in the struct. You cannot explicitly specify which fields to exclude or which constructor to use when deserializing
+For custom unmanaged structs, Nino will automatically serialize and deserialize all fields in the structure, and the order of serialization and deserialization is determined by the order of the fields in the structure (or by using `[StructLayout(LayoutKind.Explicit)]` to specify).
+
+Nino does not support explicitly specifying which fields to exclude or which constructor to use during deserialization.
 :::
 
 
 ### Custom Types
 
-If you need to serialize non-unmanaged types, please add the `[NinoType]` attribute to the `class`, `struct`, or `record` so that Nino can generate serialization and deserialization functions, for example:
+If you need to serialize managed types (i.e., not the types mentioned above), add the `[NinoType]` attribute to the `class`, `struct`, `record`, or `record struct` to allow Nino to generate serialization and deserialization functions, for example:
 
 ::: code-group
-```csharp{1} [Custom non-unmanaged struct]
+```csharp{1} [Custom managed struct]
 [NinoType]
 public struct SampleStruct
 {
@@ -54,6 +59,10 @@ public struct SampleStruct
 ```csharp{1} [Custom record]
 [NinoType]
 public record SampleRecord(int Id, string Name);
+```
+```csharp{1} [Custom record struct]
+[NinoType]
+public record struct SampleRecord(int Id, string Name);
 ```
 ```csharp{1} [Custom class]
 [NinoType]
@@ -66,7 +75,7 @@ public class SampleClass
 :::
 
 ::: info
-By default, the `[NinoType]` attribute will collect all public fields and properties with getters and setters in the corresponding `class`/`struct`. For `record`s, it will not only collect all public fields and properties with getters/setters, but also the primary constructor parameters.
+By default, the `[NinoType]` attribute will collect all public fields and properties with getters and setters in the corresponding `class` or `struct`. For `record` or `record struct`, it will not only collect all public fields and properties with getters/setters, but also the primary constructor parameters.
 
 If you want to manually mark the members that need to be serialized, use `[NinoType(false)]` to decorate the type, and use `[NinoMember(id)]` to decorate the members that need to be serialized (the tag needs to pass a numeric parameter, which is the position of the member during serialization and deserialization, and the collection order is sorted by the number in the tag in ascending order)
 
@@ -86,7 +95,12 @@ public record SampleRecord(
                 [NinoMember(2)] int Id,
                 [NinoMember(1)] string Name);
 ```
-:::
+```csharp{1,3,4} [Record struct example]
+[NinoType(false)]
+public record struct SampleRecord(
+                [NinoMember(2)] int Id,
+                [NinoMember(1)] string Name);
+```
 :::
 
 ::: info
@@ -106,6 +120,72 @@ public class SampleClass
 
 ::: warning
 `[NinoIgnore]` **does not** work on primary constructor parameters of records, it **does not** work on fields of unmanaged structs either.
+:::
+
+### Generic Types
+
+Nino supports serializing and deserializing generic types, such as:
+
+
+::: code-group
+```csharp{1} [Generic struct]
+[NinoType]
+public struct GenericStruct<T>
+{
+    public T Val;
+}
+```
+```csharp{1} [Generic class]
+[NinoType]
+public class Generic<T>
+{
+    public T Val;
+}
+```
+```csharp{1} [Generic record]
+[NinoType]
+public record SimpleRecord6<T>(int Id, T Data);
+```
+```csharp{1} [Generic record struct]
+[NinoType]
+public record struct SimpleRecordStruct2<T>(int Id, T Data);
+```
+:::
+
+::: info
+
+Nino also supports constraints on generic type parameters:
+
+```csharp{1,2}
+[NinoType]
+public class ComplexGeneric<T> where T : IList
+{
+    public T Val;
+}
+```
+
+:::
+
+::: info
+Nino also supports serializing and deserializing generic type members declared with generic parameters, for example:
+
+```csharp{1,4}
+[NinoType]
+public class ComplexGeneric2<T>
+{
+    public Generic<T> Val;
+}
+```
+:::
+
+::: warning
+Nino generates corresponding functions when defining generic instance types, so make sure that the generic parameters instantiated are serializable types, for example:
+
+```csharp
+Generic<int> generic = new Generic<int>();
+Generic<string> generic = new Generic<string>();
+Generic<List<int>> generic = new Generic<List<int>>();
+```
 :::
 
 
@@ -131,7 +211,7 @@ Nino supports serialization and deserialization of nested serializable types, su
 
 ### Polymorphic Types
 
-Nino supports serializing and deserializing polymorphic types, and it should be noted that each type that needs to be serialized (base class or derived class) needs to be decorated with the `[NinoType]` attribute, for example:
+Nino supports serializing and deserializing polymorphic types, and it should be noted that each type that needs to be serialized (interface, base class or derived class) needs to be decorated with the `[NinoType]` attribute, for example:
 
 ```csharp{1,7,8}
 [NinoType]

@@ -20,6 +20,12 @@ Nino supports projects with .NET 5.0 or higher, or .NET Standard 2.0 or higher
     dotnet add package Nino
     ```
 
+::: info
+Nino requires two NuGet packages to be installed: `Nino.Generator` and `Nino.Serialization`, both are necessary
+
+Look up and install the package `Nino` in the NuGet package manager to automatically install these two packages
+:::
+
 ::: warning
 Please be aware that this installation does not support .NET Framework projects, and IDEs that do not support `Source Generator`
 :::
