@@ -61,7 +61,7 @@ public record SampleRecord(int Id, string Name);
 ```
 ```csharp{1} [自定义Record Struct]
 [NinoType]
-public record struct SampleRecord(int Id, string Name);
+public record struct SampleRecordStruct(int Id, string Name);
 ```
 ```csharp{1} [自定义类]
 [NinoType]

@@ -97,7 +97,7 @@ public record SampleRecord(
 ```
 ```csharp{1,3,4} [Record struct example]
 [NinoType(false)]
-public record struct SampleRecord(
+public record struct SampleRecordStruct(
                 [NinoMember(2)] int Id,
                 [NinoMember(1)] string Name);
 ```
@@ -179,7 +179,7 @@ public class ComplexGeneric2<T>
 :::
 
 ::: warning
-Nino generates corresponding functions when defining generic instance types, so make sure that the generic parameters instantiated are serializable types, for example:
+Nino generates corresponding serializing and deserializing functions when instantiating a generic type (actually defining a generic type with type arguments), so make sure that the generic parameters instantiated are serializable types, for example:
 
 ```csharp
 Generic<int> generic = new Generic<int>();

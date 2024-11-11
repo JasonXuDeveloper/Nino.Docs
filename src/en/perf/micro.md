@@ -91,13 +91,13 @@ _simpleStructs = Enumerable.Range(0, 30).Select(_ => SimpleStruct.Create()).ToAr
 
 ## Benchmark Environment
 ```
-BenchmarkDotNet v0.13.12, macOS Sonoma 14.4 (23E214) [Darwin 23.4.0]
+BenchmarkDotNet v0.14.0, macOS Sonoma 14.4 (23E214) [Darwin 23.4.0]
 Apple M1, 1 CPU, 8 logical and 8 physical cores
-.NET SDK 8.0.302
+.NET SDK 9.0.100-rc.2.24474.11
   [Host]     : .NET 8.0.6 (8.0.624.26715), Arm64 RyuJIT AdvSIMD
-  Job-QCQJSF : .NET 8.0.6 (8.0.624.26715), Arm64 RyuJIT AdvSIMD
+  Job-IBNCAG : .NET 9.0.0 (9.0.24.47305), Arm64 RyuJIT AdvSIMD
 
-Runtime=.NET 8.0  IterationCount=10  WarmupCount=3  
+Runtime=.NET 9.0  IterationCount=20  WarmupCount=1 
 ```
 
 ## Benchmark Result
