@@ -283,7 +283,7 @@ Since Nino supports polymorphism, serializing the interface or abstract class im
 
 
 ## Version Compatibility
-- Renaming fields/properties of the same type that have been serialized is allowed
+- Renaming fields/properties of the same type that have been serialized is allowed (requires explicit order control via `[NinoMember(id)]`)
 - Changing the type of serialized fields/properties to an unmanaged struct of the same memory size (`int`->`uint`, `int`->`float`, `List<long>`->`List<double>`, `List<int[]>`->`List<float[]>`) is allowed
   ::: danger
   Nino performs type checking when deserializing objects, so you cannot modify fields/properties that are declared in reference types.

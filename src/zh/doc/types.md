@@ -279,7 +279,7 @@ public class Derived : Base
 
 
 ## 版本兼容
-- 可以给已序列化的相同类型的字段/属性改名
+- 可以给已序列化的相同类型的字段/属性改名 （需要通过`[NinoMember(id)]`标签指定成员在序列化和反序列化时的位置）
 - 可以给已序列化的字段/属性改成相同内存大小的unmanaged struct（`int`->`uint`，`int`->`float`，`List<long>`->`List<double>`，`List<int[]>`->`List<float[]>`）
   ::: danger
   Nino会在反序列化对象时进行类型校验，所以不能修改类型为引用类型的字段/属性
@@ -310,7 +310,7 @@ public class Derived : Base
   :::
 
 
-- 可以添加不被序列化/反序列化的新的字段/属性（既使用`[NinoIgnore]`修饰或在`[NinoType(false)]`的情况下不标记`[NinoMember]`）
+- 可以添加不被序列化/反序列化的新的字段/属性（即使用`[NinoIgnore]`修饰的成员，或在`[NinoType(false)]`的情况下不标记`[NinoMember]`的成员）
   ::: warning
   不支持给unmanaged struct添加引用类型成员
   :::
