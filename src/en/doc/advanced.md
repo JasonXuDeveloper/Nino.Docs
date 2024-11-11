@@ -6,6 +6,39 @@ outline: deep
 # Advanced Usage
 This page describes how to use Nino in more advanced scenarios.
 
+## Weak Version Tolerance
+Nino supports a weaker (more flexible) version tolerance mechanism. This means that you can add new fields to a managed nino serializable type without breaking the deserialization of the old version of serialized data.
+
+However, there are several restrictions to this mechanism:
+- You can only add new members to the end of the type.
+- You need to explicitly order the members via `[NinoType(false)]` and `[NinoMember(order)]` attribute to ensure the new members are added after the old members.
+- You cannot remove any existing members. And changing existing member types contains restrictions as well (refer to [Type System](./types#version-compatibility)).
+
+By default, this weak version tolerance mechanism is disabled. To enable it, you need to add the define symbol `WEAK_VERSION_TOLERANCE` to your project.
+
+::: warning
+Note that enabling this feature will introduce a 5% overhead in  deserialization performance.
+:::
+
+### Usage
+```csharp
+// assuming WEAK_VERSION_TOLERANCE is defined
+[NinoType(false)]
+public class SaveData
+{
+    [NinoMember(1)] public int Id;
+    [NinoMember(2)] public string Name;
+    [NinoMember(3)] public DateTime NewField1; // [!code ++]
+    [NinoMember(4)] public Generic<int> NewField2; // [!code ++]
+}
+```
+
+In this example, we added two new fields `NewField1` and `NewField2` to the `SaveData` class. By using the `[NinoType(false)]` and `[NinoMember(order)]` attribute, we can ensure that the new fields are added after the old fields. This way, the old version of serialized data can still be deserialized correctly (requires the symbol `WEAK_VERSION_TOLERANCE` to be defined).
+
+::: info
+This is in fact one of our unit test cases, we have verified that it works.
+:::
+
 ## Custom Constructors
 Nino now supports using custom constructors to `deserialize` a nino serialized object. This is useful when you want to perform additional operations when deserializing an object, such as initializing fields or properties that are not serialized.
 

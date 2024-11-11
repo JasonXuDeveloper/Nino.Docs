@@ -312,8 +312,13 @@ Since Nino supports polymorphism, serializing the interface or abstract class im
   }
   ```
   :::
-- Adding new fields/properties that are not serialized/deserialized is allowed (either decorated with `[NinoIgnore]` or not marked with `[NinoMember]` in the case of `[NinoType(false)]`)
+- **Adding** new fields/properties that are **not serialized/deserialized** is allowed (either decorated with `[NinoIgnore]` or not marked with `[NinoMember]` in the case of `[NinoType(false)]`)
   ::: warning
   It is not possible to add reference type members to unmanaged structs
   :::
+
+  ::: info
+  Adding new serializable members to a nino serializable type and the type will be serialized (with the new members) and deserialized (with the old data without these members being defined) is acheivable. This usually happens with game save data, as the developer may add new members to the data when the game versions. However, additional workarounds and restrictions will be needed to be applied. Please refer to [Advanced Usage](./advanced#weak-version-tolerance) for more information.
+  :::
+
 - **Deleting** serialized fields/properties is **not allowed**
