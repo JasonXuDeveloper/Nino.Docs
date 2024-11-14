@@ -97,7 +97,7 @@ function getSidebar(locale: string) {
 
 // https://vitepress.dev/reference/site-config
 export default withMermaid(defineConfig({
-    title: "Nino",
+    title: "Nino v2.x",
     description: "Definite useful and high performance serialization library for any C# projects, including but not limited to .NET Core apps or Unity/Godot games.",
     lastUpdated: true,
     cleanUrls: true,
@@ -242,6 +242,6 @@ export default withMermaid(defineConfig({
         }
     },
     sitemap: {
-        hostname: 'https://nino.xgamedev.net'
+        hostname: 'https://v2.nino.xgamedev.net'
     },
 }))
