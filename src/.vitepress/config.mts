@@ -47,6 +47,12 @@ function getNav(locale: string) {
                 { text: map[locale]['perf_micro'], link: `/${locale}/perf/micro` }
             ]
         },
+        {
+            text: 'v2.x',
+            items: [
+                { text: 'v3.x', link: 'https://nino.xgamedev.net' }
+            ]
+        }
     ]
 }
 
