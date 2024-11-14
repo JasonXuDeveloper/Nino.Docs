@@ -2,7 +2,7 @@
 layout: home
 layoutClass: 'm-home-layout'
 hero:
-  name: "Nino"
+  name: "Nino <small style='font-size:2rem'>v2</small>"
   text: ""
   tagline: 实用的高性能C#序列化库，包括但不限于对.NET Core 应用或Unity/Godot游戏带来令人难以置信的收益。
   actions:
