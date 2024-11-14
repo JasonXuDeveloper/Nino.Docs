@@ -57,7 +57,7 @@ public static SimpleClass Create()
     return new SimpleClass
     {
         Id = random.Next(),
-        Name = "SimpleClass",
+        Name = Guid.NewGuid().ToString(),
         Numbers = Enumerable.Range(0, 100).Select(n => random.Next()).ToArray(),
         Dates = Enumerable.Range(0, 10).Select(n => DateTime.Now.AddSeconds(random.Next())).ToList(),
         Map1 = Enumerable.Range(0, 10).ToDictionary(n => n, n => n.ToString()),
@@ -83,9 +83,9 @@ public static SimpleStruct Create()
 
 ```csharp
 _simpleClass = SimpleClass.Create();
-_simpleClasses = Enumerable.Range(0, 30).Select(_ => SimpleClass.Create()).ToArray();
+_simpleClasses = Enumerable.Range(0, 100).Select(_ => SimpleClass.Create()).ToArray();
 _simpleStruct = SimpleStruct.Create();
-_simpleStructs = Enumerable.Range(0, 30).Select(_ => SimpleStruct.Create()).ToArray();
+_simpleStructs = Enumerable.Range(0, 100).Select(_ => SimpleStruct.Create()).ToArray();
 ```
 
 
