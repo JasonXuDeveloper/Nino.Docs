@@ -12,14 +12,14 @@ hero:
       link: /en/perf/micro
       theme: alt
 features:
-  - title: Faster than fast
-    details: Serialization and deserialization runs significantly faster than JSON, Protobuf, MessagePack, etc. trivial solutions<small class="bottom-small">Most benchmark results are better than MemoryPack and other similar solutions</small>
+  - title: It's a leap change
+    details: Overall performance speeds up by <a class="highlight">25%</a> compared to Nino v2
     link: ./#
-  - title: Easy to use
-    details: By using Source Generator, Nino automatically generates serialization and deserialization functions while the user is writing the program<small class="bottom-small">The generated code is transparent and support non JIT platforms like NativeAOT natively</small>
+  - title: Plausibly the best
+    details: <a class="highlight">30%</a> to <a class="highlight">120%</a> faster than MemoryPack <br> <a class="highlight">360%</a> to <a class="highlight">900%</a> faster than MessagePack
     link: ./#
-  - title: Powerful yet versatile
-    details: Support serializing and deserializing various data structures, i.e. primitives, structs, classes, collections, dictionaries, etc.<small class="bottom-small">Besides Nino also supports serializing and deserializing objects with polymorphism</small>
+  - title: Born to be versatile
+    details: Supports <a class="highlight">records</a>, <a class="highlight">polymorphism</a>, <a class="highlight">generics</a>, <a class="highlight">cross-project references</a>, and more to be discovered
     link: ./#
 ---
 
@@ -32,5 +32,11 @@ features:
   display: block;
   margin-top: 2em;
   text-align: right;
+}
+
+.highlight{
+  font-weight: 1000;
+  font-size: 1rem;
+  color: var(--vp-c-brand-light);
 }
 </style>

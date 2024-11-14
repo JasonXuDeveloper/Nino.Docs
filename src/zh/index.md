@@ -2,7 +2,7 @@
 layout: home
 layoutClass: 'm-home-layout'
 hero:
-  name: "Nino"
+  name: "Nino <small style='font-size:2rem'>v3</small>"
   text: ""
   tagline: 终极高性能C#二进制序列化库。
   actions:
@@ -12,14 +12,14 @@ hero:
       link: /zh/perf/micro
       theme: alt
 features:
-  - title: 比快更快
-    details: 序列化与反序列化性能完胜JSON、Protobuf、MessagePack等常规方案<small class="bottom-small">大部分压测数据优于MemoryPack等同类方案</small>
+  - title: 质的飞跃
+    details: 总体性能相较于Nino v2提升了<a class="highlight">25%</a>
     link: ./#
-  - title: 简单好用
-    details: 通过Source Generator技术在用户编写代码时自动生成所需的数据序列化与反序列化函数<small class="bottom-small">生成代码透明可见且支持NativeAOT等非JIT环境</small>
+  - title: 唯我独尊
+    details: 比MemoryPack快<a class="highlight">30%</a> 至 <a class="highlight">120%</a><br>比MessagePack快<a class="highlight">360%</a> 至 <a class="highlight">900%</a>
     link: ./#
-  - title: 功能强大
-    details: 支持多种数据类型的序列化与反序列化，包括但不限于基础类型、结构体、类、集合、字典等<small class="bottom-small">除此之外更支持序列化与反序列化多态类型</small>
+  - title: 天生我才
+    details: 支持<a class="highlight">记录</a>、<a class="highlight">多态</a>、<a class="highlight">泛型</a>、<a class="highlight">跨项目引用</a>等功能
     link: ./#
 ---
 
@@ -32,5 +32,11 @@ features:
   display: block;
   margin-top: 2em;
   text-align: right;
+}
+
+.highlight{
+  font-weight: 1000;
+  font-size: 1rem;
+  color: var(--vp-c-brand-light);
 }
 </style>
