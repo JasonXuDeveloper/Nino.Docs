@@ -2,7 +2,7 @@
 layout: home
 layoutClass: 'm-home-layout'
 hero:
-  name: "Nino"
+  name: "Nino <small style='font-size:2rem'>v2</small>"
   text: ""
   tagline: Definite useful and high performance serialization library for any C# projects, including but not limited to .NET Core apps or Unity/Godot games.
   actions:
