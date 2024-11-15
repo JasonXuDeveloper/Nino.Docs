@@ -38,10 +38,10 @@ Nino supports projects with Unity 2022.3 or higher, and is compatible with any p
 We recommend running the `Nino.Unity` sample project from GitHub first to learn how to use Nino in Unity, it also includes a set of unit tests (via `TestRunner`)
 :::
 
-1. `Nino` can be installed in Unity via the Unity Package Manager (`UPM`), please refer to [this link](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation) for more information
+`Nino` can be installed in Unity via the Unity Package Manager (`UPM`), please refer to [this link](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation) for more information
 
 
-::: warning
+::: info
 
 By default, Unity 2022.3 or higher should have `Microsoft.CodeAnalysis` installed, if not, please install it manually
 

@@ -39,9 +39,9 @@ Nino支持Unity 2022.3 及以上版本的项目，支持在任意平台发布
 建议先运行GitHub上的`Nino.Unity`示例项目，以了解如何在Unity中使用Nino，示例项目还包含一套单元测试（通过`TestRunner`实现）
 :::
 
-1. `Nino`可以通过Unity Package Manager（`UPM`）安装到Unity中，请参考[这个链接](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation)获取更多信息
+`Nino`可以通过Unity Package Manager（`UPM`）安装到Unity中，请参考[这个链接](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation)获取更多信息
 
-::: warning
+::: info
 默认情况下，Unity 2022.3 及以上版本应该已经安装了`Microsoft.CodeAnalysis`，如果没有，请手动安装
 
 我们需要安装`Microsoft.CodeAnalysis` NuGet包（最新版本即可）以支持Unity内的`Source Generator`
