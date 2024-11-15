@@ -35,19 +35,19 @@ Please be aware that this installation does not support .NET Framework projects,
 ::: info
 Nino supports projects with Unity 2022.3 or higher, and is compatible with any player platform
 
-We recommend running the `Nino_Unity` sample project from GitHub first to learn how to use Nino in Unity
+We recommend running the `Nino.Unity` sample project from GitHub first to learn how to use Nino in Unity, it also includes a set of unit tests (via `TestRunner`)
 :::
 
-1. Please look up the needed Nino version from the [Release](https://github.com/JasonXuDeveloper/Nino/releases) and download the corresponding `Nino.unitypackage` plugin
+1. `Nino` can be installed in Unity via the Unity Package Manager (`UPM`), please refer to [this link](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation) for more information
 2. Please ensure that the `Microsoft.CodeAnalysis` NuGet package (latest version is fine) is installed to support `Source Generator` in Unity
    > This NuGet package can be installed in the Unity project, for example by executing `dotnet add package Microsoft.CodeAnalysis.CSharp --version 4.10.0` after entering the Unity directory (same level as Assets)
-3. Import the downloaded Nino plugin into the Unity project
-4. Move the imported Nino folder to a directory with an asmdef (such as the Test directory in the Nino_Unity project), as Unity has a bug that requires the Nino source code to be placed in a directory with an asmdef in order to generate code that does not throw errors for types in that directory
-5. If an error occurs stating `Nino.Core references netstandard, Version=2.1.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51. A roslyn analyzer should reference netstandard version 2.0`, please ignore it, as this is a Unity bug
-6. If multiple asmdefs are needed, copy the imported Nino directory into directories with different asmdefs
+
+::: warning
+If you are using `asmdef`, please make sure either `auto referencing` is enabled or when `override references` is used, explicitly add reference to `Nino.Core.dll` is needed
+:::
 
 ::: tip
-If you encounter any issues, please ensure that you have followed the above steps and can run the `Nino_Unity` sample project normally. If the problem persists, please submit an Issue on GitHub
+If you encounter any issues, please ensure that you have followed the above steps and can run the `Nino.Unity` sample project normally. If the problem persists, please submit an Issue on GitHub
 :::
 
 #### Hot Update Code
