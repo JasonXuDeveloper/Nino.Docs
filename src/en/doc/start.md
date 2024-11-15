@@ -39,8 +39,15 @@ We recommend running the `Nino.Unity` sample project from GitHub first to learn 
 :::
 
 1. `Nino` can be installed in Unity via the Unity Package Manager (`UPM`), please refer to [this link](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation) for more information
-2. Please ensure that the `Microsoft.CodeAnalysis` NuGet package (latest version is fine) is installed to support `Source Generator` in Unity
-   > This NuGet package can be installed in the Unity project, for example by executing `dotnet add package Microsoft.CodeAnalysis.CSharp --version 4.10.0` after entering the Unity directory (same level as Assets)
+
+
+::: warning
+
+By default, Unity 2022.3 or higher should have `Microsoft.CodeAnalysis` installed, if not, please install it manually
+
+We require `Microsoft.CodeAnalysis` NuGet package (latest version is fine) to be installed to support `Source Generator` in Unity
+   > This NuGet package can be manually installed in the Unity project, for example by executing `dotnet add package Microsoft.CodeAnalysis.CSharp --version 4.10.0` after entering the Unity directory (same level as Assets)
+:::
 
 ::: warning
 If you are using `asmdef`, please make sure either `auto referencing` is enabled or when `override references` is used, explicitly add reference to `Nino.Core.dll` is needed
@@ -53,3 +60,6 @@ If you encounter any issues, please ensure that you have followed the above step
 #### Hot Update Code
 - Nino supports **HybridCLR** and **ILRuntime**
 - If you need to create a C# project externally (not an asmdef within Unity) to write hot update code, please create a .NET Core project and install the Nino library via NuGet ([refer to this](#net-project)), then use the compiled DLL in HybridCLR or ILRuntime
+
+### Migrating from Nino v2
+If you are migrating from Nino v2, the only thing you need to do is to update to the latest version of Nino, then change the namespace of the generated code from `AssemblyName_Nino` to `AssemblyName.NinoGen`.
