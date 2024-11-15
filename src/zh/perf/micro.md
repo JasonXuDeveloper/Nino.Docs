@@ -20,6 +20,7 @@ public partial class SimpleClass
     [Key(0)]
     public int Id;
     [Key(1)]
+    [NinoUtf8] 
     public string Name { get; set; }
     [Key(2)]
     public int[] Numbers { get; set; }
