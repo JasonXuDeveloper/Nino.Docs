@@ -13,14 +13,7 @@ However, there are several restrictions to this mechanism:
 - You can only add new members to the end of the type.
 - You need to explicitly order the members via `[NinoType(false)]` and `[NinoMember(order)]` attribute to ensure the new members are added after the old members.
 - You cannot remove any existing members. And changing existing member types contains restrictions as well (refer to [Type System](./types#version-compatibility)).
-- You cannot define new serializable types, or need to ensure that the TypeId of the version compatible type in the generated serialization code by Nino remains unchanged, for example:
-  ```csharp
-  case 26:
-  {
-      // use Nino.UnitTests.SaveData.SaveData()
-  ```
-  We need to ensure that after adding a new serializable type, the TypeId of the version compatible type (such as `SaveData`) has not changed (here it is `26`).
-
+- You need to ensure that the class name/assembly name/namespace name has not changed.
 
 By default, this weak version tolerance mechanism is disabled. To enable it, you need to add the define symbol `WEAK_VERSION_TOLERANCE` to your project.
 

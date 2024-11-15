@@ -245,11 +245,11 @@ Deserializer.Deserialize(bytes, out List<BaseClass> result);
 :::
 
 ### Abstractions
-Nino supports serializing and deserializing interfaces and abstract classes, and it should be noted that the implementation class of the interface or abstract class needs to be decorated with the `[NinoType]` attribute (while the interface and abstract class themselves also need to be decorated with the `[NinoType]` attribute), for example:
+Nino supports serializing and deserializing interfaces and abstract classes, and it should be noted that the implementation class/struct of the interface or abstract class needs to be decorated with the `[NinoType]` attribute (while the interface and abstract class themselves also need to be decorated with the `[NinoType]` attribute), for example:
 
 ::: code-group
 
-```csharp{1,7,8} [Interface example]
+```csharp{1,7,8,13,14} [Interface example]
 [NinoType]
 public interface IBase
 {
@@ -258,6 +258,12 @@ public interface IBase
 
 [NinoType]
 public class Impl : IBase
+{
+    public int A { get; set; }
+}
+
+[NinoType]
+public struct ImplStruct : IBase
 {
     public int A { get; set; }
 }

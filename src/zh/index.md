@@ -13,9 +13,9 @@ hero:
       theme: alt
 features:
   - title: 质的飞跃
-    details: 总体性能相较于Nino v2提升了<a class="highlight">25%</a>
+    details: 总体性能相较于Nino v2提升<a class="highlight">25%</a>
     link: ./#
-  - title: 唯我独尊
+  - title: 独领风骚
     details: 比MemoryPack快<a class="highlight">30%</a> 至 <a class="highlight">120%</a><br>比MessagePack快<a class="highlight">360%</a> 至 <a class="highlight">900%</a>
     link: ./#
   - title: 天生我才

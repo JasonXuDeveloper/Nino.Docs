@@ -242,11 +242,11 @@ Deserializer.Deserialize(bytes, out List<BaseClass> result);
 :::
 
 ### 抽象类和接口
-Nino支持序列化和反序列化接口和抽象类，需要注意的是接口或抽象类的实现类需要被`[NinoType]`特性修饰（同时接口和抽象类本身也需要被`[NinoType]`特性修饰），例如：
+Nino支持序列化和反序列化接口和抽象类，需要注意的是接口或抽象类的实现类/结构体需要被`[NinoType]`特性修饰（同时接口和抽象类本身也需要被`[NinoType]`特性修饰），例如：
 
 ::: code-group
 
-```csharp{1,7,8} [接口示例]
+```csharp{1,7,8,13,14} [接口示例]
 [NinoType]
 public interface IBase
 {
@@ -255,6 +255,12 @@ public interface IBase
 
 [NinoType]
 public class Impl : IBase
+{
+    public int A { get; set; }
+}
+
+[NinoType]
+public struct ImplStruct : IBase
 {
     public int A { get; set; }
 }
