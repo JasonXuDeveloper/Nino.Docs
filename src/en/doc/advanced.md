@@ -6,14 +6,6 @@ outline: deep
 # Advanced Usage
 This page describes how to use Nino in more advanced scenarios.
 
-## Big Endian
-If your project aims to run on big-endian platforms, you need to add the define symbol `BIG_ENDIAN` to `Nino.Core` project and to compile it on your own then use the compiled `dll`. Otherwise, Nino assumes the platform is little-endian (default by C#) and may lead to incorrect deserialization on big-endian platforms.
-
-::: info
-In theory, all platforms running on .NET (including Unity) are little-endian, so you don't need to worry about this issue.
-
-If you encounter big-endian issues, then add the `BIG_ENDIAN` define symbol will solve the problem.
-:::
 
 ## String Encoding
 Nino supports custom string encoding for members in a `NinoType`. By default, Nino uses UTF-16 encoding to serialize and deserialize these string members. However, you can specify a different encoding by using the `[NinoUtf8]` attribute. The benefit of using UTF-8 encoding is that it can reduce the size of the serialized data (it halves the size of the serialized binary data).
