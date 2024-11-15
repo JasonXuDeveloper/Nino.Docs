@@ -6,6 +6,27 @@ outline: deep
 # 进阶用法
 本页描述了Nino的进阶用法
 
+## 字符串编码
+Nino支持为`NinoType`中的字符串成员指定编码。默认情况下，Nino使用UTF-16编码来序列化和反序列化这些字符串成员。然而，你可以通过使用`[NinoUtf8]`属性来指定不同的编码。使用UTF-8编码的好处是可以减小序列化数据的大小（将序列化的二进制大小减半）。
+
+::: warning
+使用UTF-8编码可能会导致序列化和反序列化这些字段的性能略有下降，大约在5%到10%之间。
+:::
+
+::: info
+当使用`[NinoUtf8]`标记非字符串成员时，Nino会忽略这个属性。
+:::
+
+### 使用方法
+```csharp
+[NinoType]
+public class StringData
+{
+    [NinoUtf8] public string Str;
+    [NinoUtf8] public bool ShouldHaveNoEffect;
+}
+```
+
 ## 弱版本兼容
 
 Nino支持一种更弱（更灵活）的版本兼容机制。这意味着你可以向一个可Nino序列化类型中添加新字段而不会影响反序列化来自旧版本的序列化数据。这个通常用于游戏中的存档数据，在版本迭代中我们可能会给存档数据新增一些成员。

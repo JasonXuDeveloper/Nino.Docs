@@ -6,6 +6,27 @@ outline: deep
 # Advanced Usage
 This page describes how to use Nino in more advanced scenarios.
 
+## String Encoding
+Nino supports custom string encoding for members in a `NinoType`. By default, Nino uses UTF-16 encoding to serialize and deserialize these string members. However, you can specify a different encoding by using the `[NinoUtf8]` attribute. The benefit of using UTF-8 encoding is that it can reduce the size of the serialized data (it halves the size of the serialized binary data).
+
+::: warning
+Using UTF-8 encoding may cause a slight performance overhead during serialization and deserialization for these member, at around 5% to 10%.
+:::
+
+::: info
+When annotating a non-string member using `[NinoUtf8]`, Nino will ignore this attribute
+:::
+
+### Usage
+```csharp
+[NinoType]
+public class StringData
+{
+    [NinoUtf8] public string Str;
+    [NinoUtf8] public bool ShouldHaveNoEffect;
+}
+```
+
 ## Weak Version Tolerance
 Nino supports a weaker (more flexible) version tolerance mechanism. This means that you can add new fields to a managed nino serializable type without breaking the deserialization of the old version of serialized data.
 
