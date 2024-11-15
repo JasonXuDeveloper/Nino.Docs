@@ -98,7 +98,6 @@ function getSidebar(locale: string) {
 // https://vitepress.dev/reference/site-config
 export default withMermaid(defineConfig({
     title: "Nino",
-    description: "Ultimate high-performance binary serialization library for C#.",
     lastUpdated: true,
     cleanUrls: true,
     lang: "en",
@@ -112,6 +111,7 @@ export default withMermaid(defineConfig({
         root: {
             label: 'English',
             lang: 'en',
+            description: 'Ultimate high-performance binary serialization library for C#.',
             link: '/en/',
             themeConfig: {
                 nav: getNav('en'),
@@ -125,6 +125,7 @@ export default withMermaid(defineConfig({
         zh: {
             label: '中文',
             lang: 'zh',
+            description: '终极高性能C#二进制序列化库。',
             link: '/zh/',
             themeConfig: {
                 nav: getNav('zh'),
