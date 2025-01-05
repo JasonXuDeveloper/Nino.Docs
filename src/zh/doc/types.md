@@ -74,7 +74,7 @@ public class SampleClass
 :::
 
 ::: info
-`[NinoType]`特性默认会收集对应`类`或`结构体`所有public的字段及包含getter与setter的属性。如果是`record`或`record struct`，则会在此之上收集主要构造函数的参数
+`[NinoType]`特性默认会收集对应`类`或`结构体`所有public和private的字段及包含getter与setter的属性。如果是`record`或`record struct`，则会在此之上收集主要构造函数的参数
 
 若希望手动标记需要序列化的成员请使用`[NinoType(false)]`修饰类或结构体并用`[NinoMember(id)]`修饰需要序列化的成员（标签内部需要传入一个数字参数，即序列化和反序列化时该成员的位置，收集顺序是按标签的数字从小到大排序的）：
 
@@ -103,7 +103,7 @@ public record struct SampleRecord(
 :::
 
 ::: info
-如果开启了自动收集全部字段和属性，且需要略过某些字段或属性，请将其打上`[NinoIgnore]`标签，需要注意的是，如果没开启自动收集，该标签会无效
+如果开启了自动收集全部字段和属性，且需要略过某些字段或属性（如private字段/属性），请将其打上`[NinoIgnore]`标签，需要注意的是，如果没开启自动收集，该标签会无效
 
 
 ```csharp{1,4}

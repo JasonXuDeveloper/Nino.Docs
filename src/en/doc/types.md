@@ -75,7 +75,7 @@ public class SampleClass
 :::
 
 ::: info
-By default, the `[NinoType]` attribute will collect all public fields and properties with getters and setters in the corresponding `class` or `struct`. For `record` or `record struct`, it will not only collect all public fields and properties with getters/setters, but also the primary constructor parameters.
+By default, the `[NinoType]` attribute will collect all public and private fields and properties with getters and setters in the corresponding `class` or `struct`. For `record` or `record struct`, it will not only collect all public fields and properties with getters/setters, but also the primary constructor parameters.
 
 If you want to manually mark the members that need to be serialized, use `[NinoType(false)]` to decorate the type, and use `[NinoMember(id)]` to decorate the members that need to be serialized (the tag needs to pass a numeric parameter, which is the position of the member during serialization and deserialization, and the collection order is sorted by the number in the tag in ascending order)
 
@@ -104,7 +104,7 @@ public record struct SampleRecordStruct(
 :::
 
 ::: info
-If you have enabled automatic collection of all fields and properties and need to skip certain fields or properties, please mark them with `[NinoIgnore]` attribute. It should be noted that if automatic collection is not enabled, this tag will be invalid.
+If you have enabled automatic collection of all fields and properties and need to skip certain fields or properties (i.e. private field/property), please mark them with `[NinoIgnore]` attribute. It should be noted that if automatic collection is not enabled, this tag will be invalid.
 
 ```csharp{1,4}
 [NinoType]
