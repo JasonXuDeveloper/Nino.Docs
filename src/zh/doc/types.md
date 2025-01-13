@@ -198,6 +198,41 @@ Generic<List<int>> generic = new Generic<List<int>>();
 - `HashSet<T>`，T是可序列化类型
 - `ArraySegment<T>`，T是可序列化类型
 
+::: warning
+当定义字典的子类时，**必须**申明一个公开的索引器，例如：
+```csharp
+public class MultiMap<T, K> : SortedDictionary<T, List<K>>
+{
+    
+    public new List<K> this[T key]
+    {
+        get
+        {
+            if (!TryGetValue(key, out List<K> value))
+            {
+                value = new List<K>();
+                Add(key, value);
+            }
+
+            return value;
+        }
+        
+        set
+        {
+            if (value.Count == 0)
+            {
+                Remove(key);
+            }
+            else
+            {
+                base[key] = value;
+            }
+        }
+    }
+}
+```
+:::
+
 
 ### 嵌套类型
 

@@ -201,6 +201,41 @@ In addition to supporting serialization and deserialization of the above types, 
 - `HashSet<T>`, where T is a serializable type
 - `ArraySegment<T>`, where T is a serializable type
 
+::: warning
+When declaring a dictionary subtype, you **must** define a public indexer, i.e.
+```csharp
+public class MultiMap<T, K> : SortedDictionary<T, List<K>>
+{
+    
+    public new List<K> this[T key]
+    {
+        get
+        {
+            if (!TryGetValue(key, out List<K> value))
+            {
+                value = new List<K>();
+                Add(key, value);
+            }
+
+            return value;
+        }
+        
+        set
+        {
+            if (value.Count == 0)
+            {
+                Remove(key);
+            }
+            else
+            {
+                base[key] = value;
+            }
+        }
+    }
+}
+```
+:::
+
 
 ### Nested Types
 
