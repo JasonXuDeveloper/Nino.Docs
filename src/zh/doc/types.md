@@ -74,7 +74,7 @@ public class SampleClass
 :::
 
 ::: info
-`[NinoType]`特性默认会收集对应`类`或`结构体`所有public和private的字段及包含getter与setter的属性。如果是`record`或`record struct`，则会在此之上收集主要构造函数的参数
+`[NinoType]`特性默认会收集对应`类`或`结构体`所有public字段及包含getter与setter的属性。如果是`record`或`record struct`，则会在此之上收集主要构造函数的参数
 
 若希望手动标记需要序列化的成员请使用`[NinoType(false)]`修饰类或结构体并用`[NinoMember(id)]`修饰需要序列化的成员（标签内部需要传入一个数字参数，即序列化和反序列化时该成员的位置，收集顺序是按标签的数字从小到大排序的）：
 
@@ -99,6 +99,18 @@ public record SampleRecord(
 public record struct SampleRecord(
                 [NinoMember(2)] int Id,
                 [NinoMember(1)] string Name);
+```
+:::
+
+::: info
+如果需要收集非`public`成员，如`protected`及`private`字段，请给`NinoType`特性传递额外参数：
+
+```csharp{1}
+[NinoType(containNonPublicMembers: true)]
+public class SampleClass
+{
+  private int Id;
+}
 ```
 :::
 
@@ -199,7 +211,7 @@ Generic<List<int>> generic = new Generic<List<int>>();
 - `ArraySegment<T>`，T是可序列化类型
 
 ::: warning
-当定义字典的子类时，**必须**申明一个公开的索引器，例如：
+当定义字典的子类时，**必须**申明一个公开的索引器，**否则不会生成序列化/反序列化代码**，例如：
 ```csharp
 public class MultiMap<T, K> : SortedDictionary<T, List<K>>
 {

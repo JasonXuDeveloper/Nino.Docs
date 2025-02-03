@@ -75,7 +75,7 @@ public class SampleClass
 :::
 
 ::: info
-By default, the `[NinoType]` attribute will collect all public and private fields and properties with getters and setters in the corresponding `class` or `struct`. For `record` or `record struct`, it will not only collect all public fields and properties with getters/setters, but also the primary constructor parameters.
+By default, the `[NinoType]` attribute will collect all public fields and properties with getters and setters in the corresponding `class` or `struct`. For `record` or `record struct`, it will not only collect all public fields and properties with getters/setters, but also the primary constructor parameters.
 
 If you want to manually mark the members that need to be serialized, use `[NinoType(false)]` to decorate the type, and use `[NinoMember(id)]` to decorate the members that need to be serialized (the tag needs to pass a numeric parameter, which is the position of the member during serialization and deserialization, and the collection order is sorted by the number in the tag in ascending order)
 
@@ -100,6 +100,18 @@ public record SampleRecord(
 public record struct SampleRecordStruct(
                 [NinoMember(2)] int Id,
                 [NinoMember(1)] string Name);
+```
+:::
+
+::: info
+If you need to collect non-public members, such as `protected` and `private` fields, pass additional parameters to the `NinoType` attribute:
+
+```csharp{1}
+[NinoType(containNonPublicMembers: true)]
+public class SampleClass
+{
+  private int Id;
+}
 ```
 :::
 
@@ -202,7 +214,7 @@ In addition to supporting serialization and deserialization of the above types, 
 - `ArraySegment<T>`, where T is a serializable type
 
 ::: warning
-When declaring a dictionary subtype, you **must** define a public indexer, i.e.
+When declaring a dictionary subtype, you **must** define a public indexer, **or no serialization/deserialization code will be generated**, i.e.
 ```csharp
 public class MultiMap<T, K> : SortedDictionary<T, List<K>>
 {
