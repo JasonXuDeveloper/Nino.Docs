@@ -28,10 +28,8 @@ public class StringData
 }
 ```
 
-
-
 ## Version Compatibility
-- **Renaming** fields/properties of the same type that have been serialized is allowed (but to ensure either the order of the member stays identical, or the `id` given in `NinoMember` remains the same)
+- **Renaming** fields/properties that have been serialized is allowed (but to ensure either the order of the member stays identical, or the `id` given in `NinoMember` remains the same)
 - **Changing the type** of serialized fields/properties (of an **unmanaged** struct) to an **unmanaged** struct of the same memory size (`int`->`uint`, `int`->`float`, `List<long>`->`List<double>`, `List<int[]>`->`List<float[]>`) is allowed
 - **Changing the type** of serialized fields/properties to its **base/derived type** is allowed
 - **Adding** new fields/properties to the **end** of the data structure is allowed (for example, while using **auto collect** via `[NinoType]` attribute, put the **new member after** the **last** collected **member of the previous members**, or if using `[NinoType(false)]` and `[NinoMember(id)]` attribute, set the `id` to a reasonable value so that it **orders after** the **last member of the previous members**, Nino orders the members by the `id` in **ascending order**)
@@ -120,7 +118,6 @@ public class SampleClass2
     public DerivedStruct Data; // [!code warning]
 }
 ```
-```
 
 ```csharp [Unmanaged Different Size Struct]
 [NinoType]
@@ -135,7 +132,7 @@ public long Data; // [!code warning]
 Valid adding new members:
 
 ::: code-group
-```csharp [Adding New Members]
+```csharp [Auto Collect]
 // assuming WEAK_VERSION_TOLERANCE is defined
 [NinoType]
 public class SampleClass
@@ -146,7 +143,7 @@ public class SampleClass
 }
 ```
 
-```csharp [Adding New Members]
+```csharp [Manual Collect]
 // assuming WEAK_VERSION_TOLERANCE is defined
 [NinoType(false)]
 public class SampleClass

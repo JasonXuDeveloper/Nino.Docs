@@ -27,38 +27,164 @@ public class StringData
 }
 ```
 
-## 弱版本兼容
+## 版本兼容性
+- **重命名**已序列化的字段/属性是允许的（但必须确保成员顺序保持不变，或 `NinoMember` 中指定的 `id` 保持一致）
+- **更改**已序列化字段/属性的（**非托管** 结构体）类型为具有相同内存大小的 **非托管** 结构体是允许的（例如：`int` -> `uint`、`int` -> `float`、`List<long>` -> `List<double>`、`List<int[]>` -> `List<float[]>`）
+- **更改**已序列化字段/属性的类型为其 **基类/派生类**是允许的
+- **在数据结构末尾添加**新字段/属性是允许的（例如，在使用 `[NinoType]` 属性进行 **自动收集** 时，将 **新成员放在**之前收集成员的 **最后一个成员之后**；或者如果使用 `[NinoType(false)]` 和 `[NinoMember(id)]` 属性，则将 `id` 设置为一个合理的值，以便其 **排在**之前成员的最后一个之后，Nino 会按照 `id` 的 **升序**对成员进行排序）
+  > 需要在项目中定义符号 `WEAK_VERSION_TOLERANCE` 以启用此功能
+- **删除**已序列化字段/属性是不允许的
 
-Nino支持一种更弱（更灵活）的版本兼容机制。这意味着你可以向一个可Nino序列化类型中添加新字段而不会影响反序列化来自旧版本的序列化数据。这个通常用于游戏中的存档数据，在版本迭代中我们可能会给存档数据新增一些成员。
+### 示例
 
-然而，这个机制有一些限制：
-- 只能在类型的末尾添加新成员。
-- 需要通过`[NinoType(false)]`和`[NinoMember(order)]`属性来明确地对成员进行排序，以确保新成员在旧成员之后添加。
-- 不能删除任何现有成员。并且更改现有成员的类型也有限制（参考[类型系统](./types#版本兼容)）。
-- 需要确保类名/程序集名/命名空间名没有更改。
-
-默认情况下，这个弱版本兼容机制是禁用的。要启用它，你需要在项目中添加`WEAK_VERSION_TOLERANCE`定义符号。
-
-::: warning
-请注意，启用此功能会导致反序列化性能下降5%。
-:::
-
-### 使用方法
-```csharp
-// 假设已经定义了WEAK_VERSION_TOLERANCE
-[NinoType(false)]
+有效更改：
+::: code-group
+```csharp [非托管相同大小结构体]
+[NinoType]
+public class SampleClass
 {
-    [NinoMember(1)] public int Id;
-    [NinoMember(2)] public string Name;
-    [NinoMember(3)] public DateTime NewField1; // [!code ++]
-    [NinoMember(4)] public Generic<int> NewField2; // [!code ++]
+    // float和int都是4字节
+    public List<float> Data; // [!code --]
+    public List<int> Data; // [!code ++]
 }
 ```
 
-在这个例子中，我们向`SaveData`类添加了两个新字段`NewField1`和`NewField2`。通过使用`[NinoType(false)]`和`[NinoMember(order)]`属性，我们可以确保新字段在旧字段之后添加。这样，旧版本的序列化数据仍然可以正确反序列化（需要定义符号`WEAK_VERSION_TOLERANCE`）。
+```csharp [派生 -> 基类]
+[NinoType]
+public interface IBase
+{
+}
+[NinoType]
+public class Derived : IBase;
+[NinoType]
+public class SampleClass2
+{
+    public Derived Data; // [!code --]
+    public IBase Data; // [!code ++]
+}
+```
 
-::: info
-这实际上是我们的一个单元测试用例，我们已经验证它可以正常工作。
+```csharp [基类 -> 派生类]
+[NinoType]
+public interface IBase
+{
+}
+[NinoType]
+public class Derived : IBase;
+[NinoType]
+public struct DerivedStruct : IBase;
+[NinoType]
+public class SampleClass2
+{
+    public IBase Data; // [!code --]
+    // 如果Data是DerivedStruct
+    public DerivedStruct Data; // [!code ++]
+    // 如果Data是Derived
+    public Derived Data; // [!code ++]
+}
+```
+:::
+
+无效更改：
+::: code-group
+```csharp [无关类型]
+[NinoType]
+public class SampleClass2
+{
+public SampleClass Data; // [!code --]
+// 假设SampleClass2不是SampleClass的基类或派生类
+public SampleClass2 Data; // [!code warning]
+}
+```
+    
+```csharp [错误的派生类型]
+[NinoType]
+public interface IBase
+{
+}
+[NinoType]
+public class Derived : IBase;
+[NinoType]
+public struct DerivedStruct : IBase;
+[NinoType]
+public class SampleClass2
+{
+    public IBase Data; // [!code --]
+    // 如果Data是DerivedStruct
+    public Derived Data; // [!code warning]
+    // 如果Data是Derived
+    public DerivedStruct Data; // [!code warning]
+}
+```
+
+```csharp [非托管不同大小结构体]
+[NinoType]
+public class SampleClass2
+{
+public int Data; // [!code --]
+public long Data; // [!code warning]
+}
+```
+:::
+
+有效添加新成员：
+::: code-group
+```csharp [自动收集]
+// 假设WEAK_VERSION_TOLERANCE已定义
+[NinoType]
+public class SampleClass
+{
+    public int Id;
+    public string Name;
+    public bool Extra; // [!code ++]
+}
+```
+```csharp [手动收集]
+// 假设WEAK_VERSION_TOLERANCE已定义
+[NinoType(false)]
+public class SampleClass
+{
+    [NinoMember(0)] public int Id;
+    [NinoMember(1)] public string Name;
+    [NinoMember(2)] public bool Extra; // [!code ++]
+}
+```
+:::
+
+无效添加新成员：
+::: code-group
+```csharp [没定义符号]
+// 假设WEAK_VERSION_TOLERANCE未定义
+[NinoType]
+public class SampleClass
+{
+    public int Id;
+    public string Name;
+    public bool Extra; // [!code warning]
+}
+```
+
+```csharp [新字段未添加到最后]
+// 假设WEAK_VERSION_TOLERANCE已定义
+[NinoType]
+public class SampleClass
+{
+    public int Id;
+    public bool Extra; // [!code warning]
+    public string Name;
+}
+```
+
+```csharp [新字段未添加到最后]
+// 假设WEAK_VERSION_TOLERANCE已定义
+[NinoType(false)]
+public class SampleClass
+{
+    [NinoMember(0)] public int Id;
+    [NinoMember(1)] public string Name;
+    [NinoMember(-1)] public bool Extra; // [!code warning]
+}
+```
 :::
 
 ## 自定义构造函数
