@@ -28,38 +28,145 @@ public class StringData
 }
 ```
 
-## Weak Version Tolerance
-Nino supports a weaker (more flexible) version tolerance mechanism. This means that you can add new fields to a managed nino serializable type without breaking the deserialization of the old version of serialized data.
 
-However, there are several restrictions to this mechanism:
-- You can only add new members to the end of the type.
-- You need to explicitly order the members via `[NinoType(false)]` and `[NinoMember(order)]` attribute to ensure the new members are added after the old members.
-- You cannot remove any existing members. And changing existing member types contains restrictions as well (refer to [Type System](./types#version-compatibility)).
-- You need to ensure that the class name/assembly name/namespace name has not changed.
 
-By default, this weak version tolerance mechanism is disabled. To enable it, you need to add the define symbol `WEAK_VERSION_TOLERANCE` to your project.
+## Version Compatibility
+- **Renaming** fields/properties of the same type that have been serialized is allowed (but to ensure either the order of the member stays identical, or the `id` given in `NinoMember` remains the same)
+- **Changing the type** of serialized fields/properties (of an **unmanaged** struct) to an **unmanaged** struct of the same memory size (`int`->`uint`, `int`->`float`, `List<long>`->`List<double>`, `List<int[]>`->`List<float[]>`) is allowed
+- **Changing the type** of serialized fields/properties to its **base/derived type** is allowed
+- **Adding** new fields/properties to the **end** of the data structure is allowed (for example, while using auto collect via `[NinoType]` attribute, put the new member after the last collected member of the previous members, or if using `[NinoType(false)]` and `[NinoMember(id)]` attribute, set the `id` to a reasonable value so that it orders after the last member of the previous members, Nino orders the members by the `id` in ascending order)
+  > Requires the symbol `WEAK_VERSION_TOLERANCE` to be defined to the project to enable this feature
+- **Deleting** serialized fields/properties is **not allowed**
 
-::: warning
-Note that enabling this feature will introduce a 5% overhead in  deserialization performance.
-:::
 
-### Usage
-```csharp
-// assuming WEAK_VERSION_TOLERANCE is defined
-[NinoType(false)]
-public class SaveData
+### Example
+
+Valid alterations:
+::: code-group
+```csharp [Unmanaged Same Size Struct]
+[NinoType]
+public class SampleClass
 {
-    [NinoMember(1)] public int Id;
-    [NinoMember(2)] public string Name;
-    [NinoMember(3)] public DateTime NewField1; // [!code ++]
-    [NinoMember(4)] public Generic<int> NewField2; // [!code ++]
+    //float and int have the same memory size, so List<int> can be used
+    public List<float> Data; // [!code --]
+    public List<int> Data; // [!code ++]
 }
 ```
 
-In this example, we added two new fields `NewField1` and `NewField2` to the `SaveData` class. By using the `[NinoType(false)]` and `[NinoMember(order)]` attribute, we can ensure that the new fields are added after the old fields. This way, the old version of serialized data can still be deserialized correctly (requires the symbol `WEAK_VERSION_TOLERANCE` to be defined).
+```csharp [Derived -> Base]
+[NinoType]
+public interface IBase;
+[NinoType]
+public class Derived : IBase;
+[NinoType]
+public class SampleClass2
+{
+    public Derived Data; // [!code --]
+    public IBase Data; // [!code ++]
+}
+```
 
-::: info
-This is in fact one of our unit test cases, we have verified that it works.
+```csharp [Base -> Derived]
+[NinoType]
+public interface IBase;
+[NinoType]
+public class Derived : IBase;
+[NinoType]
+public struct DerivedStruct : IBase;
+[NinoType]
+public class SampleClass2
+{
+    public IBase Data; // [!code --]
+    public DerivedStruct Data; // [!code ++]
+    // or
+    public Derived Data; // [!code ++]
+}
+```
+:::
+
+Invalid alterations:
+::: code-group
+```csharp [Unrelated Type]
+[NinoType]
+public class SampleClass2
+{
+public SampleClass Data; // [!code --]
+// Assuming SampleClass2 is not a base/derived type of SampleClass
+public SampleClass2 Data; // [!code warning]
+}
+```
+
+```csharp [Unmanaged Different Size Struct]
+[NinoType]
+public class SampleClass2
+{
+public int Data; // [!code --]
+public long Data; // [!code warning]
+}
+```
+:::
+
+Valid adding new members:
+
+::: code-group
+```csharp [Adding New Members]
+// assuming WEAK_VERSION_TOLERANCE is defined
+[NinoType]
+public class SampleClass
+{
+    public int Id;
+    public string Name;
+    public bool Extra; // [!code ++]
+}
+```
+
+```csharp [Adding New Members]
+// assuming WEAK_VERSION_TOLERANCE is defined
+[NinoType(false)]
+public class SampleClass
+{
+    [NinoMember(0)] public int Id;
+    [NinoMember(1)] public string Name;
+    [NinoMember(2)] public bool Extra; // [!code ++]
+}
+```
+:::
+
+Invalid adding new members:
+
+::: code-group
+```csharp [No Defined Symbol]
+// assuming WEAK_VERSION_TOLERANCE is not defined
+[NinoType]
+public class SampleClass
+{
+    public int Id;
+    public string Name;
+    public bool Extra; // [!code warning]
+}
+```
+
+```csharp [Not Adding to the End]
+// assuming WEAK_VERSION_TOLERANCE is defined
+[NinoType]
+public class SampleClass
+{
+    public int Id;
+    public bool Extra; // [!code warning]
+    public string Name;
+}
+```
+
+```csharp [Not Adding to the End]
+// assuming WEAK_VERSION_TOLERANCE is defined
+[NinoType(false)]
+public class SampleClass
+{
+    [NinoMember(0)] public int Id;
+    [NinoMember(1)] public string Name;
+    [NinoMember(-1)] public bool Extra; // [!code warning]
+}
+```
 :::
 
 ## Custom Constructors

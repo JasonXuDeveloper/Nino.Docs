@@ -14,6 +14,7 @@ let map = {
         limit: '限制',
         perf: '性能测试',
         perf_micro: '微基准测试',
+        versioning: '版本迭代',
     },
     en: {
         home: 'Home',
@@ -25,6 +26,7 @@ let map = {
         limit: 'Limitation',
         perf: 'Performance',
         perf_micro: 'Microbenchmark',
+        versioning: 'Versioning',
     }
 }
 
@@ -35,6 +37,7 @@ function getNav(locale: string) {
             text: map[locale]['doc'],
             items: [
                 { text: map[locale]['start'], link: `/${locale}/doc/start` },
+                { text: map[locale]['versioning'], link: `/${locale}/doc/versioning` },
                 { text: map[locale]['types'], link: `/${locale}/doc/types` },
                 { text: map[locale]['basic'], link: `/${locale}/doc/basic` },
                 { text: map[locale]['advanced'], link: `/${locale}/doc/advanced` },
@@ -64,6 +67,10 @@ function getSidebar(locale: string) {
                 {
                     text: map[locale]['start'],
                     link: `/${locale}/doc/start`
+                },
+                {
+                    text: map[locale]['versioning'],
+                    link: `/${locale}/doc/versioning`
                 },
                 {
                     text: map[locale]['types'],

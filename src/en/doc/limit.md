@@ -9,6 +9,12 @@ This page describes the limitations of Nino.
 ## Current Limitations
 - Need to be used with Source Generator
 - When attempting to serialize types that are not supported (such as Queue), a compilation error will occur
+
+## Resolved Limitations
+- Have no version tolerance for collections
+    ::: info
+    This feature was implemented in v3.2.0, and now you can modify the data structure of a type and still be able to deserialize the old data serialized by the old data structure, even it is a colection (list, dictionary, etc.) with polymorphic elements
+    :::
 - Cannot serialize/deserialize non-public fields/properties
     ::: info
     This feature was implemented in v3.0.6, but there are some things to note:

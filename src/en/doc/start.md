@@ -6,6 +6,8 @@ outline: deep
 # Quick Start
 
 This page describes how to quickly install Nino in different types of projects.
+
+
 ## Installation
 
 ### .NET Project
@@ -60,6 +62,3 @@ If you encounter any issues, please ensure that you have followed the above step
 #### Hot Update Code
 - Nino supports **HybridCLR** and **ILRuntime**
 - If you need to create a C# project externally (not an asmdef within Unity) to write hot update code, please create a .NET Core project and install the Nino library via NuGet ([refer to this](#net-project)), then use the compiled DLL in HybridCLR or ILRuntime
-
-### Migrating from Nino v2
-If you are migrating from Nino v2, the only thing you need to do is to update to the latest version of Nino, then change the namespace of the generated code from `AssemblyName_Nino` to `AssemblyName.NinoGen`.
