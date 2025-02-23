@@ -81,8 +81,9 @@ public struct DerivedStruct : IBase;
 public class SampleClass2
 {
     public IBase Data; // [!code --]
+    // If Data is DerivedStruct
     public DerivedStruct Data; // [!code ++]
-    // or
+    // If Data is Derived
     public Derived Data; // [!code ++]
 }
 ```
@@ -98,6 +99,27 @@ public SampleClass Data; // [!code --]
 // Assuming SampleClass2 is not a base/derived type of SampleClass
 public SampleClass2 Data; // [!code warning]
 }
+```
+
+```csharp [Wrong Derived Type]
+[NinoType]
+public interface IBase
+{
+}
+[NinoType]
+public class Derived : IBase;
+[NinoType]
+public struct DerivedStruct : IBase;
+[NinoType]
+public class SampleClass2
+{
+    public IBase Data; // [!code --]
+    // If Data is DerivedStruct
+    public Derived Data; // [!code warning]
+    // If Data is Derived
+    public DerivedStruct Data; // [!code warning]
+}
+```
 ```
 
 ```csharp [Unmanaged Different Size Struct]
