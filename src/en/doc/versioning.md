@@ -10,10 +10,15 @@ outline: deep
 Note that these Nino versions are not compatible with their earlier versions, and the generated code may need to be updated accordingly.
 
 - v3.0.0
+  
   We obsolete the v2 implementation and rewrite the entire project, so the generated code will be different from the v2 version.
+
 - v3.0.3
+  
   We fixed the issue of polymorphic unmanaged structs, so the generated code will be different from the v3.0.0 version.
+
 - v3.2.0
+  
   We added the ability to modify the data structure of a type and still be able to deserialize the old data serialized by the old data structure (including modifying the data structure of list elements, that can be polymorphic), so the generated code will be different from the v3.0.3 version.
 
 
