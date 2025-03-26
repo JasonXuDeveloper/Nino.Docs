@@ -12,16 +12,14 @@ export function getBench(table) {
 
         if (cells.length > 1) {
             const methodName = cells[0].textContent.trim();
-            const val = parseFloat(cells[4].textContent.replace(/,/g, '').replace(' ns', ''));
-            //log scale
-            const logVal = Math.log10(val);
+            const val = parseFloat(cells[1].textContent.replace(/,/g, '').replace(' ns', ''));
 
             if (methodName.includes('MessagePack')) {
-                benchData.msgpack.push(logVal);
+                benchData.msgpack.push(val);
             } else if (methodName.includes('MemoryPack')) {
-                benchData.memorypack.push(logVal);
+                benchData.memorypack.push(val);
             } else if (methodName.includes('Nino')) {
-                benchData.nino.push(logVal);
+                benchData.nino.push(val);
             }
         }
     });
