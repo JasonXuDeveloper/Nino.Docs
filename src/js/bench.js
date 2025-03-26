@@ -12,14 +12,14 @@ export function getBench(table) {
 
         if (cells.length > 1) {
             const methodName = cells[0].textContent.trim();
-            const meanValue = parseFloat(cells[1].textContent.replace(/,/g, '').replace(' ns', ''));
+            const val = parseFloat(cells[4].textContent.replace(/,/g, '').replace(' ns', ''));
 
             if (methodName.includes('MessagePack')) {
-                benchData.msgpack.push(meanValue);
+                benchData.msgpack.push(val);
             } else if (methodName.includes('MemoryPack')) {
-                benchData.memorypack.push(meanValue);
+                benchData.memorypack.push(val);
             } else if (methodName.includes('Nino')) {
-                benchData.nino.push(meanValue);
+                benchData.nino.push(val);
             }
         }
     });
