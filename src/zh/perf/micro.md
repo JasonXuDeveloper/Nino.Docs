@@ -106,7 +106,7 @@ Runtime=.NET 9.0  IterationCount=20  WarmupCount=1
 
 测试结果为序列化和反序列化上述数据的耗时，单位为纳秒，结果越低越好
 
-### 柱状图
+### 柱状图（标准化）
 
 <script setup>
 import { getBench, getDataset } from '/js/bench.js';

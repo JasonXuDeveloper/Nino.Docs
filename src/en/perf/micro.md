@@ -106,7 +106,7 @@ Runtime=.NET 9.0  IterationCount=20  WarmupCount=1
 
 Results are the time taken to serialize and deserialize the above data, in nanoseconds, the lower the better
 
-### Bar Chart
+### Bar Chart (Normalized)
 
 <script setup>
 import { getBench, getDataset } from '/js/bench.js';

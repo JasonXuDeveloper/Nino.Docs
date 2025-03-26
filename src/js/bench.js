@@ -13,16 +13,27 @@ export function getBench(table) {
         if (cells.length > 1) {
             const methodName = cells[0].textContent.trim();
             const val = parseFloat(cells[4].textContent.replace(/,/g, '').replace(' ns', ''));
+            //log scale
+            const logVal = Math.log10(val);
 
             if (methodName.includes('MessagePack')) {
-                benchData.msgpack.push(val);
+                benchData.msgpack.push(logVal);
             } else if (methodName.includes('MemoryPack')) {
-                benchData.memorypack.push(val);
+                benchData.memorypack.push(logVal);
             } else if (methodName.includes('Nino')) {
-                benchData.nino.push(val);
+                benchData.nino.push(logVal);
             }
         }
     });
+
+    // normalize the data, per benchmark, across [msgpack, memorypack, nino], per index
+    for (let i = 0; i < benchData.msgpack.length; i++) {
+        const max = Math.max(benchData.msgpack[i], benchData.memorypack[i], benchData.nino[i]);
+        benchData.msgpack[i] = benchData.msgpack[i] / max;
+        benchData.memorypack[i] = benchData.memorypack[i] / max;
+        benchData.nino[i] = benchData.nino[i] / max;
+    }
+
 
     return benchData;
 }
