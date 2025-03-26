@@ -8,6 +8,7 @@ outline: deep
 
 ## 当前限制
 - 需要搭配Source Generator使用
+- 使用了`WEAK_VERSION_TOLERANCE`定义的项目无法反序列化由未使用`WEAK_VERSION_TOLERANCE`定义的项目序列化的数据，反之亦然
 - 如果定义了不支持序列化的类型（如Queue）则会导致编译错误
 
 ## 已解决的限制

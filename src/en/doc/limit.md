@@ -8,6 +8,7 @@ This page describes the limitations of Nino.
 
 ## Current Limitations
 - Need to be used with Source Generator
+- `WEAK_VERSION_TOLERANCE` defined project cannot deserialize data serialized by a project without `WEAK_VERSION_TOLERANCE` defined, and vice versa
 - When attempting to serialize types that are not supported (such as Queue), a compilation error will occur
 
 ## Resolved Limitations

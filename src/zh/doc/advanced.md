@@ -85,6 +85,12 @@ public class StringData
   > 需要在项目中定义符号 `WEAK_VERSION_TOLERANCE` 以启用此功能
 - **删除**已序列化字段/属性是不允许的
 
+::: warning
+
+- 使用了`WEAK_VERSION_TOLERANCE`定义的项目无法反序列化由未使用`WEAK_VERSION_TOLERANCE`定义的项目序列化的数据，反之亦然
+
+:::
+
 ### 示例
 
 有效更改：

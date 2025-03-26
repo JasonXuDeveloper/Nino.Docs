@@ -84,6 +84,11 @@ public class StringData
   > Requires the symbol `WEAK_VERSION_TOLERANCE` to be defined to the project to enable this feature
 - **Deleting** serialized fields/properties is **not allowed**
 
+::: warning
+
+`WEAK_VERSION_TOLERANCE` defined project cannot deserialize data serialized by a project without `WEAK_VERSION_TOLERANCE` defined, and vice versa.
+
+:::
 
 ### Examples
 
