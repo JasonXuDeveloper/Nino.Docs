@@ -12,7 +12,9 @@ export function getBench(table) {
 
         if (cells.length > 1) {
             const methodName = cells[0].textContent.trim();
-            const val = parseFloat(cells[1].textContent.replace(/,/g, '').replace(' ns', ''));
+            var val = parseFloat(cells[1].textContent.replace(/,/g, '').replace(' ns', ''));
+            //log scale
+            val = Math.log2(val);
 
             if (methodName.includes('MessagePack')) {
                 benchData.msgpack.push(val);
@@ -23,15 +25,6 @@ export function getBench(table) {
             }
         }
     });
-
-    // normalize the data, per benchmark, across [msgpack, memorypack, nino], per index
-    for (let i = 0; i < benchData.msgpack.length; i++) {
-        const max = Math.max(benchData.msgpack[i], benchData.memorypack[i], benchData.nino[i]);
-        benchData.msgpack[i] = benchData.msgpack[i] / max;
-        benchData.memorypack[i] = benchData.memorypack[i] / max;
-        benchData.nino[i] = benchData.nino[i] / max;
-    }
-
 
     return benchData;
 }
