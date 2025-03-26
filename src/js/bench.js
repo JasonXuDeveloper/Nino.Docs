@@ -13,8 +13,6 @@ export function getBench(table) {
         if (cells.length > 1) {
             const methodName = cells[0].textContent.trim();
             var val = parseFloat(cells[1].textContent.replace(/,/g, '').replace(' ns', ''));
-            //log scale
-            val = Math.log2(val);
 
             if (methodName.includes('MessagePack')) {
                 benchData.msgpack.push(val);

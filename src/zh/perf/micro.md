@@ -93,20 +93,21 @@ _simpleStructs = Enumerable.Range(0, 100).Select(_ => SimpleStruct.Create()).ToA
 
 ## 测试环境
 ```
-BenchmarkDotNet v0.14.0, macOS Sonoma 14.4 (23E214) [Darwin 23.4.0]
+BenchmarkDotNet v0.14.0, macOS Sequoia 15.1.1 (24B91) [Darwin 24.1.0]
 Apple M1, 1 CPU, 8 logical and 8 physical cores
-.NET SDK 9.0.100-rc.2.24474.11
-  [Host]     : .NET 8.0.6 (8.0.624.26715), Arm64 RyuJIT AdvSIMD
-  Job-IBNCAG : .NET 9.0.0 (9.0.24.47305), Arm64 RyuJIT AdvSIMD
+.NET SDK 9.0.101
+  [Host]            : .NET 8.0.6 (8.0.624.26715), Arm64 RyuJIT AdvSIMD
+  ShortRun-.NET 9.0 : .NET 9.0.0 (9.0.24.52809), Arm64 RyuJIT AdvSIMD
 
-Runtime=.NET 9.0  IterationCount=20  WarmupCount=1 
+Job=ShortRun-.NET 9.0  Runtime=.NET 9.0  Server=False  
+IterationCount=3  LaunchCount=1  WarmupCount=3 
 ```
 
 ## 测试结果
 
 测试结果为序列化和反序列化上述数据的耗时，单位为纳秒，结果越低越好
 
-### 柱状图（标准化）
+### 柱状图（标缩放后）
 
 <script setup>
 import { getBench, getDataset } from '/js/bench.js';
@@ -118,6 +119,12 @@ onMounted(() => {
   const bench = getBench(table);
   const options = {
     responsive: true,
+    scales: {
+      myScale: {
+        type: 'logarithmic',
+        position: 'right', 
+      }
+    }
   };
 
   new Chart(
@@ -135,20 +142,6 @@ onMounted(() => {
   );
 
   new Chart(
-    document.getElementById('simple_struct'),
-    {
-      type: 'bar',
-      data: {
-        labels: [
-                  'SimpleStruct 序列化', 'SimpleStruct 反序列化'
-                ],
-        datasets: getDataset(bench, 5, 4)
-      },
-      options: options
-    }
-  );
-
-  new Chart(
     document.getElementById('simple_classes'),
     {
       type: 'bar',
@@ -157,6 +150,20 @@ onMounted(() => {
                   'SimpleClasses 序列化', 'SimpleClasses 反序列化'
                 ],
         datasets: getDataset(bench, 3, 2)
+      },
+      options: options
+    }
+  );
+
+  new Chart(
+    document.getElementById('simple_struct'),
+    {
+      type: 'bar',
+      data: {
+        labels: [
+                  'SimpleStruct 序列化', 'SimpleStruct 反序列化'
+                ],
+        datasets: getDataset(bench, 5, 4)
       },
       options: options
     }
@@ -180,8 +187,8 @@ onMounted(() => {
 </script>
 
 <canvas id="simple_class"></canvas>
-<canvas id="simple_struct"></canvas>
 <canvas id="simple_classes"></canvas>
+<canvas id="simple_struct"></canvas>
 <canvas id="simple_structs"></canvas>
 
 
