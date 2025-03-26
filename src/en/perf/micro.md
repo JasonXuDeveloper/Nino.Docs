@@ -99,7 +99,7 @@ Apple M1, 1 CPU, 8 logical and 8 physical cores
   [Host]            : .NET 8.0.6 (8.0.624.26715), Arm64 RyuJIT AdvSIMD
   ShortRun-.NET 9.0 : .NET 9.0.0 (9.0.24.52809), Arm64 RyuJIT AdvSIMD
 
-Job=ShortRun-.NET 9.0  Runtime=.NET 9.0  Server=False  
+Job=ShortRun-.NET 9.0  Runtime=.NET 9.0  Server=True  
 IterationCount=3  LaunchCount=1  WarmupCount=3 
 ```
 
