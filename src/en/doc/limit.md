@@ -10,6 +10,13 @@ This page describes the limitations of Nino.
 - Need to be used with Source Generator
 - `WEAK_VERSION_TOLERANCE` defined project cannot deserialize data serialized by a project without `WEAK_VERSION_TOLERANCE` defined, and vice versa
 - When attempting to serialize types that are not supported (such as Queue), a compilation error will occur
+- `ValueTuple` behaves differently in `.NET Core` and `Unity/Mono`
+  ::: info
+  This is not Nino's fault. If you look at the implementation for `ValueTuple` in `Mono`, [this link](https://github.com/mono/mono/blob/main/mcs/class/corlib/Mono/RuntimeStructs.cs), they did not specify the struct layout of all valuetuples, so its fields will be serialized/deserialized sequentially by Nino. Note that Unity is currently using `Mono` in its editor, or player mode as well (while IL2CPP is not selected). I am not sure what IL2CPP does with this but I believe it is consitent with Mono.
+
+  However, in `.NET Core`'s implementation, [this link here](https://github.com/dotnet/runtime/blob/main/src/libraries/System.Private.CoreLib/src/System/ValueTuple.cs), they choose to use `LayoutKind.Auto` to layout valuetuples, that can lead to a different result compared to the `Mono` implementation. So `ValueTuple` is not compatible between `.NET Core` and `Unity/Mono`.
+
+  :::
 
 ## Resolved Limitations
 - Cannot rename type name/namespace after serialization

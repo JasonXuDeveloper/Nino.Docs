@@ -10,6 +10,13 @@ outline: deep
 - 需要搭配Source Generator使用
 - 使用了`WEAK_VERSION_TOLERANCE`定义的项目无法反序列化由未使用`WEAK_VERSION_TOLERANCE`定义的项目序列化的数据，反之亦然
 - 如果定义了不支持序列化的类型（如Queue）则会导致编译错误
+- `ValueTuple`在`.NET Core`与`Unity/Mono`中行为不同  
+    ::: info  
+    这不是Nino的问题。如果你查看`Mono`中`ValueTuple`的实现，[这个链接](https://github.com/mono/mono/blob/main/mcs/class/corlib/Mono/RuntimeStructs.cs)，他们没有为所有`ValueTuple`指定结构布局，所以Nino会依次序列化/反序列化它的字段。请注意，Unity目前在编辑器及运行模式下使用的是`Mono`（当未选择IL2CPP时）。我不确定IL2CPP对此有何处理，但我认为它与Mono保持一致。  
+    
+    然而，在`.NET Core`的实现中，[这个链接](https://github.com/dotnet/runtime/blob/main/src/libraries/System.Private.CoreLib/src/System/ValueTuple.cs)，他们选择使用`LayoutKind.Auto`进行布局，这可能导致与`Mono`实现不同的结果。因此，`ValueTuple`在`.NET Core`与`Unity/Mono`之间并不兼容。  
+    :::
+
 
 ## 已解决的限制
 - 无法在序列化后重命名类型名称/命名空间
