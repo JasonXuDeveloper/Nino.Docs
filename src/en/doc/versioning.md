@@ -21,6 +21,10 @@ Note that these Nino versions are not compatible with their earlier versions, an
   
   We added the ability to modify the data structure of a type and still be able to deserialize the old data serialized by the old data structure (including modifying the data structure of list elements, that can be polymorphic), so the generated code will be different from the v3.0.3 version.
 
+- `v3.3.4`
+  
+  We added alignments to unmanaged fields, which allows a faster memory access when deserializing data. It also inlines the calls to copy unmanaged fields onto the memory, which makes serialization faster. However, this increases the output size and is not compatabile with previous versions.
+
 
 ## Migrating from Nino v2
 If you are migrating from Nino v2, the only thing you need to do is to update to the latest version of Nino, then change the namespace of the generated code from `AssemblyName_Nino` to `AssemblyName.NinoGen`.
