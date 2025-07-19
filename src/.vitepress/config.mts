@@ -31,7 +31,7 @@ let map = {
 }
 
 function getNav(locale: string) {
-    return [
+    const ret = [
         { text: map[locale]['home'], link: `/${locale}/` },
         {
             text: map[locale]['doc'],
@@ -57,6 +57,15 @@ function getNav(locale: string) {
             ]
         }
     ]
+
+    if (locale === 'zh') {
+        ret.push({
+            text: '交流群',
+            link: 'https://qm.qq.com/q/Octgj3BS8g'
+        })
+    }
+
+    return ret
 }
 
 function getSidebar(locale: string) {
