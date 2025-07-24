@@ -62,3 +62,6 @@ If you encounter any issues, please ensure that you have followed the above step
 #### Hot Update Code
 - Nino supports **HybridCLR** and **ILRuntime**
 - If you need to create a C# project externally (not an asmdef within Unity) to write hot update code, please create a .NET Core project and install the Nino library via NuGet ([refer to this](#net-project)), then use the compiled DLL in HybridCLR or ILRuntime
+
+### Warning
+Please do not use `Nino v3.9.*` version, this version is mainly for testing the features that will be released in `Nino v4.0`, and is not compatible with the API of `3.*` version, if you need to use it, please directly use `Nino v4.0` version

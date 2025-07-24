@@ -60,3 +60,7 @@ Nino支持Unity 2022.3 及以上版本的项目，支持在任意平台发布
 #### 代码热更
 - Nino支持**HybridCLR**与**ILRuntime**
 - 如果需要另外在外部创建一个C#工程（不是Unity内的asmdef）来编写热更代码，请创建.NET Core工程并通过NuGet安装Nino库（[参考这里](#net-项目)），再将编译出来的DLL在HybridCLR或ILRuntime中使用
+
+
+### 注意事项
+请勿使用`Nino v3.9.*`版本，该版本主要是实验将在`Nino v4.0`发布的功能，与`3.*`版本的API不兼容，如需使用请直接使用`Nino v4.0`版本
