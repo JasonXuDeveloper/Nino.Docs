@@ -12,6 +12,7 @@ icon: Cpu
 | `Nino.Generator` (generator, analyzer) | Roslyn 4.3 and later; builds for Roslyn 4.3, 4.8 and 4.12 in one package |
 | Generated code | C# 9 or later |
 | Unity | 2022.3 and later, Mono and IL2CPP, every player platform |
+| Godot | Godot 4 .NET projects (.NET 8) |
 | Hot update | HybridCLR, with no initialization call |
 
 **Every target writes identical bytes.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` each use the best primitives available to them (vectorized copies, `[UnsafeAccessor]` on .NET 8+), and the test suite checks the same golden payloads against each build. Data written by a .NET 10 server is read by a Unity IL2CPP client on a 32-bit Android phone, and the other way round.
@@ -91,6 +92,14 @@ Not supported. Every platform .NET and Unity run on today is little-endian.
 - Unity types such as `Vector3`, `Quaternion` and `Matrix4x4` are unmanaged and are written as raw memory.
 
 See [Unity and HybridCLR](/en/docs/v4/advanced/unity) for project setup and IL2CPP tips.
+
+## Godot
+
+- Godot 4 C# projects are regular .NET projects (`Godot.NET.Sdk`, targeting .NET 8). Install with `dotnet add package Nino`; see [Godot Project](/en/docs/v4/start#godot-project).
+- The project is compiled by the .NET 8+ SDK, so the source generator, the analyzers and the interceptors all run, and `[UnsafeAccessor]` reaches private members without `partial`.
+- Godot's math structs (`Vector2`, `Vector3`, `Quaternion`, `Transform3D`, `Color`, ...) are unmanaged and are copied as raw memory.
+- In a Godot build with double precision (`real_t` = `double`), these structs hold `double` fields, so their layout differs from the default single-precision build. Data with Godot math types written by one is not readable by the other; use your own structs or primitive fields for data shared between the two.
+- Serialize your own data types; Godot objects such as `Node` and `Resource` are engine objects and are not serialized.
 
 ## HybridCLR and Hot Update
 

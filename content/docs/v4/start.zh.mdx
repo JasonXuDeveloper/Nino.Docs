@@ -1,6 +1,6 @@
 ---
 title: 快速开始
-description: "在 .NET 或 Unity 项目中安装 Nino v4，并序列化你的第一个类型。"
+description: "在 .NET、Unity 或 Godot 项目中安装 Nino v4，并序列化你的第一个类型。"
 icon: Rocket
 ---
 
@@ -13,6 +13,37 @@ icon: Rocket
 </Callout>
 
 ## 安装
+
+<Tabs items={['.NET', 'Unity', 'Godot']}>
+<Tab value=".NET">
+
+```shell
+dotnet add package Nino
+```
+
+详见 [.NET 项目](#net-project)。
+
+</Tab>
+<Tab value="Unity">
+
+```shell
+openupm add com.jasonxudeveloper.nino
+```
+
+详见 [Unity 项目](#unity-project)。
+
+</Tab>
+<Tab value="Godot">
+
+```shell
+# 在 Godot 项目 .csproj 所在的目录中
+dotnet add package Nino
+```
+
+详见 [Godot 项目](#godot-project)。
+
+</Tab>
+</Tabs>
 
 ### .NET 项目 [#net-project]
 
@@ -87,6 +118,24 @@ Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`。因此，序列�
 #### 热更新代码
 - Nino 支持 **HybridCLR**。生成的注册表会在其中某个类型第一次被使用时被延迟查找，因此通过 `Assembly.Load` 加载的热更新程序集**无需初始化调用**。
 - 热更新代码可以放在 Unity 的 `asmdef` 中，也可以放在通过 NuGet 安装 Nino 的外部 C# 项目中（[见上文](#net-project)）；照常在 HybridCLR 中使用编译出的 DLL 即可。
+
+### Godot 项目 [#godot-project]
+
+Godot 4 的 C# 项目（Godot 的 .NET 版本）是使用 `Godot.NET.Sdk`、以 .NET 8 为目标的普通 .NET 项目，因此 Nino 与任何 NuGet 包一样安装：
+
+```shell
+# 在 Godot 项目 .csproj 所在的目录中
+dotnet add package Nino
+```
+
+然后构建项目（使用 Godot 的 **Build** 按钮、IDE 或 `dotnet build`）。
+
+- 项目由 .NET 8+ SDK 编译，因此源生成器、分析器和[拦截器](/zh/docs/v4/performance#interceptors)都会运行。
+- .NET 8 提供 `[UnsafeAccessor]`，因此序列化私有成员不需要 `partial` 类型。
+- Godot 的数学结构体（`Vector2`、`Vector3`、`Quaternion`、`Transform3D`、`Color` 等）是非托管类型，与其他非托管结构体一样以原始内存拷贝。
+- 序列化你自己的数据类和结构体。`Node`、`Resource` 等 Godot 对象是引擎对象而不是数据，不会被序列化。
+
+详见[平台](/zh/docs/v4/platforms#godot)。
 
 ## 第一次序列化
 

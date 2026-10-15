@@ -12,6 +12,7 @@ icon: Cpu
 | `Nino.Generator`（生成器、分析器） | Roslyn 4.3 及更高版本；一个包内含 Roslyn 4.3、4.8 和 4.12 三个构建 |
 | 生成的代码 | C# 9 或更高版本 |
 | Unity | 2022.3 及更高版本，Mono 与 IL2CPP，所有播放器平台 |
+| Godot | Godot 4 .NET 项目（.NET 8） |
 | 热更新 | HybridCLR，无需初始化调用 |
 
 **所有目标写出的字节完全相同。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 各自使用可用的最佳原语（向量化拷贝、.NET 8+ 上的 `[UnsafeAccessor]`），测试套件会针对每个构建校验同一组标准载荷。.NET 10 服务器写出的数据可以被 32 位 Android 手机上的 Unity IL2CPP 客户端读取，反之亦然。
@@ -91,6 +92,14 @@ CoreCLR 和 Unity 2021.3+ 存储为 `bool hasValue; T value;`，而旧版 Mono�
 - `Vector3`、`Quaternion`、`Matrix4x4` 等 Unity 类型是非托管类型，以原始内存写入。
 
 项目设置与 IL2CPP 技巧参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)。
+
+## Godot [#godot]
+
+- Godot 4 的 C# 项目是普通的 .NET 项目（`Godot.NET.Sdk`，以 .NET 8 为目标）。使用 `dotnet add package Nino` 安装；参见 [Godot 项目](/zh/docs/v4/start#godot-project)。
+- 项目由 .NET 8+ SDK 编译，因此源生成器、分析器和拦截器都会运行，`[UnsafeAccessor]` 无需 `partial` 即可访问私有成员。
+- Godot 的数学结构体（`Vector2`、`Vector3`、`Quaternion`、`Transform3D`、`Color` 等）是非托管类型，以原始内存拷贝。
+- 在双精度版本的 Godot（`real_t` 为 `double`）中，这些结构体的字段是 `double`，布局与默认的单精度版本不同。由其中一种版本写出的、包含 Godot 数学类型的数据无法被另一种读取；需要在两者之间共享的数据请使用你自己的结构体或基元字段。
+- 序列化你自己的数据类型；`Node`、`Resource` 等 Godot 对象是引擎对象，不会被序列化。
 
 ## HybridCLR 与热更新 [#hybridclr-and-hot-update]
 

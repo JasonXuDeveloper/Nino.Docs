@@ -1,6 +1,6 @@
 ---
 title: Quick Start
-description: "Install Nino v4 in a .NET or Unity project and serialize your first type."
+description: "Install Nino v4 in a .NET, Unity or Godot project and serialize your first type."
 icon: Rocket
 ---
 
@@ -13,6 +13,37 @@ New to v4, or upgrading from v3? Read [What's New in v4](/en/docs/v4/whats-new) 
 </Callout>
 
 ## Installation
+
+<Tabs items={['.NET', 'Unity', 'Godot']}>
+<Tab value=".NET">
+
+```shell
+dotnet add package Nino
+```
+
+Details: [.NET Project](#net-project).
+
+</Tab>
+<Tab value="Unity">
+
+```shell
+openupm add com.jasonxudeveloper.nino
+```
+
+Details: [Unity Project](#unity-project).
+
+</Tab>
+<Tab value="Godot">
+
+```shell
+# in the folder with your Godot project's .csproj
+dotnet add package Nino
+```
+
+Details: [Godot Project](#godot-project).
+
+</Tab>
+</Tabs>
 
 ### .NET Project
 
@@ -87,6 +118,24 @@ If you run into problems, first check that you can run the `Nino.Unity` sample p
 #### Hot Update Code
 - Nino supports **HybridCLR**. Generated registries are found lazily the first time one of their types is used, so a hot-update assembly loaded with `Assembly.Load` needs **no initialization call**.
 - Hot-update code can live in a Unity `asmdef`, or in an external C# project that installs Nino from NuGet ([see above](#net-project)); use the compiled DLL in HybridCLR as usual.
+
+### Godot Project
+
+Godot 4 C# projects (the .NET build of Godot) are regular .NET projects built with `Godot.NET.Sdk` and targeting .NET 8, so Nino installs like any NuGet package:
+
+```shell
+# in the folder with your Godot project's .csproj
+dotnet add package Nino
+```
+
+Then build the project (from Godot's **Build** button, your IDE or `dotnet build`).
+
+- The source generator, the analyzers and the [interceptors](/en/docs/v4/performance#interceptors) all run, since the project is compiled by the .NET 8+ SDK.
+- .NET 8 has `[UnsafeAccessor]`, so serializing private members does not require `partial` types.
+- Godot's math structs (`Vector2`, `Vector3`, `Quaternion`, `Transform3D`, `Color`, ...) are unmanaged and are copied as raw memory, like any unmanaged struct.
+- Serialize your own data classes and structs. Godot objects such as `Node` and `Resource` are engine objects, not data, and are not serialized.
+
+See [Platforms](/en/docs/v4/platforms#godot) for details.
 
 ## First Serialization
 
