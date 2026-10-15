@@ -1,20 +1,20 @@
 ---
 title: Serialize and Deserialize
-description: "Serialize and deserialize with NinoSerializer and NinoDeserializer, reuse buffers and instances."
+description: "Serialize and deserialize with NinoSerializer and NinoDeserializer, reuse buffers and instances, and handle runtime types."
 icon: Play
 ---
 
-This page describes the basic usage of Nino: serializing and deserializing values with `NinoSerializer` and `NinoDeserializer` (namespace `Nino.Core`).
+<AnchorRedirect
+  map={{
+    'recommended-usage': '/en/docs/v4/basic#reusing-a-buffer',
+    'using-a-writer': '/en/docs/v4/basic#several-values-in-one-buffer',
+    'deserializing-into-an-existing-value': '/en/docs/v4/basic#into-an-existing-value',
+  }}
+/>
 
-<Callout type="info">
+`NinoSerializer` and `NinoDeserializer` (namespace `Nino.Core`) are the whole runtime API. Both are static and **thread safe**: call them from any number of threads without locking. Per-call state (scratch buffers, reference tables) is kept per thread, and no hot path writes shared memory.
 
-Every method of `NinoSerializer` and `NinoDeserializer` is **thread safe** and can be called concurrently without locking. Per-call state (scratch buffers, reference tables) is kept per thread, and no hot path writes shared memory.
-
-</Callout>
-
-## Serialization
-
-### API
+## Serializing
 
 ```csharp
 // Into a new byte array
@@ -23,73 +23,64 @@ byte[] NinoSerializer.Serialize<T>(T value);
 // Into any IBufferWriter<byte>
 void NinoSerializer.Serialize<T>(T value, IBufferWriter<byte> bufferWriter);
 
-// With an existing Writer (for custom formatters and advanced scenarios)
+// With an existing Writer (several values in one buffer, custom formatters)
 void NinoSerializer.Serialize<T>(T value, ref Writer writer);
 
-// Boxed values, when the type is only known at runtime
+// Boxed values, when the type is only known at run time
 byte[] NinoSerializer.Serialize(object value);    // as value.GetType(); value must not be null
 void NinoSerializer.SerializeBoxed(object value, IBufferWriter<byte> bufferWriter, Type type);
 void NinoSerializer.SerializeBoxed(object value, ref Writer writer, Type type);
 ```
 
-`T` can be any [serializable type](/en/docs/v4/types): a `[NinoType]`, a primitive, a string, a collection, and so on.
-
-### Standard Usage
+`T` can be any [supported type](/en/docs/v4/types): a `[NinoType]`, a primitive, a string, a collection, and so on.
 
 ```csharp
-ObjClass obj = new ObjClass();
-byte[] bytes = NinoSerializer.Serialize(obj);
+byte[] bytes = NinoSerializer.Serialize(player);
 ```
 
-### Recommended Usage
-`Serialize<T>(value)` allocates one `byte[]` for the result. To avoid that, serialize into a buffer you reuse.
+### Reusing a Buffer
 
-`NinoArrayBufferWriter` is Nino's own `IBufferWriter<byte>`, backed by `ArrayPool<byte>.Shared`. Nino writes into it **in place**; any other `IBufferWriter<byte>` (such as .NET's `ArrayBufferWriter<byte>`, or a writer wrapping a `PipeWriter` or `Stream`) receives the bytes with one extra copy at the end.
+`Serialize<T>(value)` allocates one `byte[]` for the result. To allocate nothing, serialize into a buffer you keep.
+
+`NinoArrayBufferWriter` is Nino's own `IBufferWriter<byte>`, backed by `ArrayPool<byte>.Shared`. Nino writes into it **in place**. Any other `IBufferWriter<byte>` (.NET's `ArrayBufferWriter<byte>`, a `PipeWriter`, a writer wrapping a `Stream`) receives the bytes with one extra copy at the end.
 
 ```csharp
-var buffer = new NinoArrayBufferWriter();
+var buffer = new NinoArrayBufferWriter();      // or new NinoArrayBufferWriter(initialCapacity)
 
-NinoSerializer.Serialize(obj, buffer);
-ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // or buffer.WrittenMemory
+NinoSerializer.Serialize(player, buffer);
+ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // also WrittenMemory, WrittenCount, ToArray()
 // ... send or store the bytes ...
 
-buffer.ResetWrittenCount();                    // reuse the same buffer
-NinoSerializer.Serialize(obj, buffer);         // no allocation this time
+buffer.ResetWrittenCount();                    // reuse the same array
+NinoSerializer.Serialize(player, buffer);      // no allocation this time
 ```
 
 <Callout type="warn">
 
-`NinoArrayBufferWriter` itself is **not** thread safe: use one instance per thread (or per operation). Call `Dispose()` when you no longer need it to return its array to the pool.
+A `NinoArrayBufferWriter` is **not** thread safe: use one per thread, per connection or per operation. Call `Dispose()` when you no longer need it, to return its array to the pool.
 
 </Callout>
 
-<Callout type="info">
+### Several Values in One Buffer
 
-The same applies to `ArrayBufferWriter<byte>`: reuse one instance and call `ResetWrittenCount()` between operations.
-
-</Callout>
-
-### Using a Writer
-
-`Writer` is a `ref struct` that writes into a `NinoArrayBufferWriter`. It is useful to write several values back to back, or inside a [custom formatter](/en/docs/v4/custom-formatters):
+`Writer` is a `ref struct` that writes into a `NinoArrayBufferWriter`. Use it to write several values back to back, or inside a [custom formatter](/en/docs/v4/custom-formatters):
 
 ```csharp
 var buffer = new NinoArrayBufferWriter();
 var writer = new Writer(buffer);
 NinoSerializer.Serialize(header, ref writer);
 NinoSerializer.Serialize(body, ref writer);
-writer.Flush(); // commits the written bytes to buffer.WrittenCount (Dispose() does the same)
+writer.Flush();             // commits the bytes to buffer.WrittenCount (Dispose() does the same)
+writer.ReleaseReferences(); // ends reference tracking, see below
 ```
 
 <Callout type="info">
 
-When you create the `Writer` yourself and serialize types with `trackReferences`, call `writer.ReleaseReferences()` once the logical call is done; the top-level `NinoSerializer` overloads that create their own writer do this for you.
+The top-level overloads scope [reference tracking](/en/docs/v4/reference-tracking) to one call. When you create a `Writer` (or `Reader`) yourself, objects are tracked across everything written through it until you call `ReleaseReferences()`. Call it when the logical message ends; it costs nothing when no tracked type was written.
 
 </Callout>
 
-## Deserialization
-
-### API
+## Deserializing
 
 ```csharp
 // A new value
@@ -104,79 +95,87 @@ T NinoDeserializer.Deserialize<T>(ref Reader reader);
 void NinoDeserializer.Deserialize<T>(ref T value, ref Reader reader);
 void NinoDeserializer.DeserializeRef<T>(ref T value, ref Reader reader);        // same as above
 
-// Boxed values, when the type is only known at runtime
+// Boxed values, when the type is only known at run time
 object NinoDeserializer.Deserialize(ReadOnlySpan<byte> data, Type type);
 void NinoDeserializer.Deserialize(ReadOnlySpan<byte> data, Type type, ref object value);
 void NinoDeserializer.DeserializeBoxed(ref object value, ref Reader reader, Type type);
 ```
 
-> The data can be passed as `byte[]`, `ArraySegment<byte>`, `Span<byte>`, `Memory<byte>.Span` or anything else convertible to `ReadOnlySpan<byte>`.
+The data is a `ReadOnlySpan<byte>`: pass a `byte[]`, an `ArraySegment<byte>`, a `Span<byte>`, `Memory<byte>.Span` or a slice of any buffer you already have, without copying it.
 
-<Callout type="info">
-
-When you create the `Reader` yourself (`new Reader(span)`) and read types with `trackReferences`, call `reader.ReleaseReferences()` when done, as with `Writer`.
-
-</Callout>
-
-### Standard Usage
 ```csharp
-// assuming bytes is byte[]
-ObjClass obj = NinoDeserializer.Deserialize<ObjClass>(bytes);
-
-// a value serialized with NinoSerializer.Serialize(object)
-object boxed = NinoDeserializer.Deserialize(bytes, typeof(ObjClass));
+Player player = NinoDeserializer.Deserialize<Player>(bytes);
+Player fromSlice = NinoDeserializer.Deserialize<Player>(rented.AsSpan(0, received));
 ```
 
-### Deserializing into an Existing Value
-Pass an existing value by `ref` and Nino populates it in place, reusing the instance and its nested objects, lists, arrays and dictionaries where it can. Pass `null`/`default` and a new value is created.
+### Into an Existing Value
+
+Pass an existing value by `ref` and Nino fills it in place, reusing the instance and its nested objects, lists, arrays and dictionaries where it can. Pass `null` (or `default`) and a new value is created.
 
 ```csharp
-ObjClass obj = null;
+Player player = null;
 foreach (var message in messages)
 {
-    // the first call creates obj, later calls reuse it
-    NinoDeserializer.Deserialize(message, ref obj);
-    Handle(obj);
+    NinoDeserializer.Deserialize(message, ref player); // the first call creates player, later calls reuse it
+    Handle(player);
 }
 ```
 
-Instances that are dropped along the way (the data holds `null`, a list shrinks, a dictionary key disappears, the polymorphic type changes) can be returned to an object pool. See [Ref Deserialization and Pooling](/en/docs/v4/pooling).
+Instances dropped along the way (the data holds `null`, a list shrinks, a dictionary key disappears, the polymorphic type changes) can be returned to an object pool. There is no `out` overload: use the return value for a new instance, or `ref` to reuse one. See [Ref Deserialization and Pooling](/en/docs/v4/pooling).
 
-### Recommended Usage
-Deserialize directly from the memory you already have, without copying it into a new `byte[]`:
+### Several Values from One Buffer
+
+Read values written back to back with a `Reader`, in the same order:
 
 ```csharp
-// assuming data is a ReadOnlySequence<byte> from the network, i.e. we are using System.IO.Pipelines
-ReadOnlySequence<byte> data = xxxxx;
-ObjClass obj;
-// If the data is in a single contiguous memory block, pass the span directly
-if (data.IsSingleSegment)
+var reader = new Reader(buffer.WrittenSpan);
+var header = NinoDeserializer.Deserialize<Header>(ref reader);
+var body = NinoDeserializer.Deserialize<Body>(ref reader);
+reader.ReleaseReferences();
+```
+
+### Multi-Segment Data
+
+There is no `ReadOnlySequence<byte>` overload. A sequence from `System.IO.Pipelines` is usually a single segment, which you pass directly; otherwise copy it into one contiguous block first:
+
+```csharp
+static Player Read(ReadOnlySequence<byte> data)
 {
-    obj = NinoDeserializer.Deserialize<ObjClass>(data.FirstSpan);
-}
-// Otherwise, copy it to a single contiguous memory block first
-else
-{
-    if (data.Length <= 1024)
+    if (data.IsSingleSegment)
+        return NinoDeserializer.Deserialize<Player>(data.First.Span);
+
+    int length = (int)data.Length;
+    byte[] rented = ArrayPool<byte>.Shared.Rent(length);
+    try
     {
-        // Allocate on the stack
-        Span<byte> stackMemory = stackalloc byte[(int)data.Length];
-        data.CopyTo(stackMemory);
-        obj = NinoDeserializer.Deserialize<ObjClass>(stackMemory);
+        data.CopyTo(rented);
+        return NinoDeserializer.Deserialize<Player>(rented.AsSpan(0, length));
     }
-    else
+    finally
     {
-        // Rent from the array pool
-        byte[] arr = ArrayPool<byte>.Shared.Rent((int)data.Length);
-        data.CopyTo(arr);
-        obj = NinoDeserializer.Deserialize<ObjClass>(arr.AsSpan(0, (int)data.Length));
-        ArrayPool<byte>.Shared.Return(arr);
+        ArrayPool<byte>.Shared.Return(rented);
     }
 }
 ```
 
-<Callout type="info">
+## Runtime Types
 
-Every length read from the payload is validated against the remaining bytes before anything is allocated, so malformed or hostile input cannot trigger huge allocations. Truncated data throws an `InvalidOperationException` ("unexpected end of data") instead of reading past the end.
+When the type is only known at run time (a plugin system, an editor tool, a message table keyed by `Type`), use the boxed overloads. Serialize and deserialize with the **same** type:
 
-</Callout>
+```csharp
+object value = GetComponentData();
+byte[] bytes = NinoSerializer.Serialize(value);                    // written as value.GetType()
+object copy = NinoDeserializer.Deserialize(bytes, value.GetType());
+
+// a value declared as a base type: write and read it as that type, so the subtype is preserved
+NinoSerializer.SerializeBoxed(shape, buffer, typeof(Shape));
+object read = NinoDeserializer.Deserialize(buffer.WrittenSpan, typeof(Shape));
+```
+
+The boxed overloads resolve the formatter by `Type` (cached after the first call) and box value types. Prefer the generic overloads when the type is known at compile time.
+
+## Invalid Data
+
+Every length read from a payload is checked against the bytes left before anything is allocated, so malformed or hostile input cannot trigger huge allocations. Invalid data throws an `InvalidOperationException` whose message starts with `Nino:`: truncated data ("unexpected end of data"), an impossible length, an unknown type id, or a type id that is not a subtype of the declared type. Nothing reads past the end of the span.
+
+Nino does not detect data written for a **different** type with a compatible layout: the bytes carry no schema. Version your payloads yourself (see [Evolving Your Data](/en/docs/v4/evolving-data) and the [save file header](/en/docs/v4/advanced/persistence#add-a-file-header) pattern).

@@ -12,7 +12,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 
 </Callout>
 
-## 检查清单
+## 检查清单 [#checklist]
 
 <Steps>
 <Step>
@@ -47,7 +47,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 </Step>
 </Steps>
 
-## 序列化 API
+## 序列化 API [#serialization-api]
 
 在 v3 中，生成器会在每个程序集的 `<AssemblyName>.NinoGen` 命名空间中生成静态的 `Serializer` 和 `Deserializer` 类（以及扩展方法）。在 v4 中，`Nino.Core` 里只有一套 API，所有程序集通用。
 
@@ -59,7 +59,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 | `obj.Serialize(ref writer)` | `NinoSerializer.Serialize(obj, ref writer)` |
 | `Deserializer.Deserialize(data, out T value)` | `T value = NinoDeserializer.Deserialize<T>(data)` |
 | `Deserializer.Deserialize(out T value, ref reader)` | `T value = NinoDeserializer.Deserialize<T>(ref reader)` |
-| `Serializer.GetBufferWriter()` / `ReturnBufferWriter(...)` | 复用一个 `NinoArrayBufferWriter`（参见[序列化与反序列化](/zh/docs/v4/basic#recommended-usage)） |
+| `Serializer.GetBufferWriter()` / `ReturnBufferWriter(...)` | 复用一个 `NinoArrayBufferWriter`（参见[序列化与反序列化](/zh/docs/v4/basic#reusing-a-buffer)） |
 | （无） | `NinoDeserializer.Deserialize(data, ref value)`：反序列化到已有实例 |
 | （无） | `NinoSerializer.Serialize(object)`、`NinoDeserializer.Deserialize(data, Type)`：装箱 / 运行时类型 |
 
@@ -119,7 +119,7 @@ v3 生成的 `Serialize` 可以接收 `Span<T>` 值。在 v4 中，`T` 是泛型
 
 </Callout>
 
-## 特性与选项
+## 特性与选项 [#attributes-and-options]
 
 | v3 | v4 |
 | --- | --- |
@@ -131,7 +131,7 @@ v3 生成的 `Serialize` 可以接收 `Span<T>` 值。在 v4 中，`T` 是泛型
 | `[NinoPrivateProxy]`（由生成器生成） | 已移除；私有成员通过 `[UnsafeAccessor]`（.NET 8+）或在 `partial` 类型中生成的访问器访问 |
 | （无） | `[NinoPooled]`、`[NinoRefDeserialization]`、`[NinoCustomFormatter]`、`[assembly: NinoFormatter]` |
 
-### 版本兼容
+### 版本兼容 [#version-tolerance]
 
 <Tabs items={["v3", "v4"]}>
 
@@ -172,7 +172,7 @@ v4 的版本兼容比 v3 更强大：成员可以追加到该类型**或其任�
 
 </Callout>
 
-### 曾用名
+### 曾用名 [#former-names]
 
 <Tabs items={["v3", "v4"]}>
 
@@ -198,7 +198,7 @@ public class Weapon { ... }
 
 曾用名只对 v4 自己写入的数据有意义（反正 v3 的数据也无法读取），因此只有在采用 v4 之后重命名的类型才需要它。
 
-### 多态
+### 多态 [#polymorphism]
 
 <Tabs items={["v3", "v4"]}>
 
@@ -227,22 +227,22 @@ public class Circle : Shape { public float Radius; }
 
 在子类型上保留 `[NinoType]` 没有坏处，还可以让子类型设置自己的选项。
 
-## 生成的代码
+## 生成的代码 [#generated-code]
 - 生成的格式化器位于 `<AssemblyName>.NinoGen` 命名空间中，但不应直接调用。请删除所有引用 v3 生成类（`Serializer`、`Deserializer`、`NinoTypeConst` 等）的代码。
 - 每个 `[NinoType]` 对应一个生成文件，修改一个类型只会重新生成该类型。
 - v3 中以生成代码编译错误形式报告的问题，现在以分析器诊断的形式出现在你的代码上。无法序列化的成员类型会产生警告（NINO007）并被跳过，而不是编译错误。参见[诊断列表](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)。
 
-## Unity
+## Unity [#unity]
 - 仍然需要 Unity 2022.3 或更高版本。
 - OpenUPM 包已附带源生成器。你不再需要手动向 Unity 项目安装 `Microsoft.CodeAnalysis` NuGet 包；如果只是为 Nino 安装的，可以删除。
 - Unity 中不使用拦截器（拦截器需要 .NET 8+ SDK 的编译器）；调用走常规 API。
 - 使用 `Override References` 时，`asmdef` 文件仍需引用 `Nino.Core.dll`。
 
-## HybridCLR
+## HybridCLR [#hybridclr]
 - 热更新程序集**无需初始化调用**：Nino 会在程序集中的某个类型第一次被使用时找到该程序集生成的注册表，即使该程序集是通过 `Assembly.Load` 加载的。
 - v4 的文档和测试覆盖 HybridCLR；ILRuntime 不再列为受支持。
 
-## 转换 v3 数据
+## 转换 v3 数据 [#converting-v3-data]
 v4 无法读取 v3 的数据，而且一个项目不能同时引用这两个版本（两者都使用 `Nino.Core` 程序集和命名空间）。要保留持久化的数据：
 
 <Steps>

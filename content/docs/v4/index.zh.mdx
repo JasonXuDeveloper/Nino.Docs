@@ -1,12 +1,14 @@
 ---
 title: 介绍
-description: Nino 是一个高性能的 C# 二进制序列化库，基于源生成器，适用于 .NET、Unity 与 HybridCLR。
+description: Nino 是基于源生成器的 C# 二进制序列化库，面向 Unity、Godot 和 .NET 服务端。
 icon: BookOpen
 ---
 
-import { ArrowRightLeft, Gauge, Layers, Rocket, Sparkles, Swords } from 'lucide-react';
+import { ArrowRightLeft, ChartColumn, Compass, Rocket, Sparkles, Swords } from 'lucide-react';
 
-Nino 把你的 C# 类型转换为紧凑的字节，并能再转换回来。Roslyn 源生成器会在编译期为每个标记了 `[NinoType]` 的类型生成序列化代码，因此序列化过程不涉及反射、运行时代码生成，也不需要注册步骤；它在 .NET、Unity（Mono 与 IL2CPP）以及 HybridCLR 上的表现完全一致。
+## Nino 是什么 [#what-is-nino]
+
+Nino 是一个 C# 二进制序列化库。给类型加上 `[NinoType]`，Roslyn 源生成器就会在编译期写好它的序列化代码；运行时只需调用 `NinoSerializer.Serialize` 和 `NinoDeserializer.Deserialize`。整个过程没有反射，没有运行时代码生成，不需要 schema 文件，也不需要注册。
 
 <Stats lang="zh" />
 
@@ -25,37 +27,63 @@ byte[] bytes = NinoSerializer.Serialize(data);
 GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
 ```
 
-## 从这里开始
+## 为什么选 Nino [#why-nino]
+
+- **快。** 与 MemoryPack 1.21.4 在同一轮测试中对比，Nino 序列化快 2.5–4.3 倍，反序列化类和多态对象快 1.16–1.38 倍，非托管结构体数组与之持平；相比 Nino v3 也更快。详见[基准测试](/zh/docs/v4/perf)。
+- **热路径零 GC。** 序列化到复用的缓冲区不分配内存；[反序列化到已有对象或池化实例](/zh/docs/v4/pooling)同样零分配，速度最高可达 MemoryPack 覆盖模式的 4.9 倍。
+- **一切在编译期完成。** 源生成器为每个类型生成一个格式化器，因此 IL2CPP、NativeAOT 和 HybridCLR 都能直接使用。使用 .NET 8 SDK 及以上版本编译时，调用会被[拦截器](/zh/docs/v4/performance#interceptors)直接导向对应的格式化器。生成器是增量的：修改一个类型只会重新生成这个类型；在 1,100 个类型的项目中，生成代码的编译速度是 v3 的 289 倍。
+- **多态无需标签。** 声明为基类或接口的值，读回来仍是它的实际类型。类型 ID 由类型名哈希得到，不用维护标签表，其他程序集里的子类型也能自动找到。详见[多态](/zh/docs/v4/polymorphism)。
+- **数据可以演进。** 每个类型可以单独选择[版本兼容](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）、[键控成员](/zh/docs/v4/evolving-data#keyed-members)（增删、重排成员）或[引用追踪](/zh/docs/v4/reference-tracking)（共享引用和循环引用）。不启用的类型没有任何额外开销。
+- **各平台字节一致。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出的字节完全相同，CoreCLR、Mono、IL2CPP 以及 32 位和 64 位平台之间都能互读。Unity 客户端和 .NET 服务端可以直接交换数据。详见[平台与二进制格式](/zh/docs/v4/platforms)。
+- **线程安全。** `NinoSerializer` 和 `NinoDeserializer` 的所有方法都可以在任意多个线程上同时调用，热路径上没有锁。
+- **写代码时就发现错误。** 共 23 条[分析器诊断](/zh/docs/v4/analyzers)（NINO001–NINO023），多数提供一键修复。
+
+## 适用场景 [#where-it-fits]
+
+| 场景 | Nino 提供什么 |
+| --- | --- |
+| **Unity**（Mono、IL2CPP、HybridCLR） | 支持 Unity 2022.3 及以上版本，从 OpenUPM 安装，自带源生成器。`Vector3`、`Quaternion`、`Color32` 等非托管结构体按原始内存拷贝。热更新程序集无需初始化调用。详见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)。 |
+| **Godot 4（.NET）** | 普通的 NuGet 包。Godot 的数学结构体都是非托管类型，按原始内存拷贝。详见 [Godot](/zh/docs/v4/platforms#godot)。 |
+| **游戏服务器与网络** | 直接序列化到 `PipeWriter` 等 `IBufferWriter<byte>`，从 `ReadOnlySpan<byte>` 反序列化，消息对象可以池化复用。详见[网络层](/zh/docs/v4/advanced/networking)。 |
+| **存档与持久化** | 键控和版本兼容类型能跨版本读取；引用追踪保留完整的对象图。详见[存档与持久化](/zh/docs/v4/advanced/persistence)。 |
+| **服务、缓存与进程间通信** | 数据紧凑，每次调用不分配内存，可在 ASP.NET Core、后台任务和 Actor 中并发使用。详见[高性能序列化](/zh/docs/v4/advanced/high-performance)。 |
+
+## 什么时候不适合 [#when-not-to-use-it]
+
+- **需要人能读懂的格式。** Nino 输出的是二进制。需要人工查看或编辑的文件，请用 JSON、YAML 或 TOML。
+- **数据要给其他语言读取。** 格式由你的 C# 类型决定，没有 schema 文件，也没有其他语言的代码生成器。与非 .NET 程序通信，请用 Protocol Buffers、FlatBuffers 或 MessagePack。
+- **需要流、异步 API、回调或内置压缩。** Nino 只处理缓冲区和 span。参见[限制](/zh/docs/v4/limit)，以及 [MemoryPack 领先的地方](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)。
+- **必须直接读取 Nino v3 的数据。** v4 的二进制格式是全新的，旧数据需要先转换一次。参见[从 v3 迁移](/zh/docs/v4/migration#converting-v3-data)。
+
+## 从这里开始 [#start-here]
 
 <Cards>
   <Card icon={<Rocket />} title="快速开始" href="/zh/docs/v4/start">
-    在 .NET 或 Unity 项目中安装 Nino，并序列化你的第一个类型。
+    在 .NET、Unity 或 Godot 项目中安装 Nino，序列化第一个类型。
   </Card>
   <Card icon={<Sparkles />} title="v4 新特性" href="/zh/docs/v4/whats-new">
-    重写了运行时与生成器：运行更快，构建也更快。
-  </Card>
-  <Card icon={<ArrowRightLeft />} title="从 v3 迁移" href="/zh/docs/v4/migration">
-    API 变化、特性变化，以及如何处理 v3 写入的数据。
-  </Card>
-  <Card icon={<Gauge />} title="基准测试" href="/zh/docs/v4/perf">
-    与 v3 和 MemoryPack 对比的构建时间与运行时，附完整表格。
+    运行时和生成器全部重写：运行更快，编译也更快。
   </Card>
   <Card icon={<Swords />} title="Nino 与 MemoryPack 对比" href="/zh/docs/v4/vs-memorypack">
-    Nino 领先在哪里，MemoryPack 仍然领先在哪里。
+    Nino 强在哪里，MemoryPack 又强在哪里。
   </Card>
-  <Card icon={<Layers />} title="进阶用法" href="/zh/docs/v4/advanced">
-    热点路径、网络协议、存档、Unity 与 HybridCLR。
+  <Card icon={<ArrowRightLeft />} title="从 v3 迁移" href="/zh/docs/v4/migration">
+    API 和特性的变化，以及 v3 写出的数据怎么处理。
+  </Card>
+  <Card icon={<ChartColumn />} title="基准测试" href="/zh/docs/v4/perf">
+    与 v3 和 MemoryPack 对比编译时间和运行性能，附完整数据表。
+  </Card>
+  <Card icon={<Compass />} title="进阶指南" href="/zh/docs/v4/advanced">
+    热路径、网络协议、游戏存档和 Unity 的完整实践方案。
   </Card>
 </Cards>
 
-## Nino 能处理什么
+## Nino 能序列化什么 [#what-nino-serializes]
 
-- **你使用的类型**：基础类型、枚举、结构体、类、记录、泛型、可空类型、元组、BCL 集合、你自己的集合、不可变集合，以及 `Vector3` 等 Unity 类型。参见[支持的类型](/zh/docs/v4/types)和[定义类型](/zh/docs/v4/defining-types)。
-- **对象模型**：通过基类和接口实现的[多态](/zh/docs/v4/polymorphism)、[自定义构造函数](/zh/docs/v4/constructors)、私有成员，以及[共享引用与循环引用](/zh/docs/v4/reference-tracking)。
-- **会变化的数据**：[版本兼容](/zh/docs/v4/evolving-data#version-tolerance)、[键控成员](/zh/docs/v4/evolving-data#keyed-members)以及[重命名的类型](/zh/docs/v4/defining-types#former-name)。
-- **热路径**：缓冲区复用、零分配的[反序列化到已有实例与对象池](/zh/docs/v4/pooling)，以及去掉最后一层间接调用的[拦截器](/zh/docs/v4/performance#interceptors)。
-- **在编译期发现错误**：[分析器](/zh/docs/v4/analyzers)会在你输入时报告问题，大多附带代码修复。
+- **你自己的类型**：标记了 `[NinoType]` 的类、结构体、记录、接口和泛型类型，支持[私有成员](/zh/docs/v4/defining-types#private-members)、[自定义构造函数](/zh/docs/v4/constructors)和[类型改名](/zh/docs/v4/defining-types#former-name)。详见[定义类型](/zh/docs/v4/defining-types)。
+- **内置类型**：基元类型、枚举、字符串、`Nullable<T>`、元组、数组、BCL 集合、你自己的集合类型；安装 `Nino.Immutable` 后还支持 `ImmutableArray<T>` 和 `ImmutableList<T>`。详见[支持的类型](/zh/docs/v4/types)。
+- **其他类型**：通过[自定义格式化器](/zh/docs/v4/custom-formatters)支持，可以针对单个成员，也可以针对整个类型。
 
-## 旧版本
+## 旧版本 [#older-versions]
 
-Nino [v3](/zh/docs/v3) 和 [v2](/zh/docs/v2) 的文档仍然可以访问。它们的二进制格式与 v4 不兼容；参见[版本迭代](/zh/docs/v4/versioning)。
+Nino [v3](/zh/docs/v3) 和 [v2](/zh/docs/v2) 的文档仍可访问。它们的二进制格式与 v4 不兼容，参见[版本迭代](/zh/docs/v4/versioning)。

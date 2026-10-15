@@ -4,7 +4,7 @@ description: "Install Nino v4 in a .NET, Unity or Godot project and serialize yo
 icon: Rocket
 ---
 
-This page describes how to install Nino v4 in different types of projects and how to serialize your first type.
+Install Nino, mark a type with `[NinoType]` and serialize it. There is nothing to register and nothing to initialize.
 
 <Callout type="idea">
 
@@ -95,7 +95,7 @@ Install Nino through the Unity Package Manager from [OpenUPM](https://openupm.co
 openupm add com.jasonxudeveloper.nino
 ```
 
-The package ships `Nino.Core.dll` together with the source generator (`Nino.Generator.dll`, labelled as a `RoslynAnalyzer`), so nothing else has to be installed.
+The package ships `Nino.Core.dll` together with the source generator (`Nino.Generator.dll`, labelled as a `RoslynAnalyzer`), so nothing else has to be installed. It is the generator's Roslyn 4.3 build, the oldest compiler Unity supports, so calls are not [intercepted](/en/docs/v4/performance#interceptors) in Unity; they take the regular path and write the same bytes.
 
 <Callout type="warn">
 
@@ -116,7 +116,7 @@ If you run into problems, first check that you can run the `Nino.Unity` sample p
 </Callout>
 
 #### Hot Update Code
-- Nino supports **HybridCLR**. Generated registries are found lazily the first time one of their types is used, so a hot-update assembly loaded with `Assembly.Load` needs **no initialization call**.
+- Nino supports **HybridCLR**. Generated registries are found lazily the first time one of their types is used, so a hot-update assembly loaded with `Assembly.Load` needs **no initialization call**. See [Unity and HybridCLR](/en/docs/v4/advanced/unity#hybridclr-hot-update).
 - Hot-update code can live in a Unity `asmdef`, or in an external C# project that installs Nino from NuGet ([see above](#net-project)); use the compiled DLL in HybridCLR as usual.
 
 ### Godot Project
@@ -199,5 +199,5 @@ NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
   <Card title="Serialize and Deserialize" href="/en/docs/v4/basic">Every overload: buffer writers, spans, `Writer`/`Reader`, boxed values.</Card>
   <Card title="Defining Types" href="/en/docs/v4/defining-types">Choose members, order, private members, records, generics.</Card>
   <Card title="Supported Types" href="/en/docs/v4/types">Primitives, strings, tuples, collections and your own collections.</Card>
-  <Card title="Advanced Usage" href="/en/docs/v4/advanced">Patterns for hot paths, networking, save games and Unity.</Card>
+  <Card title="Advanced Guides" href="/en/docs/v4/advanced">Complete patterns for hot paths, networking, save games and Unity.</Card>
 </Cards>
