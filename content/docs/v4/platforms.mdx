@@ -78,7 +78,7 @@ Code that builds structs in uninitialized memory (`SkipLocalsInit`, `stackalloc`
 </Accordion>
 <Accordion title="Big-endian hosts" value="endian">
 
-Not supported. Every platform .NET and Unity run on today is little-endian.
+Not supported. Constructing a `Writer` or `Reader` on a big-endian host throws `PlatformNotSupportedException`, so Nino never writes or reads bytes in the wrong order. Every platform .NET and Unity run on today is little-endian.
 
 </Accordion>
 </Accordions>
@@ -87,8 +87,8 @@ Not supported. Every platform .NET and Unity run on today is little-endian.
 
 - Install from [OpenUPM](/en/docs/v4/start#unity-project). The package ships `Nino.Core.dll` and the generator (`Nino.Generator.dll`, labelled `RoslynAnalyzer`), plus `System.Buffers`, `System.Memory` and `System.Runtime.CompilerServices.Unsafe`.
 - Unity compiles against .NET Standard: there is no `[UnsafeAccessor]`, so a type with serialized non-public members or `[NinoPooled]` must be `partial` (NINO002, with a code fix).
-- Unity's compiler is older than Roslyn 4.8, so calls are not intercepted. They use the regular path and write the same bytes.
-- Generated registries carry `[RuntimeInitializeOnLoadMethod]` (and `[InitializeOnLoadMethod]` in the editor), which registers them eagerly and keeps them from being stripped by IL2CPP.
+- The package ships the generator's Roslyn 4.3 build, so calls are not intercepted. They use the regular path and write the same bytes.
+- Generated registries carry `[RuntimeInitializeOnLoadMethod]` (and `[InitializeOnLoadMethod]` in the editor), which runs them at startup and keeps them from being stripped by IL2CPP.
 - Unity types such as `Vector3`, `Quaternion` and `Matrix4x4` are unmanaged and are written as raw memory.
 
 See [Unity and HybridCLR](/en/docs/v4/advanced/unity) for project setup and IL2CPP tips.

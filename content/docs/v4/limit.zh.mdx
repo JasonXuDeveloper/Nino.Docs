@@ -1,79 +1,80 @@
 ---
 title: 局限性
-description: "Nino v4 不支持的内容，以及 v4 已解决的局限性。"
+description: "Nino v4 不做什么，以及 v4 解决了早期版本的哪些局限。"
 icon: TriangleAlert
 ---
 
-本页介绍 Nino v4 的局限性，以及 v4 已经解决的早期版本局限性。
+本页列出 Nino v4 不做的事情，以及早期版本中已被 v4 消除的局限。
 
-## 当前的局限性
-- **需要源生成器。** Nino 需要它的源生成器（Roslyn 4.3 或更高版本），声明 `[NinoType]` 的项目需要使用 C# 9 或更高版本。
-- **与 v3 数据不兼容。** v4 格式无法读取 v3 或 v4 beta/preview 版本写入的数据。参见[从 v3 迁移](/zh/docs/v4/migration#converting-v3-data)。
-- **默认按位置读写。** 不使用 `versionTolerant` 或 `keyed` 时，插入、删除或重新排序成员都会破坏已有数据。`versionTolerant` 只容忍追加的成员；其他修改请使用 `keyed`。修改成员的类型在任何情况下都不被容忍。
-- **原始结构体对布局敏感。** 以原始内存写入的 unmanaged `[NinoType]` 结构体按其规范字段顺序写入：重新排序字段或修改其 `StructLayout` 会破坏已有数据。将其标记为 `versionTolerant`（或对某个字段使用 `[NinoIgnore]`），即可改为逐个成员写入。
-- **仅支持小端序。** 所有多字节值都以小端序写入；不支持大端序的主机。（目前 .NET 和 Unity 运行的所有平台都是小端序。）
-- **不支持的成员类型会被跳过。** 委托、`Task`、指针、非泛型集合（`ArrayList`）、`ReadOnlyCollection<T>`、抽象集合、结构体集合以及没有可用构造函数的集合都没有格式化器：该成员会被跳过并产生警告 NINO007。请将其标记为 `[NinoIgnore]`，或提供[自定义格式化器](/zh/docs/v4/custom-formatters)。
-- **集合是值。** 同一个集合实例出现在两个成员中会被写入两次，读回时是两个实例；`trackReferences` 只追踪 `[NinoType]` 类。
-- **部分类型无法追踪或池化。** 通过构造函数参数或只读成员重新创建的类型（例如位置记录）不能使用 `trackReferences`（NINO016）或 `[NinoPooled]`（NINO018）。`[NinoPooled]` 还要求类为 `sealed`。
-- **版本兼容的接口。** 追加到 `[NinoType]` 接口上的成员不被容忍；请追加到类上。
-- **仅在运行时出现的泛型实例化。** 如果某个封闭泛型 `[NinoType]` 在进程中只通过类型 id 被读取，从未在代码中出现或被写入，就必须在启动时用 `NinoPolymorphic.Register<T>()` 注册。
-- **`PriorityQueue<TElement, TPriority>`** 仅在 .NET 6 及更高版本上可用（.NET Standard 和 Unity 上不可用）。
-- **拦截器**需要 Roslyn 4.8 或更高版本（.NET 8 SDK 及更高版本）；Unity 和更旧的编译器使用常规（稍慢的）调用，写出相同的字节。
-- **只支持缓冲区。** 没有 `Stream` 或异步 API，也没有 `ReadOnlySequence<byte>` 重载：请序列化到 `IBufferWriter<byte>`，并从 `ReadOnlySpan<byte>` 反序列化（多段序列需先拷贝）。
-- **没有序列化回调**（序列化或反序列化前后的钩子）、没有内置压缩，也没有按调用的选项。变通方法参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)。
-- **内置的 BCL 类型比部分序列化库少**：`BigInteger`、`Uri`、`Version`、`StringBuilder`、`Type`、`Memory<T>`、`Lazy<T>` 以及大多数不可变集合需要[自定义格式化器](/zh/docs/v4/custom-formatters)。
-- **.NET 8 之前**（包括 .NET Standard 和 Unity），序列化非公开成员或使用 `[NinoPooled]` 的类型必须是 `partial`，并且泛型类型中用 `new` 隐藏的非公开基类成员无法访问（NINO022）。
+## 当前的局限 [#current-limitations]
+- **离不开源生成器。** Nino 依赖它的源生成器（Roslyn 4.3 及以上），声明 `[NinoType]` 的项目需要 C# 9 及以上。
+- **不兼容 v3 数据。** v4 格式无法读取 v3 或 v4 beta/preview 版本写出的数据。参见[从 v3 迁移](/zh/docs/v4/migration#converting-v3-data)。
+- **默认按位置写入。** 不启用 `versionTolerant` 或 `keyed` 时，插入、删除或调整成员顺序都会破坏已有数据。`versionTolerant` 只允许在末尾追加成员，其他改动请用 `keyed`。修改成员类型在任何模式下都不兼容。
+- **原始结构体依赖布局。** 按原始内存写入的非托管 `[NinoType]` 结构体以规范的字段顺序写入：调整字段顺序或修改 `StructLayout` 都会破坏已有数据。标记 `versionTolerant`（或对某个字段使用 `[NinoIgnore]`）可以改为逐个成员写入。
+- **只支持小端序主机。** 所有多字节值都按小端序写入。在大端序主机上，构造 `Writer` 或 `Reader` 时会抛出 `PlatformNotSupportedException`，不会写出不兼容的字节。目前 .NET 和 Unity 运行的所有平台都是小端序。
+- **不支持的成员类型会被跳过。** 委托、`Task`、指针、`Memory<T>`、非泛型集合（`ArrayList`）、`ReadOnlyCollection<T>`、抽象集合、结构体集合，以及没有可用构造函数的集合都没有格式化器：这类成员会被跳过，并报告警告 NINO007。可以给它加上 `[NinoIgnore]`，或者编写[自定义格式化器](/zh/docs/v4/custom-formatters)。
+- **集合按值处理。** 同一个集合实例出现在两个成员中，会写入两次，读回为两个实例；`trackReferences` 只追踪 `[NinoType]` 类。
+- **部分类型不能追踪引用或池化。** 通过构造函数参数或只读成员重新创建的类型（例如位置记录）不能使用 `trackReferences`（NINO016）或 `[NinoPooled]`（NINO018）。`[NinoPooled]` 还要求类是 `sealed`。
+- **结构体至少要有一个成员。** 不序列化任何成员的结构体会报错（NINO023），因为它会被写成零字节。请至少序列化一个成员，或者标记 `versionTolerant` 或 `keyed`。
+- **接口不支持版本兼容。** 在 `[NinoType]` 接口上追加的成员不兼容旧数据，请把成员追加到类上。
+- **只在运行时出现的泛型实例化。** 如果某个封闭泛型 `[NinoType]` 在进程中只会按类型 ID 读取，代码里从未写出它的名字，也从未写入过它，就必须在启动时用 `NinoPolymorphic.Register<T>()` 注册。
+- **`PriorityQueue<TElement, TPriority>`** 只在 BCL 提供它的平台上可用：.NET 6 及以上，.NET Standard 和 Unity 中没有。
+- **拦截器**需要 Roslyn 4.8 及以上（.NET 8 SDK 及以上）。Unity 使用 Roslyn 4.3 版本，它和更旧的编译器一样走常规调用，每次慢几纳秒，写出的字节相同。
+- **只处理缓冲区。** 没有 `Stream` 或异步 API，也没有 `ReadOnlySequence<byte>` 重载：请序列化到 `IBufferWriter<byte>`，从 `ReadOnlySpan<byte>` 反序列化（多段序列先拷贝成连续内存）。
+- **没有序列化回调**（序列化或反序列化前后的钩子），没有内置压缩，也没有按调用设置的选项。替代做法参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)。
+- **内置的 BCL 类型比部分序列化库少。** `BigInteger`、`Uri`、`Version`、`StringBuilder`、`Type`、`Lazy<T>`，以及 `ImmutableArray<T>` 和 `ImmutableList<T>`（来自 `Nino.Immutable`）以外的不可变集合，都需要[自定义格式化器](/zh/docs/v4/custom-formatters)。参见[不支持的类型](/zh/docs/v4/types#not-supported)。
+- **.NET 8 之前**（包括 .NET Standard 和 Unity），序列化非公开成员或标记 `[NinoPooled]` 的类型必须是 `partial`；泛型类型中被 `new` 隐藏的非公开基类成员无法访问（NINO022）。
 
 ## 平台说明 [#platform-notes]
 
-Nino 自己定义字节格式而不是拷贝内存，因此数据可以在 CoreCLR、Mono 与 IL2CPP、64 位与 32 位之间移植。`Nullable<T>`、`ValueTuple`、`decimal`、`DateTimeOffset`、32 位对齐和填充的处理方式参见[平台与二进制格式](/zh/docs/v4/platforms#portable-by-design)。
+Nino 自己定义字节格式，而不是直接拷贝内存，所以数据可以在 CoreCLR、Mono、IL2CPP 之间，以及 64 位和 32 位平台之间通用。`Nullable<T>`、`ValueTuple`、`decimal`、`DateTimeOffset`、32 位对齐和填充字节的处理方式，参见[平台与二进制格式](/zh/docs/v4/platforms#portable-by-design)。
 
-## 已解决的局限性
+## 已解决的局限 [#resolved-limitations]
 
 <Accordions type="multiple">
 <Accordion value="resolved-1" title={<><code>ValueTuple</code> 在 .NET Core 与 Unity/Mono 中表现不同</>}>
 
-已在 v4 中解决：`ValueTuple`、`KeyValuePair` 和 `Nullable<T>` 有明确的、与运行时无关的格式，因此数据在 .NET Core 与 Unity/Mono/IL2CPP 之间兼容。
+v4 已解决：`ValueTuple`、`KeyValuePair` 和 `Nullable<T>` 有明确定义、与运行时无关的格式，数据在 .NET Core 与 Unity/Mono/IL2CPP 之间通用。
 
 </Accordion>
 <Accordion value="resolved-2" title={<>启用 <code>WEAK_VERSION_TOLERANCE</code> 的项目无法读取未启用该符号的项目的数据，反之亦然</>}>
 
-已在 v4 中解决：版本兼容是每个类型的选项（`[NinoType(versionTolerant: true)]`），属于该类型自身的格式，因此不再依赖项目设置。`WEAK_VERSION_TOLERANCE` 为兼容而保留，只影响定义它的项目中声明的类型。
+v4 已解决：版本兼容改为每个类型自己的选项（`[NinoType(versionTolerant: true)]`），属于类型自身的格式，不再依赖项目设置。`WEAK_VERSION_TOLERANCE` 仍为兼容而保留，只影响定义了该符号的项目中声明的类型。
 
 </Accordion>
-<Accordion value="resolved-3" title={<>成员只能追加在末尾；不能删除或重新排序</>}>
+<Accordion value="resolved-3" title={<>成员只能追加在末尾，不能删除或调整顺序</>}>
 
-已在 v4 中解决：版本兼容的类型接受追加到层级中任意类的成员，`[NinoType(keyed: true)]` 允许重新排序、删除和插入成员。
+v4 已解决：版本兼容的类型允许在继承层级中任意一个类的末尾追加成员；`[NinoType(keyed: true)]` 还允许调整顺序、删除和插入成员。
 
 </Accordion>
 <Accordion value="resolved-4" title={<>不支持的类型会导致编译错误</>}>
 
-已在 v4 中解决：分析器在你的代码上将其报告为警告 NINO007（并提供代码修复），该成员会被跳过。
+v4 已解决：分析器会在你的代码上报告警告 NINO007（附带代码修复），并跳过该成员。
 
 </Accordion>
-<Accordion value="resolved-5" title={<>不保留共享引用与循环引用</>}>
+<Accordion value="resolved-5" title={<>共享引用和循环引用无法保留</>}>
 
-已在 v4 中通过 `[NinoType(trackReferences: true)]` 解决。
+v4 已通过 `[NinoType(trackReferences: true)]` 解决。
 
 </Accordion>
 <Accordion value="resolved-6" title={<>字典子类需要公共索引器</>}>
 
-已在 v4 中解决：派生自 `List<T>`、`Dictionary<TKey, TValue>` 等，或实现了集合接口的用户集合，无需任何额外代码即可使用。
+v4 已解决：派生自 `List<T>`、`Dictionary<TKey, TValue>` 等类型，或实现了集合接口的自定义集合，不需要任何额外代码即可使用。
 
 </Accordion>
-<Accordion value="resolved-7" title={<>序列化后无法重命名类型名/命名空间</>}>
+<Accordion value="resolved-7" title={<>序列化后无法修改类型名或命名空间</>}>
 
-自 v3.2.2 起通过 `[NinoFormerName]` 解决。
-
-</Accordion>
-<Accordion value="resolved-8" title={<>无法序列化/反序列化非公开字段/属性</>}>
-
-自 v3.0.6 起通过 `containNonPublicMembers` 解决。在 .NET 8 及更高版本上没有限制；.NET 8 之前类型必须是 `partial`。
+自 v3.2.2 起，可以用 `[NinoFormerName]` 解决。
 
 </Accordion>
-<Accordion value="resolved-9" title={<>多态 unmanaged 结构体在转换为接口与不转换时序列化结果不同</>}>
+<Accordion value="resolved-8" title={<>无法序列化非公开的字段和属性</>}>
 
-自 v3.0.3 起解决。
+自 v3.0.6 起，可以用 `containNonPublicMembers` 解决。在 .NET 8 及以上没有限制；.NET 8 之前类型必须是 `partial`。
+
+</Accordion>
+<Accordion value="resolved-9" title={<>多态的非托管结构体转换为接口后，序列化结果与转换前不同</>}>
+
+自 v3.0.3 起已解决。
 
 </Accordion>
 </Accordions>

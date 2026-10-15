@@ -37,7 +37,7 @@ Update `[NinoFormerName]` arguments to the runtime type name form.
 </Step>
 <Step>
 
-Build, and fix what the analyzer reports (`NINO001`–`NINO022`); most diagnostics have a code fix.
+Build, and fix what the analyzer reports (`NINO001`–`NINO023`); most diagnostics have a code fix.
 
 </Step>
 <Step>
@@ -225,7 +225,7 @@ public class Circle : Shape { public float Radius; }
 </Tab>
 </Tabs>
 
-Keeping `[NinoType]` on subtypes is harmless, and lets a subtype set its own options.
+Keeping `[NinoType]` on a subtype is harmless and lets it set its own options. Its options replace the inherited ones entirely, so repeat any you want to keep, such as `versionTolerant: true`.
 
 ## Generated Code
 - Generated formatters live in the `<AssemblyName>.NinoGen` namespace but are not meant to be called directly. Remove any code that referenced the v3 generated classes (`Serializer`, `Deserializer`, `NinoTypeConst`, ...).
@@ -235,7 +235,7 @@ Keeping `[NinoType]` on subtypes is harmless, and lets a subtype set its own opt
 ## Unity
 - Unity 2022.3 or later is still required.
 - The OpenUPM package ships the source generator. You no longer need to install the `Microsoft.CodeAnalysis` NuGet packages into your Unity project manually; remove them if you only added them for Nino.
-- Interceptors are not used in Unity (they need the .NET 8+ SDK compiler); calls go through the regular API.
+- Calls are not intercepted in Unity: the package ships the generator's Roslyn 4.3 build, and interceptors need Roslyn 4.8. Calls use the regular path and write the same bytes.
 - `asmdef` files still need to reference `Nino.Core.dll` when `Override References` is used.
 
 ## HybridCLR
@@ -263,7 +263,7 @@ If you cannot convert offline (for example save games on players' devices), ship
 </Step>
 </Steps>
 
-See also [Versioning](/en/docs/v4/versioning#what-if-i-really-want-to-deserialize-the-old-data-with-the-new-version).
+See also [Versioning](/en/docs/v4/versioning#reading-data-from-an-older-version).
 
 <Callout type="idea">
 

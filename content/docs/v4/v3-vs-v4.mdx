@@ -19,12 +19,12 @@ This page compares Nino v3 with Nino v4: features, build time and generated code
 | Object pooling | no | `[NinoPooled]`, `[NinoRefDeserialization]` factories, `NinoSettings.SetRecycler<T>` |
 | Subtypes of a `[NinoType]` | need their own `[NinoType]` | inherit it |
 | User collections (subclasses of `List<T>`, `Dictionary<,>`, ...) | dictionary subclasses need a public indexer | supported without attributes |
-| `PriorityQueue<,>`, immutable collections | no | yes (.NET 6+; `Nino.Immutable`) |
+| `PriorityQueue<,>`, immutable collections | no | `PriorityQueue<,>` on .NET 6+; `ImmutableArray<T>` and `ImmutableList<T>` with `Nino.Immutable` |
 | Custom formatters | no | `[NinoCustomFormatter]` per member, `[assembly: NinoFormatter]` per type |
 | Boxed / runtime-typed API | no | `Serialize(object)`, `Deserialize(data, Type)` |
-| Diagnostics | compile errors in generated code | analyzer with 22 diagnostics, many with code fixes |
+| Diagnostics | compile errors in generated code | 23 analyzer diagnostics (NINO001–NINO023), many with code fixes |
 | Incremental generator | no: whole-compilation scans, all types re-generated on every edit | one file per type, only edited types re-generated |
-| Interceptors | no | on Roslyn 4.8+ (the .NET 8 SDK and later), always on |
+| Interceptors | no | always on with Roslyn 4.8+ (the .NET 8 SDK and later) |
 | Hot update (HybridCLR) | supported | supported, no initialization call |
 | Unity | 2022.3+, `Microsoft.CodeAnalysis` installed manually | 2022.3+, generator included in the package |
 | Thread safety | inline caches could race under contention | lock-free, copy-on-write registries |
@@ -60,7 +60,7 @@ v4 against v3 **3.3.13**, the last v3 release. Measured on a synthetic assembly 
 | Re-generating after editing a comment | 4.1 s | 0.45 s | **9.0× faster** |
 | IL of the generated code | 7.3 MB | 1.3 MB | **5.6× smaller** |
 
-v3's compile time grows much faster than the number of types: 3.3× the types took 11× the compile time (56 s → 636 s). v4 grows linearly: about 3.5 KB of source and 2 ms of compile time per type.
+v3's compile time grows much faster than the number of types: 3.3× the types took 11× the compile time (56 s → 636 s).
 
 </Tab>
 </Tabs>

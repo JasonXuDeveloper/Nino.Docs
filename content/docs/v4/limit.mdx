@@ -4,24 +4,25 @@ description: "What Nino v4 does not do, and limitations that v4 resolved."
 icon: TriangleAlert
 ---
 
-This page describes the limitations of Nino v4, and the limitations of earlier versions that v4 resolves.
+What Nino v4 does not do, and the limitations of earlier versions that v4 removed.
 
 ## Current Limitations
 - **Source generator required.** Nino needs its source generator (Roslyn 4.3 or later) and C# 9 or later in the project that declares `[NinoType]`s.
 - **Not compatible with v3 data.** The v4 format cannot read data written by v3 or the v4 betas/previews. See [Migrating from v3](/en/docs/v4/migration#converting-v3-data).
 - **Positional by default.** Without `versionTolerant` or `keyed`, inserting, removing or reordering members breaks existing data. `versionTolerant` only tolerates appended members; use `keyed` for anything else. Changing a member's type is never tolerated.
 - **Raw structs are layout-sensitive.** An unmanaged `[NinoType]` struct written as raw memory is written in its canonical field order: reordering its fields or changing its `StructLayout` breaks existing data. Mark it `versionTolerant` (or `[NinoIgnore]` a field) to write it member by member instead.
-- **Little-endian only.** All multi-byte values are written little-endian; big-endian hosts are not supported. (Every platform .NET and Unity run on today is little-endian.)
-- **Unsupported member types are skipped.** Delegates, `Task`, pointers, non-generic collections (`ArrayList`), `ReadOnlyCollection<T>`, abstract collections, struct collections and collections without a usable constructor have no formatter: the member is skipped with warning NINO007. Mark it `[NinoIgnore]`, or provide a [custom formatter](/en/docs/v4/custom-formatters).
+- **Little-endian hosts only.** All multi-byte values are written little-endian. On a big-endian host, constructing a `Writer` or `Reader` throws `PlatformNotSupportedException` instead of producing incompatible bytes. Every platform .NET and Unity run on today is little-endian.
+- **Unsupported member types are skipped.** Delegates, `Task`, pointers, `Memory<T>`, non-generic collections (`ArrayList`), `ReadOnlyCollection<T>`, abstract collections, struct collections and collections without a usable constructor have no formatter: the member is skipped with warning NINO007. Mark it `[NinoIgnore]`, or provide a [custom formatter](/en/docs/v4/custom-formatters).
 - **Collections are values.** The same collection instance in two members is written twice and read back as two instances; `trackReferences` only tracks `[NinoType]` classes.
 - **Some types cannot be tracked or pooled.** Types re-created from constructor arguments or read-only members (positional records, for example) cannot use `trackReferences` (NINO016) or `[NinoPooled]` (NINO018). `[NinoPooled]` also requires a `sealed` class.
+- **Structs need at least one member.** A struct that serializes no member is an error (NINO023): it would be written as zero bytes. Serialize a member, or mark it `versionTolerant` or `keyed`.
 - **Version-tolerant interfaces.** Members appended to a `[NinoType]` interface are not tolerated; append them to a class.
 - **Runtime-only generic instantiations.** A closed generic `[NinoType]` that a process only reads by type id, and never names in code or writes, must be registered at startup with `NinoPolymorphic.Register<T>()`.
-- **`PriorityQueue<TElement, TPriority>`** is only available on .NET 6 and later (not on .NET Standard or Unity).
-- **Interceptors** need Roslyn 4.8 or later (the .NET 8 SDK and later); Unity and older compilers use the regular (slightly slower) calls, with the same bytes.
+- **`PriorityQueue<TElement, TPriority>`** is supported only where the BCL has it: .NET 6 and later, not .NET Standard or Unity.
+- **Interceptors** need Roslyn 4.8 or later (the .NET 8 SDK and later). Unity, which uses the Roslyn 4.3 build, and older compilers make regular calls that are a few nanoseconds slower and write the same bytes.
 - **Buffers only.** There are no `Stream` or async APIs, and no `ReadOnlySequence<byte>` overload: serialize into an `IBufferWriter<byte>` and deserialize from a `ReadOnlySpan<byte>` (copy multi-segment sequences first).
 - **No serialization callbacks** (before/after serialize or deserialize hooks), no built-in compression, and no per-call options. See [Nino vs MemoryPack](/en/docs/v4/vs-memorypack#where-memorypack-is-ahead) for workarounds.
-- **Fewer built-in BCL types than some serializers**: `BigInteger`, `Uri`, `Version`, `StringBuilder`, `Type`, `Memory<T>`, `Lazy<T>` and most immutable collections need a [custom formatter](/en/docs/v4/custom-formatters).
+- **Fewer built-in BCL types than some serializers.** `BigInteger`, `Uri`, `Version`, `StringBuilder`, `Type`, `Lazy<T>` and immutable collections other than `ImmutableArray<T>` and `ImmutableList<T>` (from `Nino.Immutable`) need a [custom formatter](/en/docs/v4/custom-formatters). See [Not Supported](/en/docs/v4/types#not-supported).
 - **Before .NET 8** (including .NET Standard and Unity), types with serialized non-public members or `[NinoPooled]` must be `partial`, and a non-public base member hidden with `new` in a generic type cannot be reached (NINO022).
 
 ## Platform Notes
