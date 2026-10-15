@@ -36,13 +36,8 @@ In v4, subtypes **inherit** `[NinoType]` (including its options) from their near
 
 </Callout>
 
-<Callout type="info">
+## Interfaces and Abstract Classes
 
-Each non-sealed class, abstract class or interface is written with a 4-byte type id (a stable hash of the type's full name), so a value can be read back as the right subtype. A sealed class only needs a 1-byte null flag, and a struct needs no header. To rename or move a type without breaking existing data, use [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name).
-
-</Callout>
-
-## Abstractions
 Interfaces and abstract classes work the same way. Mark the interface or abstract class with `[NinoType]`; implementing classes and structs inherit it:
 
 <Tabs items={["Interface example", "Abstract class example"]}>
@@ -87,7 +82,7 @@ public class Derived : Base
 </Tab>
 </Tabs>
 
-A `[NinoType]` interface serializes its own members through the implementing type's members of the same name.
+A `[NinoType]` interface serializes its own members through the implementing type's members of the same name. A struct read through an interface or `object` slot is boxed.
 
 ## How a Polymorphic Value Is Written
 
@@ -107,6 +102,17 @@ The type id is the FNV-1a hash of the runtime type's full name, computed by the 
 Seal classes that have no subtypes. A sealed class costs 1 byte and no dispatch; a non-sealed one costs 4 bytes and a type check, even when no subtype exists.
 
 </Callout>
+
+### Inspecting Type Ids
+
+`NinoTypeId` computes the same ids at run time, for logging, protocol checks or a handshake that compares message sets between peers:
+
+```csharp
+int id = NinoTypeId.Of(typeof(Move));          // the id Move is written with ([NinoFormerName] honored)
+string name = NinoTypeId.GetName(typeof(Move)); // its runtime-form name, e.g. "MyGame.Net.Move"
+```
+
+Ids are never `0`, which encodes `null`.
 
 ## Dispatch
 

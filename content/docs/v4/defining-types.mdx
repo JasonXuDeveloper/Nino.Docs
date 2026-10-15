@@ -4,7 +4,7 @@ description: "Mark classes, structs, records and interfaces with [NinoType], and
 icon: Braces
 ---
 
-Any `class`, `struct`, `record`, `record struct` or `interface` marked `[NinoType]` becomes serializable. The source generator writes its formatter at compile time; there is nothing to register.
+Any `class`, `struct`, `record`, `record struct` or `interface` marked `[NinoType]` becomes serializable. The source generator writes its formatter at compile time; there is nothing to register. This page covers which members are written, in what order, and the options that change the format.
 
 ```csharp
 using Nino.Core;
@@ -148,7 +148,7 @@ And it skips:
 - **explicit interface implementations** (`int IHasId.Id { get; set; }`), which generated code cannot name. A `[NinoType]` interface serializes its members through the implementing type's members of the same name;
 - members whose type Nino cannot serialize (delegates, `Task`, pointers...), reported as warning NINO007.
 
-An `override` is the member it overrides, collected once. A member that hides a base member with `new` is a separate member: both are serialized, the base one first.
+An `override` is the member it overrides, collected once. A member that hides a base member with `new` is a separate member: both are serialized, the base one first. When the hidden base member is not public, generated code can only reach it through `[UnsafeAccessor]` (.NET 8+, non-generic types); otherwise it is skipped with warning NINO022.
 
 ### Ignoring a Member
 
@@ -216,14 +216,14 @@ public partial class Account
 - A non-public `[NinoMember]` without `containNonPublicMembers` is an error (NINO009).
 - Private members of a base class are never part of a subtype.
 
-Nino also hides the compiler's "field is never used / never assigned" warnings for private members it serializes.
+Nino also suppresses the compiler's "field is never used / never assigned" warnings for private members it serializes, since the compiler cannot see the generated accessors.
 
 ## Member Order
 
 Without `keyed: true`, the order of members **is** the format. Members are written base-class members first, then in declaration order, unless you change it:
 
 - `[NinoMember(index)]` with `[NinoType(false)]`: by index, ascending.
-- `[NinoExplicitOrder(...)]` on the type: the listed members (by name) first, in the given order; the others follow in declaration order.
+- `[NinoExplicitOrder(...)]` on a class, struct or interface: the listed members (by name) first, in the given order; the others follow in declaration order.
 
 ```csharp
 [NinoType]
@@ -244,7 +244,7 @@ Reordering, inserting or removing members (or changing their indices) breaks dat
 
 ## String Encoding
 
-Strings are written as UTF-16 by default: a length and one block copy, the fastest option. Mark a `string` member with `[NinoUtf8]` to write UTF-8 instead, which halves the size of ASCII-heavy text at the cost of transcoding (vectorized by the runtime):
+Strings are written as UTF-16 by default: a length and one block copy, the fastest option. Mark a `string` field or property with `[NinoUtf8]` to write UTF-8 instead, which halves the size of mostly-ASCII text at the cost of transcoding (vectorized by the runtime). The attribute has no effect on members of other types, and both sides must agree: a UTF-8 member cannot be read as UTF-16.
 
 ```csharp
 [NinoType]
@@ -268,7 +268,7 @@ public class ItemRenamed
 }
 ```
 
-The former name is the **runtime form** of the full name: `Namespace.Type`, `+` between a nested type and its container (`Namespace.Outer+Inner`), no `global::`. The type is found under both names, so old and new data can be read.
+The former name is the **runtime form** of the full name: `Namespace.Type`, `+` between a nested type and its container (`Namespace.Outer+Inner`), no `global::`. The type id is computed from the former name, so the renamed type keeps writing the id old readers expect, and readers find the type under both names. `NinoTypeId.Of(typeof(T))` returns the id a type writes.
 
 ## Structs
 
@@ -283,6 +283,8 @@ public struct Hit          // raw: one 16-byte copy (padding zeroed)
     public long Tick;
 }
 ```
+
+A struct that ends up serializing no member at all (every field ignored) is an error (NINO023): it would be written as zero bytes, and a collection of it could not be read back. Serialize a member, or mark it `versionTolerant` or `keyed`.
 
 <Callout type="warn">
 
@@ -302,7 +304,7 @@ public record Point(int X, int Y);
 public record struct Range(int Start, int Length);
 ```
 
-Because their properties are `init`-only, positional records are re-created on every deserialization, even into an existing instance, and cannot use [`trackReferences`](/en/docs/v4/reference-tracking) or [`[NinoPooled]`](/en/docs/v4/pooling). Use a record with settable properties when you need those.
+Because their properties are `init`-only, positional records are re-created on every deserialization, even into an existing instance, and cannot use [`trackReferences`](/en/docs/v4/reference-tracking) or [`[NinoPooled]`](/en/docs/v4/pooling). Use a record with settable properties when you need those. See [Constructors](/en/docs/v4/constructors) for how instances are created.
 
 ## Generic Types
 
@@ -315,12 +317,6 @@ public class Box<T>
 
 [NinoType]
 public record struct Pair<TKey, TValue>(TKey Key, TValue Value);
-
-[NinoType]
-public class Wrapper<T> where T : IList
-{
-    public T Items;
-}
 ```
 
 A generic `[NinoType]` gets one formatter per definition, not one per closed type. Type arguments must be serializable (`Box<int>`, `Box<List<string>>`, `Box<Player>`). The generator registers every closed type the compilation names (member types, base types, type arguments of `NinoSerializer`/`NinoDeserializer` calls), so AOT platforms have the instantiations they need; the runtime closes the rest on first use.

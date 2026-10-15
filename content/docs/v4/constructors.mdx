@@ -99,10 +99,19 @@ public struct SimpleStruct
 - Every name in `[NinoConstructor]` (or every parameter, when no names are given) must match a serialized member (NINO005).
 - If no constructor can be used, NINO004 is reported.
 - A type re-created through a constructor reads read-only members that are not constructor parameters and drops them (NINO006): add them to the constructor, make them settable, or `[NinoIgnore]` them.
-- C# 11 `required` members: a constructor marked `[SetsRequiredMembers]` is used when one matches; otherwise the generated code sets the required members with an object initializer.
+- C# 11 `required` members: a constructor marked `[SetsRequiredMembers]` is used when one matches; otherwise the generated code sets the required members with an object initializer, so every required member must be serialized and assignable by generated code (`public` or `internal`).
 
-<Callout type="info">
+## Constructor or Factory?
 
-Types whose members cannot be assigned after construction (constructor parameters, `init`-only, get-only or `readonly` members) are always **re-created** when deserialized, even by ref deserialization; the old instance is passed to the recycler.
+Nino has two ways to hook into instance creation, for different jobs:
 
-</Callout>
+| | `[NinoConstructor]` | [`[NinoRefDeserialization]`](/en/docs/v4/pooling#creating-instances-with-ninorefdeserialization) |
+| --- | --- | --- |
+| On | a constructor or a static factory method | a public static method callable without arguments |
+| Receives | the deserialized values of the listed members | nothing |
+| Use it to | build immutable types, validate, compute derived state | take an instance from your own pool |
+| After the call | members that are not parameters are assigned | every member is filled in place |
+
+## Re-created Types
+
+Types whose members cannot be assigned after construction (constructor parameters, `init`-only, get-only or `readonly` members) are always **re-created** when deserialized, even by [ref deserialization](/en/docs/v4/pooling); the old instance is passed to the recycler. Such types cannot use [`trackReferences`](/en/docs/v4/reference-tracking) (NINO016) or [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled) (NINO018). Give them settable members when you need either.
