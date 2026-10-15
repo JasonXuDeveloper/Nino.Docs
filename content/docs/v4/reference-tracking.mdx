@@ -25,7 +25,7 @@ var copy = NinoDeserializer.Deserialize<Node>(bytes);
 - Each tracked object is written behind a 4-byte reference header: an object already written in the same call is written as its index only.
 - Shared references keep their identity across members of any declared type, including `object` and interfaces.
 - Tracking covers `[NinoType]` classes, not collections: the same `List<T>` in two members is still written twice.
-- Cost: about 28 ns per top-level call plus 4 bytes and one identity lookup per object. Calls without tracked objects pay nothing.
+- Cost: a small fixed cost per top-level call, plus 4 bytes and one identity lookup per tracked object. Calls without tracked objects pay nothing.
 
 <Callout type="warn">
 

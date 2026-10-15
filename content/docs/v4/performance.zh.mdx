@@ -19,7 +19,7 @@ Player copy = NinoDeserializer.Deserialize<Player>(bytes);
 static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 ```
 
-在 .NET 8 上实测（每次调用的纳秒数，常规 → 拦截）：反序列化非密封类 15.5 → 11.6，密封类 29.5 → 24，带字符串的结构体 16.7 → 15.0。
+每次调用能省下几纳秒，对在紧密循环中频繁调用的小数据最有意义。
 
 - **始终开启，无需配置，也不能关闭。** `Nino.Generator` 包中包含面向 Roslyn 4.3、4.8 和 4.12 的三个生成器版本，NuGet 会选择你的编译器能加载的最新版本。4.8 和 4.12 版本会进行拦截，包里的 build props 会自动把 `NinoGen` 加入 `InterceptorsNamespaces` / `InterceptorsPreviewNamespaces`。
 - **取决于编译器，而不是目标框架**：用 .NET 8+ SDK 编译的 `netstandard2.0` 库同样会被拦截。

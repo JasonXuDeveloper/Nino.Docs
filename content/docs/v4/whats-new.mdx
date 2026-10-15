@@ -8,8 +8,6 @@ import { Cpu, GitBranch, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound } f
 
 Nino v4 is a rewrite of the runtime and the source generator: faster to run than v3 **and** MemoryPack, dramatically faster to build, and with the features long-lived projects need.
 
-<ShowcaseHero lang="en" />
-
 <Callout type="warn">
 
 The v4 binary format is **not compatible** with v3 or the earlier v4 betas/previews, and the API changed. See [Migrating from v3](/en/docs/v4/migration).
@@ -60,15 +58,15 @@ Neither library allocates when serializing, and payloads are about the same size
 
 <Cards>
   <Card icon={<Zap />} title="Interceptors" href="/en/docs/v4/performance#interceptors">
-    On Roslyn 4.8+ (the .NET 8 SDK and later), calls with a known type go straight to the generated formatter. Always on; older compilers such as Unity's use the regular path and write the same bytes.
+    On Roslyn 4.8+ (the .NET 8 SDK and later), calls with a known type go straight to the generated formatter. Always on; Unity (which uses the Roslyn 4.3 build) and older compilers use the regular path and write the same bytes.
   </Card>
   <Card icon={<KeyRound />} title="Keyed members and versioning" href="/en/docs/v4/evolving-data">
     `keyed: true` lets you reorder, remove and insert members; `versionTolerant: true` lets you append them, even to base classes.
   </Card>
   <Card icon={<Share2 />} title="trackReferences" href="/en/docs/v4/reference-tracking">
-    Shared references and cycles round-trip, for 4 bytes per object.
+    Shared references and cycles survive a round trip, at 4 bytes per tracked object.
   </Card>
-  <Card icon={<ShieldCheck />} title="Analyzers NINO001–NINO022" href="/en/docs/v4/analyzers">
+  <Card icon={<ShieldCheck />} title="Analyzers NINO001–NINO023" href="/en/docs/v4/analyzers">
     Mistakes reported while you type, most with a one-click code fix.
   </Card>
   <Card icon={<Recycle />} title="Low GC and pooling" href="/en/docs/v4/pooling">
@@ -90,7 +88,7 @@ Neither library allocates when serializing, and payloads are about the same size
 ### Faster to build
 - **Truly incremental source generator**: one file per `[NinoType]`, equatable models, no whole-compilation scans. Editing a type re-generates only that type, and an edit that changes no model (a comment, a method body) re-generates nothing.
 - **Much less generated code**: collections, strings, nullables, tuples and other built-in types are implemented once in `Nino.Core` as generic formatters; the generator only emits code for your `[NinoType]`s.
-- **Analyzers and code fixes**: mistakes are reported while you type (NINO001–NINO022), many with a one-click fix. See the [diagnostics list](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md).
+- **Analyzers and code fixes**: mistakes are reported while you type (NINO001–NINO023), many with a one-click fix. See the [diagnostics list](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md).
 
 ### Faster to run
 - **Struct formatters the JIT/AOT compiler inlines**, raw memory copies for unmanaged `[NinoType]` structs and their arrays and lists, and no allocations beyond the result objects.

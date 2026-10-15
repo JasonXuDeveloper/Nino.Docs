@@ -57,7 +57,7 @@ Full tables: [Benchmarks](/en/docs/v4/perf).
 | Same bytes on every runtime and CPU | ✅ canonical layout, converted on 32-bit and old Mono | ⚠️ unmanaged structs are copied as laid out in memory |
 | Deterministic output (padding zeroed) | ✅ | ❌ padding is copied as is |
 | **Defining types** | | |
-| `partial` required | ⚠️ only for private members or `[NinoPooled]` before .NET 8 | ✅ always |
+| `partial` required | ⚠️ only for `[NinoPooled]` classes, and for non-public members before .NET 8 or in generic types | ✅ always |
 | Private members | ✅ `containNonPublicMembers` | ✅ `[MemoryPackInclude]` |
 | Constructors, records, `required` members | ✅ | ✅ |
 | User collection types | ✅ automatic (`List<T>`, `Dictionary<,>` subclasses, `ICollection<T>`...) | ⚠️ `[MemoryPackable(GenerateType.Collection)]` per type |
@@ -80,17 +80,17 @@ Full tables: [Benchmarks](/en/docs/v4/perf).
 | Deserialize into an existing instance | ✅ reuses elements by index, merges dictionaries | ⚠️ arrays reused only at the same length; collections cleared and refilled |
 | Object pools | ✅ `[NinoPooled]`, factories, recycler for dropped instances | ⚠️ `MemoryPoolFormatter<T>` rents arrays from `ArrayPool` |
 | **Tooling** | | |
-| Analyzer | ✅ NINO001–NINO022, most with code fixes | ✅ MEMPACK001–MEMPACK035 |
+| Analyzer | ✅ NINO001–NINO023, most with code fixes | ✅ MEMPACK001–MEMPACK035 |
 | Compile-time call interception | ✅ Roslyn 4.8+ (.NET 8 SDK) | — not documented |
 | **I/O and integrations** | | |
 | `IBufferWriter<byte>` / `PipeWriter` | ✅ | ✅ |
 | Deserialize `ReadOnlySpan<byte>` | ✅ | ✅ |
-| Deserialize `ReadOnlySequence<byte>` | ❌ copy multi-segment data to a span | ✅ |
-| `Stream` and async APIs | ❌ | ✅ `SerializeAsync` / `DeserializeAsync` |
-| Streaming collections (`IAsyncEnumerable<T>`) | ❌ | ✅ `MemoryPack.Streaming` |
-| Serialization callbacks | ❌ | ✅ `[MemoryPackOnSerializing]` and three more |
+| Deserialize `ReadOnlySequence<byte>` | ✅ a [short helper](/en/docs/v4/advanced/streams#readonlysequence-input) over the span API | ✅ |
+| `Stream` and async I/O | ✅ a [short helper](/en/docs/v4/advanced/streams#async) over the buffer API | ✅ `SerializeAsync` / `DeserializeAsync` |
+| Streaming collections (`IAsyncEnumerable<T>`) | ⚠️ one [frame](/en/docs/v4/advanced/streams#streams) per element | ✅ `MemoryPack.Streaming` |
+| Serialization callbacks | ✅ your own hooks around the call ([example](/en/docs/v4/advanced/streams#callbacks)) | ✅ `[MemoryPackOnSerializing]` and three more |
 | Custom formatters | ✅ struct formatters, inlined; `[assembly: NinoFormatter]` binds generic types | ✅ `MemoryPackFormatter<T>`, provider registration |
-| Brotli compression | ❌ | ✅ `BrotliCompressor`, `[BrotliFormatter]` |
+| Compression | ✅ `System.IO.Compression` over the output ([example](/en/docs/v4/advanced/streams#compression)) | ✅ `BrotliCompressor`, `[BrotliFormatter]` |
 | TypeScript code generation | ❌ | ✅ `[GenerateTypeScript]` |
 | ASP.NET Core MVC formatters | ❌ | ✅ `MemoryPack.AspNetCoreMvcFormatter` |
 | Default string encoding | UTF-16, `[NinoUtf8]` per member | UTF-8, option for UTF-16 |
@@ -101,13 +101,19 @@ Plainly, these are things MemoryPack does and Nino v4 does not:
 
 - **More built-in types.** MemoryPack serializes `BigInteger`, `Uri`, `Version`, `StringBuilder`, `Type`, `BitArray`, `CultureInfo`, `TimeZoneInfo`, `Lazy<T>`, `Memory<T>`, `ReadOnlyMemory<T>`, `ReadOnlySequence<T>`, `ReadOnlyCollection<T>`, `ReadOnlyObservableCollection<T>`, `ILookup<,>`, `IGrouping<,>`, `BlockingCollection<T>` and every immutable collection. Nino has none of these (it has `ImmutableArray<T>` and `ImmutableList<T>` through `Nino.Immutable`). *Workaround:* a [custom formatter](/en/docs/v4/custom-formatters), or a serializable member that converts (`string` for `Uri`, `byte[]` for `BigInteger`).
 - **Unity class types.** `MemoryPack.Unity` serializes `AnimationCurve`, `Gradient` and `RectOffset`. Nino handles Unity's unmanaged structs (`Vector3`, `Quaternion`, `Color32`...) but no Unity classes. *Workaround:* a custom formatter.
-- **Streams and async.** MemoryPack has `Stream` overloads, `SerializeAsync`/`DeserializeAsync`, and `MemoryPack.Streaming` for `IAsyncEnumerable<T>`. Nino works on buffers only. *Workaround:* serialize into a `NinoArrayBufferWriter` and write its `WrittenMemory` to the stream; read the stream into a pooled buffer and deserialize the span.
-- **`ReadOnlySequence<byte>` input.** MemoryPack deserializes multi-segment sequences directly. *Workaround:* deserialize `sequence.First.Span` when `IsSingleSegment`, else copy into a stack or pooled buffer ([example](/en/docs/v4/advanced/networking#reading-frames)).
-- **Serialization callbacks.** MemoryPack calls `[MemoryPackOnSerializing]`, `[MemoryPackOnSerialized]`, `[MemoryPackOnDeserializing]` and `[MemoryPackOnDeserialized]` methods. Nino has no callbacks. *Workaround:* run the logic before or after your `Serialize`/`Deserialize` call, use property setters, or a `[NinoConstructor]` / `[NinoRefDeserialization]` factory.
-- **Built-in compression.** MemoryPack ships Brotli helpers and Brotli member formatters. *Workaround:* compress Nino's output with `System.IO.Compression` (`BrotliEncoder`, `BrotliStream`) or a library such as LZ4.
 - **TypeScript and ASP.NET Core.** MemoryPack generates TypeScript readers and writers and provides MVC input/output formatters. Nino has neither.
-- **Smaller polymorphic headers.** A MemoryPack union tag is 1 byte (3 bytes above 249); Nino writes a 4-byte type id. Nino's ids need no tags to maintain, but cost 3 more bytes per polymorphic value.
 - **Dependency injection and options.** MemoryPack passes `MemoryPackSerializerOptions` (string encoding, an `IServiceProvider`) through every call. Nino has no per-call options; its settings are process-wide (`NinoSettings`) and per-type attributes.
+
+Streams, async I/O, `ReadOnlySequence<byte>` input, serialization callbacks and compression are not on this list: each is a few lines over Nino's `IBufferWriter<byte>` and `ReadOnlySpan<byte>` APIs. See [Streams, Async, Callbacks and Compression](/en/docs/v4/advanced/streams) for ready-to-copy helpers.
+
+## Type Ids and Union Tags
+
+MemoryPack writes a 1-byte union tag (3 bytes above 249) where Nino writes a 4-byte type id, and that is a deliberate trade:
+
+- Nino's id is derived from the type, an FNV-1a hash of its name, so subtypes need no tags. They can live in any assembly (a plugin, a HybridCLR hot update, a library that extends your base class), and ids never renumber when subtypes are added or removed.
+- MemoryPack lists every subtype on the base with `[MemoryPackUnion(tag, type)]`, or registers them by hand with a union formatter, and the tags must be kept stable by hand.
+
+The cost is 3 more bytes per polymorphic value. See [Polymorphism](/en/docs/v4/polymorphism).
 
 ## Where Nino Is Ahead
 
@@ -126,7 +132,7 @@ Plainly, these are things MemoryPack does and Nino v4 does not:
     You serialize game state, network messages or save files at a high rate, on Unity or .NET; you need polymorphism without tag tables, data that evolves, shared references, or zero GC through pooling; or you need identical bytes across Unity, IL2CPP and servers.
   </Card>
   <Card title="Choose MemoryPack when">
-    You need streams or async APIs, `ReadOnlySequence` input, TypeScript clients or ASP.NET Core formatters, serialization callbacks, built-in Brotli, or the BCL and Unity class types listed above out of the box.
+    You need TypeScript clients, ASP.NET Core MVC formatters, per-call options, or the BCL and Unity class types listed above out of the box.
   </Card>
 </Cards>
 

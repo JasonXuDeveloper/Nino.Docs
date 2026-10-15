@@ -10,8 +10,6 @@ import { ArrowRightLeft, ChartColumn, Compass, Rocket, Sparkles, Swords } from '
 
 Nino 是一个 C# 二进制序列化库。给类型加上 `[NinoType]`，Roslyn 源生成器就会在编译期写好它的序列化代码；运行时只需调用 `NinoSerializer.Serialize` 和 `NinoDeserializer.Deserialize`。整个过程没有反射，没有运行时代码生成，不需要 schema 文件，也不需要注册。
 
-<Stats lang="zh" />
-
 ```csharp
 using Nino.Core;
 
@@ -29,9 +27,9 @@ GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
 
 ## 为什么选 Nino [#why-nino]
 
-- **快。** 与 MemoryPack 在同一轮测试中对比，Nino 序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象最高快 <BenchValue k="deserialize.max" />，非托管结构体数组与之接近；生成的代码编译也远快于 Nino v3。详见[基准测试](/zh/docs/v4/perf)。
-- **热路径零 GC。** 序列化到复用的缓冲区不分配内存；[反序列化到已有对象或池化实例](/zh/docs/v4/pooling)同样零分配，速度最高比 MemoryPack 覆盖模式快 <BenchValue k="reuse.max" />。
-- **一切在编译期完成。** 源生成器为每个类型生成一个格式化器，因此 IL2CPP、NativeAOT 和 HybridCLR 都能直接使用。使用 .NET 8 SDK 及以上版本编译时，调用会被[拦截器](/zh/docs/v4/performance#interceptors)直接导向对应的格式化器。生成器是增量的：修改一个类型只会重新生成这个类型；在 1,100 个类型的项目中，生成代码的编译速度是 v3 的 289 倍。
+- **快。** 与 MemoryPack 在同一轮测试中对比，Nino 序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象最高快 <BenchValue k="deserialize.max" />，非托管结构体数组两者接近。详见[基准测试](/zh/docs/v4/perf)。
+- **热路径零 GC。** 序列化到复用的缓冲区不分配内存；[反序列化到已有对象或池化实例](/zh/docs/v4/pooling)同样零分配。
+- **一切在编译期完成。** 源生成器为每个类型生成一个格式化器，因此 IL2CPP、NativeAOT 和 HybridCLR 都能直接使用。使用 .NET 8 SDK 及以上版本编译时，调用会被[拦截器](/zh/docs/v4/performance#interceptors)直接导向对应的格式化器。生成器是增量的：修改一个类型只会重新生成这个类型，生成代码的编译也远快于 v3（参见[构建时间](/zh/docs/v4/v3-vs-v4#build-time-and-generated-code)）。
 - **多态无需标签。** 声明为基类或接口的值，读回来仍是它的实际类型。类型 ID 由类型名哈希得到，不用维护标签表，其他程序集里的子类型也能自动找到。详见[多态](/zh/docs/v4/polymorphism)。
 - **数据可以演进。** 每个类型可以单独选择[版本兼容](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）、[键控成员](/zh/docs/v4/evolving-data#keyed-members)（增删、重排成员）或[引用追踪](/zh/docs/v4/reference-tracking)（共享引用和循环引用）。不启用的类型没有任何额外开销。
 - **各平台字节一致。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出的字节完全相同，CoreCLR、Mono、IL2CPP 以及 32 位和 64 位平台之间都能互读。Unity 客户端和 .NET 服务端可以直接交换数据。详见[平台与二进制格式](/zh/docs/v4/platforms)。
@@ -52,7 +50,7 @@ GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
 
 - **需要人能读懂的格式。** Nino 输出的是二进制。需要人工查看或编辑的文件，请用 JSON、YAML 或 TOML。
 - **数据要给其他语言读取。** 格式由你的 C# 类型决定，没有 schema 文件，也没有其他语言的代码生成器。与非 .NET 程序通信，请用 Protocol Buffers、FlatBuffers 或 MessagePack。
-- **需要流、异步 API、回调或内置压缩。** Nino 只处理缓冲区和 span。参见[限制](/zh/docs/v4/limit)，以及 [MemoryPack 领先的地方](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)。
+- **需要自动生成 TypeScript 客户端或 ASP.NET Core MVC 格式化器。** 参见[局限性](/zh/docs/v4/limit)以及 [MemoryPack 领先的地方](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)。
 - **必须直接读取 Nino v3 的数据。** v4 的二进制格式是全新的，旧数据需要先转换一次。参见[从 v3 迁移](/zh/docs/v4/migration#converting-v3-data)。
 
 ## 从这里开始 [#start-here]

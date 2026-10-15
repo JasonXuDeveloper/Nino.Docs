@@ -20,10 +20,9 @@ icon: TriangleAlert
 - **只在运行时出现的泛型实例化。** 如果某个封闭泛型 `[NinoType]` 在进程中只会按类型 ID 读取，代码里从未写出它的名字，也从未写入过它，就必须在启动时用 `NinoPolymorphic.Register<T>()` 注册。
 - **`PriorityQueue<TElement, TPriority>`** 只在 BCL 提供它的平台上可用：.NET 6 及以上，.NET Standard 和 Unity 中没有。
 - **拦截器**需要 Roslyn 4.8 及以上（.NET 8 SDK 及以上）。Unity 使用 Roslyn 4.3 版本，它和更旧的编译器一样走常规调用，每次慢几纳秒，写出的字节相同。
-- **只处理缓冲区。** 没有 `Stream` 或异步 API，也没有 `ReadOnlySequence<byte>` 重载：请序列化到 `IBufferWriter<byte>`，从 `ReadOnlySpan<byte>` 反序列化（多段序列先拷贝成连续内存）。
-- **没有序列化回调**（序列化或反序列化前后的钩子），没有内置压缩，也没有按调用设置的选项。替代做法参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)。
+- **没有按调用设置的选项。** 设置要么是进程级的（`NinoSettings`），要么按类型设置（特性），不能随某次调用传入。
 - **内置的 BCL 类型比部分序列化库少。** `BigInteger`、`Uri`、`Version`、`StringBuilder`、`Type`、`Lazy<T>`，以及 `ImmutableArray<T>` 和 `ImmutableList<T>`（来自 `Nino.Immutable`）以外的不可变集合，都需要[自定义格式化器](/zh/docs/v4/custom-formatters)。参见[不支持的类型](/zh/docs/v4/types#not-supported)。
-- **.NET 8 之前**（包括 .NET Standard 和 Unity），序列化非公开成员或标记 `[NinoPooled]` 的类型必须是 `partial`；泛型类型中被 `new` 隐藏的非公开基类成员无法访问（NINO022）。
+- **有时必须声明 `partial`。** `[NinoPooled]` 类，以及在 .NET 8 之前（包括 .NET Standard 和 Unity）或在泛型类型中序列化非公开成员的类型，都必须是 `partial`（NINO002）。这些情况下，被 `new` 隐藏的非公开基类成员无法访问（NINO022）。
 
 ## 平台说明 [#platform-notes]
 
@@ -69,7 +68,7 @@ v4 已解决：派生自 `List<T>`、`Dictionary<TKey, TValue>` 等类型，或�
 </Accordion>
 <Accordion value="resolved-8" title={<>无法序列化非公开的字段和属性</>}>
 
-自 v3.0.6 起，可以用 `containNonPublicMembers` 解决。在 .NET 8 及以上没有限制；.NET 8 之前类型必须是 `partial`。
+自 v3.0.6 起，可以用 `containNonPublicMembers` 解决。在 .NET 8 及以上，除泛型类型外不需要 `partial`；.NET 8 之前类型必须是 `partial`。
 
 </Accordion>
 <Accordion value="resolved-9" title={<>多态的非托管结构体转换为接口后，序列化结果与转换前不同</>}>
