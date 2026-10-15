@@ -48,7 +48,37 @@ static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 - 非托管元素的数组和 `List<T>`：整个集合**一次拷贝**；
 - 满足原始内存条件的 `[NinoType]` 结构体（参见[结构体](/zh/docs/v4/defining-types#structs)），无论单独出现还是在数组、列表中。
 
-写入时会把填充字节清零，所以相等的值总是产生相同的字节。带填充的结构体数组会在同一趟拷贝中用 SIMD 掩码处理，开销与普通 `memcpy` 相同。
+写入时会把填充字节清零，所以相等的值总是产生相同的字节，即使结构体位于从未清零的内存中（`ArrayPool` 租来的数组、`[SkipLocalsInit]` 下的 `stackalloc`）。Nino 在第一次写入某个类型时于运行时识别填充：读取一次字段偏移，结果成为 JIT 常量，所以没有填充的结构体不会为这项检查付出任何开销。带填充的结构体数组会在同一趟拷贝中用 SIMD 掩码处理，比普通 `memcpy` 略慢。
+
+### 结构体布局 [#struct-layout]
+
+热点结构体的声明方式决定了它走哪条路径：
+
+| 声明方式 | 路径 |
+| --- | --- |
+| 调整字段顺序，使其不需要填充（`int, int, DateTime`） | 普通的整块拷贝 |
+| 给 `int, DateTime` 加上 `[StructLayout(LayoutKind.Sequential, Pack = 4)]` | 对更小的结构体（12 字节而不是 16 字节）整块拷贝：最快，数据也最小 |
+| 字段之间有空隙（`int, DateTime`：`int` 之后有 4 字节） | 整块拷贝，并用掩码清掉填充 |
+| `[StructLayout(LayoutKind.Auto)]` | **不按原始内存写入**：运行时可能重排字段，所以 Nino 逐个字段写入，慢好几倍 |
+
+```csharp title="Layouts.cs"
+[NinoType]
+public partial struct Sample // 16 字节，其中 4 字节是填充
+{
+    public int Id;
+    public DateTime Time;
+}
+
+[NinoType]
+[StructLayout(LayoutKind.Sequential, Pack = 4)] // [!code highlight]
+public partial struct PackedSample // 12 字节，没有填充
+{
+    public int Id;
+    public DateTime Time;
+}
+```
+
+`Pack` 同时改变结构体在内存中的布局：`Time` 不再按 8 字节对齐。这在 x64 和 ARM64 上没有开销，但会改变写出的字节，所以请在存储数据之前确定布局。
 
 想保持在这条路径上：
 

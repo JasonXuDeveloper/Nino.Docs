@@ -48,7 +48,37 @@ Unmanaged values are copied as raw memory:
 - arrays and `List<T>` of unmanaged elements: **one block copy** of the whole collection;
 - a `[NinoType]` struct that qualifies as raw (see [Structs](/en/docs/v4/defining-types#structs)), alone or in arrays and lists.
 
-Padding bytes are zeroed on write, so equal values always produce equal bytes. Arrays of padded structs are copied through a SIMD mask in the same pass, which costs the same as a plain `memcpy`.
+Padding bytes are zeroed on write, so equal values always produce equal bytes, even when the struct sits in memory that was never cleared (an `ArrayPool` array, `stackalloc` under `[SkipLocalsInit]`). Nino finds the padding at runtime, the first time it writes the type: it reads the field offsets once, and the result becomes a JIT-time constant, so a struct without padding pays nothing for the check. Arrays of padded structs are copied through a SIMD mask in the same pass, which costs a little more than a plain `memcpy`.
+
+### Struct Layout [#struct-layout]
+
+How you declare a hot struct decides which path it takes:
+
+| Declaration | Path |
+| --- | --- |
+| Fields ordered so that nothing needs padding (`int, int, DateTime`) | plain block copy |
+| `[StructLayout(LayoutKind.Sequential, Pack = 4)]` on `int, DateTime` | plain block copy of a smaller struct (12 bytes instead of 16): the fastest and the smallest payload |
+| Fields with gaps (`int, DateTime`: 4 bytes after the `int`) | block copy with the padding masked out |
+| `[StructLayout(LayoutKind.Auto)]` | **not raw**: the runtime may reorder the fields, so Nino writes them one by one, several times slower |
+
+```csharp title="Layouts.cs"
+[NinoType]
+public partial struct Sample // 16 bytes, 4 of them padding
+{
+    public int Id;
+    public DateTime Time;
+}
+
+[NinoType]
+[StructLayout(LayoutKind.Sequential, Pack = 4)] // [!code highlight]
+public partial struct PackedSample // 12 bytes, no padding
+{
+    public int Id;
+    public DateTime Time;
+}
+```
+
+`Pack` changes the struct's layout in memory as well: `Time` is no longer 8-byte aligned. That is free on x64 and ARM64, but changes the bytes on the wire, so pick the layout before you store data.
 
 To stay on this path:
 
