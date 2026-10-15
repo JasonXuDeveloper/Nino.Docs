@@ -15,99 +15,190 @@ Deserializing a class normally allocates a new object graph on every call. With 
 ## Deserializing into Existing Instances
 `NinoDeserializer.Deserialize(data, ref value)` (or `Deserialize(ref value, ref reader)` with your own `Reader`) populates an existing value in place:
 
-- **`null` target:** a new instance is created (from the pool for `[NinoPooled]` types, or through a `[NinoFactory]` factory).
+- **`null` target:** a new instance is created; see [Where Instances Come From](#where-instances-come-from).
 - **Existing instance of the right type:** populated in place. Lists and arrays reuse their elements by index; dictionaries are merged by key (each value is read into the value its key already maps to, and keys missing from the data are removed).
-- **Types that cannot be assigned after construction** are re-created, and the old instance is dropped.
-
-Whenever an existing instance is dropped (the data holds `null`, a list shrinks, an array is reallocated, a dictionary key is removed, the polymorphic type changes), that slot passes it **once** to the recycler of its declared type:
-
-1. the handler registered with `NinoSettings.SetRecycler<T>`, else
-2. `ReturnToPool()` if the instance implements `INinoPooled` (`[NinoPooled]` types, or your own pooled collections implementing the interface), else
-3. nothing: the garbage collector takes it.
+- **Types that cannot be assigned after construction** (only `init` setters or constructor parameters) are re-created, and the old instance is dropped.
 
 ```csharp
-// at startup, before the first serialization call
-NinoSettings.SetRecycler<Bullet>(bullet => BulletPool.Return(bullet));
-
-Scene scene = null;
-NinoDeserializer.Deserialize(frame1, ref scene);
-NinoDeserializer.Deserialize(frame2, ref scene); // bullets removed since frame1 go to BulletPool
+Frame frame = null;
+while (socket.TryReceive(out byte[] data))
+{
+    NinoDeserializer.Deserialize(data, ref frame); // the first frame builds the graph, later frames fill it in place
+    Apply(frame);
+}
 ```
+
+## Where Instances Come From
+
+Whenever Nino needs a new instance (a `null` slot, a list that grows, a polymorphic slot whose type changes), it gets one from:
+
+| Type | New instances come from |
+| --- | --- |
+| A `[NinoPooled]` class | its built-in pool; see [`[NinoPooled]`](#ninopooled) |
+| A type with a `[NinoFactory]` method (a `[NinoType]` or a collection) | your factory, usually backed by your own pool; see [Creating Instances with `[NinoFactory]`](#creating-instances-with-ninofactory) |
+| Anything else, including plain `List<T>` and `Dictionary<K, V>` | `new` |
+
+## Where Dropped Instances Go
+
+Reuse deserialization drops an existing instance when the data holds `null` for it, a list shrinks, an array must be reallocated, a dictionary key disappears, a polymorphic slot changes type, or a type that can only be re-created is replaced. Each dropped instance is handed **once** to the recycler of the slot's declared type:
+
+1. the handler registered for that declared type with `NinoSettings.SetRecycler<T>`; otherwise
+2. `ReturnToPool()`, if the instance implements `INinoPooled` (a `[NinoPooled]` class, or one of your own [pooled collections](#your-own-pooled-collections)); otherwise
+3. nothing: the garbage collector takes it.
+
+### Why `SetRecycler` [#why-setrecycler]
+
+An object rented through `[NinoFactory]` often carries members that were rented too. Here a player comes out of the pool with a pooled `Buffs` list:
+
+```csharp title="Player.cs"
+[NinoType]
+public class Player
+{
+    public int Id;
+    public List<int> Buffs;
+
+    [NinoFactory]
+    public static Player Rent()
+    {
+        var player = ObjectPool<Player>.Rent();
+        player.Buffs ??= ObjectPool<List<int>>.Rent(); // the member is rented as well
+        return player;
+    }
+}
+```
+
+When a message has `Buffs = null`, Nino takes the list off the player. A `List<int>` does not know which pool it came from, so without a recycler it goes to the garbage collector: the list **leaks** out of your pool, which drains until every rent is a `new` again. With a recycler, the dropped list goes back:
+
+```csharp title="Startup.cs"
+// at startup, before the first serialization call
+NinoSettings.SetRecycler<List<int>>(list =>
+{
+    list.Clear();
+    ObjectPool<List<int>>.Return(list);
+});
+NinoSettings.SetRecycler<Player>(player => ObjectPool<Player>.Return(player)); // when a player itself is dropped
+```
+
+`SetRecycler` covers the **return** only. When a later message has `Buffs` again, the `Player` already exists, its factory is not called, and Nino creates the list with `new List<int>()`: creating a plain `List<T>` cannot go through a factory. To rent and return lists through a pool, use a [pooled collection](#your-own-pooled-collections).
 
 <Callout type="warn">
 
-Only register a handler for objects that belong to the deserialized object graph alone. Each slot recycles what it drops, so an instance referenced from two slots that both drop it is recycled twice.
+A recycler is registered per **declared type** and applies to every slot of that type. Register one only for objects owned exclusively by the deserialized graph: if code outside the graph still holds an instance, it is shared once the pool rents it out again. If two slots reference the same instance and both drop it, it is recycled twice (a back reference read with [reference tracking](/en/docs/v4/reference-tracking) is never recycled).
 
 </Callout>
 
 ## Creating Instances with `[NinoFactory]`
-Mark a public static method, callable without arguments, that returns the declaring type. Nino calls it instead of the constructor whenever it has to create an instance, for example to take it from your own object pool, and then populates the instance in place:
+Mark a public static method, callable without arguments, that returns the declaring type. Whenever Nino has to create an instance of that type, it calls the method instead of the constructor and then populates the instance in place. `Player.Rent()` above is one.
 
-```csharp
-[NinoType]
-public class Bullet
-{
-    [NinoFactory] // [!code highlight]
-    public static Bullet Rent() => BulletPool.Rent();
-
-    public int Id;
-    public Vector3 Position;
-}
-```
-
-It also works on collection types (a `List<T>` subclass, an `IDictionary<TKey, TValue>` implementation...). The method may return an instance that still holds elements; they are dropped (and recycled) before the data is read. It must not return `null`, and an invalid method is reported as NINO017.
+This works for collection types too (a `List<T>` subclass, an `IDictionary<TKey, TValue>` implementation, ...). The method may return an instance that still holds elements; they are dropped (and recycled) before the data is read. It must not return `null`; an invalid method reports NINO017.
 
 ## `[NinoPooled]`
-`[NinoPooled]` gives a `[NinoType]` class a built-in pool. Wherever Nino creates an instance of it (top level, member or collection element), it first takes one from the pool and deserializes into it in place, reusing its lists, arrays, dictionaries and nested objects.
+`[NinoPooled]` gives a `[NinoType]` class a built-in object pool. Wherever Nino creates an instance (top level, member or collection element), it takes one from the pool and deserializes into it; dropped instances go back to the pool on their own.
 
-```csharp
+```csharp title="Bullet.cs"
 [NinoType, NinoPooled] // [!code highlight]
-public sealed partial class Packet
+public sealed partial class Bullet
 {
     public int Id;
-    public List<int> Values;
+    public float X, Y;
 
     // Required; the analyzer offers a fix that adds both (NINO019).
-    private static partial IEnumerable<Packet> OnNinoPoolWarmup() => Enumerable.Range(0, 16).Select(_ => new Packet());
+    private static partial IEnumerable<Bullet> OnNinoPoolWarmup() => Enumerable.Range(0, 64).Select(_ => new Bullet());
     private partial void OnNinoPoolReturn() { /* clear state Nino does not deserialize */ }
 }
 
-var packet = NinoDeserializer.Deserialize<Packet>(bytes); // reuses a pooled instance (and its list) if there is one
+var bullet = NinoDeserializer.Deserialize<Bullet>(bytes); // reuses a pooled instance if there is one
 // ... use it ...
-packet.ReturnToPool();                                    // returning it twice throws
+bullet.ReturnToPool();                                    // returning it twice throws
 ```
 
-- The class must be `sealed`, `partial` and populated in place (no constructor-only or read-only members); otherwise NINO018/NINO002 are reported.
+The typical use is as a collection element: a `List<Bullet>` grows and shrinks every frame, new bullets come from the pool and dropped ones go back, with no recycler to register.
+
+- The class must be `sealed`, `partial` and populatable in place (no constructor-only or read-only members); NINO018/NINO002 report otherwise.
 - The generator adds `ReturnToPool()` and two partial methods you implement:
-  - `OnNinoPoolWarmup()` runs once before the type is first deserialized; the instances it returns go straight into the pool (return `null` or nothing to start empty).
+  - `OnNinoPoolWarmup()` runs once, before the type is first deserialized; the instances it returns go straight into the pool (return `null` or an empty sequence to start empty).
   - `OnNinoPoolReturn()` runs on `ReturnToPool()`: release state that Nino does not deserialize.
-- Returning an instance twice throws an `InvalidOperationException`. An instance that is never returned is simply collected.
-- Instances dropped by reuse deserialization are returned to the pool automatically.
-- `ReturnToPool()` returns that one instance. Its lists, arrays and nested objects (pooled or not) stay attached to it and are reused with it the next time it is deserialized into. To send a child back to its own pool instead, return it in `OnNinoPoolReturn()` and set the field to `null`.
-- The pool is thread safe: each thread keeps up to 64 instances of its own, and a shared stack keeps up to 256 by default. Change this at startup with `NinoSettings.DefaultPoolMaxRetained` or `NinoSettings.SetPoolMaxRetained<T>(int)`.
-- `NinoPool<T>.Shared` is the pool itself: `Count` is the number of instances in the shared stack (not counting the per-thread ones), and `Clear()` drops every pooled instance, the shared stack at once and each thread's own on its next use.
+- Returning an instance twice throws `InvalidOperationException`. Instances never returned are collected normally.
+- `ReturnToPool()` returns only that instance. Its lists, arrays and nested objects (pooled or not) stay attached and are reused with it next time. So **a type that holds pooled children should be pooled itself**: otherwise, when it is dropped, its children go to the garbage collector with it. To return a child to its own pool instead, return it in `OnNinoPoolReturn()` and set the field to `null`.
+- Pools are thread-safe: each thread keeps up to 64 instances of its own, and the shared stack keeps up to 256 by default. Change it at startup with `NinoSettings.DefaultPoolMaxRetained` or `NinoSettings.SetPoolMaxRetained<T>(int)`.
+- `NinoPool<T>.Shared` is the pool itself: `Count` is the number of instances in the shared stack (not counting those held per thread), and `Clear()` drops every pooled instance: the shared stack at once, and each thread's own stack the next time that thread uses it.
 
-<Callout type="info">
+### Pooled Collections [#your-own-pooled-collections]
 
-With pooling and reuse deserialization, deserializing reused instances allocates **0 B** and runs up to <BenchValue k="reuse.max" /> faster than MemoryPack's overwrite mode. See the [benchmarks](/en/docs/v4/perf#deserialize-into-existing-instances-pooling).
+Creating a plain `List<T>` cannot go through a factory. To pool the list itself, wrap an object pool and define a list type that implements `INinoPooled` (namespace `Nino.Core`): renting goes through `[NinoFactory]`, and Nino calls `ReturnToPool()` when it drops one, with no recycler to register.
 
-</Callout>
-
-### Your Own Pooled Collections
-
-A collection type that already has a pool of its own (ET's `ListComponent<T>`, for example) can implement `INinoPooled` (namespace `Nino.Core`). When reuse deserialization drops an instance from a slot of that type, Nino calls its `ReturnToPool()`:
-
-```csharp
-public class ListComponent<T> : List<T>, INinoPooled
+```csharp title="ObjectPool.cs"
+public static class ObjectPool<T> where T : class, new()
 {
-    [NinoFactory]
-    public static ListComponent<T> Create() => MyPools.Rent<ListComponent<T>>();
+    [ThreadStatic] private static Stack<T> _items;
 
-    void INinoPooled.ReturnToPool() => MyPools.Return(this);
+    public static T Rent()
+    {
+        var items = _items ??= new Stack<T>();
+        return items.Count > 0 ? items.Pop() : new T();
+    }
+
+    public static void Return(T item) => (_items ??= new Stack<T>()).Push(item);
+}
+
+public sealed class PooledList<T> : List<T>, INinoPooled
+{
+    [NinoFactory] // [!code highlight]
+    public static PooledList<T> Rent() => ObjectPool<PooledList<T>>.Rent();
+
+    public void ReturnToPool() // [!code highlight]
+    {
+        Clear();
+        ObjectPool<PooledList<T>>.Return(this);
+    }
 }
 ```
 
-Pair it with a [`[NinoFactory]`](#creating-instances-with-ninofactory) method so new instances come from the same pool. A handler registered with `NinoSettings.SetRecycler<T>` takes precedence over `ReturnToPool()`.
+Declare the member as `PooledList<int>` instead of `List<int>`. Collection types that already have a pool of their own (such as ET's `ListComponent<T>`) work the same way. A handler registered with `SetRecycler<T>` for that type takes precedence over `ReturnToPool()`.
+
+## Example: Zero-GC State Sync [#example]
+
+A server sends the full state every frame: the number of units and bullets changes every frame, and a unit's path is sometimes there and sometimes not.
+
+```csharp title="Frame.cs"
+[NinoType]
+public class Frame
+{
+    public int Tick;
+    public List<Unit> Units;     // length changes every frame
+    public List<Bullet> Bullets; // Bullet is the [NinoPooled] class above
+}
+
+[NinoType, NinoPooled]
+public sealed partial class Unit
+{
+    public int Id;
+    public PooledList<int> Path; // sometimes null
+
+    private static partial IEnumerable<Unit> OnNinoPoolWarmup() => null;
+    private partial void OnNinoPoolReturn() { }
+}
+```
+
+```csharp
+Frame frame = null;
+foreach (byte[] data in frames)
+    NinoDeserializer.Deserialize(data, ref frame);
+```
+
+Once warmed up, every frame allocates **0 B**:
+
+- `Frame` and its two lists are reused in place.
+- When a list grows, new `Unit`s and `Bullet`s come from their pools; when it shrinks, the dropped ones go back.
+- When `Path` becomes `null`, the `PooledList<int>` goes back through `ReturnToPool()`; when it comes back, it is rented through `[NinoFactory]`.
+
+If `Unit` were not pooled, every `Unit` dropped from a shrinking list would go to the garbage collector with its `Path`: frames would keep allocating, and the list pool would slowly drain.
+
+<Callout type="info">
+
+With pooling and reuse deserialization, deserializing into reused instances allocates **0 B** and is up to <BenchValue k="reuse.max" /> faster than MemoryPack's overwrite mode. See [Benchmarks](/en/docs/v4/perf#pooling).
+
+</Callout>
 
 ## Settings
 
