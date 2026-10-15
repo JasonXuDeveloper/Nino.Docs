@@ -5,7 +5,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { source } from '../src/lib/source';
-import { latestVersion } from '../src/lib/versions';
+import { latestVersion, versions } from '../src/lib/versions';
 
 const siteUrl = 'https://nino.xgamedev.net';
 const outDir = path.resolve('build/client');
@@ -24,10 +24,18 @@ async function markdownOf(page: Page) {
   return `# ${page.data.title}\n\nURL: ${siteUrl}${page.url}\n\n${body}`;
 }
 
+// Newest version first, as in the version switcher.
+function byVersion(a: Page, b: Page) {
+  const rank = (page: Page) =>
+    versions.indexOf(page.slugs[0] as (typeof versions)[number]);
+  return rank(a) - rank(b);
+}
+
 function sitemap() {
   const urls = ['/en', '/zh'];
   for (const locale of locales) {
-    for (const page of source.getPages(locale)) urls.push(page.url);
+    for (const page of source.getPages(locale).sort(byVersion))
+      urls.push(page.url);
   }
   const entries = urls
     .map((url) => `  <url><loc>${siteUrl}${url}</loc></url>`)
@@ -43,7 +51,7 @@ function llmsList(locale: (typeof locales)[number]) {
   const lines = [
     '# Nino',
     '',
-    '> Ultimate high-performance binary serialization library for C#: source-generated, for .NET, Unity and HybridCLR.',
+    '> The fastest binary serializer for C#: source-generated, zero-allocation and thread-safe, for Unity, Godot and .NET servers.',
     '',
   ];
   for (const page of source.getPages(locale)) {

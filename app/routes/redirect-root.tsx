@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 
-// `/` picks the language in the browser: the `nino_locale` cookie (set by the
+// On Cloudflare Pages, functions/[[path]].ts redirects `/` first. This page is
+// the fallback (wrangler-less hosting, local preview): the `FD_LOCALE` cookie (set by the
 // language switcher), else the browser language. There is no server.
-const pickLocale = `(function(){var m=document.cookie.match(/(?:^|; )nino_locale=(en|zh)/);var l=m?m[1]:(navigator.language||'').toLowerCase().indexOf('zh')===0?'zh':'en';location.replace('/'+l+location.hash);})()`;
+const pickLocale = `(function(){var m=document.cookie.match(/(?:^|; )FD_LOCALE=(en|zh)/);var l=m?m[1]:(navigator.language||'').toLowerCase().indexOf('zh')===0?'zh':'en';location.replace('/'+l+location.hash);})()`;
 
 export function meta() {
   return [
@@ -15,7 +16,7 @@ export function meta() {
 export default function RedirectRoot() {
   // Client-side navigation to `/` (the inline script only runs on page load)
   useEffect(() => {
-    const cookie = document.cookie.match(/(?:^|; )nino_locale=(en|zh)/)?.[1];
+    const cookie = document.cookie.match(/(?:^|; )FD_LOCALE=(en|zh)/)?.[1];
     const locale =
       cookie ??
       (navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en');

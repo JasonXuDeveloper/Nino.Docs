@@ -1,4 +1,5 @@
 import { remarkImage } from 'fumadocs-core/mdx-plugins';
+import { remarkFeedbackBlock } from 'fumadocs-core/mdx-plugins/remark-feedback-block';
 import {
   defineConfig,
   defineDocs,
@@ -23,6 +24,10 @@ export const docs = defineDocs({
 
 export default defineConfig({
   mdxOptions: {
-    remarkPlugins: [[remarkImage, { external: false, publicDir: 'public' }]],
+    remarkPlugins: [
+      [remarkImage, { external: false, publicDir: 'public' }],
+      // Block-level feedback: a "Feedback" button on each paragraph
+      remarkFeedbackBlock,
+    ],
   },
 });

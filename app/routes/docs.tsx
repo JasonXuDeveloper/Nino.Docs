@@ -7,11 +7,11 @@ import {
   DocsDescription,
   DocsPage,
   DocsTitle,
-  EditOnGitHub,
-  MarkdownCopyButton,
-  ViewOptionsPopover,
 } from 'fumadocs-ui/layouts/docs/page';
 import { Link, redirect } from 'react-router';
+import { LLMCopyButton, ViewOptions } from '@/components/ai/page-actions';
+import { handlePageFeedback } from '@/components/feedback/actions';
+import { Feedback } from '@/components/feedback/client';
 import { getLocale, type Locale } from '@/lib/i18n';
 import { baseOptions } from '@/lib/layout.shared';
 import { source } from '@/lib/source';
@@ -20,7 +20,7 @@ import { getMDXComponents } from '@/mdx-components';
 import type { Route } from './+types/docs';
 
 const siteUrl = 'https://nino.xgamedev.net';
-const repoUrl = 'https://github.com/JasonXuDeveloper/nino.docs';
+const repoUrl = 'https://github.com/JasonXuDeveloper/Nino.Docs';
 
 export async function loader({ params }: Route.LoaderArgs) {
   const lang = getLocale(params.lang);
@@ -92,19 +92,18 @@ const clientLoader = browserCollections.docs.createClientLoader<ContentProps>({
         <DocsDescription className="mb-0">
           {frontmatter.description}
         </DocsDescription>
-        <div className="flex flex-row flex-wrap items-center gap-2 border-b pt-2 pb-4">
-          <MarkdownCopyButton markdownUrl={`${url}.mdx`} />
-          <ViewOptionsPopover
+        <div className="mb-4 flex flex-row items-center gap-2 border-b pt-2 pb-4">
+          <LLMCopyButton markdownUrl={`${url}.mdx`} locale={lang} />
+          <ViewOptions
             markdownUrl={`${url}.mdx`}
             githubUrl={`${repoUrl}/blob/main/content/docs/${path}`}
+            locale={lang}
           />
         </div>
         <DocsBody>
           <Mdx components={getMDXComponents()} />
         </DocsBody>
-        <EditOnGitHub href={`${repoUrl}/edit/main/content/docs/${path}`}>
-          {lang === 'zh' ? '在 GitHub 上编辑此页' : 'Edit this page on GitHub'}
-        </EditOnGitHub>
+        <Feedback onSendAction={handlePageFeedback} />
       </DocsPage>
     );
   },
@@ -120,7 +119,7 @@ function OldVersionBanner({
   latestUrl: string;
 }) {
   return (
-    <Banner className="nino-banner">
+    <Banner>
       {lang === 'zh' ? (
         <span>
           你正在阅读旧版本 Nino {version} 的文档。最新版本为 {latestVersion}：

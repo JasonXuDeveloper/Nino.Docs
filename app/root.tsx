@@ -47,7 +47,7 @@ export function Layout({ children }: { children: ReactNode }) {
   // Remember the choice (read by the `/` page) and stay on the same page.
   function onLocaleChange(next: string) {
     // biome-ignore lint/suspicious/noDocumentCookie: one cookie, read by the inline script of `/`
-    document.cookie = `nino_locale=${next}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    document.cookie = `FD_LOCALE=${next}; Path=/; Max-Age=31536000; SameSite=Lax`;
     const rest = pathname.replace(/^\/(en|zh)(?=\/|$)/, '');
     navigate(`/${next}${rest}${window.location.hash}`);
   }
@@ -57,7 +57,6 @@ export function Layout({ children }: { children: ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="theme-color" content="#1c1a4f" />
         <meta property="og:site_name" content="Nino" />
         <meta property="og:image" content="https://nino.xgamedev.net/og.png" />
         <Meta />

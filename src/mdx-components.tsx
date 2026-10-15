@@ -1,3 +1,4 @@
+import type { FeedbackBlockProps } from 'fumadocs-core/mdx-plugins/remark-feedback-block';
 import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 import { File, Files, Folder } from 'fumadocs-ui/components/files';
 import { ImageZoom } from 'fumadocs-ui/components/image-zoom';
@@ -6,10 +7,12 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 import { TypeTable } from 'fumadocs-ui/components/type-table';
 import defaultMdxComponents from 'fumadocs-ui/mdx';
 import type { MDXComponents } from 'mdx/types';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { AnchorRedirect } from '@/components/anchor-redirect';
 import { BenchChart } from '@/components/bench-chart';
 import { BenchmarkChart } from '@/components/charts';
+import { handleBlockFeedback } from '@/components/feedback/actions';
+import { FeedbackBlock } from '@/components/feedback/client';
 import { CountUp, ShowcaseHero, StatCards } from '@/components/showcase';
 import { Stats } from '@/components/stats';
 
@@ -36,6 +39,14 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     Tab,
     Tabs,
     TypeTable,
+    FeedbackBlock: ({
+      children,
+      ...props
+    }: FeedbackBlockProps & { children: ReactNode }) => (
+      <FeedbackBlock {...props} onSendAction={handleBlockFeedback}>
+        {children}
+      </FeedbackBlock>
+    ),
     ...components,
   };
 }
