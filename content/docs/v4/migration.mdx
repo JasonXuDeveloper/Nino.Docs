@@ -129,7 +129,19 @@ NinoSerializer.Serialize(obj, buffer);
 | `[NinoFormerName("global::Old.Namespace.Type")]` (name copied from `NinoTypeConst.g.cs`) | `[NinoFormerName("Old.Namespace.Type")]`: runtime form, no `global::`, `+` for nested types |
 | `[NinoMember(index)]`, `[NinoIgnore]`, `[NinoUtf8]`, `[NinoConstructor(...)]`, `[NinoExplicitOrder(...)]` | unchanged; `[NinoConstructor]` can also mark a static factory method |
 | `[NinoPrivateProxy]` (emitted by the generator) | removed; private members are reached through `[UnsafeAccessor]` (.NET 8+) or a generated accessor in the `partial` type |
-| (none) | `[NinoPooled]`, `[NinoRefDeserialization]`, `[NinoCustomFormatter]`, `[assembly: NinoFormatter]` |
+| (none) | `[NinoPooled]`, `[NinoFactory]`, `[NinoCustomFormatter]`, `[assembly: NinoFormatter]` |
+
+### Names from the v4 betas
+
+Code written against an early v4 beta uses names that changed before the release:
+
+| v4 beta | v4 |
+| --- | --- |
+| `[NinoRefDeserialization]` | `[NinoFactory]` |
+| `NinoFactory<T>` | `NinoActivator<T>` |
+| `NinoDeserializer.DeserializeRef(ref value, data)` | `NinoDeserializer.Deserialize(data, ref value)` |
+| `NinoDeserializer.DeserializeRef(ref value, ref reader)` | `NinoDeserializer.Deserialize(ref value, ref reader)` |
+| "ref deserialization" | reuse deserialization |
 
 ### Version tolerance
 

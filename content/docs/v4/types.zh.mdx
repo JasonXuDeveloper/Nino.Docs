@@ -112,12 +112,12 @@ public class Inventory : List<Item> { }
 public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 ```
 
-- Nino 只在槽位为 `null` 时才创建集合：如果类型声明了公共静态的 [`[NinoRefDeserialization]`](/zh/docs/v4/pooling#creating-instances-with-ninorefdeserialization) 工厂方法（比如从池中取实例），就调用它，否则调用可无参调用的公共构造函数。
+- Nino 只在槽位为 `null` 时才创建集合：如果类型声明了公共静态的 [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) 工厂方法（比如从池中取实例），就调用它，否则调用可无参调用的公共构造函数。
 - 集合通过公开的集合 API 填充（`Add`/`Clear`、字典索引器、`Enqueue`、`Push`、`TryAdd`）。`List<T>`、`HashSet<T>` 和 `Dictionary<TKey, TValue>` 的子类通过基类型填充，所以用 `new` 隐藏的成员不会被调用。
 - 如果集合类型本身也是 `[NinoType]`，会先写元素，再写它自己的序列化成员。
 - 创建什么由声明类型决定：一个声明为 `List<int>` 的成员即使存放的是 `Inventory`，读回来也是 `List<int>`。
 - 集合按值处理：同一个集合实例出现在两个成员中，会写入两次，读回为两个实例。
-- 池化的集合（例如 ET 的 `ListComponent<T>`）可以实现 `INinoPooled`：ref 反序列化丢弃它时，Nino 会调用它的 `ReturnToPool()`。参见 [ref 反序列化与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
+- 池化的集合（例如 ET 的 `ListComponent<T>`）可以实现 `INinoPooled`：复用反序列化丢弃它时，Nino 会调用它的 `ReturnToPool()`。参见 [复用反序列化与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
 
 <Callout type="warn">
 

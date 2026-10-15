@@ -70,7 +70,7 @@ v4 新增：通过 `ref` 反序列化到已有的对象中，需要新实例时�
     写代码时就报告错误，多数附带一键修复。
   </Card>
   <Card icon={<Recycle />} title="低 GC 与对象池" href="/zh/docs/v4/pooling">
-    ref 反序列化复用已有对象，`[NinoPooled]` 池化其余对象，被丢弃的实例都会回收。
+    复用反序列化复用已有对象，`[NinoPooled]` 池化其余对象，被丢弃的实例都会回收。
   </Card>
   <Card icon={<Layers />} title="线程安全" href="/zh/docs/v4/performance#thread-safety">
     所有 API 都可以并发调用，无需加锁；热路径从不写共享内存。
@@ -96,11 +96,11 @@ v4 新增：通过 `ref` 反序列化到已有的对象中，需要新实例时�
 - **线程安全、缓存友好**：注册表无锁，采用写时复制；热路径上没有共享的可变状态。
 
 ### 复用而非分配 [#reuse-instead-of-allocate]
-- **ref 反序列化**：`NinoDeserializer.Deserialize(data, ref value)` 原地填充已有的对象、列表、数组和字典。
+- **复用反序列化**：`NinoDeserializer.Deserialize(data, ref value)` 原地填充已有的对象、列表、数组和字典。
 - **池化反序列化**：给类加上 `[NinoPooled]`，Nino 就会反序列化到你用 `ReturnToPool()` 归还的实例中，并复用其中的列表、数组和字典。被丢弃的实例（数据为 `null`、列表变短、类型改变）会回到各自的池，或交给用 `NinoSettings.SetRecycler<T>` 注册的处理器。
-- **`[NinoRefDeserialization]` 工厂方法**让 Nino 从你自己的对象池中获取新实例。
+- **`[NinoFactory]` 工厂方法**让 Nino 从你自己的对象池中获取新实例。
 
-参见 [ref 反序列化与对象池](/zh/docs/v4/pooling)。
+参见 [复用反序列化与对象池](/zh/docs/v4/pooling)。
 
 ### 数据演进 [#evolve-your-data]
 - **按需开启的版本兼容**：`[NinoType(versionTolerant: true)]` 允许在该类型或任意一层基类的末尾追加成员。

@@ -70,7 +70,7 @@ Neither library allocates when serializing, and payloads are about the same size
     Mistakes reported while you type, most with a one-click code fix.
   </Card>
   <Card icon={<Recycle />} title="Low GC and pooling" href="/en/docs/v4/pooling">
-    Ref deserialization reuses your objects, `[NinoPooled]` pools the rest, and every dropped instance is recycled.
+    Reuse deserialization reuses your objects, `[NinoPooled]` pools the rest, and every dropped instance is recycled.
   </Card>
   <Card icon={<Layers />} title="Thread safe" href="/en/docs/v4/performance#thread-safety">
     Every API can be called concurrently without locks; no hot path writes shared memory.
@@ -96,11 +96,11 @@ Neither library allocates when serializing, and payloads are about the same size
 - **Thread safe and cache friendly**: lock-free, copy-on-write registries; no shared mutable state on hot paths.
 
 ### Reuse instead of allocate
-- **Ref deserialization**: `NinoDeserializer.Deserialize(data, ref value)` populates existing objects, lists, arrays and dictionaries in place.
+- **Reuse deserialization**: `NinoDeserializer.Deserialize(data, ref value)` populates existing objects, lists, arrays and dictionaries in place.
 - **Pooled deserialization**: mark a class `[NinoPooled]` and Nino deserializes into instances you hand back with `ReturnToPool()`, reusing their lists, arrays and dictionaries. Dropped instances (the payload is `null`, a list shrinks, the type changes) go back to their pool or to a handler registered with `NinoSettings.SetRecycler<T>`.
-- **`[NinoRefDeserialization]` factories** let Nino take new instances from your own pools.
+- **`[NinoFactory]` factories** let Nino take new instances from your own pools.
 
-See [Ref Deserialization and Pooling](/en/docs/v4/pooling).
+See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 
 ### Evolve your data
 - **Opt-in version tolerance**: `[NinoType(versionTolerant: true)]` lets you append members to the type or any of its base classes, at any nesting depth.

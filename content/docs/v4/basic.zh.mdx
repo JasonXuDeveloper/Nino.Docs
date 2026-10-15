@@ -88,12 +88,10 @@ T NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data);
 
 // Into an existing value, reusing its instances
 void NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data, ref T value);
-void NinoDeserializer.DeserializeRef<T>(ref T value, ReadOnlySpan<byte> data); // same as above
 
 // With an existing Reader
 T NinoDeserializer.Deserialize<T>(ref Reader reader);
 void NinoDeserializer.Deserialize<T>(ref T value, ref Reader reader);
-void NinoDeserializer.DeserializeRef<T>(ref T value, ref Reader reader);        // same as above
 
 // Boxed values, when the type is only known at run time
 object NinoDeserializer.Deserialize(ReadOnlySpan<byte> data, Type type);
@@ -121,7 +119,7 @@ foreach (var message in messages)
 }
 ```
 
-过程中被丢弃的实例（数据中为 `null`、列表变短、字典少了某个键、多态类型变了）可以归还到对象池。Nino 没有 `out` 重载：要新实例就用返回值，要复用就用 `ref`。详见 [ref 反序列化与对象池](/zh/docs/v4/pooling)。
+过程中被丢弃的实例（数据中为 `null`、列表变短、字典少了某个键、多态类型变了）可以归还到对象池。Nino 没有 `out` 重载：要新实例就用返回值，要复用就用 `ref`。详见 [复用反序列化与对象池](/zh/docs/v4/pooling)。
 
 ### 从一个缓冲区读多个值 [#several-values-from-one-buffer]
 

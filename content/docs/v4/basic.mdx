@@ -88,12 +88,10 @@ T NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data);
 
 // Into an existing value, reusing its instances
 void NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data, ref T value);
-void NinoDeserializer.DeserializeRef<T>(ref T value, ReadOnlySpan<byte> data); // same as above
 
 // With an existing Reader
 T NinoDeserializer.Deserialize<T>(ref Reader reader);
 void NinoDeserializer.Deserialize<T>(ref T value, ref Reader reader);
-void NinoDeserializer.DeserializeRef<T>(ref T value, ref Reader reader);        // same as above
 
 // Boxed values, when the type is only known at run time
 object NinoDeserializer.Deserialize(ReadOnlySpan<byte> data, Type type);
@@ -121,7 +119,7 @@ foreach (var message in messages)
 }
 ```
 
-Instances dropped along the way (the data holds `null`, a list shrinks, a dictionary key disappears, the polymorphic type changes) can be returned to an object pool. There is no `out` overload: use the return value for a new instance, or `ref` to reuse one. See [Ref Deserialization and Pooling](/en/docs/v4/pooling).
+Instances dropped along the way (the data holds `null`, a list shrinks, a dictionary key disappears, the polymorphic type changes) can be returned to an object pool. There is no `out` overload: use the return value for a new instance, or `ref` to reuse one. See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 
 ### Several Values from One Buffer
 

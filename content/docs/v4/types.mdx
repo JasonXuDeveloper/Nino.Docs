@@ -107,12 +107,12 @@ public class Inventory : List<Item> { }
 public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 ```
 
-- Nino creates a collection only when the slot is `null`: through a public static [`[NinoRefDeserialization]`](/en/docs/v4/pooling#creating-instances-with-ninorefdeserialization) factory method if the type declares one (for example to take it from a pool), otherwise through a public constructor callable without arguments.
+- Nino creates a collection only when the slot is `null`: through a public static [`[NinoFactory]`](/en/docs/v4/pooling#creating-instances-with-ninofactory) factory method if the type declares one (for example to take it from a pool), otherwise through a public constructor callable without arguments.
 - Collections are filled through the public collection API (`Add`/`Clear`, the dictionary indexer, `Enqueue`, `Push`, `TryAdd`). Subclasses of `List<T>`, `HashSet<T>` and `Dictionary<TKey, TValue>` are filled through the base type, so members hidden with `new` are not called.
 - If the collection type is also a `[NinoType]`, its elements are written first and then its own serialized members.
 - The declared type decides what is created: a `List<int>` member holding an `Inventory` is read back as a `List<int>`.
 - Collections are values: the same collection instance in two members is written twice and read back as two instances.
-- A pooled collection (such as ET's `ListComponent<T>`) can implement `INinoPooled`: when ref deserialization drops it, Nino calls its `ReturnToPool()`. See [Ref Deserialization and Pooling](/en/docs/v4/pooling#deserializing-into-existing-instances).
+- A pooled collection (such as ET's `ListComponent<T>`) can implement `INinoPooled`: when reuse deserialization drops it, Nino calls its `ReturnToPool()`. See [Reuse Deserialization and Pooling](/en/docs/v4/pooling#deserializing-into-existing-instances).
 
 <Callout type="warn">
 

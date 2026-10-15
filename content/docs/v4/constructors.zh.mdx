@@ -105,7 +105,7 @@ public struct SimpleStruct
 
 Nino 提供两种介入实例创建的方式，用途不同：
 
-| | `[NinoConstructor]` | [`[NinoRefDeserialization]`](/zh/docs/v4/pooling#creating-instances-with-ninorefdeserialization) |
+| | `[NinoConstructor]` | [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) |
 | --- | --- | --- |
 | 标记在 | 构造函数或静态工厂方法上 | 可无参调用的公共静态方法上 |
 | 接收 | 所列成员反序列化后的值 | 无 |
@@ -114,4 +114,4 @@ Nino 提供两种介入实例创建的方式，用途不同：
 
 ## 重新创建的类型 [#re-created-types]
 
-如果类型的成员在构造之后无法再赋值（构造函数参数、`init` 属性、只读属性或 `readonly` 字段），那么每次反序列化都会**重新创建**它，即使是 [ref 反序列化](/zh/docs/v4/pooling)也不例外，旧实例会交给回收器。这类类型不能使用 [`trackReferences`](/zh/docs/v4/reference-tracking)（NINO016）或 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)（NINO018）。需要这两项功能时，请让成员可写。
+如果类型的成员在构造之后无法再赋值（构造函数参数、`init` 属性、只读属性或 `readonly` 字段），那么每次反序列化都会**重新创建**它，即使是 [复用反序列化](/zh/docs/v4/pooling)也不例外，旧实例会交给回收器。这类类型不能使用 [`trackReferences`](/zh/docs/v4/reference-tracking)（NINO016）或 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)（NINO018）。需要这两项功能时，请让成员可写。

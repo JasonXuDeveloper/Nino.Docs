@@ -129,7 +129,19 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 | `[NinoFormerName("global::Old.Namespace.Type")]`（名称从 `NinoTypeConst.g.cs` 复制） | `[NinoFormerName("Old.Namespace.Type")]`：运行时写法，不带 `global::`，嵌套类型用 `+` 分隔 |
 | `[NinoMember(index)]`、`[NinoIgnore]`、`[NinoUtf8]`、`[NinoConstructor(...)]`、`[NinoExplicitOrder(...)]` | 不变；`[NinoConstructor]` 也可以标记静态工厂方法 |
 | `[NinoPrivateProxy]`（由生成器生成） | 已移除；私有成员通过 `[UnsafeAccessor]`（.NET 8+）或 `partial` 类型中生成的访问器访问 |
-| （无） | `[NinoPooled]`、`[NinoRefDeserialization]`、`[NinoCustomFormatter]`、`[assembly: NinoFormatter]` |
+| （无） | `[NinoPooled]`、`[NinoFactory]`、`[NinoCustomFormatter]`、`[assembly: NinoFormatter]` |
+
+### v4 beta 中的旧名称 [#names-from-the-v4-betas]
+
+基于早期 v4 beta 编写的代码会用到一些在正式版发布前改过名的 API：
+
+| v4 beta | v4 |
+| --- | --- |
+| `[NinoRefDeserialization]` | `[NinoFactory]` |
+| `NinoFactory<T>` | `NinoActivator<T>` |
+| `NinoDeserializer.DeserializeRef(ref value, data)` | `NinoDeserializer.Deserialize(data, ref value)` |
+| `NinoDeserializer.DeserializeRef(ref value, ref reader)` | `NinoDeserializer.Deserialize(ref value, ref reader)` |
+| “ref 反序列化” | 复用反序列化 |
 
 ### 版本兼容 [#version-tolerance]
 

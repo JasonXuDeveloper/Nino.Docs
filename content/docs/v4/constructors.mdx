@@ -105,7 +105,7 @@ public struct SimpleStruct
 
 Nino has two ways to hook into instance creation, for different jobs:
 
-| | `[NinoConstructor]` | [`[NinoRefDeserialization]`](/en/docs/v4/pooling#creating-instances-with-ninorefdeserialization) |
+| | `[NinoConstructor]` | [`[NinoFactory]`](/en/docs/v4/pooling#creating-instances-with-ninofactory) |
 | --- | --- | --- |
 | On | a constructor or a static factory method | a public static method callable without arguments |
 | Receives | the deserialized values of the listed members | nothing |
@@ -114,4 +114,4 @@ Nino has two ways to hook into instance creation, for different jobs:
 
 ## Re-created Types
 
-Types whose members cannot be assigned after construction (constructor parameters, `init`-only, get-only or `readonly` members) are always **re-created** when deserialized, even by [ref deserialization](/en/docs/v4/pooling); the old instance is passed to the recycler. Such types cannot use [`trackReferences`](/en/docs/v4/reference-tracking) (NINO016) or [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled) (NINO018). Give them settable members when you need either.
+Types whose members cannot be assigned after construction (constructor parameters, `init`-only, get-only or `readonly` members) are always **re-created** when deserialized, even by [reuse deserialization](/en/docs/v4/pooling); the old instance is passed to the recycler. Such types cannot use [`trackReferences`](/en/docs/v4/reference-tracking) (NINO016) or [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled) (NINO018). Give them settable members when you need either.

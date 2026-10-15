@@ -1,6 +1,6 @@
 ---
 title: 高性能序列化
-description: "零分配实践：复用缓冲区、基于 span 读取、ref 反序列化、对象池与原始内存结构体。"
+description: "零分配实践：复用缓冲区、基于 span 读取、复用反序列化、对象池与原始内存结构体。"
 icon: Gauge
 ---
 
@@ -109,11 +109,11 @@ while (TryReceive(out ReadOnlySpan<byte> frame))
 
 - 列表和数组逐个元素复用；字典按键合并。
 - 无法原地填充的类型（位置记录、`init` 或只读成员）会被重新创建。
-- 已有实例被**丢弃**时（数据中为 `null`、列表变短、某个键消失、多态类型改变），它会恰好一次交给该槽位的回收器，而不是被悄悄覆盖。正因如此，ref 反序列化才能安全地与对象池配合使用；参见 [ref 反序列化与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
+- 已有实例被**丢弃**时（数据中为 `null`、列表变短、某个键消失、多态类型改变），它会恰好一次交给该槽位的回收器，而不是被悄悄覆盖。正因如此，复用反序列化才能安全地与对象池配合使用；参见 [复用反序列化与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
 
 ## 池化新建的对象 [#pool-what-you-create]
 
-ref 反序列化复用的是你手里已有的对象，其余的交给 `[NinoPooled]`：每当 Nino 需要**新建**该类型的实例（顶层、成员、变长列表中的新元素），都会先从池中取，被丢弃的实例也会自动回到池中。
+复用反序列化复用的是你手里已有的对象，其余的交给 `[NinoPooled]`：每当 Nino 需要**新建**该类型的实例（顶层、成员、变长列表中的新元素），都会先从池中取，被丢弃的实例也会自动回到池中。
 
 <Steps>
 <Step>
@@ -184,7 +184,7 @@ NinoSettings.SetPoolMaxRetained<Bullet>(4096);
 
 <Callout type="idea">
 
-已经有自己的对象池了？给一个公共静态工厂方法加上 `[NinoRefDeserialization]`，Nino 就会通过它创建实例；再用 `NinoSettings.SetRecycler<T>(...)` 注册处理函数，接收 Nino 丢弃的实例。参见 [ref 反序列化与对象池](/zh/docs/v4/pooling#creating-instances-with-ninorefdeserialization)。
+已经有自己的对象池了？给一个公共静态工厂方法加上 `[NinoFactory]`，Nino 就会通过它创建实例；再用 `NinoSettings.SetRecycler<T>(...)` 注册处理函数，接收 Nino 丢弃的实例。参见 [复用反序列化与对象池](/zh/docs/v4/pooling#creating-instances-with-ninofactory)。
 
 </Callout>
 
