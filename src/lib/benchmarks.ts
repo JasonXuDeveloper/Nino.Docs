@@ -43,16 +43,11 @@ const rows = new Map(
   (bench.rows as BenchRow[]).map((row) => [row.method, row] as const),
 );
 
-/** "Nino v4.0.0, measured on GitHub Actions, 2026-10-14." */
+/** "Nino v4.0.0, 2026-10-14." — tag and date only, linked to the release */
 export function sourceNote(zh: boolean) {
   const date = benchSource.publishedAt?.slice(0, 10);
-  if (benchSource.origin === 'release')
-    return zh
-      ? `Nino ${benchSource.tag}，GitHub Actions 实测，${date}。`
-      : `Nino ${benchSource.tag}, measured on GitHub Actions, ${date}.`;
-  return zh
-    ? `Nino ${benchSource.tag}，本地实测（docs/v4-benchmarks.md）；下一个附带完整性能报告的 v4 版本发布后自动更新。`
-    : `Nino ${benchSource.tag}, measured locally (docs/v4-benchmarks.md); updated automatically from the next v4 release with a complete performance report.`;
+  const parts = [`Nino ${benchSource.tag}`, date].filter(Boolean);
+  return zh ? `${parts.join('，')}。` : `${parts.join(', ')}.`;
 }
 
 /** All rows of the report, in report order (for the full results table) */
@@ -145,7 +140,6 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
       key: 'PolymorphicClassArray',
     },
     { name: 'Polymorphic Foo[]', zh: '多态 Foo[]', key: 'PolymorphicFooArray' },
-    { name: 'SimpleStruct', code: true, key: 'SimpleStruct' },
     { name: 'SimpleStruct[100]', code: true, key: 'SimpleStructs' },
     { name: 'Vector4[10000]', code: true, key: 'Vectors', gcBound: true },
   ],
@@ -291,9 +285,11 @@ export const reuse: ReuseCase[] = reuseCases.flatMap(
   },
 );
 
-/** How many times faster Nino reusing is than MemoryPack overwrite (one decimal) */
+/** How many times faster Nino reusing is than MemoryPack overwrite (two decimals, from the raw means) */
 export function reuseSpeedup(row: ReuseCase) {
-  return Math.round((row.memorypackOverwrite.ns / row.ninoReuse.ns) * 10) / 10;
+  return (
+    Math.round((row.memorypackOverwrite.ns / row.ninoReuse.ns) * 100) / 100
+  );
 }
 
 /** The reuse case where Nino gains most over MemoryPack's overwrite mode */
@@ -320,9 +316,13 @@ export const payload = {
   memorypack: rows.get('MemoryPackSerializeSimpleClass')?.payloadBytes ?? null,
 };
 
-/** "2.97×" */
-export const times = (value: number, decimals = 2) =>
-  `${value.toFixed(decimals)}×`;
+/**
+ * The one way to print a ratio. Runtime ratios (computed from the raw means)
+ * always show two decimals ("4.33×"); build-time ratios are whole numbers or
+ * as published ("289×", "7.9×").
+ */
+export const formatRatio = (value: number) => `${value.toFixed(2)}×`;
+export const formatBuildRatio = (value: number) => `${value}×`;
 
 /* ------------------------------------------------------------------ */
 /* Build time                                                          */
@@ -422,17 +422,8 @@ export const buildLarge = {
 /* Headline numbers                                                    */
 /* ------------------------------------------------------------------ */
 
-/** Best serialize win over MemoryPack, one decimal ("4.3") */
+/** Best serialize win over MemoryPack, two decimals ("4.33"), from the raw means */
 export const headlineSerialize = (() => {
   const { max } = ratioRange('serialize');
-  return Number.isFinite(max) ? max.toFixed(1) : null;
+  return Number.isFinite(max) ? max.toFixed(2) : null;
 })();
-
-/** Best reuse win over MemoryPack's overwrite, one decimal ("4.9") */
-export const headlineReuse = bestReuse
-  ? reuseSpeedup(bestReuse).toFixed(1)
-  : null;
-
-/** True when the data shows zero GC on the serialize and reuse paths */
-export const headlineZeroGc =
-  bestReuse?.ninoReuseBytes === 0 && serializeAllocatesNothing;

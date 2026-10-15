@@ -9,7 +9,7 @@ import {
   Recycle,
 } from 'lucide-react';
 import { Link } from 'react-router';
-import { HomeCompare, HomeStats } from '@/components/home-compare';
+import { HomeCompare } from '@/components/home-compare';
 import { headlineSerialize } from '@/lib/benchmarks';
 import { cn } from '@/lib/cn';
 import { getLocale, type Locale } from '@/lib/i18n';
@@ -197,7 +197,11 @@ export default function HomePage({ params }: Route.ComponentProps) {
   return (
     <HomeLayout {...baseOptions(lang)}>
       <main className="flex flex-1 flex-col items-center">
-        <section className="flex w-full flex-col items-center px-6 pt-10 pb-8 md:pt-16 md:pb-10">
+        <section className="relative isolate flex w-full flex-col items-center px-6 pt-10 pb-10 md:pt-16 md:pb-14">
+          <div
+            aria-hidden="true"
+            className="nino-hero-glow pointer-events-none absolute inset-0 -z-10"
+          />
           <div className="flex max-w-5xl flex-col items-center text-center">
             <span className="mb-4 rounded-full border border-fd-border bg-fd-secondary/50 px-3 py-1 text-xs font-medium text-fd-muted-foreground">
               {t.pill}
@@ -206,12 +210,12 @@ export default function HomePage({ params }: Route.ComponentProps) {
             <h1 className="text-4xl font-extrabold tracking-tight break-keep sm:text-5xl lg:text-6xl">
               {t.headline[0]}
               <br />
-              <span className="bg-linear-to-r/oklab from-fd-primary from-35% to-nino-champagne bg-clip-text text-transparent">
+              <span className="bg-linear-to-r/oklab from-nino-grad-from from-25% to-nino-grad-to bg-clip-text text-transparent">
                 {t.headline[1]}
               </span>
             </h1>
 
-            <p className="mt-3 max-w-xl text-base leading-relaxed text-fd-muted-foreground md:text-lg">
+            <p className="mt-3 max-w-xl text-base leading-relaxed text-balance text-fd-muted-foreground md:text-lg">
               {t.sub}
             </p>
 
@@ -242,13 +246,7 @@ export default function HomePage({ params }: Route.ComponentProps) {
           </div>
         </section>
 
-        <section className="w-full border-t px-6 py-10">
-          <div className="mx-auto max-w-5xl">
-            <HomeStats lang={lang} docs={docs} />
-          </div>
-        </section>
-
-        <section className="w-full border-t px-6 py-12">
+        <section className="w-full border-t px-4 py-12 sm:px-6 md:py-16">
           <div className="mx-auto max-w-5xl">
             <HomeCompare lang={lang} docs={docs} />
           </div>

@@ -1,261 +1,116 @@
-import { Gauge, Hammer, Leaf, Recycle } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { CountUp, useReveal } from '@/components/showcase';
 import {
   bestReuse,
+  build,
   buildLarge,
+  formatBuildRatio,
   formatBytes,
-  type ReuseCase,
+  formatRatio,
   type RuntimeCase,
   runtime,
-  serializeAllocatesNothing,
-  sourceNote,
 } from '@/lib/benchmarks';
 import { cn } from '@/lib/cn';
 import type { Locale } from '@/lib/i18n';
 
 /*
- * Home page numbers: the four headline stats and the two compact comparisons
- * (vs MemoryPack, vs Nino v3). All values come from src/lib/benchmarks.ts.
- * Bars are drawn to scale against the slower side and grow in once when
- * scrolled into view (not with reduced motion); the prerendered HTML already
- * has their final widths.
+ * The home page's numbers, in two layers:
+ *
+ * 1. One monumental figure: Nino's biggest serialize win over MemoryPack,
+ *    beside the two measured times on a shared axis.
+ * 2. Two panels on one grid (vs MemoryPack, vs Nino v3) whose rows line up
+ *    across the panels (CSS subgrid on wide screens).
+ *
+ * Every value comes from src/lib/benchmarks.ts: runtime ratios from the raw
+ * means through formatRatio (two decimals), build ratios as published. Bars
+ * are drawn to scale and grow in once when scrolled into view (not with
+ * reduced motion); the prerendered HTML already has their final widths.
  */
 
-function find(op: 'serialize' | 'deserialize', name: string) {
-  return runtime[op].find((r) => r.name === name);
-}
+const find = (op: 'serialize' | 'deserialize', name: string) =>
+  runtime[op].find((r) => r.name === name);
 
 /** The case where Nino beats MemoryPack by the most */
-function best(op: 'serialize' | 'deserialize') {
-  return runtime[op].reduce<RuntimeCase | undefined>(
+const best = (op: 'serialize' | 'deserialize') =>
+  runtime[op].reduce<RuntimeCase | undefined>(
     (top, row) => ((row.ratio ?? 0) > (top?.ratio ?? 0) ? row : top),
     undefined,
   );
-}
 
 const simple = find('serialize', 'SimpleClass');
 const polySer = best('serialize');
 const polyDes = best('deserialize');
-const leaves: ReuseCase | undefined = bestReuse;
-const reuseRatio = leaves
-  ? leaves.memorypackOverwrite.ns / leaves.ninoReuse.ns
-  : undefined;
-const count = buildLarge.types.toLocaleString('en-US');
+const leaves = bestReuse;
+const count = (n: number) => n.toLocaleString('en-US');
+
+/** Case name inside a sentence: "polymorphic class array", "SimpleClass", "多态类数组" */
+function caseName(row: RuntimeCase, zh: boolean) {
+  if (zh && row.zh) return row.zh;
+  if (row.code) return row.name;
+  return row.name.charAt(0).toLowerCase() + row.name.slice(1);
+}
+
+/** "Serialize SimpleClass", "反序列化多态类数组", "序列化 SimpleClass" */
+const action = (verb: string, row: RuntimeCase, zh: boolean) =>
+  `${verb}${zh && !row.code ? '' : ' '}${caseName(row, zh)}`;
+
+/** 636 -> "10 min 36 s" / "10 分 36 秒" */
+function minutes(seconds: number, zh: boolean) {
+  const [min, sec] = zh ? ['分', '秒'] : ['min', 's'];
+  if (seconds < 60) return `${seconds} ${sec}`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds - m * 60);
+  return s ? `${m} ${min} ${s} ${sec}` : `${m} ${min}`;
+}
+
+/** "2.2 s" -> "2.2 秒" in Chinese, as the zh docs write it */
+const seconds = (text: string, zh: boolean) =>
+  zh ? text.replace(/ s$/, ' 秒') : text;
 
 /* ------------------------------------------------------------------ */
-/* Stats                                                               */
+/* Pieces                                                              */
 /* ------------------------------------------------------------------ */
-
-interface StatCell {
-  icon: typeof Gauge;
-  label: string;
-  value: string;
-  unit: string;
-  context: string;
-  href: string;
-}
-
-const label = (row: { name: string; zh?: string }, zh: boolean) =>
-  zh && row.zh ? row.zh : row.name;
-
-/** 0 GC only when the data shows it: Nino's best reuse case and every serialize case allocate 0 B */
-const zeroGc = leaves?.ninoReuseBytes === 0 && serializeAllocatesNothing;
-
-function stats(lang: Locale): StatCell[] {
-  const zh = lang === 'zh';
-  const cells: StatCell[] = [];
-  if (polySer?.ratio)
-    cells.push({
-      icon: Gauge,
-      label: zh ? '序列化，对比 MemoryPack' : 'Serialize vs MemoryPack',
-      value: polySer.ratio.toFixed(1),
-      unit: zh ? '倍' : '× faster',
-      context: zh
-        ? `${label(polySer, zh)}：${polySer.v4.text} 对比 ${polySer.memorypack.text}`
-        : `${label(polySer, zh)}: ${polySer.v4.text} vs ${polySer.memorypack.text}`,
-      href: 'vs-memorypack',
-    });
-  if (leaves && reuseRatio)
-    cells.push({
-      icon: Recycle,
-      label: zh ? '复用池化对象反序列化' : 'Deserialize into pooled objects',
-      value: reuseRatio.toFixed(1),
-      unit: zh ? '倍' : '× faster',
-      context: zh
-        ? `对比 MemoryPack 覆盖写入：${leaves.ninoReuse.text} 对比 ${leaves.memorypackOverwrite.text}`
-        : `vs MemoryPack's overwrite: ${leaves.ninoReuse.text} vs ${leaves.memorypackOverwrite.text}`,
-      href: 'whats-new#deserialize-into-existing-objects',
-    });
-  if (zeroGc)
-    cells.push({
-      icon: Leaf,
-      label: zh ? '内存分配' : 'Allocations',
-      value: '0',
-      unit: 'GC',
-      context: zh
-        ? '序列化、复用池化对象反序列化零 GC'
-        : 'serialize and deserialize into pooled objects',
-      href: 'pooling',
-    });
-  cells.push({
-    icon: Hammer,
-    label: zh ? '构建，对比 Nino v3' : 'Build vs Nino v3',
-    value: String(buildLarge.emit.ratio),
-    unit: zh ? '倍' : '× faster',
-    context: zh
-      ? `${count} 个类型：${buildLarge.emit.v3} → ${buildLarge.emit.v4}`
-      : `${count} types: ${buildLarge.emit.v3} → ${buildLarge.emit.v4}`,
-    href: 'v3-vs-v4',
-  });
-  return cells;
-}
-
-export function HomeStats({ lang, docs }: { lang: Locale; docs: string }) {
-  return (
-    <ul className="grid grid-cols-2 gap-x-6 gap-y-10 lg:grid-cols-4 lg:gap-x-8">
-      {stats(lang).map((s) => (
-        <li key={s.label}>
-          <Link to={`${docs}/${s.href}`} className="group flex h-full flex-col">
-            <span className="flex min-h-10 items-center gap-2.5">
-              <span className="shrink-0 rounded-md bg-fd-primary/10 p-2 text-fd-primary">
-                <s.icon className="size-4" />
-              </span>
-              <span className="text-sm leading-snug font-semibold">
-                {s.label}
-              </span>
-            </span>
-            <span className="mt-4 flex items-baseline gap-1">
-              <CountUp
-                value={s.value}
-                className="text-4xl leading-none font-bold tracking-tighter text-fd-primary sm:text-5xl"
-              />
-              <span className="text-sm font-semibold sm:text-base">
-                {s.unit}
-              </span>
-            </span>
-            <span className="mt-2 text-sm leading-snug text-fd-muted-foreground group-hover:text-fd-foreground">
-              {s.context}
-            </span>
-          </Link>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Comparisons                                                         */
-/* ------------------------------------------------------------------ */
-
-interface Row {
-  label: string;
-  note?: string;
-  ratio: string;
-  unit: string;
-  nino: { text: string; value: number };
-  other: { text: string; value: number };
-}
-
-function runtimeRow(
-  row: RuntimeCase | undefined,
-  zh: boolean,
-  verb: string,
-): Row[] {
-  if (!row?.ratio) return [];
-  return [
-    {
-      label: `${verb} ${zh || row.code ? label(row, zh) : row.name.charAt(0).toLowerCase() + row.name.slice(1)}`,
-      ratio: row.ratio.toFixed(2),
-      unit: zh ? '倍' : '× faster',
-      nino: { text: row.v4.text, value: row.v4.ns },
-      other: { text: row.memorypack.text, value: row.memorypack.ns },
-    },
-  ];
-}
-
-function comparisons(lang: Locale) {
-  const zh = lang === 'zh';
-  const ser = zh ? '序列化' : 'Serialize';
-  const des = zh ? '反序列化' : 'Deserialize';
-  const memorypack: Row[] = [
-    ...runtimeRow(simple, zh, ser),
-    ...(polySer !== simple ? runtimeRow(polySer, zh, ser) : []),
-    ...runtimeRow(polyDes, zh, des),
-  ];
-  if (leaves && reuseRatio)
-    memorypack.push({
-      label: zh ? '反序列化到池化对象' : 'Deserialize into pooled objects',
-      note: zh
-        ? `分配 ${formatBytes(leaves.ninoReuseBytes)} 对比 ${formatBytes(leaves.memorypackOverwriteBytes)}`
-        : `${formatBytes(leaves.ninoReuseBytes)} vs ${formatBytes(leaves.memorypackOverwriteBytes)} allocated`,
-      ratio: reuseRatio.toFixed(2),
-      unit: zh ? '倍' : '× faster',
-      nino: { text: leaves.ninoReuse.text, value: leaves.ninoReuse.ns },
-      other: {
-        text: leaves.memorypackOverwrite.text,
-        value: leaves.memorypackOverwrite.ns,
-      },
-    });
-
-  const { emit, source } = buildLarge;
-  const v3: Row[] = [
-    {
-      label: zh ? '编译生成的代码' : 'Compile the generated code',
-      note: zh ? `${count} 个类型` : `${count} types`,
-      ratio: String(emit.ratio),
-      unit: zh ? '倍' : '× faster',
-      nino: { text: emit.v4, value: emit.v4n },
-      other: { text: emit.v3, value: emit.v3n },
-    },
-    {
-      label: zh ? '生成的源码' : 'Generated source',
-      note: zh ? `${count} 个类型` : `${count} types`,
-      ratio: String(source.ratio),
-      unit: zh ? '倍更小' : '× smaller',
-      nino: { text: source.v4, value: source.v4n },
-      other: { text: source.v3, value: source.v3n },
-    },
-  ];
-  // Runtime against v3 only once V3_RUNTIME has a direct measurement.
-  if (simple?.v3 && simple.vsV3)
-    v3.push({
-      label: zh ? '序列化 SimpleClass' : 'Serialize SimpleClass',
-      ratio: simple.vsV3.toFixed(2),
-      unit: zh ? '倍' : '× faster',
-      nino: { text: simple.v4.text, value: simple.v4.ns },
-      other: { text: simple.v3.text, value: simple.v3.ns },
-    });
-  return { memorypack, v3 };
-}
 
 function Bar({
+  label,
   value,
   max,
-  nino,
   text,
+  nino,
+  thick,
 }: {
+  label: string;
   value: number;
   max: number;
-  nino?: boolean;
   text: string;
+  nino?: boolean;
+  thick?: boolean;
 }) {
-  // A floor of 1% keeps a 0.3% sliver (2.2 s of 636 s) visible.
+  // A floor of 1% keeps a sliver visible.
   const pct = Math.max((value / max) * 100, 1);
   return (
-    <div className="flex items-center gap-3">
-      <div className="relative h-2 flex-1">
-        <div
+    <div className="grid grid-cols-[5.25rem_minmax(0,1fr)_4.25rem] items-center gap-3 text-xs">
+      <span
+        className={cn(
+          'truncate',
+          nino ? 'font-medium text-fd-foreground' : 'text-fd-muted-foreground',
+        )}
+      >
+        {label}
+      </span>
+      <span className={cn('relative', thick ? 'h-2.5' : 'h-1.5')}>
+        <span
           className={cn(
             'nino-chart-bar absolute inset-y-0 left-0 rounded-full',
             nino ? 'bg-fd-primary' : 'bg-[var(--nino-chart-other)]',
           )}
           style={{ width: `${pct}%` }}
         />
-      </div>
+      </span>
       <span
         className={cn(
-          'w-16 shrink-0 text-right text-xs tabular-nums',
+          'text-right tabular-nums',
           nino ? 'font-medium text-fd-foreground' : 'text-fd-muted-foreground',
         )}
       >
@@ -265,113 +120,315 @@ function Bar({
   );
 }
 
+function Pair({
+  a,
+  b,
+}: {
+  a: { label: string; value: number; text: string };
+  b: { label: string; value: number; text: string };
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Bar nino {...a} max={b.value} />
+      <Bar {...b} max={b.value} />
+    </div>
+  );
+}
+
+/** Allocation as a container: Nino's stays empty, MemoryPack's is full */
+function Allocation({
+  label,
+  bytes,
+  full,
+}: {
+  label: string;
+  bytes: number;
+  full?: boolean;
+}) {
+  return (
+    <span className="flex items-center gap-2.5 text-xs">
+      <span
+        aria-hidden="true"
+        className={cn(
+          'size-7 shrink-0 rounded-[3px] border',
+          full
+            ? 'border-transparent bg-[var(--nino-chart-other)]'
+            : 'border-dashed border-fd-muted-foreground/60',
+        )}
+      />
+      <span className="flex flex-col leading-tight">
+        <span
+          className={cn(
+            'tabular-nums',
+            full
+              ? 'text-fd-muted-foreground'
+              : 'font-medium text-fd-foreground',
+          )}
+        >
+          {formatBytes(bytes)}
+        </span>
+        <span className="text-fd-muted-foreground">{label}</span>
+      </span>
+    </span>
+  );
+}
+
+interface Row {
+  label: string;
+  note?: string;
+  ratio: string;
+  unit: string;
+  body: ReactNode;
+}
+
 function Panel({
   title,
-  other,
   rows,
   link,
   href,
 }: {
   title: string;
-  other: string;
   rows: Row[];
   link: string;
   href: string;
 }) {
-  const [ref, shown] = useReveal<HTMLDivElement>();
   return (
-    <div
-      ref={ref}
-      className="nino-chart flex flex-col"
-      data-hidden={shown ? undefined : ''}
+    <section
+      className={cn(
+        'flex flex-col rounded-xl border',
+        'lg:row-span-5 lg:grid lg:grid-rows-subgrid lg:gap-0',
+      )}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-        <p className="flex items-center gap-3 text-xs text-fd-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-fd-primary" />
-            Nino v4
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-[var(--nino-chart-other)]" />
-            {other}
-          </span>
-        </p>
-      </div>
-      <ul className="mt-5 flex flex-1 flex-col divide-y">
-        {rows.map((row) => (
-          <li
-            key={row.label}
-            className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-4 py-4"
-          >
+      <h3 className="px-5 pt-5 pb-1 font-semibold tracking-tight sm:px-6">
+        {title}
+      </h3>
+      {rows.map((row, i) => (
+        <div
+          key={row.label}
+          className={cn(
+            'flex flex-col gap-3 px-5 py-5 sm:px-6',
+            i > 0 && 'border-t',
+          )}
+        >
+          <div className="flex items-start justify-between gap-4">
             <p className="flex flex-col">
-              <span className="text-3xl leading-none font-bold tracking-tighter text-fd-primary tabular-nums">
-                {row.ratio}
-                <span className="text-xl">
-                  {row.unit.startsWith('×') ? '×' : ''}
+              <span className="text-sm font-medium">{row.label}</span>
+              {row.note && (
+                <span className="text-xs text-fd-muted-foreground">
+                  {row.note}
                 </span>
+              )}
+            </p>
+            <p className="flex shrink-0 items-baseline gap-1.5 leading-none">
+              <span className="text-2xl font-semibold tracking-tight tabular-nums">
+                {row.ratio}
               </span>
-              <span className="mt-1 text-xs text-fd-muted-foreground">
-                {row.unit.startsWith('×') ? row.unit.slice(2) : row.unit}
+              <span className="text-xs text-fd-muted-foreground">
+                {row.unit}
               </span>
             </p>
-            <div className="flex flex-col gap-1.5">
-              <p className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm leading-tight">
-                <span>{row.label}</span>
-                {row.note && (
-                  <span className="text-xs text-fd-muted-foreground">
-                    {row.note}
-                  </span>
-                )}
-              </p>
-              <Bar
-                nino
-                value={row.nino.value}
-                max={row.other.value}
-                text={row.nino.text}
-              />
-              <Bar
-                value={row.other.value}
-                max={row.other.value}
-                text={row.other.text}
-              />
-            </div>
-          </li>
-        ))}
-      </ul>
-      <Link
-        to={href}
-        className="mt-2 text-sm font-medium text-fd-primary hover:underline"
-      >
-        {link}
-      </Link>
-    </div>
+          </div>
+          {row.body}
+        </div>
+      ))}
+      <div className="mt-auto border-t px-5 py-3.5 sm:px-6">
+        <Link
+          to={href}
+          className="text-sm font-medium text-fd-primary underline-offset-4 hover:underline"
+        >
+          {link}
+        </Link>
+      </div>
+    </section>
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Rows                                                                */
+/* ------------------------------------------------------------------ */
+
+function memorypackRows(zh: boolean): Row[] {
+  const faster = zh ? '更快' : 'faster';
+  const rows: Row[] = [];
+  const timed = (row: RuntimeCase | undefined, verb: string) => {
+    if (!row?.ratio) return;
+    rows.push({
+      label: action(verb, row, zh),
+      ratio: formatRatio(row.ratio),
+      unit: faster,
+      body: (
+        <Pair
+          a={{ label: 'Nino v4', value: row.v4.ns, text: row.v4.text }}
+          b={{
+            label: 'MemoryPack',
+            value: row.memorypack.ns,
+            text: row.memorypack.text,
+          }}
+        />
+      ),
+    });
+  };
+  timed(simple !== polySer ? simple : undefined, zh ? '序列化' : 'Serialize');
+  timed(polyDes, zh ? '反序列化' : 'Deserialize');
+  if (leaves)
+    rows.push({
+      label: zh ? '反序列化到池化对象' : 'Deserialize into pooled objects',
+      note: zh ? '对比 MemoryPack 覆盖写入' : "vs MemoryPack's overwrite mode",
+      ratio: formatRatio(leaves.memorypackOverwrite.ns / leaves.ninoReuse.ns),
+      unit: faster,
+      body: (
+        <div className="flex flex-col gap-4">
+          <Pair
+            a={{
+              label: 'Nino v4',
+              value: leaves.ninoReuse.ns,
+              text: leaves.ninoReuse.text,
+            }}
+            b={{
+              label: 'MemoryPack',
+              value: leaves.memorypackOverwrite.ns,
+              text: leaves.memorypackOverwrite.text,
+            }}
+          />
+          {leaves.ninoReuseBytes !== null &&
+            leaves.memorypackOverwriteBytes !== null && (
+              <div className="flex flex-wrap gap-x-8 gap-y-3">
+                <Allocation
+                  label={zh ? 'Nino v4 分配' : 'Nino v4 allocates'}
+                  bytes={leaves.ninoReuseBytes}
+                />
+                <Allocation
+                  full
+                  label={zh ? 'MemoryPack 分配' : 'MemoryPack allocates'}
+                  bytes={leaves.memorypackOverwriteBytes}
+                />
+              </div>
+            )}
+        </div>
+      ),
+    });
+  return rows;
+}
+
+function Before({ v3, v4, big }: { v3: string; v4: string; big?: boolean }) {
+  return (
+    <p
+      className={cn(
+        'flex flex-wrap items-baseline gap-x-3 tracking-tight tabular-nums',
+        big ? 'text-3xl sm:text-4xl' : 'text-xl',
+      )}
+    >
+      <span className="text-fd-muted-foreground">{v3}</span>
+      <span aria-hidden="true" className="text-base text-fd-muted-foreground">
+        →
+      </span>
+      <span className="font-semibold">{v4}</span>
+    </p>
+  );
+}
+
+function v3Rows(zh: boolean): Row[] {
+  const { emit, source } = buildLarge;
+  const types = (n: number) =>
+    zh ? `${count(n)} 个类型，v3.3.13 → v4` : `${count(n)} types, v3.3.13 → v4`;
+  const generator = build.find((b) => b.en === 'Running the generator');
+  const rows: Row[] = [
+    {
+      label: zh ? '编译生成的代码' : 'Compile the generated code',
+      note: types(buildLarge.types),
+      ratio: formatBuildRatio(emit.ratio),
+      unit: zh ? '更快' : 'faster',
+      body: (
+        <Before big v3={minutes(emit.v3n, zh)} v4={seconds(emit.v4, zh)} />
+      ),
+    },
+    {
+      label: zh ? '生成的源码' : 'Generated source',
+      note: types(buildLarge.types),
+      ratio: formatBuildRatio(source.ratio),
+      unit: zh ? '更小' : 'smaller',
+      body: <Before v3={source.v3} v4={source.v4} />,
+    },
+  ];
+  if (generator)
+    rows.push({
+      label: zh ? '运行生成器' : 'Run the generator',
+      note: types(330),
+      ratio: formatBuildRatio(generator.ratio),
+      unit: zh ? '更快' : 'faster',
+      body: (
+        <Before
+          v3={seconds(generator.v3, zh)}
+          v4={seconds(generator.v4, zh)}
+        />
+      ),
+    });
+  return rows;
+}
+
+/* ------------------------------------------------------------------ */
+/* Section                                                             */
+/* ------------------------------------------------------------------ */
+
 export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
   const zh = lang === 'zh';
-  const data = comparisons(lang);
-  const link = zh ? '全部基准测试 →' : 'All benchmarks →';
+  const [ref, shown] = useReveal<HTMLDivElement>();
+
   return (
-    <>
-      <div className="grid gap-12 lg:grid-cols-2">
+    <div
+      ref={ref}
+      className="nino-chart flex flex-col gap-10"
+      data-hidden={shown ? undefined : ''}
+    >
+      {polySer?.ratio && (
+        <div className="grid items-end gap-x-14 gap-y-5 lg:grid-cols-[auto_minmax(0,1fr)]">
+          <div>
+            <p className="text-sm text-fd-muted-foreground">
+              {zh
+                ? '序列化速度，对比 MemoryPack'
+                : 'Serialize speed, vs MemoryPack'}
+            </p>
+            <CountUp
+              value={formatRatio(polySer.ratio)}
+              className="mt-2 block bg-linear-to-r/oklab from-nino-grad-from to-nino-grad-to bg-clip-text pb-2 text-[5.5rem] leading-none font-extrabold tracking-tighter text-transparent sm:text-9xl"
+            />
+          </div>
+          <div className="flex flex-col gap-4 lg:pb-4">
+            <p className="max-w-md text-base leading-snug text-pretty sm:text-lg">
+              {zh
+                ? `${action('序列化', polySer, zh)}，Nino v4 用时 ${polySer.v4.text}，MemoryPack ${polySer.memorypack.text}。`
+                : `${action('Serializing a', polySer, zh)}: ${polySer.v4.text} with Nino v4, ${polySer.memorypack.text} with MemoryPack.`}
+            </p>
+            <Pair
+              a={{
+                label: 'Nino v4',
+                value: polySer.v4.ns,
+                text: polySer.v4.text,
+              }}
+              b={{
+                label: 'MemoryPack',
+                value: polySer.memorypack.ns,
+                text: polySer.memorypack.text,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-2 lg:gap-x-8">
         <Panel
           title={zh ? '对比 MemoryPack' : 'vs MemoryPack'}
-          other="MemoryPack"
-          rows={data.memorypack}
-          link={link}
+          rows={memorypackRows(zh)}
+          link={zh ? '全部基准测试' : 'All benchmarks'}
           href={`${docs}/perf`}
         />
         <Panel
           title={zh ? '对比 Nino v3' : 'vs Nino v3'}
-          other="Nino v3"
-          rows={data.v3}
-          link={link}
-          href={`${docs}/perf`}
+          rows={v3Rows(zh)}
+          link={zh ? 'v3 与 v4 对比' : 'v3 vs v4 in detail'}
+          href={`${docs}/v3-vs-v4`}
         />
       </div>
-      <p className="mt-8 text-xs text-fd-muted-foreground">{sourceNote(zh)}</p>
-    </>
+    </div>
   );
 }

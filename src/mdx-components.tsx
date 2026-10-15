@@ -20,8 +20,7 @@ import {
 import { BenchmarkChart } from '@/components/charts';
 import { handleBlockFeedback } from '@/components/feedback/actions';
 import { FeedbackBlock } from '@/components/feedback/client';
-import { CountUp, ShowcaseHero, StatCards } from '@/components/showcase';
-import { Stats } from '@/components/stats';
+import { CountUp } from '@/components/showcase';
 
 export function getMDXComponents(components?: MDXComponents): MDXComponents {
   return {
@@ -43,9 +42,6 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     File,
     Files,
     Folder,
-    ShowcaseHero,
-    StatCards,
-    Stats,
     Step,
     Steps,
     Tab,

@@ -12,6 +12,7 @@
  * to raise the API rate limit.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = 'JasonXuDeveloper/Nino';
@@ -85,11 +86,15 @@ export function parseTime(text: string): number | null {
   return number(match[1]) * timeUnits[match[2]];
 }
 
-/** "-", "0 B", "1,024 B", "12.5 KB", "1146" -> bytes; null if unreadable */
-export function parseSize(text: string): number | null {
+/**
+ * "0 B", "1,024 B", "12.5 KB", "1146" -> bytes; null if unreadable. "-" is 0
+ * for Allocated (BenchmarkDotNet's "nothing allocated") and null for Payload.
+ */
+export function parseSize(text: string, dash: 0 | null = 0): number | null {
   const value = clean(text);
   if (value === '' || value === '?' || /^n\/?a$/i.test(value)) return null;
-  if (value === '-' || value === '0') return 0;
+  if (value === '-') return dash;
+  if (value === '0') return 0;
   const match = /^([\d,]*\.?\d+)\s*(B|KB|MB|GB)?$/i.exec(value);
   if (!match) return null;
   const unit = (match[2] ?? 'b').toLowerCase();
@@ -150,9 +155,10 @@ export function parseReport(body: string) {
       rows.push({
         method: name,
         category: category >= 0 ? row[category] || null : null,
-        meanNs: Math.round(ns * 1000) / 1000,
+        // As printed (BenchmarkDotNet's 4 decimals), minus float noise
+        meanNs: Math.round(ns * 1e4) / 1e4,
         allocatedBytes: allocated >= 0 ? parseSize(row[allocated] ?? '') : null,
-        payloadBytes: payload >= 0 ? parseSize(row[payload] ?? '') : null,
+        payloadBytes: payload >= 0 ? parseSize(row[payload] ?? '', null) : null,
       });
     }
   }
@@ -322,10 +328,16 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  // Fixture mode reports parse errors; normal mode never gets here.
-  console.error(
-    `[benchmarks] ${error instanceof Error ? error.message : String(error)}`,
-  );
-  process.exitCode = process.argv.includes('--fixture') ? 1 : 0;
-});
+// Run only when executed directly (the parser is importable).
+const isMain =
+  process.argv[1] !== undefined &&
+  fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+
+if (isMain)
+  main().catch((error) => {
+    // Fixture mode reports parse errors; normal mode never gets here.
+    console.error(
+      `[benchmarks] ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exitCode = process.argv.includes('--fixture') ? 1 : 0;
+  });

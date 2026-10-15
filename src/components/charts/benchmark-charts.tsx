@@ -141,7 +141,7 @@ function reuseChart(zh: boolean): BarChartProps {
     series: [s.ninoNew, s.mpNew, s.ninoReuse, s.mpOverwrite],
     rows: reuse.map((row) => {
       const base = row.memorypackNew.ns;
-      const speedup = reuseSpeedup(row).toFixed(1);
+      const speedup = reuseSpeedup(row).toFixed(2);
       return {
         label: caseLabel(row, zh),
         values: {

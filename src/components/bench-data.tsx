@@ -6,6 +6,7 @@ import {
   benchRows,
   benchSource,
   formatBytes,
+  formatRatio,
   formatTime,
   payload,
   type RuntimeCase,
@@ -150,6 +151,13 @@ export function ResultsTable({ lang = 'en' }: { lang?: Locale }) {
   const zh = lang === 'zh';
   const size = (value: number | null) =>
     value === null ? '—' : formatBytes(value);
+  // The report prints payloads in KB with two decimals; show them the same way.
+  const payloadSize = (value: number | null) =>
+    value === null
+      ? '—'
+      : value < 1024
+        ? formatBytes(value)
+        : `${(value / 1024).toFixed(2)} KB`;
   return (
     <>
       <BenchSource lang={lang} />
@@ -180,7 +188,7 @@ export function ResultsTable({ lang = 'en' }: { lang?: Locale }) {
                 {size(row.allocatedBytes)}
               </td>
               <td className="text-right tabular-nums">
-                {size(row.payloadBytes || null)}
+                {payloadSize(row.payloadBytes || null)}
               </td>
             </tr>
           ))}
@@ -204,7 +212,7 @@ export function BenchValue({ k }: { k: string }) {
 export function benchValue(k: string): string {
   const [op, which] = k.split(/[.:]/) as [string, string];
   if (k === 'reuse.max')
-    return `${Math.max(...reuse.map(reuseSpeedup)).toFixed(1)}×`;
+    return formatRatio(Math.max(...reuse.map(reuseSpeedup)));
   if (op === 'payload') {
     const value = which === 'v4' ? payload.v4 : payload.memorypack;
     return value === null ? '—' : value.toLocaleString('en-US');
@@ -212,12 +220,12 @@ export function benchValue(k: string): string {
   if ((op === 'serialize' || op === 'deserialize') && k.includes('.')) {
     const range = ratioRange(op);
     const value = which === 'max' ? range.max : range.min;
-    return Number.isFinite(value) ? `${value.toFixed(2)}×` : '—';
+    return Number.isFinite(value) ? formatRatio(value) : '—';
   }
   if (op === 'serialize' || op === 'deserialize') {
     const row = runtime[op].find((r) => r.key === which);
     if (!row) return '—';
-    return row.ratio === undefined ? '1.00×' : `${row.ratio.toFixed(2)}×`;
+    return formatRatio(row.ratio ?? 1);
   }
   throw new Error(`Unknown benchmark value: ${k}`);
 }

@@ -1,21 +1,14 @@
 /**
- * Small shared pieces: reveal-on-scroll, count-up numbers, the stat row and
- * the tab bar used by the charts.
+ * Small shared pieces: reveal-on-scroll, count-up numbers and the tab bar
+ * used by the charts.
  *
  * Everything renders its final state on the server (prerendered HTML, no
  * JavaScript needed to read the numbers). After hydration, elements that are
  * not yet on screen reset and animate when scrolled into view. With
  * prefers-reduced-motion, nothing animates.
  */
-import { type ReactNode, useEffect, useRef, useState } from 'react';
-import {
-  buildLarge,
-  headlineReuse,
-  headlineSerialize,
-  headlineZeroGc,
-} from '@/lib/benchmarks';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
-import type { Locale } from '@/lib/i18n';
 
 function reducedMotion() {
   return (
@@ -119,91 +112,6 @@ export function CountUp({
       <span className="sr-only">{value}</span>
     </span>
   );
-}
-
-/* ------------------------------------------------------------------ */
-/* Stat row                                                            */
-/* ------------------------------------------------------------------ */
-
-export interface Stat {
-  value: string;
-  label: ReactNode;
-  note?: ReactNode;
-}
-
-/** A row of plain numbers with labels, separated by hairlines. */
-export function StatCards({
-  stats,
-  className,
-}: {
-  stats: Stat[];
-  className?: string;
-}) {
-  return (
-    <dl
-      className={cn(
-        'not-prose my-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-fd-border md:grid-cols-4',
-        className,
-      )}
-    >
-      {stats.map((stat) => (
-        <div
-          key={`${stat.value}${String(stat.label)}`}
-          className="flex flex-col gap-1 bg-fd-card px-4 py-4"
-        >
-          <dt className="order-2 text-xs leading-snug text-fd-muted-foreground">
-            {stat.label}
-          </dt>
-          <dd className="order-1 text-2xl font-bold tracking-tight md:text-3xl">
-            <CountUp value={stat.value} />
-          </dd>
-          {stat.note && (
-            <dd className="order-3 text-xs text-fd-muted-foreground/80">
-              {stat.note}
-            </dd>
-          )}
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-/** The headline numbers of v4 (What's New, docs index), from src/lib/benchmarks.ts */
-export function headlineStats(lang: Locale): Stat[] {
-  const zh = lang === 'zh';
-  const stats: Stat[] = [];
-  if (headlineSerialize)
-    stats.push({
-      value: `${headlineSerialize}×`,
-      label: zh
-        ? '序列化比 MemoryPack 快'
-        : 'faster serialization than MemoryPack',
-    });
-  if (headlineReuse)
-    stats.push({
-      value: `${headlineReuse}×`,
-      label: zh
-        ? '复用池化对象反序列化，比 MemoryPack 覆盖写入快'
-        : "faster deserializing into pooled objects than MemoryPack's overwrite",
-    });
-  if (headlineZeroGc)
-    stats.push({
-      value: '0 GC',
-      label: zh
-        ? '序列化、复用池化对象反序列化零 GC 分配'
-        : 'zero GC allocations when serializing or deserializing into pooled objects',
-    });
-  stats.push({
-    value: `${buildLarge.emit.ratio}×`,
-    label: zh
-      ? `编译比 v3 快（${buildLarge.types.toLocaleString('en-US')} 个类型）`
-      : `faster compile than v3 (${buildLarge.types.toLocaleString('en-US')} types)`,
-  });
-  return stats;
-}
-
-export function ShowcaseHero({ lang = 'en' }: { lang?: Locale }) {
-  return <StatCards stats={headlineStats(lang)} />;
 }
 
 /* ------------------------------------------------------------------ */
