@@ -8,7 +8,7 @@ icon: TriangleAlert
 
 ## 当前的局限性
 - **需要源生成器。** Nino 需要它的源生成器（Roslyn 4.3 或更高版本），声明 `[NinoType]` 的项目需要使用 C# 9 或更高版本。
-- **与 v3 数据不兼容。** v4 格式无法读取 v3 或 v4 beta/preview 版本写入的数据。参见[从 v3 迁移](/zh/docs/v4/migration#转换-v3-数据)。
+- **与 v3 数据不兼容。** v4 格式无法读取 v3 或 v4 beta/preview 版本写入的数据。参见[从 v3 迁移](/zh/docs/v4/migration#converting-v3-data)。
 - **默认按位置读写。** 不使用 `versionTolerant` 或 `keyed` 时，插入、删除或重新排序成员都会破坏已有数据。`versionTolerant` 只容忍追加的成员；其他修改请使用 `keyed`。修改成员的类型在任何情况下都不被容忍。
 - **原始结构体对布局敏感。** 以原始内存写入的 unmanaged `[NinoType]` 结构体按其规范字段顺序写入：重新排序字段或修改其 `StructLayout` 会破坏已有数据。将其标记为 `versionTolerant`（或对某个字段使用 `[NinoIgnore]`），即可改为逐个成员写入。
 - **仅支持小端序。** 所有多字节值都以小端序写入；不支持大端序的主机。（目前 .NET 和 Unity 运行的所有平台都是小端序。）
