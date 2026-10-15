@@ -77,7 +77,7 @@ Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
 - 把热更新类型放在引用了 `Nino.Core` 的程序集定义中，或者放在通过 NuGet 安装 Nino 的独立 C# 项目中编译，然后照常加载 DLL。
 - 遵循 HybridCLR 自己的 AOT 泛型规则：热更新代码用到了哪些 AOT 程序集中的泛型，就为这些程序集加载补充元数据。
 - 热更新代码运行在 HybridCLR 的解释器中，解释器不会内联调用。正因如此，Nino 生成的代码直接调用 `Nino.Core`，不经过任何包装层。
-- 注册是按需进行的，所以热更新类型第一次序列化时要承担加载注册表的开销。如果想把这部分开销放到加载界面中，可以在加载程序集后调用 `NinoRegistry.EnsureInitialized(hotUpdate)`（或用 `NinoRegistry.EnsureAllInitialized()` 处理所有已加载的程序集）。两者都是可选的。
+- 注册是按需完成的，所以热更新类型第一次序列化时要承担加载注册表的开销。如果想把这部分开销放到加载界面中，可以在加载程序集后调用 `NinoRegistry.EnsureInitialized(hotUpdate)`（或用 `NinoRegistry.EnsureAllInitialized()` 处理所有已加载的程序集）。两者都是可选的。
 
 ## 降低帧耗时的技巧 [#frame-time-tips]
 

@@ -22,7 +22,7 @@ icon: Swords
 
 <ReuseTable lang="zh" />
 
-### 内存分配与载荷大小 [#allocations-and-payload-size]
+### 内存分配与数据大小 [#allocations-and-payload-size]
 
 <BenchmarkChart chart={['allocation', 'payload']} lang="zh" />
 
@@ -34,7 +34,7 @@ icon: Swords
 | 反序列化 | Nino 领先的用例中**快 <BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" />**；原始结构体数组上接近，`Vector4[10000]` 可能是 MemoryPack 更快（见下文） |
 | 反序列化到已有 / 池化实例 | 分配 **0 B**，最高比 MemoryPack 的覆盖模式**快 <BenchValue k="reuse.max" />** |
 | 序列化时的内存分配 | 两者都是 0 B |
-| 载荷大小 | 基本相同：`SimpleClass` 在 Nino 中为 <BenchValue k="payload.v4" /> 字节，在 MemoryPack 中为 <BenchValue k="payload.memorypack" /> 字节 |
+| 数据大小 | 基本相同：`SimpleClass` 在 Nino 中为 <BenchValue k="payload.v4" /> 字节，在 MemoryPack 中为 <BenchValue k="payload.memorypack" /> 字节 |
 
 <Callout type="info" title="MemoryPack 更快的情况">
 
@@ -60,13 +60,13 @@ icon: Swords
 | 需要 `partial` | ⚠️ 只有 `[NinoPooled]` 类，以及在 .NET 8 之前或泛型类型中序列化非公开成员时需要 | ✅ 总是需要 |
 | 私有成员 | ✅ `containNonPublicMembers` | ✅ `[MemoryPackInclude]` |
 | 构造函数、记录、`required` 成员 | ✅ | ✅ |
-| 用户集合类型 | ✅ 自动（`List<T>`、`Dictionary<,>` 子类、`ICollection<T>`……） | ⚠️ 每个类型需要 `[MemoryPackable(GenerateType.Collection)]` |
+| 自定义集合类型 | ✅ 自动（`List<T>`、`Dictionary<,>` 子类、`ICollection<T>`……） | ⚠️ 每个类型需要 `[MemoryPackable(GenerateType.Collection)]` |
 | **多态** | | |
 | 抽象类与接口 | ✅ | ✅ `[MemoryPackUnion]` |
 | 非抽象基类 | ✅ | ❌ Union 只能用于接口和抽象类 |
 | 子类型 ID | ✅ 自动（类型名哈希），4 字节 | ⚠️ 每个子类型显式标签，1 字节（超过 249 时 3 字节） |
 | 其他程序集中的子类型 | ✅ 自动 | ⚠️ `[MemoryPackUnionFormatter]`；在 Unity 中需在启动时手动注册 |
-| 热更新程序集（HybridCLR） | ✅ 延迟发现，无需初始化调用 | — 未见文档说明 |
+| 热更新程序集（HybridCLR） | ✅ 按需查找，无需初始化调用 | — 未见文档说明 |
 | **数据演进** | | |
 | 追加成员 | ✅ `versionTolerant`（也可追加到基类） | ✅ 默认模式（仅新代码可读旧数据） |
 | 旧代码读取新数据 | ✅ `versionTolerant`、`keyed` | ✅ `GenerateType.VersionTolerant` |
