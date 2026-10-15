@@ -17,6 +17,8 @@ Data outlives code. A save file, a cached asset or a message from an older clien
 | Overhead | none | 4 bytes per hierarchy level | 8 bytes per member, plus 4 per object |
 | Speed | fastest | about the same | serialize ~1.3×, deserialize ~1.2× the positional time |
 
+The format itself is part of the data: turning `versionTolerant` or `keyed` on or off for a type makes data written before unreadable. Choose before you store anything.
+
 In every format, **changing a member's type** is not tolerated. **Renaming a member** is free in positional and version-tolerant types, which write no names, but not in keyed types, where the key is the hash of the name: a renamed keyed member reads as "one member removed, another added". Rename *types* with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name).
 
 ## Positional

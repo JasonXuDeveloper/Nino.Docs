@@ -77,7 +77,8 @@ packet.ReturnToPool();                                    // returning it twice 
   - `OnNinoPoolReturn()` runs on `ReturnToPool()`: release state that Nino does not deserialize.
 - Returning an instance twice throws an `InvalidOperationException`. An instance that is never returned is simply collected.
 - Instances dropped by ref deserialization are returned to the pool automatically.
-- The pool is thread safe: each thread keeps up to 64 instances of its own, and a shared stack keeps up to 256 by default. Change this at startup with `NinoSettings.DefaultPoolMaxRetained` or `NinoSettings.SetPoolMaxRetained<T>(int)`. `NinoPool<T>.Shared.Clear()` drops every pooled instance.
+- The pool is thread safe: each thread keeps up to 64 instances of its own, and a shared stack keeps up to 256 by default. Change this at startup with `NinoSettings.DefaultPoolMaxRetained` or `NinoSettings.SetPoolMaxRetained<T>(int)`.
+- `NinoPool<T>.Shared` is the pool itself: `Count` is the number of instances in the shared stack (not counting the per-thread ones), and `Clear()` drops every pooled instance, the shared stack at once and each thread's own on its next use.
 
 <Callout type="info">
 

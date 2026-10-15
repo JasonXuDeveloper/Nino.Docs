@@ -1,23 +1,23 @@
 ---
-title: Ref 反序列化与对象池
+title: ref 反序列化与对象池
 description: 反序列化到已有实例和池化对象，零分配。
 icon: Recycle
 ---
 
-反序列化一个类通常每次调用都会分配一整个新的对象图。Nino v4 可以改为填充你已有的对象，并从对象池中获取新对象，因此持续不断的消息或帧可以在**零分配**（0 B）的情况下完成反序列化。
+反序列化一个类，通常每次调用都会分配一整套新的对象图。Nino v4 可以改为填充你已有的对象，并从对象池中获取需要新建的对象，因此源源不断的消息或帧在反序列化时可以做到 **0 B** 分配。
 
 ## 反序列化到已有实例 [#deserializing-into-existing-instances]
-`NinoDeserializer.Deserialize(data, ref value)`（或 `DeserializeRef(ref value, data)`）会原地填充一个已有的值：
+`NinoDeserializer.Deserialize(data, ref value)`（或 `DeserializeRef(ref value, data)`）会原地填充已有的值：
 
-- **目标为 `null`**：创建一个新实例（对于 `[NinoPooled]` 类型从对象池获取，或通过 `[NinoRefDeserialization]` 工厂方法创建）。
-- **类型正确的已有实例**：原地填充。列表和数组按索引复用元素；字典按键合并（每个值读入其键当前对应的值中，数据中不存在的键会被删除）。
-- **构造后无法赋值的类型**会被重新创建，旧实例被丢弃。
+- **目标为 `null`：** 创建新实例（`[NinoPooled]` 类型从对象池中取，或者通过 `[NinoRefDeserialization]` 工厂方法创建）。
+- **已有实例且类型匹配：** 原地填充。列表和数组按索引复用元素；字典按键合并（每个值读入该键当前对应的值中，数据中没有的键会被删除）。
+- **构造之后无法赋值的类型：** 重新创建，丢弃旧实例。
 
-每当一个已有实例被丢弃时（数据中为 `null`、列表变短、数组被重新分配、字典的键被删除、多态类型改变），它会被**恰好一次**传给该槽位声明类型的回收器：
+每当已有实例被丢弃（数据中为 `null`、列表变短、数组重新分配、字典删除了某个键、多态类型改变），它会**恰好一次**交给该槽位声明类型的回收器：
 
-1. 通过 `NinoSettings.SetRecycler<T>` 注册的处理器；否则
-2. 如果实例实现了 `INinoPooled`（`[NinoPooled]` 类型，或你自己实现了该接口的池化集合），调用 `ReturnToPool()`；否则
-3. 什么都不做：交给垃圾回收器。
+1. 通过 `NinoSettings.SetRecycler<T>` 注册的处理函数；否则
+2. 如果实例实现了 `INinoPooled`（`[NinoPooled]` 类型，或你自己实现了该接口的池化集合），调用它的 `ReturnToPool()`；否则
+3. 什么也不做，交给垃圾回收器。
 
 ```csharp
 // at startup, before the first serialization call
@@ -30,12 +30,12 @@ NinoDeserializer.Deserialize(frame2, ref scene); // bullets removed since frame1
 
 <Callout type="warn">
 
-只为完全归反序列化对象图所有的对象注册处理器。如果一个实例被两个槽位引用，而两者都丢弃了它，它会按槽位各被回收一次。
+只为完全由反序列化对象图独占的对象注册处理函数。如果一个实例同时被两个槽位引用，而两个槽位都丢弃了它，它会按槽位各回收一次。
 
 </Callout>
 
-## 使用 `[NinoRefDeserialization]` 创建实例 [#creating-instances-with-ninorefdeserialization]
-标记一个公共静态、可无参调用、返回声明类型的方法。每当 Nino 需要创建实例时，都会调用它来代替构造函数（例如从你自己的对象池中获取），然后原地填充该实例：
+## 用 `[NinoRefDeserialization]` 创建实例 [#creating-instances-with-ninorefdeserialization]
+标记一个公共静态方法，它可以无参调用，返回值为声明它的类型。每当 Nino 需要创建实例时，都会调用它来代替构造函数（例如从你自己的对象池中取），然后原地填充这个实例：
 
 ```csharp
 [NinoType]
@@ -49,10 +49,10 @@ public class Bullet
 }
 ```
 
-它同样适用于集合类型（`List<T>` 的子类、`IDictionary<TKey, TValue>` 的实现……）。该方法可以返回仍然持有元素的实例；这些元素会在读取数据之前被丢弃（并回收）。它不能返回 `null`，无效的方法会被报告为 NINO017。
+它同样适用于集合类型（`List<T>` 的子类、`IDictionary<TKey, TValue>` 的实现等）。该方法可以返回仍然装有元素的实例，这些元素会在读取数据之前被丢弃（并回收）。它不能返回 `null`；无效的方法会报告 NINO017。
 
 ## `[NinoPooled]` [#ninopooled]
-`[NinoPooled]` 为 `[NinoType]` 类提供内置的对象池。无论 Nino 在哪里创建它的实例（顶层、成员或集合元素），都会先从池中取出一个，并原地反序列化到其中，复用它的列表、数组、字典和嵌套对象。
+`[NinoPooled]` 为 `[NinoType]` 类提供内置的对象池。无论 Nino 在哪里创建它的实例（顶层、成员还是集合元素），都会先从池中取一个，再原地反序列化，复用其中的列表、数组、字典和嵌套对象。
 
 ```csharp
 [NinoType, NinoPooled] // [!code highlight]
@@ -71,17 +71,18 @@ var packet = NinoDeserializer.Deserialize<Packet>(bytes); // reuses a pooled ins
 packet.ReturnToPool();                                    // returning it twice throws
 ```
 
-- 该类必须是 `sealed`、`partial`，并且可以原地填充（没有仅构造函数可设置的成员或只读成员）；否则会报告 NINO018/NINO002。
-- 生成器会添加 `ReturnToPool()` 以及两个需要你实现的 partial 方法：
-  - `OnNinoPoolWarmup()` 在该类型第一次被反序列化之前运行一次；它返回的实例会直接放入池中（返回 `null` 或不返回任何实例则以空池开始）。
+- 该类必须是 `sealed`、`partial`，并且能原地填充（没有只能通过构造函数设置的成员或只读成员）；否则会报告 NINO018/NINO002。
+- 生成器会添加 `ReturnToPool()`，以及两个需要你实现的 partial 方法：
+  - `OnNinoPoolWarmup()` 在该类型第一次被反序列化之前运行一次，返回的实例会直接放入池中（返回 `null` 或空序列则从空池开始）。
   - `OnNinoPoolReturn()` 在 `ReturnToPool()` 时运行：释放 Nino 不会反序列化的状态。
-- 同一个实例归还两次会抛出 `InvalidOperationException`。从未归还的实例只会被正常回收。
+- 同一个实例归还两次会抛出 `InvalidOperationException`。从未归还的实例只是被垃圾回收而已。
 - 被 ref 反序列化丢弃的实例会自动归还到池中。
-- 对象池是线程安全的：每个线程最多保留 64 个自己的实例，共享栈默认最多保留 256 个。可在启动时通过 `NinoSettings.DefaultPoolMaxRetained` 或 `NinoSettings.SetPoolMaxRetained<T>(int)` 修改。`NinoPool<T>.Shared.Clear()` 会丢弃所有池化实例。
+- 对象池是线程安全的：每个线程自己最多保留 64 个实例，共享栈默认最多保留 256 个。可以在启动时通过 `NinoSettings.DefaultPoolMaxRetained` 或 `NinoSettings.SetPoolMaxRetained<T>(int)` 修改。
+- `NinoPool<T>.Shared` 就是这个池本身：`Count` 是共享栈中的实例数（不含各线程自己保留的），`Clear()` 会丢弃所有池化实例：共享栈立即清空，各线程自己的栈在下次使用时清空。
 
 <Callout type="info">
 
-借助对象池和 ref 反序列化，反序列化到复用的实例时分配 **0 B**，最高比 MemoryPack 的覆盖模式快 4.9 倍。参见[基准测试](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/v4-benchmarks.md#deserialize-into-existing-instances-pooling)。
+结合对象池和 ref 反序列化，反序列化复用实例时分配 **0 B**，速度最高可达 MemoryPack 覆盖模式的 4.9 倍。参见[基准测试](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/v4-benchmarks.md#deserialize-into-existing-instances-pooling)。
 
 </Callout>
 
@@ -92,16 +93,16 @@ packet.ReturnToPool();                                    // returning it twice 
 <TypeTable
   type={{
     'SetRecycler<T>(Action<T> handler)': {
-      description: 'ref 反序列化从声明类型为 T 的位置丢弃实例时调用的处理器。对该声明类型，它取代把 [NinoPooled] 实例归还到对象池的行为。传入 null 可移除。',
+      description: 'ref 反序列化从声明类型为 T 的槽位中丢弃实例时调用的处理函数。对该声明类型，它会取代“把 [NinoPooled] 实例还回池中”的默认行为。传入 null 可移除。',
       type: 'method',
     },
     DefaultPoolMaxRetained: {
-      description: '此后创建的对象池中，共享栈最多保留的实例数（对象池在其类型第一次被反序列化或归还时创建）。',
+      description: '此后新建的每个池，其共享栈最多保留的实例数（池在其类型第一次被反序列化或归还时创建）。',
       type: 'int',
       default: '256',
     },
     'SetPoolMaxRetained<T>(int maxRetained)': {
-      description: 'T 的对象池中共享栈最多保留的实例数；用于可能已经存在的对象池。每个线程另外最多保留 64 个自己的实例。',
+      description: 'T 的池中共享栈最多保留的实例数；适用于可能已经创建的池。此外每个线程还会各自保留最多 64 个。',
       type: 'method',
     },
   }}
@@ -109,6 +110,6 @@ packet.ReturnToPool();                                    // returning it twice 
 
 <Callout type="warn">
 
-`NinoSettings` 的值是不加同步读取的普通字段：请在任何线程第一次调用序列化之前，在启动代码中设置它们。
+`NinoSettings` 的值是不加同步读取的普通字段：请在启动代码中、任何线程第一次序列化之前设置好。
 
 </Callout>
