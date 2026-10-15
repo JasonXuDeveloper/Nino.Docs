@@ -79,6 +79,34 @@ Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
 - 热更新代码运行在 HybridCLR 的解释器中，解释器不会内联调用。正因如此，Nino 生成的代码直接调用 `Nino.Core`，不经过任何包装层。
 - 注册是按需完成的，所以热更新类型第一次序列化时要承担加载注册表的开销。如果想把这部分开销放到加载界面中，可以在加载程序集后调用 `NinoRegistry.EnsureInitialized(hotUpdate)`（或用 `NinoRegistry.EnsureAllInitialized()` 处理所有已加载的程序集）。两者都是可选的。
 
+## 启动检查清单 [#startup-checklist]
+
+大多数项目一步都不需要。需要的步骤，在第一次序列化调用之前执行一次即可：
+
+| 步骤 | 什么时候需要 | 什么时候不需要 |
+| --- | --- | --- |
+| `NinoSettings`（`DefaultPoolMaxRetained`、`SetPoolMaxRetained<T>`、`SetRecycler<T>`） | 想改变默认的池大小（共享栈 256、每个线程 64），或者想让自己的对象池接收被丢弃的实例。请**最先**设置：这些值的读取不做同步。 | 默认值够用。 |
+| HybridCLR 补充元数据 | 热更新代码用到了 AOT 程序集中定义的泛型。按 HybridCLR 的规则处理即可，Nino 没有额外要求。 | 没有热更新。 |
+| 用 `Assembly.Load` 加载热更新 DLL | 在读取包含其中类型的数据之前。 | |
+| `NinoRegistry.EnsureInitialized(assembly)` 或 `EnsureAllInitialized()` | 想把一次性的注册表加载放到加载界面，而不是第一次用到该程序集的调用。 | 始终是可选的：注册表在首次使用时自动加载。 |
+| `NinoPolymorphic.Register<T>()` | 某个封闭泛型 `[NinoType]`（如 `Box<MyStruct>`）在本进程中只会通过基类型**读取**，代码里从未写出它的名字，也从未写入过它。 | 普通子类型，无论在哪个程序集（包括热更新程序集），都会自动找到。 |
+
+```csharp
+public static class NinoStartup
+{
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void Init()
+    {
+        NinoSettings.SetPoolMaxRetained<Bullet>(1024); // only if the defaults do not fit
+        NinoPolymorphic.Register<Box<MyStruct>>();     // only for read-only closed generics
+    }
+}
+
+// after HybridCLR has loaded its supplementary metadata:
+Assembly hotUpdate = Assembly.Load(dllBytes);
+NinoRegistry.EnsureInitialized(hotUpdate);             // optional: pay the registry load now
+```
+
 ## 降低帧耗时的技巧 [#frame-time-tips]
 
 - **网络或回放数据不引起 GC 峰值：** 每个 tick 都用 `ref` 反序列化到上一个 tick 的对象中，并给批量创建的类（子弹、事件）加上 `[NinoPooled]`。参见[高性能序列化](/zh/docs/v4/advanced/high-performance)。

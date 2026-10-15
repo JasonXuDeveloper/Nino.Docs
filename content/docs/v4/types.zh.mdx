@@ -121,7 +121,7 @@ public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 
 <Callout type="warn">
 
-以下集合不受支持，这些类型的成员会被跳过并报告警告 NINO007：抽象集合、没有可用构造函数或工厂方法的集合、结构体集合、非泛型集合（`ArrayList`）、`ReadOnlyCollection<T>`，以及对两个不同的 `T` 实现了 `ICollection<T>` 的类型。
+部分集合形式不受支持，参见[不支持的类型](#not-supported)。
 
 反序列化到 `IsReadOnly` 为 `true` 的集合会抛出 `InvalidOperationException`；数据中字典或 `HashSet<T>` 出现重复键时也一样。
 
@@ -134,6 +134,7 @@ public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 - 委托、`Task`、指针等只在运行时有意义的类型；
 - `Memory<T>`、`ReadOnlyMemory<T>`（请改用 `T[]` 或 `ArraySegment<T>`），以及本来就不能作为类成员的 `Span<T>`；
 - 非泛型集合（`ArrayList`、`Hashtable`）和 `ReadOnlyCollection<T>`；
+- Nino 无法创建或填充的集合：抽象集合类（`abstract class Bag : ICollection<int>`）、既没有可无参调用的公共构造函数也没有 [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) 方法的集合、结构体集合（`struct Ring : IList<int>`），以及对两个不同的 `T` 实现了 `ICollection<T>` 的类型；
 - 其他 BCL 类，如 `BigInteger`、`Uri`、`Version`、`StringBuilder`、`Type`、`Lazy<T>`，以及除 `ImmutableArray<T>` 和 `ImmutableList<T>` 之外的不可变集合；
 - Unity 和 Godot 的**类**（`AnimationCurve`、`Gradient`、`Node`、`Resource` 等）；它们的非托管结构体是支持的。
 

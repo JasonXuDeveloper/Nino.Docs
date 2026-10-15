@@ -116,7 +116,7 @@ public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 
 <Callout type="warn">
 
-These collections are not supported, and members of these types are skipped with warning NINO007: abstract collections, collections without a usable constructor or factory, struct collections, non-generic collections (`ArrayList`), `ReadOnlyCollection<T>`, and types implementing `ICollection<T>` for two different `T`.
+Some collection shapes are not supported; see [Not Supported](#not-supported).
 
 Deserializing into a collection whose `IsReadOnly` is `true` throws an `InvalidOperationException`, as does data that holds the same key twice for a dictionary or `HashSet<T>`.
 
@@ -129,6 +129,7 @@ These have no formatter; a member of such a type is skipped with warning NINO007
 - delegates, `Task`, pointers and other runtime-only types;
 - `Memory<T>`, `ReadOnlyMemory<T>` (use `T[]` or `ArraySegment<T>`), and `Span<T>`, which cannot be a member of a class anyway;
 - non-generic collections (`ArrayList`, `Hashtable`) and `ReadOnlyCollection<T>`;
+- collections Nino cannot create or fill: an abstract collection class (`abstract class Bag : ICollection<int>`), a collection without a public constructor callable without arguments or a [`[NinoFactory]`](/en/docs/v4/pooling#creating-instances-with-ninofactory) method, a struct collection (`struct Ring : IList<int>`), and a type implementing `ICollection<T>` for two different `T`;
 - other BCL classes such as `BigInteger`, `Uri`, `Version`, `StringBuilder`, `Type` and `Lazy<T>`, and immutable collections other than `ImmutableArray<T>` and `ImmutableList<T>`;
 - Unity and Godot **classes** (`AnimationCurve`, `Gradient`, `Node`, `Resource`...); their unmanaged structs are supported.
 

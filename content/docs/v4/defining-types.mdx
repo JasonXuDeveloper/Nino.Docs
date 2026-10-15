@@ -270,6 +270,8 @@ public class ItemRenamed
 
 The former name is the **runtime form** of the full name: `Namespace.Type`, `+` between a nested type and its container (`Namespace.Outer+Inner`), no `global::`. The type id is computed from the former name, so the renamed type keeps writing the id old readers expect, and readers find the type under both names. `NinoTypeId.Of(typeof(T))` returns the id a type writes.
 
+On a field or property of a `keyed` type, `[NinoFormerName("OldName")]` (repeatable) keeps reading data written under the member's old names; see [Renaming Keyed Members](/en/docs/v4/evolving-data#renaming-keyed-members). Positional and version-tolerant types write no member names, so they need nothing to rename a member.
+
 ## Structs
 
 A `[NinoType]` struct has no header at all. When it is unmanaged, not `versionTolerant` or `keyed`, uses the default sequential layout, has no custom member formatters and every instance field is serialized, it is written as its **raw memory**: one copy, and arrays and lists of it as one block. Otherwise it is written member by member.

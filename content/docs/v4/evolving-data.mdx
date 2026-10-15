@@ -11,7 +11,7 @@ Data outlives code. A save file, a cached asset or a message from an older clien
 | Append members at the end | ✗ | ✓ | ✓ |
 | Append members to a base class | ✗ | ✓ | ✓ |
 | Insert, remove or reorder members | ✗ | ✗ | ✓ |
-| Rename members | ✓ | ✓ | ✗ |
+| Rename members | ✓ | ✓ | ✓ with `[NinoFormerName]` |
 | New code reads old data | ✗ | ✓ | ✓ |
 | Old code reads new data | ✗ | ✓ | ✓ |
 | Overhead | none | 4 bytes per hierarchy level | 8 bytes per member, plus 4 per object |
@@ -19,7 +19,7 @@ Data outlives code. A save file, a cached asset or a message from an older clien
 
 The format itself is part of the data: turning `versionTolerant` or `keyed` on or off for a type makes data written before unreadable. Choose before you store anything.
 
-In every format, **changing a member's type** is not tolerated. **Renaming a member** is free in positional and version-tolerant types, which write no names, but not in keyed types, where the key is the hash of the name: a renamed keyed member reads as "one member removed, another added". Rename *types* with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name).
+In every format, **changing a member's type** is not tolerated. **Renaming a member** is free in positional and version-tolerant types, which write no names. In keyed types the key is the hash of the name, so mark a renamed member with its old name ([Renaming Keyed Members](#renaming-keyed-members)); without it, the rename reads as "one member removed, another added". Rename *types* with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name) on the type.
 
 ## Positional
 
@@ -81,6 +81,25 @@ Each member is written with a **key**, the 32-bit FNV-1a hash of its name comput
 - Keyed structs are never written as raw memory. Polymorphism works as usual: the type id comes before the body.
 
 This is the format for data authored in an editor and kept for a long time: game configuration, level data, settings files.
+
+### Renaming Keyed Members
+
+Put `[NinoFormerName("OldName")]` on the renamed field or property, once per earlier name. Reading accepts the current name and every former name; writing always uses the current name.
+
+```csharp
+[NinoType(keyed: true)]
+public class PlayerSave
+{
+    [NinoFormerName("Hp")]                   // [!code highlight]
+    [NinoFormerName("Health")]               // [!code highlight]
+    public int HitPoints;                    // reads data written as Hp, Health or HitPoints
+    public string Name;
+}
+```
+
+- A former name that collides with another member of the type is a compile-time error.
+- In positional and version-tolerant types the attribute has no effect, since they write no names; the analyzer warns about it there.
+- Old code still knows only the old name, so data written after the rename loses this member when old code reads it.
 
 ## Choosing
 

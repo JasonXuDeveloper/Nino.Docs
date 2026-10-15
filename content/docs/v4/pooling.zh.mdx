@@ -82,15 +82,32 @@ packet.ReturnToPool();                                    // returning it twice 
   - `OnNinoPoolWarmup()` 在该类型第一次被反序列化之前运行一次，返回的实例会直接放入池中（返回 `null` 或空序列则从空池开始）。
   - `OnNinoPoolReturn()` 在 `ReturnToPool()` 时运行：释放 Nino 不会反序列化的状态。
 - 同一个实例归还两次会抛出 `InvalidOperationException`。未归还的实例会被 GC 正常回收。
-- 被 复用反序列化丢弃的实例会自动归还到池中。
+- 复用反序列化丢弃的实例会自动归还到池中。
+- `ReturnToPool()` 只归还这一个实例。它的列表、数组和嵌套对象（无论是否池化）仍然挂在它身上，下次反序列化到它时一起复用。如果想把某个子对象归还到它自己的池，请在 `OnNinoPoolReturn()` 中归还，并把字段设为 `null`。
 - 对象池是线程安全的：每个线程自己最多保留 64 个实例，共享栈默认最多保留 256 个。可以在启动时通过 `NinoSettings.DefaultPoolMaxRetained` 或 `NinoSettings.SetPoolMaxRetained<T>(int)` 修改。
 - `NinoPool<T>.Shared` 就是这个池本身：`Count` 是共享栈中的实例数（不含各线程自己保留的），`Clear()` 会丢弃所有池化实例：共享栈立即清空，各线程自己的栈在下次使用时清空。
 
 <Callout type="info">
 
-结合对象池和 复用反序列化，反序列化复用实例时分配 **0 B**，速度最高比 MemoryPack 覆盖模式快 <BenchValue k="reuse.max" />。参见[基准测试](/zh/docs/v4/perf#pooling)。
+结合对象池和复用反序列化，反序列化复用实例时分配 **0 B**，速度最高比 MemoryPack 覆盖模式快 <BenchValue k="reuse.max" />。参见[基准测试](/zh/docs/v4/perf#pooling)。
 
 </Callout>
+
+### 自己的池化集合 [#your-own-pooled-collections]
+
+已经有自己对象池的集合类型（例如 ET 的 `ListComponent<T>`）可以实现 `INinoPooled`（命名空间 `Nino.Core`）。复用反序列化从该类型的槽位中丢弃实例时，Nino 会调用它的 `ReturnToPool()`：
+
+```csharp
+public class ListComponent<T> : List<T>, INinoPooled
+{
+    [NinoFactory]
+    public static ListComponent<T> Create() => MyPools.Rent<ListComponent<T>>();
+
+    void INinoPooled.ReturnToPool() => MyPools.Return(this);
+}
+```
+
+再配合一个 [`[NinoFactory]`](#creating-instances-with-ninofactory) 方法，让新实例也从同一个池中取。用 `NinoSettings.SetRecycler<T>` 注册的处理函数优先于 `ReturnToPool()`。
 
 ## 设置 [#settings]
 

@@ -79,6 +79,34 @@ Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
 - Hot-update code runs in HybridCLR's interpreter, which does not inline calls. Nino's generated code calls `Nino.Core` directly without wrapper layers, for this reason.
 - Registration is lazy, so the first serialization of a hot-update type pays for loading its registry. To pay that during a loading screen instead, call `NinoRegistry.EnsureInitialized(hotUpdate)` after loading the assembly (or `NinoRegistry.EnsureAllInitialized()` for every loaded assembly). Both are optional.
 
+## Startup Checklist
+
+Most projects need none of these steps. Run the ones you need once, before the first serialization call:
+
+| Step | Needed when | Not needed when |
+| --- | --- | --- |
+| `NinoSettings` (`DefaultPoolMaxRetained`, `SetPoolMaxRetained<T>`, `SetRecycler<T>`) | You want other pool sizes than the defaults (256 shared, 64 per thread), or your own pools should receive dropped instances. Set them **first**: they are read without synchronization. | The defaults suit you. |
+| HybridCLR supplementary metadata | Hot-update code instantiates generics defined in AOT assemblies. Follow HybridCLR's rules; Nino adds none of its own. | There is no hot update. |
+| `Assembly.Load` of hot-update DLLs | Before reading data that contains their types. | |
+| `NinoRegistry.EnsureInitialized(assembly)` or `EnsureAllInitialized()` | You want the one-time registry load on a loading screen instead of the first call that meets the assembly. | Always optional: registries load on first use. |
+| `NinoPolymorphic.Register<T>()` | A closed generic `[NinoType]` such as `Box<MyStruct>` that this process only **reads** through a base type, and never names in code nor writes. | Ordinary subtypes in any assembly, hot update included: they are found automatically. |
+
+```csharp
+public static class NinoStartup
+{
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void Init()
+    {
+        NinoSettings.SetPoolMaxRetained<Bullet>(1024); // only if the defaults do not fit
+        NinoPolymorphic.Register<Box<MyStruct>>();     // only for read-only closed generics
+    }
+}
+
+// after HybridCLR has loaded its supplementary metadata:
+Assembly hotUpdate = Assembly.Load(dllBytes);
+NinoRegistry.EnsureInitialized(hotUpdate);             // optional: pay the registry load now
+```
+
 ## Frame-Time Tips
 
 - **No GC spikes from network or replay data:** deserialize each tick into the previous tick's object with `ref`, and mark the classes you create in bulk (bullets, events) `[NinoPooled]`. See [High-Performance Serialization](/en/docs/v4/advanced/high-performance).

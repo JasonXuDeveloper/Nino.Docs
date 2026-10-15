@@ -11,7 +11,7 @@ icon: GitBranch
 | 在末尾追加成员 | ✗ | ✓ | ✓ |
 | 向基类追加成员 | ✗ | ✓ | ✓ |
 | 插入、删除或重排成员 | ✗ | ✗ | ✓ |
-| 重命名成员 | ✓ | ✓ | ✗ |
+| 重命名成员 | ✓ | ✓ | ✓（配合 `[NinoFormerName]`） |
 | 新代码读旧数据 | ✗ | ✓ | ✓ |
 | 旧代码读新数据 | ✗ | ✓ | ✓ |
 | 额外开销 | 无 | 每层继承 4 字节 | 每个成员 8 字节，每个对象另加 4 字节 |
@@ -19,7 +19,7 @@ icon: GitBranch
 
 格式本身也是数据的一部分：给某个类型打开或关闭 `versionTolerant`、`keyed`，都会让之前写出的数据无法读取。请在保存任何数据之前做好选择。
 
-无论哪种格式，都**不能修改成员的类型**。按位置和版本兼容格式不写成员名，所以**重命名成员**没有影响；键控格式则不行，它的键是成员名的哈希，改名后的成员会被当作“删掉一个、新增一个”。重命名*类型*请使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
+无论哪种格式，都**不能修改成员的类型**。按位置和版本兼容格式不写成员名，所以**重命名成员**没有影响；键控格式的键是成员名的哈希，所以改名的成员要标上旧名称（参见[重命名键控成员](#renaming-keyed-members)），否则改名会被当作“删掉一个、新增一个”。重命名*类型*请在类型上使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
 
 ## 按位置 [#positional]
 
@@ -81,6 +81,25 @@ public class EnemyConfig
 - 键控结构体永远不会按原始内存写入。多态照常工作：类型 ID 写在成员数据之前。
 
 这种格式适合在编辑器中编辑、需要长期保存的数据：游戏配置、关卡数据、设置文件。
+
+### 重命名键控成员 [#renaming-keyed-members]
+
+在改名的字段或属性上加 `[NinoFormerName("OldName")]`，每个旧名称加一个。读取时，当前名称和所有旧名称都能识别；写入时始终使用当前名称。
+
+```csharp
+[NinoType(keyed: true)]
+public class PlayerSave
+{
+    [NinoFormerName("Hp")]                   // [!code highlight]
+    [NinoFormerName("Health")]               // [!code highlight]
+    public int HitPoints;                    // reads data written as Hp, Health or HitPoints
+    public string Name;
+}
+```
+
+- 旧名称与该类型的其他成员冲突时，会在编译期报错。
+- 按位置和版本兼容的类型不写成员名，这个特性在其中没有作用，分析器会给出警告。
+- 旧代码只认识旧名称，所以改名后写出的数据被旧代码读取时，会丢失这个成员。
 
 ## 如何选择 [#choosing]
 

@@ -12,7 +12,7 @@ icon: TriangleAlert
 - **默认按位置写入。** 不启用 `versionTolerant` 或 `keyed` 时，插入、删除或调整成员顺序都会破坏已有数据。`versionTolerant` 只允许在末尾追加成员，其他改动请用 `keyed`。修改成员类型在任何模式下都不兼容。
 - **原始结构体依赖布局。** 按原始内存写入的非托管 `[NinoType]` 结构体以规范的字段顺序写入：调整字段顺序或修改 `StructLayout` 都会破坏已有数据。标记 `versionTolerant`（或对某个字段使用 `[NinoIgnore]`）可以改为逐个成员写入。
 - **只支持小端序主机。** 所有多字节值都按小端序写入。在大端序主机上，构造 `Writer` 或 `Reader` 时会抛出 `PlatformNotSupportedException`，不会写出不兼容的字节。目前 .NET 和 Unity 运行的所有平台都是小端序。
-- **不支持的成员类型会被跳过。** 委托、`Task`、指针、`Memory<T>`、非泛型集合（`ArrayList`）、`ReadOnlyCollection<T>`、抽象集合、结构体集合，以及没有可用构造函数的集合都没有格式化器：这类成员会被跳过，并报告警告 NINO007。可以给它加上 `[NinoIgnore]`，或者编写[自定义格式化器](/zh/docs/v4/custom-formatters)。
+- **部分类型不受支持。** 委托、`Task`、指针、`Memory<T>`、非泛型集合和部分自定义集合形式、一些 BCL 类（`BigInteger`、`Uri`、大多数不可变集合）以及 Unity 或 Godot 的类都没有格式化器，这类成员会被跳过并报告警告 NINO007。完整列表见[支持的类型](/zh/docs/v4/types#not-supported)；用[自定义格式化器](/zh/docs/v4/custom-formatters)可以支持其中任何一种。
 - **集合按值处理。** 同一个集合实例出现在两个成员中，会写入两次，读回为两个实例；`trackReferences` 只追踪 `[NinoType]` 类。
 - **部分类型不能追踪引用或池化。** 通过构造函数参数或只读成员重新创建的类型（例如位置记录）不能使用 `trackReferences`（NINO016）或 `[NinoPooled]`（NINO018）。`[NinoPooled]` 还要求类是 `sealed`。
 - **结构体至少要有一个成员。** 不序列化任何成员的结构体会报错（NINO023），因为它会被写成零字节。请至少序列化一个成员，或者标记 `versionTolerant` 或 `keyed`。
@@ -21,7 +21,6 @@ icon: TriangleAlert
 - **`PriorityQueue<TElement, TPriority>`** 只在 BCL 提供它的平台上可用：.NET 6 及以上，.NET Standard 和 Unity 中没有。
 - **拦截器**需要 Roslyn 4.8 及以上（.NET 8 SDK 及以上）。Unity 使用 Roslyn 4.3 版本，它和更旧的编译器一样走常规调用，每次慢几纳秒，写出的字节相同。
 - **没有按调用设置的选项。** 设置要么是进程级的（`NinoSettings`），要么按类型设置（特性），不能随某次调用传入。
-- **内置的 BCL 类型比部分序列化库少。** `BigInteger`、`Uri`、`Version`、`StringBuilder`、`Type`、`Lazy<T>`，以及 `ImmutableArray<T>` 和 `ImmutableList<T>`（来自 `Nino.Immutable`）以外的不可变集合，都需要[自定义格式化器](/zh/docs/v4/custom-formatters)。参见[不支持的类型](/zh/docs/v4/types#not-supported)。
 - **有时必须声明 `partial`。** `[NinoPooled]` 类，以及在 .NET 8 之前（包括 .NET Standard 和 Unity）或在泛型类型中序列化非公开成员的类型，都必须是 `partial`（NINO002）。这些情况下，被 `new` 隐藏的非公开基类成员无法访问（NINO022）。
 
 ## 平台说明 [#platform-notes]

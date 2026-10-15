@@ -52,9 +52,24 @@ public struct GridPos            // 按位置的原始结构体：永远不要�
 
 <Callout type="warn">
 
-键控成员靠**成员名**的哈希识别：重命名字段相当于“删掉一个、新增一个”，旧值不会读进来。*类型*可以借助 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name) 随意改名，字段名则要保持不变，否则只能自己迁移旧值。
+键控成员靠**成员名**的哈希识别。给字段改名时，请用 `[NinoFormerName]` 保留旧名称（参见[字段改名](#rename-a-field)）；否则改名相当于“删掉一个、新增一个”，旧值不会读进来。*类型*改名请在类型上使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
 
 </Callout>
+
+## 字段改名 [#rename-a-field]
+
+在键控的存档类型中给字段改名时，把旧名称标出来。改名前写出的存档会读进新字段，新存档则以新名称写入：
+
+```csharp
+[NinoType(keyed: true)]
+public sealed class Player
+{
+    [NinoFormerName("Lvl")] // [!code highlight]
+    public int Level;       // was: public int Lvl;
+}
+```
+
+只要旧存档还可能被加载，就要一直保留这个特性。改名之前的版本读不了新名称，所以改名之后不要让玩家降级。
 
 ## 对象图 [#object-graphs]
 
@@ -160,7 +175,7 @@ public void LoadsEveryShippedSave()
 - [ ] 根对象和长期保留的记录使用 `keyed`（只会增加字段的用 `versionTolerant`）。
 - [ ] 小型原始结构体已定型：不再调整字段顺序或类型。
 - [ ] 共享或循环的对象使用 `trackReferences`。
-- [ ] 重命名的类型带有 `[NinoFormerName]`。
+- [ ] 改名的类型和改名的键控成员都带有 `[NinoFormerName]`。
 - [ ] 文件以你自己的魔数和版本开头。
 - [ ] 存档先写入临时文件再替换。
 - [ ] 测试会加载每个已发布版本的存档。

@@ -270,6 +270,8 @@ public class ItemRenamed
 
 曾用名使用全名的**运行时形式**：`Namespace.Type`，嵌套类型与外层类型之间用 `+` 连接（`Namespace.Outer+Inner`），不带 `global::`。类型 ID 由曾用名计算，所以改名后的类型仍写出旧读取方认识的 ID，而读取方用新旧两个名字都能找到它。`NinoTypeId.Of(typeof(T))` 可以查看某个类型写出的 ID。
 
+在 `keyed` 类型的字段或属性上，`[NinoFormerName("OldName")]`（可重复使用）可以继续读取以成员旧名称写出的数据，参见[重命名键控成员](/zh/docs/v4/evolving-data#renaming-keyed-members)。按位置和版本兼容的类型不写成员名，重命名成员时什么都不用做。
+
 ## 结构体 [#structs]
 
 `[NinoType]` 结构体没有任何头部。当它是非托管类型、未启用 `versionTolerant` 或 `keyed`、使用默认的顺序布局、没有自定义成员格式化器，并且每个实例字段都参与序列化时，会按**原始内存**写入：单个值一次拷贝，它的数组和列表也是整块拷贝。否则逐个成员写入。

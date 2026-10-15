@@ -52,9 +52,24 @@ public struct GridPos            // positional raw struct: never reorder its fie
 
 <Callout type="warn">
 
-Keyed members are identified by the hash of their **name**: renaming a field reads as "removed one, added another", so the old value is not loaded. Rename *types* freely with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name), but keep field names stable or migrate the value yourself.
+Keyed members are identified by the hash of their **name**. When you rename a field, keep its old name with `[NinoFormerName]` (see [Rename a Field](#rename-a-field)); otherwise the rename reads as "removed one, added another" and the old value is not loaded. Rename *types* with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name) on the type.
 
 </Callout>
+
+## Rename a Field
+
+In a keyed save type, rename the field and list its old name. Saves written before the rename load into the new field, and new saves are written under the new name:
+
+```csharp
+[NinoType(keyed: true)]
+public sealed class Player
+{
+    [NinoFormerName("Lvl")] // [!code highlight]
+    public int Level;       // was: public int Lvl;
+}
+```
+
+Keep the attribute for as long as old saves may still be loaded. A build that predates the rename cannot read the new name, so do not let players downgrade after it.
 
 ## Object Graphs
 
@@ -160,7 +175,7 @@ public void LoadsEveryShippedSave()
 - [ ] Root and long-lived records are `keyed` (or `versionTolerant` if they only grow).
 - [ ] Small raw structs are frozen: never reorder or retype their fields.
 - [ ] Shared or cyclic objects are `trackReferences`.
-- [ ] Renamed types carry `[NinoFormerName]`.
+- [ ] Renamed types and renamed keyed members carry `[NinoFormerName]`.
 - [ ] The file starts with your own magic number and version.
 - [ ] Saves are written to a temporary file and swapped in.
 - [ ] Saves from every shipped version are loaded in a test.

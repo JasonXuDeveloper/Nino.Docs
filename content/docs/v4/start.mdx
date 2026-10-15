@@ -193,6 +193,16 @@ NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
 </Step>
 </Steps>
 
+## At Startup
+
+Nino needs no initialization call: generated code registers itself, and assemblies loaded later are found on first use. Three things are optional:
+
+- `NinoSettings` (pool sizes, recyclers), set before the first serialization call.
+- `NinoPolymorphic.Register<T>()` for a closed generic `[NinoType]` that a process only reads through a base type and never names in code.
+- `NinoRegistry.EnsureInitialized(assembly)` to load a plugin's registry now instead of on first use.
+
+Unity and HybridCLR projects: see the [startup checklist](/en/docs/v4/advanced/unity#startup-checklist).
+
 ## Next Steps
 
 <Cards>
