@@ -9,14 +9,8 @@ import type { MDXComponents } from 'mdx/types';
 import type { ComponentProps } from 'react';
 import { AnchorRedirect } from '@/components/anchor-redirect';
 import { BenchChart } from '@/components/bench-chart';
-import {
-  CompileTime,
-  CountUp,
-  MemoryPackRace,
-  ShowcaseHero,
-  StatCards,
-  V3Race,
-} from '@/components/showcase';
+import { BenchmarkChart } from '@/components/charts';
+import { CountUp, ShowcaseHero, StatCards } from '@/components/showcase';
 import { Stats } from '@/components/stats';
 
 export function getMDXComponents(components?: MDXComponents): MDXComponents {
@@ -29,12 +23,11 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     AnchorRedirect,
     Accordions,
     BenchChart,
-    CompileTime,
+    BenchmarkChart,
     CountUp,
     File,
     Files,
     Folder,
-    MemoryPackRace,
     ShowcaseHero,
     StatCards,
     Stats,
@@ -43,7 +36,6 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     Tab,
     Tabs,
     TypeTable,
-    V3Race,
     ...components,
   };
 }

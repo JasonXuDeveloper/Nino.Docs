@@ -8,9 +8,28 @@ icon: Swords
 
 ## 性能 [#performance]
 
-使用 BenchmarkDotNet 0.15.2 在 .NET 10.0.13 上测量（Intel Xeon 2.80 GHz，4 核，AVX-512，Ubuntu 24.04），两个库在同一次运行中。柱状图显示以 MemoryPack = 1.00 归一化的耗时，越短越快。
+使用 BenchmarkDotNet 0.15.2 在 .NET 10.0.13 上测量（Intel Xeon 2.80 GHz，4 核，AVX-512，Ubuntu 24.04），两个库在同一次运行中。条形为相对 MemoryPack（1.0）的耗时，越短越快。悬停或聚焦某一行可查看数值。
 
-<MemoryPackRace lang="zh" />
+<BenchmarkChart chart={['serialize', 'deserialize']} lang="zh" />
+
+### 反序列化到已有对象 [#deserialize-into-existing-objects]
+
+两个库都可以填充你已有的对象，而不是分配新对象。Nino 通过 `ref` 反序列化到已有对象图，新实例取自 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池；MemoryPack 覆盖已有实例。在池化用例中，Nino **快 2.6 倍和 4.9 倍**，且分配 **0 B**，而 MemoryPack 每次调用分配 1,024 B 和 12,800 B。
+
+<BenchmarkChart chart="reuse" lang="zh" table={false} />
+
+| 用例 | Nino 新建 | Nino 复用 | MemoryPack 新建 | MemoryPack 覆盖 |
+| --- | ---: | ---: | ---: | ---: |
+| 池化节点 | 873 ns | **280 ns**（0 B） | 952 ns | 727 ns（1,024 B） |
+| 池化叶子，原地复用 | 5.23 µs | **1.18 µs**（0 B） | 5.38 µs | 5.80 µs（12,800 B） |
+| 池化叶子，池化元素 | 5.23 µs | 3.82 µs（856 B） | 5.38 µs | 5.80 µs（12,800 B） |
+| 池化类 | 780 ns | 623 ns（1,080 B） | 1,044 ns | 857 ns（1,080 B） |
+
+### 内存分配与载荷大小 [#allocations-and-payload-size]
+
+<BenchmarkChart chart={['allocation', 'payload']} lang="zh" />
+
+### 汇总 [#summary]
 
 | | Nino v4 对比 MemoryPack |
 | --- | --- |

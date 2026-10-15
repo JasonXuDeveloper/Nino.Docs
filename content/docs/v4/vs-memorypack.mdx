@@ -8,9 +8,28 @@ icon: Swords
 
 ## Performance
 
-Measured with BenchmarkDotNet 0.15.2 on .NET 10.0.13 (Intel Xeon 2.80 GHz, 4 cores, AVX-512, Ubuntu 24.04), both libraries in the same run. Bars show time normalized to MemoryPack = 1.00; shorter is faster.
+Measured with BenchmarkDotNet 0.15.2 on .NET 10.0.13 (Intel Xeon 2.80 GHz, 4 cores, AVX-512, Ubuntu 24.04), both libraries in the same run. Bars show time relative to MemoryPack (1.0); shorter is faster. Hover or focus a row for the numbers.
 
-<MemoryPackRace lang="en" />
+<BenchmarkChart chart={['serialize', 'deserialize']} lang="en" />
+
+### Deserialize into Existing Objects
+
+Both libraries can fill objects you already have instead of allocating new ones. Nino deserializes by `ref` into the existing graph and takes any new instances from [`[NinoPooled]`](/en/docs/v4/pooling) pools; MemoryPack overwrites existing instances. Nino is **2.6× and 4.9× faster** in the pooled cases and allocates **0 B**, where MemoryPack allocates 1,024 B and 12,800 B per call.
+
+<BenchmarkChart chart="reuse" lang="en" table={false} />
+
+| Case | Nino new | Nino reusing | MemoryPack new | MemoryPack overwrite |
+| --- | ---: | ---: | ---: | ---: |
+| Pooled node | 873 ns | **280 ns** (0 B) | 952 ns | 727 ns (1,024 B) |
+| Pooled leaves, in place | 5.23 µs | **1.18 µs** (0 B) | 5.38 µs | 5.80 µs (12,800 B) |
+| Pooled leaves, pooled elements | 5.23 µs | 3.82 µs (856 B) | 5.38 µs | 5.80 µs (12,800 B) |
+| Pooled class | 780 ns | 623 ns (1,080 B) | 1,044 ns | 857 ns (1,080 B) |
+
+### Allocations and Payload Size
+
+<BenchmarkChart chart={['allocation', 'payload']} lang="en" />
+
+### Summary
 
 | | Nino v4 vs MemoryPack |
 | --- | --- |

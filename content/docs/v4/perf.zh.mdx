@@ -31,6 +31,8 @@ Nino v4 与 Nino v3 **3.3.13**（v3 的最后一个版本）以及 [MemoryPack](
 | 修改一处注释后重新生成 | 1.11 s | 0.19 s | **快 5.8 倍** |
 | 生成代码的 IL | 2.2 MB | 0.37 MB | **小 6.0 倍** |
 
+<BenchmarkChart chart="compile" lang="zh" table={false} />
+
 ### 1,100 个类型（N = 100） [#1100-types-n--100]
 
 {/* GEN_N100 */}
@@ -58,6 +60,8 @@ v4 与 MemoryPack 在同一次运行中。“v4 对比 v3”一列是把 v4 / Me
 | `SimpleStruct[100]` * | 28.6 ns | 30.6 ns | 快 1.07 倍 | 持平 |
 | `Vector4[10000]` * | 4.06 µs | 4.10 µs | 持平 | 持平 |
 
+<BenchmarkChart chart="serialize" lang="zh" table={false} />
+
 `SimpleStruct` 有 4 字节填充。v4 会将其清零，因此输出是确定性的；v3 和 MemoryPack 会原样拷贝填充中的内容。借助掩码 SIMD 拷贝，这几乎没有可测量的开销。
 
 ### 反序列化（新实例） [#deserialize]
@@ -71,6 +75,8 @@ v4 与 MemoryPack 在同一次运行中。“v4 对比 v3”一列是把 v4 / Me
 | 多态 `Foo[]` | 37.0 µs | 43.1 µs | **快 1.16 倍** | — |
 | `SimpleStruct[100]` * | 295 ns | 295 ns | 持平 | 持平 |
 | `Vector4[10000]` * | 173 µs | 147 µs | 0.85 倍 | 0.90 倍 |
+
+<BenchmarkChart chart="deserialize" lang="zh" table={false} />
 
 <Callout type="info">
 
@@ -89,7 +95,11 @@ Nino 可以反序列化到已有的对象图（`ref` 反序列化），并从 `[
 | 池化叶子，池化元素 | 5.23 µs | 3.82 µs（856 B） | 5.38 µs | 5.80 µs（12,800 B） |
 | 池化类 | 780 ns | 623 ns（1,080 B） | 1,044 ns | 857 ns（1,080 B） |
 
+<BenchmarkChart chart="reuse" lang="zh" table={false} />
+
 上述序列化路径中两者都不分配内存（每次调用 0 B），反序列化只分配结果对象。
+
+<BenchmarkChart chart={['allocation', 'payload']} lang="zh" />
 
 ### 复现 [#reproducing]
 

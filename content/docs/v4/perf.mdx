@@ -31,6 +31,8 @@ Workload: `N` abstract root classes, each with a chain of 8 derived classes, a s
 | Re-generating after editing a comment | 1.11 s | 0.19 s | **5.8× faster** |
 | IL of the generated code | 2.2 MB | 0.37 MB | **6.0× smaller** |
 
+<BenchmarkChart chart="compile" lang="en" table={false} />
+
 ### 1,100 Types (N = 100)
 
 {/* GEN_N100 */}
@@ -58,6 +60,8 @@ v4 and MemoryPack in the same run. The v4 vs v3 column compares the v4 / MemoryP
 | `SimpleStruct[100]` * | 28.6 ns | 30.6 ns | 1.07× faster | on par |
 | `Vector4[10000]` * | 4.06 µs | 4.10 µs | on par | on par |
 
+<BenchmarkChart chart="serialize" lang="en" table={false} />
+
 `SimpleStruct` has 4 bytes of padding. v4 zeroes it, so the output is deterministic; v3 and MemoryPack copy whatever the padding contains. With the masked SIMD copy this costs nothing measurable.
 
 ### Deserialize (New Instances)
@@ -71,6 +75,8 @@ v4 and MemoryPack in the same run. The v4 vs v3 column compares the v4 / MemoryP
 | Polymorphic `Foo[]` | 37.0 µs | 43.1 µs | **1.16× faster** | — |
 | `SimpleStruct[100]` * | 295 ns | 295 ns | on par | on par |
 | `Vector4[10000]` * | 173 µs | 147 µs | 0.85× | 0.90× |
+
+<BenchmarkChart chart="deserialize" lang="en" table={false} />
 
 <Callout type="info">
 
@@ -89,7 +95,11 @@ Nino deserializes into an existing object graph (`ref` deserialization) and take
 | Pooled leaves, pooled elements | 5.23 µs | 3.82 µs (856 B) | 5.38 µs | 5.80 µs (12,800 B) |
 | Pooled class | 780 ns | 623 ns (1,080 B) | 1,044 ns | 857 ns (1,080 B) |
 
+<BenchmarkChart chart="reuse" lang="en" table={false} />
+
 Neither serializer allocates on the serialize paths above (0 B per call), and deserialization allocates only the result objects.
+
+<BenchmarkChart chart={['allocation', 'payload']} lang="en" />
 
 ### Reproducing
 

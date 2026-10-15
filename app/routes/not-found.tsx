@@ -37,12 +37,15 @@ function Message({ lang }: { lang: Locale }) {
       <h1 className="text-2xl font-semibold">{t.title}</h1>
       <p className="text-fd-muted-foreground">{t.text}</p>
       <div className="flex flex-wrap justify-center gap-3">
-        <a href={`/${lang}`} className="nino-btn nino-btn-secondary">
+        <a
+          href={`/${lang}`}
+          className="inline-flex items-center rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors hover:bg-fd-accent"
+        >
           {t.home}
         </a>
         <a
           href={`/${lang}/docs/${latestVersion}`}
-          className="nino-btn nino-btn-primary"
+          className="inline-flex items-center rounded-lg bg-fd-primary px-5 py-2.5 text-sm font-medium text-fd-primary-foreground transition-colors hover:bg-fd-primary/90"
         >
           {t.docs}
         </a>
@@ -61,7 +64,9 @@ export default function NotFound() {
   return (
     <HomeLayout {...baseOptions(langs[0])}>
       <main className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center gap-10 p-8 text-center">
-        <p className="nino-gradient-text text-7xl font-extrabold">404</p>
+        <p className="text-6xl font-extrabold tracking-tight text-fd-muted-foreground">
+          404
+        </p>
         {langs.map((lang) => (
           <Message key={lang} lang={lang} />
         ))}

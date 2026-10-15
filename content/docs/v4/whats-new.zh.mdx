@@ -18,9 +18,9 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 
 ## 比 v3 更快 [#faster-than-v3]
 
-与 v3 的最后一个版本 **3.3.13** 在同一台机器上对比。可以在序列化、反序列化和编译时间之间切换；MemoryPack 柱是共同的基准（1.00）。
+与 v3 的最后一个版本 **3.3.13** 在同一台机器上对比。耗时以两次运行共同的基准 MemoryPack（1.0）归一化。
 
-<V3Race lang="zh" />
+<BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="zh" />
 
 结构体数组（`SimpleStruct[100]`、`Vector4[10000]`）在 v3 中就已经是一次内存拷贝，因此保持持平。
 
@@ -28,7 +28,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 
 v3 的生成器会把每个子类型的主体内联到每个多态基类中，并且每次按键都会重新生成所有类型。v4 为每个类型生成一个文件、只生成一次，并且只重新生成你修改的部分。
 
-<CompileTime lang="zh" />
+<BenchmarkChart chart="compile" lang="zh" />
 
 {/* GEN_N100 */}
 
@@ -42,7 +42,7 @@ v3 3.3.13 在 N = 100 时的数据正在测量，完成后会补充到这里。v
 
 与 MemoryPack 1.21.4 在同一次运行中对比。Nino 在序列化上明显领先，在类和多态对象图的反序列化上领先，在原始数组上持平（两者都是一次 `memcpy`）。
 
-<MemoryPackRace lang="zh" />
+<BenchmarkChart chart={['serialize', 'deserialize']} lang="zh" />
 
 <Callout type="info" title="MemoryPack 唯一胜出的用例">
 
@@ -50,7 +50,13 @@ v3 3.3.13 在 N = 100 时的数据正在测量，完成后会补充到这里。v
 
 </Callout>
 
-两个库在序列化时都不分配内存。复用实例时，Nino 分配 **0 B**，最高比 MemoryPack 的覆盖模式快 **4.9 倍**。请阅读[与 MemoryPack 的完整对比](/zh/docs/v4/vs-memorypack)（包括 MemoryPack 仍然领先的地方）以及[基准测试表格](/zh/docs/v4/perf)。
+### 反序列化到已有对象 [#deserialize-into-existing-objects]
+
+v4 新增：通过 `ref` 反序列化到你已有的对象中，新实例取自 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池。与 MemoryPack 的覆盖模式相比，Nino 在池化节点上**快 2.6 倍**，在原地更新的池化叶子上**快 4.9 倍**，并且分配 **0 B**，而 MemoryPack 每次调用分配 1,024 B 和 12,800 B。
+
+<BenchmarkChart chart={['reuse', 'allocation']} lang="zh" />
+
+两个库在序列化时都不分配内存，载荷大小也相同（`SimpleClass`：Nino 为 1,146 字节，MemoryPack 为 1,148 字节）。请阅读[与 MemoryPack 的完整对比](/zh/docs/v4/vs-memorypack)（包括 MemoryPack 仍然领先的地方）以及[基准测试表格](/zh/docs/v4/perf)。
 
 ## 你将获得 [#what-you-get]
 

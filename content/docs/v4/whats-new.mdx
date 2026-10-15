@@ -18,9 +18,9 @@ The v4 binary format is **not compatible** with v3 or the earlier v4 betas/previ
 
 ## Faster than v3
 
-Against v3 **3.3.13**, the last v3 release, on the same machine. Switch between serialize, deserialize and compile time; the MemoryPack bar is the common baseline (1.00).
+Against v3 **3.3.13**, the last v3 release, on the same machine. Times are normalized to MemoryPack (1.0), the common baseline of both runs.
 
-<V3Race lang="en" />
+<BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="en" />
 
 Struct arrays (`SimpleStruct[100]`, `Vector4[10000]`) were already a single memory copy in v3 and stay on par.
 
@@ -28,7 +28,7 @@ Struct arrays (`SimpleStruct[100]`, `Vector4[10000]`) were already a single memo
 
 The v3 generator inlined the body of every subtype into each polymorphic base and re-emitted every type on every keystroke. v4 emits one file per type, once, and re-generates only what you edit.
 
-<CompileTime lang="en" />
+<BenchmarkChart chart="compile" lang="en" />
 
 {/* GEN_N100 */}
 
@@ -42,7 +42,7 @@ Numbers for v3 3.3.13 at N = 100 are being measured and will be added here. v4 g
 
 Against MemoryPack 1.21.4 in the same run. Nino wins clearly when serializing, leads on classes and polymorphic graphs when deserializing, and ties on raw arrays, where both are one `memcpy`.
 
-<MemoryPackRace lang="en" />
+<BenchmarkChart chart={['serialize', 'deserialize']} lang="en" />
 
 <Callout type="info" title="The one case MemoryPack wins">
 
@@ -50,7 +50,13 @@ Deserializing `Vector4[10000]` measured 0.85×. Each call allocates a 160 KB arr
 
 </Callout>
 
-Neither library allocates when serializing. When reusing instances, Nino allocates **0 B** and is up to **4.9×** faster than MemoryPack's overwrite mode. Read the [full comparison with MemoryPack](/en/docs/v4/vs-memorypack), including where MemoryPack is still ahead, and the [benchmark tables](/en/docs/v4/perf).
+### Deserialize into Existing Objects
+
+New in v4: deserialize by `ref` into the objects you already have, with any new instances taken from [`[NinoPooled]`](/en/docs/v4/pooling) pools. Against MemoryPack's overwrite mode, Nino is **2.6× faster** on a pooled node and **4.9× faster** on pooled leaves updated in place, and allocates **0 B** where MemoryPack allocates 1,024 B and 12,800 B per call.
+
+<BenchmarkChart chart={['reuse', 'allocation']} lang="en" />
+
+Neither library allocates when serializing, and payloads are the same size (`SimpleClass`: 1,146 bytes in Nino, 1,148 in MemoryPack). Read the [full comparison with MemoryPack](/en/docs/v4/vs-memorypack), including where MemoryPack is still ahead, and the [benchmark tables](/en/docs/v4/perf).
 
 ## What You Get
 
