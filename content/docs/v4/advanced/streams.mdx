@@ -42,19 +42,30 @@ public static class NinoStream
 
     public static T Read<T>(Stream stream)
     {
-        Span<byte> prefix = stackalloc byte[4];
-        stream.ReadExactly(prefix);
+        byte[] prefix = new byte[4];
+        Fill(stream, prefix, 4);
         int length = ReadLength(prefix);
 
         byte[] payload = ArrayPool<byte>.Shared.Rent(length);
         try
         {
-            stream.ReadExactly(payload, 0, length);
+            Fill(stream, payload, length);
             return NinoDeserializer.Deserialize<T>(payload.AsSpan(0, length));
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(payload);
+        }
+    }
+
+    // Stream.ReadExactly does the same on .NET 7+; this loop runs everywhere, including Unity
+    private static void Fill(Stream stream, byte[] buffer, int count)
+    {
+        for (int read = 0; read < count; )
+        {
+            int n = stream.Read(buffer, read, count - read);
+            if (n == 0) throw new EndOfStreamException();
+            read += n;
         }
     }
 
@@ -94,13 +105,13 @@ public static async ValueTask WriteAsync<T>(Stream stream, T value, NinoArrayBuf
 public static async ValueTask<T> ReadAsync<T>(Stream stream, CancellationToken ct = default)
 {
     byte[] prefix = new byte[4];
-    await stream.ReadExactlyAsync(prefix, ct);
+    await FillAsync(stream, prefix, 4, ct);
     int length = ReadLength(prefix);
 
     byte[] payload = ArrayPool<byte>.Shared.Rent(length);
     try
     {
-        await stream.ReadExactlyAsync(payload.AsMemory(0, length), ct);
+        await FillAsync(stream, payload, length, ct);
         return NinoDeserializer.Deserialize<T>(payload.AsSpan(0, length));
     }
     finally
@@ -108,12 +119,8 @@ public static async ValueTask<T> ReadAsync<T>(Stream stream, CancellationToken c
         ArrayPool<byte>.Shared.Return(payload);
     }
 }
-```
 
-`Stream.ReadExactly` and `ReadExactlyAsync` are .NET 7 and later. On .NET Standard (and Unity), read in a loop:
-
-```csharp
-static async ValueTask ReadExactlyAsync(Stream stream, byte[] buffer, int count, CancellationToken ct)
+private static async ValueTask FillAsync(Stream stream, byte[] buffer, int count, CancellationToken ct)
 {
     for (int read = 0; read < count; )
     {
@@ -123,6 +130,8 @@ static async ValueTask ReadExactlyAsync(Stream stream, byte[] buffer, int count,
     }
 }
 ```
+
+`Fill` and `FillAsync` run on every target; on .NET 7 and later, `Stream.ReadExactly` and `ReadExactlyAsync` do the same. `stream.Write(span)` and `WriteAsync(memory)` need .NET Standard 2.1 (Unity 2022.3 has it); on .NET Standard 2.0 only, get the array with `MemoryMarshal.TryGetArray(buffer.WrittenMemory, out var segment)` and call `Write(segment.Array, segment.Offset, segment.Count)`.
 
 With `System.IO.Pipelines`, serialize straight into the `PipeWriter` (it is an `IBufferWriter<byte>`) and read frames from the `PipeReader`; see [Reading Frames](/en/docs/v4/advanced/networking#reading-frames) for the complete loop, which decodes each frame the same way as the helper below.
 

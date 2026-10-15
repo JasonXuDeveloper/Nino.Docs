@@ -42,9 +42,9 @@ icon: Cpu
 | `sealed class` | 1 字节：`0` = null，`1` = 实例 |
 | 非密封类、抽象类、接口 | `int32` 类型 ID：`0` = null，否则为运行时类型的 ID |
 
-类型 ID 是类型运行时名称（`Namespace.Outer+Inner`）的 FNV-1a 哈希。生成器和运行时编译的是同一份哈希代码，所以两边算出的 ID 不会不一致。`versionTolerant` 类型在每个继承层级多写一个长度，`keyed` 类型在每个成员前多写键和长度，`trackReferences` 类型多写一个引用头；参见[数据演进](/zh/docs/v4/evolving-data)和[引用追踪](/zh/docs/v4/reference-tracking)。
+类型 ID 是类型运行时名称（`Namespace.Outer+Inner`）的 FNV-1a 哈希。生成器和运行时编译的是同一份哈希代码，所以两边算出的 ID 必然相同。`versionTolerant` 类型在每个继承层级多写一个长度，`keyed` 类型在每个成员前多写键和长度，`trackReferences` 类型多写一个引用头；参见[数据演进](/zh/docs/v4/evolving-data)和[引用追踪](/zh/docs/v4/reference-tracking)。
 
-从数据中读出的每个长度，都会先与剩余字节数比对，再分配内存。因此畸形或恶意的输入无法诱发巨量分配，被截断的数据会抛出异常，而不会越界读取。
+从数据中读出的每个长度，都会先与剩余字节数比对，再分配内存。因此格式错误或恶意构造的输入不会引发超大内存分配，被截断的数据会抛出异常，而不会越界读取。
 
 ## 可移植的设计 [#portable-by-design]
 

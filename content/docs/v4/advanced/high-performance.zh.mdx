@@ -109,7 +109,7 @@ while (TryReceive(out ReadOnlySpan<byte> frame))
 
 - 列表和数组逐个元素复用；字典按键合并。
 - 无法原地填充的类型（位置记录、`init` 或只读成员）会被重新创建。
-- 已有实例被**丢弃**时（数据中为 `null`、列表变短、某个键消失、多态类型改变），它会恰好一次交给该槽位的回收器，而不是被悄悄覆盖。正因如此，复用反序列化才能安全地与对象池配合使用；参见 [复用反序列化与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
+- 已有实例被**丢弃**时（数据中为 `null`、列表变短、某个键消失、多态类型改变），该槽位会把它交给回收器（只交一次），而不是悄悄覆盖掉。正因如此，复用反序列化才能安全地与对象池配合使用；参见 [复用反序列化与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
 
 ## 池化新建的对象 [#pool-what-you-create]
 
@@ -171,7 +171,7 @@ Simulate(bullet);
 bullet.ReturnToPool(); // its List<int> stays attached and is reused next time
 ```
 
-同一个实例归还两次会抛出 `InvalidOperationException`。从未归还的实例只是被垃圾回收而已。
+同一个实例归还两次会抛出 `InvalidOperationException`。未归还的实例会被 GC 正常回收。
 
 </Step>
 </Steps>

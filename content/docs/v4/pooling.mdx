@@ -19,7 +19,7 @@ Deserializing a class normally allocates a new object graph on every call. With 
 - **Existing instance of the right type:** populated in place. Lists and arrays reuse their elements by index; dictionaries are merged by key (each value is read into the value its key already maps to, and keys missing from the data are removed).
 - **Types that cannot be assigned after construction** are re-created, and the old instance is dropped.
 
-Whenever an existing instance is dropped (the data holds `null`, a list shrinks, an array is reallocated, a dictionary key is removed, the polymorphic type changes), it is passed **exactly once** to the recycler of the slot's declared type:
+Whenever an existing instance is dropped (the data holds `null`, a list shrinks, an array is reallocated, a dictionary key is removed, the polymorphic type changes), that slot passes it **once** to the recycler of its declared type:
 
 1. the handler registered with `NinoSettings.SetRecycler<T>`, else
 2. `ReturnToPool()` if the instance implements `INinoPooled` (`[NinoPooled]` types, or your own pooled collections implementing the interface), else
@@ -36,7 +36,7 @@ NinoDeserializer.Deserialize(frame2, ref scene); // bullets removed since frame1
 
 <Callout type="warn">
 
-Only register a handler for objects that are exclusively owned by the deserialized object graph. An instance referenced from two slots that both drop it is recycled once per slot.
+Only register a handler for objects that belong to the deserialized object graph alone. Each slot recycles what it drops, so an instance referenced from two slots that both drop it is recycled twice.
 
 </Callout>
 

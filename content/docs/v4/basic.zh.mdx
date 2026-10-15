@@ -174,6 +174,6 @@ object read = NinoDeserializer.Deserialize(buffer.WrittenSpan, typeof(Shape));
 
 ## 无效数据 [#invalid-data]
 
-从数据中读出的每个长度，都会先与剩余字节数比对，再分配内存，因此畸形或恶意数据无法诱发巨量分配。无效数据会抛出 `InvalidOperationException`，消息以 `Nino:` 开头，例如数据被截断（"unexpected end of data"）、长度不可能成立、类型 ID 未知，或类型 ID 不是声明类型的子类型。读取永远不会越过 span 的末尾。
+从数据中读出的每个长度，都会先与剩余字节数比对，再分配内存，因此格式错误或恶意构造的数据不会引发超大内存分配。无效数据会抛出 `InvalidOperationException`，消息以 `Nino:` 开头，例如数据被截断（"unexpected end of data"）、长度不可能成立、类型 ID 未知，或类型 ID 不是声明类型的子类型。读取永远不会越过 span 的末尾。
 
 但如果数据是按**另一个**布局兼容的类型写出的，Nino 无法察觉：字节中不带 schema。请自行为数据加上版本信息（参见[数据演进](/zh/docs/v4/evolving-data)和[存档文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）。

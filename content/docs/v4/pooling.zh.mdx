@@ -17,9 +17,9 @@ icon: Recycle
 
 - **目标为 `null`：** 创建新实例（`[NinoPooled]` 类型从对象池中取，或者通过 `[NinoFactory]` 工厂方法创建）。
 - **已有实例且类型匹配：** 原地填充。列表和数组按索引复用元素；字典按键合并（每个值读入该键当前对应的值中，数据中没有的键会被删除）。
-- **构造之后无法赋值的类型：** 重新创建，丢弃旧实例。
+- **构造后成员无法再赋值的类型：** 重新创建，丢弃旧实例。
 
-每当已有实例被丢弃（数据中为 `null`、列表变短、数组重新分配、字典删除了某个键、多态类型改变），它会**恰好一次**交给该槽位声明类型的回收器：
+每当已有实例被丢弃（数据中为 `null`、列表变短、数组重新分配、字典删除了某个键、多态类型改变），该槽位会把它交给声明类型的回收器，**只交一次**：
 
 1. 通过 `NinoSettings.SetRecycler<T>` 注册的处理函数；否则
 2. 如果实例实现了 `INinoPooled`（`[NinoPooled]` 类型，或你自己实现了该接口的池化集合），调用它的 `ReturnToPool()`；否则
@@ -36,7 +36,7 @@ NinoDeserializer.Deserialize(frame2, ref scene); // bullets removed since frame1
 
 <Callout type="warn">
 
-只为完全由反序列化对象图独占的对象注册处理函数。如果一个实例同时被两个槽位引用，而两个槽位都丢弃了它，它会按槽位各回收一次。
+只有当对象完全归反序列化得到的对象图所有时，才注册处理函数。如果同一个实例被两个槽位引用，而两个槽位都丢弃了它，每个槽位都会回收它一次。
 
 </Callout>
 
@@ -81,7 +81,7 @@ packet.ReturnToPool();                                    // returning it twice 
 - 生成器会添加 `ReturnToPool()`，以及两个需要你实现的 partial 方法：
   - `OnNinoPoolWarmup()` 在该类型第一次被反序列化之前运行一次，返回的实例会直接放入池中（返回 `null` 或空序列则从空池开始）。
   - `OnNinoPoolReturn()` 在 `ReturnToPool()` 时运行：释放 Nino 不会反序列化的状态。
-- 同一个实例归还两次会抛出 `InvalidOperationException`。从未归还的实例只是被垃圾回收而已。
+- 同一个实例归还两次会抛出 `InvalidOperationException`。未归还的实例会被 GC 正常回收。
 - 被 复用反序列化丢弃的实例会自动归还到池中。
 - 对象池是线程安全的：每个线程自己最多保留 64 个实例，共享栈默认最多保留 256 个。可以在启动时通过 `NinoSettings.DefaultPoolMaxRetained` 或 `NinoSettings.SetPoolMaxRetained<T>(int)` 修改。
 - `NinoPool<T>.Shared` 就是这个池本身：`Count` 是共享栈中的实例数（不含各线程自己保留的），`Clear()` 会丢弃所有池化实例：共享栈立即清空，各线程自己的栈在下次使用时清空。
