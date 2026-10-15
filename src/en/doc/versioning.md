@@ -7,32 +7,49 @@ outline: deep
 # Versioning
 
 ## Incompatibility
-Note that these Nino versions are not compatible with their earlier versions, and the generated code may need to be updated accordingly.
+These Nino versions write a binary format that is not compatible with earlier versions, and the generated code may change accordingly. Data written by an older version cannot be read by them (see [below](#what-if-i-really-want-to-deserialize-the-old-data-with-the-new-version) for a workaround).
 
-- `v3.0.0`
-  
-  We obsoleted the v2 implementation and rewrite the entire project, so the generated code will be different from the v2 version.
+- `v4.0.0`
 
-- `v3.0.3`
-  
-  We fixed the issue of polymorphic unmanaged structs, so the generated code will be different from the v3.0.0 version.
+  A rewrite of the runtime and the source generator. **The binary format is not compatible with v3 or the earlier v4 betas/previews**, and the public API changed. Main changes:
+  - `NinoSerializer` / `NinoDeserializer` in `Nino.Core` replace the generated `Serializer` / `Deserializer` classes and their extension methods.
+  - New wire format: little-endian, unaligned, padding zeroed, identical bytes on `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0`; type ids are FNV-1a hashes of the runtime type name.
+  - Per-type options on `[NinoType]`: `versionTolerant`, `keyed`, `trackReferences`, `allowInheritance`. Subtypes inherit `[NinoType]`.
+  - Ref deserialization into existing instances with recycling, `[NinoPooled]` pools, `[NinoRefDeserialization]` factories and `NinoSettings`.
+  - User collections, `PriorityQueue`, `Nino.Immutable`, pluggable formatters (`[assembly: NinoFormatter]`, `[NinoCustomFormatter]`).
+  - A truly incremental generator, analyzers with code fixes, and interceptors on the .NET 9+ SDK.
 
-- `v3.2.0`
-  
-  We added the ability to modify the data structure of a type and still be able to deserialize the old data serialized by the old data structure (including modifying the data structure of list elements, that can be polymorphic), so the generated code will be different from the v3.0.3 version.
+  See [What's New in v4](/en/doc/whats-new), [v3 vs v4](/en/doc/v3-vs-v4) and [Migrating from v3](/en/doc/migration).
 
 - `v3.3.4`
-  
-  We added alignments to unmanaged fields, which allows a faster memory access when deserializing data. It also inlines the calls to copy unmanaged fields onto the memory, which makes serialization faster. However, this increases the output size and is not compatabile with previous versions.
+
+  We added alignments to unmanaged fields, which allows a faster memory access when deserializing data. It also inlines the calls to copy unmanaged fields onto the memory, which makes serialization faster. However, this increases the output size and is not compatible with previous versions.
+
+- `v3.2.0`
+
+  We added the ability to modify the data structure of a type and still be able to deserialize the old data serialized by the old data structure (including modifying the data structure of list elements, that can be polymorphic), so the generated code will be different from the v3.0.3 version.
+
+- `v3.0.3`
+
+  We fixed the issue of polymorphic unmanaged structs, so the generated code will be different from the v3.0.0 version.
+
+- `v3.0.0`
+
+  We obsoleted the v2 implementation and rewrote the entire project, so the generated code will be different from the v2 version.
 
 
-## Migrating from Nino v2
-If you are migrating from Nino v2, the only thing you need to do is to update to the latest version of Nino, then change the namespace of the generated code from `AssemblyName_Nino` to `AssemblyName.NinoGen`.
+## Migrating
+- **From Nino v3:** see [Migrating from v3](/en/doc/migration).
+- **From Nino v2 to v3:** update to v3, then change the namespace of the generated code from `AssemblyName_Nino` to `AssemblyName.NinoGen`. To go on to v4, follow the v3 migration guide afterwards.
 
 ## What if I really want to deserialize the old data with the new version?
 
-If you really want to deserialize the old data with the new version, please follow the steps below:
+Formats are not converted automatically. To read data written by an older version, follow the steps below:
 
-1. **Copy** the old generated code (particularlly the **old deserializer** with its **dependencies**) to the new project, change a namespace so no one gets confused.
+1. **Keep** the old version's deserializer. Within v3 releases, **copy** the old generated code (particularly the **old deserializer** with its **dependencies**) into the new project and change its namespace so no one gets confused. For data written by v3 and read by v4, the v3 generated code depends on v3's `Nino.Core`, so keep it in a separate converter (see [Converting v3 data](/en/doc/migration#converting-v3-data)).
 2. **Upgrade** to the **desired version** of Nino, so that a **new** serializer and deserializer are **generated**.
-3. Use the **old deserializer** to deserialize the **old data**, then use the **new serializer** to serialize the data again. If this is about game **checkpoints**, you can distinguish old and new data by having a **header** for the checkpoint data if the data is using a newer version of Nino (i.e. save the data with the newer Nino and add a header to the data before saving the checkpoint, so the next time by reading the **header implies** the program should use the **newer deseiralizer** to deserialize the data), otherwise **fallback** to deserialize it with the **old**, hard-copied **deserializer**.
+3. Use the **old deserializer** to deserialize the **old data**, then use the **new serializer** to serialize the data again. If this is about game **checkpoints**, you can distinguish old and new data by having a **header** for the checkpoint data if the data is using a newer version of Nino (i.e. save the data with the newer Nino and add a header to the data before saving the checkpoint, so the next time by reading the **header implies** the program should use the **newer deserializer** to deserialize the data), otherwise **fallback** to deserialize it with the **old**, hard-copied **deserializer**.
+
+::: tip
+From v4 on, consider `[NinoType(versionTolerant: true)]` or `[NinoType(keyed: true)]` for long-lived data such as save games, so that future changes to your own types do not require a conversion step. See [Version Tolerance](/en/doc/advanced#version-tolerance).
+:::

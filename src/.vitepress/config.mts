@@ -7,6 +7,9 @@ let map = {
     zh: {
         home: '首页',
         doc: '使用文档',
+        whats_new: 'v4 新特性',
+        v3_vs_v4: 'v3 与 v4 对比',
+        migration: '从 v3 迁移',
         start: '快速开始',
         types: '类型系统',
         basic: '基础用法',
@@ -19,6 +22,9 @@ let map = {
     en: {
         home: 'Home',
         doc: 'Documentation',
+        whats_new: "What's New in v4",
+        v3_vs_v4: 'v3 vs v4',
+        migration: 'Migrating from v3',
         start: 'Quick Start',
         types: 'Type System',
         basic: 'Basic Usage',
@@ -36,11 +42,14 @@ function getNav(locale: string) {
         {
             text: map[locale]['doc'],
             items: [
+                { text: map[locale]['whats_new'], link: `/${locale}/doc/whats-new` },
+                { text: map[locale]['v3_vs_v4'], link: `/${locale}/doc/v3-vs-v4` },
+                { text: map[locale]['migration'], link: `/${locale}/doc/migration` },
                 { text: map[locale]['start'], link: `/${locale}/doc/start` },
-                { text: map[locale]['versioning'], link: `/${locale}/doc/versioning` },
-                { text: map[locale]['types'], link: `/${locale}/doc/types` },
                 { text: map[locale]['basic'], link: `/${locale}/doc/basic` },
+                { text: map[locale]['types'], link: `/${locale}/doc/types` },
                 { text: map[locale]['advanced'], link: `/${locale}/doc/advanced` },
+                { text: map[locale]['versioning'], link: `/${locale}/doc/versioning` },
                 { text: map[locale]['limit'], link: `/${locale}/doc/limit` }
             ]
         },
@@ -51,8 +60,9 @@ function getNav(locale: string) {
             ]
         },
         {
-            text: 'v3.x',
+            text: 'v4.x',
             items: [
+                { text: 'v3.x', link: 'https://v3.nino.xgamedev.net' },
                 { text: 'v2.x', link: 'https://v2.nino.xgamedev.net' }
             ]
         }
@@ -74,24 +84,36 @@ function getSidebar(locale: string) {
             text: map[locale]['doc'],
             items: [
                 {
+                    text: map[locale]['whats_new'],
+                    link: `/${locale}/doc/whats-new`
+                },
+                {
+                    text: map[locale]['v3_vs_v4'],
+                    link: `/${locale}/doc/v3-vs-v4`
+                },
+                {
+                    text: map[locale]['migration'],
+                    link: `/${locale}/doc/migration`
+                },
+                {
                     text: map[locale]['start'],
                     link: `/${locale}/doc/start`
-                },
-                {
-                    text: map[locale]['versioning'],
-                    link: `/${locale}/doc/versioning`
-                },
-                {
-                    text: map[locale]['types'],
-                    link: `/${locale}/doc/types`
                 },
                 {
                     text: map[locale]['basic'],
                     link: `/${locale}/doc/basic`
                 },
                 {
+                    text: map[locale]['types'],
+                    link: `/${locale}/doc/types`
+                },
+                {
                     text: map[locale]['advanced'],
                     link: `/${locale}/doc/advanced`
+                },
+                {
+                    text: map[locale]['versioning'],
+                    link: `/${locale}/doc/versioning`
                 },
                 {
                     text: map[locale]['limit'],

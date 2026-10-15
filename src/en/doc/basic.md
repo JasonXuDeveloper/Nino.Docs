@@ -4,88 +4,168 @@ lang: en
 outline: deep
 ---
 # Basic Usage
-This page describes the basic usage of Nino, including how to serialize and deserialize data.
+This page describes the basic usage of Nino: serializing and deserializing values with `NinoSerializer` and `NinoDeserializer` (namespace `Nino.Core`).
 
+::: info
+Every method of `NinoSerializer` and `NinoDeserializer` is **thread safe** and can be called concurrently without locking. Per-call state (scratch buffers, reference tables) is kept per thread, and no hot path writes shared memory.
+:::
 
 ## Serialization
+
+### API
+
+```csharp
+// Into a new byte array
+byte[] NinoSerializer.Serialize<T>(T value);
+
+// Into any IBufferWriter<byte>
+void NinoSerializer.Serialize<T>(T value, IBufferWriter<byte> bufferWriter);
+
+// With an existing Writer (for custom formatters and advanced scenarios)
+void NinoSerializer.Serialize<T>(T value, ref Writer writer);
+
+// Boxed values, when the type is only known at runtime
+byte[] NinoSerializer.Serialize(object value);    // as value.GetType(); value must not be null
+void NinoSerializer.SerializeBoxed(object value, IBufferWriter<byte> bufferWriter, Type type);
+void NinoSerializer.SerializeBoxed(object value, ref Writer writer, Type type);
+```
+
+`T` can be any [serializable type](/en/doc/types): a `[NinoType]`, a primitive, a string, a collection, and so on.
 
 ### Standard Usage
 
 ```csharp
-byte[] Serializer.Serialize(NinoSerializableType val);
-void Serializer.Serialize(NinoSerializableType val, IBufferWriter<byte> bufferWriter);
-```
-
-Example:
-
-```csharp
 ObjClass obj = new ObjClass();
-byte[] byteArr = Serializer.Serialize(obj);
-//or use extension method
-byteArr = obj.Serialize();
+byte[] bytes = NinoSerializer.Serialize(obj);
 ```
 
 ### Recommended Usage
-Please note that the `IBufferWriter<byte>` interface is used to write serialized data to a buffer, and you can implement your own `IBufferWriter<byte>` type according to your needs. This way, you don't necessarily need to allocate a new binary array after serialization is complete
-> For example, you can encapsulate an `IBufferWriter<byte>` type with MemoryStream or NetworkStream
->
-> Alternatively, you can use the `ArrayBufferWriter<byte>` class provided by .NET Core, reusing (with calling `ResetWrittenCount()`) an identical `ArrayBufferWriter` across multiple serialization operations avoids unnecessary memory allocation significantly
+`Serialize<T>(value)` allocates one `byte[]` for the result. To avoid that, serialize into a buffer you reuse.
 
-For example:
+`NinoArrayBufferWriter` is Nino's own `IBufferWriter<byte>`, backed by `ArrayPool<byte>.Shared`. Nino writes into it **in place**; any other `IBufferWriter<byte>` (such as .NET's `ArrayBufferWriter<byte>`, or a writer wrapping a `PipeWriter` or `Stream`) receives the bytes with one extra copy at the end.
 
 ```csharp
-ObjClass obj = new ObjClass();
-ArrayBufferWriter<byte> bufferWriter = new ArrayBufferWriter<byte>();
-Serializer.Serialize(obj, bufferWriter);
-//re-serialize it using extension method
-bufferWriter.ResetWrittenCount(); //reset the written count
-obj.Serialize(bufferWriter); //serialize again, this time no memory allocation will be performed
+var buffer = new NinoArrayBufferWriter();
+
+NinoSerializer.Serialize(obj, buffer);
+ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // or buffer.WrittenMemory
+// ... send or store the bytes ...
+
+buffer.ResetWrittenCount();                    // reuse the same buffer
+NinoSerializer.Serialize(obj, buffer);         // no allocation this time
 ```
+
+::: warning
+`NinoArrayBufferWriter` itself is **not** thread safe: use one instance per thread (or per operation). Call `Dispose()` when you no longer need it to return its array to the pool.
+:::
+
+::: info
+The same applies to `ArrayBufferWriter<byte>`: reuse one instance and call `ResetWrittenCount()` between operations.
+:::
+
+### Using a Writer
+
+`Writer` is a `ref struct` that writes into a `NinoArrayBufferWriter`. It is useful to write several values back to back, or inside a [custom formatter](/en/doc/advanced#custom-formatters):
+
+```csharp
+var buffer = new NinoArrayBufferWriter();
+var writer = new Writer(buffer);
+NinoSerializer.Serialize(header, ref writer);
+NinoSerializer.Serialize(body, ref writer);
+writer.Flush(); // commits the written bytes to buffer.WrittenCount (Dispose() does the same)
+```
+
+::: info
+When you create the `Writer` yourself and serialize types with `trackReferences`, call `writer.ReleaseReferences()` once the logical call is done; the top-level `NinoSerializer` overloads that create their own writer do this for you.
+:::
 
 
 ## Deserialization
 
+### API
+
 ```csharp
-void Deserializer.Deserialize(ReadOnlySpan<byte> data, out NinoSerializableType value);
+// A new value
+T NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data);
+
+// Into an existing value, reusing its instances
+void NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data, ref T value);
+void NinoDeserializer.DeserializeRef<T>(ref T value, ReadOnlySpan<byte> data); // same as above
+
+// With an existing Reader
+T NinoDeserializer.Deserialize<T>(ref Reader reader);
+void NinoDeserializer.Deserialize<T>(ref T value, ref Reader reader);
+void NinoDeserializer.DeserializeRef<T>(ref T value, ref Reader reader);        // same as above
+
+// Boxed values, when the type is only known at runtime
+object NinoDeserializer.Deserialize(ReadOnlySpan<byte> data, Type type);
+void NinoDeserializer.Deserialize(ReadOnlySpan<byte> data, Type type, ref object value);
+void NinoDeserializer.DeserializeBoxed(ref object value, ref Reader reader, Type type);
 ```
 
-> The data can not only be passed as `byte[]`, but also as `ArraySegment<byte>` or `Span<byte>`, or `Memory<byte>.Span`
+> The data can be passed as `byte[]`, `ArraySegment<byte>`, `Span<byte>`, `Memory<byte>.Span` or anything else convertible to `ReadOnlySpan<byte>`.
 
+::: info
+When you create the `Reader` yourself (`new Reader(span)`) and read types with `trackReferences`, call `reader.ReleaseReferences()` when done, as with `Writer`.
+:::
 
 ### Standard Usage
 ```csharp
-//assuming byteArr is byte[]
-Deserializer.Deserialize(byteArr, out ObjClass obj);
+// assuming bytes is byte[]
+ObjClass obj = NinoDeserializer.Deserialize<ObjClass>(bytes);
+
+// a value serialized with NinoSerializer.Serialize(object)
+object boxed = NinoDeserializer.Deserialize(bytes, typeof(ObjClass));
 ```
 
-### Recommended Usage
+### Deserializing into an Existing Value
+Pass an existing value by `ref` and Nino populates it in place, reusing the instance and its nested objects, lists, arrays and dictionaries where it can. Pass `null`/`default` and a new value is created.
+
 ```csharp
-//assuming data is ReadOnlySequence<byte> from network, i.e. we are using Pipeline
-ReadOnlySequence<byte> data = xxxxx;
-ObjClass obj;
-//If the data is in a single contiguous memory block, we can pass in Span<byte> directly
-if(data.IsSingleSegment)
+ObjClass obj = null;
+foreach (var message in messages)
 {
-  Span<byte> dataSpan = data.FirstSpan;
-  Deserializer.Deserialize(dataSpan, out obj);
-}
-//If the data is not in a single contiguous memory block, we need to copy it to a single contiguous memory block first
-else
-{
-  if(data.Length <= 1024)
-  {
-    //Allocate on the stack
-    Span<byte> stackMemory = stackalloc byte[(int)data.Length];
-    data.CopyTo(stackMemory);
-    Deserializer.Deserialize(stackMemory, out obj);
-  }
-  else
-  {
-    //Allocate on the heap, use object pool
-    byte[] arr = ArrayPool<byte>.Shared.Rent((int)data.Length);
-    data.CopyTo(arr);
-    Deserializer.Deserialize(arr, out obj);
-    ArrayPool<byte>.Shared.Return(arr);
-  }
+    // the first call creates obj, later calls reuse it
+    NinoDeserializer.Deserialize(message, ref obj);
+    Handle(obj);
 }
 ```
+
+Instances that are dropped along the way (the data holds `null`, a list shrinks, a dictionary key disappears, the polymorphic type changes) can be returned to an object pool. See [Ref Deserialization and Pooling](/en/doc/advanced#ref-deserialization-and-pooling).
+
+### Recommended Usage
+Deserialize directly from the memory you already have, without copying it into a new `byte[]`:
+
+```csharp
+// assuming data is a ReadOnlySequence<byte> from the network, i.e. we are using System.IO.Pipelines
+ReadOnlySequence<byte> data = xxxxx;
+ObjClass obj;
+// If the data is in a single contiguous memory block, pass the span directly
+if (data.IsSingleSegment)
+{
+    obj = NinoDeserializer.Deserialize<ObjClass>(data.FirstSpan);
+}
+// Otherwise, copy it to a single contiguous memory block first
+else
+{
+    if (data.Length <= 1024)
+    {
+        // Allocate on the stack
+        Span<byte> stackMemory = stackalloc byte[(int)data.Length];
+        data.CopyTo(stackMemory);
+        obj = NinoDeserializer.Deserialize<ObjClass>(stackMemory);
+    }
+    else
+    {
+        // Rent from the array pool
+        byte[] arr = ArrayPool<byte>.Shared.Rent((int)data.Length);
+        data.CopyTo(arr);
+        obj = NinoDeserializer.Deserialize<ObjClass>(arr.AsSpan(0, (int)data.Length));
+        ArrayPool<byte>.Shared.Return(arr);
+    }
+}
+```
+
+::: info
+Every length read from the payload is validated against the remaining bytes before anything is allocated, so malformed or hostile input cannot trigger huge allocations. Truncated data throws an `InvalidOperationException` ("unexpected end of data") instead of reading past the end.
+:::
