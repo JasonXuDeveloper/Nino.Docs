@@ -10,10 +10,10 @@ Nino v4 与 Nino v3 **3.3.13**（v3 的最后一个版本）以及 [MemoryPack](
 
 | | |
 | --- | --- |
-| CPU | Intel Xeon 2.80 GHz，4 核，AVX-512 |
+| CPU | 运行时：Intel Xeon 2.10 GHz，4 核，AVX-512；构建耗时：Intel Xeon 2.80 GHz，4 核 |
 | 操作系统 | Ubuntu 24.04 |
 | 运行时 | .NET 10.0.13（SDK 10.0.402），服务器 GC |
-| 工具 | BenchmarkDotNet 0.15.2，15 次迭代（标 * 的行以 20 次迭代重新运行） |
+| 工具 | BenchmarkDotNet 0.15.2，5 次预热、15 次迭代，四个测试类在同一次运行中完成 |
 | 项目 | [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.Benchmark)（运行时），[`src/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.GeneratorBenchmark)（构建时间） |
 
 ## 构建时间与生成代码 [#build-time-and-generated-code]
@@ -58,7 +58,7 @@ v4 与 MemoryPack 在同一次运行中。数据大小基本相同（`SimpleClas
 
 <BenchmarkChart chart="serialize" lang="zh" table={false} />
 
-`SimpleStruct` 有 4 字节填充。v4 会将其清零，因此输出是确定性的；v3 和 MemoryPack 会原样拷贝填充中的内容。借助掩码 SIMD 拷贝，这几乎没有可测量的开销。
+`SimpleStruct` 有 4 字节填充。v4 会将其清零，因此输出是确定性的；v3 和 MemoryPack 会原样拷贝填充中的内容。单个值只需一两次内联的常量写入；`SimpleStruct[100]`（1.6 KB）的掩码拷贝比普通 `memcpy` 多约 5 ns，所以 v4 在这一项落后。没有填充的结构体（如 `Vector4[10000]`）与另外两者一样是一次整块拷贝。
 
 ### 反序列化（新实例） [#deserialize]
 
@@ -74,7 +74,7 @@ v4 与 MemoryPack 在同一次运行中。数据大小基本相同（`SimpleClas
 
 ### 反序列化到已有实例（对象池） [#pooling]
 
-Nino 可以反序列化到已有的对象图（`ref` 反序列化），并从 `[NinoPooled]` 对象池获取新实例；MemoryPack 则覆盖已有实例。
+Nino 可以反序列化到已有的对象图（复用反序列化），并从 `[NinoPooled]` 对象池获取新实例；MemoryPack 则覆盖已有实例。
 
 <ReuseTable lang="zh" />
 

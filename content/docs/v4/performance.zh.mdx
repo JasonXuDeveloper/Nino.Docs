@@ -65,7 +65,7 @@ static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 ## 内存分配 [#allocation]
 
 - **序列化不分配内存**，唯一的例外是你要求返回的 `byte[]`。序列化到复用的 `NinoArrayBufferWriter`（或任意 `IBufferWriter<byte>`）时，每次调用分配 0 B。
-- **反序列化只分配结果对象**，而这些对象也可以复用：用 `ref` 反序列化到已有实例，并从 `[NinoPooled]` 对象池中获取新实例。复用实例时分配 0 B。参见 [复用反序列化与对象池](/zh/docs/v4/pooling)。
+- **反序列化只分配结果对象**，而这些对象也可以复用：用复用反序列化填充已有实例，并从 `[NinoPooled]` 对象池中获取新实例。复用实例时分配 0 B。参见 [复用反序列化与对象池](/zh/docs/v4/pooling)。
 - 字符串默认使用 UTF-16（一次整块拷贝）。`[NinoUtf8]` 写出的数据更小，但需要转码。
 
 ## 缓冲区 [#buffers]

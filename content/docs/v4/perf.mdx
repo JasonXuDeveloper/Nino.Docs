@@ -10,10 +10,10 @@ Build-time and runtime measurements of Nino v4 against Nino v3 **3.3.13** (the l
 
 | | |
 | --- | --- |
-| CPU | Intel Xeon 2.80 GHz, 4 cores, AVX-512 |
+| CPU | Runtime: Intel Xeon 2.10 GHz, 4 cores, AVX-512; build time: Intel Xeon 2.80 GHz, 4 cores |
 | OS | Ubuntu 24.04 |
 | Runtime | .NET 10.0.13 (SDK 10.0.402), server GC |
-| Harness | BenchmarkDotNet 0.15.2, 15 iterations (rows marked * re-run with 20) |
+| Harness | BenchmarkDotNet 0.15.2, 5 warm-up and 15 measured iterations, all four benchmark classes in one run |
 | Projects | [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.Benchmark) (runtime), [`src/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.GeneratorBenchmark) (build time) |
 
 ## Build Time and Generated Code
@@ -58,7 +58,7 @@ v4 and MemoryPack in the same run. Payload sizes are about the same (`SimpleClas
 
 <BenchmarkChart chart="serialize" lang="en" table={false} />
 
-`SimpleStruct` has 4 bytes of padding. v4 zeroes it, so the output is deterministic; v3 and MemoryPack copy whatever the padding contains. With the masked SIMD copy this costs nothing measurable.
+`SimpleStruct` has 4 bytes of padding. v4 zeroes it, so the output is deterministic; v3 and MemoryPack copy whatever the padding contains. For a single value that is one or two inlined constant stores; for `SimpleStruct[100]` (1.6 KB) the masked copy costs about 5 ns over a plain `memcpy`, which is why v4 is behind there. Structs without padding (`Vector4[10000]`) are one block copy, as in the other two.
 
 ### Deserialize (New Instances)
 
@@ -74,7 +74,7 @@ v4 and MemoryPack in the same run. Payload sizes are about the same (`SimpleClas
 
 ### Deserialize into Existing Instances (Pooling)
 
-Nino deserializes into an existing object graph (`ref` deserialization) and takes new instances from `[NinoPooled]` pools; MemoryPack overwrites existing instances.
+Nino deserializes into an existing object graph (reuse deserialization) and takes new instances from `[NinoPooled]` pools; MemoryPack overwrites existing instances.
 
 <ReuseTable lang="en" />
 

@@ -109,7 +109,7 @@ NinoRegistry.EnsureInitialized(hotUpdate);             // optional: pay the regi
 
 ## 降低帧耗时的技巧 [#frame-time-tips]
 
-- **网络或回放数据不引起 GC 峰值：** 每个 tick 都用 `ref` 反序列化到上一个 tick 的对象中，并给批量创建的类（子弹、事件）加上 `[NinoPooled]`。参见[高性能序列化](/zh/docs/v4/advanced/high-performance)。
+- **网络或回放数据不引起 GC 峰值：** 每个 tick 都用复用反序列化填充上一个 tick 的对象，并给批量创建的类（子弹、事件）加上 `[NinoPooled]`。参见[高性能序列化](/zh/docs/v4/advanced/high-performance)。
 - **每个发送方复用一个 `NinoArrayBufferWriter`** 来写出数据，而不是每帧调用 `Serialize(value)` 分配一个 `byte[]`。
 - **批量数据保持非托管：** `Vector3`、`Color32` 或你自己的非托管 `[NinoType]` 结构体组成的数组，只需一次内存拷贝。
 - **在编辑器中编辑的配置**经常变动：使用 [`keyed: true`](/zh/docs/v4/evolving-data#keyed-members)，策划增加或调整字段时，已有资源也不会损坏。

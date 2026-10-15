@@ -161,8 +161,19 @@ export const V3_RUNTIME: {
   environment: string | null;
   rows: Partial<Record<string, { v3Ns: number; v4Ns: number }>>;
 } = {
-  environment: null,
-  rows: {},
+  environment:
+    'Nino 3.3.13 (NuGet) run directly before and after the v4 run on the same machine (BenchmarkDotNet 0.15.2, .NET 10.0.13, server GC, Intel Xeon 2.10 GHz); v3 is the mean of the two runs.',
+  rows: {
+    'serialize:SimpleClass': { v3Ns: 158.3, v4Ns: 123.34 },
+    'serialize:SimpleClasses': { v3Ns: 22964.99, v4Ns: 15493.56 },
+    'serialize:SimpleStruct': { v3Ns: 1.18, v4Ns: 1.02 },
+    'serialize:SimpleStructs': { v3Ns: 20.89, v4Ns: 25.92 },
+    'serialize:Vectors': { v3Ns: 4443.69, v4Ns: 4381.3 },
+    'deserialize:SimpleClass': { v3Ns: 653.63, v4Ns: 657.59 },
+    'deserialize:SimpleClasses': { v3Ns: 67746.37, v4Ns: 72278.9 },
+    'deserialize:SimpleStructs': { v3Ns: 180.96, v4Ns: 176.42 },
+    'deserialize:Vectors': { v3Ns: 127218.79, v4Ns: 125254.2 },
+  },
 };
 
 function buildCase(op: 'serialize' | 'deserialize', info: CaseInfo) {

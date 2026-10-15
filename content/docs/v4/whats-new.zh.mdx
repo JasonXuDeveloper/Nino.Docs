@@ -14,11 +14,13 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 
 </Callout>
 
-## 比 v3 更快 [#faster-than-v3]
+## 序列化比 v3 更快 [#faster-than-v3]
 
 对比对象是 v3 的最后一个版本 **3.3.13**，与 v4 在同一台机器上先后测量。
 
 <BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="zh" />
+
+类的序列化明显更快。反序列化与 v3 持平：它主要花在分配结果对象上，而 v4 同时还做了引用追踪、复用反序列化和数据校验。带填充字节的结构体数组序列化慢几纳秒，因为 v4 会把填充清零，保证输出确定。
 
 ## 构建更快 [#faster-to-build]
 
@@ -48,7 +50,7 @@ v3 编译生成代码要 636 秒，v4 只要 2.2 秒（**快 289 倍**），生�
 
 ### 反序列化到已有对象 [#deserialize-into-existing-objects]
 
-v4 新增：通过 `ref` 反序列化到已有的对象中，需要新实例时从 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池中取。与 MemoryPack 的覆盖模式相比，Nino 最高**快 <BenchValue k="reuse.max" />**；池化路径上每次调用分配 **0 B**，而 MemoryPack 每次调用都要分配（具体数字见图表）。
+v4 新增：复用反序列化，把数据填充到已有的对象中，需要新实例时从 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池中取。与 MemoryPack 的覆盖模式相比，Nino 最高**快 <BenchValue k="reuse.max" />**；池化路径上每次调用分配 **0 B**，而 MemoryPack 每次调用都要分配（具体数字见图表）。
 
 <BenchmarkChart chart={['reuse', 'allocation']} lang="zh" />
 
