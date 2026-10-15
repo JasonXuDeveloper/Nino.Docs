@@ -338,9 +338,7 @@ function v3Rows(zh: boolean): Row[] {
       note: types(buildLarge.types),
       ratio: formatBuildRatio(emit.ratio),
       unit: zh ? '更快' : 'faster',
-      body: (
-        <Before big v3={minutes(emit.v3n, zh)} v4={seconds(emit.v4, zh)} />
-      ),
+      body: <Before big v3={minutes(emit.v3n, zh)} v4={seconds(emit.v4, zh)} />,
     },
     {
       label: zh ? '生成的源码' : 'Generated source',
@@ -357,10 +355,7 @@ function v3Rows(zh: boolean): Row[] {
       ratio: formatBuildRatio(generator.ratio),
       unit: zh ? '更快' : 'faster',
       body: (
-        <Before
-          v3={seconds(generator.v3, zh)}
-          v4={seconds(generator.v4, zh)}
-        />
+        <Before v3={seconds(generator.v3, zh)} v4={seconds(generator.v4, zh)} />
       ),
     });
   return rows;
