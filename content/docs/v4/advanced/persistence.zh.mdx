@@ -50,6 +50,8 @@ public struct GridPos            // 按位置的原始结构体：永远不要�
 }
 ```
 
+之后的更新新增的字段，在旧存档里是不存在的。读取时它保留构造函数赋予的值，所以请给新字段一个合理的初始值：给 `SaveGame` 加上 `public int Difficulty = 1;` 之后，所有旧存档读进来都是普通难度，而不是 `0`。
+
 <Callout type="warn">
 
 键控成员靠**成员名**的哈希识别。给字段改名时，请用 `[NinoFormerName]` 保留旧名称（参见[字段改名](#rename-a-field)）；否则改名相当于“删掉一个、新增一个”，旧值不会读进来。*类型*改名请在类型上使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。

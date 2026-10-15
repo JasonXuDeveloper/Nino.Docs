@@ -10,30 +10,37 @@ icon: GitFork
   }}
 />
 
-Nino 会写入值的运行时类型，所以声明为基类或接口的值，读回来仍是它真正的类型：
+Nino 会写入值的运行时类型，所以声明为基类或接口的值，读回来仍是它真正的类型。配置表里一个技能的效果列表、回放中的事件、网络协议中的各种消息，都是这种情况：声明的是一个类型，实际是许多具体类型。
 
-```csharp
+```csharp title="Effects.cs"
 [NinoType] // [!code highlight]
-public class BaseClass
+public abstract class Effect
 {
-  public int Id;
+    public float Duration;
 }
 
-public class DerivedClass : BaseClass   // inherits [NinoType]
+public sealed class Damage : Effect   // inherits [NinoType]
 {
-  public string Name;
+    public int Amount;
 }
+
+public sealed class Heal : Effect
+{
+    public int Amount;
+}
+
+public sealed class Stun : Effect { }
 ```
 
 ```csharp
-var list = new List<BaseClass>
+var fireball = new List<Effect>
 {
-    new BaseClass { Id = 1 },
-    new DerivedClass { Id = 2, Name = "Nino" }
+    new Damage { Amount = 40 },
+    new Stun { Duration = 1.5f },
 };
-byte[] bytes = NinoSerializer.Serialize(list);
-List<BaseClass> result = NinoDeserializer.Deserialize<List<BaseClass>>(bytes);
-// result[0] is a BaseClass, result[1] is a DerivedClass
+byte[] bytes = NinoSerializer.Serialize(fireball);
+List<Effect> effects = NinoDeserializer.Deserialize<List<Effect>>(bytes);
+// effects[0] is a Damage, effects[1] is a Stun
 ```
 
 <Callout type="info">
@@ -131,7 +138,7 @@ Nino 采用混合分派：
 
 ## 其他程序集中的子类型 [#subtypes-in-other-assemblies]
 
-无论子类型声明在哪里，Nino 都能自动找到，包括之后才加载的程序集（插件、HybridCLR 热更新 DLL）：遇到未知的类型 ID 时，Nino 会先查找新加载程序集的注册表，找不到才报错。不需要任何注册调用。子类型所在的程序集必须引用 `Nino.Core`，这样源生成器才会在那里运行；如果类型 ID 对应的类型不在任何已加载的程序集中，会抛出 `InvalidOperationException`。
+无论子类型声明在哪里，Nino 都能自动找到，包括之后才加载的程序集（插件、HybridCLR 热更新 DLL）：遇到未知的类型 ID 时，Nino 会先查找新加载程序集的注册表，找不到才报错。不需要任何注册调用。例如，热更新在自己的 DLL 中新增了 `public sealed class Freeze : Effect`：DLL 加载之后，AOT 程序集中的战斗代码读取包含 `Freeze` 的 `List<Effect>`，无需任何改动。子类型所在的程序集必须引用 `Nino.Core`，这样源生成器才会在那里运行；如果类型 ID 对应的类型不在任何已加载的程序集中，会抛出 `InvalidOperationException`。
 
 唯一的例外是：某个封闭泛型子类型（如 `Box<int>`）在进程中只会被**读取**，代码里既不出现它的名字，也从不写入它。这种情况需要在启动时注册：
 

@@ -161,7 +161,7 @@ public static class FrameReader
 
 <Callout type="info">
 
-Nino validates every length inside the payload against the bytes left before allocating, so a malicious frame cannot make it allocate a huge array, and truncated data throws instead of reading past the end. Still cap the frame size yourself, as above, so a peer cannot make the pipe buffer gigabytes.
+Nino validates every length inside the payload against the bytes left before allocating, so a malicious frame cannot make it allocate a huge array, and truncated data throws instead of reading past the end. Still cap the frame size yourself, as above, so a peer cannot make the pipe buffer gigabytes. Nesting depth is not limited, so keep recursive types (a node that holds another node) out of messages a client can send: a deeply nested payload overflows the server's stack. See [Invalid Data](/en/docs/v4/basic#invalid-data).
 
 </Callout>
 
@@ -229,7 +229,7 @@ When clients and servers are not always on the same build, choose the format wit
 | Remove or reorder fields | ✗ | ✗ | ✓ |
 | New message type | old peers cannot read it | old peers cannot read it | old peers cannot read it |
 
-- With `versionTolerant` on the base class (inherited by every message), an old peer skips fields it does not know and a new peer gives missing fields their default.
+- With `versionTolerant` on the base class (inherited by every message), an old peer skips fields it does not know and on a new peer a missing field keeps the value the message's constructor gave it (a field initializer such as `public int Priority = 1;` works as the default for old senders). A reused or pooled message is filled in place, so there a missing field keeps the value of the **previous** message: reset such fields in `OnNinoPoolReturn`, or do not reuse instances while old peers are connected.
 - A peer that receives a **message type it does not know** cannot deserialize it: the call throws an `InvalidOperationException` (unknown type id). Negotiate a protocol version in your handshake and only send new message types to peers that announced support; `NinoTypeId.Of(typeof(T))` gives the id of each message type if you want to exchange the list.
 - If both sides always ship together (a game client and its dedicated server), stay positional: it is the smallest and fastest format.
 

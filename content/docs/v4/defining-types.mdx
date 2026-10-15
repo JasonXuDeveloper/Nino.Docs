@@ -244,20 +244,23 @@ Reordering, inserting or removing members (or changing their indices) breaks dat
 
 ## String Encoding
 
-Strings are written as UTF-16 by default: a length and one block copy, the fastest option. Mark a `string` field or property with `[NinoUtf8]` to write UTF-8 instead, which halves the size of mostly-ASCII text at the cost of transcoding (vectorized by the runtime). The attribute has no effect on members of other types, and both sides must agree: a UTF-8 member cannot be read as UTF-16.
+Strings are written as UTF-16 by default: a length and one block copy, the fastest option. Mark a member with `[NinoUtf8]` to write UTF-8 instead, which halves the size of mostly-ASCII text at the cost of transcoding (vectorized by the runtime). Use it where bytes cost more than CPU: chat and player names sent to many clients, or large text tables on disk. Keep UTF-16 for text that is mostly CJK, which takes 3 bytes per character in UTF-8 instead of 2.
 
 ```csharp
 [NinoType]
 public class ChatMessage
 {
     public int SenderId;
-    [NinoUtf8] public string Text; // [!code highlight]
+    [NinoUtf8] public string Text;                       // [!code highlight]
+    [NinoUtf8] public Dictionary<string, string> Tags;   // keys and values are UTF-8 too
 }
 ```
 
+The attribute applies to every string the member's own formatter writes: the member itself, and the `string` elements, keys, values and tuple items of a collection or tuple member (`List<string>`, `string[]`, `Dictionary<string, int>`, `(string, int)`). Strings inside a nested `[NinoType]` keep that type's own encoding, and on a member that holds no strings the attribute does nothing. Writer and reader must agree: data written as UTF-8 cannot be read by a type that declares the member without `[NinoUtf8]`.
+
 ## Former Name
 
-Non-sealed classes, abstract classes and interfaces are written with a **type id**, a 32-bit hash of the type's full name, so polymorphic values can be read back as the right type. Renaming the type or moving it to another namespace changes the id. Keep reading old data with `[NinoFormerName]`:
+A value stored in a slot declared as a non-sealed class, an abstract class, an interface or `object` is written with the **type id** of its runtime type, a 32-bit hash of that type's full name, so it can be read back as the right type. Renaming the type or moving it to another namespace changes the id, and that includes sealed subtypes such as the message classes sent through a `Message` base. A typical case: you move your protocol classes from `Game.Net` to `Game.Protocol`, while save files or clients from the previous release still use the old ids. Keep reading old data with `[NinoFormerName]`:
 
 ```csharp
 [NinoType]
@@ -278,7 +281,7 @@ A `[NinoType]` struct has no header at all. When it is unmanaged, not `versionTo
 
 ```csharp
 [NinoType]
-public struct Hit          // raw: one 16-byte copy (padding zeroed)
+public struct Hit          // raw: one 16-byte copy, no padding
 {
     public int TargetId;
     public float Damage;
@@ -331,7 +334,7 @@ A closed generic type that a process only **reads** polymorphically (by type id)
 
 ## Inheritance
 
-Subtypes inherit `[NinoType]`, with its options, from their nearest `[NinoType]` base class or interface; put `[NinoType]` on a subtype to give it options of its own. A subtype's own `[NinoType]` replaces the inherited options entirely, so repeat the ones you want to keep: `[NinoType(versionTolerant: true)]` on a subtype of a version-tolerant base. See [Polymorphism](/en/docs/v4/polymorphism).
+Subtypes inherit `[NinoType]`, with its options, from their nearest `[NinoType]` base class or interface; put `[NinoType]` on a subtype to give it options of its own. A subtype's own `[NinoType]` replaces the inherited options, so repeat the ones you want to keep: `[NinoType(versionTolerant: true)]` on a subtype of a version-tolerant base. The one exception is `trackReferences`: a class is tracked when it or any `[NinoType]` base class or interface asks for it, whatever its own attribute says, so a tracked hierarchy stays tracked. See [Polymorphism](/en/docs/v4/polymorphism).
 
 ## Next
 

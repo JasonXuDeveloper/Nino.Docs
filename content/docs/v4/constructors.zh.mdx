@@ -4,39 +4,52 @@ description: Nino 如何创建实例：构造函数、工厂方法、记录与�
 icon: Hammer
 ---
 
-Nino 反序列化每个类型时，都需要知道如何创建它的实例，依次尝试：
+Nino 反序列化每个类型时，都需要知道如何创建它的实例。生成器在编译期按以下顺序选定：
 
 1. 标记了 `[NinoConstructor]` 的构造函数或静态工厂方法（如果有）。
-2. 否则，选用可访问（`public` 或 `internal`）的构造函数中参数最多、且每个参数都能按名称（不区分大小写）对应到某个序列化成员的那个。对记录来说通常就是主构造函数；无参构造函数视为零个参数，同样满足条件。
-3. 结构体最后退回到 `new T()`。
+2. 否则，如果所有序列化成员在构造之后都能赋值：使用可以不传参数调用的构造函数（无参，或所有参数都有默认值）。实例创建后逐个成员填充，[复用反序列化](/zh/docs/v4/pooling)时则直接原地填充已有实例。结构体使用 `new T()`。即使类型还有参数能对上成员的构造函数，这里也优先用无参构造函数。
+3. 否则（有成员是只读、`init` 或 `readonly` 的）：选用可访问（`public` 或 `internal`）的构造函数中参数最多、且每个参数都能按名称（不区分大小写）对应到某个序列化成员的那个。位置记录选中的就是主构造函数。不是参数的成员在调用之后立即赋值。
+4. 结构体最后退回到 `new T()`；类如果以上都不满足，会报错（NINO004）。
 
-`[NinoConstructor]` 的参数是依次传给构造函数的成员名称。不写名称时，按参数名匹配成员：
+所以大多数类什么都不用写：无参构造函数加可写成员就是最快的路径。只有当类型需要**不可变**，或者需要**校验**读到的数据时，才值得为 Nino 写构造函数。例如从配置表加载的道具定义：某一行数据有问题时，应该在加载时就报错，而不是等到对局进行到一半才出问题。
+
+`[NinoConstructor]` 的参数是依次传给构造函数的成员名称，因此构造函数的参数名不必与成员同名。不写名称时，按参数名匹配成员：
 
 <Tabs items={["构造函数", "工厂方法", "主构造函数", "结构体"]}>
 
 <Tab value="构造函数">
 
-```csharp
+```csharp title="ItemDef.cs"
 [NinoType]
-public record SimpleRecord
+public sealed class ItemDef
 {
-    public int Id;
-    public string Name;
-    public DateTime CreateTime;
+    public int Id { get; }
+    public string Name { get; }
+    public int MaxStack { get; }
 
-    public SimpleRecord()
+    // no attribute needed: the parameters match Id, Name and MaxStack by name
+    public ItemDef(int id, string name, int maxStack)
     {
-        Id = 0;
-        Name = string.Empty;
-        CreateTime = DateTime.MinValue;
-    }
-
-    [NinoConstructor(nameof(Id), nameof(Name))] // [!code highlight]
-    public SimpleRecord(int id, string name)
-    {
+        if (maxStack <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxStack)); // a bad config row fails at load time
         Id = id;
         Name = name;
-        CreateTime = DateTime.Now;
+        MaxStack = maxStack;
+    }
+}
+
+[NinoType]
+public sealed class Weapon
+{
+    public int Id { get; }
+    public string Name { get; }
+    public int Damage;                // not a parameter: assigned after the call
+
+    [NinoConstructor(nameof(Id), nameof(Name))] // [!code highlight]
+    public Weapon(int weaponId, string displayName) // names differ, so list the members
+    {
+        Id = weaponId;
+        Name = displayName;
     }
 }
 ```

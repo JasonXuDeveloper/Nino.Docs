@@ -10,30 +10,37 @@ icon: GitFork
   }}
 />
 
-Nino serializes the runtime type of a value, so a value declared as a base class or interface is read back as the type it really is:
+Nino serializes the runtime type of a value, so a value declared as a base class or interface is read back as the type it really is. This is what a skill's list of effects in a config table, the events of a replay, or the messages of a network protocol need: one declared type, many concrete ones.
 
-```csharp
+```csharp title="Effects.cs"
 [NinoType] // [!code highlight]
-public class BaseClass
+public abstract class Effect
 {
-  public int Id;
+    public float Duration;
 }
 
-public class DerivedClass : BaseClass   // inherits [NinoType]
+public sealed class Damage : Effect   // inherits [NinoType]
 {
-  public string Name;
+    public int Amount;
 }
+
+public sealed class Heal : Effect
+{
+    public int Amount;
+}
+
+public sealed class Stun : Effect { }
 ```
 
 ```csharp
-var list = new List<BaseClass>
+var fireball = new List<Effect>
 {
-    new BaseClass { Id = 1 },
-    new DerivedClass { Id = 2, Name = "Nino" }
+    new Damage { Amount = 40 },
+    new Stun { Duration = 1.5f },
 };
-byte[] bytes = NinoSerializer.Serialize(list);
-List<BaseClass> result = NinoDeserializer.Deserialize<List<BaseClass>>(bytes);
-// result[0] is a BaseClass, result[1] is a DerivedClass
+byte[] bytes = NinoSerializer.Serialize(fireball);
+List<Effect> effects = NinoDeserializer.Deserialize<List<Effect>>(bytes);
+// effects[0] is a Damage, effects[1] is a Stun
 ```
 
 <Callout type="info">
@@ -131,7 +138,7 @@ Reading checks that the type in the data really derives from the declared type; 
 
 ## Subtypes in Other Assemblies
 
-Subtypes are found automatically wherever they are declared, including assemblies loaded later (plugins, HybridCLR hot-update DLLs): when a type id is unknown, Nino finds the registries of newly loaded assemblies before failing. There is no registration call. The subtype's assembly must reference `Nino.Core`, so the generator runs there too; an id whose type is in no loaded assembly throws `InvalidOperationException`.
+Subtypes are found automatically wherever they are declared, including assemblies loaded later (plugins, HybridCLR hot-update DLLs): when a type id is unknown, Nino finds the registries of newly loaded assemblies before failing. There is no registration call. For example, a hot update adds `public sealed class Freeze : Effect` in its own DLL: once the DLL is loaded, the battle code in the AOT assembly reads a `List<Effect>` that contains a `Freeze` without any change. The subtype's assembly must reference `Nino.Core`, so the generator runs there too; an id whose type is in no loaded assembly throws `InvalidOperationException`.
 
 The one exception is a closed generic subtype (`Box<int>`) that a process only **reads** and never names in code or writes. Register it at startup:
 

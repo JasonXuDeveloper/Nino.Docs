@@ -19,7 +19,9 @@ public interface INinoFormatter<T>
 `Deserialize` 通过 `ref` 接收当前值：`default` 表示需要创建新值，已有实例则可以复用。格式化器以 `default(TFormatter)` 的形式调用，没有实例状态；需要保存的状态请放在静态字段中。
 
 ## 用于单个成员 [#for-one-member]
-用 `[NinoCustomFormatter]` 指定某个成员使用你的格式化器。格式化器实现的 `INinoFormatter<T>` 必须与成员类型**完全一致**（NINO008）：
+用 `[NinoCustomFormatter]` 指定某个成员使用你的格式化器。格式化器实现的 `INinoFormatter<T>` 必须与成员类型**完全一致**（NINO008）。
+
+典型的例子是回放文件或状态同步流：每一帧记录各个数值的变化量。变化量通常很小，而 `long` 永远占 8 字节。改用 zig-zag 变长整数后，-64 到 63 之间的值只占 1 字节，±8191 以内只占 2 字节：
 
 ```csharp
 /// Writes a long as a zig-zag varint.
@@ -52,10 +54,11 @@ public struct ZigZagLongFormatter : INinoFormatter<long>
 }
 
 [NinoType]
-public class Delta
+public sealed class TickDelta
 {
-    [NinoCustomFormatter(typeof(ZigZagLongFormatter))]
-    public long Value;
+    public int Tick;
+    [NinoCustomFormatter(typeof(ZigZagLongFormatter))] // [!code highlight]
+    public long GoldChange;
 }
 ```
 

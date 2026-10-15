@@ -176,4 +176,6 @@ The boxed overloads resolve the formatter by `Type` (cached after the first call
 
 Every length read from a payload is checked against the bytes left before anything is allocated, so malformed or hostile input cannot trigger huge allocations. Invalid data throws an `InvalidOperationException` whose message starts with `Nino:`: truncated data ("unexpected end of data"), an impossible length, an unknown type id, or a type id that is not a subtype of the declared type. Nothing reads past the end of the span.
 
+Nesting depth is not limited. A recursive type (a node that holds another node, a tree of children) lets a payload nest one level for every few bytes, and a deep enough one overflows the stack when read, which ends the process and cannot be caught. Keep recursive types out of data from untrusted sources, such as messages from game clients.
+
 Nino does not detect data written for a **different** type with a compatible layout: the bytes carry no schema. Version your payloads yourself (see [Evolving Your Data](/en/docs/v4/evolving-data) and the [save file header](/en/docs/v4/advanced/persistence#add-a-file-header) pattern).

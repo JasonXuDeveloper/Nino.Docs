@@ -1,6 +1,6 @@
 ---
 title: Analyzer Diagnostics
-description: "Every diagnostic Nino reports while you type, NINO001 to NINO023, what it means and how to fix it."
+description: "Every diagnostic Nino reports while you type, NINO001 to NINO024, what it means and how to fix it."
 icon: ShieldCheck
 ---
 
@@ -23,7 +23,7 @@ Nino's analyzer ships with the source generator (the `Nino.Generator` package, a
 | [NINO011](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino011) | Warning | Redundant `[NinoIgnore]` with `autoCollect: false` | Remove it | ✅ |
 | [NINO012](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino012) | Error | Member has both `[NinoMember]` and `[NinoIgnore]` | Remove one or both | ✅ |
 | [NINO013](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino013) | Error | Duplicate `[NinoMember]` index | Use the next free index | ✅ |
-| [NINO014](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino014) | Error | Two keyed members hash to the same key | Rename one of them |  |
+| [NINO014](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino014) | Error | Two keyed members (or a member's `[NinoFormerName]`) hash to the same key | Rename one of them, or drop the former name |  |
 | [NINO015](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino015) | Warning | `trackReferences` on a struct is ignored | Remove `trackReferences` | ✅ |
 | [NINO016](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino016) | Error | `trackReferences` on a type re-created from its constructor (e.g. a positional record) | Make the members assignable |  |
 | [NINO017](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino017) | Error | Invalid `[NinoFactory]` method | Make it `public static`, callable without arguments, returning the declaring type |  |
@@ -33,10 +33,11 @@ Nino's analyzer ships with the source generator (the `Nino.Generator` package, a
 | [NINO021](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino021) | Error | `[NinoConstructor]` is `private` or `protected` | Make it `public` or `internal` |  |
 | [NINO022](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino022) | Warning | A non-public base member hidden with `new` cannot be reached; it is skipped | Rename one of the members, or make it public |  |
 | [NINO023](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino023) | Error | A struct serializes no member, so it would be written as zero bytes and a collection of it could not be read back | Serialize a member, or mark the struct `versionTolerant` or `keyed` |  |
+| [NINO024](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino024) | Warning | `[NinoFormerName]` on a member of a type that is not keyed has no effect: positional and version-tolerant types write no member names | Remove it, or make the type `keyed` |  |
 
 See the [diagnostics reference](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md) in the Nino repository for the full explanation of each id.
 
-`[NinoFormerName]` on a member is checked too: a former name that collides with another member of a keyed type is an error, and the attribute on a member of a positional or version-tolerant type, where it has no effect, is a warning. See [Renaming Keyed Members](/en/docs/v4/evolving-data#renaming-keyed-members).
+A member's `[NinoFormerName]`s are keys too, so a former name that is another member's name (or hashes like one) is NINO014. A former name equal to the member's own name is ignored. See [Renaming Keyed Members](/en/docs/v4/evolving-data#renaming-keyed-members).
 
 ## Changing Severities
 

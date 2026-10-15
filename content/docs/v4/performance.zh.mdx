@@ -24,7 +24,7 @@ static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 - **始终开启，无需配置，也不能关闭。** `Nino.Generator` 包中包含面向 Roslyn 4.3、4.8 和 4.12 的三个生成器版本，NuGet 会选择你的编译器能加载的最新版本。4.8 和 4.12 版本会进行拦截，包里的 build props 会自动把 `NinoGen` 加入 `InterceptorsNamespaces` / `InterceptorsPreviewNamespaces`。
 - **取决于编译器，而不是目标框架**：用 .NET 8+ SDK 编译的 `netstandard2.0` 库同样会被拦截。
 - **旧编译器直接走常规路径**，写出的字节相同。Unity 包中附带的是生成器的 Roslyn 4.3 版本，所以 Unity 项目不会拦截。
-- 常规路径本来就直接处理的调用（原始值、原始元素数组），以及泛型代码内部的调用，不会被拦截。
+- 以下调用不会被拦截，因为拦截也没有收益：原始值和原始元素数组（常规路径本来就直接拷贝），在其他程序集中声明的 `[NinoType]`（调用方项目只能通过格式化器缓存访问它的格式化器，与常规调用相同），以及泛型代码内部的调用。
 - 在运行时用 `NinoFormatterCache<T>.Register<TFormatter>()` 注册的格式化器仍然优先，因此拦截调用和常规调用的结果永远一致。
 
 <Callout type="warn">

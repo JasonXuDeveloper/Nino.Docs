@@ -15,7 +15,7 @@ Data outlives code. A save file, a cached asset or a message from an older clien
 | New code reads old data | ✗ | ✓ | ✓ |
 | Old code reads new data | ✗ | ✓ | ✓ |
 | Overhead | none | 4 bytes per hierarchy level | 8 bytes per member, plus 4 per object |
-| Speed | fastest | about the same | somewhat slower than positional (see [Benchmarks](/en/docs/v4/perf)) |
+| Speed | fastest | close to positional: one length per level | slower: a key and length per member, and a key check per member when reading |
 
 The format itself is part of the data: turning `versionTolerant` or `keyed` on or off for a type makes data written before unreadable. Choose before you store anything.
 
@@ -33,19 +33,21 @@ Any change to the member list (adding, removing, reordering, changing an index) 
 
 ## Version Tolerance
 
+Version 1.1 of a game adds a music volume to its settings file. Players still have files written by 1.0:
+
 ```csharp
 [NinoType(versionTolerant: true)] // [!code highlight]
-public class SaveData
+public class Settings
 {
-    public int Id;
-    public string Name;
-    public bool Tutorial; // [!code ++]
+    public float SfxVolume = 1f;
+    public bool Subtitles;
+    public float MusicVolume = 0.8f; // [!code ++]
 }
 ```
 
 Each level of the hierarchy (each `[NinoType]` class from the root down to the type) is written behind its own 4-byte length:
 
-- **Old data, new code:** members missing from the data keep their current value (when deserializing into an existing instance) or their default.
+- **Old data, new code:** members missing from the data keep the value they already have: the existing instance's value when you deserialize into it, otherwise whatever the constructor set, field initializers included. A 1.0 file loaded by 1.1 gets `MusicVolume = 0.8f`, not `0`. Types re-created through a constructor (positional records, get-only members) get `default` for a missing constructor argument, not the parameter's default value.
 - **New data, old code:** bytes the old code does not know are skipped.
 - Members can be appended to the type **or any of its base classes**, and this holds at any nesting depth: inside collections, dictionaries and polymorphic members.
 
@@ -75,7 +77,7 @@ public class EnemyConfig
 
 Each member is written with a **key**, the 32-bit FNV-1a hash of its name computed by the generator, and its length, much like MessagePack's `[Key("name")]` but without writing strings:
 
-- Unknown keys in the data are skipped; members missing from the data keep their current value or their default.
+- Unknown keys in the data are skipped; members missing from the data keep their value, by the same rule as [version tolerance](#version-tolerance) (field initializers apply).
 - Reading first assumes the declaration order, so data written by the same schema is read with one 8-byte compare per unmanaged member; at the first mismatch it falls back to dispatching each key.
 - Two member names of one type (inherited ones included) that hash to the same key are a compile-time error (NINO014), so a collision cannot corrupt data.
 - Keyed structs are never written as raw memory. Polymorphism works as usual: the type id comes before the body.

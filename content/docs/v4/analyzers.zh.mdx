@@ -1,6 +1,6 @@
 ---
 title: 分析器诊断
-description: "Nino 在你编写代码时报告的每一条诊断（NINO001 至 NINO023）：含义与修复方法。"
+description: "Nino 在你编写代码时报告的每一条诊断（NINO001 至 NINO024）：含义与修复方法。"
 icon: ShieldCheck
 ---
 
@@ -23,7 +23,7 @@ Nino 的分析器随源生成器一起发布（`Nino.Generator` 包和 Unity 包
 | [NINO011](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino011) | 警告 | `autoCollect: false` 时 `[NinoIgnore]` 是多余的 | 移除它 | ✅ |
 | [NINO012](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino012) | 错误 | 成员同时标记了 `[NinoMember]` 和 `[NinoIgnore]` | 移除其中一个或两个 | ✅ |
 | [NINO013](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino013) | 错误 | `[NinoMember]` 索引重复 | 改用下一个空闲索引 | ✅ |
-| [NINO014](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino014) | 错误 | 两个键控成员的哈希相同 | 重命名其中一个 |  |
+| [NINO014](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino014) | 错误 | 两个键控成员（或某个成员的 `[NinoFormerName]`）的哈希相同 | 重命名其中一个，或去掉该旧名称 |  |
 | [NINO015](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino015) | 警告 | `trackReferences` 用在结构体上会被忽略 | 移除 `trackReferences` | ✅ |
 | [NINO016](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino016) | 错误 | `trackReferences` 用在需要通过构造函数重新创建的类型上（例如位置记录） | 让成员可以赋值 |  |
 | [NINO017](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino017) | 错误 | `[NinoFactory]` 方法无效 | 改为可无参调用、返回声明类型的 `public static` 方法 |  |
@@ -33,10 +33,11 @@ Nino 的分析器随源生成器一起发布（`Nino.Generator` 包和 Unity 包
 | [NINO021](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino021) | 错误 | `[NinoConstructor]` 是 `private` 或 `protected` 的 | 改为 `public` 或 `internal` |  |
 | [NINO022](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino022) | 警告 | 用 `new` 隐藏的非公开基类成员无法访问，会被跳过 | 重命名其中一个成员，或改为公共成员 |  |
 | [NINO023](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino023) | 错误 | 结构体没有任何成员参与序列化，会被写成 0 字节，由它组成的集合无法读回 | 至少序列化一个成员，或把结构体标记为 `versionTolerant` 或 `keyed` |  |
+| [NINO024](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino024) | 警告 | 非键控类型的成员上的 `[NinoFormerName]` 不起作用：按位置和版本兼容的类型不写成员名 | 删除它，或把类型改为 `keyed` |  |
 
 每条诊断的完整说明见 Nino 仓库中的[诊断参考](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)。
 
-成员上的 `[NinoFormerName]` 同样会被检查：在键控类型中，旧名称与其他成员冲突会报错；在按位置或版本兼容的类型中，这个特性没有作用，会报告警告。参见[重命名键控成员](/zh/docs/v4/evolving-data#renaming-keyed-members)。
+成员的 `[NinoFormerName]` 同样是键，所以旧名称如果是另一个成员的名称（或哈希与之相同），也会报告 NINO014。与成员当前名称相同的旧名称会被忽略。参见[重命名键控成员](/zh/docs/v4/evolving-data#renaming-keyed-members)。
 
 ## 修改严重级别 [#changing-severities]
 

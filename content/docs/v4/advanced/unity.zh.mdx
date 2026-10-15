@@ -74,6 +74,8 @@ Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
 // nothing else to do: types in hotUpdate serialize, including subtypes of AOT base classes
 ```
 
+常见的划分方式是：AOT 主包（启动器、网络层）声明 `Message` 基类，所有帧都按 `Message` 读取；热更新 DLL 声明玩法消息和配置类型。某次更新新增了 `public sealed class EnterDungeon : Message` 之后，只要加载了新的 DLL，主包中的网络代码就能读到它，既不需要注册调用，也不需要重新打主包。
+
 - 把热更新类型放在引用了 `Nino.Core` 的程序集定义中，或者放在通过 NuGet 安装 Nino 的独立 C# 项目中编译，然后照常加载 DLL。
 - 遵循 HybridCLR 自己的 AOT 泛型规则：热更新代码用到了哪些 AOT 程序集中的泛型，就为这些程序集加载补充元数据。
 - 热更新代码运行在 HybridCLR 的解释器中，解释器不会内联调用。正因如此，Nino 生成的代码直接调用 `Nino.Core`，不经过任何包装层。
@@ -105,6 +107,33 @@ public static class NinoStartup
 // after HybridCLR has loaded its supplementary metadata:
 Assembly hotUpdate = Assembly.Load(dllBytes);
 NinoRegistry.EnsureInitialized(hotUpdate);             // optional: pay the registry load now
+```
+
+## 配置表 [#config-tables]
+
+在表格或编辑器中编辑的游戏数据（道具、关卡、掉落表）很适合用 Nino：导出一次 `.bytes` 文件，运行时直接加载，不需要任何解析。把表的类型标记为 `keyed: true`，这样新增或调整列不会让之前导出的文件失效：
+
+```csharp title="ItemTable.cs"
+[NinoType(keyed: true)]
+public sealed class ItemTable
+{
+    public List<ItemRow> Rows;
+}
+
+[NinoType(keyed: true)]
+public sealed class ItemRow
+{
+    public int Id;
+    public string Name;
+    public int Price;
+}
+
+// Editor: export after the table is edited (a menu item, or an import step for your spreadsheets)
+File.WriteAllBytes("Assets/Config/items.bytes", NinoSerializer.Serialize(table));
+
+// Player: .bytes files import as TextAsset
+var asset = Resources.Load<TextAsset>("Config/items");
+ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
 ```
 
 ## 降低帧耗时的技巧 [#frame-time-tips]

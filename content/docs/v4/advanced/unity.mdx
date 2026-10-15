@@ -74,6 +74,8 @@ Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
 // nothing else to do: types in hotUpdate serialize, including subtypes of AOT base classes
 ```
 
+A typical split: the AOT shell (launcher, network layer) declares the `Message` base class and reads every frame as a `Message`; the hot-update DLL declares the gameplay messages and config types. When an update adds `public sealed class EnterDungeon : Message`, the shell's network code reads it as soon as the new DLL is loaded, with no registration call and no rebuilt shell.
+
 - Put hot-update types in an assembly definition that references `Nino.Core`, or build them in a separate C# project that installs Nino from NuGet and load the DLL as usual.
 - Follow HybridCLR's own rules for AOT generics: load supplementary metadata for the AOT assemblies your hot-update code instantiates generics from.
 - Hot-update code runs in HybridCLR's interpreter, which does not inline calls. Nino's generated code calls `Nino.Core` directly without wrapper layers, for this reason.
@@ -105,6 +107,33 @@ public static class NinoStartup
 // after HybridCLR has loaded its supplementary metadata:
 Assembly hotUpdate = Assembly.Load(dllBytes);
 NinoRegistry.EnsureInitialized(hotUpdate);             // optional: pay the registry load now
+```
+
+## Config Tables
+
+Game data authored in spreadsheets or the editor (items, levels, drop tables) is a good fit for Nino: export it to a `.bytes` file once, and load it at runtime without any parsing. Mark the table types `keyed: true`, so that adding or reordering a column does not break files exported before:
+
+```csharp title="ItemTable.cs"
+[NinoType(keyed: true)]
+public sealed class ItemTable
+{
+    public List<ItemRow> Rows;
+}
+
+[NinoType(keyed: true)]
+public sealed class ItemRow
+{
+    public int Id;
+    public string Name;
+    public int Price;
+}
+
+// Editor: export after the table is edited (a menu item, or an import step for your spreadsheets)
+File.WriteAllBytes("Assets/Config/items.bytes", NinoSerializer.Serialize(table));
+
+// Player: .bytes files import as TextAsset
+var asset = Resources.Load<TextAsset>("Config/items");
+ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
 ```
 
 ## Frame-Time Tips

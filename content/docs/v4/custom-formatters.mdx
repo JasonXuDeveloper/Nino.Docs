@@ -19,7 +19,9 @@ public interface INinoFormatter<T>
 `Deserialize` receives the current value by `ref`: `default` means "create a new value", an existing instance may be reused. Formatters are called as `default(TFormatter)`, so they have no instance state; keep any state in static fields.
 
 ## For One Member
-Use `[NinoCustomFormatter]` to serialize a single member with your formatter. The formatter must implement `INinoFormatter<T>` for **exactly** the member type (NINO008):
+Use `[NinoCustomFormatter]` to serialize a single member with your formatter. The formatter must implement `INinoFormatter<T>` for **exactly** the member type (NINO008).
+
+A typical case is a replay file or a state-sync stream that records, per tick, how much each value changed. The deltas are usually tiny, yet a `long` always takes 8 bytes. A zig-zag varint writes values between -64 and 63 in 1 byte and values up to ±8191 in 2:
 
 ```csharp
 /// Writes a long as a zig-zag varint.
@@ -52,10 +54,11 @@ public struct ZigZagLongFormatter : INinoFormatter<long>
 }
 
 [NinoType]
-public class Delta
+public sealed class TickDelta
 {
-    [NinoCustomFormatter(typeof(ZigZagLongFormatter))]
-    public long Value;
+    public int Tick;
+    [NinoCustomFormatter(typeof(ZigZagLongFormatter))] // [!code highlight]
+    public long GoldChange;
 }
 ```
 

@@ -4,39 +4,52 @@ description: "How Nino creates instances: constructors, factory methods, records
 icon: Hammer
 ---
 
-Nino needs a way to create each type it deserializes:
+Nino needs a way to create each type it deserializes. The generator picks one at compile time, in this order:
 
 1. A constructor or static factory method marked `[NinoConstructor]`, if there is one.
-2. Otherwise, the accessible (`public` or `internal`) constructor with the most parameters that all match serialized members by name (ignoring case). For records this is usually the primary constructor; a parameterless constructor matches with zero parameters.
-3. Structs fall back to `new T()`.
+2. Otherwise, if every serialized member can be assigned after construction: a constructor callable without arguments (parameterless, or every parameter optional). The instance is then filled member by member, and [reuse deserialization](/en/docs/v4/pooling) fills an existing instance in place. Structs use `new T()`. A parameterless constructor wins here even when the type also has a constructor whose parameters match members.
+3. Otherwise (some members are get-only, `init`-only or `readonly`): the accessible (`public` or `internal`) constructor with the most parameters that all match serialized members by name, ignoring case. For a positional record this is the primary constructor. Members that are not parameters are set right after the call.
+4. Structs fall back to `new T()`; a class with none of the above is an error (NINO004).
 
-`[NinoConstructor]` takes the names of the serialized members passed as arguments, in order. Without arguments, parameters are matched by name:
+So most classes need nothing: a parameterless constructor and settable members is the fastest path. Write a constructor for Nino when the type should be **immutable** or should **validate** what it reads, for example item definitions loaded from a config table, where a broken row should fail at load time instead of in the middle of a match.
+
+`[NinoConstructor]` takes the names of the serialized members passed as arguments, in order, so parameter names do not have to match. Without arguments, parameters are matched by name:
 
 <Tabs items={["Constructor", "Factory method", "Primary constructor", "Struct"]}>
 
 <Tab value="Constructor">
 
-```csharp
+```csharp title="ItemDef.cs"
 [NinoType]
-public record SimpleRecord
+public sealed class ItemDef
 {
-    public int Id;
-    public string Name;
-    public DateTime CreateTime;
+    public int Id { get; }
+    public string Name { get; }
+    public int MaxStack { get; }
 
-    public SimpleRecord()
+    // no attribute needed: the parameters match Id, Name and MaxStack by name
+    public ItemDef(int id, string name, int maxStack)
     {
-        Id = 0;
-        Name = string.Empty;
-        CreateTime = DateTime.MinValue;
-    }
-
-    [NinoConstructor(nameof(Id), nameof(Name))] // [!code highlight]
-    public SimpleRecord(int id, string name)
-    {
+        if (maxStack <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxStack)); // a bad config row fails at load time
         Id = id;
         Name = name;
-        CreateTime = DateTime.Now;
+        MaxStack = maxStack;
+    }
+}
+
+[NinoType]
+public sealed class Weapon
+{
+    public int Id { get; }
+    public string Name { get; }
+    public int Damage;                // not a parameter: assigned after the call
+
+    [NinoConstructor(nameof(Id), nameof(Name))] // [!code highlight]
+    public Weapon(int weaponId, string displayName) // names differ, so list the members
+    {
+        Id = weaponId;
+        Name = displayName;
     }
 }
 ```

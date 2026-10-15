@@ -24,7 +24,7 @@ The saving is a few nanoseconds per call, which matters most for small values ca
 - **Always on, nothing to configure, no opt-out.** The `Nino.Generator` package contains generator builds for Roslyn 4.3, 4.8 and 4.12; NuGet picks the newest your compiler can load. The 4.8 and 4.12 builds intercept, and the package's build props add `NinoGen` to `InterceptorsNamespaces` / `InterceptorsPreviewNamespaces` for you.
 - **It depends on the compiler, not the target framework**: a `netstandard2.0` library built with the .NET 8+ SDK is intercepted too.
 - **Older compilers simply use the regular path**, which writes the same bytes. The Unity package ships the generator's Roslyn 4.3 build, so Unity projects never intercept.
-- Calls the regular path already handles directly (raw values, arrays of raw elements) and calls inside generic code are left alone.
+- Left alone, because interception would gain nothing: raw values and arrays of raw elements (the regular path already copies them directly), `[NinoType]`s declared in another assembly (the calling project reaches their formatter only through the formatter cache, as the regular call does), and calls inside generic code.
 - A formatter registered at runtime with `NinoFormatterCache<T>.Register<TFormatter>()` still takes precedence, so intercepted and regular calls never disagree.
 
 <Callout type="warn">
