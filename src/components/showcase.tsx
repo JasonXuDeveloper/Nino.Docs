@@ -8,6 +8,12 @@
  * prefers-reduced-motion, nothing animates.
  */
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import {
+  buildLarge,
+  headlineReuse,
+  headlineSerialize,
+  headlineZeroGc,
+} from '@/lib/benchmarks';
 import { cn } from '@/lib/cn';
 import type { Locale } from '@/lib/i18n';
 
@@ -162,25 +168,38 @@ export function StatCards({
   );
 }
 
-/** The four headline numbers of v4 (home page, What's New, docs index). */
+/** The headline numbers of v4 (What's New, docs index), from src/lib/benchmarks.ts */
 export function headlineStats(lang: Locale): Stat[] {
-  return lang === 'zh'
-    ? [
-        { value: '4.3×', label: '序列化比 MemoryPack 快' },
-        { value: '4.9×', label: '反序列化到已有对象更快' },
-        { value: '0 GC', label: '序列化、复用池化对象反序列化零 GC 分配' },
-        { value: '44×', label: '编译比 v3 快' },
-      ]
-    : [
-        { value: '4.3×', label: 'faster serialization than MemoryPack' },
-        { value: '4.9×', label: 'faster deserializing into existing objects' },
-        {
-          value: '0 GC',
-          label:
-            'zero GC allocations when serializing or deserializing into pooled objects',
-        },
-        { value: '44×', label: 'faster compile than v3' },
-      ];
+  const zh = lang === 'zh';
+  const stats: Stat[] = [];
+  if (headlineSerialize)
+    stats.push({
+      value: `${headlineSerialize}×`,
+      label: zh
+        ? '序列化比 MemoryPack 快'
+        : 'faster serialization than MemoryPack',
+    });
+  if (headlineReuse)
+    stats.push({
+      value: `${headlineReuse}×`,
+      label: zh
+        ? '复用池化对象反序列化，比 MemoryPack 覆盖写入快'
+        : "faster deserializing into pooled objects than MemoryPack's overwrite",
+    });
+  if (headlineZeroGc)
+    stats.push({
+      value: '0 GC',
+      label: zh
+        ? '序列化、复用池化对象反序列化零 GC 分配'
+        : 'zero GC allocations when serializing or deserializing into pooled objects',
+    });
+  stats.push({
+    value: `${buildLarge.emit.ratio}×`,
+    label: zh
+      ? `编译比 v3 快（${buildLarge.types.toLocaleString('en-US')} 个类型）`
+      : `faster compile than v3 (${buildLarge.types.toLocaleString('en-US')} types)`,
+  });
+  return stats;
 }
 
 export function ShowcaseHero({ lang = 'en' }: { lang?: Locale }) {

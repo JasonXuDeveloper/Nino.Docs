@@ -48,20 +48,13 @@ v3's compile time grows much faster than the number of types: 3.3× the types to
 
 ## Runtime
 
-v4 and MemoryPack in the same run. The v4 vs v3 column compares the v4 / MemoryPack ratio with the v3 / MemoryPack ratio of a separate run of v3 3.3.13 and MemoryPack on the same machine; v3's benchmarks have no polymorphic cases. Payload sizes are about the same (`SimpleClass`: 1,146 bytes in v4, 1,148 in MemoryPack).
+v4 and MemoryPack in the same run. Payload sizes are about the same (`SimpleClass`: <BenchValue k="payload.v4" /> bytes in v4, <BenchValue k="payload.memorypack" /> in MemoryPack).
+
+<BenchSource lang="en" />
 
 ### Serialize (to a Reused Buffer Writer)
 
-| Case | v4 | MemoryPack | v4 vs MemoryPack | v4 vs v3 |
-| --- | ---: | ---: | ---: | ---: |
-| `SimpleClass` | 151 ns | 450 ns | **2.97× faster** | 1.73× faster |
-| `SimpleClass[100]` | 17.0 µs | 48.7 µs | **2.86× faster** | 1.29× faster |
-| Polymorphic class | 11.5 µs | 31.5 µs | **2.72× faster** | — |
-| Polymorphic class array | 89.6 µs | 388 µs | **4.33× faster** | — |
-| Polymorphic `Foo[]` | 9.9 µs | 31.4 µs | **3.15× faster** | — |
-| `SimpleStruct` (`int` + `DateTime`) | 2.3 ns | 5.8 ns | **2.50× faster** | 1.35× faster |
-| `SimpleStruct[100]` * | 28.6 ns | 30.6 ns | 1.07× faster | on par |
-| `Vector4[10000]` * | 4.06 µs | 4.10 µs | on par | on par |
+<RuntimeTable op="serialize" lang="en" />
 
 <BenchmarkChart chart="serialize" lang="en" table={false} />
 
@@ -69,21 +62,13 @@ v4 and MemoryPack in the same run. The v4 vs v3 column compares the v4 / MemoryP
 
 ### Deserialize (New Instances)
 
-| Case | v4 | MemoryPack | v4 vs MemoryPack | v4 vs v3 |
-| --- | ---: | ---: | ---: | ---: |
-| `SimpleClass` | 964 ns | 1,129 ns | **1.17× faster** | 1.19× faster |
-| `SimpleClass[100]` | 106 µs | 134 µs | **1.26× faster** | 1.22× faster |
-| Polymorphic class * | 36.3 µs | 44.8 µs | **1.23× faster** | — |
-| Polymorphic class array | 406 µs | 562 µs | **1.38× faster** | — |
-| Polymorphic `Foo[]` | 37.0 µs | 43.1 µs | **1.16× faster** | — |
-| `SimpleStruct[100]` * | 295 ns | 295 ns | on par | on par |
-| `Vector4[10000]` * | 173 µs | 147 µs | 0.85× | 0.90× |
+<RuntimeTable op="deserialize" lang="en" />
 
 <BenchmarkChart chart="deserialize" lang="en" table={false} />
 
 <Callout type="info">
 
-`Vector4[10000]` allocates a 160 KB array on the large object heap per call, so it measures gen-2 collections more than either serializer: the two runs gave 0.96× and 0.85× with ±15% error. The copy itself is one `memcpy` in both.
+`Vector4[10000]` allocates a 160 KB array on the large object heap per call, so it measures gen-2 collections more than either serializer and varies between runs. The copy itself is one `memcpy` in both.
 
 </Callout>
 
@@ -91,16 +76,11 @@ v4 and MemoryPack in the same run. The v4 vs v3 column compares the v4 / MemoryP
 
 Nino deserializes into an existing object graph (`ref` deserialization) and takes new instances from `[NinoPooled]` pools; MemoryPack overwrites existing instances.
 
-| Case | Nino new | Nino reusing | MemoryPack new | MemoryPack overwrite |
-| --- | ---: | ---: | ---: | ---: |
-| Pooled node | 873 ns | **280 ns** (0 B) | 952 ns | 727 ns (1,024 B) |
-| Pooled leaves, in place | 5.23 µs | **1.18 µs** (0 B) | 5.38 µs | 5.80 µs (12,800 B) |
-| Pooled leaves, pooled elements | 5.23 µs | 3.82 µs (856 B) | 5.38 µs | 5.80 µs (12,800 B) |
-| Pooled class | 780 ns | 623 ns (1,080 B) | 1,044 ns | 857 ns (1,080 B) |
+<ReuseTable lang="en" />
 
 <BenchmarkChart chart="reuse" lang="en" table={false} />
 
-Neither serializer allocates on the serialize paths above (0 B per call), and deserialization allocates only the result objects.
+Bytes allocated per call are in the chart below and in the [full results](#results).
 
 <BenchmarkChart chart={['allocation', 'payload']} lang="en" />
 
@@ -234,22 +214,4 @@ Serialization writes into a reused buffer writer (`NinoArrayBufferWriter` for Ni
 
 Results are the time taken to serialize and deserialize the above data, the lower the better.
 
-{/* PERF_TABLE */}
-
-{/* Benchmark environment (BenchmarkDotNet summary header) */}
-
-```text
-TBD
-```
-
-{/* One entry per case, mean time in nanoseconds. Drives the bar chart below; leave empty to hide it.
-   e.g. { name: 'SimpleClass · Serialize', nino: 151, memorypack: 450, messagepack: 1700 } */}
-export const benchmarks = [];
-
-| Method | Mean | Error | StdDev | Ratio | RatioSD | Allocated | Payload |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| TBD | | | | | | | |
-
-{/* /PERF_TABLE */}
-
-<BenchChart data={benchmarks} lang="en" />
+<ResultsTable lang="en" />

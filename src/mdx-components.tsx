@@ -10,6 +10,13 @@ import type { MDXComponents } from 'mdx/types';
 import type { ComponentProps, ReactNode } from 'react';
 import { AnchorRedirect } from '@/components/anchor-redirect';
 import { BenchChart } from '@/components/bench-chart';
+import {
+  BenchSource,
+  BenchValue,
+  ResultsTable,
+  ReuseTable,
+  RuntimeTable,
+} from '@/components/bench-data';
 import { BenchmarkChart } from '@/components/charts';
 import { handleBlockFeedback } from '@/components/feedback/actions';
 import { FeedbackBlock } from '@/components/feedback/client';
@@ -27,6 +34,11 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     Accordions,
     BenchChart,
     BenchmarkChart,
+    BenchSource,
+    BenchValue,
+    ResultsTable,
+    ReuseTable,
+    RuntimeTable,
     CountUp,
     File,
     Files,

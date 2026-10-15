@@ -18,11 +18,9 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 
 ## 比 v3 更快 [#faster-than-v3]
 
-与 v3 的最后一个版本 **3.3.13** 在同一台机器上对比。耗时以两次运行共同的基准 MemoryPack（1.0）归一化。
+与 v3 的最后一个版本 **3.3.13** 在同一台机器上与 v4 背靠背对比。
 
 <BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="zh" />
-
-结构体数组（`SimpleStruct[100]`、`Vector4[10000]`）在 v3 中就已经是一次内存拷贝，因此保持持平。
 
 ## 构建更快 [#faster-to-build]
 
@@ -38,23 +36,25 @@ v3 编译生成代码要 636 秒，v4 只要 2.2 秒（**快 289 倍**），生�
 
 ## 比 MemoryPack 更快 [#faster-than-memorypack]
 
-与 MemoryPack 1.21.4 在同一次运行中对比。Nino 在序列化上明显领先，在类和多态对象图的反序列化上领先，在原始数组上持平（两者都是一次 `memcpy`）。
+与 MemoryPack 在同一次运行中对比。Nino 在序列化上明显领先（最高 <BenchValue k="serialize.max" />），在类和多态对象图的反序列化上领先（最高 <BenchValue k="deserialize.max" />），在原始数组上接近（两者都是一次 `memcpy`）。
+
+<BenchSource lang="zh" />
 
 <BenchmarkChart chart={['serialize', 'deserialize']} lang="zh" />
 
-<Callout type="info" title="MemoryPack 唯一胜出的用例">
+<Callout type="info" title="Vector4[10000]">
 
-反序列化 `Vector4[10000]` 测得 0.85 倍。每次调用都会在大对象堆上分配一个 160 KB 的数组，因此主要测量的是第 2 代垃圾回收：两次运行分别为 0.96 倍和 0.85 倍，误差 ±15%。
+反序列化 `Vector4[10000]` 每次调用都会在大对象堆上分配一个 160 KB 的数组，因此主要测量的是第 2 代垃圾回收，结果随运行波动；MemoryPack 在这里可能领先。
 
 </Callout>
 
 ### 反序列化到已有对象 [#deserialize-into-existing-objects]
 
-v4 新增：通过 `ref` 反序列化到你已有的对象中，新实例取自 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池。与 MemoryPack 的覆盖模式相比，Nino 在池化节点上**快 2.6 倍**，在原地更新的池化叶子上**快 4.9 倍**，并且分配 **0 B**，而 MemoryPack 每次调用分配 1,024 B 和 12,800 B。
+v4 新增：通过 `ref` 反序列化到你已有的对象中，新实例取自 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池。与 MemoryPack 的覆盖模式相比，Nino 最高**快 <BenchValue k="reuse.max" />**，并且在池化路径上每次调用分配 **0 B**，而 MemoryPack 每次调用都要分配（数字见图表）。
 
 <BenchmarkChart chart={['reuse', 'allocation']} lang="zh" />
 
-两个库在序列化时都不分配内存，载荷大小也相同（`SimpleClass`：Nino 为 1,146 字节，MemoryPack 为 1,148 字节）。请阅读[与 MemoryPack 的完整对比](/zh/docs/v4/vs-memorypack)（包括 MemoryPack 仍然领先的地方）以及[基准测试表格](/zh/docs/v4/perf)。
+两个库在序列化时都不分配内存，载荷大小也基本相同（`SimpleClass`：Nino 为 <BenchValue k="payload.v4" /> 字节，MemoryPack 为 <BenchValue k="payload.memorypack" /> 字节）。请阅读[与 MemoryPack 的完整对比](/zh/docs/v4/vs-memorypack)（包括 MemoryPack 仍然领先的地方）以及[基准测试表格](/zh/docs/v4/perf)。
 
 ## 你将获得 [#what-you-get]
 

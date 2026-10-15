@@ -46,6 +46,15 @@ Feedback only works on **production**. Preview deployments and `bun run preview`
 
 `public/_routes.json` keeps the old-URL paths out of the functions, so the `public/_redirects` rules (which Pages does not apply to requests that reach a function) still handle them. Pages serves each page at its trailing-slash URL (`/en/docs/v4/start/`) and redirects the bare path there; unknown paths get `404.html` with a 404 status.
 
+## Benchmark data
+
+The v4 runtime numbers (Nino and MemoryPack) come from `src/data/bench-v4.json`. Before every build, `scripts/sync-benchmarks.ts` reads the "Performance Report" that Nino's report workflow adds to each GitHub release, takes the newest `v4.*` release (prereleases included) whose report covers every benchmark the site shows, and rewrites the file. If anything fails (no such release yet, network, rate limit, a table it cannot read) it prints a warning and the build uses the committed file. The report workflow triggers a rebuild through a Pages deploy hook (`DOCS_DEPLOY_HOOK` secret in the Nino repo). Optional: set `GITHUB_TOKEN` on the Pages project to raise the GitHub API rate limit.
+
+```bash
+bun run sync:benchmarks                                              # sync now
+bun scripts/sync-benchmarks.ts --fixture scripts/fixtures/release-body.md  # test the parser
+```
+
 ## Redirects
 
 Old URLs keep working:

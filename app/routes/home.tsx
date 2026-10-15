@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { HomeCompare, HomeStats } from '@/components/home-compare';
+import { headlineSerialize } from '@/lib/benchmarks';
 import { cn } from '@/lib/cn';
 import { getLocale, type Locale } from '@/lib/i18n';
 import { baseOptions, githubUrl } from '@/lib/layout.shared';
@@ -42,8 +43,7 @@ const copy: Record<
 > = {
   en: {
     title: 'Nino - The fastest binary serializer for C#',
-    description:
-      'Nino is a source-generated binary serializer for C#: up to 4.3× faster than MemoryPack, zero GC allocations, for Unity, Godot and .NET servers.',
+    description: `Nino is a source-generated binary serializer for C#: ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack, ` : ''}zero GC allocations, for Unity, Godot and .NET servers.`,
     pill: 'C# binary serializer · v4',
     headline: ['The fastest binary serializer', 'for C#.'],
     sub: 'Source-generated, with zero GC allocations, for Unity, Godot and .NET servers.',
@@ -92,8 +92,7 @@ const copy: Record<
   },
   zh: {
     title: 'Nino - 最快的 C# 二进制序列化库',
-    description:
-      'Nino 是基于源生成器的 C# 二进制序列化库：最高比 MemoryPack 快 4.3 倍，零 GC 分配，适用于 Unity、Godot 与 .NET 服务端。',
+    description: `Nino 是基于源生成器的 C# 二进制序列化库：${headlineSerialize ? `最高比 MemoryPack 快 ${headlineSerialize} 倍，` : ''}零 GC 分配，适用于 Unity、Godot 与 .NET 服务端。`,
     pill: 'C# 二进制序列化库 · v4',
     headline: ['最快的二进制序列化库', '为 C# 而生。'],
     sub: '源生成器实现，零 GC 分配，适用于 Unity、Godot 与 .NET 服务端。',

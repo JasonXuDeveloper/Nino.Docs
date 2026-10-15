@@ -7,11 +7,15 @@ import { Segmented } from '@/components/showcase';
 import {
   build,
   formatBytes,
+  formatTime,
   payload,
   type RuntimeCase,
   reuse,
   reuseSpeedup,
   runtime,
+  serializeAllocatesNothing,
+  sourceNote,
+  V3_RUNTIME,
 } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
 import { BarChart, type BarChartProps, type ChartSeries } from './bar-chart';
@@ -39,7 +43,7 @@ function seriesFor(zh: boolean) {
     mp: { key: 'mp', label: 'MemoryPack', color: 'var(--nino-chart-other)' },
     v3: {
       key: 'v3',
-      label: zh ? 'Nino v3（3.3.13，推算）' : 'Nino v3 (3.3.13, derived)',
+      label: 'Nino v3 (3.3.13)',
       color: 'var(--nino-chart-faint)',
     },
     ninoNew: {
@@ -66,8 +70,8 @@ function seriesFor(zh: boolean) {
 }
 
 const gcNote = {
-  en: '† Vector4[10000] allocates a 160 KB array on the large object heap per call, so it mostly measures gen-2 garbage collections: two runs gave 0.96× and 0.85× with ±15% error. The copy itself is one memcpy in both.',
-  zh: '† Vector4[10000] 每次调用都在大对象堆上分配 160 KB 的数组，因此主要测量的是第 2 代垃圾回收：两次运行分别为 0.96 倍和 0.85 倍，误差 ±15%。拷贝本身在两个库中都是一次 memcpy。',
+  en: '† Vector4[10000] allocates a 160 KB array on the large object heap per call, so it mostly measures gen-2 garbage collections and varies between runs. The copy itself is one memcpy in both.',
+  zh: '† Vector4[10000] 每次调用都在大对象堆上分配 160 KB 的数组，因此主要测量的是第 2 代垃圾回收，结果随运行波动。拷贝本身在两个库中都是一次 memcpy。',
 };
 
 function mpBadge(row: RuntimeCase, zh: boolean) {
@@ -91,8 +95,8 @@ function memoryPackChart(
   const hasGc = rows.some((row) => row.gcBound);
   return {
     title: zh
-      ? `${op === 'serialize' ? '序列化' : '反序列化（新实例）'}：Nino v4 对比 MemoryPack 1.21.4`
-      : `${op === 'serialize' ? 'Serialize' : 'Deserialize (new instances)'}: Nino v4 vs MemoryPack 1.21.4`,
+      ? `${op === 'serialize' ? '序列化' : '反序列化（新实例）'}：Nino v4 对比 MemoryPack`
+      : `${op === 'serialize' ? 'Serialize' : 'Deserialize (new instances)'}: Nino v4 vs MemoryPack`,
     subtitle: zh
       ? '条形为相对 MemoryPack 的耗时（MemoryPack = 1.0），越短越快；数字为实测耗时。'
       : 'Bars show time relative to MemoryPack (MemoryPack = 1.0), shorter is faster; labels are measured times.',
@@ -109,7 +113,7 @@ function memoryPackChart(
       ? '相对耗时（MemoryPack = 1.0）'
       : 'Relative time (MemoryPack = 1.0)',
     tickFormat: rel,
-    footnotes: hasGc ? [zh ? gcNote.zh : gcNote.en] : undefined,
+    footnotes: [sourceNote(zh), ...(hasGc ? [zh ? gcNote.zh : gcNote.en] : [])],
     table: {
       caption: zh ? '数据表' : 'Data table',
       head: zh
@@ -164,6 +168,7 @@ function reuseChart(zh: boolean): BarChartProps {
       ? '相对耗时（MemoryPack 新建 = 1.0）'
       : 'Relative time (MemoryPack, new instances = 1.0)',
     tickFormat: rel,
+    footnotes: [sourceNote(zh)],
     table: {
       caption: zh ? '数据表' : 'Data table',
       head: zh
@@ -193,7 +198,7 @@ function reuseChart(zh: boolean): BarChartProps {
 }
 
 function v3Badge(vsV3: number, zh: boolean) {
-  if (vsV3 === 1)
+  if (Math.abs(vsV3 - 1) < 0.05)
     return { text: zh ? '与 v3 持平' : 'on par with v3', tone: 'par' as const };
   const r = ratioText(vsV3);
   if (vsV3 > 1)
@@ -207,53 +212,46 @@ function v3Badge(vsV3: number, zh: boolean) {
   };
 }
 
-function v3Chart(op: 'serialize' | 'deserialize', zh: boolean): BarChartProps {
+/** Nino v4 vs v3 3.3.13 from V3_RUNTIME; null until it has been measured */
+function v3Chart(
+  op: 'serialize' | 'deserialize',
+  zh: boolean,
+): BarChartProps | null {
   const s = seriesFor(zh);
-  const rows = runtime[op].filter((row) => row.vsV3 !== undefined);
-  const hasGc = rows.some((row) => row.gcBound);
+  const entries = runtime[op].flatMap((row) => {
+    const measured = V3_RUNTIME.rows[`${op}:${row.key}`];
+    return measured ? [{ row, ...measured }] : [];
+  });
+  if (entries.length === 0) return null;
+  const vs = (e: (typeof entries)[number]) => e.v3Ns / e.v4Ns;
   return {
     title: zh
       ? `${op === 'serialize' ? '序列化' : '反序列化'}：Nino v4 对比 v3（3.3.13）`
       : `${op === 'serialize' ? 'Serialize' : 'Deserialize'}: Nino v4 vs v3 (3.3.13)`,
     subtitle: zh
-      ? '耗时以 MemoryPack = 1.0 归一化，越短越快。v3 没有多态用例。'
-      : 'Time normalized to MemoryPack = 1.0, shorter is faster. v3 has no polymorphic cases.',
-    series: [s.v3, s.v4, s.mp],
-    rows: rows.map((row) => {
-      const v4 = row.v4.ns / row.memorypack.ns;
-      const v3 = v4 * (row.vsV3 ?? 1);
-      return {
-        label: caseLabel(row, zh),
-        code: row.code,
-        mark: row.gcBound ? '†' : undefined,
-        values: { v3, v4, mp: 1 },
-        text: { v3: v3.toFixed(2), v4: v4.toFixed(2), mp: '1.00' },
-        badge: v3Badge(row.vsV3 ?? 1, zh),
-        detail: zh
-          ? `Nino v4 ${row.v4.text}，MemoryPack ${row.memorypack.text}`
-          : `Nino v4 ${row.v4.text}, MemoryPack ${row.memorypack.text}`,
-      };
-    }),
-    axisLabel: zh
-      ? '相对耗时（MemoryPack = 1.0）'
-      : 'Relative time (MemoryPack = 1.0)',
+      ? '条形为相对 v3 的耗时（v3 = 1.0），越短越快；数字为同一次运行中的实测耗时。'
+      : 'Bars show time relative to v3 (v3 = 1.0), shorter is faster; labels are measured times from the same run.',
+    series: [s.v4, s.v3],
+    rows: entries.map((e) => ({
+      label: caseLabel(e.row, zh),
+      code: e.row.code,
+      values: { v4: e.v4Ns / e.v3Ns, v3: 1 },
+      text: { v4: formatTime(e.v4Ns), v3: formatTime(e.v3Ns) },
+      badge: v3Badge(vs(e), zh),
+    })),
+    axisLabel: zh ? '相对耗时（v3 = 1.0）' : 'Relative time (v3 = 1.0)',
     tickFormat: rel,
-    footnotes: [
-      zh
-        ? 'v3 条形为推算值：v4 的相对耗时乘以公布的 v4 对比 v3 倍数（v3 与 MemoryPack 在同一台机器上单独运行）。'
-        : 'The v3 bars are derived: the v4 relative time multiplied by the published v4-vs-v3 ratio (v3 and MemoryPack were run separately on the same machine).',
-      ...(hasGc ? [zh ? gcNote.zh : gcNote.en] : []),
-    ],
+    footnotes: V3_RUNTIME.environment ? [V3_RUNTIME.environment] : undefined,
     table: {
       caption: zh ? '数据表' : 'Data table',
       head: zh
-        ? ['用例', 'Nino v4', 'MemoryPack', 'v4 对比 v3']
-        : ['Case', 'Nino v4', 'MemoryPack', 'v4 vs v3'],
-      rows: rows.map((row) => [
-        caseLabel(row, zh),
-        row.v4.text,
-        row.memorypack.text,
-        v3Badge(row.vsV3 ?? 1, zh).text,
+        ? ['用例', 'Nino v4', 'Nino v3', 'v4 对比 v3']
+        : ['Case', 'Nino v4', 'Nino v3', 'v4 vs v3'],
+      rows: entries.map((e) => [
+        caseLabel(e.row, zh),
+        formatTime(e.v4Ns),
+        formatTime(e.v3Ns),
+        v3Badge(vs(e), zh).text,
       ]),
     },
   };
@@ -323,9 +321,14 @@ function allocationChart(zh: boolean): BarChartProps {
     axisLabel: zh ? '每次调用分配的字节数' : 'Bytes allocated per call',
     tickFormat: (value) => (value >= 1000 ? `${value / 1000}K` : String(value)),
     footnotes: [
-      zh
-        ? '序列化：两个库在所有用例中都是每次调用 0 B。反序列化为新实例：两者分配的字节数相同（只有结果对象）。'
-        : 'Serialize: 0 B per call in both libraries, in every case. Deserialize into new instances: both allocate the same bytes (only the result objects).',
+      ...(serializeAllocatesNothing
+        ? [
+            zh
+              ? '序列化：两个库在所有用例中都是每次调用 0 B。'
+              : 'Serialize: 0 B per call in both libraries, in every case.',
+          ]
+        : []),
+      sourceNote(zh),
     ],
     table: {
       caption: zh ? '数据表' : 'Data table',
@@ -341,22 +344,25 @@ function allocationChart(zh: boolean): BarChartProps {
   };
 }
 
-function payloadChart(zh: boolean): BarChartProps {
+function payloadChart(zh: boolean): BarChartProps | null {
   const s = seriesFor(zh);
+  const v4 = payload.v4;
+  const mp = payload.memorypack;
+  if (v4 === null || mp === null) return null;
   return {
     title: zh ? '载荷大小' : 'Payload size',
     subtitle: zh
-      ? '序列化一个 SimpleClass 写出的字节数，两者基本相同。'
-      : 'Bytes written for one SimpleClass: about the same in both.',
+      ? '序列化一个 SimpleClass 写出的字节数。'
+      : 'Bytes written for one SimpleClass.',
     series: [s.v4, s.mp],
     rows: [
       {
         label: payload.name,
         code: true,
-        values: { v4: payload.v4, mp: payload.memorypack },
+        values: { v4: v4, mp: mp },
         text: {
-          v4: formatBytes(payload.v4),
-          mp: formatBytes(payload.memorypack),
+          v4: formatBytes(v4),
+          mp: formatBytes(mp),
         },
       },
     ],
@@ -367,18 +373,12 @@ function payloadChart(zh: boolean): BarChartProps {
       head: zh
         ? ['用例', 'Nino v4', 'MemoryPack']
         : ['Case', 'Nino v4', 'MemoryPack'],
-      rows: [
-        [
-          payload.name,
-          formatBytes(payload.v4),
-          formatBytes(payload.memorypack),
-        ],
-      ],
+      rows: [[payload.name, formatBytes(v4), formatBytes(mp)]],
     },
   };
 }
 
-function chartProps(id: ChartId, zh: boolean): BarChartProps {
+function chartProps(id: ChartId, zh: boolean): BarChartProps | null {
   switch (id) {
     case 'serialize':
     case 'deserialize':
@@ -409,6 +409,17 @@ const tabLabels: Record<ChartId, { en: string; zh: string }> = {
   payload: { en: 'Payload size', zh: '载荷大小' },
 };
 
+/** Shown in place of a chart whose numbers have not been measured yet */
+function Pending({ zh }: { zh: boolean }) {
+  return (
+    <p className="not-prose my-6 rounded-xl border bg-fd-card p-4 text-sm text-fd-muted-foreground sm:p-5">
+      {zh
+        ? '运行时对比 v3（3.3.13）的数据将来自一次与 v4 背靠背的直接测量，测量完成后在此显示。'
+        : 'Runtime numbers against v3 (3.3.13) will come from a direct back-to-back measurement with v4 and appear here once measured.'}
+    </p>
+  );
+}
+
 export interface BenchmarkChartProps {
   /** One chart, or several shown as tabs */
   chart: ChartId | ChartId[];
@@ -426,9 +437,14 @@ export default function BenchmarkCharts({
   const ids = Array.isArray(chart) ? chart : [chart];
   const [current, setCurrent] = useState<ChartId>(ids[0]);
   const props = chartProps(current, zh);
-  if (!table) props.table = undefined;
+  if (props && !table) props.table = undefined;
+  const body = props ? (
+    <BarChart key={current} {...props} />
+  ) : (
+    <Pending zh={zh} />
+  );
 
-  if (ids.length === 1) return <BarChart {...props} />;
+  if (ids.length === 1) return body;
   return (
     <div className="not-prose my-6">
       <Segmented
@@ -439,9 +455,7 @@ export default function BenchmarkCharts({
           label: zh ? tabLabels[id].zh : tabLabels[id].en,
         }))}
       />
-      <div className="-mt-6">
-        <BarChart key={current} {...props} />
-      </div>
+      <div className="-mt-6">{body}</div>
     </div>
   );
 }

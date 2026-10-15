@@ -39,7 +39,7 @@ bun run format         # Biome format
 ├── src/
 │   ├── components/            # charts/ (visx bar charts), feedback/ (GitHub Discussions), ai/page-actions, showcase (stat row, tabs), search
 │   ├── data/                  # v2/v3 benchmark JSON
-│   ├── lib/benchmarks.ts      # every benchmark number the site shows
+│   ├── lib/benchmarks.ts      # every benchmark number the site shows (runtime from data/bench-v4.json)
 │   ├── lib/versions.ts        # version list and latestVersion
 │   ├── lib/source.ts, i18n.ts # Fumadocs loader and i18n (en, zh; dot parser)
 │   └── mdx-components.tsx     # components available in MDX
@@ -61,8 +61,10 @@ bun run format         # Biome format
 - Code blocks are C# with Shiki notation (`// [!code highlight]`, `title="File.cs"`).
 - MDX components: `Callout`, `Cards`/`Card`, `Tabs`/`Tab`, `Steps`/`Step`, `Accordions`/`Accordion`, `TypeTable`, `Files`, plus site components `BenchmarkChart`, `ShowcaseHero`/`Stats` (headline stat row), `StatCards`, `CountUp`, `BenchChart` (archived versions), `AnchorRedirect`.
 - Versions are listed newest first everywhere: `src/lib/versions.ts` and `content/docs/meta.json` / `meta.zh.json` (`["v4", "v3", "v2"]`).
-- Benchmark numbers live in `src/lib/benchmarks.ts` (charts) and in the MDX tables of the perf/whats-new/v3-vs-v4/vs-memorypack pages. Keep them in sync with `docs/v4-benchmarks.md` in the Nino repo. Note: v3 means **3.3.13**, not the 4.0 betas.
-- Placeholders waiting for data, kept as MDX comments: `{/* GEN_N100 */}` (N = 100 build numbers vs v3), `{/* V3_DESERIALIZE */}...{/* /V3_DESERIALIZE */}` (v3-vs-v4), `{/* PERF_TABLE */}...{/* /PERF_TABLE */}` (perf).
+- v4 runtime numbers (v4 and MemoryPack) come only from `src/data/bench-v4.json`. `bun run build` first runs `scripts/sync-benchmarks.ts`, which refreshes it from the "Performance Report" of the newest `v4.*` release (prereleases included) when that report covers every method the site shows; on any failure it keeps the committed file. Test the parser with `bun scripts/sync-benchmarks.ts --fixture scripts/fixtures/release-body.md`. `GITHUB_TOKEN` raises the API limit.
+- Never type a runtime number or ratio into MDX: use `<RuntimeTable op="serialize" />`, `<ReuseTable />`, `<ResultsTable />`, `<BenchSource />` and `<BenchValue k="serialize.max" />` (keys in `src/components/bench-data.tsx`). Ratios are computed in `src/lib/benchmarks.ts`.
+- Runtime against v3: only `V3_RUNTIME` in `src/lib/benchmarks.ts`, from a direct back-to-back run of v3 3.3.13 (NuGet) and v4; while it is empty the site shows no v4-vs-v3 runtime numbers. v3 means **3.3.13**, never a 4.0 beta. Build-time numbers (generator benchmark) are static in `benchmarks.ts` (`build`, `buildLarge`) and the perf/v3-vs-v4 tables.
+- v3 and v2 pages keep their own `src/data/bench-v3.json` / `bench-v2.json`; never point them at the synced data.
 - Interceptors are always on with Roslyn 4.8+; there is no opt-out property. Do not reintroduce one.
 
 ## Redirects

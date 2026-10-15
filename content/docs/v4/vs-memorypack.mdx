@@ -8,22 +8,19 @@ icon: Swords
 
 ## Performance
 
-Measured with BenchmarkDotNet 0.15.2 on .NET 10.0.13 (Intel Xeon 2.80 GHz, 4 cores, AVX-512, Ubuntu 24.04), both libraries in the same run. Bars show time relative to MemoryPack (1.0); shorter is faster. Hover or focus a row for the numbers.
+Measured with BenchmarkDotNet, both libraries in the same run. Bars show time relative to MemoryPack (1.0); shorter is faster. Hover or focus a row for the numbers.
+
+<BenchSource lang="en" />
 
 <BenchmarkChart chart={['serialize', 'deserialize']} lang="en" />
 
 ### Deserialize into Existing Objects
 
-Both libraries can fill objects you already have instead of allocating new ones. Nino deserializes by `ref` into the existing graph and takes any new instances from [`[NinoPooled]`](/en/docs/v4/pooling) pools; MemoryPack overwrites existing instances. Nino is **2.6× and 4.9× faster** in the pooled cases and allocates **0 B**, where MemoryPack allocates 1,024 B and 12,800 B per call.
+Both libraries can fill objects you already have instead of allocating new ones. Nino deserializes by `ref` into the existing graph and takes any new instances from [`[NinoPooled]`](/en/docs/v4/pooling) pools; MemoryPack overwrites existing instances. Nino is up to **<BenchValue k="reuse.max" /> faster** and allocates **0 B** on the pooled paths, where MemoryPack allocates on every call.
 
 <BenchmarkChart chart="reuse" lang="en" table={false} />
 
-| Case | Nino new | Nino reusing | MemoryPack new | MemoryPack overwrite |
-| --- | ---: | ---: | ---: | ---: |
-| Pooled node | 873 ns | **280 ns** (0 B) | 952 ns | 727 ns (1,024 B) |
-| Pooled leaves, in place | 5.23 µs | **1.18 µs** (0 B) | 5.38 µs | 5.80 µs (12,800 B) |
-| Pooled leaves, pooled elements | 5.23 µs | 3.82 µs (856 B) | 5.38 µs | 5.80 µs (12,800 B) |
-| Pooled class | 780 ns | 623 ns (1,080 B) | 1,044 ns | 857 ns (1,080 B) |
+<ReuseTable lang="en" />
 
 ### Allocations and Payload Size
 
@@ -33,15 +30,15 @@ Both libraries can fill objects you already have instead of allocating new ones.
 
 | | Nino v4 vs MemoryPack |
 | --- | --- |
-| Serialize | **2.5–4.3× faster** on classes, structs and polymorphic types; 1.07× on `SimpleStruct[100]`; on par on `Vector4[10000]` |
-| Deserialize | **1.16–1.38× faster** on classes and polymorphic types; on par on `SimpleStruct[100]`; **0.85×** on `Vector4[10000]` (see below) |
-| Deserialize into existing / pooled instances | **0 B** allocated, up to **4.9× faster** than MemoryPack's overwrite mode |
+| Serialize | **<BenchValue k="serialize.min" />–<BenchValue k="serialize.max" /> faster** where Nino leads; raw struct arrays are close (per case in the chart) |
+| Deserialize | **<BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" /> faster** where Nino leads; raw struct arrays are close, and `Vector4[10000]` can favor MemoryPack (see below) |
+| Deserialize into existing / pooled instances | **0 B** allocated, up to **<BenchValue k="reuse.max" /> faster** than MemoryPack's overwrite mode |
 | Allocations when serializing | 0 B for both |
-| Payload size | About the same: `SimpleClass` is 1,146 bytes in Nino, 1,148 in MemoryPack |
+| Payload size | About the same: `SimpleClass` is <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack |
 
 <Callout type="info" title="Where MemoryPack is faster">
 
-Deserializing `Vector4[10000]` measured 0.85× (MemoryPack faster). Each call allocates a 160 KB array on the large object heap, so the case mostly measures gen-2 garbage collections: two runs gave 0.96× and 0.85× with ±15% error. The copy itself is one `memcpy` in both libraries.
+Deserializing `Vector4[10000]` can favor MemoryPack. Each call allocates a 160 KB array on the large object heap, so the case mostly measures gen-2 garbage collections and varies between runs. The copy itself is one `memcpy` in both libraries.
 
 </Callout>
 
@@ -114,7 +111,7 @@ Plainly, these are things MemoryPack does and Nino v4 does not:
 
 ## Where Nino Is Ahead
 
-- **Speed**: 2.5–4.3× faster serialization and 1.16–1.38× faster deserialization of classes and polymorphic graphs, with the numbers above.
+- **Speed**: up to <BenchValue k="serialize.max" /> faster serialization and up to <BenchValue k="deserialize.max" /> faster deserialization of classes and polymorphic graphs, with the numbers above.
 - **Zero-allocation reuse**: ref deserialization that reuses nested objects, lists and dictionaries, `[NinoPooled]` pools, and a recycler for every instance that is dropped.
 - **Data that changes**: keyed members can be reordered, removed and inserted; version-tolerant types accept members appended to base classes; old code reads new data.
 - **Polymorphism without bookkeeping**: no tags, any non-sealed class, subtypes in other assemblies and hot-update DLLs found automatically.

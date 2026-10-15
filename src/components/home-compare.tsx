@@ -1,7 +1,16 @@
 import { Gauge, Hammer, Leaf, Recycle } from 'lucide-react';
 import { Link } from 'react-router';
 import { CountUp, useReveal } from '@/components/showcase';
-import { buildLarge, formatBytes, reuse, runtime } from '@/lib/benchmarks';
+import {
+  bestReuse,
+  buildLarge,
+  formatBytes,
+  type ReuseCase,
+  type RuntimeCase,
+  runtime,
+  serializeAllocatesNothing,
+  sourceNote,
+} from '@/lib/benchmarks';
 import { cn } from '@/lib/cn';
 import type { Locale } from '@/lib/i18n';
 
@@ -14,17 +23,24 @@ import type { Locale } from '@/lib/i18n';
  */
 
 function find(op: 'serialize' | 'deserialize', name: string) {
-  const row = runtime[op].find((r) => r.name === name);
-  if (!row?.ratio) throw new Error(`${op} ${name} missing`);
-  return row;
+  return runtime[op].find((r) => r.name === name);
+}
+
+/** The case where Nino beats MemoryPack by the most */
+function best(op: 'serialize' | 'deserialize') {
+  return runtime[op].reduce<RuntimeCase | undefined>(
+    (top, row) => ((row.ratio ?? 0) > (top?.ratio ?? 0) ? row : top),
+    undefined,
+  );
 }
 
 const simple = find('serialize', 'SimpleClass');
-const polySer = find('serialize', 'Polymorphic class array');
-const polyDes = find('deserialize', 'Polymorphic class array');
-const leaves = reuse[1];
-const reuseRatio = leaves.memorypackOverwrite.ns / leaves.ninoReuse.ns;
-const v3SimpleNs = Math.round(simple.v4.ns * (simple.vsV3 ?? 1));
+const polySer = best('serialize');
+const polyDes = best('deserialize');
+const leaves: ReuseCase | undefined = bestReuse;
+const reuseRatio = leaves
+  ? leaves.memorypackOverwrite.ns / leaves.ninoReuse.ns
+  : undefined;
 const count = buildLarge.types.toLocaleString('en-US');
 
 /* ------------------------------------------------------------------ */
@@ -40,20 +56,28 @@ interface StatCell {
   href: string;
 }
 
+const label = (row: { name: string; zh?: string }, zh: boolean) =>
+  zh && row.zh ? row.zh : row.name;
+
+/** 0 GC only when the data shows it: Nino's best reuse case and every serialize case allocate 0 B */
+const zeroGc = leaves?.ninoReuseBytes === 0 && serializeAllocatesNothing;
+
 function stats(lang: Locale): StatCell[] {
   const zh = lang === 'zh';
-  return [
-    {
+  const cells: StatCell[] = [];
+  if (polySer?.ratio)
+    cells.push({
       icon: Gauge,
       label: zh ? '序列化，对比 MemoryPack' : 'Serialize vs MemoryPack',
-      value: polySer.ratio?.toFixed(1) ?? '',
+      value: polySer.ratio.toFixed(1),
       unit: zh ? '倍' : '× faster',
       context: zh
-        ? `多态类数组：${polySer.v4.text} 对比 ${polySer.memorypack.text}`
-        : `Polymorphic class array: ${polySer.v4.text} vs ${polySer.memorypack.text}`,
+        ? `${label(polySer, zh)}：${polySer.v4.text} 对比 ${polySer.memorypack.text}`
+        : `${label(polySer, zh)}: ${polySer.v4.text} vs ${polySer.memorypack.text}`,
       href: 'vs-memorypack',
-    },
-    {
+    });
+  if (leaves && reuseRatio)
+    cells.push({
       icon: Recycle,
       label: zh ? '复用池化对象反序列化' : 'Deserialize into pooled objects',
       value: reuseRatio.toFixed(1),
@@ -62,8 +86,9 @@ function stats(lang: Locale): StatCell[] {
         ? `对比 MemoryPack 覆盖写入：${leaves.ninoReuse.text} 对比 ${leaves.memorypackOverwrite.text}`
         : `vs MemoryPack's overwrite: ${leaves.ninoReuse.text} vs ${leaves.memorypackOverwrite.text}`,
       href: 'whats-new#deserialize-into-existing-objects',
-    },
-    {
+    });
+  if (zeroGc)
+    cells.push({
       icon: Leaf,
       label: zh ? '内存分配' : 'Allocations',
       value: '0',
@@ -72,18 +97,18 @@ function stats(lang: Locale): StatCell[] {
         ? '序列化、复用池化对象反序列化零 GC'
         : 'serialize and deserialize into pooled objects',
       href: 'pooling',
-    },
-    {
-      icon: Hammer,
-      label: zh ? '构建，对比 Nino v3' : 'Build vs Nino v3',
-      value: String(buildLarge.emit.ratio),
-      unit: zh ? '倍' : '× faster',
-      context: zh
-        ? `${count} 个类型：${buildLarge.emit.v3} → ${buildLarge.emit.v4}`
-        : `${count} types: ${buildLarge.emit.v3} → ${buildLarge.emit.v4}`,
-      href: 'v3-vs-v4',
-    },
-  ];
+    });
+  cells.push({
+    icon: Hammer,
+    label: zh ? '构建，对比 Nino v3' : 'Build vs Nino v3',
+    value: String(buildLarge.emit.ratio),
+    unit: zh ? '倍' : '× faster',
+    context: zh
+      ? `${count} 个类型：${buildLarge.emit.v3} → ${buildLarge.emit.v4}`
+      : `${count} types: ${buildLarge.emit.v3} → ${buildLarge.emit.v4}`,
+    href: 'v3-vs-v4',
+  });
+  return cells;
 }
 
 export function HomeStats({ lang, docs }: { lang: Locale; docs: string }) {
@@ -132,45 +157,46 @@ interface Row {
   other: { text: string; value: number };
 }
 
+function runtimeRow(
+  row: RuntimeCase | undefined,
+  zh: boolean,
+  verb: string,
+): Row[] {
+  if (!row?.ratio) return [];
+  return [
+    {
+      label: `${verb} ${zh || row.code ? label(row, zh) : row.name.charAt(0).toLowerCase() + row.name.slice(1)}`,
+      ratio: row.ratio.toFixed(2),
+      unit: zh ? '倍' : '× faster',
+      nino: { text: row.v4.text, value: row.v4.ns },
+      other: { text: row.memorypack.text, value: row.memorypack.ns },
+    },
+  ];
+}
+
 function comparisons(lang: Locale) {
   const zh = lang === 'zh';
-  const faster = zh ? '倍' : '× faster';
+  const ser = zh ? '序列化' : 'Serialize';
+  const des = zh ? '反序列化' : 'Deserialize';
   const memorypack: Row[] = [
-    {
-      label: zh ? '序列化 SimpleClass' : 'Serialize SimpleClass',
-      ratio: simple.ratio?.toFixed(2) ?? '',
-      unit: faster,
-      nino: { text: simple.v4.text, value: simple.v4.ns },
-      other: { text: simple.memorypack.text, value: simple.memorypack.ns },
-    },
-    {
-      label: zh ? '序列化多态类数组' : 'Serialize polymorphic array',
-      ratio: polySer.ratio?.toFixed(2) ?? '',
-      unit: faster,
-      nino: { text: polySer.v4.text, value: polySer.v4.ns },
-      other: { text: polySer.memorypack.text, value: polySer.memorypack.ns },
-    },
-    {
-      label: zh ? '反序列化多态类数组' : 'Deserialize polymorphic array',
-      ratio: polyDes.ratio?.toFixed(2) ?? '',
-      unit: faster,
-      nino: { text: polyDes.v4.text, value: polyDes.v4.ns },
-      other: { text: polyDes.memorypack.text, value: polyDes.memorypack.ns },
-    },
-    {
+    ...runtimeRow(simple, zh, ser),
+    ...(polySer !== simple ? runtimeRow(polySer, zh, ser) : []),
+    ...runtimeRow(polyDes, zh, des),
+  ];
+  if (leaves && reuseRatio)
+    memorypack.push({
       label: zh ? '反序列化到池化对象' : 'Deserialize into pooled objects',
       note: zh
         ? `分配 ${formatBytes(leaves.ninoReuseBytes)} 对比 ${formatBytes(leaves.memorypackOverwriteBytes)}`
         : `${formatBytes(leaves.ninoReuseBytes)} vs ${formatBytes(leaves.memorypackOverwriteBytes)} allocated`,
       ratio: reuseRatio.toFixed(2),
-      unit: faster,
+      unit: zh ? '倍' : '× faster',
       nino: { text: leaves.ninoReuse.text, value: leaves.ninoReuse.ns },
       other: {
         text: leaves.memorypackOverwrite.text,
         value: leaves.memorypackOverwrite.ns,
       },
-    },
-  ];
+    });
 
   const { emit, source } = buildLarge;
   const v3: Row[] = [
@@ -178,7 +204,7 @@ function comparisons(lang: Locale) {
       label: zh ? '编译生成的代码' : 'Compile the generated code',
       note: zh ? `${count} 个类型` : `${count} types`,
       ratio: String(emit.ratio),
-      unit: faster,
+      unit: zh ? '倍' : '× faster',
       nino: { text: emit.v4, value: emit.v4n },
       other: { text: emit.v3, value: emit.v3n },
     },
@@ -190,15 +216,16 @@ function comparisons(lang: Locale) {
       nino: { text: source.v4, value: source.v4n },
       other: { text: source.v3, value: source.v3n },
     },
-    {
-      label: zh ? '序列化 SimpleClass' : 'Serialize SimpleClass',
-      note: zh ? 'v3 为同机换算值' : 'v3 normalized from the same machine',
-      ratio: simple.vsV3?.toFixed(2) ?? '',
-      unit: faster,
-      nino: { text: simple.v4.text, value: simple.v4.ns },
-      other: { text: `≈ ${v3SimpleNs} ns`, value: v3SimpleNs },
-    },
   ];
+  // Runtime against v3 only once V3_RUNTIME has a direct measurement.
+  if (simple?.v3 && simple.vsV3)
+    v3.push({
+      label: zh ? '序列化 SimpleClass' : 'Serialize SimpleClass',
+      ratio: simple.vsV3.toFixed(2),
+      unit: zh ? '倍' : '× faster',
+      nino: { text: simple.v4.text, value: simple.v4.ns },
+      other: { text: simple.v3.text, value: simple.v3.ns },
+    });
   return { memorypack, v3 };
 }
 
@@ -327,21 +354,24 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
   const data = comparisons(lang);
   const link = zh ? '全部基准测试 →' : 'All benchmarks →';
   return (
-    <div className="grid gap-12 lg:grid-cols-2">
-      <Panel
-        title={zh ? '对比 MemoryPack' : 'vs MemoryPack'}
-        other="MemoryPack"
-        rows={data.memorypack}
-        link={link}
-        href={`${docs}/perf`}
-      />
-      <Panel
-        title={zh ? '对比 Nino v3' : 'vs Nino v3'}
-        other="Nino v3"
-        rows={data.v3}
-        link={link}
-        href={`${docs}/perf`}
-      />
-    </div>
+    <>
+      <div className="grid gap-12 lg:grid-cols-2">
+        <Panel
+          title={zh ? '对比 MemoryPack' : 'vs MemoryPack'}
+          other="MemoryPack"
+          rows={data.memorypack}
+          link={link}
+          href={`${docs}/perf`}
+        />
+        <Panel
+          title={zh ? '对比 Nino v3' : 'vs Nino v3'}
+          other="Nino v3"
+          rows={data.v3}
+          link={link}
+          href={`${docs}/perf`}
+        />
+      </div>
+      <p className="mt-8 text-xs text-fd-muted-foreground">{sourceNote(zh)}</p>
+    </>
   );
 }

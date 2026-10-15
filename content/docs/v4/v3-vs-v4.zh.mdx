@@ -69,31 +69,8 @@ v3 会把每个子类型的主体内联到每个多态基类中，并在每次�
 
 ## 运行时 [#runtime]
 
-BenchmarkDotNet 0.15.2，.NET 10.0.13。每个比例是把 v4 / MemoryPack 1.21.4 与同一台机器上另一次运行得到的 v3 3.3.13 / MemoryPack 相比；v3 的基准测试没有多态用例。绝对耗时参见[基准测试](/zh/docs/v4/perf)。
+Nino v4 与 NuGet 上的 v3 3.3.13 在同一台机器上背靠背测量。绝对耗时与对比 MemoryPack 的结果参见[基准测试](/zh/docs/v4/perf)。
 
-<BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="zh" table={false} />
-
-### 序列化 [#serialize]
-
-| 用例 | v4 对比 v3 |
-|---|---:|
-| `SimpleClass` | **快 1.73 倍** |
-| `SimpleClass[100]` | **快 1.29 倍** |
-| `SimpleStruct`（`int` + `DateTime`） | **快 1.35 倍** |
-| `SimpleStruct[100]` | 持平 |
-| `Vector4[10000]` | 持平 |
-
-### 反序列化 [#deserialize]
-
-{/* V3_DESERIALIZE */}
-
-| 用例 | v4 对比 v3 |
-|---|---:|
-| `SimpleClass` | **快 1.19 倍** |
-| `SimpleClass[100]` | **快 1.22 倍** |
-| `SimpleStruct[100]` | 持平 |
-| `Vector4[10000]` | 0.90 倍（主要耗时在每次调用分配 160 KB 数组） |
-
-{/* /V3_DESERIALIZE */}
+<BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="zh" />
 
 类的反序列化主要耗时在分配结果对象上。v4 增加了 v3 做不到的能力：反序列化到已有实例和池化实例，每次调用分配 **0 B**。参见 [v4 新特性](/zh/docs/v4/whats-new)。

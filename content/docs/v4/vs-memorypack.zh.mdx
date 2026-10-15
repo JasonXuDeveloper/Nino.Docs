@@ -8,22 +8,19 @@ icon: Swords
 
 ## 性能 [#performance]
 
-使用 BenchmarkDotNet 0.15.2 在 .NET 10.0.13 上测量（Intel Xeon 2.80 GHz，4 核，AVX-512，Ubuntu 24.04），两个库在同一次运行中。条形为相对 MemoryPack（1.0）的耗时，越短越快。悬停或聚焦某一行可查看数值。
+使用 BenchmarkDotNet 测量，两个库在同一次运行中。条形为相对 MemoryPack（1.0）的耗时，越短越快。悬停或聚焦某一行可查看数值。
+
+<BenchSource lang="zh" />
 
 <BenchmarkChart chart={['serialize', 'deserialize']} lang="zh" />
 
 ### 反序列化到已有对象 [#deserialize-into-existing-objects]
 
-两个库都可以填充你已有的对象，而不是分配新对象。Nino 通过 `ref` 反序列化到已有对象图，新实例取自 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池；MemoryPack 覆盖已有实例。在池化用例中，Nino **快 2.6 倍和 4.9 倍**，且分配 **0 B**，而 MemoryPack 每次调用分配 1,024 B 和 12,800 B。
+两个库都可以填充你已有的对象，而不是分配新对象。Nino 通过 `ref` 反序列化到已有对象图，新实例取自 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池；MemoryPack 覆盖已有实例。在池化路径上，Nino 最高**快 <BenchValue k="reuse.max" />**，且分配 **0 B**，而 MemoryPack 每次调用都要分配。
 
 <BenchmarkChart chart="reuse" lang="zh" table={false} />
 
-| 用例 | Nino 新建 | Nino 复用 | MemoryPack 新建 | MemoryPack 覆盖 |
-| --- | ---: | ---: | ---: | ---: |
-| 池化节点 | 873 ns | **280 ns**（0 B） | 952 ns | 727 ns（1,024 B） |
-| 池化叶子，原地复用 | 5.23 µs | **1.18 µs**（0 B） | 5.38 µs | 5.80 µs（12,800 B） |
-| 池化叶子，池化元素 | 5.23 µs | 3.82 µs（856 B） | 5.38 µs | 5.80 µs（12,800 B） |
-| 池化类 | 780 ns | 623 ns（1,080 B） | 1,044 ns | 857 ns（1,080 B） |
+<ReuseTable lang="zh" />
 
 ### 内存分配与载荷大小 [#allocations-and-payload-size]
 
@@ -33,15 +30,15 @@ icon: Swords
 
 | | Nino v4 对比 MemoryPack |
 | --- | --- |
-| 序列化 | 类、结构体和多态类型上**快 2.5–4.3 倍**；`SimpleStruct[100]` 上快 1.07 倍；`Vector4[10000]` 上持平 |
-| 反序列化 | 类和多态类型上**快 1.16–1.38 倍**；`SimpleStruct[100]` 上持平；`Vector4[10000]` 上为 **0.85 倍**（见下文） |
-| 反序列化到已有 / 池化实例 | 分配 **0 B**，最高比 MemoryPack 的覆盖模式**快 4.9 倍** |
+| 序列化 | Nino 领先的用例中**快 <BenchValue k="serialize.min" />–<BenchValue k="serialize.max" />**；原始结构体数组上接近（各用例见图表） |
+| 反序列化 | Nino 领先的用例中**快 <BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" />**；原始结构体数组上接近，`Vector4[10000]` 可能是 MemoryPack 更快（见下文） |
+| 反序列化到已有 / 池化实例 | 分配 **0 B**，最高比 MemoryPack 的覆盖模式**快 <BenchValue k="reuse.max" />** |
 | 序列化时的内存分配 | 两者都是 0 B |
-| 载荷大小 | 基本相同：`SimpleClass` 在 Nino 中为 1,146 字节，在 MemoryPack 中为 1,148 字节 |
+| 载荷大小 | 基本相同：`SimpleClass` 在 Nino 中为 <BenchValue k="payload.v4" /> 字节，在 MemoryPack 中为 <BenchValue k="payload.memorypack" /> 字节 |
 
 <Callout type="info" title="MemoryPack 更快的情况">
 
-反序列化 `Vector4[10000]` 测得 0.85 倍（MemoryPack 更快）。每次调用都会在大对象堆上分配一个 160 KB 的数组，因此该用例主要测量的是第 2 代垃圾回收：两次运行分别为 0.96 倍和 0.85 倍，误差 ±15%。拷贝本身在两个库中都是一次 `memcpy`。
+反序列化 `Vector4[10000]` 可能是 MemoryPack 更快。每次调用都会在大对象堆上分配一个 160 KB 的数组，因此该用例主要测量的是第 2 代垃圾回收，结果随运行波动。拷贝本身在两个库中都是一次 `memcpy`。
 
 </Callout>
 
@@ -114,7 +111,7 @@ icon: Swords
 
 ## Nino 领先的地方 [#where-nino-is-ahead]
 
-- **速度**：类和多态对象图的序列化快 2.5–4.3 倍、反序列化快 1.16–1.38 倍，数据如上。
+- **速度**：类和多态对象图的序列化最高快 <BenchValue k="serialize.max" />、反序列化最高快 <BenchValue k="deserialize.max" />，数据如上。
 - **零分配复用**：引用反序列化会复用嵌套对象、列表和字典，`[NinoPooled]` 对象池，以及为每个被丢弃实例准备的回收器。
 - **可演进的数据**：键控成员可以重新排序、删除和插入；版本兼容类型允许向基类追加成员；旧代码可以读取新数据。
 - **无需维护的多态**：没有标签，任何非密封类都可以，其他程序集和热更新 DLL 中的子类型会被自动发现。

@@ -48,20 +48,13 @@ v3 的编译耗时增长远快于类型数量：类型多 3.3 倍，编译耗时
 
 ## 运行时 [#runtime]
 
-v4 与 MemoryPack 在同一次运行中。“v4 对比 v3”一列是把 v4 / MemoryPack 的比例与同一台机器上另一次运行得到的 v3 3.3.13 / MemoryPack 的比例相比；v3 的基准测试没有多态用例。载荷大小基本相同（`SimpleClass`：v4 为 1,146 字节，MemoryPack 为 1,148 字节）。
+v4 与 MemoryPack 在同一次运行中。载荷大小基本相同（`SimpleClass`：v4 为 <BenchValue k="payload.v4" /> 字节，MemoryPack 为 <BenchValue k="payload.memorypack" /> 字节）。
+
+<BenchSource lang="zh" />
 
 ### 序列化（到复用的缓冲区写入器） [#serialize]
 
-| 用例 | v4 | MemoryPack | v4 对比 MemoryPack | v4 对比 v3 |
-| --- | ---: | ---: | ---: | ---: |
-| `SimpleClass` | 151 ns | 450 ns | **快 2.97 倍** | 快 1.73 倍 |
-| `SimpleClass[100]` | 17.0 µs | 48.7 µs | **快 2.86 倍** | 快 1.29 倍 |
-| 多态类 | 11.5 µs | 31.5 µs | **快 2.72 倍** | — |
-| 多态类数组 | 89.6 µs | 388 µs | **快 4.33 倍** | — |
-| 多态 `Foo[]` | 9.9 µs | 31.4 µs | **快 3.15 倍** | — |
-| `SimpleStruct`（`int` + `DateTime`） | 2.3 ns | 5.8 ns | **快 2.50 倍** | 快 1.35 倍 |
-| `SimpleStruct[100]` * | 28.6 ns | 30.6 ns | 快 1.07 倍 | 持平 |
-| `Vector4[10000]` * | 4.06 µs | 4.10 µs | 持平 | 持平 |
+<RuntimeTable op="serialize" lang="zh" />
 
 <BenchmarkChart chart="serialize" lang="zh" table={false} />
 
@@ -69,21 +62,13 @@ v4 与 MemoryPack 在同一次运行中。“v4 对比 v3”一列是把 v4 / Me
 
 ### 反序列化（新实例） [#deserialize]
 
-| 用例 | v4 | MemoryPack | v4 对比 MemoryPack | v4 对比 v3 |
-| --- | ---: | ---: | ---: | ---: |
-| `SimpleClass` | 964 ns | 1,129 ns | **快 1.17 倍** | 快 1.19 倍 |
-| `SimpleClass[100]` | 106 µs | 134 µs | **快 1.26 倍** | 快 1.22 倍 |
-| 多态类 * | 36.3 µs | 44.8 µs | **快 1.23 倍** | — |
-| 多态类数组 | 406 µs | 562 µs | **快 1.38 倍** | — |
-| 多态 `Foo[]` | 37.0 µs | 43.1 µs | **快 1.16 倍** | — |
-| `SimpleStruct[100]` * | 295 ns | 295 ns | 持平 | 持平 |
-| `Vector4[10000]` * | 173 µs | 147 µs | 0.85 倍 | 0.90 倍 |
+<RuntimeTable op="deserialize" lang="zh" />
 
 <BenchmarkChart chart="deserialize" lang="zh" table={false} />
 
 <Callout type="info">
 
-`Vector4[10000]` 每次调用都会在大对象堆上分配一个 160 KB 的数组，因此它测量的主要是第 2 代垃圾回收，而不是序列化器本身：两次运行分别为 0.96 倍和 0.85 倍，误差 ±15%。拷贝本身在两者中都是一次 `memcpy`。
+`Vector4[10000]` 每次调用都会在大对象堆上分配一个 160 KB 的数组，因此它测量的主要是第 2 代垃圾回收，而不是序列化器本身，结果随运行波动。拷贝本身在两者中都是一次 `memcpy`。
 
 </Callout>
 
@@ -91,16 +76,11 @@ v4 与 MemoryPack 在同一次运行中。“v4 对比 v3”一列是把 v4 / Me
 
 Nino 可以反序列化到已有的对象图（`ref` 反序列化），并从 `[NinoPooled]` 对象池获取新实例；MemoryPack 则覆盖已有实例。
 
-| 用例 | Nino 新建 | Nino 复用 | MemoryPack 新建 | MemoryPack 覆盖 |
-| --- | ---: | ---: | ---: | ---: |
-| 池化节点 | 873 ns | **280 ns**（0 B） | 952 ns | 727 ns（1,024 B） |
-| 池化叶子，原地 | 5.23 µs | **1.18 µs**（0 B） | 5.38 µs | 5.80 µs（12,800 B） |
-| 池化叶子，池化元素 | 5.23 µs | 3.82 µs（856 B） | 5.38 µs | 5.80 µs（12,800 B） |
-| 池化类 | 780 ns | 623 ns（1,080 B） | 1,044 ns | 857 ns（1,080 B） |
+<ReuseTable lang="zh" />
 
 <BenchmarkChart chart="reuse" lang="zh" table={false} />
 
-上述序列化路径中两者都不分配内存（每次调用 0 B），反序列化只分配结果对象。
+每次调用分配的字节数见下方图表与[完整结果](#结果)。
 
 <BenchmarkChart chart={['allocation', 'payload']} lang="zh" />
 
@@ -234,22 +214,4 @@ Vectors = Enumerable.Range(0, 10000)
 
 结果为序列化和反序列化上述数据所用的时间，越低越好。
 
-{/* PERF_TABLE */}
-
-{/* Benchmark environment (BenchmarkDotNet summary header) */}
-
-```text
-TBD
-```
-
-{/* One entry per case, mean time in nanoseconds. Drives the bar chart below; leave empty to hide it.
-   e.g. { name: 'SimpleClass · Serialize', nino: 151, memorypack: 450, messagepack: 1700 } */}
-export const benchmarks = [];
-
-| Method | Mean | Error | StdDev | Ratio | RatioSD | Allocated | Payload |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| TBD | | | | | | | |
-
-{/* /PERF_TABLE */}
-
-<BenchChart data={benchmarks} lang="zh" />
+<ResultsTable lang="zh" />

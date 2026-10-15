@@ -29,8 +29,8 @@ GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
 
 ## 为什么选 Nino [#why-nino]
 
-- **快。** 与 MemoryPack 1.21.4 在同一轮测试中对比，Nino 序列化快 2.5–4.3 倍，反序列化类和多态对象快 1.16–1.38 倍，非托管结构体数组与之持平；相比 Nino v3 也更快。详见[基准测试](/zh/docs/v4/perf)。
-- **热路径零 GC。** 序列化到复用的缓冲区不分配内存；[反序列化到已有对象或池化实例](/zh/docs/v4/pooling)同样零分配，速度最高可达 MemoryPack 覆盖模式的 4.9 倍。
+- **快。** 与 MemoryPack 在同一轮测试中对比，Nino 序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象最高快 <BenchValue k="deserialize.max" />，非托管结构体数组与之接近；生成的代码编译也远快于 Nino v3。详见[基准测试](/zh/docs/v4/perf)。
+- **热路径零 GC。** 序列化到复用的缓冲区不分配内存；[反序列化到已有对象或池化实例](/zh/docs/v4/pooling)同样零分配，速度最高比 MemoryPack 覆盖模式快 <BenchValue k="reuse.max" />。
 - **一切在编译期完成。** 源生成器为每个类型生成一个格式化器，因此 IL2CPP、NativeAOT 和 HybridCLR 都能直接使用。使用 .NET 8 SDK 及以上版本编译时，调用会被[拦截器](/zh/docs/v4/performance#interceptors)直接导向对应的格式化器。生成器是增量的：修改一个类型只会重新生成这个类型；在 1,100 个类型的项目中，生成代码的编译速度是 v3 的 289 倍。
 - **多态无需标签。** 声明为基类或接口的值，读回来仍是它的实际类型。类型 ID 由类型名哈希得到，不用维护标签表，其他程序集里的子类型也能自动找到。详见[多态](/zh/docs/v4/polymorphism)。
 - **数据可以演进。** 每个类型可以单独选择[版本兼容](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）、[键控成员](/zh/docs/v4/evolving-data#keyed-members)（增删、重排成员）或[引用追踪](/zh/docs/v4/reference-tracking)（共享引用和循环引用）。不启用的类型没有任何额外开销。

@@ -1,34 +1,92 @@
 /**
  * Every benchmark number the site shows (home page, What's New, v3 vs v4,
- * Nino vs MemoryPack, Benchmarks). Keep in sync with docs/v4-benchmarks.md in
- * the Nino repository; the MDX tables repeat these numbers.
+ * Nino vs MemoryPack, Benchmarks).
  *
- * Runtime: BenchmarkDotNet 0.15.2, .NET 10.0.13, server GC, v4 and MemoryPack
- * 1.21.4 in the same run. "v4 vs v3" compares the v4 / MemoryPack ratio with
- * the v3 (3.3.13) / MemoryPack ratio of a separate run on the same machine.
- * Build time: src/Nino.GeneratorBenchmark, 330 types (N = 30), v3 = 3.3.13.
+ * Runtime (v4 and MemoryPack): src/data/bench-v4.json. scripts/sync-benchmarks.ts
+ * refreshes it before each build from the "Performance Report" of the newest
+ * v4 release; the committed file is the fallback. Ratios are computed here
+ * from the measured times, never typed in.
  *
- * Times are kept as published ("17.0 µs") and parsed to nanoseconds.
+ * Runtime against v3: V3_RUNTIME below, the one place for those numbers.
+ *
+ * Build time (source generator, v3 3.3.13 vs v4): static, from
+ * docs/v4-benchmarks.md in the Nino repository; it is not in the release report.
  */
+import bench from '@/data/bench-v4.json';
 
 export interface Measure {
-  /** As published, e.g. "1,129 ns" */
+  /** Formatted for display, e.g. "1.13 µs" */
   text: string;
   /** In nanoseconds */
   ns: number;
 }
 
-const unitNs = { ns: 1, µs: 1e3, ms: 1e6, s: 1e9 } as const;
+interface BenchRow {
+  method: string;
+  category: string | null;
+  meanNs: number;
+  allocatedBytes: number | null;
+  payloadBytes: number | null;
+  rerun?: boolean;
+}
 
-function t(text: string): Measure {
-  const match = /^([\d,.]+) (ns|µs|ms|s)$/.exec(text);
-  if (!match) throw new Error(`Bad time: ${text}`);
-  const value = Number.parseFloat(match[1].replace(/,/g, ''));
-  return { text, ns: value * unitNs[match[2] as keyof typeof unitNs] };
+/** Where the runtime numbers come from */
+export const benchSource = {
+  origin: bench.origin as 'release' | 'local' | 'fixture',
+  tag: bench.tag,
+  url: bench.url,
+  publishedAt: bench.publishedAt as string | null,
+  environment: bench.environment as string | null,
+};
+
+const rows = new Map(
+  (bench.rows as BenchRow[]).map((row) => [row.method, row] as const),
+);
+
+/** "Nino v4.0.0, measured on GitHub Actions, 2026-10-14." */
+export function sourceNote(zh: boolean) {
+  const date = benchSource.publishedAt?.slice(0, 10);
+  if (benchSource.origin === 'release')
+    return zh
+      ? `Nino ${benchSource.tag}，GitHub Actions 实测，${date}。`
+      : `Nino ${benchSource.tag}, measured on GitHub Actions, ${date}.`;
+  return zh
+    ? `Nino ${benchSource.tag}，本地实测（docs/v4-benchmarks.md）；下一个附带完整性能报告的 v4 版本发布后自动更新。`
+    : `Nino ${benchSource.tag}, measured locally (docs/v4-benchmarks.md); updated automatically from the next v4 release with a complete performance report.`;
+}
+
+/** All rows of the report, in report order (for the full results table) */
+export const benchRows: readonly BenchRow[] = bench.rows as BenchRow[];
+
+function digits(value: number) {
+  if (value >= 100) return Math.round(value).toLocaleString('en-US');
+  if (value >= 10) return value.toFixed(1);
+  return value.toFixed(2);
+}
+
+/** 151 -> "151 ns", 17040 -> "17.0 µs", 1.234e6 -> "1.23 ms" */
+export function formatTime(ns: number) {
+  if (ns < 1e3) return `${digits(ns)} ns`;
+  if (ns < 1e6) return `${digits(ns / 1e3)} µs`;
+  if (ns < 1e9) return `${digits(ns / 1e6)} ms`;
+  return `${digits(ns / 1e9)} s`;
 }
 
 export const formatBytes = (bytes: number) =>
   `${bytes.toLocaleString('en-US')} B`;
+
+function measure(method: string): Measure | undefined {
+  const row = rows.get(method);
+  return row ? { text: formatTime(row.meanNs), ns: row.meanNs } : undefined;
+}
+
+const bytes = (method: string) => rows.get(method)?.allocatedBytes ?? null;
+
+/** Two decimals; within 5% counts as on par */
+function ratioOf(slower: number, faster: number) {
+  const ratio = Math.round((slower / faster) * 100) / 100;
+  return Math.abs(ratio - 1) < 0.05 ? undefined : ratio;
+}
 
 /* ------------------------------------------------------------------ */
 /* Runtime                                                             */
@@ -39,142 +97,115 @@ export interface RuntimeCase {
   name: string;
   zh?: string;
   code?: boolean;
+  /** Method suffix in Nino.Benchmark, e.g. "SimpleClasses" */
+  key: string;
   v4: Measure;
   memorypack: Measure;
-  /** v4 vs MemoryPack as published; undefined = on par; < 1 = MemoryPack faster */
+  /** MemoryPack time / v4 time; undefined = on par; < 1 = MemoryPack faster */
   ratio?: number;
-  /** v4 vs v3 3.3.13 as published; 1 = on par; undefined = no v3 case */
+  /** v3 3.3.13 time / v4 time from V3_RUNTIME; undefined = not measured */
   vsV3?: number;
-  /** Re-run with 20 iterations (marked * in the tables) */
+  v3?: Measure;
+  /** Marked * in the tables: re-run with more iterations (local snapshot only) */
   rerun?: boolean;
   /** Dominated by gen-2 GC of a 160 KB array (see the footnote) */
   gcBound?: boolean;
 }
 
-export const runtime: Record<'serialize' | 'deserialize', RuntimeCase[]> = {
+interface CaseInfo {
+  name: string;
+  zh?: string;
+  code?: boolean;
+  key: string;
+  gcBound?: boolean;
+}
+
+const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
   serialize: [
-    {
-      name: 'SimpleClass',
-      code: true,
-      v4: t('151 ns'),
-      memorypack: t('450 ns'),
-      ratio: 2.97,
-      vsV3: 1.73,
-    },
-    {
-      name: 'SimpleClass[100]',
-      code: true,
-      v4: t('17.0 µs'),
-      memorypack: t('48.7 µs'),
-      ratio: 2.86,
-      vsV3: 1.29,
-    },
-    {
-      name: 'Polymorphic class',
-      zh: '多态类',
-      v4: t('11.5 µs'),
-      memorypack: t('31.5 µs'),
-      ratio: 2.72,
-    },
+    { name: 'SimpleClass', code: true, key: 'SimpleClass' },
+    { name: 'SimpleClass[100]', code: true, key: 'SimpleClasses' },
+    { name: 'Polymorphic class', zh: '多态类', key: 'PolymorphicClass' },
     {
       name: 'Polymorphic class array',
       zh: '多态类数组',
-      v4: t('89.6 µs'),
-      memorypack: t('388 µs'),
-      ratio: 4.33,
+      key: 'PolymorphicClassArray',
     },
-    {
-      name: 'Polymorphic Foo[]',
-      zh: '多态 Foo[]',
-      v4: t('9.9 µs'),
-      memorypack: t('31.4 µs'),
-      ratio: 3.15,
-    },
-    {
-      name: 'SimpleStruct',
-      code: true,
-      v4: t('2.3 ns'),
-      memorypack: t('5.8 ns'),
-      ratio: 2.5,
-      vsV3: 1.35,
-    },
-    {
-      name: 'SimpleStruct[100]',
-      code: true,
-      v4: t('28.6 ns'),
-      memorypack: t('30.6 ns'),
-      ratio: 1.07,
-      vsV3: 1,
-      rerun: true,
-    },
-    {
-      name: 'Vector4[10000]',
-      code: true,
-      v4: t('4.06 µs'),
-      memorypack: t('4.10 µs'),
-      vsV3: 1,
-      rerun: true,
-    },
+    { name: 'Polymorphic Foo[]', zh: '多态 Foo[]', key: 'PolymorphicFooArray' },
+    { name: 'SimpleStruct', code: true, key: 'SimpleStruct' },
+    { name: 'SimpleStruct[100]', code: true, key: 'SimpleStructs' },
+    { name: 'Vector4[10000]', code: true, key: 'Vectors' },
   ],
   deserialize: [
-    {
-      name: 'SimpleClass',
-      code: true,
-      v4: t('964 ns'),
-      memorypack: t('1,129 ns'),
-      ratio: 1.17,
-      vsV3: 1.19,
-    },
-    {
-      name: 'SimpleClass[100]',
-      code: true,
-      v4: t('106 µs'),
-      memorypack: t('134 µs'),
-      ratio: 1.26,
-      vsV3: 1.22,
-    },
-    {
-      name: 'Polymorphic class',
-      zh: '多态类',
-      v4: t('36.3 µs'),
-      memorypack: t('44.8 µs'),
-      ratio: 1.23,
-      rerun: true,
-    },
+    { name: 'SimpleClass', code: true, key: 'SimpleClass' },
+    { name: 'SimpleClass[100]', code: true, key: 'SimpleClasses' },
+    { name: 'Polymorphic class', zh: '多态类', key: 'PolymorphicClass' },
     {
       name: 'Polymorphic class array',
       zh: '多态类数组',
-      v4: t('406 µs'),
-      memorypack: t('562 µs'),
-      ratio: 1.38,
+      key: 'PolymorphicClassArray',
     },
-    {
-      name: 'Polymorphic Foo[]',
-      zh: '多态 Foo[]',
-      v4: t('37.0 µs'),
-      memorypack: t('43.1 µs'),
-      ratio: 1.16,
-    },
-    {
-      name: 'SimpleStruct[100]',
-      code: true,
-      v4: t('295 ns'),
-      memorypack: t('295 ns'),
-      vsV3: 1,
-      rerun: true,
-    },
-    {
-      name: 'Vector4[10000]',
-      code: true,
-      v4: t('173 µs'),
-      memorypack: t('147 µs'),
-      ratio: 0.85,
-      vsV3: 0.9,
-      rerun: true,
-      gcBound: true,
-    },
+    { name: 'Polymorphic Foo[]', zh: '多态 Foo[]', key: 'PolymorphicFooArray' },
+    { name: 'SimpleStruct', code: true, key: 'SimpleStruct' },
+    { name: 'SimpleStruct[100]', code: true, key: 'SimpleStructs' },
+    { name: 'Vector4[10000]', code: true, key: 'Vectors', gcBound: true },
   ],
 };
+
+/* ------------------------------------------------------------------ */
+/* V3_RUNTIME: Nino v3 3.3.13 (NuGet) against v4, measured back to back */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Fill in from a direct back-to-back BenchmarkDotNet run of Nino 3.3.13 (from
+ * NuGet) and v4 on the same machine: mean times in nanoseconds, keyed by
+ * "serialize:SimpleClass" / "deserialize:SimpleClasses" (the case keys
+ * above). Both times must come from the same run. Empty = not measured yet:
+ * the site then shows no v4-vs-v3 runtime numbers.
+ */
+export const V3_RUNTIME: {
+  /** Machine and versions of the run, shown under the v3 charts */
+  environment: string | null;
+  rows: Partial<Record<string, { v3Ns: number; v4Ns: number }>>;
+} = {
+  environment: null,
+  rows: {},
+};
+
+function buildCase(op: 'serialize' | 'deserialize', info: CaseInfo) {
+  const verb = op === 'serialize' ? 'Serialize' : 'Deserialize';
+  const nino = rows.get(`Nino${verb}${info.key}`);
+  const v4 = measure(`Nino${verb}${info.key}`);
+  const memorypack = measure(`MemoryPack${verb}${info.key}`);
+  if (!v4 || !memorypack || !nino) return [];
+  const v3Row = V3_RUNTIME.rows[`${op}:${info.key}`];
+  const result: RuntimeCase = {
+    ...info,
+    v4,
+    memorypack,
+    ratio: ratioOf(memorypack.ns, v4.ns),
+    rerun: nino.rerun,
+  };
+  if (v3Row) {
+    result.v3 = { text: formatTime(v3Row.v3Ns), ns: v3Row.v3Ns };
+    result.vsV3 = Math.round((v3Row.v3Ns / v3Row.v4Ns) * 100) / 100;
+  }
+  return [result];
+}
+
+export const runtime: Record<'serialize' | 'deserialize', RuntimeCase[]> = {
+  serialize: cases.serialize.flatMap((info) => buildCase('serialize', info)),
+  deserialize: cases.deserialize.flatMap((info) =>
+    buildCase('deserialize', info),
+  ),
+};
+
+/** Fastest / slowest win against MemoryPack (ignores on-par and losses) */
+export function ratioRange(op: 'serialize' | 'deserialize') {
+  const wins = runtime[op]
+    .map((row) => row.ratio)
+    .filter((ratio): ratio is number => ratio !== undefined && ratio > 1);
+  return { min: Math.min(...wins), max: Math.max(...wins) };
+}
 
 /* ------------------------------------------------------------------ */
 /* Deserializing into existing objects                                 */
@@ -193,60 +224,105 @@ export interface ReuseCase {
   memorypackOverwriteBytes: number;
 }
 
-export const reuse: ReuseCase[] = [
+const reuseCases = [
   {
     name: 'Pooled node',
     zh: '池化节点',
-    ninoNew: t('873 ns'),
-    ninoReuse: t('280 ns'),
-    ninoReuseBytes: 0,
-    memorypackNew: t('952 ns'),
-    memorypackOverwrite: t('727 ns'),
-    memorypackOverwriteBytes: 1024,
+    methods: [
+      'NinoNodeNew',
+      'NinoNodePooled',
+      'MemoryPackNodeNew',
+      'MemoryPackNodeOverwrite',
+    ],
   },
   {
     name: 'Pooled leaves, in place',
     zh: '池化叶子，原地复用',
-    ninoNew: t('5.23 µs'),
-    ninoReuse: t('1.18 µs'),
-    ninoReuseBytes: 0,
-    memorypackNew: t('5.38 µs'),
-    memorypackOverwrite: t('5.80 µs'),
-    memorypackOverwriteBytes: 12800,
+    methods: [
+      'NinoLeavesNew',
+      'NinoLeavesInPlace',
+      'MemoryPackLeavesNew',
+      'MemoryPackLeavesOverwrite',
+    ],
   },
   {
     name: 'Pooled leaves, pooled elements',
     zh: '池化叶子，池化元素',
-    ninoNew: t('5.23 µs'),
-    ninoReuse: t('3.82 µs'),
-    ninoReuseBytes: 856,
-    memorypackNew: t('5.38 µs'),
-    memorypackOverwrite: t('5.80 µs'),
-    memorypackOverwriteBytes: 12800,
+    methods: [
+      'NinoLeavesNew',
+      'NinoLeavesPooledElements',
+      'MemoryPackLeavesNew',
+      'MemoryPackLeavesOverwrite',
+    ],
   },
   {
     name: 'Pooled class',
     zh: '池化类',
-    ninoNew: t('780 ns'),
-    ninoReuse: t('623 ns'),
-    ninoReuseBytes: 1080,
-    memorypackNew: t('1,044 ns'),
-    memorypackOverwrite: t('857 ns'),
-    memorypackOverwriteBytes: 1080,
+    methods: [
+      'NinoDeserializeNew',
+      'NinoDeserializePooled',
+      'MemoryPackDeserializeNew',
+      'MemoryPackDeserializeOverwrite',
+    ],
   },
 ];
 
-/** How many times faster Nino reusing is than MemoryPack overwrite (2.6, 4.9, ...) */
+export const reuse: ReuseCase[] = reuseCases.flatMap(
+  ({ name, zh, methods: [ninoNew, ninoReuse, mpNew, mpOverwrite] }) => {
+    const a = measure(ninoNew);
+    const b = measure(ninoReuse);
+    const c = measure(mpNew);
+    const d = measure(mpOverwrite);
+    const bBytes = bytes(ninoReuse);
+    const dBytes = bytes(mpOverwrite);
+    if (!a || !b || !c || !d || bBytes === null || dBytes === null) return [];
+    return [
+      {
+        name,
+        zh,
+        ninoNew: a,
+        ninoReuse: b,
+        ninoReuseBytes: bBytes,
+        memorypackNew: c,
+        memorypackOverwrite: d,
+        memorypackOverwriteBytes: dBytes,
+      },
+    ];
+  },
+);
+
+/** How many times faster Nino reusing is than MemoryPack overwrite (one decimal) */
 export function reuseSpeedup(row: ReuseCase) {
   return Math.round((row.memorypackOverwrite.ns / row.ninoReuse.ns) * 10) / 10;
 }
 
+/** The reuse case where Nino gains most over MemoryPack's overwrite mode */
+export const bestReuse = reuse.reduce<ReuseCase | undefined>(
+  (best, row) => (!best || reuseSpeedup(row) > reuseSpeedup(best) ? row : best),
+  undefined,
+);
+
 /* ------------------------------------------------------------------ */
-/* Payload size                                                        */
+/* Allocations and payload size                                        */
 /* ------------------------------------------------------------------ */
 
+/** True when every serialize case allocated 0 B in both libraries */
+export const serializeAllocatesNothing = cases.serialize.every((info) =>
+  ['Nino', 'MemoryPack'].every(
+    (lib) => (bytes(`${lib}Serialize${info.key}`) ?? 0) === 0,
+  ),
+);
+
 /** Bytes written for one SimpleClass */
-export const payload = { name: 'SimpleClass', v4: 1146, memorypack: 1148 };
+export const payload = {
+  name: 'SimpleClass',
+  v4: rows.get('NinoSerializeSimpleClass')?.payloadBytes ?? null,
+  memorypack: rows.get('MemoryPackSerializeSimpleClass')?.payloadBytes ?? null,
+};
+
+/** "2.97×" */
+export const times = (value: number, decimals = 2) =>
+  `${value.toFixed(decimals)}×`;
 
 /* ------------------------------------------------------------------ */
 /* Build time                                                          */
@@ -328,67 +404,6 @@ export const build: BuildMeasure[] = [
   },
 ];
 
-/* ------------------------------------------------------------------ */
-/* Derived views for the race bars (times normalized to MemoryPack)    */
-/* ------------------------------------------------------------------ */
-
-export interface CompareRow {
-  name: string;
-  /** Normalized times (MemoryPack = 1.00, lower is faster) */
-  v4: number;
-  memorypack: number;
-  /** Approximate: the v4 time multiplied by the published v4-vs-v3 ratio */
-  v3?: number;
-  /** Published v4 vs MemoryPack ratio; undefined = on par */
-  ratio?: number;
-  /** Published v4 vs v3 ratio (1 = on par) */
-  vsV3?: number;
-  /** Shown instead of the normalized number, e.g. "280 ns · 0 B" */
-  detail?: { v4: string; memorypack: string };
-}
-
-const round = (value: number) => Math.round(value * 1000) / 1000;
-
-function normalized(row: RuntimeCase): CompareRow {
-  const v4 = round(row.v4.ns / row.memorypack.ns);
-  return {
-    name: row.name,
-    v4,
-    memorypack: 1,
-    v3: row.vsV3 === undefined ? undefined : round(v4 * row.vsV3),
-    ratio: row.ratio,
-    vsV3: row.vsV3,
-  };
-}
-
-/** Cases measured against v3 too (v3's benchmarks have no polymorphic cases) */
-export const vsV3Runtime = {
-  serialize: runtime.serialize
-    .filter((row) => row.vsV3 !== undefined)
-    .map(normalized),
-  deserialize: runtime.deserialize
-    .filter((row) => row.vsV3 !== undefined)
-    .map(normalized),
-};
-
-export const vsMemoryPack = {
-  serialize: runtime.serialize.map(normalized),
-  deserialize: runtime.deserialize.map(normalized),
-  /** Nino reusing vs MemoryPack overwrite, normalized to MemoryPack overwrite */
-  reuse: reuse.map(
-    (row): CompareRow => ({
-      name: row.name,
-      v4: round(row.ninoReuse.ns / row.memorypackOverwrite.ns),
-      memorypack: 1,
-      ratio: reuseSpeedup(row),
-      detail: {
-        v4: `${row.ninoReuse.text} · ${formatBytes(row.ninoReuseBytes)}`,
-        memorypack: `${row.memorypackOverwrite.text} · ${formatBytes(row.memorypackOverwriteBytes)}`,
-      },
-    }),
-  ),
-};
-
 /** Stat cards for the build benchmark */
 export const vsV3Build = build.map((row) => ({
   value: `${row.ratio}×`,
@@ -402,3 +417,22 @@ export const buildLarge = {
   source: { v3: '62.0 MB', v4: '3.9 MB', v3n: 62, v4n: 3.9, ratio: 16 },
   emit: { v3: '636 s', v4: '2.2 s', v3n: 636, v4n: 2.2, ratio: 289 },
 };
+
+/* ------------------------------------------------------------------ */
+/* Headline numbers                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Best serialize win over MemoryPack, one decimal ("4.3") */
+export const headlineSerialize = (() => {
+  const { max } = ratioRange('serialize');
+  return Number.isFinite(max) ? max.toFixed(1) : null;
+})();
+
+/** Best reuse win over MemoryPack's overwrite, one decimal ("4.9") */
+export const headlineReuse = bestReuse
+  ? reuseSpeedup(bestReuse).toFixed(1)
+  : null;
+
+/** True when the data shows zero GC on the serialize and reuse paths */
+export const headlineZeroGc =
+  bestReuse?.ninoReuseBytes === 0 && serializeAllocatesNothing;

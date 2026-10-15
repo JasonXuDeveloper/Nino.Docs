@@ -69,31 +69,8 @@ v3 inlined the bodies of every subtype into each polymorphic base and re-generat
 
 ## Runtime
 
-BenchmarkDotNet 0.15.2 on .NET 10.0.13. Each ratio compares v4 / MemoryPack 1.21.4 with v3 3.3.13 / MemoryPack from a separate run on the same machine; v3's benchmarks have no polymorphic cases. See [Benchmarks](/en/docs/v4/perf) for the absolute times.
+Nino v4 against v3 3.3.13 from NuGet, measured back to back on the same machine. See [Benchmarks](/en/docs/v4/perf) for absolute times and the comparison with MemoryPack.
 
-<BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="en" table={false} />
-
-### Serialize
-
-| Case | v4 vs v3 |
-|---|---:|
-| `SimpleClass` | **1.73× faster** |
-| `SimpleClass[100]` | **1.29× faster** |
-| `SimpleStruct` (`int` + `DateTime`) | **1.35× faster** |
-| `SimpleStruct[100]` | on par |
-| `Vector4[10000]` | on par |
-
-### Deserialize
-
-{/* V3_DESERIALIZE */}
-
-| Case | v4 vs v3 |
-|---|---:|
-| `SimpleClass` | **1.19× faster** |
-| `SimpleClass[100]` | **1.22× faster** |
-| `SimpleStruct[100]` | on par |
-| `Vector4[10000]` | 0.90× (dominated by allocating a 160 KB array per call) |
-
-{/* /V3_DESERIALIZE */}
+<BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="en" />
 
 Deserializing classes is dominated by allocating the result objects. v4 adds what v3 could not do: deserializing into existing and pooled instances, which allocates **0 B** per call. See [What's New in v4](/en/docs/v4/whats-new).
