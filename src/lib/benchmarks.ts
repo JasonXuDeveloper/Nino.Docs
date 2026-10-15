@@ -395,3 +395,10 @@ export const vsV3Build = build.map((row) => ({
   en: row.short.en,
   zh: row.short.zh,
 }));
+
+/** Build cost at 1,100 types (N = 100), v3.3.13 vs v4 (docs/v4-benchmarks.md) */
+export const buildLarge = {
+  types: 1100,
+  source: { v3: '62.0 MB', v4: '3.9 MB', v3n: 62, v4n: 3.9, ratio: 16 },
+  emit: { v3: '636 s', v4: '2.2 s', v3n: 636, v4n: 2.2, ratio: 289 },
+};

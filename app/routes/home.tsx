@@ -1,26 +1,27 @@
 import { HomeLayout } from 'fumadocs-ui/layouts/home';
+import {
+  ArrowRight,
+  Boxes,
+  Cpu,
+  GitBranch,
+  Globe,
+  Hammer,
+  Recycle,
+} from 'lucide-react';
 import { Link } from 'react-router';
-import { ByteMap } from '@/components/byte-map';
-import { BenchmarkChart } from '@/components/charts';
+import { HomeCompare, HomeStats } from '@/components/home-compare';
+import { cn } from '@/lib/cn';
 import { getLocale, type Locale } from '@/lib/i18n';
-import { baseOptions } from '@/lib/layout.shared';
+import { baseOptions, githubUrl } from '@/lib/layout.shared';
 import { latestVersion } from '@/lib/versions';
 import type { Route } from './+types/home';
 
 const siteUrl = 'https://nino.xgamedev.net';
 
-interface Item {
+interface Highlight {
+  icon: typeof Cpu;
   label: string;
   text: string;
-  href: string;
-}
-
-/** One measured claim: text before the number, the number, text after */
-interface Fact {
-  before: string;
-  value: string;
-  after: string;
-  href: string;
 }
 
 const copy: Record<
@@ -28,205 +29,118 @@ const copy: Record<
   {
     title: string;
     description: string;
-    headline: string;
+    pill: string;
+    headline: [string, string];
     sub: string;
     start: string;
-    whatsNew: string;
-    facts: Fact[];
-    benchTitle: string;
-    benchText: string;
-    benchLinks: [string, string];
-    featuresTitle: string;
-    features: Item[];
-    guides: [string, string];
-    useCases: Item[];
-    oldVersions: string;
-    license: string;
+    github: string;
+    highlights: Highlight[];
+    guides: string;
+    useCases: { label: string; href: string }[];
+    older: string;
   }
 > = {
   en: {
     title: 'Nino - The fastest binary serializer for C#',
     description:
       'Nino is a source-generated binary serializer for C#: up to 4.3× faster than MemoryPack, zero GC allocations, for Unity, Godot and .NET servers.',
-    headline: 'The fastest binary serializer for C#',
-    sub: 'Mark a type with [NinoType] and Nino generates its serializer at compile time. For Unity, Godot and .NET servers.',
-    start: 'Get started',
-    whatsNew: "What's new in v4",
-    facts: [
+    pill: 'C# binary serializer · v4',
+    headline: ['The fastest binary serializer', 'for C#.'],
+    sub: 'Source-generated, with zero GC allocations, for Unity, Godot and .NET servers.',
+    start: 'Get Started',
+    github: 'View on GitHub',
+    highlights: [
       {
-        before: 'Serializes up to ',
-        value: '4.3×',
-        after: ' faster than MemoryPack.',
-        href: 'vs-memorypack',
+        icon: Cpu,
+        label: 'Zero reflection',
+        text: 'Formatters are generated at compile time: runs on IL2CPP, NativeAOT and HybridCLR.',
       },
       {
-        before: 'Deserializes into pooled objects up to ',
-        value: '4.9×',
-        after: ' faster than MemoryPack overwriting them.',
-        href: 'whats-new#deserialize-into-existing-objects',
+        icon: Recycle,
+        label: 'Zero allocation',
+        text: 'Serialize without garbage; deserialize into existing objects and pools.',
       },
       {
-        before: '',
-        value: '0 GC',
-        after:
-          ': zero GC allocations when serializing or deserializing into pooled objects.',
-        href: 'pooling',
+        icon: Boxes,
+        label: 'Polymorphism without tags',
+        text: 'Subtypes inherit [NinoType] and come back as their runtime type. No union tags to maintain.',
       },
       {
-        before: 'Generated code compiles ',
-        value: '44×',
-        after: ' faster than with Nino v3.',
-        href: 'v3-vs-v4',
-      },
-    ],
-    benchTitle: 'Benchmarks',
-    benchText:
-      'BenchmarkDotNet on .NET 10. Nino v4 and MemoryPack 1.21.4 ran side by side; build times are against Nino v3.3.13.',
-    benchLinks: ['All benchmarks', 'Nino vs MemoryPack'],
-    featuresTitle: 'Features',
-    features: [
-      {
-        label: 'No reflection',
-        text: 'Formatters are generated at compile time, so Nino runs on IL2CPP, NativeAOT and HybridCLR.',
-        href: 'platforms',
-      },
-      {
-        label: 'Reuse what you have',
-        text: 'Deserialize into existing objects and pools instead of allocating new ones.',
-        href: 'pooling',
-      },
-      {
-        label: 'One file per type',
-        text: 'The incremental generator writes 16× less code than v3 and rebuilds only what changed.',
-        href: 'v3-vs-v4',
-      },
-      {
+        icon: GitBranch,
         label: 'Data that evolves',
-        text: "Version-tolerant and keyed types let old and new builds read each other's data.",
-        href: 'evolving-data',
+        text: 'Keyed members, version tolerance and reference tracking, chosen per type.',
       },
       {
-        label: 'Polymorphism',
-        text: 'Subclasses and interfaces come back as the type that was written.',
-        href: 'polymorphism',
+        icon: Hammer,
+        label: 'Incremental generator',
+        text: 'One file per type and 16× less code than v3; an edit re-generates only that type.',
       },
       {
+        icon: Globe,
         label: 'Same bytes everywhere',
         text: 'CoreCLR, Mono and IL2CPP, 64-bit and 32-bit all read and write one format.',
-        href: 'platforms',
       },
     ],
-    guides: ['Guides for ', ' and '],
+    guides: 'Guides:',
     useCases: [
-      { label: 'Unity', text: '', href: 'advanced/unity' },
-      { label: 'Godot', text: '', href: 'platforms#godot' },
-      { label: 'game servers', text: '', href: 'advanced/networking' },
-      { label: 'save games', text: '', href: 'advanced/persistence' },
-      {
-        label: 'high-throughput services',
-        text: '',
-        href: 'advanced/high-performance',
-      },
+      { label: 'Unity', href: 'advanced/unity' },
+      { label: 'Godot', href: 'platforms#godot' },
+      { label: 'Game servers', href: 'advanced/networking' },
+      { label: 'Save games', href: 'advanced/persistence' },
     ],
-    oldVersions: 'Older versions:',
-    license: 'MIT License',
+    older: 'Older versions:',
   },
   zh: {
     title: 'Nino - 最快的 C# 二进制序列化库',
     description:
       'Nino 是基于源生成器的 C# 二进制序列化库：最高比 MemoryPack 快 4.3 倍，零 GC 分配，适用于 Unity、Godot 与 .NET 服务端。',
-    headline: '最快的 C# 二进制序列化库',
-    sub: '给类型标上 [NinoType]，Nino 会在编译期生成它的序列化代码。适用于 Unity、Godot 与 .NET 服务端。',
+    pill: 'C# 二进制序列化库 · v4',
+    headline: ['最快的二进制序列化库', '为 C# 而生。'],
+    sub: '源生成器实现，零 GC 分配，适用于 Unity、Godot 与 .NET 服务端。',
     start: '快速开始',
-    whatsNew: 'v4 新特性',
-    facts: [
+    github: '在 GitHub 上查看',
+    highlights: [
       {
-        before: '序列化比 MemoryPack 最高快 ',
-        value: '4.3 倍',
-        after: '。',
-        href: 'vs-memorypack',
+        icon: Cpu,
+        label: '零反射',
+        text: '格式化器在编译期生成：可用于 IL2CPP、NativeAOT 与 HybridCLR。',
       },
       {
-        before: '反序列化到池化对象，比 MemoryPack 覆盖写入最高快 ',
-        value: '4.9 倍',
-        after: '。',
-        href: 'whats-new#deserialize-into-existing-objects',
+        icon: Recycle,
+        label: '零分配',
+        text: '序列化不产生垃圾；反序列化可复用已有对象与对象池。',
       },
       {
-        before: '',
-        value: '0 GC',
-        after: '：序列化、复用池化对象反序列化零 GC 分配。',
-        href: 'pooling',
+        icon: Boxes,
+        label: '无需标签的多态',
+        text: '子类自动继承 [NinoType]，按运行时类型还原，无需维护联合标签。',
       },
       {
-        before: '生成的代码编译比 Nino v3 快 ',
-        value: '44 倍',
-        after: '。',
-        href: 'v3-vs-v4',
-      },
-    ],
-    benchTitle: '基准测试',
-    benchText:
-      'BenchmarkDotNet，.NET 10。Nino v4 与 MemoryPack 1.21.4 在同一次运行中对比；构建时间与 Nino v3.3.13 对比。',
-    benchLinks: ['全部基准测试', 'Nino 与 MemoryPack 对比'],
-    featuresTitle: '特性',
-    features: [
-      {
-        label: '无反射',
-        text: '格式化器在编译期生成，可用于 IL2CPP、NativeAOT 与 HybridCLR。',
-        href: 'platforms',
-      },
-      {
-        label: '复用已有对象',
-        text: '反序列化到已有对象与对象池，而不是分配新对象。',
-        href: 'pooling',
-      },
-      {
-        label: '每个类型一个文件',
-        text: '增量生成器的代码量比 v3 少 16 倍，只重新生成改动的部分。',
-        href: 'v3-vs-v4',
-      },
-      {
+        icon: GitBranch,
         label: '数据可演进',
-        text: '版本兼容与键控类型让新旧版本互相读取对方的数据。',
-        href: 'evolving-data',
+        text: '键控成员、版本兼容与引用追踪，按类型选择。',
       },
       {
-        label: '多态',
-        text: '子类与接口反序列化后仍是写入时的类型。',
-        href: 'polymorphism',
+        icon: Hammer,
+        label: '增量生成器',
+        text: '每个类型一个文件，代码比 v3 少 16 倍；修改后只重新生成该类型。',
       },
       {
+        icon: Globe,
         label: '处处同一格式',
         text: 'CoreCLR、Mono 与 IL2CPP，64 位与 32 位，读写同一种格式。',
-        href: 'platforms',
       },
     ],
-    guides: ['使用指南：', '与'],
+    guides: '使用指南：',
     useCases: [
-      { label: 'Unity', text: '', href: 'advanced/unity' },
-      { label: 'Godot', text: '', href: 'platforms#godot' },
-      { label: '游戏服务器', text: '', href: 'advanced/networking' },
-      { label: '游戏存档', text: '', href: 'advanced/persistence' },
-      { label: '高吞吐量服务', text: '', href: 'advanced/high-performance' },
+      { label: 'Unity', href: 'advanced/unity' },
+      { label: 'Godot', href: 'platforms#godot' },
+      { label: '游戏服务器', href: 'advanced/networking' },
+      { label: '游戏存档', href: 'advanced/persistence' },
     ],
-    oldVersions: '旧版本：',
-    license: 'MIT 许可证',
+    older: '旧版本：',
   },
 };
-
-export const links: Route.LinksFunction = () => [
-  { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
-  {
-    rel: 'preconnect',
-    href: 'https://fonts.gstatic.com',
-    crossOrigin: 'anonymous',
-  },
-  {
-    rel: 'stylesheet',
-    href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap',
-  },
-];
 
 export function meta({ params }: Route.MetaArgs) {
   const lang = getLocale(params.lang);
@@ -261,31 +175,17 @@ export function meta({ params }: Route.MetaArgs) {
   ];
 }
 
-const primaryButton =
-  'inline-flex items-center gap-2 rounded-lg bg-fd-primary px-4 py-2.5 text-sm font-medium text-fd-primary-foreground transition-colors hover:bg-fd-primary/90';
-const secondaryButton =
-  'inline-flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground';
-
-function Guides({ lang, docs }: { lang: Locale; docs: string }) {
-  const t = copy[lang];
-  const list = t.useCases;
-  const sep = lang === 'zh' ? '、' : ', ';
+function GitHubIcon() {
   return (
-    <p className="mt-10 max-w-2xl text-fd-muted-foreground">
-      {t.guides[0]}
-      {list.map((u, i) => (
-        <span key={u.href}>
-          {i > 0 && (i === list.length - 1 ? t.guides[1] : sep)}
-          <Link
-            to={`${docs}/${u.href}`}
-            className="font-medium text-fd-foreground underline decoration-fd-border underline-offset-4 hover:decoration-fd-primary"
-          >
-            {u.label}
-          </Link>
-        </span>
-      ))}
-      {lang === 'zh' ? '。' : '.'}
-    </p>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+    </svg>
   );
 }
 
@@ -293,123 +193,117 @@ export default function HomePage({ params }: Route.ComponentProps) {
   const lang = getLocale(params.lang);
   const t = copy[lang];
   const docs = `/${lang}/docs/${latestVersion}`;
-  const year = new Date().getFullYear();
+  const sep = lang === 'zh' ? '、' : ', ';
 
   return (
     <HomeLayout {...baseOptions(lang)}>
-      <main className="flex flex-1 flex-col">
-        <section className="mx-auto grid w-full max-w-6xl gap-10 px-4 pt-12 pb-12 sm:px-6 md:pt-20 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] lg:items-center lg:gap-12">
-          <div>
-            <h1 className="max-w-md text-4xl leading-[1.08] font-semibold tracking-tight text-balance break-keep md:text-5xl lg:text-[2.5rem]">
-              {t.headline}
+      <main className="flex flex-1 flex-col items-center">
+        <section className="flex w-full flex-col items-center px-6 pt-10 pb-8 md:pt-16 md:pb-10">
+          <div className="flex max-w-5xl flex-col items-center text-center">
+            <span className="mb-4 rounded-full border border-fd-border bg-fd-secondary/50 px-3 py-1 text-xs font-medium text-fd-muted-foreground">
+              {t.pill}
+            </span>
+
+            <h1 className="text-4xl font-extrabold tracking-tight break-keep sm:text-5xl lg:text-6xl">
+              {t.headline[0]}
+              <br />
+              <span className="bg-linear-to-r/oklab from-fd-primary from-35% to-nino-champagne bg-clip-text text-transparent">
+                {t.headline[1]}
+              </span>
             </h1>
-            <p className="mt-5 max-w-md text-lg leading-relaxed text-fd-muted-foreground">
+
+            <p className="mt-3 max-w-xl text-base leading-relaxed text-fd-muted-foreground md:text-lg">
               {t.sub}
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link to={`${docs}/start`} className={primaryButton}>
+
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                to={`${docs}/start`}
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-colors',
+                  'bg-fd-primary text-fd-primary-foreground hover:bg-fd-primary/90',
+                )}
+              >
                 {t.start}
+                <ArrowRight className="size-4" />
               </Link>
-              <Link to={`${docs}/whats-new`} className={secondaryButton}>
-                {t.whatsNew}
-              </Link>
+              <a
+                href={githubUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors',
+                  'hover:bg-fd-accent hover:text-fd-accent-foreground',
+                )}
+              >
+                <GitHubIcon />
+                {t.github}
+              </a>
             </div>
           </div>
-
-          <ByteMap lang={lang} />
-
-          <ul className="grid gap-x-8 gap-y-4 border-t pt-6 text-[15px] leading-relaxed text-fd-muted-foreground sm:grid-cols-2 lg:col-span-2 lg:grid-cols-4">
-            {t.facts.map((f) => (
-              <li key={f.value}>
-                <Link
-                  to={`${docs}/${f.href}`}
-                  className="hover:text-fd-foreground"
-                >
-                  {f.before}
-                  <strong className="font-semibold whitespace-nowrap text-fd-foreground tabular-nums">
-                    {f.value}
-                  </strong>
-                  {f.after}
-                </Link>
-              </li>
-            ))}
-          </ul>
         </section>
 
-        <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 md:py-16">
-          <div className="max-w-3xl">
-            <h2 className="text-2xl font-semibold tracking-tight">
-              {t.benchTitle}
-            </h2>
-            <p className="mt-2 text-fd-muted-foreground">{t.benchText}</p>
-            <BenchmarkChart
-              chart={['serialize', 'deserialize', 'reuse', 'compile']}
-              lang={lang}
-            />
-            <p className="flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium">
-              <Link
-                to={`${docs}/perf`}
-                className="text-fd-primary hover:underline"
-              >
-                {t.benchLinks[0]}
-              </Link>
-              <Link
-                to={`${docs}/vs-memorypack`}
-                className="text-fd-primary hover:underline"
-              >
-                {t.benchLinks[1]}
-              </Link>
-            </p>
+        <section className="w-full border-t px-6 py-10">
+          <div className="mx-auto max-w-5xl">
+            <HomeStats lang={lang} docs={docs} />
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 md:py-16">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            {t.featuresTitle}
-          </h2>
-          <dl className="mt-8 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
-            {t.features.map((f) => (
-              <div key={f.label}>
-                <dt className="font-semibold">
-                  <Link
-                    to={`${docs}/${f.href}`}
-                    className="hover:text-fd-primary"
-                  >
-                    {f.label}
-                  </Link>
-                </dt>
-                <dd className="mt-1.5 leading-relaxed text-fd-muted-foreground">
-                  {f.text}
-                </dd>
+        <section className="w-full border-t px-6 py-12">
+          <div className="mx-auto max-w-5xl">
+            <HomeCompare lang={lang} docs={docs} />
+          </div>
+        </section>
+
+        <section className="w-full border-t px-6 py-8">
+          <div className="mx-auto grid max-w-5xl gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+            {t.highlights.map((h) => (
+              <div key={h.label} className="flex items-start gap-3">
+                <div className="mt-0.5 shrink-0 rounded-md bg-fd-primary/10 p-2 text-fd-primary">
+                  <h.icon className="size-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">{h.label}</p>
+                  <p className="text-sm text-fd-muted-foreground">{h.text}</p>
+                </div>
               </div>
             ))}
-          </dl>
-          <Guides lang={lang} docs={docs} />
+          </div>
         </section>
 
-        <footer className="mt-auto border-t">
-          <div className="mx-auto flex w-full max-w-6xl flex-wrap justify-between gap-x-8 gap-y-2 px-4 py-6 text-sm text-fd-muted-foreground sm:px-6">
-            <p>
-              {t.oldVersions}{' '}
-              <Link
-                to={`/${lang}/docs/v3`}
-                className="underline underline-offset-4"
-              >
-                v3
-              </Link>
-              {lang === 'zh' ? '、' : ', '}
-              <Link
-                to={`/${lang}/docs/v2`}
-                className="underline underline-offset-4"
-              >
-                v2
-              </Link>
-            </p>
-            <p>
-              {t.license}, © {year} JasonXuDeveloper
-            </p>
-          </div>
-        </footer>
+        <section className="w-full border-t px-6 py-6">
+          <p className="mx-auto max-w-5xl text-center text-sm text-fd-muted-foreground">
+            {t.guides}{' '}
+            {t.useCases.map((u, i) => (
+              <span key={u.href}>
+                {i > 0 && sep}
+                <Link
+                  to={`${docs}/${u.href}`}
+                  className="underline underline-offset-4 hover:text-fd-foreground"
+                >
+                  {u.label}
+                </Link>
+              </span>
+            ))}
+            <span className="mx-3 text-fd-border" aria-hidden="true">
+              |
+            </span>
+            {t.older}{' '}
+            <Link
+              to={`/${lang}/docs/v3`}
+              className="underline underline-offset-4 hover:text-fd-foreground"
+            >
+              v3
+            </Link>
+            {sep}
+            <Link
+              to={`/${lang}/docs/v2`}
+              className="underline underline-offset-4 hover:text-fd-foreground"
+            >
+              v2
+            </Link>
+          </p>
+        </section>
       </main>
     </HomeLayout>
   );
