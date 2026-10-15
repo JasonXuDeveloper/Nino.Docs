@@ -53,7 +53,7 @@ public class PlayerState
 <Callout type="info">
 
 - **`partial` is required for private members.** Unity compiles against .NET Standard, which has no `[UnsafeAccessor]`, so a type that serializes non-public members (or is `[NinoPooled]`) must be `partial`, together with every type that contains it. The analyzer reports it as NINO002 and fixes it for you.
-- **No interceptors.** Unity's compiler predates Roslyn 4.8, so calls use the regular path. The bytes are identical, and the difference is a few nanoseconds per call.
+- **No interceptors.** The Unity package ships the generator's Roslyn 4.3 build, the oldest compiler Unity supports, so calls use the regular path. The bytes are identical, and the difference is a few nanoseconds per call.
 - **Same bytes as .NET.** Data written by a .NET server is read by a Unity client and the other way round, including 32-bit IL2CPP players and old Mono runtimes. See [Platforms and Binary Format](/en/docs/v4/platforms).
 
 </Callout>
@@ -61,7 +61,7 @@ public class PlayerState
 ## IL2CPP
 
 - Generated code is plain C#: no reflection at serialization time, no `System.Reflection.Emit`.
-- Each generated registry is marked `[RuntimeInitializeOnLoadMethod]`, which registers it at startup and keeps it rooted for the IL2CPP linker.
+- Each generated registry is marked `[RuntimeInitializeOnLoadMethod]` (and `[InitializeOnLoadMethod]` in the editor), which runs it at startup and keeps it from being stripped by the IL2CPP linker. Registration would otherwise still happen lazily on first use.
 - Generic `[NinoType]` instantiations and built-in generic collections that your code **names** (member types, `NinoSerializer.Serialize<List<MyStruct>>` calls) are registered by the generator, so IL2CPP compiles them ahead of time.
 - An instantiation that you only create through reflection and only **read** polymorphically needs one line at startup: `NinoPolymorphic.Register<Box<MyStruct>>()`.
 
@@ -77,6 +77,7 @@ Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
 - Put hot-update types in an assembly definition that references `Nino.Core`, or build them in a separate C# project that installs Nino from NuGet and load the DLL as usual.
 - Follow HybridCLR's own rules for AOT generics: load supplementary metadata for the AOT assemblies your hot-update code instantiates generics from.
 - Hot-update code runs in HybridCLR's interpreter, which does not inline calls. Nino's generated code calls `Nino.Core` directly without wrapper layers, for this reason.
+- Registration is lazy, so the first serialization of a hot-update type pays for loading its registry. To pay that during a loading screen instead, call `NinoRegistry.EnsureInitialized(hotUpdate)` after loading the assembly (or `NinoRegistry.EnsureAllInitialized()` for every loaded assembly). Both are optional.
 
 ## Frame-Time Tips
 

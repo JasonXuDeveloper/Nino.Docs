@@ -1,19 +1,19 @@
 ---
 title: 网络层
-description: "基于 Nino 构建消息协议：分帧、多态消息、System.IO.Pipelines、按连接池化、滚动升级。"
+description: "基于 Nino 搭建消息协议：分帧、多态消息、System.IO.Pipelines、按连接池化、滚动升级。"
 icon: Network
 ---
 
-本指南构建一个 TCP 协议的序列化部分：一个消息继承体系、直接写入 `PipeWriter` 的长度前缀帧、从 `PipeReader` 中无拷贝读取的帧，以及按连接复用的消息。传输层（Socket、Kestrel 连接、引擎自带的网络库）由你决定；任何能提供 `PipeReader`/`PipeWriter`、`Stream` 或原始缓冲区的方式都适用。
+本指南实现一个 TCP 协议中与序列化相关的部分：消息继承体系、直接写入 `PipeWriter` 的长度前缀帧、从 `PipeReader` 无拷贝地读取帧，以及按连接复用消息对象。传输层（socket、Kestrel 连接、引擎自带的网络模块）由你决定；只要能提供 `PipeReader`/`PipeWriter`、`Stream` 或原始缓冲区，做法都一样。
 
 ## 定义消息 [#define-the-messages]
 
-让所有消息共享一个 `[NinoType]` 基类。每条消息都带有一个 4 字节的**类型 ID**（其全名的稳定哈希）写入，因此接收方无需手工维护操作码表就能得到正确的子类型。
+让所有消息继承同一个 `[NinoType]` 基类。每条消息写入时都带有 4 字节的**类型 ID**（类型全名的稳定哈希），接收方无需手工维护操作码表，就能还原出正确的子类型。
 
 ```csharp title="Messages.cs"
 using Nino.Core;
 
-[NinoType(versionTolerant: true)] // 子类型继承 [NinoType] 及其选项
+[NinoType(versionTolerant: true)] // subtypes inherit [NinoType] and its options
 public abstract class Message
 {
     public int RequestId;
@@ -33,15 +33,15 @@ public sealed class Move : Message
 
 public sealed class Chat : Message
 {
-    [NinoUtf8] public string Text; // UTF-8：以 ASCII 为主的文本更小
+    [NinoUtf8] public string Text; // UTF-8: smaller for mostly-ASCII text
 }
 ```
 
-- 具体的消息类设为密封：Nino 会用生成的代码分派它们，而不是查注册表。
-- 类型 ID 来自名称，因此重命名或移动消息类会让旧的对端无法识别。重命名时请使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
-- `versionTolerant` 让你之后可以添加字段；参见[滚动升级](#rolling-upgrades)。
+- 把消息和 `Message` 声明在同一个程序集中：这样 Nino 会用生成的代码分派（写入时是一串类型判断，读取时是对 ID 的 `switch`），而不是查注册表。把它们声明为 `sealed`，这样声明为 `Move` 的成员只需 1 字节头部，而不是 4 字节 ID。
+- 类型 ID 来自类型名，所以给消息类改名或换命名空间会导致旧版本的对端无法识别。改名时请使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
+- `versionTolerant` 让你以后可以添加字段，参见[滚动升级](#rolling-upgrades)。子类型会随 `[NinoType]` 一起继承它；如果给某个消息单独加了 `[NinoType]`，记得在那里也写上 `versionTolerant: true`。
 
-用普通的模式匹配进行分派：
+用普通的模式匹配分发消息：
 
 ```csharp
 void Handle(Message message)
@@ -55,9 +55,9 @@ void Handle(Message message)
 }
 ```
 
-## 对流分帧 [#frame-the-stream]
+## 分帧 [#frame-the-stream]
 
-TCP 是字节流，因此每条消息都需要分帧。4 字节小端长度前缀是最简单的方式。Nino 的 `Writer` 可以预留这 4 个字节，在其后序列化消息，再回填长度，全部在一个缓冲区内完成：
+TCP 是字节流，每条消息都需要分帧。最简单的做法是加 4 字节小端序的长度前缀。Nino 的 `Writer` 可以先预留 4 字节，在后面序列化消息，再回填长度，全部在同一个缓冲区里完成：
 
 ```csharp title="FrameWriter.cs"
 using System.IO.Pipelines;
@@ -65,35 +65,35 @@ using Nino.Core;
 
 public sealed class FrameWriter
 {
-    private readonly NinoArrayBufferWriter _buffer = new(4096); // 每个连接一个
+    private readonly NinoArrayBufferWriter _buffer = new(4096); // one per connection
 
     public void Write(PipeWriter output, Message message)
     {
         _buffer.ResetWrittenCount();
         var writer = new Writer(_buffer);
-        int lengthPosition = writer.ReserveInt32();   // 为长度预留 4 字节
+        int lengthPosition = writer.ReserveInt32();   // 4 bytes for the length
         NinoSerializer.Serialize(message, ref writer);
-        writer.PatchLength(lengthPosition);           // 预留槽位之后写入的字节数
+        writer.PatchLength(lengthPosition);           // bytes written after the slot
         writer.Flush();
 
-        output.Write(_buffer.WrittenSpan);            // PipeWriter 是 IBufferWriter<byte>
+        output.Write(_buffer.WrittenSpan);            // PipeWriter is an IBufferWriter<byte>
     }
 }
 
-// 发送
+// sending
 frameWriter.Write(pipe.Output, new Move { EntityId = 7, Target = target });
 await pipe.Output.FlushAsync();
 ```
 
 <Callout type="info">
 
-如果传输层本身已经分帧（WebSocket 消息、UDP 数据报、消息队列），可以省略前缀，直接序列化到传输层的 `IBufferWriter<byte>`：`NinoSerializer.Serialize(message, pipeWriter)`。
+如果传输层本身已经分帧（WebSocket 消息、UDP 数据报、消息队列），就不需要长度前缀，直接序列化到传输层的 `IBufferWriter<byte>` 即可：`NinoSerializer.Serialize(message, pipeWriter)`。
 
 </Callout>
 
 ## 读取帧 [#reading-frames]
 
-从管道提供的 `ReadOnlySequence<byte>` 中读出帧，并直接从管道自己的内存中反序列化每一帧：
+从管道给出的 `ReadOnlySequence<byte>` 中切出每一帧，直接在管道自己的内存上反序列化：
 
 ```csharp title="FrameReader.cs"
 using System.Buffers;
@@ -102,7 +102,7 @@ using Nino.Core;
 
 public static class FrameReader
 {
-    public const int MaxFrameSize = 1 << 20; // 在缓冲之前拒绝离谱的长度
+    public const int MaxFrameSize = 1 << 20; // reject absurd lengths before buffering them
 
     public static async Task ReadLoopAsync(PipeReader input, Action<Message> handle)
     {
@@ -138,10 +138,10 @@ public static class FrameReader
 
     public static Message Decode(ReadOnlySequence<byte> frame)
     {
-        if (frame.IsSingleSegment)                       // 常见情况：无需拷贝
+        if (frame.IsSingleSegment)                       // the common case: no copy
             return NinoDeserializer.Deserialize<Message>(frame.First.Span);
 
-        int length = (int)frame.Length;                  // 跨越两个段：拷贝一次
+        int length = (int)frame.Length;                  // spans two segments: copy once
         if (length <= 512)
         {
             Span<byte> stack = stackalloc byte[length];
@@ -161,46 +161,46 @@ public static class FrameReader
 
 <Callout type="info">
 
-Nino 会在分配之前把载荷内的每个长度与剩余字节数比对，因此恶意帧无法让它分配巨大的数组，截断的数据会抛出异常而不是越界读取。但你仍应像上面那样自己限制帧大小，避免对端让管道缓冲数 GB 的数据。
+Nino 在分配内存之前，会把数据中的每个长度与剩余字节数比对，所以恶意的帧无法让它分配巨大的数组；数据被截断时会抛出异常，而不会越界读取。但你仍然应该像上面那样自己限制帧的大小，以免对端让管道缓冲数 GB 的数据。
 
 </Callout>
 
 ## 按连接复用消息 [#reuse-messages-per-connection]
 
-繁忙的连接会反复反序列化同样几种消息类型。有两种方式可以避免为它们分配内存：
+繁忙的连接会反复反序列化同样几种消息。有两种办法避免为它们分配内存：
 
 <Tabs items={["池化消息", "每种类型一个实例"]}>
 <Tab value="池化消息">
 
-把热点消息标记为 `[NinoPooled]`。每当 Nino 创建实例时都会从对象池中取，包括通过 `Message` 基类读取 `Move` 时。处理完之后归还：
+给高频消息加上 `[NinoPooled]`。Nino 每次创建实例时都会先从池中取，通过 `Message` 基类型读取 `Move` 时也一样。处理完之后把它还回去：
 
 ```csharp
-[NinoType, NinoPooled]
+[NinoPooled] // [NinoType] and versionTolerant are inherited from Message
 public sealed partial class Move : Message
 {
     public int EntityId;
     public Vector3 Target;
 
-    private static partial IEnumerable<Move> OnNinoPoolWarmup() => null; // 初始为空
+    private static partial IEnumerable<Move> OnNinoPoolWarmup() => null; // start empty
     private partial void OnNinoPoolReturn() { }
 }
 
-// 在读取循环中
+// in the read loop
 Message message = FrameReader.Decode(frame);
 Handle(message);
 if (message is INinoPooled pooled)
     pooled.ReturnToPool();
 ```
 
-对象池是线程安全的，并为每个线程保留一个栈，因此不同线程上的连接不会相互争用。
+对象池是线程安全的，并且每个线程有自己的栈，所以不同线程上的连接之间不会争用。
 
 </Tab>
 <Tab value="每种类型一个实例">
 
-如果消息是同步处理且不会被保留，可以用 `ref` 反序列化到上一个实例。下一条消息类型相同时原地填充；类型不同时，旧实例被丢弃（如果它是池化的，则被回收）：
+如果消息是同步处理、处理完不会保留，就用 `ref` 反序列化到上一个实例。下一条消息类型相同时原地填充；类型不同时，旧实例会被丢弃（如果是池化类型，会被回收）：
 
 ```csharp
-private Message _last; // 每个连接一个，同一时间只由一个线程使用
+private Message _last; // per connection, used by one thread at a time
 
 void OnFrame(ReadOnlySpan<byte> frame)
 {
@@ -214,23 +214,23 @@ void OnFrame(ReadOnlySpan<byte> frame)
 
 ## 线程 [#threads]
 
-- `NinoSerializer` 和 `NinoDeserializer` 可以被任意多个线程同时调用，无需加锁。
-- 你的缓冲区和复用的消息则不行：每个连接（或每个发送线程）使用一个 `FrameWriter`，并且绝不能让两个线程反序列化到同一个实例。
-- 交给其他线程（游戏循环、任务队列）的消息，在那个线程用完之前不能被复用或归还到对象池。
+- `NinoSerializer` 和 `NinoDeserializer` 可以在任意多个线程上同时调用，无需加锁。
+- 但你的缓冲区和复用的消息对象不行：每个连接（或每个发送线程）用一个 `FrameWriter`，并且绝不能让两个线程反序列化到同一个实例。
+- 交给其他线程（游戏主循环、任务队列）的消息，在那个线程用完之前，不能复用，也不能归还到池中。
 
 ## 滚动升级 [#rolling-upgrades]
 
-当客户端和服务器并不总是运行同一版本时，请在选择格式时考虑升级：
+当客户端和服务器不总是运行同一个构建版本时，选择格式要把升级考虑进去：
 
-| 修改 | 按位置 | `versionTolerant` | `keyed` |
+| 改动 | 按位置 | `versionTolerant` | `keyed` |
 | --- | :---: | :---: | :---: |
 | 在消息末尾新增字段 | ✗ | ✓ | ✓ |
 | 在 `Message` 基类中新增字段 | ✗ | ✓ | ✓ |
 | 删除或重排字段 | ✗ | ✗ | ✓ |
-| 新的消息类型 | 旧对端无法读取 | 旧对端无法读取 | 旧对端无法读取 |
+| 新增消息类型 | 旧对端无法读取 | 旧对端无法读取 | 旧对端无法读取 |
 
-- 在基类上设置 `versionTolerant`（所有消息都会继承）后，旧对端会跳过不认识的字段，新对端会把缺失的字段设为默认值。
-- 收到**不认识的消息类型**的对端无法反序列化它：调用会抛出异常。请在握手时协商协议版本，只向声明支持的对端发送新的消息类型。
-- 如果双方总是一起发布（游戏客户端与其专用服务器），保持按位置格式即可：它最小也最快。
+- 在基类上设置 `versionTolerant`（所有消息都会继承），旧对端会跳过它不认识的字段，新对端会给缺失的字段赋默认值。
+- 对端收到**它不认识的消息类型**时无法反序列化，调用会抛出 `InvalidOperationException`（未知的类型 ID）。请在握手时协商协议版本，只向声明支持的对端发送新的消息类型；如果想交换消息类型列表，`NinoTypeId.Of(typeof(T))` 可以给出每种消息的 ID。
+- 如果两端总是一起发布（游戏客户端和它的专用服务器），就保持按位置格式：它最小也最快。
 
-具体规则参见[让数据演进](/zh/docs/v4/evolving-data)。
+具体规则参见[数据演进](/zh/docs/v4/evolving-data)。

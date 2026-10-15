@@ -1,14 +1,14 @@
 ---
 title: 高性能序列化
-description: "零分配模式：复用缓冲区、基于 Span 的读取、引用反序列化、对象池和原始结构体。"
+description: "零分配实践：复用缓冲区、基于 span 读取、ref 反序列化、对象池与原始内存结构体。"
 icon: Gauge
 ---
 
-`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 本身已经很快，但每次调用都会分配结果。在热点路径上（服务器 Tick、渲染帧、消息循环），以下模式能把两个方向都降到**每次调用 0 B**。
+`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 本身已经很快，但每次调用都要为结果分配内存。在热路径上（服务器的一次 tick、渲染的一帧、消息循环），下面这些做法可以让序列化和反序列化都降到**每次调用 0 B**。
 
 ## 序列化到复用的缓冲区 [#serialize-into-a-reused-buffer]
 
-`NinoArrayBufferWriter` 是 Nino 的 `IBufferWriter<byte>`，底层使用 `ArrayPool<byte>.Shared`。Nino 原地写入它，最初几次调用后它就会增长到所需大小，之后序列化不再分配。
+`NinoArrayBufferWriter` 是 Nino 自带的 `IBufferWriter<byte>`，底层数组租自 `ArrayPool<byte>.Shared`。Nino 直接写入其中；最初几次调用后，它会增长到你需要的大小，之后序列化就不再分配内存。
 
 ```csharp title="FrameEncoder.cs"
 using Nino.Core;
@@ -19,16 +19,16 @@ public sealed class FrameEncoder : IDisposable
 
     public ReadOnlySpan<byte> Encode(WorldState state)
     {
-        _buffer.ResetWrittenCount();          // 复用同一个数组
+        _buffer.ResetWrittenCount();          // reuse the same array
         NinoSerializer.Serialize(state, _buffer);
-        return _buffer.WrittenSpan;           // 在下一次 Encode 之前有效
+        return _buffer.WrittenSpan;           // valid until the next Encode
     }
 
-    public void Dispose() => _buffer.Dispose(); // 把数组归还给池
+    public void Dispose() => _buffer.Dispose(); // returns the array to the pool
 }
 ```
 
-缓冲区不是线程安全的。给每个线程（或每个连接、每个编码器）各自一个。对于没有天然归属的代码，可以使用线程静态缓冲区：
+缓冲区不是线程安全的，每个线程（或每个连接、每个编码器）各用一个。如果代码没有明确的归属对象，可以用线程静态的缓冲区：
 
 ```csharp
 static class ScratchBuffer
@@ -46,49 +46,60 @@ static class ScratchBuffer
 
 <Callout type="warn">
 
-在缓冲区被再次使用之前，先拷贝或发送 `WrittenSpan`；也不要把线程静态缓冲区交给可能在用完之前再次调用 `Get()` 的代码（重入）。
+在缓冲区被再次使用之前，先拷贝或发送 `WrittenSpan`；也不要把线程静态缓冲区交给可能在用完之前再次调用 `Get()` 的代码（重入问题）。
 
 </Callout>
 
 ### 连续写入多个值 [#several-values-back-to-back]
 
-`Writer` 写入 `NinoArrayBufferWriter`，可以把多个值放进同一个缓冲区，或预留空间稍后再填：
+`Writer` 写入 `NinoArrayBufferWriter`，可以把多个值放进同一个缓冲区，或者预留空间稍后回填：
 
 ```csharp
 var buffer = new NinoArrayBufferWriter();
 var writer = new Writer(buffer);
 NinoSerializer.Serialize(header, ref writer);
 NinoSerializer.Serialize(body, ref writer);
-writer.Flush();              // 提交到 buffer.WrittenCount
-writer.ReleaseReferences();  // 仅在写入了 trackReferences 类型时需要
+writer.Flush();              // commit to buffer.WrittenCount
+writer.ReleaseReferences();  // only needed when trackReferences types were written
 
-// 按相同顺序读回
+// reading them back in the same order
 var reader = new Reader(buffer.WrittenSpan);
 var h = NinoDeserializer.Deserialize<Header>(ref reader);
 var b = NinoDeserializer.Deserialize<Body>(ref reader);
 reader.ReleaseReferences();
 ```
 
-## 从已有内存反序列化 [#deserialize-from-the-memory-you-have]
+## 序列化到任意 IBufferWriter [#serialize-into-any-ibufferwriter]
 
-`NinoDeserializer` 读取 `ReadOnlySpan<byte>`，因此直接传入字节所在缓冲区的切片即可，无需拷贝到新的 `byte[]`：
+任何 `IBufferWriter<byte>` 都可以作为写入目标：`PipeWriter`、Kestrel 的响应体写入器、`ArrayBufferWriter<byte>`。Nino 先写入线程本地的暂存缓冲区，再一次性拷贝到目标写入器，因此每次调用都不分配内存：
 
 ```csharp
-// 收到的数据报位于池化数组中
+NinoSerializer.Serialize(message, pipeWriter); // one copy into the pipe's memory
+await pipeWriter.FlushAsync();
+```
+
+只有 `NinoArrayBufferWriter` 是直接写入的。需要在写完之后回填字节时（例如长度前缀，参见[分帧](/zh/docs/v4/advanced/networking#frame-the-stream)），请使用它。
+
+## 直接从已有内存反序列化 [#deserialize-from-the-memory-you-have]
+
+`NinoDeserializer` 读取的是 `ReadOnlySpan<byte>`，字节在哪个缓冲区里，就直接传那块缓冲区的切片，不必再拷贝到新的 `byte[]`：
+
+```csharp
+// a received datagram in a pooled array
 byte[] rented = ArrayPool<byte>.Shared.Rent(65536);
 int received = socket.Receive(rented);
 var message = NinoDeserializer.Deserialize<Message>(rented.AsSpan(0, received));
 ArrayPool<byte>.Shared.Return(rented);
 ```
 
-对于 `ReadOnlySequence<byte>`（来自 `System.IO.Pipelines`），参见[网络层](/zh/docs/v4/advanced/networking#reading-frames)。
+`ReadOnlySequence<byte>`（来自 `System.IO.Pipelines`）的处理方式见[网络层](/zh/docs/v4/advanced/networking#reading-frames)。
 
 ## 反序列化到已有对象 [#deserialize-into-existing-objects]
 
-通过 `ref` 传入上一次的结果，Nino 会原地填充它：同一个对象，同样的嵌套对象、列表、数组和字典。结构相同的稳定消息流因此不再分配。
+用 `ref` 传入上一次的结果，Nino 会原地填充：同一个对象，同样的嵌套对象、列表、数组和字典。这样，结构相同的消息源源不断地到来时，也不会分配内存。
 
 ```csharp
-WorldState state = null;                 // 第一次调用时创建
+WorldState state = null;                 // created on the first call
 while (TryReceive(out ReadOnlySpan<byte> frame))
 {
     NinoDeserializer.Deserialize(frame, ref state);
@@ -96,13 +107,13 @@ while (TryReceive(out ReadOnlySpan<byte> frame))
 }
 ```
 
-- 列表和数组按索引逐元素复用；字典按键合并。
+- 列表和数组逐个元素复用；字典按键合并。
 - 无法原地填充的类型（位置记录、`init` 或只读成员）会被重新创建。
-- 当已有实例被**丢弃**时（数据为 `null`、列表变短、键消失、多态类型改变），它会被交给该槽位的回收器，且只交一次，而不是被悄悄覆盖。这正是引用反序列化可以安全配合对象池的原因；参见[引用反序列化与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
+- 已有实例被**丢弃**时（数据中为 `null`、列表变短、某个键消失、多态类型改变），它会恰好一次交给该槽位的回收器，而不是被悄悄覆盖。正因如此，ref 反序列化才能安全地与对象池配合使用；参见 [ref 反序列化与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
 
-## 池化你创建的对象 [#pool-what-you-create]
+## 池化新建的对象 [#pool-what-you-create]
 
-引用反序列化复用你已持有的对象，`[NinoPooled]` 负责其余部分：每当 Nino 需要**创建**该类型的实例时（顶层、成员、增长中列表的元素），会先从对象池中取，被丢弃的实例则自动回到池中。
+ref 反序列化复用的是你手里已有的对象，其余的交给 `[NinoPooled]`：每当 Nino 需要**新建**该类型的实例（顶层、成员、变长列表中的新元素），都会先从池中取，被丢弃的实例也会自动回到池中。
 
 <Steps>
 <Step>
@@ -118,16 +129,16 @@ public sealed partial class Bullet
     public Vector3 Velocity;
     public List<int> HitTargets;
 
-    // 在 Nino 首次反序列化该类型之前调用一次：预先填充对象池。
+    // Called once, before Nino first deserializes the type: pre-fill the pool.
     private static partial IEnumerable<Bullet> OnNinoPoolWarmup() =>
         Enumerable.Range(0, 256).Select(_ => new Bullet { HitTargets = new List<int>(8) });
 
-    // 由 ReturnToPool() 调用：释放 Nino 不会反序列化的状态。
+    // Called by ReturnToPool(): release state Nino does not deserialize.
     private partial void OnNinoPoolReturn() { }
 }
 ```
 
-该类必须是 `sealed`、`partial`，并且可以原地填充（NINO018、NINO002）。分析器提供一键添加两个钩子的修复（NINO019）。
+该类必须是 `sealed`、`partial`，并且可以原地填充（NINO018、NINO002）。分析器提供一键添加两个钩子方法的修复（NINO019）。
 
 </Step>
 <Step>
@@ -143,29 +154,29 @@ public sealed class Snapshot
 }
 
 Snapshot snapshot = null;
-NinoDeserializer.Deserialize(frame1, ref snapshot); // 子弹来自对象池
-NinoDeserializer.Deserialize(frame2, ref snapshot); // 消失的子弹回到池中
+NinoDeserializer.Deserialize(frame1, ref snapshot); // bullets come from the pool
+NinoDeserializer.Deserialize(frame2, ref snapshot); // bullets that disappeared go back to it
 ```
 
 </Step>
 <Step>
 
-### 归还你持有的对象 [#return-what-you-own]
+### 归还你持有的实例 [#return-what-you-own]
 
-在顶层得到的实例用完后，把它归还：
+顶层反序列化得到的实例用完之后，把它还回去：
 
 ```csharp
 var bullet = NinoDeserializer.Deserialize<Bullet>(data);
 Simulate(bullet);
-bullet.ReturnToPool(); // 它的 List<int> 保持附着，下次会被复用
+bullet.ReturnToPool(); // its List<int> stays attached and is reused next time
 ```
 
-重复归还同一个实例会抛出 `InvalidOperationException`。从未归还的实例会被正常回收。
+同一个实例归还两次会抛出 `InvalidOperationException`。从未归还的实例只是被垃圾回收而已。
 
 </Step>
 </Steps>
 
-如果默认大小（共享栈 256 个，加上每个线程最多 64 个）不合适，请在启动时设置：
+如果默认容量（共享栈 256 个，另外每个线程最多 64 个）不合适，可以在启动时调整：
 
 ```csharp
 NinoSettings.SetPoolMaxRetained<Bullet>(4096);
@@ -173,17 +184,17 @@ NinoSettings.SetPoolMaxRetained<Bullet>(4096);
 
 <Callout type="idea">
 
-已经有自己的对象池了？给一个公共静态工厂方法标记 `[NinoRefDeserialization]`，Nino 就会通过它创建实例；再用 `NinoSettings.SetRecycler<T>(...)` 注册处理程序，接收 Nino 丢弃的实例。参见[引用反序列化与对象池](/zh/docs/v4/pooling#creating-instances-with-ninorefdeserialization)。
+已经有自己的对象池了？给一个公共静态工厂方法加上 `[NinoRefDeserialization]`，Nino 就会通过它创建实例；再用 `NinoSettings.SetRecycler<T>(...)` 注册处理函数，接收 Nino 丢弃的实例。参见 [ref 反序列化与对象池](/zh/docs/v4/pooling#creating-instances-with-ninorefdeserialization)。
 
 </Callout>
 
-## 让批量数据保持原始 [#keep-bulk-data-raw]
+## 批量数据保持原始内存格式 [#keep-bulk-data-raw]
 
-非托管数据以原始内存按块拷贝：
+非托管数据会按原始内存整块拷贝：
 
 ```csharp
 [NinoType]
-public struct Particle          // 非托管、顺序布局：以原始内存写入
+public struct Particle          // unmanaged, sequential: written as raw memory
 {
     public Vector3 Position;
     public Vector3 Velocity;
@@ -194,17 +205,17 @@ public struct Particle          // 非托管、顺序布局：以原始内存写
 public sealed class ParticleSystemState
 {
     public int Seed;
-    public Particle[] Particles; // 整个数组一次块拷贝
+    public Particle[] Particles; // one block copy for the whole array
 }
 ```
 
 - 非托管元素的数组和 `List<T>` 只需一次拷贝。
-- 内含 `string` 或数组的结构体不是原始的；如果该结构体很热，请把这些字段放到单独的类中。
-- `versionTolerant`、`keyed` 和自定义成员格式化器会关闭该结构体的原始拷贝。
+- 含有 `string` 或数组的结构体不能按原始内存写入；如果这个结构体处在热路径上，把这些字段挪到单独的类里。
+- `versionTolerant`、`keyed` 和自定义成员格式化器都会关闭该结构体的原始内存拷贝。
 
 ### 确定性的字节 [#deterministic-bytes]
 
-Nino 会清零填充字节，因此相等的值总是产生相同的字节，即使结构体是在未初始化内存中构造的（`stackalloc`、`SkipLocalsInit`）。你可以直接对载荷做哈希或比较，例如跳过发送未变化的状态：
+Nino 会把填充字节清零，所以相等的值总是产生相同的字节，即使结构体是在未初始化的内存中构造的（`stackalloc`、`SkipLocalsInit`）。因此可以直接对数据做哈希或比较，例如跳过发送没有变化的状态：
 
 ```csharp
 NinoSerializer.Serialize(state, buffer);
@@ -214,10 +225,10 @@ if (hash != lastHash) { Send(buffer.WrittenSpan); lastHash = hash; }
 
 ## 检查清单 [#checklist]
 
-- [ ] 序列化到复用的 `NinoArrayBufferWriter`，每个线程或持有者一个。
-- [ ] 从已有内存的 Span 反序列化。
-- [ ] 用 `ref` 把热点消息反序列化到已有实例。
-- [ ] 对高频创建和丢弃的类使用 `[NinoPooled]`。
-- [ ] 批量数据使用非托管结构体的数组或列表。
-- [ ] 没有子类型的类设为密封（1 字节头部，无需分派）。
-- [ ] 使用 .NET 8 SDK 或更高版本构建，以获得[拦截器](/zh/docs/v4/performance#interceptors)。
+- [ ] 序列化到复用的 `NinoArrayBufferWriter`，每个线程或每个持有者一个。
+- [ ] 直接从已有内存的 span 反序列化。
+- [ ] 高频消息用 `ref` 反序列化到已有实例。
+- [ ] 给频繁创建和丢弃的类加上 `[NinoPooled]`。
+- [ ] 批量数据放在非托管结构体的数组或列表中。
+- [ ] 没有子类型的类声明为 `sealed`（1 字节头部，无需分派）。
+- [ ] 用 .NET 8 SDK 或更高版本编译，以启用[拦截器](/zh/docs/v4/performance#interceptors)。

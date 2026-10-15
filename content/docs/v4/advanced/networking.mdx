@@ -37,9 +37,9 @@ public sealed class Chat : Message
 }
 ```
 
-- Seal the concrete messages: Nino then dispatches on them with generated code instead of a registry lookup.
+- Declare the messages in the same assembly as `Message`: Nino then dispatches on them with generated code (a type check chain when writing, a `switch` on the id when reading) instead of a registry lookup. Seal them, so that a member declared as `Move` costs a 1-byte header instead of a 4-byte id.
 - Type ids come from names, so renaming or moving a message class breaks old peers. Use [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name) when you rename one.
-- `versionTolerant` lets you add fields later; see [Rolling Upgrades](#rolling-upgrades).
+- `versionTolerant` lets you add fields later; see [Rolling Upgrades](#rolling-upgrades). Subtypes inherit it with `[NinoType]`; if you give a message its own `[NinoType]`, repeat `versionTolerant: true` there.
 
 Dispatch with ordinary pattern matching:
 
@@ -175,7 +175,7 @@ A busy connection deserializes the same few message types over and over. Two way
 Make the hot messages `[NinoPooled]`. Nino takes an instance from the pool whenever it creates one, including when it reads a `Move` through the `Message` base type. Return it once it has been handled:
 
 ```csharp
-[NinoType, NinoPooled]
+[NinoPooled] // [NinoType] and versionTolerant are inherited from Message
 public sealed partial class Move : Message
 {
     public int EntityId;
@@ -230,7 +230,7 @@ When clients and servers are not always on the same build, choose the format wit
 | New message type | old peers cannot read it | old peers cannot read it | old peers cannot read it |
 
 - With `versionTolerant` on the base class (inherited by every message), an old peer skips fields it does not know and a new peer gives missing fields their default.
-- A peer that receives a **message type it does not know** cannot deserialize it: the call throws. Negotiate a protocol version in your handshake and only send new message types to peers that announced support.
+- A peer that receives a **message type it does not know** cannot deserialize it: the call throws an `InvalidOperationException` (unknown type id). Negotiate a protocol version in your handshake and only send new message types to peers that announced support; `NinoTypeId.Of(typeof(T))` gives the id of each message type if you want to exchange the list.
 - If both sides always ship together (a game client and its dedicated server), stay positional: it is the smallest and fastest format.
 
 See [Evolving Your Data](/en/docs/v4/evolving-data) for the exact rules.

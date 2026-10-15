@@ -4,15 +4,15 @@ description: "在更新后依然可读的文件：键控与版本兼容类型、
 icon: Save
 ---
 
-存档会被写入它时还不存在的版本读取。本指南介绍如何组织持久化数据，让明年的更新依然能加载今年的存档。
+存档写下时，读取它的版本往往还没发布。本指南介绍如何组织持久化数据，让明年的更新依然能加载今年的存档。
 
 ## 按类型选择格式 [#pick-a-format-per-type]
 
 | 数据 | 格式 | 原因 |
 | --- | --- | --- |
-| 存档根对象与长期存在的记录 | `keyed: true` | 任何更新中都可以添加、删除和重排字段。 |
-| 只会增长的记录 | `versionTolerant: true` | 只追加字段；每个继承层级 4 字节，而不是每个成员 8 字节。 |
-| 小型值结构体（`Vector3`、你的 `GridPos`） | 按位置（不带参数的 `[NinoType]`） | 原始、紧凑，且不太会变化。将它们冻结。 |
+| 存档根对象与长期保留的记录 | `keyed: true` | 任何一次更新都可以增删、重排字段。 |
+| 只会增加字段的记录 | `versionTolerant: true` | 只在末尾追加字段；每个继承层级 4 字节，而不是每个成员 8 字节。 |
+| 小型值结构体（`Vector3`、你的 `GridPos`） | 按位置（不带参数的 `[NinoType]`） | 按原始字节写入，紧凑，也很少变化。定下来后就不要再改。 |
 
 ```csharp title="SaveData.cs"
 using Nino.Core;
@@ -52,13 +52,13 @@ public struct GridPos            // 按位置的原始结构体：永远不要�
 
 <Callout type="warn">
 
-键控成员由其**名称**的哈希识别：重命名字段会被视为“删除了一个、新增了另一个”，旧值不会被加载。*类型*可以用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name) 自由重命名，但字段名请保持稳定，否则需要自己迁移该值。
+键控成员靠**成员名**的哈希识别：重命名字段相当于“删掉一个、新增一个”，旧值不会读进来。*类型*可以借助 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name) 随意改名，字段名则要保持不变，否则只能自己迁移旧值。
 
 </Callout>
 
 ## 对象图 [#object-graphs]
 
-默认情况下，每个引用都会写成独立的副本。如果存档中有多处指向同一个对象（既在队伍中又在公会中的成员、引用了某个 NPC 而该 NPC 又引用了它的任务），请把这些共享类型标记为 `trackReferences: true`：
+默认情况下，每个引用都各自写一份副本。如果存档里有多处指向同一个对象（既在队伍里又在公会里的角色，或者任务引用了 NPC、NPC 又引用回这个任务），请给这些共享的类型加上 `trackReferences: true`：
 
 ```csharp
 [NinoType(keyed: true, trackReferences: true)] // [!code highlight]
@@ -70,11 +70,11 @@ public class Character
 }
 ```
 
-每个对象只写入一次；之后的引用写为 4 字节索引，循环引用也能解析。追踪只覆盖 `[NinoType]` 类，不覆盖集合，并且不能用于通过构造函数参数重新创建的类型，例如位置记录（NINO016）。参见[引用追踪](/zh/docs/v4/reference-tracking)。
+每个对象只写一次，之后的引用写成 4 字节的索引，循环引用也能正确还原。引用追踪只作用于 `[NinoType]` 类，不包括集合；通过构造函数参数重新创建的类型（例如位置记录）不能使用它（NINO016）。参见[引用追踪](/zh/docs/v4/reference-tracking)。
 
 ## 添加文件头 [#add-a-file-header]
 
-Nino 自身不写入魔数或格式版本。在存档前面加一个小文件头，以便识别文件并决定如何迁移：
+Nino 本身不写魔数，也不写格式版本。在存档前面加一个小文件头，用来识别文件、决定如何迁移：
 
 ```csharp title="SaveFile.cs"
 using System.IO;
@@ -115,7 +115,7 @@ public static class SaveFile
 
 ## 安全写入 [#write-safely]
 
-写入过程中崩溃或断电，不能毁掉之前的存档。先写入临时文件，再替换：
+写到一半时崩溃或断电，不能连带毁掉上一份存档。先写到临时文件，再替换正式文件：
 
 ```csharp
 public static void Save(string path, SaveGame save)
@@ -135,13 +135,13 @@ public static SaveGame Load(string path) =>
 
 <Callout type="info">
 
-在 Unity 中，请写入 `Application.persistentDataPath` 之下。
+在 Unity 中，请把存档写到 `Application.persistentDataPath` 目录下。
 
 </Callout>
 
 ## 测试旧存档 [#test-old-saves]
 
-以上规则能让旧数据保持可读，但只有测试才能证明这一点。在仓库中保留每个已发布版本的几份存档，并在每次构建时用单元测试加载它们：
+上面的规则能让旧数据保持可读，但只有测试才能证明。把每个已发布版本的几份存档放进仓库，每次构建都用单元测试加载一遍：
 
 ```csharp
 [TestMethod]
@@ -157,10 +157,10 @@ public void LoadsEveryShippedSave()
 
 ## 检查清单 [#checklist]
 
-- [ ] 根对象和长期记录使用 `keyed`（只会增长的使用 `versionTolerant`）。
-- [ ] 小型原始结构体已冻结：永不重排或修改其字段类型。
+- [ ] 根对象和长期保留的记录使用 `keyed`（只会增加字段的用 `versionTolerant`）。
+- [ ] 小型原始结构体已定型：不再调整字段顺序或类型。
 - [ ] 共享或循环的对象使用 `trackReferences`。
 - [ ] 重命名的类型带有 `[NinoFormerName]`。
 - [ ] 文件以你自己的魔数和版本开头。
 - [ ] 存档先写入临时文件再替换。
-- [ ] 每个已发布版本的存档都在测试中被加载。
+- [ ] 测试会加载每个已发布版本的存档。

@@ -1,106 +1,106 @@
 ---
 title: 性能指南
-description: "Nino v4 的速度从何而来，以及如何保持它：拦截器、原始结构体、缓冲区复用、线程。"
+description: "Nino v4 的速度从何而来，以及如何保持：拦截器、原始内存结构体、缓冲区复用、多线程。"
 icon: Zap
 ---
 
-Nino 无需任何调优就很快。本页解释其内部机制，帮助你让类型和调用始终走在快速路径上。测量数据参见[基准测试](/zh/docs/v4/perf)；完整的使用模式参见[高性能序列化](/zh/docs/v4/advanced/high-performance)。
+Nino 不用任何调优就很快。本页介绍它的内部机制，帮你让类型和调用始终走在快速路径上。实测数据见[基准测试](/zh/docs/v4/perf)，完整的实践方案见[高性能序列化](/zh/docs/v4/advanced/high-performance)。
 
 ## 拦截器 [#interceptors]
 
-当项目由 **Roslyn 4.8 或更高版本**编译时（.NET 8 SDK 及更高版本、Visual Studio 2022 17.8+、新版 Rider），生成器会拦截每个类型参数在调用处已知的 `NinoSerializer`/`NinoDeserializer` 调用，并在编译期将其重定向到生成的格式化器。调用不再经过格式化器缓存的虚调用；写出的字节完全相同。
+当项目由 **Roslyn 4.8 及以上版本**编译时（.NET 8 SDK 及以上、Visual Studio 2022 17.8+、新版 Rider），对于调用处已知类型参数的每个 `NinoSerializer`/`NinoDeserializer` 调用，生成器都会拦截它，在编译期直接导向生成的格式化器。调用不再经过格式化器缓存的虚调用，写出的字节完全相同。
 
 ```csharp
-// 被拦截：此处类型已知
+// Intercepted: the type is known here
 byte[] bytes = NinoSerializer.Serialize(player);
 Player copy = NinoDeserializer.Deserialize<Player>(bytes);
 
-// 不被拦截：T 是类型参数，走常规调用
+// Not intercepted: T is a type parameter, so the regular call runs
 static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 ```
 
-在 .NET 8 上测得（每次调用的纳秒数，常规 → 拦截）：反序列化非密封类 15.5 → 11.6，密封类 29.5 → 24，带字符串的结构体 16.7 → 15.0。
+在 .NET 8 上实测（每次调用的纳秒数，常规 → 拦截）：反序列化非密封类 15.5 → 11.6，密封类 29.5 → 24，带字符串的结构体 16.7 → 15.0。
 
-- **始终开启，无需配置。** `Nino.Generator` 包内含针对 Roslyn 4.3、4.8 和 4.12 的生成器构建，NuGet 会选择编译器能加载的最新版本。4.8 和 4.12 构建会进行拦截，并且包中的 build props 会自动把 `NinoGen` 添加到 `InterceptorsNamespaces` / `InterceptorsPreviewNamespaces`。
-- **取决于编译器，而非目标框架**：用 .NET 8+ SDK 构建的 `netstandard2.0` 库同样会被拦截。
-- **旧版编译器直接走常规路径**，写出相同的字节。Unity 的编译器就属于这种情况，因此 Unity 项目不会进行拦截。
-- 常规路径已直接处理的调用（原始值、原始元素的数组）以及泛型代码中的调用保持不变。
-- 在运行时通过 `NinoFormatterCache<T>.Register<TFormatter>()` 注册的格式化器仍然优先，因此拦截调用与常规调用的结果永远一致。
+- **始终开启，无需配置，也不能关闭。** `Nino.Generator` 包中包含面向 Roslyn 4.3、4.8 和 4.12 的三个生成器版本，NuGet 会选择你的编译器能加载的最新版本。4.8 和 4.12 版本会进行拦截，包里的 build props 会自动把 `NinoGen` 加入 `InterceptorsNamespaces` / `InterceptorsPreviewNamespaces`。
+- **取决于编译器，而不是目标框架**：用 .NET 8+ SDK 编译的 `netstandard2.0` 库同样会被拦截。
+- **旧编译器直接走常规路径**，写出的字节相同。Unity 包中附带的是生成器的 Roslyn 4.3 版本，所以 Unity 项目不会拦截。
+- 常规路径本来就直接处理的调用（原始值、原始元素数组），以及泛型代码内部的调用，不会被拦截。
+- 在运行时用 `NinoFormatterCache<T>.Register<TFormatter>()` 注册的格式化器仍然优先，因此拦截调用和常规调用的结果永远一致。
 
 <Callout type="warn">
 
-如果你的项目自己设置了 `InterceptorsNamespaces` 或 `InterceptorsPreviewNamespaces`，请在已有值上**追加**（`$(InterceptorsNamespaces);MyNamespace`），而不要覆盖。否则 `NinoGen` 条目会丢失，Nino 不会生成拦截器（常规调用依然可用）。
+如果项目自己设置了 `InterceptorsNamespaces` 或 `InterceptorsPreviewNamespaces`，请在原值后面**追加**（`$(InterceptorsNamespaces);MyNamespace`），不要直接覆盖。否则 `NinoGen` 会丢失，Nino 不会生成拦截器（常规调用仍然可用）。
 
 </Callout>
 
-## 可内联的结构体格式化器 [#struct-formatters-inlined]
+## 内联的结构体格式化器 [#struct-formatters-inlined]
 
-每个格式化器都是结构体，元素格式化器是类型参数（`ListFormatter<TList, T, TFormatter>`）。成员调用 `default(TFormatter).Serialize(...)`：这是 JIT 或 AOT 编译器可以内联的直接调用，因此序列化 `List<Player>` 会被编译成一个循环，玩家的成员直接在循环内写入。每个元素都没有虚分派，任何地方都没有反射。
+所有格式化器都是结构体，元素格式化器作为类型参数传入（`ListFormatter<TList, T, TFormatter>`）。成员通过 `default(TFormatter).Serialize(...)` 调用格式化器：这是 JIT 或 AOT 编译器能够内联的直接调用。因此序列化一个 `List<Player>`，编译出来就是一个循环，循环体内直接写入 Player 的各个成员。每个元素都没有虚分派，任何地方都没有反射。
 
-唯一剩下的间接调用是顶层调用，它通过 `NinoFormatterCache<T>`（一个静态泛型字段）进行，除非被拦截。
+唯一剩下的间接调用是顶层调用：它经过 `NinoFormatterCache<T>`（一个泛型静态字段），除非被拦截。
 
-## 非托管数据的原始内存拷贝 [#raw-memory-for-unmanaged-data]
+## 非托管数据按原始内存拷贝 [#raw-memory-for-unmanaged-data]
 
-非托管值以原始内存拷贝：
+非托管值会按原始内存拷贝：
 
-- 基元类型、枚举、`DateTime`、`Guid`、`Vector3` 及其他非托管结构体；
-- `[NinoType]` 中连续的非托管成员，作为**一个块**写入，只做一次边界检查；
-- 非托管元素的数组和 `List<T>`：整个集合**一次块拷贝**；
-- 符合原始条件的 `[NinoType]` 结构体（参见[结构体](/zh/docs/v4/defining-types#structs)），无论单独出现还是在数组和列表中。
+- 基元类型、枚举、`DateTime`、`Guid`、`Vector3` 和其他非托管结构体；
+- `[NinoType]` 中连续的非托管成员，作为**一整块**写入，只做一次边界检查；
+- 非托管元素的数组和 `List<T>`：整个集合**一次拷贝**；
+- 满足原始内存条件的 `[NinoType]` 结构体（参见[结构体](/zh/docs/v4/defining-types#structs)），无论单独出现还是在数组、列表中。
 
-填充字节在写入时会被清零，因此相等的值总是产生相同的字节。带填充的结构体数组通过 SIMD 掩码在同一轮中完成拷贝，开销与普通的 `memcpy` 相同。
+写入时会把填充字节清零，所以相等的值总是产生相同的字节。带填充的结构体数组会在同一趟拷贝中用 SIMD 掩码处理，开销与普通 `memcpy` 相同。
 
-要保持在这条路径上：
+想保持在这条路径上：
 
-- 批量数据（位置、采样、瓦片）优先使用非托管 `T` 的 `T[]` 和 `List<T>`；
-- 让热点结构体不包含引用（`string`、数组），使其符合原始条件；
-- 注意 `versionTolerant`、`keyed` 和自定义成员格式化器会关闭该结构体的原始拷贝。
+- 批量数据（坐标、采样、瓦片）优先使用非托管 `T` 的 `T[]` 和 `List<T>`；
+- 热点结构体中不要放引用类型（`string`、数组），这样它们才能按原始内存写入；
+- 注意 `versionTolerant`、`keyed` 和自定义成员格式化器都会让该结构体不再按原始内存拷贝。
 
 <Callout type="info">
 
-原始布局是规范的 64 位布局。在结构体布局不同的运行时上（32 位平台、旧版 Mono），Nino 会逐字段转换为相同的字节，因此数据依然可移植，只是速度会有所下降。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+原始布局以 64 位平台的规范布局为准。在结构体布局不同的运行时上（32 位平台、旧版 Mono），Nino 会逐字段转换成相同的字节，数据依然可移植，只是速度稍慢。参见[平台与二进制格式](/zh/docs/v4/platforms)。
 
 </Callout>
 
 ## 内存分配 [#allocation]
 
-- **序列化不分配任何内存**，除了你要求返回的 `byte[]`。序列化到复用的 `NinoArrayBufferWriter`（或任意 `IBufferWriter<byte>`）时，每次调用分配 0 B。
-- **反序列化只分配结果对象**，而这些对象也可以复用：用 `ref` 反序列化到已有实例，并从 `[NinoPooled]` 对象池获取新实例。复用实例时分配 0 B。参见[引用反序列化与对象池](/zh/docs/v4/pooling)。
-- 字符串默认为 UTF-16（一次块拷贝）。`[NinoUtf8]` 在传输时更小，但需要转码。
+- **序列化不分配内存**，唯一的例外是你要求返回的 `byte[]`。序列化到复用的 `NinoArrayBufferWriter`（或任意 `IBufferWriter<byte>`）时，每次调用分配 0 B。
+- **反序列化只分配结果对象**，而这些对象也可以复用：用 `ref` 反序列化到已有实例，并从 `[NinoPooled]` 对象池中获取新实例。复用实例时分配 0 B。参见 [ref 反序列化与对象池](/zh/docs/v4/pooling)。
+- 字符串默认使用 UTF-16（一次整块拷贝）。`[NinoUtf8]` 写出的数据更小，但需要转码。
 
 ## 缓冲区 [#buffers]
 
-| 目标 | 行为 |
+| 写入目标 | 过程 |
 | --- | --- |
-| `NinoSerializer.Serialize(value)` | 写入池化的临时缓冲区，然后拷贝到一个大小正好的新 `byte[]`。 |
-| `NinoArrayBufferWriter` | **原地**写入。底层数组来自 `ArrayPool<byte>.Shared`；用 `ResetWrittenCount()` 复用。 |
-| 其他任意 `IBufferWriter<byte>`（`ArrayBufferWriter<byte>`、`PipeWriter`……） | 写入线程本地的临时缓冲区，然后一次性拷贝到目标写入器。 |
-| `ref Writer` | 原地写入该写入器的 `NinoArrayBufferWriter`。可以连续写入多个值。 |
+| `NinoSerializer.Serialize(value)` | 写入池化的暂存缓冲区，再拷贝到一个大小正好的新 `byte[]`。 |
+| `NinoArrayBufferWriter` | **直接写入**。数组租自 `ArrayPool<byte>.Shared`；用 `ResetWrittenCount()` 复用。 |
+| 其他 `IBufferWriter<byte>`（`ArrayBufferWriter<byte>`、`PipeWriter` 等） | 先写入线程本地的暂存缓冲区，再一次性拷贝到目标写入器。 |
+| `ref Writer` | 直接写入该 writer 所属的 `NinoArrayBufferWriter`，可以连续写入多个值。 |
 
-读取方面，`NinoDeserializer` 接收 `ReadOnlySpan<byte>`：直接传入你已有内存的切片（池化数组、管道段、内存映射文件），无需拷贝。
+读取方面，`NinoDeserializer` 接受 `ReadOnlySpan<byte>`：直接传入你已有内存的切片即可（池化数组、管道分段、内存映射文件），无需拷贝。
 
 ## 线程安全 [#thread-safety]
 
-`NinoSerializer` 和 `NinoDeserializer` 的每个方法都**可以并发调用**，无需加锁：
+`NinoSerializer` 和 `NinoDeserializer` 的所有方法都**可以并发调用**，无需加锁：
 
-- 热点路径从不写共享内存，因此序列化线程之间不会争用缓存行；
-- 临时缓冲区和引用追踪表按线程存放，使用期间从槽位中取出，因此重入调用（在自定义格式化器中再次序列化）是安全的；
-- 格式化器查找是只写一次的静态泛型字段；多态表是不可变快照，以写时复制方式替换，无锁读取；
-- `NinoPool<T>` 每个线程保留最多 64 个实例的栈，并有一个加锁的共享栈，只会批量访问；它的热点字段独占一条 64 字节缓存行。
+- 热路径不写共享内存，因此多个序列化线程之间不会争用缓存行；
+- 暂存缓冲区和引用追踪表按线程保存，使用期间会从槽位中取出，所以重入调用（例如在自定义格式化器中再次序列化）是安全的；
+- 格式化器查找是只写一次的泛型静态字段；多态表是不可变快照，以写时复制方式替换，读取无锁；
+- `NinoPool<T>` 为每个线程保留最多 64 个实例，只有在批量转移时才会访问加锁的共享栈；它的热字段独占一条 64 字节的缓存行。
 
-**不是**线程安全的是你自己持有的状态：`NinoArrayBufferWriter`、`Writer` 或 `Reader`，以及你反序列化到的对象。每个线程或每个连接使用各自的缓冲区。
+**不**线程安全的是你自己持有的状态：`NinoArrayBufferWriter`、`Writer` 或 `Reader`，以及你反序列化的目标对象。请每个线程或每个连接各用一个缓冲区。
 
 <Callout type="warn">
 
-`NinoSettings` 的值是不加同步读取的普通字段。请在启动时、任何线程首次序列化之前设置它们。
+`NinoSettings` 的值是不加同步读取的普通字段。请在启动时、任何线程第一次序列化之前设置好。
 
 </Callout>
 
 ## 多态 [#polymorphism]
 
-多态值需要一个 4 字节的类型 ID。对于与基类声明在同一程序集中的子类型，生成器会生成写入用的分派链和读取用的按 ID `switch`，因此常见情况会直接调用子类型的格式化器；其他程序集的子类型、封闭泛型和被追踪的类型则通过无锁注册表处理。没有子类型的类请设为密封：密封类只需 1 字节空标志，也无需分派。
+多态值需要额外的 4 字节类型 ID。对于与基类在同一程序集中声明的子类型，生成器会生成写入时的分派链和读取时针对 ID 的 `switch`，常见情况下直接调用子类型的格式化器；其他程序集中的子类型、封闭泛型和启用引用追踪的类型则通过无锁注册表分派。没有子类型的类请声明为 `sealed`：密封类只需要 1 字节的 null 标记，也不需要分派。
 
 ## 测量 [#measuring]
 
-- 使用 BenchmarkDotNet 或其他长时间运行进行测量。在分层编译下，短时间运行测到的是未优化的 Tier-0 代码，此时 Nino 的 `static readonly` 布局检查尚未被折叠为常量。
-- 反序列化大集合的耗时常常主要花在分配并清零结果上，而不是 Nino 本身。使用复用实例进行测量，才能看清序列化器所占的部分。
+- 请用 BenchmarkDotNet 或其他长时间运行的方式测量。在分层编译下，短时间运行测到的是未优化的 Tier-0 代码，此时 Nino 中 `static readonly` 的布局检查还没有被折叠成常量。
+- 反序列化大型集合时，耗时往往主要花在分配和清零结果上，而不在 Nino 本身。用复用实例的方式测量，才能看出序列化器自身的开销。

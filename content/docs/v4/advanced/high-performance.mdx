@@ -69,6 +69,17 @@ var b = NinoDeserializer.Deserialize<Body>(ref reader);
 reader.ReleaseReferences();
 ```
 
+## Serialize into Any IBufferWriter
+
+Any `IBufferWriter<byte>` works as a destination: a `PipeWriter`, Kestrel's response body writer, an `ArrayBufferWriter<byte>`. Nino writes into a thread-local scratch buffer and copies the result into the writer once, so nothing is allocated per call:
+
+```csharp
+NinoSerializer.Serialize(message, pipeWriter); // one copy into the pipe's memory
+await pipeWriter.FlushAsync();
+```
+
+Only a `NinoArrayBufferWriter` is written in place. Use one when you need to patch bytes after writing (a length prefix, see [framing](/en/docs/v4/advanced/networking#frame-the-stream)).
+
 ## Deserialize from the Memory You Have
 
 `NinoDeserializer` reads a `ReadOnlySpan<byte>`, so pass a slice of whatever buffer the bytes are already in. There is no need to copy them into a fresh `byte[]`:
