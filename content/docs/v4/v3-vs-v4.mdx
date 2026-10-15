@@ -1,0 +1,92 @@
+---
+title: v3 vs v4
+description: Features, build time, generated code and runtime performance compared.
+icon: Scale
+---
+
+This page compares Nino v3 with Nino v4: features, build time and generated code, and runtime performance. For upgrading, see [Migrating from v3](/en/docs/v4/migration).
+
+## Features
+
+| | v3 | v4 |
+| --- | --- | --- |
+| API | generated `Serializer` / `Deserializer` per assembly, extension methods | `NinoSerializer` / `NinoDeserializer` in `Nino.Core` |
+| Binary format | positional | positional by default, identical bytes on every target framework; padding zeroed (deterministic output) |
+| Version tolerance | `WEAK_VERSION_TOLERANCE` for the whole project, append at the end | `versionTolerant` per type; append to the type or any base class, at any depth |
+| Keyed members (reorder / remove / insert) | no | `[NinoType(keyed: true)]` |
+| Shared references and cycles | no | `[NinoType(trackReferences: true)]` |
+| Deserialize into existing instances | no | `Deserialize(data, ref value)`, with recycling of dropped instances |
+| Object pooling | no | `[NinoPooled]`, `[NinoRefDeserialization]` factories, `NinoSettings.SetRecycler<T>` |
+| Subtypes of a `[NinoType]` | need their own `[NinoType]` | inherit it |
+| User collections (subclasses of `List<T>`, `Dictionary<,>`, ...) | dictionary subclasses need a public indexer | supported without attributes |
+| `PriorityQueue<,>`, immutable collections | no | yes (.NET 6+; `Nino.Immutable`) |
+| Custom formatters | no | `[NinoCustomFormatter]` per member, `[assembly: NinoFormatter]` per type |
+| Boxed / runtime-typed API | no | `Serialize(object)`, `Deserialize(data, Type)` |
+| Diagnostics | compile errors in generated code | analyzer with 22 diagnostics, many with code fixes |
+| Incremental generator | no: whole-compilation scans, all types re-generated on every edit | one file per type, only edited types re-generated |
+| Interceptors | no | on Roslyn 4.8+ (the .NET 8 SDK and later), always on |
+| Hot update (HybridCLR) | supported | supported, no initialization call |
+| Unity | 2022.3+, `Microsoft.CodeAnalysis` installed manually | 2022.3+, generator included in the package |
+| Thread safety | inline caches could race under contention | lock-free, copy-on-write registries |
+
+## Build Time and Generated Code
+
+v4 against v3 **3.3.13**, the last v3 release. Measured on a synthetic assembly of `N` abstract root classes, each with a chain of 8 derived classes, a sealed leaf and a struct (`N × 11` types), with primitives, strings, `List<T>`, `Dictionary<int, string>`, references to other `[NinoType]`s and private fields. Intel Xeon 2.80 GHz, 4 cores, Ubuntu 24.04, .NET SDK 10.0.402; the ratios are what to look at.
+
+<CompileTime lang="en" />
+
+<Tabs items={["330 types (N = 30)", "1,100 types (N = 100)"]}>
+
+<Tab value="330 types (N = 30)">
+
+| | v3 (3.3.13) | v4 | v4 vs v3 |
+|---|---:|---:|---:|
+| Generated source | 18.7 MB (363,233 lines) | 1.15 MB (21,679 lines) | **16× smaller** |
+| Compiling the generated code (emit) | 56.0 s | 1.27 s | **44× faster** |
+| Running the generator | 1.11 s | 0.14 s | **7.9× faster** |
+| Re-generating after editing a member | 1.31 s | 0.19 s | **6.9× faster** |
+| Re-generating after editing a comment | 1.11 s | 0.19 s | **5.8× faster** |
+| IL of the generated code | 2.2 MB | 0.37 MB | **6.0× smaller** |
+
+</Tab>
+<Tab value="1,100 types (N = 100)">
+
+{/* GEN_N100 */}
+
+The v3 3.3.13 measurements at N = 100 are pending.
+
+</Tab>
+</Tabs>
+
+v3 inlined the bodies of every subtype into each polymorphic base and re-generated every type on every edit. v4 emits each body once and grows linearly: about 3.5 KB of source and 2 ms of compile time per type. Editing a type in the IDE re-generates that type only.
+
+## Runtime
+
+BenchmarkDotNet 0.15.2 on .NET 10.0.13. Each ratio compares v4 / MemoryPack 1.21.4 with v3 3.3.13 / MemoryPack from a separate run on the same machine; v3's benchmarks have no polymorphic cases. See [Benchmarks](/en/docs/v4/perf) for the absolute times.
+
+<V3Race lang="en" />
+
+### Serialize
+
+| Case | v4 vs v3 |
+|---|---:|
+| `SimpleClass` | **1.73× faster** |
+| `SimpleClass[100]` | **1.29× faster** |
+| `SimpleStruct` (`int` + `DateTime`) | **1.35× faster** |
+| `SimpleStruct[100]` | on par |
+| `Vector4[10000]` | on par |
+
+### Deserialize
+
+{/* V3_DESERIALIZE */}
+
+| Case | v4 vs v3 |
+|---|---:|
+| `SimpleClass` | **1.19× faster** |
+| `SimpleClass[100]` | **1.22× faster** |
+| `SimpleStruct[100]` | on par |
+| `Vector4[10000]` | 0.90× (dominated by allocating a 160 KB array per call) |
+
+{/* /V3_DESERIALIZE */}
+
+Deserializing classes is dominated by allocating the result objects. v4 adds what v3 could not do: deserializing into existing and pooled instances, which allocates **0 B** per call. See [What's New in v4](/en/docs/v4/whats-new).

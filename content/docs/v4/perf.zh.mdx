@@ -1,0 +1,242 @@
+---
+title: 基准测试
+description: "Nino v4 与 v3（3.3.13）和 MemoryPack 1.21.4 的构建时间与运行时基准测试，以及复现方法。"
+icon: Gauge
+---
+
+Nino v4 与 Nino v3 **3.3.13**（v3 的最后一个版本）以及 [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** 的构建时间与运行时测量。绝对耗时因机器而异，重点看比例。功能对比参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)。
+
+## 测试环境 [#setup]
+
+| | |
+| --- | --- |
+| CPU | Intel Xeon 2.80 GHz，4 核，AVX-512 |
+| 操作系统 | Ubuntu 24.04 |
+| 运行时 | .NET 10.0.13（SDK 10.0.402），服务器 GC |
+| 工具 | BenchmarkDotNet 0.15.2，15 次迭代（标 * 的行以 20 次迭代重新运行） |
+| 项目 | [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.Benchmark)（运行时），[`src/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.GeneratorBenchmark)（构建时间） |
+
+## 构建时间与生成代码 [#build-time-and-generated-code]
+
+测试负载：`N` 个抽象根类，每个根类下有 8 层派生类链、一个密封叶子类和一个结构体（共 `N × 11` 个类型），成员包括基元类型、字符串、`List<T>`、`Dictionary<int, string>`、对其他 `[NinoType]` 的引用以及私有字段。测试工具在编译上运行生成器（进程内 Roslyn 4.3），生成程序集，并在修改后重新运行生成器。耗时取五次运行中后三次的中位数。
+
+### 330 个类型（N = 30） [#330-types-n--30]
+
+| | v3（3.3.13） | v4 | v4 对比 v3 |
+| --- | ---: | ---: | ---: |
+| 生成的源码 | 18.7 MB（363,233 行） | 1.15 MB（21,679 行） | **小 16 倍** |
+| 编译生成的代码（emit） | 56.0 s | 1.27 s | **快 44 倍** |
+| 运行生成器 | 1.11 s | 0.14 s | **快 7.9 倍** |
+| 修改一个成员后重新生成 | 1.31 s | 0.19 s | **快 6.9 倍** |
+| 修改一处注释后重新生成 | 1.11 s | 0.19 s | **快 5.8 倍** |
+| 生成代码的 IL | 2.2 MB | 0.37 MB | **小 6.0 倍** |
+
+### 1,100 个类型（N = 100） [#1100-types-n--100]
+
+{/* GEN_N100 */}
+
+<Callout type="info">
+
+v3 3.3.13 在 N = 100 时的数据尚在测量中。v4 随类型数量线性增长：每个类型约 3.5 KB 源码和 2 ms 编译时间。
+
+</Callout>
+
+## 运行时 [#runtime]
+
+v4 与 MemoryPack 在同一次运行中。“v4 对比 v3”一列是把 v4 / MemoryPack 的比例与同一台机器上另一次运行得到的 v3 3.3.13 / MemoryPack 的比例相比；v3 的基准测试没有多态用例。载荷大小基本相同（`SimpleClass`：v4 为 1,146 字节，MemoryPack 为 1,148 字节）。
+
+### 序列化（到复用的缓冲区写入器） [#serialize]
+
+| 用例 | v4 | MemoryPack | v4 对比 MemoryPack | v4 对比 v3 |
+| --- | ---: | ---: | ---: | ---: |
+| `SimpleClass` | 151 ns | 450 ns | **快 2.97 倍** | 快 1.73 倍 |
+| `SimpleClass[100]` | 17.0 µs | 48.7 µs | **快 2.86 倍** | 快 1.29 倍 |
+| 多态类 | 11.5 µs | 31.5 µs | **快 2.72 倍** | — |
+| 多态类数组 | 89.6 µs | 388 µs | **快 4.33 倍** | — |
+| 多态 `Foo[]` | 9.9 µs | 31.4 µs | **快 3.15 倍** | — |
+| `SimpleStruct`（`int` + `DateTime`） | 2.3 ns | 5.8 ns | **快 2.50 倍** | 快 1.35 倍 |
+| `SimpleStruct[100]` * | 28.6 ns | 30.6 ns | 快 1.07 倍 | 持平 |
+| `Vector4[10000]` * | 4.06 µs | 4.10 µs | 持平 | 持平 |
+
+`SimpleStruct` 有 4 字节填充。v4 会将其清零，因此输出是确定性的；v3 和 MemoryPack 会原样拷贝填充中的内容。借助掩码 SIMD 拷贝，这几乎没有可测量的开销。
+
+### 反序列化（新实例） [#deserialize]
+
+| 用例 | v4 | MemoryPack | v4 对比 MemoryPack | v4 对比 v3 |
+| --- | ---: | ---: | ---: | ---: |
+| `SimpleClass` | 964 ns | 1,129 ns | **快 1.17 倍** | 快 1.19 倍 |
+| `SimpleClass[100]` | 106 µs | 134 µs | **快 1.26 倍** | 快 1.22 倍 |
+| 多态类 * | 36.3 µs | 44.8 µs | **快 1.23 倍** | — |
+| 多态类数组 | 406 µs | 562 µs | **快 1.38 倍** | — |
+| 多态 `Foo[]` | 37.0 µs | 43.1 µs | **快 1.16 倍** | — |
+| `SimpleStruct[100]` * | 295 ns | 295 ns | 持平 | 持平 |
+| `Vector4[10000]` * | 173 µs | 147 µs | 0.85 倍 | 0.90 倍 |
+
+<Callout type="info">
+
+`Vector4[10000]` 每次调用都会在大对象堆上分配一个 160 KB 的数组，因此它测量的主要是第 2 代垃圾回收，而不是序列化器本身：两次运行分别为 0.96 倍和 0.85 倍，误差 ±15%。拷贝本身在两者中都是一次 `memcpy`。
+
+</Callout>
+
+### 反序列化到已有实例（对象池） [#pooling]
+
+Nino 可以反序列化到已有的对象图（`ref` 反序列化），并从 `[NinoPooled]` 对象池获取新实例；MemoryPack 则覆盖已有实例。
+
+| 用例 | Nino 新建 | Nino 复用 | MemoryPack 新建 | MemoryPack 覆盖 |
+| --- | ---: | ---: | ---: | ---: |
+| 池化节点 | 873 ns | **280 ns**（0 B） | 952 ns | 727 ns（1,024 B） |
+| 池化叶子，原地 | 5.23 µs | **1.18 µs**（0 B） | 5.38 µs | 5.80 µs（12,800 B） |
+| 池化叶子，池化元素 | 5.23 µs | 3.82 µs（856 B） | 5.38 µs | 5.80 µs（12,800 B） |
+| 池化类 | 780 ns | 623 ns（1,080 B） | 1,044 ns | 857 ns（1,080 B） |
+
+上述序列化路径中两者都不分配内存（每次调用 0 B），反序列化只分配结果对象。
+
+### 复现 [#reproducing]
+
+```shell
+# 构建时间与生成代码
+dotnet run -c Release --project src/Nino.GeneratorBenchmark -- 30 8
+
+# 运行时
+dotnet run -c Release --project src/Nino.Benchmark -- --filter '*Nino*' '*MemoryPack*' --iterationCount 15 --warmupCount 5
+```
+
+## Nino、MemoryPack 与 MessagePack [#nino-memorypack-and-messagepack]
+
+`Nino.Benchmark` 项目还在下面的数据结构上将 Nino 与 [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) 进行了对比。
+
+### 数据结构
+
+<Tabs items={["简单类", "简单结构体"]}>
+
+<Tab value="简单类">
+
+```csharp
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+[MemoryPackUnion(0, typeof(SimpleClass))]
+[Union(0, typeof(SimpleClass))]
+public abstract partial class SimpleClassBase
+{
+    [Key(0)] public int Id;
+    [Key(1)] public bool Tag;
+    [Key(2)] public Guid Guid;
+    [Key(3)] public DateTime CreateTime;
+}
+
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+public sealed partial class SimpleClass : SimpleClassBase
+{
+    [Key(4)] public string Name { get; set; }
+    [Key(5)] [NinoUtf8] public string Desc;
+    [Key(6)] public int[] Numbers { get; set; }
+    [Key(7)] public List<DateTime> Dates { get; set; }
+    [Key(8)] public Dictionary<int, string> Map1;
+    [Key(9)] public Dictionary<int, int> Map2 { get; set; }
+}
+```
+
+</Tab>
+<Tab value="简单结构体">
+
+```csharp
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+public partial struct SimpleStruct
+{
+    [Key(0)] public int Id;
+    [Key(1)] public DateTime CreateTime;
+}
+```
+
+</Tab>
+</Tabs>
+
+### 数据生成
+
+#### 生成函数
+
+<Tabs items={["简单类", "简单结构体"]}>
+
+<Tab value="简单类">
+
+```csharp
+public static SimpleClass Create()
+{
+    Random random = new Random();
+    return new SimpleClass
+    {
+        Id = random.Next(),
+        Tag = random.Next() % 2 == 0,
+        Guid = Guid.NewGuid(),
+        CreateTime = DateTime.Now,
+        Name = Guid.NewGuid().ToString(),
+        Desc = Enumerable.Range(0, 10).Select(_ => Guid.NewGuid().ToString()).Aggregate((a, b) => a + b),
+        Numbers = Enumerable.Range(0, 100).Select(_ => random.Next()).ToArray(),
+        Dates = Enumerable.Range(0, 10).Select(_ => DateTime.Now.AddSeconds(random.Next())).ToList(),
+        Map1 = Enumerable.Range(0, 10).ToDictionary(n => n, n => n.ToString()),
+        Map2 = Enumerable.Range(0, 10).ToDictionary(n => n, n => n * 2)
+    };
+}
+```
+
+</Tab>
+<Tab value="简单结构体">
+
+```csharp
+public static SimpleStruct Create()
+{
+    Random random = new Random();
+    return new SimpleStruct
+    {
+        Id = random.Next(),
+        CreateTime = DateTime.Now.AddSeconds(random.Next())
+    };
+}
+```
+
+</Tab>
+</Tabs>
+
+#### 基准测试数据
+
+```csharp
+SimpleClass = SimpleClass.Create();
+SimpleClasses = Enumerable.Range(0, 100).Select(_ => SimpleClass.Create()).ToArray();
+SimpleStruct = SimpleStruct.Create();
+SimpleStructs = Enumerable.Range(0, 100).Select(_ => SimpleStruct.Create()).ToArray();
+var r = Random.Shared;
+Vectors = Enumerable.Range(0, 10000)
+    .Select(_ => new Vector4(r.NextSingle(), r.NextSingle(),
+        r.NextSingle(), r.NextSingle())).ToArray();
+```
+
+序列化时写入一个复用的缓冲区写入器（Nino 使用 `NinoArrayBufferWriter`，其他库使用 `ArrayBufferWriter<byte>`），因此所有序列化器在序列化路径上都不会产生分配。
+
+### 结果
+
+结果为序列化和反序列化上述数据所用的时间，越低越好。
+
+{/* PERF_TABLE */}
+
+{/* Benchmark environment (BenchmarkDotNet summary header) */}
+
+```text
+TBD
+```
+
+{/* One entry per case, mean time in nanoseconds. Drives the bar chart below; leave empty to hide it.
+   e.g. { name: 'SimpleClass · Serialize', nino: 151, memorypack: 450, messagepack: 1700 } */}
+export const benchmarks = [];
+
+| Method | Mean | Error | StdDev | Ratio | RatioSD | Allocated | Payload |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| TBD | | | | | | | |
+
+{/* /PERF_TABLE */}
+
+<BenchChart data={benchmarks} lang="zh" />

@@ -1,0 +1,99 @@
+---
+title: 平台与二进制格式
+description: "Nino 能在哪里运行，为什么所有平台写出的字节都相同，以及格式的样子。"
+icon: Cpu
+---
+
+## 支持的平台 [#supported-platforms]
+
+| 组件 | 目标 |
+| --- | --- |
+| `Nino.Core`（运行时） | `netstandard2.0`、`netstandard2.1`、`net8.0`、`net10.0` |
+| `Nino.Generator`（生成器、分析器） | Roslyn 4.3 及更高版本；一个包内含 Roslyn 4.3、4.8 和 4.12 三个构建 |
+| 生成的代码 | C# 9 或更高版本 |
+| Unity | 2022.3 及更高版本，Mono 与 IL2CPP，所有播放器平台 |
+| 热更新 | HybridCLR，无需初始化调用 |
+
+**所有目标写出的字节完全相同。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 各自使用可用的最佳原语（向量化拷贝、.NET 8+ 上的 `[UnsafeAccessor]`），测试套件会针对每个构建校验同一组标准载荷。.NET 10 服务器写出的数据可以被 32 位 Android 手机上的 Unity IL2CPP 客户端读取，反之亦然。
+
+## 二进制格式 [#binary-format]
+
+所有多字节值都是**小端序**，并以非对齐方式写入。按位置格式的类型中没有结构描述，也没有字段名：生成的代码知道布局。
+
+| 值 | 编码 |
+| --- | --- |
+| 非托管值（`int`、`Guid`、枚举、原始结构体） | 其原始字节，规范布局，填充清零 |
+| `bool` | 1 字节 |
+| `T?` | 1 字节的有值标志，有值时后跟该值 |
+| 字符串、数组或集合的长度 | `int32`；`-1` 表示 `null` |
+| `string` | UTF-16 字符数，然后是 UTF-16 码元 |
+| 带 `[NinoUtf8]` 的 `string` | 字节数，然后是 UTF-8 字节 |
+| 非托管 `T` 的数组或列表 | 长度，然后是一整块元素 |
+| 其他集合 | 长度，然后逐个元素 |
+| 字典 | 长度，然后是键/值对 |
+| `T[,]` 及更高维度 | 各维长度，然后按行优先顺序的元素 |
+
+对象的头部取决于**声明**类型：
+
+| 声明类型 | 头部 |
+| --- | --- |
+| `struct` | 无 |
+| `sealed class` | 1 字节：`0` = null，`1` = 实例 |
+| 非密封类、抽象类、接口 | `int32` 类型 ID：`0` = null，否则为运行时类型的 ID |
+
+类型 ID 是类型运行时形式名称（`Namespace.Outer+Inner`）的 FNV-1a 哈希。同一份哈希代码同时编译进生成器和运行时，因此 ID 不可能不一致。`versionTolerant` 类型为每个继承层级增加一个长度，`keyed` 类型为每个成员增加键和长度，`trackReferences` 类型增加一个引用头；参见[让数据演进](/zh/docs/v4/evolving-data)和[引用追踪](/zh/docs/v4/reference-tracking)。
+
+载荷中读到的每个长度都会在分配任何内存之前与剩余字节数比对，因此畸形或恶意的输入无法触发巨大的分配，截断的数据会抛出异常而不是越界读取。
+
+## 天生可移植 [#portable-by-design]
+
+Nino 自己定义字节格式，而不是拷贝运行时内存中的任意内容。各运行时的内存布局并不总是一致，因此以下情况都经过专门处理：
+
+<Accordions type="multiple">
+<Accordion title={<><code>Nullable&lt;T&gt;</code></>} value="nullable">
+
+CoreCLR 和 Unity 2021.3+ 存储为 `bool hasValue; T value;`，而旧版 Mono（Unity 2019.4 及更早版本）先存值。把 `T?` 当作原始内存拷贝，在两者上会得到不同的字节。Nino 把单个 `T?` 写为一个有值字节后跟值；`T?` 的数组和列表使用规范布局，在运行时布局不同时逐元素转换。
+
+</Accordion>
+<Accordion title={<><code>ValueTuple</code> 与 <code>KeyValuePair</code></>} value="tuple">
+
+`ValueTuple` 在 .NET 上是 `LayoutKind.Auto`，CoreCLR 可能会重排其字段，而 Mono 按顺序布局。Nino 总是逐成员写入元组和 `KeyValuePair`，从不作为原始内存。
+
+</Accordion>
+<Accordion title={<><code>decimal</code>、<code>DateTimeOffset</code>、<code>nint</code></>} value="bcl">
+
+`decimal` 在 CoreCLR 上按 8 字节对齐，在 Mono 和 IL2CPP 上按 4 字节对齐，因此包含它的结构体可能布局不同；Nino 会将其转换为规范布局。`DateTimeOffset` 写为 UTC ticks 加偏移分钟数（10 字节），从不原始写入。`nint`/`nuint` 始终为 8 字节。
+
+</Accordion>
+<Accordion title="32 位平台" value="32bit">
+
+`struct { int a; long b; }` 在 x64 上是 16 字节，在 x86 .NET 和 Mono 上是 12 字节。Nino 的原始布局是规范的 64 位布局；运行时布局不同时，会逐字段转换为相同的字节（速度有所下降），并跳过批量原始拷贝。
+
+</Accordion>
+<Accordion title="填充字节" value="padding">
+
+在未初始化内存中构造结构体的代码（`SkipLocalsInit`、`stackalloc`、`GC.AllocateUninitializedArray`）可能在填充中留下残留数据。Nino 在写入时清零填充，因此相等的值总是序列化为相同的字节，也不会有残留内存泄漏到载荷中。
+
+</Accordion>
+<Accordion title="大端序主机" value="endian">
+
+不支持。目前 .NET 和 Unity 运行的所有平台都是小端序。
+
+</Accordion>
+</Accordions>
+
+## Unity [#unity]
+
+- 从 [OpenUPM](/zh/docs/v4/start#unity-project) 安装。该包包含 `Nino.Core.dll` 和生成器（`Nino.Generator.dll`，标记为 `RoslynAnalyzer`），以及 `System.Buffers`、`System.Memory` 和 `System.Runtime.CompilerServices.Unsafe`。
+- Unity 基于 .NET Standard 编译：没有 `[UnsafeAccessor]`，因此序列化非公共成员或使用 `[NinoPooled]` 的类型必须是 `partial`（NINO002，提供代码修复）。
+- Unity 的编译器早于 Roslyn 4.8，因此调用不会被拦截。它们走常规路径，写出相同的字节。
+- 生成的注册表带有 `[RuntimeInitializeOnLoadMethod]`（编辑器中还有 `[InitializeOnLoadMethod]`），会在启动时注册，并让它们在 IL2CPP 链接器中保持被引用。
+- `Vector3`、`Quaternion`、`Matrix4x4` 等 Unity 类型是非托管类型，以原始内存写入。
+
+项目设置与 IL2CPP 技巧参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)。
+
+## HybridCLR 与热更新 [#hybridclr-and-hot-update]
+
+生成的注册表是延迟发现的：Nino 第一次遇到某个程序集的类型，或在读取时遇到未知的类型 ID 时，才会找到该程序集的注册表。因此通过 `Assembly.Load` 加载的热更新程序集**无需任何初始化调用**，其类型（包括 AOT 程序集中基类的子类型）在首次使用时即可被找到。
+
+生成的代码有意不使用转发外观：HybridCLR 和 Mono 的解释器不会内联，每多一层调用都会带来实际开销。

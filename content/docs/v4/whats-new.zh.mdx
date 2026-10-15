@@ -1,0 +1,148 @@
+---
+title: v4 新特性
+description: "重写了运行时与源生成器，运行更快，构建也更快。"
+icon: Sparkles
+---
+
+import { Cpu, GitBranch, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound } from 'lucide-react';
+
+Nino v4 重写了运行时与源生成器：运行速度超过 v3 **和** MemoryPack，构建速度大幅提升，并提供长期项目所需的功能。
+
+<ShowcaseHero lang="zh" />
+
+<Callout type="warn">
+
+v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**，API 也有变化。请参阅[从 v3 迁移](/zh/docs/v4/migration)。
+
+</Callout>
+
+## 比 v3 更快 [#faster-than-v3]
+
+与 v3 的最后一个版本 **3.3.13** 在同一台机器上对比。可以在序列化、反序列化和编译时间之间切换；MemoryPack 柱是共同的基准（1.00）。
+
+<V3Race lang="zh" />
+
+结构体数组（`SimpleStruct[100]`、`Vector4[10000]`）在 v3 中就已经是一次内存拷贝，因此保持持平。
+
+## 构建更快 [#faster-to-build]
+
+v3 的生成器会把每个子类型的主体内联到每个多态基类中，并且每次按键都会重新生成所有类型。v4 为每个类型生成一个文件、只生成一次，并且只重新生成你修改的部分。
+
+<CompileTime lang="zh" />
+
+{/* GEN_N100 */}
+
+<Callout type="info" title="1,100 个类型（N = 100）">
+
+v3 3.3.13 在 N = 100 时的数据正在测量，完成后会补充到这里。v4 随类型数量线性增长：每个类型约 3.5 KB 源码和 2 ms 编译时间。
+
+</Callout>
+
+## 比 MemoryPack 更快 [#faster-than-memorypack]
+
+与 MemoryPack 1.21.4 在同一次运行中对比。Nino 在序列化上明显领先，在类和多态对象图的反序列化上领先，在原始数组上持平（两者都是一次 `memcpy`）。
+
+<MemoryPackRace lang="zh" />
+
+<Callout type="info" title="MemoryPack 唯一胜出的用例">
+
+反序列化 `Vector4[10000]` 测得 0.85 倍。每次调用都会在大对象堆上分配一个 160 KB 的数组，因此主要测量的是第 2 代垃圾回收：两次运行分别为 0.96 倍和 0.85 倍，误差 ±15%。
+
+</Callout>
+
+两个库在序列化时都不分配内存。复用实例时，Nino 分配 **0 B**，最高比 MemoryPack 的覆盖模式快 **4.9 倍**。请阅读[与 MemoryPack 的完整对比](/zh/docs/v4/vs-memorypack)（包括 MemoryPack 仍然领先的地方）以及[基准测试表格](/zh/docs/v4/perf)。
+
+## 你将获得 [#what-you-get]
+
+<Cards>
+  <Card icon={<Zap />} title="拦截器" href="/zh/docs/v4/performance#interceptors">
+    在 Roslyn 4.8+（.NET 8 SDK 及更高版本）上，类型已知的调用会直接调用生成的格式化器。始终开启；Unity 等旧版编译器走常规路径，写出相同的字节。
+  </Card>
+  <Card icon={<KeyRound />} title="键控成员与版本兼容" href="/zh/docs/v4/evolving-data">
+    `keyed: true` 允许重新排序、删除和插入成员；`versionTolerant: true` 允许追加成员，甚至追加到基类。
+  </Card>
+  <Card icon={<Share2 />} title="trackReferences" href="/zh/docs/v4/reference-tracking">
+    共享引用和循环引用可以完整往返，每个对象只需 4 字节。
+  </Card>
+  <Card icon={<ShieldCheck />} title="分析器 NINO001–NINO022" href="/zh/docs/v4/analyzers">
+    在你输入时报告错误，大多数提供一键代码修复。
+  </Card>
+  <Card icon={<Recycle />} title="低 GC 与对象池" href="/zh/docs/v4/pooling">
+    引用反序列化复用你的对象，`[NinoPooled]` 池化其余对象，每个被丢弃的实例都会被回收。
+  </Card>
+  <Card icon={<Layers />} title="线程安全" href="/zh/docs/v4/performance#thread-safety">
+    所有 API 都可以无锁并发调用；热点路径从不写共享内存。
+  </Card>
+  <Card icon={<Cpu />} title="处处字节相同" href="/zh/docs/v4/platforms">
+    `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 在 CoreCLR、Mono 和 IL2CPP、64 位和 32 位上写出相同的字节。
+  </Card>
+  <Card icon={<GitBranch />} title="真正增量的生成器" href="/zh/docs/v4/v3-vs-v4">
+    每个类型一个文件；修改一个类型只重新生成该类型。
+  </Card>
+</Cards>
+
+## 亮点
+
+### 构建更快
+- **真正增量的源生成器**：每个 `[NinoType]` 一个文件，模型可比较（equatable），不再扫描整个编译。修改一个类型只会重新生成该类型；不改变任何模型的修改（注释、方法体）不会重新生成任何内容。
+- **生成的代码大幅减少**：集合、字符串、可空类型、元组等内置类型以泛型格式化器的形式在 `Nino.Core` 中实现一次；生成器只为你的 `[NinoType]` 生成代码。
+- **分析器与代码修复**：在你输入时报告错误（NINO001–NINO022），其中许多提供一键修复。参见[诊断列表](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)。
+
+### 运行更快
+- **可被 JIT/AOT 编译器内联的结构体格式化器**，对 unmanaged 的 `[NinoType]` 结构体及其数组和列表直接拷贝原始内存，除结果对象外不产生任何分配。
+- **新版编译器上的拦截器**：在 Roslyn 4.8+（.NET 8 SDK 及更高版本）上，类型已知的 `NinoSerializer`/`NinoDeserializer` 调用会在编译期被重定向到生成的格式化器（没有虚调用）。始终开启，无需配置；旧版编译器走常规路径，写出相同的字节。参见[拦截器](/zh/docs/v4/performance#interceptors)。
+- **线程安全、缓存友好**：无锁、写时复制（copy-on-write）的注册表；热路径上没有共享的可变状态。
+
+### 复用而非分配
+- **Ref 反序列化**：`NinoDeserializer.Deserialize(data, ref value)` 原地填充已有的对象、列表、数组和字典。
+- **对象池反序列化**：给类加上 `[NinoPooled]`，Nino 就会反序列化到你通过 `ReturnToPool()` 归还的实例中，并复用它们的列表、数组和字典。被丢弃的实例（数据为 `null`、列表变短、类型变化）会回到各自的对象池，或交给通过 `NinoSettings.SetRecycler<T>` 注册的处理器。
+- **`[NinoRefDeserialization]` 工厂方法**让 Nino 从你自己的对象池中获取新实例。
+
+参见 [Ref 反序列化与对象池](/zh/docs/v4/pooling)。
+
+### 让数据演进
+- **可选的版本兼容**：`[NinoType(versionTolerant: true)]` 允许在该类型或其任意基类中追加成员，适用于任意嵌套深度。
+- **键控成员**：`[NinoType(keyed: true)]` 按成员名称的哈希写入成员，因此成员可以重新排序、删除和插入。
+- **引用追踪**：`[NinoType(trackReferences: true)]` 保留共享引用与循环引用。
+
+### 更多类型，随你定制
+- **用户集合**：派生自 `List<T>`、`HashSet<T>`、`Dictionary<TKey, TValue>` 等的类型，无需任何特性。
+- **更多内置类型**：.NET 6+ 上的 `PriorityQueue<TElement, TPriority>`，以及通过 `Nino.Immutable` 包支持的 `ImmutableArray<T>` / `ImmutableList<T>`。
+- **可插拔的格式化器**：`[assembly: NinoFormatter(typeof(MyFormatter<,>))]` 让 Nino 认识一个新类型（你自己的或第三方的）。类型参数与元素格式化器会被自动推断，生成的代码直接调用它，运行时也使用同一份注册。Nino 自己的 BCL 格式化器也是这样声明的。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
+- **子类型继承 `[NinoType]`**：从其基类或接口继承。
+
+### 随处运行
+- **处处同一种格式**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 产出完全相同的字节，数据可在 CoreCLR、Mono 与 IL2CPP 之间、64 位与 32 位之间通用。
+- **无需初始化调用**：生成的注册表会被延迟查找，因此热更新程序集（HybridCLR）开箱即用。
+- **Unity**：生成器随包附带，无需额外安装。
+
+## 快速示例
+
+```csharp
+[NinoType, NinoPooled]
+public sealed partial class Packet
+{
+    public int Id;
+    public List<int> Values;
+
+    // Required (the analyzer offers a fix that adds both).
+    private static partial IEnumerable<Packet> OnNinoPoolWarmup() => Enumerable.Range(0, 16).Select(_ => new Packet());
+    private partial void OnNinoPoolReturn() { /* clear state Nino does not deserialize */ }
+}
+
+byte[] bytes = NinoSerializer.Serialize(new Packet { Id = 1, Values = new List<int> { 1, 2, 3 } });
+
+var packet = NinoDeserializer.Deserialize<Packet>(bytes); // reuses a pooled instance (and its list) if there is one
+// ... use it ...
+packet.ReturnToPool();                                    // returning it twice throws
+```
+
+## 了解更多
+
+<Cards>
+  <Card title="快速开始" href="/zh/docs/v4/start" description="安装 Nino v4，并序列化你的第一个类型。" />
+  <Card title="从 v3 迁移" href="/zh/docs/v4/migration" description="逐步升级，附修改前后的代码。" />
+  <Card title="设计文档" href="https://github.com/JasonXuDeveloper/Nino/blob/main/docs/v4-design.md" description="v4 的架构与二进制格式。" />
+  <Card title="基准测试" href="/zh/docs/v4/perf" description="与 v3 和 MemoryPack 对比的完整构建时间与运行时表格。" />
+  <Card title="Nino 与 MemoryPack 对比" href="/zh/docs/v4/vs-memorypack" description="客观的功能与性能对比。" />
+</Cards>

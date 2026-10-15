@@ -1,0 +1,236 @@
+---
+title: Network Layer
+description: "Build a message protocol on Nino: framing, polymorphic messages, System.IO.Pipelines, pooling per connection, rolling upgrades."
+icon: Network
+---
+
+This guide builds the serialization half of a TCP protocol: a message hierarchy, length-prefixed frames written straight into a `PipeWriter`, frames read from a `PipeReader` without copying, and messages reused per connection. The transport (sockets, Kestrel connections, your engine's networking) is up to you; anything that gives you a `PipeReader`/`PipeWriter`, a `Stream` or raw buffers works the same way.
+
+## Define the Messages
+
+Give all messages one `[NinoType]` base class. Every message is written with a 4-byte **type id** (a stable hash of its full name), so the receiver gets back the right subtype without a hand-maintained opcode table.
+
+```csharp title="Messages.cs"
+using Nino.Core;
+
+[NinoType(versionTolerant: true)] // subtypes inherit [NinoType] and its options
+public abstract class Message
+{
+    public int RequestId;
+}
+
+public sealed class Login : Message
+{
+    public string User;
+    public byte[] Token;
+}
+
+public sealed class Move : Message
+{
+    public int EntityId;
+    public Vector3 Target;
+}
+
+public sealed class Chat : Message
+{
+    [NinoUtf8] public string Text; // UTF-8: smaller for mostly-ASCII text
+}
+```
+
+- Seal the concrete messages: Nino then dispatches on them with generated code instead of a registry lookup.
+- Type ids come from names, so renaming or moving a message class breaks old peers. Use [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name) when you rename one.
+- `versionTolerant` lets you add fields later; see [Rolling Upgrades](#rolling-upgrades).
+
+Dispatch with ordinary pattern matching:
+
+```csharp
+void Handle(Message message)
+{
+    switch (message)
+    {
+        case Login login: OnLogin(login); break;
+        case Move move:   OnMove(move);   break;
+        case Chat chat:   OnChat(chat);   break;
+    }
+}
+```
+
+## Frame the Stream
+
+TCP is a byte stream, so each message needs a frame. A 4-byte little-endian length prefix is the simplest. Nino's `Writer` can reserve the 4 bytes, serialize the message after them, and patch the length in, all in one buffer:
+
+```csharp title="FrameWriter.cs"
+using System.IO.Pipelines;
+using Nino.Core;
+
+public sealed class FrameWriter
+{
+    private readonly NinoArrayBufferWriter _buffer = new(4096); // one per connection
+
+    public void Write(PipeWriter output, Message message)
+    {
+        _buffer.ResetWrittenCount();
+        var writer = new Writer(_buffer);
+        int lengthPosition = writer.ReserveInt32();   // 4 bytes for the length
+        NinoSerializer.Serialize(message, ref writer);
+        writer.PatchLength(lengthPosition);           // bytes written after the slot
+        writer.Flush();
+
+        output.Write(_buffer.WrittenSpan);            // PipeWriter is an IBufferWriter<byte>
+    }
+}
+
+// sending
+frameWriter.Write(pipe.Output, new Move { EntityId = 7, Target = target });
+await pipe.Output.FlushAsync();
+```
+
+<Callout type="info">
+
+If your transport already frames messages (WebSocket messages, UDP datagrams, a message queue), skip the prefix and serialize straight into the transport's `IBufferWriter<byte>`: `NinoSerializer.Serialize(message, pipeWriter)`.
+
+</Callout>
+
+## Reading Frames
+
+Read frames out of the `ReadOnlySequence<byte>` the pipe gives you, and deserialize each one from the pipe's own memory:
+
+```csharp title="FrameReader.cs"
+using System.Buffers;
+using System.IO.Pipelines;
+using Nino.Core;
+
+public static class FrameReader
+{
+    public const int MaxFrameSize = 1 << 20; // reject absurd lengths before buffering them
+
+    public static async Task ReadLoopAsync(PipeReader input, Action<Message> handle)
+    {
+        while (true)
+        {
+            ReadResult result = await input.ReadAsync();
+            ReadOnlySequence<byte> buffer = result.Buffer;
+
+            while (TryReadFrame(ref buffer, out ReadOnlySequence<byte> frame))
+                handle(Decode(frame));
+
+            input.AdvanceTo(buffer.Start, buffer.End);
+            if (result.IsCompleted) break;
+        }
+        await input.CompleteAsync();
+    }
+
+    private static bool TryReadFrame(ref ReadOnlySequence<byte> buffer, out ReadOnlySequence<byte> frame)
+    {
+        var reader = new SequenceReader<byte>(buffer);
+        frame = default;
+        if (!reader.TryReadLittleEndian(out int length))
+            return false;
+        if ((uint)length > MaxFrameSize)
+            throw new InvalidDataException($"Frame of {length} bytes");
+        if (reader.Remaining < length)
+            return false;
+
+        frame = buffer.Slice(4, length);
+        buffer = buffer.Slice(4 + length);
+        return true;
+    }
+
+    public static Message Decode(ReadOnlySequence<byte> frame)
+    {
+        if (frame.IsSingleSegment)                       // the common case: no copy
+            return NinoDeserializer.Deserialize<Message>(frame.First.Span);
+
+        int length = (int)frame.Length;                  // spans two segments: copy once
+        if (length <= 512)
+        {
+            Span<byte> stack = stackalloc byte[length];
+            frame.CopyTo(stack);
+            return NinoDeserializer.Deserialize<Message>(stack);
+        }
+        byte[] rented = ArrayPool<byte>.Shared.Rent(length);
+        try
+        {
+            frame.CopyTo(rented);
+            return NinoDeserializer.Deserialize<Message>(rented.AsSpan(0, length));
+        }
+        finally { ArrayPool<byte>.Shared.Return(rented); }
+    }
+}
+```
+
+<Callout type="info">
+
+Nino validates every length inside the payload against the bytes left before allocating, so a malicious frame cannot make it allocate a huge array, and truncated data throws instead of reading past the end. Still cap the frame size yourself, as above, so a peer cannot make the pipe buffer gigabytes.
+
+</Callout>
+
+## Reuse Messages per Connection
+
+A busy connection deserializes the same few message types over and over. Two ways to stop allocating them:
+
+<Tabs items={["Pooled messages", "One instance per type"]}>
+<Tab value="Pooled messages">
+
+Make the hot messages `[NinoPooled]`. Nino takes an instance from the pool whenever it creates one, including when it reads a `Move` through the `Message` base type. Return it once it has been handled:
+
+```csharp
+[NinoType, NinoPooled]
+public sealed partial class Move : Message
+{
+    public int EntityId;
+    public Vector3 Target;
+
+    private static partial IEnumerable<Move> OnNinoPoolWarmup() => null; // start empty
+    private partial void OnNinoPoolReturn() { }
+}
+
+// in the read loop
+Message message = FrameReader.Decode(frame);
+Handle(message);
+if (message is INinoPooled pooled)
+    pooled.ReturnToPool();
+```
+
+Pools are thread safe and keep a stack per thread, so connections on different threads do not contend.
+
+</Tab>
+<Tab value="One instance per type">
+
+If messages are handled synchronously and never kept, deserialize into the last instance by `ref`. When the next message is the same type it is filled in place; when it is a different type, the old instance is dropped (and recycled, if it is pooled):
+
+```csharp
+private Message _last; // per connection, used by one thread at a time
+
+void OnFrame(ReadOnlySpan<byte> frame)
+{
+    NinoDeserializer.Deserialize(frame, ref _last);
+    Handle(_last);
+}
+```
+
+</Tab>
+</Tabs>
+
+## Threads
+
+- `NinoSerializer` and `NinoDeserializer` are safe to call from any number of threads at once, with no locks.
+- Your buffers and reused messages are not: keep one `FrameWriter` per connection (or per sending thread), and never let two threads deserialize into the same instance.
+- A message you hand to another thread (a game loop, a job queue) must not be reused or returned to its pool until that thread is done with it.
+
+## Rolling Upgrades
+
+When clients and servers are not always on the same build, choose the format with the upgrade in mind:
+
+| Change | Positional | `versionTolerant` | `keyed` |
+| --- | :---: | :---: | :---: |
+| New field at the end of a message | ✗ | ✓ | ✓ |
+| New field in the `Message` base class | ✗ | ✓ | ✓ |
+| Remove or reorder fields | ✗ | ✗ | ✓ |
+| New message type | old peers cannot read it | old peers cannot read it | old peers cannot read it |
+
+- With `versionTolerant` on the base class (inherited by every message), an old peer skips fields it does not know and a new peer gives missing fields their default.
+- A peer that receives a **message type it does not know** cannot deserialize it: the call throws. Negotiate a protocol version in your handshake and only send new message types to peers that announced support.
+- If both sides always ship together (a game client and its dedicated server), stay positional: it is the smallest and fastest format.
+
+See [Evolving Your Data](/en/docs/v4/evolving-data) for the exact rules.

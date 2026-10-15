@@ -1,0 +1,223 @@
+---
+title: High-Performance Serialization
+description: "Zero-allocation patterns: reused buffers, span-based reads, ref deserialization, object pools and raw structs."
+icon: Gauge
+---
+
+`NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)` are already fast, but each call allocates its result. On a hot path (a server tick, a render frame, a message loop) these patterns bring both directions down to **0 B per call**.
+
+## Serialize into a Reused Buffer
+
+`NinoArrayBufferWriter` is Nino's `IBufferWriter<byte>`, backed by `ArrayPool<byte>.Shared`. Nino writes into it in place, and after the first few calls it has grown to the size you need, so serializing allocates nothing.
+
+```csharp title="FrameEncoder.cs"
+using Nino.Core;
+
+public sealed class FrameEncoder : IDisposable
+{
+    private readonly NinoArrayBufferWriter _buffer = new(64 * 1024);
+
+    public ReadOnlySpan<byte> Encode(WorldState state)
+    {
+        _buffer.ResetWrittenCount();          // reuse the same array
+        NinoSerializer.Serialize(state, _buffer);
+        return _buffer.WrittenSpan;           // valid until the next Encode
+    }
+
+    public void Dispose() => _buffer.Dispose(); // returns the array to the pool
+}
+```
+
+A buffer is not thread safe. Give each thread (or each connection, or each encoder) its own. For code that has no natural owner, a thread-static buffer works:
+
+```csharp
+static class ScratchBuffer
+{
+    [ThreadStatic] private static NinoArrayBufferWriter t_buffer;
+
+    public static NinoArrayBufferWriter Get()
+    {
+        var buffer = t_buffer ??= new NinoArrayBufferWriter();
+        buffer.ResetWrittenCount();
+        return buffer;
+    }
+}
+```
+
+<Callout type="warn">
+
+Copy or send `WrittenSpan` before the buffer is used again, and do not hand a thread-static buffer to code that might call `Get()` again before it is done (re-entrancy).
+
+</Callout>
+
+### Several Values Back to Back
+
+A `Writer` writes into a `NinoArrayBufferWriter` and lets you put several values in one buffer, or reserve space to fill in later:
+
+```csharp
+var buffer = new NinoArrayBufferWriter();
+var writer = new Writer(buffer);
+NinoSerializer.Serialize(header, ref writer);
+NinoSerializer.Serialize(body, ref writer);
+writer.Flush();              // commit to buffer.WrittenCount
+writer.ReleaseReferences();  // only needed when trackReferences types were written
+
+// reading them back in the same order
+var reader = new Reader(buffer.WrittenSpan);
+var h = NinoDeserializer.Deserialize<Header>(ref reader);
+var b = NinoDeserializer.Deserialize<Body>(ref reader);
+reader.ReleaseReferences();
+```
+
+## Deserialize from the Memory You Have
+
+`NinoDeserializer` reads a `ReadOnlySpan<byte>`, so pass a slice of whatever buffer the bytes are already in. There is no need to copy them into a fresh `byte[]`:
+
+```csharp
+// a received datagram in a pooled array
+byte[] rented = ArrayPool<byte>.Shared.Rent(65536);
+int received = socket.Receive(rented);
+var message = NinoDeserializer.Deserialize<Message>(rented.AsSpan(0, received));
+ArrayPool<byte>.Shared.Return(rented);
+```
+
+For `ReadOnlySequence<byte>` (from `System.IO.Pipelines`), see [Network Layer](/en/docs/v4/advanced/networking#reading-frames).
+
+## Deserialize into Existing Objects
+
+Pass the previous result by `ref` and Nino fills it in place: the same object, the same nested objects, lists, arrays and dictionaries. A steady stream of messages of the same shape then allocates nothing.
+
+```csharp
+WorldState state = null;                 // created on the first call
+while (TryReceive(out ReadOnlySpan<byte> frame))
+{
+    NinoDeserializer.Deserialize(frame, ref state);
+    Render(state);
+}
+```
+
+- Lists and arrays are reused element by element; dictionaries are merged by key.
+- Types that cannot be filled in place (positional records, `init`-only or get-only members) are re-created.
+- When an existing instance is **dropped** (the data holds `null`, a list shrinks, a key disappears, the polymorphic type changes), it is handed to the slot's recycler exactly once, instead of being silently overwritten. This is what makes ref deserialization safe with pools; see [Ref Deserialization and Pooling](/en/docs/v4/pooling#deserializing-into-existing-instances).
+
+## Pool What You Create
+
+Ref deserialization reuses what you already hold. `[NinoPooled]` covers the rest: whenever Nino has to **create** an instance of the type (top level, member, element of a growing list), it takes one from a pool first, and dropped instances go back to that pool automatically.
+
+<Steps>
+<Step>
+
+### Mark the class
+
+```csharp
+[NinoType, NinoPooled] // [!code highlight]
+public sealed partial class Bullet
+{
+    public int Id;
+    public Vector3 Position;
+    public Vector3 Velocity;
+    public List<int> HitTargets;
+
+    // Called once, before Nino first deserializes the type: pre-fill the pool.
+    private static partial IEnumerable<Bullet> OnNinoPoolWarmup() =>
+        Enumerable.Range(0, 256).Select(_ => new Bullet { HitTargets = new List<int>(8) });
+
+    // Called by ReturnToPool(): release state Nino does not deserialize.
+    private partial void OnNinoPoolReturn() { }
+}
+```
+
+The class must be `sealed`, `partial`, and filled in place (NINO018, NINO002). The analyzer offers a fix that adds both hooks (NINO019).
+
+</Step>
+<Step>
+
+### Deserialize as usual
+
+```csharp
+[NinoType]
+public sealed class Snapshot
+{
+    public long Tick;
+    public List<Bullet> Bullets;
+}
+
+Snapshot snapshot = null;
+NinoDeserializer.Deserialize(frame1, ref snapshot); // bullets come from the pool
+NinoDeserializer.Deserialize(frame2, ref snapshot); // bullets that disappeared go back to it
+```
+
+</Step>
+<Step>
+
+### Return what you own
+
+When you are done with an instance you received at the top level, hand it back:
+
+```csharp
+var bullet = NinoDeserializer.Deserialize<Bullet>(data);
+Simulate(bullet);
+bullet.ReturnToPool(); // its List<int> stays attached and is reused next time
+```
+
+Returning an instance twice throws `InvalidOperationException`. An instance that is never returned is simply collected.
+
+</Step>
+</Steps>
+
+Size the pools at startup if the defaults (256 in the shared stack, plus up to 64 per thread) do not fit:
+
+```csharp
+NinoSettings.SetPoolMaxRetained<Bullet>(4096);
+```
+
+<Callout type="idea">
+
+Already have your own pools? Mark a public static factory `[NinoRefDeserialization]` to make Nino create instances through it, and register `NinoSettings.SetRecycler<T>(...)` to receive the instances it drops. See [Ref Deserialization and Pooling](/en/docs/v4/pooling#creating-instances-with-ninorefdeserialization).
+
+</Callout>
+
+## Keep Bulk Data Raw
+
+Unmanaged data is copied as raw memory, in blocks:
+
+```csharp
+[NinoType]
+public struct Particle          // unmanaged, sequential: written as raw memory
+{
+    public Vector3 Position;
+    public Vector3 Velocity;
+    public float Life;
+}
+
+[NinoType]
+public sealed class ParticleSystemState
+{
+    public int Seed;
+    public Particle[] Particles; // one block copy for the whole array
+}
+```
+
+- Arrays and `List<T>` of unmanaged elements are one copy.
+- A struct with a `string` or an array inside is not raw; keep those in a separate class if the struct is hot.
+- `versionTolerant`, `keyed` and custom member formatters turn raw copying off for that struct.
+
+### Deterministic Bytes
+
+Nino zeroes padding bytes, so equal values always produce equal bytes, even for structs built in uninitialized memory (`stackalloc`, `SkipLocalsInit`). You can hash or compare payloads directly, for example to skip sending unchanged state:
+
+```csharp
+NinoSerializer.Serialize(state, buffer);
+ulong hash = XxHash64.HashToUInt64(buffer.WrittenSpan); // System.IO.Hashing
+if (hash != lastHash) { Send(buffer.WrittenSpan); lastHash = hash; }
+```
+
+## Checklist
+
+- [ ] Serialize into a reused `NinoArrayBufferWriter`, one per thread or owner.
+- [ ] Deserialize from spans of the memory you already have.
+- [ ] Deserialize hot messages into existing instances with `ref`.
+- [ ] `[NinoPooled]` the classes you create and drop at a high rate.
+- [ ] Keep bulk data in arrays or lists of unmanaged structs.
+- [ ] Seal classes that have no subtypes (1-byte header, no dispatch).
+- [ ] Build with the .NET 8 SDK or later to get [interceptors](/en/docs/v4/performance#interceptors).

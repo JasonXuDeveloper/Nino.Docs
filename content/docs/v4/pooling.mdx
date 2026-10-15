@@ -1,0 +1,114 @@
+---
+title: Ref Deserialization and Pooling
+description: Deserialize into existing instances and pooled objects with zero allocations.
+icon: Recycle
+---
+
+Deserializing a class normally allocates a new object graph on every call. Nino v4 can instead fill objects you already have, and take new ones from a pool, so a steady stream of messages or frames is deserialized with **0 B** allocated.
+
+## Deserializing into Existing Instances
+`NinoDeserializer.Deserialize(data, ref value)` (or `DeserializeRef(ref value, data)`) populates an existing value in place:
+
+- **`null` target:** a new instance is created (from the pool for `[NinoPooled]` types, or through a `[NinoRefDeserialization]` factory).
+- **Existing instance of the right type:** populated in place. Lists and arrays reuse their elements by index; dictionaries are merged by key (each value is read into the value its key already maps to, and keys missing from the data are removed).
+- **Types that cannot be assigned after construction** are re-created, and the old instance is dropped.
+
+Whenever an existing instance is dropped (the data holds `null`, a list shrinks, an array is reallocated, a dictionary key is removed, the polymorphic type changes), it is passed **exactly once** to the recycler of the slot's declared type:
+
+1. the handler registered with `NinoSettings.SetRecycler<T>`, else
+2. `ReturnToPool()` if the instance implements `INinoPooled` (`[NinoPooled]` types, or your own pooled collections implementing the interface), else
+3. nothing: the garbage collector takes it.
+
+```csharp
+// at startup, before the first serialization call
+NinoSettings.SetRecycler<Bullet>(bullet => BulletPool.Return(bullet));
+
+Scene scene = null;
+NinoDeserializer.Deserialize(frame1, ref scene);
+NinoDeserializer.Deserialize(frame2, ref scene); // bullets removed since frame1 go to BulletPool
+```
+
+<Callout type="warn">
+
+Only register a handler for objects that are exclusively owned by the deserialized object graph. An instance referenced from two slots that both drop it is recycled once per slot.
+
+</Callout>
+
+## Creating Instances with `[NinoRefDeserialization]`
+Mark a public static method, callable without arguments, that returns the declaring type. Nino calls it instead of the constructor whenever it has to create an instance, for example to take it from your own object pool, and then populates the instance in place:
+
+```csharp
+[NinoType]
+public class Bullet
+{
+    [NinoRefDeserialization] // [!code highlight]
+    public static Bullet Rent() => BulletPool.Rent();
+
+    public int Id;
+    public Vector3 Position;
+}
+```
+
+It also works on collection types (a `List<T>` subclass, an `IDictionary<TKey, TValue>` implementation...). The method may return an instance that still holds elements; they are dropped (and recycled) before the data is read. It must not return `null`, and an invalid method is reported as NINO017.
+
+## `[NinoPooled]`
+`[NinoPooled]` gives a `[NinoType]` class a built-in pool. Wherever Nino creates an instance of it (top level, member or collection element), it first takes one from the pool and deserializes into it in place, reusing its lists, arrays, dictionaries and nested objects.
+
+```csharp
+[NinoType, NinoPooled] // [!code highlight]
+public sealed partial class Packet
+{
+    public int Id;
+    public List<int> Values;
+
+    // Required; the analyzer offers a fix that adds both (NINO019).
+    private static partial IEnumerable<Packet> OnNinoPoolWarmup() => Enumerable.Range(0, 16).Select(_ => new Packet());
+    private partial void OnNinoPoolReturn() { /* clear state Nino does not deserialize */ }
+}
+
+var packet = NinoDeserializer.Deserialize<Packet>(bytes); // reuses a pooled instance (and its list) if there is one
+// ... use it ...
+packet.ReturnToPool();                                    // returning it twice throws
+```
+
+- The class must be `sealed`, `partial` and populated in place (no constructor-only or read-only members); otherwise NINO018/NINO002 are reported.
+- The generator adds `ReturnToPool()` and two partial methods you implement:
+  - `OnNinoPoolWarmup()` runs once before the type is first deserialized; the instances it returns go straight into the pool (return `null` or nothing to start empty).
+  - `OnNinoPoolReturn()` runs on `ReturnToPool()`: release state that Nino does not deserialize.
+- Returning an instance twice throws an `InvalidOperationException`. An instance that is never returned is simply collected.
+- Instances dropped by ref deserialization are returned to the pool automatically.
+- The pool is thread safe: each thread keeps up to 64 instances of its own, and a shared stack keeps up to 256 by default. Change this at startup with `NinoSettings.DefaultPoolMaxRetained` or `NinoSettings.SetPoolMaxRetained<T>(int)`. `NinoPool<T>.Shared.Clear()` drops every pooled instance.
+
+<Callout type="info">
+
+With pooling and ref deserialization, deserializing reused instances allocates **0 B** and runs up to 4.9× faster than MemoryPack's overwrite mode. See the [benchmarks](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/v4-benchmarks.md#deserialize-into-existing-instances-pooling).
+
+</Callout>
+
+## Settings
+
+All settings are static members of `NinoSettings` (namespace `Nino.Core`):
+
+<TypeTable
+  type={{
+    'SetRecycler<T>(Action<T> handler)': {
+      description: 'Handler called with each instance that ref deserialization drops from a slot declared as T. Replaces returning [NinoPooled] instances to their pool for that declared type. Pass null to remove it.',
+      type: 'method',
+    },
+    DefaultPoolMaxRetained: {
+      description: 'How many instances the shared stack of each pool keeps, for pools created from now on (a pool is created when its type is first deserialized or returned).',
+      type: 'int',
+      default: '256',
+    },
+    'SetPoolMaxRetained<T>(int maxRetained)': {
+      description: "How many instances the shared stack of T's pool keeps; use it for a pool that may already exist. Each thread additionally keeps up to 64 of its own.",
+      type: 'method',
+    },
+  }}
+/>
+
+<Callout type="warn">
+
+`NinoSettings` values are plain fields read without synchronization: set them in startup code before the first serialization call on any thread.
+
+</Callout>

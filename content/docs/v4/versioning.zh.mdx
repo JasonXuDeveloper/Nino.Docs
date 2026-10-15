@@ -1,0 +1,62 @@
+---
+title: 版本迭代
+description: "哪些 Nino 版本改变了二进制格式，以及如何读取旧数据。"
+icon: History
+---
+
+## 不兼容的版本
+以下 Nino 版本写入的二进制格式与更早的版本不兼容，生成的代码也可能随之变化。它们无法读取旧版本写入的数据（变通方法见[下文](#如何用新版本读取旧数据)）。
+
+<Accordions type="single" defaultValue="v4.0.0">
+<Accordion title="v4.0.0" value="v4.0.0">
+
+重写了运行时与源生成器。**二进制格式与 v3 以及更早的 v4 beta/preview 版本不兼容**，公共 API 也有变化。主要变化：
+- `Nino.Core` 中的 `NinoSerializer` / `NinoDeserializer` 取代了生成的 `Serializer` / `Deserializer` 类及其扩展方法。
+- 新的数据格式：小端序、不对齐、填充字节清零，`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 产出完全相同的字节；类型 id 是运行时类型名的 FNV-1a 哈希。
+- `[NinoType]` 上的每类型选项：`versionTolerant`、`keyed`、`trackReferences`、`allowInheritance`。子类型继承 `[NinoType]`。
+- 反序列化到已有实例并回收被丢弃的实例、`[NinoPooled]` 对象池、`[NinoRefDeserialization]` 工厂方法以及 `NinoSettings`。
+- 用户集合、`PriorityQueue`、`Nino.Immutable`、可插拔的格式化器（`[assembly: NinoFormatter]`、`[NinoCustomFormatter]`）。
+- 真正增量的生成器、带代码修复的分析器，以及 .NET 8+ SDK 上的拦截器。
+
+参见 [v4 新特性](/zh/docs/v4/whats-new)、[v3 与 v4 对比](/zh/docs/v4/v3-vs-v4)以及[从 v3 迁移](/zh/docs/v4/migration)。
+
+</Accordion>
+<Accordion title="v3.3.4" value="v3.3.4">
+
+我们为 unmanaged 字段添加了对齐，使反序列化时的内存访问更快。同时内联了把 unmanaged 字段拷贝到内存的调用，使序列化更快。但这会增大输出体积，并且与之前的版本不兼容。
+
+</Accordion>
+<Accordion title="v3.2.0" value="v3.2.0">
+
+我们新增了修改类型的数据结构后，仍能反序列化旧数据结构所序列化的旧数据的能力（包括修改列表元素的数据结构，元素可以是多态的），因此生成的代码与 v3.0.3 版本不同。
+
+</Accordion>
+<Accordion title="v3.0.3" value="v3.0.3">
+
+我们修复了多态 unmanaged 结构体的问题，因此生成的代码与 v3.0.0 版本不同。
+
+</Accordion>
+<Accordion title="v3.0.0" value="v3.0.0">
+
+我们废弃了 v2 的实现并重写了整个项目，因此生成的代码与 v2 版本不同。
+
+</Accordion>
+</Accordions>
+
+## 迁移
+- **从 Nino v3 迁移**：参见[从 v3 迁移](/zh/docs/v4/migration)。
+- **从 Nino v2 迁移到 v3**：更新到 v3，然后把生成代码的命名空间从 `AssemblyName_Nino` 改为 `AssemblyName.NinoGen`。如需继续升级到 v4，之后再按照 v3 的迁移指南操作。
+
+## 如何用新版本读取旧数据
+
+格式不会自动转换。要读取旧版本写入的数据，请按以下步骤操作：
+
+1. **保留**旧版本的反序列化器。在 v3 的各个版本之间，把旧的生成代码（尤其是**旧的反序列化器**及其**依赖**）**复制**到新项目中，并修改其命名空间以免混淆。对于由 v3 写入、由 v4 读取的数据，v3 的生成代码依赖 v3 的 `Nino.Core`，因此请把它放在单独的转换器中（参见[转换 v3 数据](/zh/docs/v4/migration#转换-v3-数据)）。
+2. 把 Nino **升级**到**目标版本**，从而**生成新的**序列化器和反序列化器。
+3. 用**旧的反序列化器**反序列化**旧数据**，再用**新的序列化器**重新序列化。如果是游戏**存档**，可以在使用新版本 Nino 时为存档数据加上一个**头部**来区分新旧数据（即用新版 Nino 保存数据，并在保存存档前为数据加上头部；下次读取时，**头部表明**程序应使用**新的反序列化器**来反序列化数据），否则**回退**到用**旧的**、复制过来的**反序列化器**进行反序列化。
+
+<Callout type="idea">
+
+从 v4 开始，对于存档这类长期保存的数据，可以考虑使用 `[NinoType(versionTolerant: true)]` 或 `[NinoType(keyed: true)]`，这样将来修改你自己的类型时就不需要转换步骤。参见[版本兼容](/zh/docs/v4/evolving-data#version-tolerance)。
+
+</Callout>

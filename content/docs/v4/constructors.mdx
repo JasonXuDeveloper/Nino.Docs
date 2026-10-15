@@ -1,0 +1,108 @@
+---
+title: Custom Constructors
+description: "How Nino creates instances: constructors, factory methods, records and structs."
+icon: Hammer
+---
+
+Nino needs a way to create each type it deserializes:
+
+1. A constructor or static factory method marked `[NinoConstructor]`, if there is one.
+2. Otherwise, the accessible (`public` or `internal`) constructor with the most parameters that all match serialized members by name (ignoring case). For records this is usually the primary constructor; a parameterless constructor matches with zero parameters.
+3. Structs fall back to `new T()`.
+
+`[NinoConstructor]` takes the names of the serialized members passed as arguments, in order. Without arguments, parameters are matched by name:
+
+<Tabs items={["Constructor", "Factory method", "Primary constructor", "Struct"]}>
+
+<Tab value="Constructor">
+
+```csharp
+[NinoType]
+public record SimpleRecord
+{
+    public int Id;
+    public string Name;
+    public DateTime CreateTime;
+
+    public SimpleRecord()
+    {
+        Id = 0;
+        Name = string.Empty;
+        CreateTime = DateTime.MinValue;
+    }
+
+    [NinoConstructor(nameof(Id), nameof(Name))] // [!code highlight]
+    public SimpleRecord(int id, string name)
+    {
+        Id = id;
+        Name = name;
+        CreateTime = DateTime.Now;
+    }
+}
+```
+
+</Tab>
+<Tab value="Factory method">
+
+```csharp
+[NinoType]
+public class Move
+{
+    public ushort ClientX;
+    public ushort ClientY;
+
+    private Move() { }
+
+    [NinoConstructor(nameof(ClientX), nameof(ClientY))] // [!code highlight]
+    public static Move Create(ushort clientX, ushort clientY)
+    {
+        return new Move { ClientX = clientX, ClientY = clientY };
+    }
+}
+```
+
+</Tab>
+<Tab value="Primary constructor">
+
+```csharp
+[NinoType]
+public record SimpleRecord2(int Id, string Name, DateTime CreateTime); // [!code highlight]
+```
+
+</Tab>
+<Tab value="Struct">
+
+```csharp
+[NinoType]
+public struct SimpleStruct
+{
+    public int Id;
+    public string Name;
+    public DateTime CreateTime;
+
+    // used instead of the implicit parameterless constructor
+    [NinoConstructor(nameof(Id), nameof(Name), nameof(CreateTime))] // [!code highlight]
+    public SimpleStruct(int a, string b, DateTime c)
+    {
+        Id = a;
+        Name = b;
+        CreateTime = c;
+    }
+}
+```
+
+</Tab>
+</Tabs>
+
+## Rules
+- The constructor or factory method marked `[NinoConstructor]` must be `public` or `internal` (NINO021).
+- Every name in `[NinoConstructor]` (or every parameter, when no names are given) must match a serialized member (NINO005).
+- If no constructor can be used, NINO004 is reported.
+- A type re-created through a constructor reads read-only members that are not constructor parameters and drops them (NINO006): add them to the constructor, make them settable, or `[NinoIgnore]` them.
+- C# 11 `required` members: a constructor marked `[SetsRequiredMembers]` is used when one matches; otherwise the generated code sets the required members with an object initializer.
+
+<Callout type="info">
+
+Types whose members cannot be assigned after construction (constructor parameters, `init`-only, get-only or `readonly` members) are always **re-created** when deserialized, even by ref deserialization; the old instance is passed to the recycler.
+
+</Callout>

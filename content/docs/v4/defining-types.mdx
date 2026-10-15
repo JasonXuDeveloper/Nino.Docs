@@ -1,0 +1,343 @@
+---
+title: Defining Types
+description: "Mark classes, structs, records and interfaces with [NinoType], and choose which members are serialized and in what order."
+icon: Braces
+---
+
+Any `class`, `struct`, `record`, `record struct` or `interface` marked `[NinoType]` becomes serializable. The source generator writes its formatter at compile time; there is nothing to register.
+
+```csharp
+using Nino.Core;
+
+[NinoType]
+public class Player
+{
+    public int Id;                       // public fields
+    public string Name { get; set; }     // public properties with a getter and a setter
+    public List<Item> Inventory { get; init; } // init setters work too
+    public Vector3? LastCheckpoint;      // Nullable<T> of any serializable T
+}
+```
+
+<Tabs items={["Class", "Struct", "Record", "Record struct", "Interface"]}>
+<Tab value="Class">
+
+```csharp
+[NinoType]
+public class SampleClass
+{
+    public int Id;
+    public string Name { get; set; }
+}
+```
+
+</Tab>
+<Tab value="Struct">
+
+```csharp
+[NinoType]
+public struct SampleStruct
+{
+    public int Id;
+    public string Name { get; set; }
+}
+```
+
+</Tab>
+<Tab value="Record">
+
+```csharp
+[NinoType]
+public record SampleRecord(int Id, string Name);
+```
+
+</Tab>
+<Tab value="Record struct">
+
+```csharp
+[NinoType]
+public record struct SampleRecordStruct(int Id, string Name);
+```
+
+</Tab>
+<Tab value="Interface">
+
+```csharp
+[NinoType]
+public interface IShape
+{
+    float Area { get; set; }
+}
+
+public class Square : IShape // inherits [NinoType]
+{
+    public float Area { get; set; }
+    public float Side;
+}
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+
+A `[NinoType]` and every type containing it must be `public` or `internal` (`protected internal` also works), and it cannot be a `static` class or a `ref struct` (NINO001, with a code fix).
+
+</Callout>
+
+## `[NinoType]` Options
+
+```csharp
+public NinoTypeAttribute(
+    bool autoCollect = true,
+    bool containNonPublicMembers = false,
+    bool allowInheritance = true,
+    bool versionTolerant = false,
+    bool keyed = false,
+    bool trackReferences = false)
+```
+
+<TypeTable
+  type={{
+    autoCollect: {
+      description: <><code>true</code>: every public field and property is serialized. <code>false</code>: only members marked <code>[NinoMember]</code>.</>,
+      type: 'bool',
+      default: 'true',
+    },
+    containNonPublicMembers: {
+      description: <>Also serialize <code>private</code>, <code>protected</code> and <code>internal</code> members (with <code>autoCollect</code>, or the ones marked <code>[NinoMember]</code>).</>,
+      type: 'bool',
+      default: 'false',
+    },
+    allowInheritance: {
+      description: <>Subtypes inherit the attribute and are serializable through this type. With <code>false</code>, a subtype must declare <code>[NinoType]</code> itself (NINO003).</>,
+      type: 'bool',
+      default: 'true',
+    },
+    versionTolerant: {
+      description: <>Members can be appended later, to this type or any base class. See <a href="/en/docs/v4/evolving-data#version-tolerance">Version Tolerance</a>.</>,
+      type: 'bool',
+      default: 'false',
+    },
+    keyed: {
+      description: <>Members are written with a key, so they can be reordered, removed and inserted. See <a href="/en/docs/v4/evolving-data#keyed-members">Keyed Members</a>.</>,
+      type: 'bool',
+      default: 'false',
+    },
+    trackReferences: {
+      description: <>Classes only. Shared references and cycles round-trip. See <a href="/en/docs/v4/reference-tracking">Reference Tracking</a>.</>,
+      type: 'bool',
+      default: 'false',
+    },
+  }}
+/>
+
+Use named arguments for readability: `[NinoType(versionTolerant: true)]`. A bare `[NinoType]` gives the fastest and most compact format: positional, no per-member overhead.
+
+## Which Members Are Serialized
+
+With the default `autoCollect: true`, Nino collects:
+
+- every **public field**, and every **public property with a getter and a setter** (`set` or `init`);
+- the members of `[NinoType]` base classes first, then the type's own members in declaration order;
+- for records, the primary constructor parameters (they are public properties).
+
+And it skips:
+
+- **get-only auto-properties** (`public int Id { get; }`), unless a constructor takes them as a parameter of the same name (ignoring case), since nothing else could restore them. See [Constructors](/en/docs/v4/constructors);
+- **explicit interface implementations** (`int IHasId.Id { get; set; }`), which generated code cannot name. A `[NinoType]` interface serializes its members through the implementing type's members of the same name;
+- members whose type Nino cannot serialize (delegates, `Task`, pointers...), reported as warning NINO007.
+
+An `override` is the member it overrides, collected once. A member that hides a base member with `new` is a separate member: both are serialized, the base one first.
+
+### Ignoring a Member
+
+```csharp
+[NinoType]
+public class Session
+{
+    public int UserId;
+    [NinoIgnore] public DateTime CachedAt; // [!code highlight]
+}
+```
+
+### Choosing Members Explicitly
+
+With `[NinoType(false)]` (`autoCollect: false`) only members marked `[NinoMember(index)]` are serialized, ordered by `index` ascending:
+
+<Tabs items={["Class", "Record"]}>
+<Tab value="Class">
+
+```csharp
+[NinoType(false)] // [!code highlight]
+public class SampleClass
+{
+    public int Id;                       // not serialized
+    [NinoMember(1)] public string Name { get; set; } // [!code highlight]
+    [NinoMember(0)] public int Level;    // written first
+}
+```
+
+</Tab>
+<Tab value="Record">
+
+```csharp
+[NinoType(false)] // [!code highlight]
+public record SampleRecord(
+    [property: NinoMember(2)] int Id, // [!code highlight]
+    [property: NinoMember(1)] string Name); // [!code highlight]
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+
+The analyzer keeps these consistent: `[NinoMember]` is redundant with `autoCollect: true` (NINO010) and `[NinoIgnore]` with `autoCollect: false` (NINO011), a member cannot have both (NINO012), and indices must be unique (NINO013). Each comes with a code fix.
+
+</Callout>
+
+### Private Members
+
+Set `containNonPublicMembers` to serialize non-public members as well:
+
+```csharp
+[NinoType(containNonPublicMembers: true)] // [!code highlight]
+public partial class Account
+{
+    private long _balance;
+    protected string Owner;
+    public int Id;
+}
+```
+
+- On .NET 8 and later, generated code reaches private members through `[UnsafeAccessor]` (except in generic types).
+- Before .NET 8 (including .NET Standard and Unity), and in generic types, it uses an accessor generated **inside** the type, so the type and every type containing it must be `partial` (NINO002, with a code fix).
+- A non-public `[NinoMember]` without `containNonPublicMembers` is an error (NINO009).
+- Private members of a base class are never part of a subtype.
+
+Nino also hides the compiler's "field is never used / never assigned" warnings for private members it serializes.
+
+## Member Order
+
+Without `keyed: true`, the order of members **is** the format. Members are written base-class members first, then in declaration order, unless you change it:
+
+- `[NinoMember(index)]` with `[NinoType(false)]`: by index, ascending.
+- `[NinoExplicitOrder(...)]` on the type: the listed members (by name) first, in the given order; the others follow in declaration order.
+
+```csharp
+[NinoType]
+[NinoExplicitOrder(nameof(Name), nameof(Id))] // [!code highlight]
+public class Ordered
+{
+    public int Id;
+    public string Name;
+    public bool Flag;   // written after Name and Id
+}
+```
+
+<Callout type="warn">
+
+Reordering, inserting or removing members (or changing their indices) breaks data written before. Plan for change with [version tolerance or keyed members](/en/docs/v4/evolving-data).
+
+</Callout>
+
+## String Encoding
+
+Strings are written as UTF-16 by default: a length and one block copy, the fastest option. Mark a `string` member with `[NinoUtf8]` to write UTF-8 instead, which halves the size of ASCII-heavy text at the cost of transcoding (vectorized by the runtime):
+
+```csharp
+[NinoType]
+public class ChatMessage
+{
+    public int SenderId;
+    [NinoUtf8] public string Text; // [!code highlight]
+}
+```
+
+## Former Name
+
+Non-sealed classes, abstract classes and interfaces are written with a **type id**, a 32-bit hash of the type's full name, so polymorphic values can be read back as the right type. Renaming the type or moving it to another namespace changes the id. Keep reading old data with `[NinoFormerName]`:
+
+```csharp
+[NinoType]
+[NinoFormerName("Old.Namespace.Outer+Item")] // [!code highlight]
+public class ItemRenamed
+{
+    public int Id;
+}
+```
+
+The former name is the **runtime form** of the full name: `Namespace.Type`, `+` between a nested type and its container (`Namespace.Outer+Inner`), no `global::`. The type is found under both names, so old and new data can be read.
+
+## Structs
+
+A `[NinoType]` struct has no header at all. When it is unmanaged, not `versionTolerant` or `keyed`, uses the default sequential layout, has no custom member formatters and every instance field is serialized, it is written as its **raw memory**: one copy, and arrays and lists of it as one block. Otherwise it is written member by member.
+
+```csharp
+[NinoType]
+public struct Hit          // raw: one 16-byte copy (padding zeroed)
+{
+    public int TargetId;
+    public float Damage;
+    public long Tick;
+}
+```
+
+<Callout type="warn">
+
+A raw struct is written in its canonical field order: reordering its fields or changing its `StructLayout` breaks existing data. Mark it `versionTolerant` (or `[NinoIgnore]` a field) to opt out of raw copying. See [Platforms and Binary Format](/en/docs/v4/platforms).
+
+</Callout>
+
+## Records
+
+Positional records are created through their primary constructor; their parameters are the serialized properties. Records with a body work like classes.
+
+```csharp
+[NinoType]
+public record Point(int X, int Y);
+
+[NinoType]
+public record struct Range(int Start, int Length);
+```
+
+Because their properties are `init`-only, positional records are re-created on every deserialization, even into an existing instance, and cannot use [`trackReferences`](/en/docs/v4/reference-tracking) or [`[NinoPooled]`](/en/docs/v4/pooling). Use a record with settable properties when you need those.
+
+## Generic Types
+
+```csharp
+[NinoType]
+public class Box<T>
+{
+    public T Value;
+}
+
+[NinoType]
+public record struct Pair<TKey, TValue>(TKey Key, TValue Value);
+
+[NinoType]
+public class Wrapper<T> where T : IList
+{
+    public T Items;
+}
+```
+
+A generic `[NinoType]` gets one formatter per definition, not one per closed type. Type arguments must be serializable (`Box<int>`, `Box<List<string>>`, `Box<Player>`). The generator registers every closed type the compilation names (member types, base types, type arguments of `NinoSerializer`/`NinoDeserializer` calls), so AOT platforms have the instantiations they need; the runtime closes the rest on first use.
+
+<Callout type="warn">
+
+A closed generic type that a process only **reads** polymorphically (by type id) and never names or writes must be registered at startup: `NinoPolymorphic.Register<Box<int>>()`. This only matters for instantiations created by reflection or in another assembly.
+
+</Callout>
+
+## Inheritance
+
+Subtypes inherit `[NinoType]`, with its options, from their nearest `[NinoType]` base class or interface; put `[NinoType]` on a subtype to give it options of its own. See [Polymorphism](/en/docs/v4/polymorphism).
+
+## Next
+
+<Cards>
+  <Card title="Constructors" href="/en/docs/v4/constructors">How Nino creates instances: constructors, factories, records, `required` members.</Card>
+  <Card title="Supported Types" href="/en/docs/v4/types">Every built-in type, collection and how user collections work.</Card>
+</Cards>

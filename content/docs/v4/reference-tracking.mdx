@@ -1,0 +1,56 @@
+---
+title: Reference Tracking
+description: Preserve shared references and cycles.
+icon: Share2
+---
+
+By default, an object referenced twice is written twice and read back as two instances, and cyclic graphs cannot be serialized. Mark a class `trackReferences: true` (subtypes inherit it) to preserve the object graph:
+
+```csharp
+[NinoType(trackReferences: true)] // [!code highlight]
+public class Node
+{
+    public int Value;
+    public Node Next;    // may point back to an earlier node
+}
+
+var a = new Node { Value = 1 };
+var b = new Node { Value = 2, Next = a };
+a.Next = b;                                   // a cycle
+var bytes = NinoSerializer.Serialize(a);
+var copy = NinoDeserializer.Deserialize<Node>(bytes);
+// copy.Next.Next == copy
+```
+
+- Each tracked object is written behind a 4-byte reference header: an object already written in the same call is written as its index only.
+- Shared references keep their identity across members of any declared type, including `object` and interfaces.
+- Tracking covers `[NinoType]` classes, not collections: the same `List<T>` in two members is still written twice.
+- Cost: about 28 ns per top-level call plus 4 bytes and one identity lookup per object. Calls without tracked objects pay nothing.
+
+<Callout type="warn">
+
+Types that must be re-created from constructor arguments or read-only members (for example positional records) cannot be tracked (NINO016). `trackReferences` on a struct is ignored with a warning (NINO015).
+
+</Callout>
+
+## When to Use It
+
+<Accordions type="single">
+<Accordion title="Use it for object graphs">
+
+Scene graphs, entity relationships, editors' undo stacks, save games where several objects point to the same one, trees with parent links: anything where identity matters or cycles exist. A list repeating one tracked object 100 times is written in a fraction of the bytes and time of the untracked list.
+
+</Accordion>
+<Accordion title="Skip it for messages and plain data">
+
+Network messages, configuration and other tree-shaped data have no shared references. Leave tracking off there: untracked types pay nothing, not even the 4-byte header.
+
+</Accordion>
+<Accordion title="Writing and reading several values yourself">
+
+The top-level `NinoSerializer`/`NinoDeserializer` calls scope the reference table to one call. When you create a `Writer` or `Reader` yourself, references are shared across everything written through it until you call `ReleaseReferences()`, which you must do when the logical message ends.
+
+</Accordion>
+</Accordions>
+
+Ref deserialization works as usual for new objects; a back reference replaces the current value without recycling it, since the old value may still be referenced elsewhere in the graph.

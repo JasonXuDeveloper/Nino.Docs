@@ -1,0 +1,99 @@
+---
+title: Platforms and Binary Format
+description: "Where Nino runs, why every platform writes the same bytes, and what the format looks like."
+icon: Cpu
+---
+
+## Supported Platforms
+
+| Component | Targets |
+| --- | --- |
+| `Nino.Core` (runtime) | `netstandard2.0`, `netstandard2.1`, `net8.0`, `net10.0` |
+| `Nino.Generator` (generator, analyzer) | Roslyn 4.3 and later; builds for Roslyn 4.3, 4.8 and 4.12 in one package |
+| Generated code | C# 9 or later |
+| Unity | 2022.3 and later, Mono and IL2CPP, every player platform |
+| Hot update | HybridCLR, with no initialization call |
+
+**Every target writes identical bytes.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` each use the best primitives available to them (vectorized copies, `[UnsafeAccessor]` on .NET 8+), and the test suite checks the same golden payloads against each build. Data written by a .NET 10 server is read by a Unity IL2CPP client on a 32-bit Android phone, and the other way round.
+
+## Binary Format
+
+All multi-byte values are **little-endian** and written unaligned. There is no schema and no field names in positional types: the generated code knows the layout.
+
+| Value | Encoding |
+| --- | --- |
+| Unmanaged value (`int`, `Guid`, enums, raw structs) | its raw bytes, canonical layout, padding zeroed |
+| `bool` | 1 byte |
+| `T?` | 1 byte has-value flag, then the value if present |
+| Length of a string, array or collection | `int32`; `-1` means `null` |
+| `string` | length in UTF-16 chars, then UTF-16 code units |
+| `string` with `[NinoUtf8]` | length in bytes, then UTF-8 bytes |
+| Array or list of unmanaged `T` | length, then one block of elements |
+| Other collections | length, then each element |
+| Dictionary | length, then key/value pairs |
+| `T[,]` and higher ranks | each dimension's length, then elements in row-major order |
+
+Objects get a header that depends on the **declared** type:
+
+| Declared type | Header |
+| --- | --- |
+| `struct` | none |
+| `sealed class` | 1 byte: `0` = null, `1` = instance |
+| non-sealed class, abstract class, interface | `int32` type id: `0` = null, otherwise the runtime type's id |
+
+The type id is the FNV-1a hash of the type's name in runtime form (`Namespace.Outer+Inner`). The same hash code is compiled into the generator and the runtime, so ids cannot diverge. `versionTolerant` types add a length per hierarchy level, `keyed` types a key and length per member, and `trackReferences` types a reference header; see [Evolving Your Data](/en/docs/v4/evolving-data) and [Reference Tracking](/en/docs/v4/reference-tracking).
+
+Every length read from a payload is validated against the bytes left before anything is allocated, so malformed or hostile input cannot trigger huge allocations, and truncated data throws instead of reading past the end.
+
+## Portable by Design
+
+Nino defines its bytes instead of copying whatever a runtime has in memory. Runtimes do not always agree on memory layout, so these cases are handled explicitly:
+
+<Accordions type="multiple">
+<Accordion title={<><code>Nullable&lt;T&gt;</code></>} value="nullable">
+
+CoreCLR and Unity 2021.3+ store `bool hasValue; T value;`, while old Mono (Unity 2019.4 and earlier) stores the value first. Copying a `T?` as raw memory produces different bytes on each. Nino writes a single `T?` as a has-value byte followed by the value; arrays and lists of `T?` use the canonical layout and are converted element by element where the runtime differs.
+
+</Accordion>
+<Accordion title={<><code>ValueTuple</code> and <code>KeyValuePair</code></>} value="tuple">
+
+`ValueTuple` is `LayoutKind.Auto` on .NET, so CoreCLR may reorder its fields, while Mono lays them out sequentially. Nino always writes tuples and `KeyValuePair` member by member, never as raw memory.
+
+</Accordion>
+<Accordion title={<><code>decimal</code>, <code>DateTimeOffset</code>, <code>nint</code></>} value="bcl">
+
+`decimal` is aligned to 8 bytes on CoreCLR and to 4 on Mono and IL2CPP, so a struct holding one can have a different layout; Nino converts it to the canonical layout. `DateTimeOffset` is written as UTC ticks plus offset minutes (10 bytes), never raw. `nint`/`nuint` are always 8 bytes.
+
+</Accordion>
+<Accordion title="32-bit platforms" value="32bit">
+
+`struct { int a; long b; }` is 16 bytes on x64 and 12 bytes on x86 .NET and Mono. Nino's raw layout is the canonical 64-bit one; where a runtime differs, values are converted field by field into the same bytes (at some cost in speed) and bulk raw copies are skipped.
+
+</Accordion>
+<Accordion title="Padding" value="padding">
+
+Code that builds structs in uninitialized memory (`SkipLocalsInit`, `stackalloc`, `GC.AllocateUninitializedArray`) can leave stale bytes in padding. Nino zeroes padding on write, so equal values always serialize to equal bytes and no stale memory leaks into a payload.
+
+</Accordion>
+<Accordion title="Big-endian hosts" value="endian">
+
+Not supported. Every platform .NET and Unity run on today is little-endian.
+
+</Accordion>
+</Accordions>
+
+## Unity
+
+- Install from [OpenUPM](/en/docs/v4/start#unity-project). The package ships `Nino.Core.dll` and the generator (`Nino.Generator.dll`, labelled `RoslynAnalyzer`), plus `System.Buffers`, `System.Memory` and `System.Runtime.CompilerServices.Unsafe`.
+- Unity compiles against .NET Standard: there is no `[UnsafeAccessor]`, so a type with serialized non-public members or `[NinoPooled]` must be `partial` (NINO002, with a code fix).
+- Unity's compiler is older than Roslyn 4.8, so calls are not intercepted. They use the regular path and write the same bytes.
+- Generated registries carry `[RuntimeInitializeOnLoadMethod]` (and `[InitializeOnLoadMethod]` in the editor), which registers them eagerly and keeps them from being stripped by IL2CPP.
+- Unity types such as `Vector3`, `Quaternion` and `Matrix4x4` are unmanaged and are written as raw memory.
+
+See [Unity and HybridCLR](/en/docs/v4/advanced/unity) for project setup and IL2CPP tips.
+
+## HybridCLR and Hot Update
+
+Generated registries are discovered lazily: the first time Nino meets a type of an assembly, or an unknown type id while reading, it finds that assembly's registry. A hot-update assembly loaded with `Assembly.Load` therefore needs **no initialization call**, and its types (including subtypes of base classes in AOT assemblies) are found on first use.
+
+Generated code avoids forwarding facades on purpose: interpreters such as HybridCLR's and Mono's do not inline, so every extra call layer would cost real time there.

@@ -1,0 +1,242 @@
+---
+title: Benchmarks
+description: "Build-time and runtime benchmarks of Nino v4 against v3 (3.3.13) and MemoryPack 1.21.4, with the setup to reproduce them."
+icon: Gauge
+---
+
+Build-time and runtime measurements of Nino v4 against Nino v3 **3.3.13** (the last v3 release) and [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4**. Absolute times vary between machines; the ratios are what to look at. For a feature comparison, see [Nino vs MemoryPack](/en/docs/v4/vs-memorypack).
+
+## Setup
+
+| | |
+| --- | --- |
+| CPU | Intel Xeon 2.80 GHz, 4 cores, AVX-512 |
+| OS | Ubuntu 24.04 |
+| Runtime | .NET 10.0.13 (SDK 10.0.402), server GC |
+| Harness | BenchmarkDotNet 0.15.2, 15 iterations (rows marked * re-run with 20) |
+| Projects | [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.Benchmark) (runtime), [`src/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.GeneratorBenchmark) (build time) |
+
+## Build Time and Generated Code
+
+Workload: `N` abstract root classes, each with a chain of 8 derived classes, a sealed leaf and a struct (`N × 11` types), with primitives, strings, `List<T>`, `Dictionary<int, string>`, references to other `[NinoType]`s and private fields. The harness runs the generator on the compilation (Roslyn 4.3 in-process), emits the assembly, and re-runs the generator after an edit. Times are the median of the last three of five runs.
+
+### 330 Types (N = 30)
+
+| | v3 (3.3.13) | v4 | v4 vs v3 |
+| --- | ---: | ---: | ---: |
+| Generated source | 18.7 MB (363,233 lines) | 1.15 MB (21,679 lines) | **16× smaller** |
+| Compiling the generated code (emit) | 56.0 s | 1.27 s | **44× faster** |
+| Running the generator | 1.11 s | 0.14 s | **7.9× faster** |
+| Re-generating after editing a member | 1.31 s | 0.19 s | **6.9× faster** |
+| Re-generating after editing a comment | 1.11 s | 0.19 s | **5.8× faster** |
+| IL of the generated code | 2.2 MB | 0.37 MB | **6.0× smaller** |
+
+### 1,100 Types (N = 100)
+
+{/* GEN_N100 */}
+
+<Callout type="info">
+
+The v3 3.3.13 measurements at N = 100 are pending. v4 grows linearly with the number of types: about 3.5 KB of source and 2 ms of compile time per type.
+
+</Callout>
+
+## Runtime
+
+v4 and MemoryPack in the same run. The v4 vs v3 column compares the v4 / MemoryPack ratio with the v3 / MemoryPack ratio of a separate run of v3 3.3.13 and MemoryPack on the same machine; v3's benchmarks have no polymorphic cases. Payload sizes are about the same (`SimpleClass`: 1,146 bytes in v4, 1,148 in MemoryPack).
+
+### Serialize (to a Reused Buffer Writer)
+
+| Case | v4 | MemoryPack | v4 vs MemoryPack | v4 vs v3 |
+| --- | ---: | ---: | ---: | ---: |
+| `SimpleClass` | 151 ns | 450 ns | **2.97× faster** | 1.73× faster |
+| `SimpleClass[100]` | 17.0 µs | 48.7 µs | **2.86× faster** | 1.29× faster |
+| Polymorphic class | 11.5 µs | 31.5 µs | **2.72× faster** | — |
+| Polymorphic class array | 89.6 µs | 388 µs | **4.33× faster** | — |
+| Polymorphic `Foo[]` | 9.9 µs | 31.4 µs | **3.15× faster** | — |
+| `SimpleStruct` (`int` + `DateTime`) | 2.3 ns | 5.8 ns | **2.50× faster** | 1.35× faster |
+| `SimpleStruct[100]` * | 28.6 ns | 30.6 ns | 1.07× faster | on par |
+| `Vector4[10000]` * | 4.06 µs | 4.10 µs | on par | on par |
+
+`SimpleStruct` has 4 bytes of padding. v4 zeroes it, so the output is deterministic; v3 and MemoryPack copy whatever the padding contains. With the masked SIMD copy this costs nothing measurable.
+
+### Deserialize (New Instances)
+
+| Case | v4 | MemoryPack | v4 vs MemoryPack | v4 vs v3 |
+| --- | ---: | ---: | ---: | ---: |
+| `SimpleClass` | 964 ns | 1,129 ns | **1.17× faster** | 1.19× faster |
+| `SimpleClass[100]` | 106 µs | 134 µs | **1.26× faster** | 1.22× faster |
+| Polymorphic class * | 36.3 µs | 44.8 µs | **1.23× faster** | — |
+| Polymorphic class array | 406 µs | 562 µs | **1.38× faster** | — |
+| Polymorphic `Foo[]` | 37.0 µs | 43.1 µs | **1.16× faster** | — |
+| `SimpleStruct[100]` * | 295 ns | 295 ns | on par | on par |
+| `Vector4[10000]` * | 173 µs | 147 µs | 0.85× | 0.90× |
+
+<Callout type="info">
+
+`Vector4[10000]` allocates a 160 KB array on the large object heap per call, so it measures gen-2 collections more than either serializer: the two runs gave 0.96× and 0.85× with ±15% error. The copy itself is one `memcpy` in both.
+
+</Callout>
+
+### Deserialize into Existing Instances (Pooling)
+
+Nino deserializes into an existing object graph (`ref` deserialization) and takes new instances from `[NinoPooled]` pools; MemoryPack overwrites existing instances.
+
+| Case | Nino new | Nino reusing | MemoryPack new | MemoryPack overwrite |
+| --- | ---: | ---: | ---: | ---: |
+| Pooled node | 873 ns | **280 ns** (0 B) | 952 ns | 727 ns (1,024 B) |
+| Pooled leaves, in place | 5.23 µs | **1.18 µs** (0 B) | 5.38 µs | 5.80 µs (12,800 B) |
+| Pooled leaves, pooled elements | 5.23 µs | 3.82 µs (856 B) | 5.38 µs | 5.80 µs (12,800 B) |
+| Pooled class | 780 ns | 623 ns (1,080 B) | 1,044 ns | 857 ns (1,080 B) |
+
+Neither serializer allocates on the serialize paths above (0 B per call), and deserialization allocates only the result objects.
+
+### Reproducing
+
+```shell
+# build time and generated code
+dotnet run -c Release --project src/Nino.GeneratorBenchmark -- 30 8
+
+# runtime
+dotnet run -c Release --project src/Nino.Benchmark -- --filter '*Nino*' '*MemoryPack*' --iterationCount 15 --warmupCount 5
+```
+
+## Nino, MemoryPack and MessagePack
+
+The `Nino.Benchmark` project also compares Nino with [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp), on the data structures below.
+
+### Data Structures
+
+<Tabs items={["Simple Class", "Simple Struct"]}>
+
+<Tab value="Simple Class">
+
+```csharp
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+[MemoryPackUnion(0, typeof(SimpleClass))]
+[Union(0, typeof(SimpleClass))]
+public abstract partial class SimpleClassBase
+{
+    [Key(0)] public int Id;
+    [Key(1)] public bool Tag;
+    [Key(2)] public Guid Guid;
+    [Key(3)] public DateTime CreateTime;
+}
+
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+public sealed partial class SimpleClass : SimpleClassBase
+{
+    [Key(4)] public string Name { get; set; }
+    [Key(5)] [NinoUtf8] public string Desc;
+    [Key(6)] public int[] Numbers { get; set; }
+    [Key(7)] public List<DateTime> Dates { get; set; }
+    [Key(8)] public Dictionary<int, string> Map1;
+    [Key(9)] public Dictionary<int, int> Map2 { get; set; }
+}
+```
+
+</Tab>
+<Tab value="Simple Struct">
+
+```csharp
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+public partial struct SimpleStruct
+{
+    [Key(0)] public int Id;
+    [Key(1)] public DateTime CreateTime;
+}
+```
+
+</Tab>
+</Tabs>
+
+### Data Generation
+
+#### Generation Function
+
+<Tabs items={["Simple Class", "Simple Struct"]}>
+
+<Tab value="Simple Class">
+
+```csharp
+public static SimpleClass Create()
+{
+    Random random = new Random();
+    return new SimpleClass
+    {
+        Id = random.Next(),
+        Tag = random.Next() % 2 == 0,
+        Guid = Guid.NewGuid(),
+        CreateTime = DateTime.Now,
+        Name = Guid.NewGuid().ToString(),
+        Desc = Enumerable.Range(0, 10).Select(_ => Guid.NewGuid().ToString()).Aggregate((a, b) => a + b),
+        Numbers = Enumerable.Range(0, 100).Select(_ => random.Next()).ToArray(),
+        Dates = Enumerable.Range(0, 10).Select(_ => DateTime.Now.AddSeconds(random.Next())).ToList(),
+        Map1 = Enumerable.Range(0, 10).ToDictionary(n => n, n => n.ToString()),
+        Map2 = Enumerable.Range(0, 10).ToDictionary(n => n, n => n * 2)
+    };
+}
+```
+
+</Tab>
+<Tab value="Simple Struct">
+
+```csharp
+public static SimpleStruct Create()
+{
+    Random random = new Random();
+    return new SimpleStruct
+    {
+        Id = random.Next(),
+        CreateTime = DateTime.Now.AddSeconds(random.Next())
+    };
+}
+```
+
+</Tab>
+</Tabs>
+
+#### Benchmark Data
+
+```csharp
+SimpleClass = SimpleClass.Create();
+SimpleClasses = Enumerable.Range(0, 100).Select(_ => SimpleClass.Create()).ToArray();
+SimpleStruct = SimpleStruct.Create();
+SimpleStructs = Enumerable.Range(0, 100).Select(_ => SimpleStruct.Create()).ToArray();
+var r = Random.Shared;
+Vectors = Enumerable.Range(0, 10000)
+    .Select(_ => new Vector4(r.NextSingle(), r.NextSingle(),
+        r.NextSingle(), r.NextSingle())).ToArray();
+```
+
+Serialization writes into a reused buffer writer (`NinoArrayBufferWriter` for Nino, `ArrayBufferWriter<byte>` for the others), so no serializer allocates on the serialize paths.
+
+### Results
+
+Results are the time taken to serialize and deserialize the above data, the lower the better.
+
+{/* PERF_TABLE */}
+
+{/* Benchmark environment (BenchmarkDotNet summary header) */}
+
+```text
+TBD
+```
+
+{/* One entry per case, mean time in nanoseconds. Drives the bar chart below; leave empty to hide it.
+   e.g. { name: 'SimpleClass · Serialize', nino: 151, memorypack: 450, messagepack: 1700 } */}
+export const benchmarks = [];
+
+| Method | Mean | Error | StdDev | Ratio | RatioSD | Allocated | Payload |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| TBD | | | | | | | |
+
+{/* /PERF_TABLE */}
+
+<BenchChart data={benchmarks} lang="en" />

@@ -1,0 +1,159 @@
+---
+title: Custom Formatters
+description: Serialize a member, or teach Nino a whole new type, with your own formatter.
+icon: Puzzle
+---
+
+A formatter is a **struct** implementing `INinoFormatter<T>`:
+
+```csharp
+public interface INinoFormatter<T>
+{
+    void Serialize(T value, ref Writer writer);
+    void Deserialize(ref T value, ref Reader reader);
+}
+```
+
+`Deserialize` receives the current value by `ref`: `default` means "create a new value", an existing instance may be reused. Formatters are called as `default(TFormatter)`, so they have no instance state; keep any state in static fields.
+
+## For One Member
+Use `[NinoCustomFormatter]` to serialize a single member with your formatter. The formatter must implement `INinoFormatter<T>` for **exactly** the member type (NINO008):
+
+```csharp
+/// Writes a long as a zig-zag varint.
+public struct ZigZagLongFormatter : INinoFormatter<long>
+{
+    public void Serialize(long value, ref Writer writer)
+    {
+        ulong v = (ulong)((value << 1) ^ (value >> 63));
+        while (v >= 0x80)
+        {
+            writer.Write((byte)(v | 0x80));
+            v >>= 7;
+        }
+        writer.Write((byte)v);
+    }
+
+    public void Deserialize(ref long value, ref Reader reader)
+    {
+        ulong v = 0;
+        int shift = 0;
+        byte b;
+        do
+        {
+            reader.Read(out b);
+            v |= (ulong)(b & 0x7F) << shift;
+            shift += 7;
+        } while ((b & 0x80) != 0);
+        value = (long)(v >> 1) ^ -(long)(v & 1);
+    }
+}
+
+[NinoType]
+public class Delta
+{
+    [NinoCustomFormatter(typeof(ZigZagLongFormatter))]
+    public long Value;
+}
+```
+
+## For a Type: `[assembly: NinoFormatter]`
+To teach Nino a type it does not know (your own or a third-party one), register a formatter on your assembly. Type arguments and element formatters are inferred: a type parameter constrained to `INinoFormatter<E>` receives the formatter Nino resolves for `E`, so element (de)serialization is inlined. Generated code calls the formatter directly, and the runtime uses the same registration.
+
+```csharp
+[assembly: NinoFormatter(typeof(RingFormatter<,>))]
+
+public sealed class Ring<T> : IEnumerable<T> { /* a third-party fixed-capacity buffer */ }
+
+public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
+    where TFormatter : struct, INinoFormatter<T>
+{
+    public void Serialize(Ring<T> value, ref Writer writer)
+    {
+        if (value == null)
+        {
+            writer.Write(-1);
+            return;
+        }
+
+        writer.Write(value.Capacity);
+        writer.Write(value.Count);
+        foreach (var item in value)
+            default(TFormatter).Serialize(item, ref writer);
+    }
+
+    public void Deserialize(ref Ring<T> value, ref Reader reader)
+    {
+        reader.Read(out int capacity);
+        if (capacity < 0)
+        {
+            value = null;
+            return;
+        }
+
+        reader.Read(out int count);
+        value = new Ring<T>(capacity);
+        for (int i = 0; i < count; i++)
+        {
+            T item = default;
+            default(TFormatter).Deserialize(ref item, ref reader);
+            value.Push(item);
+        }
+    }
+}
+
+[NinoType]
+public sealed class RingHolder
+{
+    public Ring<int> Ints;          // uses RingFormatter<int, ...>
+    public List<Ring<string>> Nested;
+}
+```
+
+- The formatter is a struct (not nested in a generic type), passed as an open generic definition (`typeof(F<,>)`) and must implement `INinoFormatter<P>` exactly once. Every type parameter must be inferable from `P`, from a type constraint (`where TList : List<T>`), or from an `INinoFormatter<E>` constraint. An unusable registration is reported as NINO020.
+- To target a bare type parameter (`INinoFormatter<TCollection>`), list the target types: `[assembly: NinoFormatter(typeof(F<,,>), typeof(IList<>))]`.
+- When several registrations match, the higher `Priority` wins: `[assembly: NinoFormatter(typeof(F<,>), Priority = 10)]`.
+- Nino's own formatters for the BCL types are declared the same way.
+
+### Binding the Formatter's Type Parameters
+
+Nino binds each type parameter of a registered formatter when it meets a type the formatter can format:
+
+<TypeTable
+  type={{
+    'Occurs in P': {
+      description: 'Bound by matching the formatted pattern P against the type, e.g. T in INinoFormatter<Ring<T>>.',
+      type: 'RingFormatter<T, ...>',
+    },
+    'Type constraint': {
+      description: 'A constraint such as where TList : List<T> binds the parameters it mentions, by matching against the bound type, its base types or its interfaces.',
+      type: 'where TList : List<T>',
+    },
+    'INinoFormatter<E> constraint': {
+      description: 'Bound to the formatter Nino resolves for E, so element formatters compose and inline (they are structs).',
+      type: 'where TFormatter : struct, INinoFormatter<T>',
+    },
+    '[NinoRaw]': {
+      description: 'On an unmanaged parameter: the formatter copies its values as raw memory, so only types Nino writes as raw bytes are bound (no Nullable, tuples, nint, DateTimeOffset or non-raw [NinoType] structs).',
+      type: '[NinoRaw] T, where T : unmanaged',
+    },
+    '[NinoCreated]': {
+      description: 'The formatter creates instances with NinoFactory<T>.Create(), so only non-abstract classes with a public static [NinoRefDeserialization] factory or a public constructor callable without arguments are bound. Use it instead of new(), which admits only parameterless constructors and compiles to Activator.CreateInstance<T>().',
+      type: '[NinoCreated] TCollection',
+    },
+  }}
+/>
+
+Other constraints keep their C# meaning (`class`, `struct`, `unmanaged`, `new()`).
+
+<Callout type="info">
+
+A formatter can also be registered at runtime for the top-level APIs with `NinoFormatterCache<T>.Register<TFormatter>()` (before first use); it then takes precedence over intercepted calls.
+
+</Callout>
+
+<Callout type="info" title="Declarative, no startup code">
+
+`[assembly: NinoFormatter]` is an attribute, not a call: there is no module initializer and nothing to run at startup. The runtime reads an assembly's registrations when it first meets one of its types (or, when a lookup misses, from every loaded assembly). Formatters declared in a HybridCLR hot-update assembly are therefore picked up as soon as the assembly is loaded, and Nino declares its own BCL formatters the same way.
+
+</Callout>

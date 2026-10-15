@@ -1,0 +1,61 @@
+---
+title: Introduction
+description: Nino is a high-performance binary serialization library for C#, source-generated for .NET, Unity and HybridCLR.
+icon: BookOpen
+---
+
+import { ArrowRightLeft, Gauge, Layers, Rocket, Sparkles, Swords } from 'lucide-react';
+
+Nino turns your C# types into compact bytes and back. A Roslyn source generator writes the serialization code for every type marked `[NinoType]` at compile time, so serialization involves no reflection, no runtime code generation and no registration step, and it works the same on .NET, Unity (Mono and IL2CPP) and HybridCLR.
+
+<Stats lang="en" />
+
+```csharp
+using Nino.Core;
+
+[NinoType]
+public class GameData
+{
+    public int Score;
+    public string PlayerName;
+    public List<Item> Items;
+}
+
+byte[] bytes = NinoSerializer.Serialize(data);
+GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
+```
+
+## Start Here
+
+<Cards>
+  <Card icon={<Rocket />} title="Quick Start" href="/en/docs/v4/start">
+    Install Nino in a .NET or Unity project and serialize your first type.
+  </Card>
+  <Card icon={<Sparkles />} title="What's New in v4" href="/en/docs/v4/whats-new">
+    A rewrite of the runtime and the generator: faster to run and to build.
+  </Card>
+  <Card icon={<ArrowRightLeft />} title="Migrating from v3" href="/en/docs/v4/migration">
+    API changes, attribute changes and how to handle data written by v3.
+  </Card>
+  <Card icon={<Gauge />} title="Benchmarks" href="/en/docs/v4/perf">
+    Build time and runtime against v3 and MemoryPack, with the full tables.
+  </Card>
+  <Card icon={<Swords />} title="Nino vs MemoryPack" href="/en/docs/v4/vs-memorypack">
+    Where Nino is ahead, and where MemoryPack still is.
+  </Card>
+  <Card icon={<Layers />} title="Advanced Usage" href="/en/docs/v4/advanced">
+    Hot paths, network protocols, save games, Unity and HybridCLR.
+  </Card>
+</Cards>
+
+## What Nino Handles
+
+- **The types you use**: primitives, enums, structs, classes, records, generics, nullables, tuples, the BCL collections, your own collections, immutable collections, and Unity types such as `Vector3`. See [Supported Types](/en/docs/v4/types) and [Defining Types](/en/docs/v4/defining-types).
+- **Object models**: [polymorphism](/en/docs/v4/polymorphism) through base classes and interfaces, [custom constructors](/en/docs/v4/constructors), private members, and [shared references and cycles](/en/docs/v4/reference-tracking).
+- **Data that changes**: [version tolerance](/en/docs/v4/evolving-data#version-tolerance), [keyed members](/en/docs/v4/evolving-data#keyed-members) and [renamed types](/en/docs/v4/defining-types#former-name).
+- **Hot paths**: buffer reuse, [deserialization into existing instances and object pooling](/en/docs/v4/pooling) with zero allocations, and [interceptors](/en/docs/v4/performance#interceptors) that remove the last indirection.
+- **Mistakes at compile time**: an [analyzer](/en/docs/v4/analyzers) reports problems while you type, most with a code fix.
+
+## Older Versions
+
+The documentation of Nino [v3](/en/docs/v3) and [v2](/en/docs/v2) is still available. Their binary formats are not compatible with v4; see [Versioning](/en/docs/v4/versioning).

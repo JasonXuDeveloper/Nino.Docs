@@ -1,0 +1,272 @@
+---
+title: 从 v3 迁移
+description: 逐步把 v3 项目升级到 v4，附修改前后的代码。
+icon: ArrowRightLeft
+---
+
+Nino v4 是一次破坏性更新。本页列出所有发生变化的 API、特性和选项，附上修改前后的代码，并说明如何处理 v3 写入的数据。
+
+<Callout type="warn">
+
+v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**。v4 无法读取 v3 写入的数据，v3 也无法读取 v4 写入的数据。如果你有持久化的 v3 数据（存档、缓存、配置文件），请在升级前阅读[转换 v3 数据](#转换-v3-数据)。
+
+</Callout>
+
+## 检查清单
+
+<Steps>
+<Step>
+
+将 `Nino` NuGet 包（或 Unity 中的 OpenUPM 包）更新到 v4。
+
+</Step>
+<Step>
+
+将 `Serializer`/`Deserializer` 调用替换为 `NinoSerializer`/`NinoDeserializer`，并删除 `using <YourAssembly>.NinoGen;`。
+
+</Step>
+<Step>
+
+在需要的类型上用 `[NinoType(versionTolerant: true)]` 替换 `WEAK_VERSION_TOLERANCE`（可选，见下文）。
+
+</Step>
+<Step>
+
+将 `[NinoFormerName]` 的参数改为运行时类型名的形式。
+
+</Step>
+<Step>
+
+构建项目，修复分析器报告的问题（`NINO001`–`NINO022`）；大多数诊断都提供代码修复。
+
+</Step>
+<Step>
+
+转换或丢弃持久化的 v3 数据。
+
+</Step>
+</Steps>
+
+## 序列化 API
+
+在 v3 中，生成器会在每个程序集的 `<AssemblyName>.NinoGen` 命名空间中生成静态的 `Serializer` 和 `Deserializer` 类（以及扩展方法）。在 v4 中，`Nino.Core` 里只有一套 API，所有程序集通用。
+
+| v3 | v4 |
+| --- | --- |
+| `using MyGame.NinoGen;` | `using Nino.Core;` |
+| `Serializer.Serialize(obj)` / `obj.Serialize()` | `NinoSerializer.Serialize(obj)` |
+| `Serializer.Serialize(obj, bufferWriter)` / `obj.Serialize(bufferWriter)` | `NinoSerializer.Serialize(obj, bufferWriter)` |
+| `obj.Serialize(ref writer)` | `NinoSerializer.Serialize(obj, ref writer)` |
+| `Deserializer.Deserialize(data, out T value)` | `T value = NinoDeserializer.Deserialize<T>(data)` |
+| `Deserializer.Deserialize(out T value, ref reader)` | `T value = NinoDeserializer.Deserialize<T>(ref reader)` |
+| `Serializer.GetBufferWriter()` / `ReturnBufferWriter(...)` | 复用一个 `NinoArrayBufferWriter`（参见[序列化与反序列化](/zh/docs/v4/basic#recommended-usage)） |
+| （无） | `NinoDeserializer.Deserialize(data, ref value)`：反序列化到已有实例 |
+| （无） | `NinoSerializer.Serialize(object)`、`NinoDeserializer.Deserialize(data, Type)`：装箱 / 运行时类型 |
+
+<Tabs items={["v3", "v4"]}>
+
+<Tab value="v3">
+
+```csharp
+using MyGame.NinoGen;
+
+byte[] bytes = obj.Serialize();
+
+Deserializer.Deserialize(bytes, out ObjClass result);
+```
+
+</Tab>
+<Tab value="v4">
+
+```csharp
+using Nino.Core;
+
+byte[] bytes = NinoSerializer.Serialize(obj);
+
+ObjClass result = NinoDeserializer.Deserialize<ObjClass>(bytes);
+```
+
+</Tab>
+</Tabs>
+
+复用缓冲区：
+
+<Tabs items={["v3", "v4"]}>
+
+<Tab value="v3">
+
+```csharp
+var bufferWriter = Serializer.GetBufferWriter();
+obj.Serialize(bufferWriter);
+Serializer.ReturnBufferWriter(bufferWriter);
+```
+
+</Tab>
+<Tab value="v4">
+
+```csharp
+var buffer = new NinoArrayBufferWriter(); // keep and reuse it (one per thread)
+buffer.ResetWrittenCount();
+NinoSerializer.Serialize(obj, buffer);
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+
+v3 生成的 `Serialize` 可以接收 `Span<T>` 值。在 v4 中，`T` 是泛型类型参数，不能是 `ref struct`：请改为序列化数组、`List<T>` 或 `ArraySegment<T>`。
+
+</Callout>
+
+## 特性与选项
+
+| v3 | v4 |
+| --- | --- |
+| `[NinoType]`、`[NinoType(autoCollect, containNonPublicMembers)]` | 不变；新增可选参数 `allowInheritance`、`versionTolerant`、`keyed`、`trackReferences` |
+| 每个子类型都需要自己的 `[NinoType]` | 子类型从基类或接口**继承** `[NinoType]`（除非基类设置了 `allowInheritance: false`） |
+| `WEAK_VERSION_TOLERANCE`（整个项目） | 每个类型单独使用 `[NinoType(versionTolerant: true)]`；该符号仍然存在，会为项目中的所有类型开启版本兼容 |
+| `[NinoFormerName("global::Old.Namespace.Type")]`（名称从 `NinoTypeConst.g.cs` 复制） | `[NinoFormerName("Old.Namespace.Type")]`：运行时形式，不带 `global::`，嵌套类型用 `+` 分隔 |
+| `[NinoMember(index)]`、`[NinoIgnore]`、`[NinoUtf8]`、`[NinoConstructor(...)]`、`[NinoExplicitOrder(...)]` | 不变；`[NinoConstructor]` 也可以标记静态工厂方法 |
+| `[NinoPrivateProxy]`（由生成器生成） | 已移除；私有成员通过 `[UnsafeAccessor]`（.NET 8+）或在 `partial` 类型中生成的访问器访问 |
+| （无） | `[NinoPooled]`、`[NinoRefDeserialization]`、`[NinoCustomFormatter]`、`[assembly: NinoFormatter]` |
+
+### 版本兼容
+
+<Tabs items={["v3", "v4"]}>
+
+<Tab value="v3">
+
+```csharp
+// v3: #define WEAK_VERSION_TOLERANCE in the project settings
+[NinoType]
+public class SaveData
+{
+    public int Id;
+    public string Name;
+    public bool Extra; // appended later
+}
+```
+
+</Tab>
+<Tab value="v4">
+
+```csharp
+[NinoType(versionTolerant: true)]
+public class SaveData
+{
+    public int Id;
+    public string Name;
+    public bool Extra; // appended later
+}
+```
+
+</Tab>
+</Tabs>
+
+v4 的版本兼容比 v3 更强大：成员可以追加到该类型**或其任意基类**中，适用于任意嵌套深度。如需重新排序、删除或插入成员，请使用 `[NinoType(keyed: true)]`。参见[版本兼容](/zh/docs/v4/evolving-data#version-tolerance)与[键控成员](/zh/docs/v4/evolving-data#keyed-members)。
+
+<Callout type="warn">
+
+在 v3 中，`WEAK_VERSION_TOLERANCE` 还允许把成员改为相同大小的 unmanaged 类型（`int` → `float`）。在 v4 中不要依赖这一点：修改成员的类型不属于可兼容的修改。
+
+</Callout>
+
+### 曾用名
+
+<Tabs items={["v3", "v4"]}>
+
+<Tab value="v3">
+
+```csharp
+[NinoType]
+[NinoFormerName("global::MyGame.Items.Sword")]
+public class Weapon { ... }
+```
+
+</Tab>
+<Tab value="v4">
+
+```csharp
+[NinoType]
+[NinoFormerName("MyGame.Items.Sword")]
+public class Weapon { ... }
+```
+
+</Tab>
+</Tabs>
+
+曾用名只对 v4 自己写入的数据有意义（反正 v3 的数据也无法读取），因此只有在采用 v4 之后重命名的类型才需要它。
+
+### 多态
+
+<Tabs items={["v3", "v4"]}>
+
+<Tab value="v3">
+
+```csharp
+[NinoType]
+public abstract class Shape { public int Id; }
+
+[NinoType] // no longer required: inherited from Shape
+public class Circle : Shape { public float Radius; }
+```
+
+</Tab>
+<Tab value="v4">
+
+```csharp
+[NinoType]
+public abstract class Shape { public int Id; }
+
+public class Circle : Shape { public float Radius; }
+```
+
+</Tab>
+</Tabs>
+
+在子类型上保留 `[NinoType]` 没有坏处，还可以让子类型设置自己的选项。
+
+## 生成的代码
+- 生成的格式化器位于 `<AssemblyName>.NinoGen` 命名空间中，但不应直接调用。请删除所有引用 v3 生成类（`Serializer`、`Deserializer`、`NinoTypeConst` 等）的代码。
+- 每个 `[NinoType]` 对应一个生成文件，修改一个类型只会重新生成该类型。
+- v3 中以生成代码编译错误形式报告的问题，现在以分析器诊断的形式出现在你的代码上。无法序列化的成员类型会产生警告（NINO007）并被跳过，而不是编译错误。参见[诊断列表](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)。
+
+## Unity
+- 仍然需要 Unity 2022.3 或更高版本。
+- OpenUPM 包已附带源生成器。你不再需要手动向 Unity 项目安装 `Microsoft.CodeAnalysis` NuGet 包；如果只是为 Nino 安装的，可以删除。
+- Unity 中不使用拦截器（拦截器需要 .NET 8+ SDK 的编译器）；调用走常规 API。
+- 使用 `Override References` 时，`asmdef` 文件仍需引用 `Nino.Core.dll`。
+
+## HybridCLR
+- 热更新程序集**无需初始化调用**：Nino 会在程序集中的某个类型第一次被使用时找到该程序集生成的注册表，即使该程序集是通过 `Assembly.Load` 加载的。
+- v4 的文档和测试覆盖 HybridCLR；ILRuntime 不再列为受支持。
+
+## 转换 v3 数据
+v4 无法读取 v3 的数据，而且一个项目不能同时引用这两个版本（两者都使用 `Nino.Core` 程序集和命名空间）。要保留持久化的数据：
+
+<Steps>
+<Step>
+
+编写一个小型**转换器**，它仍然引用 Nino v3 和你的 v3 类型。它用 v3 的 `Deserializer` 读取旧数据，并导出为中立格式（例如 JSON），或者把对象交给另一个引用 v4 的程序集（例如在单独的 `AssemblyLoadContext` 中加载它）。
+
+</Step>
+<Step>
+
+在 v4 应用中导入中立格式的数据，并用 `NinoSerializer` 写入。
+
+</Step>
+<Step>
+
+如果无法离线转换（例如玩家设备上的存档），就把转换逻辑随游戏一起发布，并给新数据加上**头部**（魔数或版本字节）。带有头部的数据用 v4 读取；没有头部的数据转换一次后再用 v4 重新保存。
+
+</Step>
+</Steps>
+
+另请参阅[版本迭代](/zh/docs/v4/versioning#如何用新版本读取旧数据)。
+
+<Callout type="idea">
+
+只存在于内存中、或在你一起部署的进程之间传输的数据（网络消息、缓存）不需要转换：把所有端同时升级到 v4 即可。
+
+</Callout>

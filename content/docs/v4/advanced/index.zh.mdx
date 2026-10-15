@@ -1,0 +1,61 @@
+---
+title: 概览
+description: "在真实系统中使用 Nino 的指南：热点路径、网络协议、存档、Unity 与 HybridCLR。"
+icon: Layers
+---
+
+import { Gamepad2, Gauge, Network, Save } from 'lucide-react';
+
+<AnchorRedirect
+  map={{
+    '曾用名': '/zh/docs/v4/defining-types#former-name',
+    '字符串编码': '/zh/docs/v4/defining-types#string-encoding',
+    '成员顺序': '/zh/docs/v4/defining-types#member-order',
+    '自定义构造函数': '/zh/docs/v4/constructors',
+    '规则': '/zh/docs/v4/constructors#rules',
+    '版本兼容': '/zh/docs/v4/evolving-data#version-tolerance',
+    '键控成员': '/zh/docs/v4/evolving-data#keyed-members',
+    '引用追踪': '/zh/docs/v4/reference-tracking',
+    'ref-反序列化与对象池': '/zh/docs/v4/pooling',
+    '反序列化到已有实例': '/zh/docs/v4/pooling#deserializing-into-existing-instances',
+    '使用-ninorefdeserialization-创建实例': '/zh/docs/v4/pooling#creating-instances-with-ninorefdeserialization',
+    'ninopooled': '/zh/docs/v4/pooling#ninopooled',
+    '自定义格式化器': '/zh/docs/v4/custom-formatters',
+    '拦截器': '/zh/docs/v4/performance#interceptors',
+    '分析器与代码修复': '/zh/docs/v4/analyzers',
+    'former-name': '/zh/docs/v4/defining-types#former-name',
+    'string-encoding': '/zh/docs/v4/defining-types#string-encoding',
+    'custom-constructors': '/zh/docs/v4/constructors',
+    'version-tolerance': '/zh/docs/v4/evolving-data#version-tolerance',
+  }}
+/>
+
+各功能页面解释了每个选项的作用。这些指南则把它们组合起来，面向你真正要构建的系统，并提供可以直接复制的完整模式。所有代码片段都只使用 Nino 的公共 API 和标准 .NET 类型。
+
+<Cards>
+  <Card icon={<Gauge />} title="高性能序列化" href="/zh/docs/v4/advanced/high-performance">
+    零分配的序列化与反序列化：复用缓冲区、Span、引用反序列化、对象池和原始结构体。
+  </Card>
+  <Card icon={<Network />} title="网络层" href="/zh/docs/v4/advanced/networking">
+    长度前缀分帧、多态消息、`System.IO.Pipelines`、按连接池化和滚动升级。
+  </Card>
+  <Card icon={<Save />} title="存档与持久化" href="/zh/docs/v4/advanced/persistence">
+    在更新后依然可读的文件：键控与版本兼容类型、对象图、安全写入。
+  </Card>
+  <Card icon={<Gamepad2 />} title="Unity 与 HybridCLR" href="/zh/docs/v4/advanced/unity">
+    项目设置、IL2CPP、程序集定义、热更新以及帧耗时技巧。
+  </Card>
+</Cards>
+
+## 我需要哪个功能？ [#which-feature-do-i-need]
+
+| 你想要 | 使用 |
+| --- | --- |
+| 之后向已保存的类型添加成员 | [`versionTolerant: true`](/zh/docs/v4/evolving-data#version-tolerance) |
+| 之后重新排序、删除或插入成员 | [`keyed: true`](/zh/docs/v4/evolving-data#keyed-members) |
+| 重命名类型或将其移到其他命名空间 | [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name) |
+| 保留共享引用或循环引用 | [`trackReferences: true`](/zh/docs/v4/reference-tracking) |
+| 不再每次反序列化都分配内存 | [引用反序列化与 `[NinoPooled]`](/zh/docs/v4/pooling) |
+| 序列化 Nino 不认识的类型 | [`[assembly: NinoFormatter]`](/zh/docs/v4/custom-formatters) |
+| 用不同方式编码某个成员 | [`[NinoCustomFormatter]`](/zh/docs/v4/custom-formatters#for-one-member) |
+| 以值的真实类型读回 | [多态](/zh/docs/v4/polymorphism) |

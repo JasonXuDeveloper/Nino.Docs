@@ -1,0 +1,343 @@
+---
+title: 定义类型
+description: "用 [NinoType] 标记类、结构体、记录和接口，并选择要序列化的成员及其顺序。"
+icon: Braces
+---
+
+任何标记了 `[NinoType]` 的 `class`、`struct`、`record`、`record struct` 或 `interface` 都可以被序列化。源生成器在编译期生成它的格式化器，无需任何注册。
+
+```csharp
+using Nino.Core;
+
+[NinoType]
+public class Player
+{
+    public int Id;                       // 公共字段
+    public string Name { get; set; }     // 同时有 getter 和 setter 的公共属性
+    public List<Item> Inventory { get; init; } // init 访问器同样可用
+    public Vector3? LastCheckpoint;      // 任意可序列化 T 的 Nullable<T>
+}
+```
+
+<Tabs items={["类", "结构体", "记录", "记录结构体", "接口"]}>
+<Tab value="类">
+
+```csharp
+[NinoType]
+public class SampleClass
+{
+    public int Id;
+    public string Name { get; set; }
+}
+```
+
+</Tab>
+<Tab value="结构体">
+
+```csharp
+[NinoType]
+public struct SampleStruct
+{
+    public int Id;
+    public string Name { get; set; }
+}
+```
+
+</Tab>
+<Tab value="记录">
+
+```csharp
+[NinoType]
+public record SampleRecord(int Id, string Name);
+```
+
+</Tab>
+<Tab value="记录结构体">
+
+```csharp
+[NinoType]
+public record struct SampleRecordStruct(int Id, string Name);
+```
+
+</Tab>
+<Tab value="接口">
+
+```csharp
+[NinoType]
+public interface IShape
+{
+    float Area { get; set; }
+}
+
+public class Square : IShape // 继承 [NinoType]
+{
+    public float Area { get; set; }
+    public float Side;
+}
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+
+`[NinoType]` 类型及其所有外层类型必须是 `public` 或 `internal`（`protected internal` 也可以），且不能是 `static` 类或 `ref struct`（NINO001，提供代码修复）。
+
+</Callout>
+
+## `[NinoType]` 选项 [#ninotype-options]
+
+```csharp
+public NinoTypeAttribute(
+    bool autoCollect = true,
+    bool containNonPublicMembers = false,
+    bool allowInheritance = true,
+    bool versionTolerant = false,
+    bool keyed = false,
+    bool trackReferences = false)
+```
+
+<TypeTable
+  type={{
+    autoCollect: {
+      description: <><code>true</code>：序列化所有公共字段和属性。<code>false</code>：只序列化标记了 <code>[NinoMember]</code> 的成员。</>,
+      type: 'bool',
+      default: 'true',
+    },
+    containNonPublicMembers: {
+      description: <>同时序列化 <code>private</code>、<code>protected</code> 和 <code>internal</code> 成员（配合 <code>autoCollect</code>，或仅限标记了 <code>[NinoMember]</code> 的成员）。</>,
+      type: 'bool',
+      default: 'false',
+    },
+    allowInheritance: {
+      description: <>子类型继承该特性，并可通过此类型序列化。设为 <code>false</code> 时，子类型必须自己声明 <code>[NinoType]</code>（NINO003）。</>,
+      type: 'bool',
+      default: 'true',
+    },
+    versionTolerant: {
+      description: <>之后可以向此类型或任意基类追加成员。参见<a href="/zh/docs/v4/evolving-data#version-tolerance">版本兼容</a>。</>,
+      type: 'bool',
+      default: 'false',
+    },
+    keyed: {
+      description: <>每个成员带键写入，因此可以重新排序、删除和插入成员。参见<a href="/zh/docs/v4/evolving-data#keyed-members">键控成员</a>。</>,
+      type: 'bool',
+      default: 'false',
+    },
+    trackReferences: {
+      description: <>仅限类。共享引用与循环引用可以完整往返。参见<a href="/zh/docs/v4/reference-tracking">引用追踪</a>。</>,
+      type: 'bool',
+      default: 'false',
+    },
+  }}
+/>
+
+建议使用命名参数以提高可读性：`[NinoType(versionTolerant: true)]`。一个不带参数的 `[NinoType]` 提供最快、最紧凑的格式：按位置排列，每个成员没有额外开销。
+
+## 哪些成员会被序列化 [#which-members-are-serialized]
+
+使用默认的 `autoCollect: true` 时，Nino 会收集：
+
+- 所有**公共字段**，以及所有**同时有 getter 和 setter 的公共属性**（`set` 或 `init`）；
+- 先收集 `[NinoType]` 基类的成员，再按声明顺序收集类型自身的成员；
+- 对于记录，主构造函数参数（它们是公共属性）。
+
+并会跳过：
+
+- **只读自动属性**（`public int Id { get; }`），除非某个构造函数以同名参数（忽略大小写）接收它，因为没有其他方式能恢复它。参见[构造函数](/zh/docs/v4/constructors)；
+- **显式接口实现**（`int IHasId.Id { get; set; }`），生成的代码无法通过名称访问它们。`[NinoType]` 接口通过实现类型中同名的成员来序列化自己的成员；
+- Nino 无法序列化的成员类型（委托、`Task`、指针……），会报告警告 NINO007。
+
+`override` 成员就是它所重写的成员，只收集一次。用 `new` 隐藏基类成员的成员是另一个成员：两者都会被序列化，基类的在前。
+
+### 忽略成员 [#ignoring-a-member]
+
+```csharp
+[NinoType]
+public class Session
+{
+    public int UserId;
+    [NinoIgnore] public DateTime CachedAt; // [!code highlight]
+}
+```
+
+### 显式选择成员 [#choosing-members-explicitly]
+
+使用 `[NinoType(false)]`（`autoCollect: false`）时，只序列化标记了 `[NinoMember(index)]` 的成员，并按 `index` 升序排列：
+
+<Tabs items={["类", "记录"]}>
+<Tab value="类">
+
+```csharp
+[NinoType(false)] // [!code highlight]
+public class SampleClass
+{
+    public int Id;                       // 不会被序列化
+    [NinoMember(1)] public string Name { get; set; } // [!code highlight]
+    [NinoMember(0)] public int Level;    // 最先写入
+}
+```
+
+</Tab>
+<Tab value="记录">
+
+```csharp
+[NinoType(false)] // [!code highlight]
+public record SampleRecord(
+    [property: NinoMember(2)] int Id, // [!code highlight]
+    [property: NinoMember(1)] string Name); // [!code highlight]
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+
+分析器会保持这些特性的一致性：`autoCollect: true` 时 `[NinoMember]` 是多余的（NINO010），`autoCollect: false` 时 `[NinoIgnore]` 是多余的（NINO011），一个成员不能同时拥有两者（NINO012），索引必须唯一（NINO013）。每一项都提供代码修复。
+
+</Callout>
+
+### 私有成员 [#private-members]
+
+设置 `containNonPublicMembers` 以同时序列化非公共成员：
+
+```csharp
+[NinoType(containNonPublicMembers: true)] // [!code highlight]
+public partial class Account
+{
+    private long _balance;
+    protected string Owner;
+    public int Id;
+}
+```
+
+- 在 .NET 8 及更高版本上，生成的代码通过 `[UnsafeAccessor]` 访问私有成员（泛型类型除外）。
+- 在 .NET 8 之前（包括 .NET Standard 和 Unity）以及泛型类型中，它使用在类型**内部**生成的访问器，因此该类型及其所有外层类型都必须是 `partial`（NINO002，提供代码修复）。
+- 未设置 `containNonPublicMembers` 时，非公共的 `[NinoMember]` 会报错（NINO009）。
+- 基类的私有成员永远不属于子类型。
+
+对于 Nino 序列化的私有成员，Nino 还会屏蔽编译器的“字段从未使用 / 从未赋值”警告。
+
+## 成员顺序 [#member-order]
+
+不使用 `keyed: true` 时，成员的顺序**就是**格式本身。成员按先基类、后声明顺序写入，除非你改变它：
+
+- `[NinoMember(index)]` 配合 `[NinoType(false)]`：按索引升序。
+- 类型上的 `[NinoExplicitOrder(...)]`：列出的成员（按名称）按给定顺序排在最前，其余成员按声明顺序跟在后面。
+
+```csharp
+[NinoType]
+[NinoExplicitOrder(nameof(Name), nameof(Id))] // [!code highlight]
+public class Ordered
+{
+    public int Id;
+    public string Name;
+    public bool Flag;   // 在 Name 和 Id 之后写入
+}
+```
+
+<Callout type="warn">
+
+重新排序、插入或删除成员（或修改其索引）会破坏之前写入的数据。请用[版本兼容或键控成员](/zh/docs/v4/evolving-data)为变化做好准备。
+
+</Callout>
+
+## 字符串编码 [#string-encoding]
+
+字符串默认以 UTF-16 写入：一个长度加一次块拷贝，这是最快的方式。给 `string` 成员标记 `[NinoUtf8]` 即可改为 UTF-8，对以 ASCII 为主的文本体积减半，代价是需要转码（由运行时向量化完成）：
+
+```csharp
+[NinoType]
+public class ChatMessage
+{
+    public int SenderId;
+    [NinoUtf8] public string Text; // [!code highlight]
+}
+```
+
+## 曾用名 [#former-name]
+
+非密封类、抽象类和接口在写入时带有一个**类型 ID**，即类型全名的 32 位哈希，以便多态值能以正确的类型读回。重命名类型或将其移到其他命名空间会改变这个 ID。用 `[NinoFormerName]` 继续读取旧数据：
+
+```csharp
+[NinoType]
+[NinoFormerName("Old.Namespace.Outer+Item")] // [!code highlight]
+public class ItemRenamed
+{
+    public int Id;
+}
+```
+
+曾用名是全名的**运行时形式**：`Namespace.Type`，嵌套类型与外层类型之间用 `+`（`Namespace.Outer+Inner`），不带 `global::`。该类型在两个名称下都能被找到，因此新旧数据都可以读取。
+
+## 结构体 [#structs]
+
+`[NinoType]` 结构体完全没有头部。当它是非托管类型、不是 `versionTolerant` 或 `keyed`、使用默认的顺序布局、没有自定义成员格式化器，并且所有实例字段都被序列化时，它会以**原始内存**写入：一次拷贝，其数组和列表则是一整块。否则逐个成员写入。
+
+```csharp
+[NinoType]
+public struct Hit          // 原始写入：一次 16 字节拷贝（填充清零）
+{
+    public int TargetId;
+    public float Damage;
+    public long Tick;
+}
+```
+
+<Callout type="warn">
+
+原始结构体按其规范字段顺序写入：重新排列字段或修改 `StructLayout` 会破坏已有数据。将其标记为 `versionTolerant`（或对某个字段使用 `[NinoIgnore]`）即可退出原始拷贝。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+
+</Callout>
+
+## 记录 [#records]
+
+位置记录通过主构造函数创建，其参数就是被序列化的属性。带有主体的记录与类的行为相同。
+
+```csharp
+[NinoType]
+public record Point(int X, int Y);
+
+[NinoType]
+public record struct Range(int Start, int Length);
+```
+
+由于其属性是 `init` 只读的，位置记录在每次反序列化时都会被重新创建（即使是反序列化到已有实例），也不能使用 [`trackReferences`](/zh/docs/v4/reference-tracking) 或 [`[NinoPooled]`](/zh/docs/v4/pooling)。需要这些功能时，请使用属性可写的记录。
+
+## 泛型类型 [#generic-types]
+
+```csharp
+[NinoType]
+public class Box<T>
+{
+    public T Value;
+}
+
+[NinoType]
+public record struct Pair<TKey, TValue>(TKey Key, TValue Value);
+
+[NinoType]
+public class Wrapper<T> where T : IList
+{
+    public T Items;
+}
+```
+
+泛型 `[NinoType]` 每个定义只生成一个格式化器，而不是每个封闭类型一个。类型参数必须可序列化（`Box<int>`、`Box<List<string>>`、`Box<Player>`）。生成器会注册编译中出现的每个封闭类型（成员类型、基类型、`NinoSerializer`/`NinoDeserializer` 调用的类型参数），因此 AOT 平台拥有所需的实例化；其余的由运行时在首次使用时封闭。
+
+<Callout type="warn">
+
+如果某个封闭泛型类型在进程中只会被多态地**读取**（通过类型 ID），而从未在代码中出现也从未被写入，则必须在启动时注册：`NinoPolymorphic.Register<Box<int>>()`。这只影响通过反射或在其他程序集中创建的实例化。
+
+</Callout>
+
+## 继承 [#inheritance]
+
+子类型会从最近的 `[NinoType]` 基类或接口继承 `[NinoType]` 及其选项；在子类型上标记 `[NinoType]` 可以为它设置自己的选项。参见[多态](/zh/docs/v4/polymorphism)。
+
+## 下一步 [#next]
+
+<Cards>
+  <Card title="构造函数" href="/zh/docs/v4/constructors">Nino 如何创建实例：构造函数、工厂方法、记录、`required` 成员。</Card>
+  <Card title="支持的类型" href="/zh/docs/v4/types">所有内置类型、集合，以及用户集合的工作方式。</Card>
+</Cards>

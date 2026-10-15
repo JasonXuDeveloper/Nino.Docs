@@ -1,0 +1,79 @@
+---
+title: Limitations
+description: "What Nino v4 does not do, and limitations that v4 resolved."
+icon: TriangleAlert
+---
+
+This page describes the limitations of Nino v4, and the limitations of earlier versions that v4 resolves.
+
+## Current Limitations
+- **Source generator required.** Nino needs its source generator (Roslyn 4.3 or later) and C# 9 or later in the project that declares `[NinoType]`s.
+- **Not compatible with v3 data.** The v4 format cannot read data written by v3 or the v4 betas/previews. See [Migrating from v3](/en/docs/v4/migration#converting-v3-data).
+- **Positional by default.** Without `versionTolerant` or `keyed`, inserting, removing or reordering members breaks existing data. `versionTolerant` only tolerates appended members; use `keyed` for anything else. Changing a member's type is never tolerated.
+- **Raw structs are layout-sensitive.** An unmanaged `[NinoType]` struct written as raw memory is written in its canonical field order: reordering its fields or changing its `StructLayout` breaks existing data. Mark it `versionTolerant` (or `[NinoIgnore]` a field) to write it member by member instead.
+- **Little-endian only.** All multi-byte values are written little-endian; big-endian hosts are not supported. (Every platform .NET and Unity run on today is little-endian.)
+- **Unsupported member types are skipped.** Delegates, `Task`, pointers, non-generic collections (`ArrayList`), `ReadOnlyCollection<T>`, abstract collections, struct collections and collections without a usable constructor have no formatter: the member is skipped with warning NINO007. Mark it `[NinoIgnore]`, or provide a [custom formatter](/en/docs/v4/custom-formatters).
+- **Collections are values.** The same collection instance in two members is written twice and read back as two instances; `trackReferences` only tracks `[NinoType]` classes.
+- **Some types cannot be tracked or pooled.** Types re-created from constructor arguments or read-only members (positional records, for example) cannot use `trackReferences` (NINO016) or `[NinoPooled]` (NINO018). `[NinoPooled]` also requires a `sealed` class.
+- **Version-tolerant interfaces.** Members appended to a `[NinoType]` interface are not tolerated; append them to a class.
+- **Runtime-only generic instantiations.** A closed generic `[NinoType]` that a process only reads by type id, and never names in code or writes, must be registered at startup with `NinoPolymorphic.Register<T>()`.
+- **`PriorityQueue<TElement, TPriority>`** is only available on .NET 6 and later (not on .NET Standard or Unity).
+- **Interceptors** need Roslyn 4.8 or later (the .NET 8 SDK and later); Unity and older compilers use the regular (slightly slower) calls, with the same bytes.
+- **Buffers only.** There are no `Stream` or async APIs, and no `ReadOnlySequence<byte>` overload: serialize into an `IBufferWriter<byte>` and deserialize from a `ReadOnlySpan<byte>` (copy multi-segment sequences first).
+- **No serialization callbacks** (before/after serialize or deserialize hooks), no built-in compression, and no per-call options. See [Nino vs MemoryPack](/en/docs/v4/vs-memorypack#where-memorypack-is-ahead) for workarounds.
+- **Fewer built-in BCL types than some serializers**: `BigInteger`, `Uri`, `Version`, `StringBuilder`, `Type`, `Memory<T>`, `Lazy<T>` and most immutable collections need a [custom formatter](/en/docs/v4/custom-formatters).
+- **Before .NET 8** (including .NET Standard and Unity), types with serialized non-public members or `[NinoPooled]` must be `partial`, and a non-public base member hidden with `new` in a generic type cannot be reached (NINO022).
+
+## Platform Notes
+
+Nino defines its bytes instead of copying memory, so data is portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit. How `Nullable<T>`, `ValueTuple`, `decimal`, `DateTimeOffset`, 32-bit alignment and padding are handled is described in [Platforms and Binary Format](/en/docs/v4/platforms#portable-by-design).
+
+## Resolved Limitations
+
+<Accordions type="multiple">
+<Accordion value="resolved-1" title={<><code>ValueTuple</code> behaves differently in .NET Core and Unity/Mono</>}>
+
+Resolved in v4: `ValueTuple`, `KeyValuePair` and `Nullable<T>` have a defined, runtime-independent format, so data is compatible between .NET Core and Unity/Mono/IL2CPP.
+
+</Accordion>
+<Accordion value="resolved-2" title={<><code>WEAK_VERSION_TOLERANCE</code> projects cannot read data from projects without it, and vice versa</>}>
+
+Resolved in v4: version tolerance is an option of each type (`[NinoType(versionTolerant: true)]`) and is part of the type's own format, so it no longer depends on project settings. `WEAK_VERSION_TOLERANCE` still exists for compatibility and only affects the types declared in the project that defines it.
+
+</Accordion>
+<Accordion value="resolved-3" title={<>Members can only be appended at the end; no removing or reordering</>}>
+
+Resolved in v4: version-tolerant types accept members appended to any class of the hierarchy, and `[NinoType(keyed: true)]` allows reordering, removing and inserting members.
+
+</Accordion>
+<Accordion value="resolved-4" title={<>Unsupported types cause a compilation error</>}>
+
+Resolved in v4: the analyzer reports them as warning NINO007 on your code (with a code fix), and the member is skipped.
+
+</Accordion>
+<Accordion value="resolved-5" title={<>Shared references and cycles are not preserved</>}>
+
+Resolved in v4 with `[NinoType(trackReferences: true)]`.
+
+</Accordion>
+<Accordion value="resolved-6" title={<>Dictionary subtypes need a public indexer</>}>
+
+Resolved in v4: user collections derived from `List<T>`, `Dictionary<TKey, TValue>` and friends, or implementing the collection interfaces, work without any extra code.
+
+</Accordion>
+<Accordion value="resolved-7" title={<>Cannot rename type name/namespace after serialization</>}>
+
+Resolved since v3.2.2 with `[NinoFormerName]`.
+
+</Accordion>
+<Accordion value="resolved-8" title={<>Cannot serialize/deserialize non-public fields/properties</>}>
+
+Resolved since v3.0.6 with `containNonPublicMembers`. On .NET 8 and later there are no restrictions; before .NET 8 the type must be `partial`.
+
+</Accordion>
+<Accordion value="resolved-9" title={<>Polymorphic unmanaged structs serialized differently with and without casting to their interface</>}>
+
+Resolved since v3.0.3.
+
+</Accordion>
+</Accordions>

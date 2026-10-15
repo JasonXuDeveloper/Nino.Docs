@@ -1,0 +1,166 @@
+---
+title: Save Games and Persistence
+description: "Files that survive updates: keyed and version-tolerant types, object graphs with shared references, headers and safe writes."
+icon: Save
+---
+
+A save file is read by builds that did not exist when it was written. This guide shows how to lay out persistent data so that next year's update still loads this year's saves.
+
+## Pick a Format per Type
+
+| Data | Format | Why |
+| --- | --- | --- |
+| The save root and long-lived records | `keyed: true` | Fields can be added, removed and reordered in any update. |
+| Records that only ever grow | `versionTolerant: true` | Append fields; 4 bytes per hierarchy level instead of 8 per member. |
+| Small value structs (`Vector3`, your `GridPos`) | positional (bare `[NinoType]`) | Raw, compact, and unlikely to change. Freeze them. |
+
+```csharp title="SaveData.cs"
+using Nino.Core;
+
+[NinoType(keyed: true)]
+public sealed class SaveGame
+{
+    public int Version;              // your own content version, see below
+    public DateTime SavedAt;
+    public Player Player;
+    public List<Quest> Quests;
+    public Dictionary<string, int> Flags;
+}
+
+[NinoType(keyed: true)]
+public sealed class Player
+{
+    public string Name;
+    public int Level;
+    public GridPos Position;
+    public List<Item> Inventory;
+}
+
+[NinoType(versionTolerant: true)]
+public class Item
+{
+    public int DefinitionId;
+    public int Count;
+}
+
+[NinoType]
+public struct GridPos            // positional raw struct: never reorder its fields
+{
+    public int X, Y, Layer;
+}
+```
+
+<Callout type="warn">
+
+Keyed members are identified by the hash of their **name**: renaming a field reads as "removed one, added another", so the old value is not loaded. Rename *types* freely with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name), but keep field names stable or migrate the value yourself.
+
+</Callout>
+
+## Object Graphs
+
+By default every reference is written as its own copy. If several parts of a save point to the same object (a party member who is also in a guild, a quest that references an NPC that references the quest), mark the shared types `trackReferences: true`:
+
+```csharp
+[NinoType(keyed: true, trackReferences: true)] // [!code highlight]
+public class Character
+{
+    public string Name;
+    public Character Mentor;         // may point to another saved character, or back to this one
+    public List<Character> Party;
+}
+```
+
+Each object is written once; later references are written as a 4-byte index, and cycles resolve. Tracking covers `[NinoType]` classes, not collections, and cannot be used with types re-created from constructor arguments such as positional records (NINO016). See [Reference Tracking](/en/docs/v4/reference-tracking).
+
+## Add a File Header
+
+Nino writes no magic number or format version of its own. Put a small header in front of the save so you can recognize the file and decide how to migrate it:
+
+```csharp title="SaveFile.cs"
+using System.IO;
+using Nino.Core;
+
+public static class SaveFile
+{
+    private const int Magic = 0x5641534E;   // any constant you like
+    private const int FormatVersion = 3;    // bump when you change the save layout by hand
+
+    public static byte[] Encode(SaveGame save)
+    {
+        using var buffer = new NinoArrayBufferWriter();
+        var writer = new Writer(buffer);
+        writer.Write(Magic);
+        writer.Write(FormatVersion);
+        NinoSerializer.Serialize(save, ref writer);
+        writer.Flush();
+        writer.ReleaseReferences();         // the save uses trackReferences
+        return buffer.ToArray();
+    }
+
+    public static SaveGame Decode(ReadOnlySpan<byte> data)
+    {
+        var reader = new Reader(data);
+        if (reader.Read<int>() != Magic)
+            throw new InvalidDataException("Not a save file");
+        int version = reader.Read<int>();
+        if (version > FormatVersion)
+            throw new InvalidDataException("Save from a newer game version");
+
+        var save = NinoDeserializer.Deserialize<SaveGame>(ref reader);
+        reader.ReleaseReferences();
+        return Migrate(save, version);      // fix up content between versions
+    }
+}
+```
+
+## Write Safely
+
+A crash or power loss in the middle of a write must not destroy the previous save. Write to a temporary file, then swap it in:
+
+```csharp
+public static void Save(string path, SaveGame save)
+{
+    byte[] bytes = SaveFile.Encode(save);
+    string temp = path + ".tmp";
+    File.WriteAllBytes(temp, bytes);
+    if (File.Exists(path))
+        File.Replace(temp, path, path + ".bak");   // keeps the previous save as a backup
+    else
+        File.Move(temp, path);
+}
+
+public static SaveGame Load(string path) =>
+    SaveFile.Decode(File.ReadAllBytes(path));
+```
+
+<Callout type="info">
+
+On Unity, write under `Application.persistentDataPath`.
+
+</Callout>
+
+## Test Old Saves
+
+The rules above keep old data readable, but only a test proves it. Keep a few saves from every released version in your repository and load them in a unit test on each build:
+
+```csharp
+[TestMethod]
+public void LoadsEveryShippedSave()
+{
+    foreach (var file in Directory.GetFiles("TestData/Saves", "*.sav"))
+    {
+        var save = SaveFile.Decode(File.ReadAllBytes(file));
+        Assert.IsNotNull(save.Player);
+    }
+}
+```
+
+## Checklist
+
+- [ ] Root and long-lived records are `keyed` (or `versionTolerant` if they only grow).
+- [ ] Small raw structs are frozen: never reorder or retype their fields.
+- [ ] Shared or cyclic objects are `trackReferences`.
+- [ ] Renamed types carry `[NinoFormerName]`.
+- [ ] The file starts with your own magic number and version.
+- [ ] Saves are written to a temporary file and swapped in.
+- [ ] Saves from every shipped version are loaded in a test.

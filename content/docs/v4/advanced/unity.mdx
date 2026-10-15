@@ -1,0 +1,112 @@
+---
+title: Unity and HybridCLR
+description: "Set up Nino in Unity, use it with assembly definitions, IL2CPP and HybridCLR hot update, and keep frames free of GC."
+icon: Gamepad2
+---
+
+## Setup
+
+<Steps>
+<Step>
+
+### Install the package
+
+Nino supports Unity 2022.3 and later, on every player platform, with Mono and IL2CPP. Install it from [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/):
+
+```shell
+openupm add com.jasonxudeveloper.nino
+```
+
+The package contains `Nino.Core.dll`, the source generator `Nino.Generator.dll` (labelled `RoslynAnalyzer`, so Unity runs it on your scripts), and the `System.Buffers`, `System.Memory` and `System.Runtime.CompilerServices.Unsafe` assemblies it needs.
+
+</Step>
+<Step>
+
+### Reference it from your assembly definitions
+
+Assemblies with an `.asmdef` see `Nino.Core.dll` when **Auto Referenced** is on. If an assembly uses **Override References**, add `Nino.Core.dll` to its list explicitly. The generator runs on every assembly that references `Nino.Core`.
+
+</Step>
+<Step>
+
+### Mark your types
+
+```csharp
+using Nino.Core;
+using UnityEngine;
+
+[NinoType]
+public class PlayerState
+{
+    public string Name;
+    public Vector3 Position;      // Unity structs are unmanaged: written as raw memory
+    public Quaternion Rotation;
+    public Color32[] Palette;     // one block copy
+}
+```
+
+</Step>
+</Steps>
+
+## What Differs from .NET
+
+<Callout type="info">
+
+- **`partial` is required for private members.** Unity compiles against .NET Standard, which has no `[UnsafeAccessor]`, so a type that serializes non-public members (or is `[NinoPooled]`) must be `partial`, together with every type that contains it. The analyzer reports it as NINO002 and fixes it for you.
+- **No interceptors.** Unity's compiler predates Roslyn 4.8, so calls use the regular path. The bytes are identical, and the difference is a few nanoseconds per call.
+- **Same bytes as .NET.** Data written by a .NET server is read by a Unity client and the other way round, including 32-bit IL2CPP players and old Mono runtimes. See [Platforms and Binary Format](/en/docs/v4/platforms).
+
+</Callout>
+
+## IL2CPP
+
+- Generated code is plain C#: no reflection at serialization time, no `System.Reflection.Emit`.
+- Each generated registry is marked `[RuntimeInitializeOnLoadMethod]`, which registers it at startup and keeps it rooted for the IL2CPP linker.
+- Generic `[NinoType]` instantiations and built-in generic collections that your code **names** (member types, `NinoSerializer.Serialize<List<MyStruct>>` calls) are registered by the generator, so IL2CPP compiles them ahead of time.
+- An instantiation that you only create through reflection and only **read** polymorphically needs one line at startup: `NinoPolymorphic.Register<Box<MyStruct>>()`.
+
+## HybridCLR Hot Update
+
+Nino needs **no initialization call** in hot-update code. Generated registries are found lazily: the first time Nino meets a type of a newly loaded assembly, or a type id it does not know yet, it finds that assembly's registry. So:
+
+```csharp
+Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
+// nothing else to do: types in hotUpdate serialize, including subtypes of AOT base classes
+```
+
+- Put hot-update types in an assembly definition that references `Nino.Core`, or build them in a separate C# project that installs Nino from NuGet and load the DLL as usual.
+- Follow HybridCLR's own rules for AOT generics: load supplementary metadata for the AOT assemblies your hot-update code instantiates generics from.
+- Hot-update code runs in HybridCLR's interpreter, which does not inline calls. Nino's generated code calls `Nino.Core` directly without wrapper layers, for this reason.
+
+## Frame-Time Tips
+
+- **No GC spikes from network or replay data:** deserialize each tick into the previous tick's object with `ref`, and mark the classes you create in bulk (bullets, events) `[NinoPooled]`. See [High-Performance Serialization](/en/docs/v4/advanced/high-performance).
+- **Reuse one `NinoArrayBufferWriter`** per sender for outgoing data instead of calling `Serialize(value)` and allocating a `byte[]` each frame.
+- **Keep bulk data unmanaged:** arrays of `Vector3`, `Color32` or your own unmanaged `[NinoType]` structs are one memory copy.
+- **Configuration authored in the editor** changes all the time: use [`keyed: true`](/en/docs/v4/evolving-data#keyed-members) so designers can add and reorder fields without breaking existing assets.
+
+<Callout type="warn">
+
+With **Enter Play Mode Options** and domain reload disabled, static state survives between play sessions, including `[NinoPooled]` pools and `NinoSettings`. Clear the pools you use when play mode starts if stale instances would be a problem: `NinoPool<Bullet>.Shared.Clear()`.
+
+</Callout>
+
+## Troubleshooting
+
+<Accordions type="single">
+<Accordion title="My types are not serialized / the generator does not run">
+
+Check that the assembly references `Nino.Core.dll` (Auto Referenced, or listed under Override References) and that `Nino.Generator.dll` is still labelled `RoslynAnalyzer` in its import settings. Then try the `Nino.Unity` sample project from the GitHub repository, which includes a test suite you can run with the Test Runner.
+
+</Accordion>
+<Accordion title="error NINO002: Type must be partial">
+
+The type serializes private members, or is `[NinoPooled]`, and Unity has no `[UnsafeAccessor]`. Make the type and every type containing it `partial` (the code fix does it).
+
+</Accordion>
+<Accordion title="Data from an older build cannot be read">
+
+Nino's default format is positional: changing a type's members breaks old data. Use `versionTolerant` or `keyed` for anything that is stored. See [Evolving Your Data](/en/docs/v4/evolving-data). Data written by Nino v3 cannot be read by v4 at all; see [Migrating from v3](/en/docs/v4/migration).
+
+</Accordion>
+</Accordions>

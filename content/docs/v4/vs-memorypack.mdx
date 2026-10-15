@@ -1,0 +1,121 @@
+---
+title: Nino vs MemoryPack
+description: "An honest comparison with the fastest C# binary serializer we know: where Nino v4 is ahead, and where MemoryPack still is."
+icon: Swords
+---
+
+[MemoryPack](https://github.com/Cysharp/MemoryPack) is an excellent serializer and the one we measure Nino against. This page compares Nino v4 with MemoryPack **1.21.4**, using MemoryPack's own README for its features and Nino's source for Nino's. Where we could not verify a feature on either side, it is left out.
+
+## Performance
+
+Measured with BenchmarkDotNet 0.15.2 on .NET 10.0.13 (Intel Xeon 2.80 GHz, 4 cores, AVX-512, Ubuntu 24.04), both libraries in the same run. Bars show time normalized to MemoryPack = 1.00; shorter is faster.
+
+<MemoryPackRace lang="en" />
+
+| | Nino v4 vs MemoryPack |
+| --- | --- |
+| Serialize | **2.5–4.3× faster** on classes, structs and polymorphic types; 1.07× on `SimpleStruct[100]`; on par on `Vector4[10000]` |
+| Deserialize | **1.16–1.38× faster** on classes and polymorphic types; on par on `SimpleStruct[100]`; **0.85×** on `Vector4[10000]` (see below) |
+| Deserialize into existing / pooled instances | **0 B** allocated, up to **4.9× faster** than MemoryPack's overwrite mode |
+| Allocations when serializing | 0 B for both |
+| Payload size | About the same: `SimpleClass` is 1,146 bytes in Nino, 1,148 in MemoryPack |
+
+<Callout type="info" title="Where MemoryPack is faster">
+
+Deserializing `Vector4[10000]` measured 0.85× (MemoryPack faster). Each call allocates a 160 KB array on the large object heap, so the case mostly measures gen-2 garbage collections: two runs gave 0.96× and 0.85× with ±15% error. The copy itself is one `memcpy` in both libraries.
+
+</Callout>
+
+Full tables: [Benchmarks](/en/docs/v4/perf).
+
+## Feature Matrix
+
+✅ supported · ⚠️ partial or with conditions · ❌ not supported
+
+| | Nino v4 | MemoryPack 1.21.4 |
+| --- | --- | --- |
+| **Platforms** | | |
+| Minimum .NET target | ✅ `netstandard2.0` | ⚠️ `netstandard2.1` (and `net7.0`+) |
+| Unity | ✅ 2022.3+, OpenUPM package | ✅ 2022.3.12f1+, NuGetForUnity plus a git package |
+| IL2CPP / Native AOT | ✅ source generated, no reflection when serializing | ✅ source generated, no IL.Emit |
+| Same bytes on every runtime and CPU | ✅ canonical layout, converted on 32-bit and old Mono | ⚠️ unmanaged structs are copied as laid out in memory |
+| Deterministic output (padding zeroed) | ✅ | ❌ padding is copied as is |
+| **Defining types** | | |
+| `partial` required | ⚠️ only for private members or `[NinoPooled]` before .NET 8 | ✅ always |
+| Private members | ✅ `containNonPublicMembers` | ✅ `[MemoryPackInclude]` |
+| Constructors, records, `required` members | ✅ | ✅ |
+| User collection types | ✅ automatic (`List<T>`, `Dictionary<,>` subclasses, `ICollection<T>`...) | ⚠️ `[MemoryPackable(GenerateType.Collection)]` per type |
+| **Polymorphism** | | |
+| Abstract classes and interfaces | ✅ | ✅ `[MemoryPackUnion]` |
+| Non-abstract base classes | ✅ | ❌ unions only on interfaces and abstract classes |
+| Subtype ids | ✅ automatic (hash of the type name), 4 bytes | ⚠️ explicit tag per subtype, 1 byte (3 above 249) |
+| Subtypes in other assemblies | ✅ automatic | ⚠️ `[MemoryPackUnionFormatter]`; in Unity, registered manually at startup |
+| Hot-update assemblies (HybridCLR) | ✅ found lazily, no init call | — not documented |
+| **Evolving data** | | |
+| Append members | ✅ `versionTolerant` (also to base classes) | ✅ default mode (new code reads old data only) |
+| Old code reads new data | ✅ `versionTolerant`, `keyed` | ✅ `GenerateType.VersionTolerant` |
+| Remove members | ✅ `keyed` | ✅ `VersionTolerant` with explicit orders |
+| Reorder or insert members | ✅ `keyed` | ❌ |
+| Rename members | ✅ positional, `versionTolerant` | ✅ |
+| Rename or move types | ✅ `[NinoFormerName]` | ✅ union tags do not depend on names |
+| **Object graphs** | | |
+| Shared and circular references | ✅ `trackReferences`, any constructor that can fill in place | ⚠️ `GenerateType.CircularReference`, parameterless constructors only |
+| **Allocation** | | |
+| Deserialize into an existing instance | ✅ reuses elements by index, merges dictionaries | ⚠️ arrays reused only at the same length; collections cleared and refilled |
+| Object pools | ✅ `[NinoPooled]`, factories, recycler for dropped instances | ⚠️ `MemoryPoolFormatter<T>` rents arrays from `ArrayPool` |
+| **Tooling** | | |
+| Analyzer | ✅ NINO001–NINO022, most with code fixes | ✅ MEMPACK001–MEMPACK035 |
+| Compile-time call interception | ✅ Roslyn 4.8+ (.NET 8 SDK) | — not documented |
+| **I/O and integrations** | | |
+| `IBufferWriter<byte>` / `PipeWriter` | ✅ | ✅ |
+| Deserialize `ReadOnlySpan<byte>` | ✅ | ✅ |
+| Deserialize `ReadOnlySequence<byte>` | ❌ copy multi-segment data to a span | ✅ |
+| `Stream` and async APIs | ❌ | ✅ `SerializeAsync` / `DeserializeAsync` |
+| Streaming collections (`IAsyncEnumerable<T>`) | ❌ | ✅ `MemoryPack.Streaming` |
+| Serialization callbacks | ❌ | ✅ `[MemoryPackOnSerializing]` and three more |
+| Custom formatters | ✅ struct formatters, inlined; `[assembly: NinoFormatter]` binds generic types | ✅ `MemoryPackFormatter<T>`, provider registration |
+| Brotli compression | ❌ | ✅ `BrotliCompressor`, `[BrotliFormatter]` |
+| TypeScript code generation | ❌ | ✅ `[GenerateTypeScript]` |
+| ASP.NET Core MVC formatters | ❌ | ✅ `MemoryPack.AspNetCoreMvcFormatter` |
+| Default string encoding | UTF-16, `[NinoUtf8]` per member | UTF-8, option for UTF-16 |
+
+## Where MemoryPack Is Ahead
+
+Plainly, these are things MemoryPack does and Nino v4 does not:
+
+- **More built-in types.** MemoryPack serializes `BigInteger`, `Uri`, `Version`, `StringBuilder`, `Type`, `BitArray`, `CultureInfo`, `TimeZoneInfo`, `Lazy<T>`, `Memory<T>`, `ReadOnlyMemory<T>`, `ReadOnlySequence<T>`, `ReadOnlyCollection<T>`, `ReadOnlyObservableCollection<T>`, `ILookup<,>`, `IGrouping<,>`, `BlockingCollection<T>` and every immutable collection. Nino has none of these (it has `ImmutableArray<T>` and `ImmutableList<T>` through `Nino.Immutable`). *Workaround:* a [custom formatter](/en/docs/v4/custom-formatters), or a serializable member that converts (`string` for `Uri`, `byte[]` for `BigInteger`).
+- **Unity class types.** `MemoryPack.Unity` serializes `AnimationCurve`, `Gradient` and `RectOffset`. Nino handles Unity's unmanaged structs (`Vector3`, `Quaternion`, `Color32`...) but no Unity classes. *Workaround:* a custom formatter.
+- **Streams and async.** MemoryPack has `Stream` overloads, `SerializeAsync`/`DeserializeAsync`, and `MemoryPack.Streaming` for `IAsyncEnumerable<T>`. Nino works on buffers only. *Workaround:* serialize into a `NinoArrayBufferWriter` and write its `WrittenMemory` to the stream; read the stream into a pooled buffer and deserialize the span.
+- **`ReadOnlySequence<byte>` input.** MemoryPack deserializes multi-segment sequences directly. *Workaround:* deserialize `sequence.First.Span` when `IsSingleSegment`, else copy into a stack or pooled buffer ([example](/en/docs/v4/advanced/networking#reading-frames)).
+- **Serialization callbacks.** MemoryPack calls `[MemoryPackOnSerializing]`, `[MemoryPackOnSerialized]`, `[MemoryPackOnDeserializing]` and `[MemoryPackOnDeserialized]` methods. Nino has no callbacks. *Workaround:* run the logic before or after your `Serialize`/`Deserialize` call, use property setters, or a `[NinoConstructor]` / `[NinoRefDeserialization]` factory.
+- **Built-in compression.** MemoryPack ships Brotli helpers and Brotli member formatters. *Workaround:* compress Nino's output with `System.IO.Compression` (`BrotliEncoder`, `BrotliStream`) or a library such as LZ4.
+- **TypeScript and ASP.NET Core.** MemoryPack generates TypeScript readers and writers and provides MVC input/output formatters. Nino has neither.
+- **Smaller polymorphic headers.** A MemoryPack union tag is 1 byte (3 bytes above 249); Nino writes a 4-byte type id. Nino's ids need no tags to maintain, but cost 3 more bytes per polymorphic value.
+- **Dependency injection and options.** MemoryPack passes `MemoryPackSerializerOptions` (string encoding, an `IServiceProvider`) through every call. Nino has no per-call options; its settings are process-wide (`NinoSettings`) and per-type attributes.
+
+## Where Nino Is Ahead
+
+- **Speed**: 2.5–4.3× faster serialization and 1.16–1.38× faster deserialization of classes and polymorphic graphs, with the numbers above.
+- **Zero-allocation reuse**: ref deserialization that reuses nested objects, lists and dictionaries, `[NinoPooled]` pools, and a recycler for every instance that is dropped.
+- **Data that changes**: keyed members can be reordered, removed and inserted; version-tolerant types accept members appended to base classes; old code reads new data.
+- **Polymorphism without bookkeeping**: no tags, any non-sealed class, subtypes in other assemblies and hot-update DLLs found automatically.
+- **Portable, deterministic bytes**: identical on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, with padding zeroed.
+- **Wider reach**: `netstandard2.0`, OpenUPM for Unity, HybridCLR without init calls.
+- **Build time**: one generated file per type and a truly incremental generator.
+
+## When to Choose Which
+
+<Cards>
+  <Card title="Choose Nino when" >
+    You serialize game state, network messages or save files at a high rate, on Unity or .NET; you need polymorphism without tag tables, data that evolves, shared references, or zero GC through pooling; or you need identical bytes across Unity, IL2CPP and servers.
+  </Card>
+  <Card title="Choose MemoryPack when">
+    You need streams or async APIs, `ReadOnlySequence` input, TypeScript clients or ASP.NET Core formatters, serialization callbacks, built-in Brotli, or the BCL and Unity class types listed above out of the box.
+  </Card>
+</Cards>
+
+<Callout type="idea">
+
+Both are MIT licensed, source generated and AOT safe. If you are unsure, benchmark your own types: the [benchmark project](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.Benchmark) runs Nino and MemoryPack side by side.
+
+</Callout>

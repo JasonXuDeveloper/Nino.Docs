@@ -1,0 +1,154 @@
+---
+title: 快速开始
+description: "在 .NET 或 Unity 项目中安装 Nino v4，并序列化你的第一个类型。"
+icon: Rocket
+---
+
+本页介绍如何在不同类型的项目中安装 Nino v4，以及如何序列化你的第一个类型。
+
+<Callout type="idea">
+
+第一次使用 v4，或者正从 v3 升级？请先阅读 [v4 新特性](/zh/docs/v4/whats-new)和[迁移指南](/zh/docs/v4/migration)。v4 的二进制格式与 v3 以及更早的 v4 beta 版本**不兼容**。
+
+</Callout>
+
+## 安装
+
+### .NET 项目 [#net-project]
+
+<Callout type="info">
+
+运行时（`Nino.Core`）面向 `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0`，因此任何可以使用 .NET Standard 2.0 库的项目都可以使用它。所有目标框架产出完全相同的字节。
+
+源生成器需要 Roslyn 4.3 或更高版本的编译器（Visual Studio 2022 17.3+、Rider，或 .NET 6.0.400 及更高版本的 SDK）。生成的代码使用了 C# 9 特性，因此项目必须以 `LangVersion` 9 或更高版本编译（较旧的 .NET Framework 项目默认是 C# 7.3，需要设置 `<LangVersion>9</LangVersion>` 或更高版本）。
+
+</Callout>
+
+- 在 Visual Studio 或 Rider 的 NuGet 包管理器中搜索 `Nino` 并安装
+- 或者使用 `dotnet` CLI：
+    ```shell
+    dotnet add package Nino
+    # Optional: ImmutableArray<T> / ImmutableList<T> support
+    dotnet add package Nino.Immutable
+    ```
+
+<Callout type="info">
+
+`Nino` 包会引入两个包，两者都是必需的：
+- `Nino.Serialization`：运行时库（`Nino.Core.dll`）
+- `Nino.Generator`：源生成器、分析器和代码修复
+
+`Nino.Immutable` 是可选的，它为 `ImmutableArray<T>` 和 `ImmutableList<T>` 添加格式化器。
+
+</Callout>
+
+<Callout type="idea">
+
+使用 .NET 8 SDK 或更高版本时，类型已知的 `NinoSerializer`/`NinoDeserializer` 调用会在编译期被重定向到生成的格式化器（拦截器）。这是自动的；参见[拦截器](/zh/docs/v4/performance#interceptors)。
+
+</Callout>
+
+### Unity 项目 [#unity-project]
+
+<Callout type="info">
+
+Nino 支持 Unity 2022.3 或更高版本，适用于所有播放器平台（Mono 和 IL2CPP）。
+
+GitHub 上的 `Nino.Unity` 示例项目展示了如何在 Unity 中使用 Nino，并包含一组单元测试（通过 `TestRunner` 运行）。
+
+</Callout>
+
+通过 Unity Package Manager 从 [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation) 安装 Nino，例如：
+
+```shell
+openupm add com.jasonxudeveloper.nino
+```
+
+该包同时附带 `Nino.Core.dll` 和源生成器（`Nino.Generator.dll`，标记为 `RoslynAnalyzer`），无需再安装其他内容。
+
+<Callout type="warn">
+
+如果你使用了 `asmdef` 文件，请确保启用了 `Auto Referenced`；或者在使用 `Override References` 时，显式添加对 `Nino.Core.dll` 的引用。
+
+</Callout>
+
+<Callout type="info">
+
+Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`。因此，序列化非公开成员（或使用 `[NinoPooled]`）的类型必须声明为 `partial`，包含它的每个类型也是如此。分析器会报告这一点（NINO002）并提供修复。
+
+</Callout>
+
+<Callout type="idea">
+
+如果遇到问题，请先确认你能运行 `Nino.Unity` 示例项目。如果问题依旧，请在 GitHub 上提交 issue。
+
+</Callout>
+
+#### 热更新代码
+- Nino 支持 **HybridCLR**。生成的注册表会在其中某个类型第一次被使用时被延迟查找，因此通过 `Assembly.Load` 加载的热更新程序集**无需初始化调用**。
+- 热更新代码可以放在 Unity 的 `asmdef` 中，也可以放在通过 NuGet 安装 Nino 的外部 C# 项目中（[见上文](#net-project)）；照常在 HybridCLR 中使用编译出的 DLL 即可。
+
+## 第一次序列化
+
+源生成器会在编译期为每个 `[NinoType]` 生成格式化器；你只需要调用 `NinoSerializer` 和 `NinoDeserializer`（命名空间 `Nino.Core`）：
+
+<Steps>
+<Step>
+
+### 用 `[NinoType]` 标记类型
+
+```csharp
+using Nino.Core;
+
+[NinoType]
+public class GameData
+{
+    public int Score;
+    public string PlayerName;
+    public DateTime LastPlayed;
+}
+```
+
+</Step>
+<Step>
+
+### 序列化
+
+```csharp
+var data = new GameData { Score = 1000, PlayerName = "Player1", LastPlayed = DateTime.Now };
+byte[] bytes = NinoSerializer.Serialize(data);
+```
+
+</Step>
+<Step>
+
+### 反序列化
+
+```csharp
+GameData restored = NinoDeserializer.Deserialize<GameData>(bytes);
+```
+
+</Step>
+<Step>
+
+### 或者反序列化到已有对象
+
+通过 `ref` 传入已有实例，Nino 会原地填充它，并复用其嵌套对象和集合。传入 `null` 则会创建新实例：
+
+```csharp
+GameData current = null;
+NinoDeserializer.Deserialize(bytes, ref current);    // 创建实例
+NinoDeserializer.Deserialize(newBytes, ref current); // 填充同一个实例
+```
+
+</Step>
+</Steps>
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="序列化与反序列化" href="/zh/docs/v4/basic">所有重载：缓冲区写入器、Span、`Writer`/`Reader`、装箱值。</Card>
+  <Card title="定义类型" href="/zh/docs/v4/defining-types">选择成员、顺序、私有成员、记录、泛型。</Card>
+  <Card title="支持的类型" href="/zh/docs/v4/types">基元类型、字符串、元组、集合以及你自己的集合。</Card>
+  <Card title="进阶用法" href="/zh/docs/v4/advanced">热点路径、网络、存档和 Unity 的使用模式。</Card>
+</Cards>

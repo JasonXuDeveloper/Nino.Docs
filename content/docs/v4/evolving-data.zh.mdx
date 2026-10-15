@@ -1,0 +1,112 @@
+---
+title: 让数据演进
+description: "按位置、版本兼容与键控三种格式：数据写入之后，各自允许你修改什么。"
+icon: GitBranch
+---
+
+数据比代码活得更久。存档、缓存资源或旧客户端发来的消息，会被你的类型的新版本读取，有时反过来也一样。Nino 为每个类型提供三种格式之一，在 `[NinoType]` 上选择：
+
+| | 按位置（默认） | `versionTolerant: true` | `keyed: true` |
+| --- | :---: | :---: | :---: |
+| 在末尾追加成员 | ✗ | ✓ | ✓ |
+| 向基类追加成员 | ✗ | ✓ | ✓ |
+| 插入、删除或重新排序成员 | ✗ | ✗ | ✓ |
+| 重命名成员 | ✓ | ✓ | ✗ |
+| 新代码读取旧数据 | ✗ | ✓ | ✓ |
+| 旧代码读取新数据 | ✗ | ✓ | ✓ |
+| 开销 | 无 | 每个继承层级 4 字节 | 每个成员 8 字节，每个对象另加 4 字节 |
+| 速度 | 最快 | 基本相同 | 序列化约为按位置的 1.3 倍耗时，反序列化约 1.2 倍 |
+
+在所有格式中，**修改成员的类型**都不被兼容。**重命名成员**在按位置和版本兼容的类型中没有问题，因为它们不写入名称；但在键控类型中不行，因为键是名称的哈希：被重命名的键控成员会被视为“删除了一个成员、新增了另一个”。重命名*类型*请使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
+
+## 按位置 [#positional]
+
+不带参数的 `[NinoType]` 依次写入各成员，不写名称、长度或键。这是最快、最小的格式，适合由同一版本写入和读取的数据：版本一致的客户端与服务器之间的网络消息、可以重建的缓存、内存中的快照。
+
+<Callout type="warn">
+
+对成员列表的任何修改（添加、删除、重新排序、修改索引）都会让旧数据无法读取：读取时会抛出异常，更糟的情况是得到错误的值。
+
+</Callout>
+
+## 版本兼容 [#version-tolerance]
+
+```csharp
+[NinoType(versionTolerant: true)] // [!code highlight]
+public class SaveData
+{
+    public int Id;
+    public string Name;
+    public bool Tutorial; // [!code ++]
+}
+```
+
+继承链的每一层（从根到该类型本身的每个 `[NinoType]` 类）都写在各自的 4 字节长度之后：
+
+- **旧数据，新代码：**数据中缺少的成员保持当前值（反序列化到已有实例时）或默认值。
+- **新数据，旧代码：**旧代码不认识的字节会被跳过。
+- 可以向该类型**或其任意基类**追加成员，并且在任意嵌套深度都成立：集合、字典和多态成员内部也一样。
+
+<Callout type="warn">
+
+不兼容的修改：在某一层内插入、删除或重新排序成员，向 `[NinoType]` 接口追加成员（请追加到类上），以及在继承链中添加或移除 `[NinoType]` 类。使用 `[NinoType(false)]` 时，新成员的索引必须大于所有已有索引。
+
+</Callout>
+
+<Callout type="info">
+
+在项目中定义符号 `WEAK_VERSION_TOLERANCE`，会为该项目中声明的所有类型开启 `versionTolerant`；引用程序集中的类型保持各自的格式。推荐使用按类型设置的选项。
+
+</Callout>
+
+## 键控成员 [#keyed-members]
+
+```csharp
+[NinoType(keyed: true)] // [!code highlight]
+public class EnemyConfig
+{
+    public string Name;
+    public int Health;    // 可以自由地重新排序、删除或插入成员
+    public float Speed;
+}
+```
+
+每个成员连同一个**键**（由生成器计算的成员名 32 位 FNV-1a 哈希）及其长度一起写入，类似 MessagePack 的 `[Key("name")]`，但不写入字符串：
+
+- 数据中的未知键会被跳过；数据中缺少的成员保持当前值或默认值。
+- 读取时先假设声明顺序，因此由同一结构写入的数据，每个非托管成员只需一次 8 字节比较；遇到第一个不匹配时，才回退为按键分派。
+- 同一类型中（包括继承的成员）两个成员名哈希到同一个键会产生编译错误（NINO014），因此冲突不会损坏数据。
+- 键控结构体从不以原始内存写入。多态照常工作：类型 ID 写在主体之前。
+
+这是在编辑器中制作并长期保存的数据的理想格式：游戏配置、关卡数据、设置文件。
+
+## 如何选择 [#choosing]
+
+<Accordions type="single">
+<Accordion title="客户端与服务器之间的消息">
+
+如果双方总是运行同一版本，使用按位置格式。如果客户端和服务器在不同时间升级（滚动升级、旧版本应用仍在使用），使用 `versionTolerant` 并且只**追加**字段；如果还需要废弃字段，则使用 `keyed`。参见[网络层](/zh/docs/v4/advanced/networking)。
+
+</Accordion>
+<Accordion title="存档与用户文件">
+
+如果只会逐渐增加字段，使用 `versionTolerant`；如果希望可以自由删除和重排字段，使用 `keyed`。当存档的对象图中有共享对象或循环时，加上 [`trackReferences`](/zh/docs/v4/reference-tracking)。参见[存档与持久化](/zh/docs/v4/advanced/persistence)。
+
+</Accordion>
+<Accordion title="在 Unity 编辑器中制作的配置">
+
+使用 `keyed`：策划会频繁地添加、删除和重排字段，而每个成员 8 字节的开销对配置来说几乎无关紧要。
+
+</Accordion>
+<Accordion title="缓存与内存快照">
+
+使用按位置格式。结构变化时，丢弃缓存重新生成即可。
+
+</Accordion>
+</Accordions>
+
+<Callout type="idea">
+
+这些选项可以混用：键控的存档内部可以包含按位置写入的原始结构体（例如 `Vector3` 或你自己的 `[NinoType]` 结构体）。每个类型都有自己的格式。
+
+</Callout>

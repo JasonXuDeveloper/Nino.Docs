@@ -1,0 +1,182 @@
+---
+title: 序列化与反序列化
+description: "使用 NinoSerializer 和 NinoDeserializer 序列化与反序列化，复用缓冲区与实例。"
+icon: Play
+---
+
+本页介绍 Nino 的基础用法：使用 `NinoSerializer` 和 `NinoDeserializer`（命名空间 `Nino.Core`）序列化和反序列化数据。
+
+<Callout type="info">
+
+`NinoSerializer` 和 `NinoDeserializer` 的所有方法都是**线程安全**的，可以在不加锁的情况下并发调用。每次调用的状态（临时缓冲区、引用表）按线程保存，热路径不会写入共享内存。
+
+</Callout>
+
+## 序列化
+
+### API
+
+```csharp
+// Into a new byte array
+byte[] NinoSerializer.Serialize<T>(T value);
+
+// Into any IBufferWriter<byte>
+void NinoSerializer.Serialize<T>(T value, IBufferWriter<byte> bufferWriter);
+
+// With an existing Writer (for custom formatters and advanced scenarios)
+void NinoSerializer.Serialize<T>(T value, ref Writer writer);
+
+// Boxed values, when the type is only known at runtime
+byte[] NinoSerializer.Serialize(object value);    // as value.GetType(); value must not be null
+void NinoSerializer.SerializeBoxed(object value, IBufferWriter<byte> bufferWriter, Type type);
+void NinoSerializer.SerializeBoxed(object value, ref Writer writer, Type type);
+```
+
+`T` 可以是任何[可序列化的类型](/zh/docs/v4/types)：`[NinoType]`、基础类型、字符串、集合等。
+
+### 标准用法
+
+```csharp
+ObjClass obj = new ObjClass();
+byte[] bytes = NinoSerializer.Serialize(obj);
+```
+
+### 推荐用法 [#recommended-usage]
+`Serialize<T>(value)` 会为结果分配一个 `byte[]`。要避免这次分配，可以序列化到一个复用的缓冲区中。
+
+`NinoArrayBufferWriter` 是 Nino 自己的 `IBufferWriter<byte>`，基于 `ArrayPool<byte>.Shared`。Nino 会**原地**写入它；其他任何 `IBufferWriter<byte>`（例如 .NET 的 `ArrayBufferWriter<byte>`，或者包装了 `PipeWriter`、`Stream` 的写入器）会在最后多一次拷贝来接收字节。
+
+```csharp
+var buffer = new NinoArrayBufferWriter();
+
+NinoSerializer.Serialize(obj, buffer);
+ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // or buffer.WrittenMemory
+// ... send or store the bytes ...
+
+buffer.ResetWrittenCount();                    // reuse the same buffer
+NinoSerializer.Serialize(obj, buffer);         // no allocation this time
+```
+
+<Callout type="warn">
+
+`NinoArrayBufferWriter` 本身**不是**线程安全的：请每个线程（或每次操作）使用一个实例。不再需要时调用 `Dispose()`，将其数组归还到池中。
+
+</Callout>
+
+<Callout type="info">
+
+`ArrayBufferWriter<byte>` 同理：复用同一个实例，并在每次操作之间调用 `ResetWrittenCount()`。
+
+</Callout>
+
+### 使用 Writer
+
+`Writer` 是一个写入 `NinoArrayBufferWriter` 的 `ref struct`。它适合连续写入多个值，或在[自定义格式化器](/zh/docs/v4/custom-formatters)中使用：
+
+```csharp
+var buffer = new NinoArrayBufferWriter();
+var writer = new Writer(buffer);
+NinoSerializer.Serialize(header, ref writer);
+NinoSerializer.Serialize(body, ref writer);
+writer.Flush(); // commits the written bytes to buffer.WrittenCount (Dispose() does the same)
+```
+
+<Callout type="info">
+
+当你自己创建 `Writer` 并序列化带有 `trackReferences` 的类型时，请在一次逻辑调用结束后调用 `writer.ReleaseReferences()`；自己创建 Writer 的顶层 `NinoSerializer` 重载会替你完成这一步。
+
+</Callout>
+
+## 反序列化
+
+### API
+
+```csharp
+// A new value
+T NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data);
+
+// Into an existing value, reusing its instances
+void NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data, ref T value);
+void NinoDeserializer.DeserializeRef<T>(ref T value, ReadOnlySpan<byte> data); // same as above
+
+// With an existing Reader
+T NinoDeserializer.Deserialize<T>(ref Reader reader);
+void NinoDeserializer.Deserialize<T>(ref T value, ref Reader reader);
+void NinoDeserializer.DeserializeRef<T>(ref T value, ref Reader reader);        // same as above
+
+// Boxed values, when the type is only known at runtime
+object NinoDeserializer.Deserialize(ReadOnlySpan<byte> data, Type type);
+void NinoDeserializer.Deserialize(ReadOnlySpan<byte> data, Type type, ref object value);
+void NinoDeserializer.DeserializeBoxed(ref object value, ref Reader reader, Type type);
+```
+
+> 数据可以以 `byte[]`、`ArraySegment<byte>`、`Span<byte>`、`Memory<byte>.Span` 或任何可转换为 `ReadOnlySpan<byte>` 的形式传入。
+
+<Callout type="info">
+
+当你自己创建 `Reader`（`new Reader(span)`）并读取带有 `trackReferences` 的类型时，与 `Writer` 一样，用完后请调用 `reader.ReleaseReferences()`。
+
+</Callout>
+
+### 标准用法
+```csharp
+// assuming bytes is byte[]
+ObjClass obj = NinoDeserializer.Deserialize<ObjClass>(bytes);
+
+// a value serialized with NinoSerializer.Serialize(object)
+object boxed = NinoDeserializer.Deserialize(bytes, typeof(ObjClass));
+```
+
+### 反序列化到已有的值
+通过 `ref` 传入一个已有的值，Nino 会原地填充它，并尽可能复用该实例及其嵌套的对象、列表、数组和字典。传入 `null`/`default` 则会创建一个新值。
+
+```csharp
+ObjClass obj = null;
+foreach (var message in messages)
+{
+    // the first call creates obj, later calls reuse it
+    NinoDeserializer.Deserialize(message, ref obj);
+    Handle(obj);
+}
+```
+
+过程中被丢弃的实例（数据中为 `null`、列表变短、字典的键消失、多态类型改变）可以归还到对象池。参见 [Ref 反序列化与对象池](/zh/docs/v4/pooling)。
+
+### 推荐用法 [#recommended-usage-1]
+直接从你已有的内存中反序列化，而不是先拷贝到一个新的 `byte[]`：
+
+```csharp
+// assuming data is a ReadOnlySequence<byte> from the network, i.e. we are using System.IO.Pipelines
+ReadOnlySequence<byte> data = xxxxx;
+ObjClass obj;
+// If the data is in a single contiguous memory block, pass the span directly
+if (data.IsSingleSegment)
+{
+    obj = NinoDeserializer.Deserialize<ObjClass>(data.FirstSpan);
+}
+// Otherwise, copy it to a single contiguous memory block first
+else
+{
+    if (data.Length <= 1024)
+    {
+        // Allocate on the stack
+        Span<byte> stackMemory = stackalloc byte[(int)data.Length];
+        data.CopyTo(stackMemory);
+        obj = NinoDeserializer.Deserialize<ObjClass>(stackMemory);
+    }
+    else
+    {
+        // Rent from the array pool
+        byte[] arr = ArrayPool<byte>.Shared.Rent((int)data.Length);
+        data.CopyTo(arr);
+        obj = NinoDeserializer.Deserialize<ObjClass>(arr.AsSpan(0, (int)data.Length));
+        ArrayPool<byte>.Shared.Return(arr);
+    }
+}
+```
+
+<Callout type="info">
+
+从数据中读取的每个长度都会在分配之前与剩余字节数进行校验，因此畸形或恶意的输入无法触发巨大的分配。被截断的数据会抛出 `InvalidOperationException`（"unexpected end of data"），而不会越界读取。
+
+</Callout>

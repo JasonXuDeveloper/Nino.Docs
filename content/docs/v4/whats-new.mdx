@@ -1,0 +1,148 @@
+---
+title: "What's New in v4"
+description: A rewrite of the runtime and the source generator, faster to run and to build.
+icon: Sparkles
+---
+
+import { Cpu, GitBranch, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound } from 'lucide-react';
+
+Nino v4 is a rewrite of the runtime and the source generator: faster to run than v3 **and** MemoryPack, dramatically faster to build, and with the features long-lived projects need.
+
+<ShowcaseHero lang="en" />
+
+<Callout type="warn">
+
+The v4 binary format is **not compatible** with v3 or the earlier v4 betas/previews, and the API changed. See [Migrating from v3](/en/docs/v4/migration).
+
+</Callout>
+
+## Faster than v3
+
+Against v3 **3.3.13**, the last v3 release, on the same machine. Switch between serialize, deserialize and compile time; the MemoryPack bar is the common baseline (1.00).
+
+<V3Race lang="en" />
+
+Struct arrays (`SimpleStruct[100]`, `Vector4[10000]`) were already a single memory copy in v3 and stay on par.
+
+## Faster to Build
+
+The v3 generator inlined the body of every subtype into each polymorphic base and re-emitted every type on every keystroke. v4 emits one file per type, once, and re-generates only what you edit.
+
+<CompileTime lang="en" />
+
+{/* GEN_N100 */}
+
+<Callout type="info" title="1,100 types (N = 100)">
+
+Numbers for v3 3.3.13 at N = 100 are being measured and will be added here. v4 grows linearly: about 3.5 KB of source and 2 ms of compile time per type.
+
+</Callout>
+
+## Faster than MemoryPack
+
+Against MemoryPack 1.21.4 in the same run. Nino wins clearly when serializing, leads on classes and polymorphic graphs when deserializing, and ties on raw arrays, where both are one `memcpy`.
+
+<MemoryPackRace lang="en" />
+
+<Callout type="info" title="The one case MemoryPack wins">
+
+Deserializing `Vector4[10000]` measured 0.85×. Each call allocates a 160 KB array on the large object heap, so it mostly measures gen-2 garbage collections: two runs gave 0.96× and 0.85× with ±15% error.
+
+</Callout>
+
+Neither library allocates when serializing. When reusing instances, Nino allocates **0 B** and is up to **4.9×** faster than MemoryPack's overwrite mode. Read the [full comparison with MemoryPack](/en/docs/v4/vs-memorypack), including where MemoryPack is still ahead, and the [benchmark tables](/en/docs/v4/perf).
+
+## What You Get
+
+<Cards>
+  <Card icon={<Zap />} title="Interceptors" href="/en/docs/v4/performance#interceptors">
+    On Roslyn 4.8+ (the .NET 8 SDK and later), calls with a known type go straight to the generated formatter. Always on; older compilers such as Unity's use the regular path and write the same bytes.
+  </Card>
+  <Card icon={<KeyRound />} title="Keyed members and versioning" href="/en/docs/v4/evolving-data">
+    `keyed: true` lets you reorder, remove and insert members; `versionTolerant: true` lets you append them, even to base classes.
+  </Card>
+  <Card icon={<Share2 />} title="trackReferences" href="/en/docs/v4/reference-tracking">
+    Shared references and cycles round-trip, for 4 bytes per object.
+  </Card>
+  <Card icon={<ShieldCheck />} title="Analyzers NINO001–NINO022" href="/en/docs/v4/analyzers">
+    Mistakes reported while you type, most with a one-click code fix.
+  </Card>
+  <Card icon={<Recycle />} title="Low GC and pooling" href="/en/docs/v4/pooling">
+    Ref deserialization reuses your objects, `[NinoPooled]` pools the rest, and every dropped instance is recycled.
+  </Card>
+  <Card icon={<Layers />} title="Thread safe" href="/en/docs/v4/performance#thread-safety">
+    Every API can be called concurrently without locks; no hot path writes shared memory.
+  </Card>
+  <Card icon={<Cpu />} title="Identical bytes everywhere" href="/en/docs/v4/platforms">
+    `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` write the same bytes, on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit.
+  </Card>
+  <Card icon={<GitBranch />} title="Truly incremental generator" href="/en/docs/v4/v3-vs-v4">
+    One file per type; editing a type re-generates that type only.
+  </Card>
+</Cards>
+
+## Highlights
+
+### Faster to build
+- **Truly incremental source generator**: one file per `[NinoType]`, equatable models, no whole-compilation scans. Editing a type re-generates only that type, and an edit that changes no model (a comment, a method body) re-generates nothing.
+- **Much less generated code**: collections, strings, nullables, tuples and other built-in types are implemented once in `Nino.Core` as generic formatters; the generator only emits code for your `[NinoType]`s.
+- **Analyzers and code fixes**: mistakes are reported while you type (NINO001–NINO022), many with a one-click fix. See the [diagnostics list](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md).
+
+### Faster to run
+- **Struct formatters the JIT/AOT compiler inlines**, raw memory copies for unmanaged `[NinoType]` structs and their arrays and lists, and no allocations beyond the result objects.
+- **Interceptors on modern compilers**: on Roslyn 4.8+ (the .NET 8 SDK and later), `NinoSerializer`/`NinoDeserializer` calls with a known type are redirected at compile time to the generated formatter (no virtual call). Always on, nothing to configure; older compilers use the regular path, with the same bytes. See [Interceptors](/en/docs/v4/performance#interceptors).
+- **Thread safe and cache friendly**: lock-free, copy-on-write registries; no shared mutable state on hot paths.
+
+### Reuse instead of allocate
+- **Ref deserialization**: `NinoDeserializer.Deserialize(data, ref value)` populates existing objects, lists, arrays and dictionaries in place.
+- **Pooled deserialization**: mark a class `[NinoPooled]` and Nino deserializes into instances you hand back with `ReturnToPool()`, reusing their lists, arrays and dictionaries. Dropped instances (the payload is `null`, a list shrinks, the type changes) go back to their pool or to a handler registered with `NinoSettings.SetRecycler<T>`.
+- **`[NinoRefDeserialization]` factories** let Nino take new instances from your own pools.
+
+See [Ref Deserialization and Pooling](/en/docs/v4/pooling).
+
+### Evolve your data
+- **Opt-in version tolerance**: `[NinoType(versionTolerant: true)]` lets you append members to the type or any of its base classes, at any nesting depth.
+- **Keyed members**: `[NinoType(keyed: true)]` writes members by name hash, so they can be reordered, removed and inserted.
+- **Reference tracking**: `[NinoType(trackReferences: true)]` keeps shared references and cycles.
+
+### More types, your way
+- **User collections**: types derived from `List<T>`, `HashSet<T>`, `Dictionary<TKey, TValue>` and friends, without attributes.
+- **More built-in types**: `PriorityQueue<TElement, TPriority>` on .NET 6+, and `ImmutableArray<T>` / `ImmutableList<T>` with the `Nino.Immutable` package.
+- **Pluggable formatters**: `[assembly: NinoFormatter(typeof(MyFormatter<,>))]` teaches Nino a new type (yours or a third-party one). Type arguments and element formatters are inferred, generated code calls it directly, and the runtime uses the same registration. Nino's own BCL formatters are declared the same way. See [Custom Formatters](/en/docs/v4/custom-formatters).
+- **Subtypes inherit `[NinoType]`** from their base class or interface.
+
+### Runs everywhere
+- **One format everywhere**: `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` produce identical bytes, and data is portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit.
+- **No init calls**: generated registries are found lazily, so hot-update assemblies (HybridCLR) just work.
+- **Unity**: the generator ships in the package; nothing else to install.
+
+## Quick Example
+
+```csharp
+[NinoType, NinoPooled]
+public sealed partial class Packet
+{
+    public int Id;
+    public List<int> Values;
+
+    // Required (the analyzer offers a fix that adds both).
+    private static partial IEnumerable<Packet> OnNinoPoolWarmup() => Enumerable.Range(0, 16).Select(_ => new Packet());
+    private partial void OnNinoPoolReturn() { /* clear state Nino does not deserialize */ }
+}
+
+byte[] bytes = NinoSerializer.Serialize(new Packet { Id = 1, Values = new List<int> { 1, 2, 3 } });
+
+var packet = NinoDeserializer.Deserialize<Packet>(bytes); // reuses a pooled instance (and its list) if there is one
+// ... use it ...
+packet.ReturnToPool();                                    // returning it twice throws
+```
+
+## Learn More
+
+<Cards>
+  <Card title="Quick Start" href="/en/docs/v4/start" description="Install Nino v4 and serialize your first type." />
+  <Card title="Migrating from v3" href="/en/docs/v4/migration" description="Step-by-step upgrade, with before/after code." />
+  <Card title="Design document" href="https://github.com/JasonXuDeveloper/Nino/blob/main/docs/v4-design.md" description="The v4 architecture and binary format." />
+  <Card title="Benchmarks" href="/en/docs/v4/perf" description="Full build-time and runtime tables against v3 and MemoryPack." />
+  <Card title="Nino vs MemoryPack" href="/en/docs/v4/vs-memorypack" description="An honest feature and performance comparison." />
+</Cards>

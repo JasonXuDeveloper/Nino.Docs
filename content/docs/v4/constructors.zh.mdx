@@ -1,0 +1,108 @@
+---
+title: 自定义构造函数
+description: Nino 如何创建实例：构造函数、工厂方法、记录与结构体。
+icon: Hammer
+---
+
+Nino 需要一种方式来创建它要反序列化的每个类型：
+
+1. 如果有标记了 `[NinoConstructor]` 的构造函数或静态工厂方法，就使用它。
+2. 否则，使用可访问的（`public` 或 `internal`）、参数最多且所有参数都按名称（忽略大小写）匹配可序列化成员的构造函数。对于 record，通常就是主构造函数；无参构造函数以零个参数匹配。
+3. 结构体最后会回退到 `new T()`。
+
+`[NinoConstructor]` 接受作为参数传入的可序列化成员的名称，按顺序排列。不传参数时，按名称匹配参数：
+
+<Tabs items={["构造函数", "工厂方法", "主构造函数", "结构体"]}>
+
+<Tab value="构造函数">
+
+```csharp
+[NinoType]
+public record SimpleRecord
+{
+    public int Id;
+    public string Name;
+    public DateTime CreateTime;
+
+    public SimpleRecord()
+    {
+        Id = 0;
+        Name = string.Empty;
+        CreateTime = DateTime.MinValue;
+    }
+
+    [NinoConstructor(nameof(Id), nameof(Name))] // [!code highlight]
+    public SimpleRecord(int id, string name)
+    {
+        Id = id;
+        Name = name;
+        CreateTime = DateTime.Now;
+    }
+}
+```
+
+</Tab>
+<Tab value="工厂方法">
+
+```csharp
+[NinoType]
+public class Move
+{
+    public ushort ClientX;
+    public ushort ClientY;
+
+    private Move() { }
+
+    [NinoConstructor(nameof(ClientX), nameof(ClientY))] // [!code highlight]
+    public static Move Create(ushort clientX, ushort clientY)
+    {
+        return new Move { ClientX = clientX, ClientY = clientY };
+    }
+}
+```
+
+</Tab>
+<Tab value="主构造函数">
+
+```csharp
+[NinoType]
+public record SimpleRecord2(int Id, string Name, DateTime CreateTime); // [!code highlight]
+```
+
+</Tab>
+<Tab value="结构体">
+
+```csharp
+[NinoType]
+public struct SimpleStruct
+{
+    public int Id;
+    public string Name;
+    public DateTime CreateTime;
+
+    // used instead of the implicit parameterless constructor
+    [NinoConstructor(nameof(Id), nameof(Name), nameof(CreateTime))] // [!code highlight]
+    public SimpleStruct(int a, string b, DateTime c)
+    {
+        Id = a;
+        Name = b;
+        CreateTime = c;
+    }
+}
+```
+
+</Tab>
+</Tabs>
+
+## 规则 [#rules]
+- 标记了 `[NinoConstructor]` 的构造函数或工厂方法必须是 `public` 或 `internal`（NINO021）。
+- `[NinoConstructor]` 中的每个名称（未给出名称时则是每个参数）都必须对应一个可序列化成员（NINO005）。
+- 如果没有可用的构造函数，会报告 NINO004。
+- 通过构造函数重新创建的类型，会读取不是构造函数参数的只读成员并将其丢弃（NINO006）：请把它们加入构造函数、让它们可写，或者对它们使用 `[NinoIgnore]`。
+- C# 11 的 `required` 成员：如果有匹配的、标记了 `[SetsRequiredMembers]` 的构造函数，就使用它；否则生成的代码会用对象初始化器设置 required 成员。
+
+<Callout type="info">
+
+成员在构造后无法赋值的类型（构造函数参数、`init`-only、只读属性或 `readonly` 成员）在反序列化时总是会被**重新创建**，即使是 ref 反序列化也一样；旧实例会被交给回收器。
+
+</Callout>

@@ -1,0 +1,159 @@
+---
+title: 自定义格式化器
+description: 用你自己的格式化器序列化某个成员，或让 Nino 支持一个全新的类型。
+icon: Puzzle
+---
+
+格式化器是一个实现了 `INinoFormatter<T>` 的**结构体**：
+
+```csharp
+public interface INinoFormatter<T>
+{
+    void Serialize(T value, ref Writer writer);
+    void Deserialize(ref T value, ref Reader reader);
+}
+```
+
+`Deserialize` 通过 `ref` 接收当前值：`default` 表示“创建一个新值”，已有实例则可以被复用。格式化器以 `default(TFormatter)` 的方式调用，因此没有实例状态；如需状态请放在静态字段中。
+
+## 针对单个成员 [#for-one-member]
+使用 `[NinoCustomFormatter]` 用你的格式化器序列化单个成员。格式化器必须为**恰好**该成员的类型实现 `INinoFormatter<T>`（NINO008）：
+
+```csharp
+/// Writes a long as a zig-zag varint.
+public struct ZigZagLongFormatter : INinoFormatter<long>
+{
+    public void Serialize(long value, ref Writer writer)
+    {
+        ulong v = (ulong)((value << 1) ^ (value >> 63));
+        while (v >= 0x80)
+        {
+            writer.Write((byte)(v | 0x80));
+            v >>= 7;
+        }
+        writer.Write((byte)v);
+    }
+
+    public void Deserialize(ref long value, ref Reader reader)
+    {
+        ulong v = 0;
+        int shift = 0;
+        byte b;
+        do
+        {
+            reader.Read(out b);
+            v |= (ulong)(b & 0x7F) << shift;
+            shift += 7;
+        } while ((b & 0x80) != 0);
+        value = (long)(v >> 1) ^ -(long)(v & 1);
+    }
+}
+
+[NinoType]
+public class Delta
+{
+    [NinoCustomFormatter(typeof(ZigZagLongFormatter))]
+    public long Value;
+}
+```
+
+## 针对类型：`[assembly: NinoFormatter]`
+要让 Nino 认识一个它不认识的类型（你自己的或第三方的），在你的程序集上注册一个格式化器。类型参数和元素格式化器会被自动推断：约束为 `INinoFormatter<E>` 的类型参数会接收 Nino 为 `E` 解析出的格式化器，因此元素的（反）序列化会被内联。生成的代码直接调用该格式化器，运行时也使用同一份注册。
+
+```csharp
+[assembly: NinoFormatter(typeof(RingFormatter<,>))]
+
+public sealed class Ring<T> : IEnumerable<T> { /* a third-party fixed-capacity buffer */ }
+
+public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
+    where TFormatter : struct, INinoFormatter<T>
+{
+    public void Serialize(Ring<T> value, ref Writer writer)
+    {
+        if (value == null)
+        {
+            writer.Write(-1);
+            return;
+        }
+
+        writer.Write(value.Capacity);
+        writer.Write(value.Count);
+        foreach (var item in value)
+            default(TFormatter).Serialize(item, ref writer);
+    }
+
+    public void Deserialize(ref Ring<T> value, ref Reader reader)
+    {
+        reader.Read(out int capacity);
+        if (capacity < 0)
+        {
+            value = null;
+            return;
+        }
+
+        reader.Read(out int count);
+        value = new Ring<T>(capacity);
+        for (int i = 0; i < count; i++)
+        {
+            T item = default;
+            default(TFormatter).Deserialize(ref item, ref reader);
+            value.Push(item);
+        }
+    }
+}
+
+[NinoType]
+public sealed class RingHolder
+{
+    public Ring<int> Ints;          // uses RingFormatter<int, ...>
+    public List<Ring<string>> Nested;
+}
+```
+
+- 格式化器是一个结构体（不能嵌套在泛型类型中），以开放泛型定义的形式传入（`typeof(F<,>)`），并且必须恰好实现一次 `INinoFormatter<P>`。每个类型参数都必须能从 `P`、类型约束（`where TList : List<T>`）或 `INinoFormatter<E>` 约束中推断出来。不可用的注册会被报告为 NINO020。
+- 要以裸类型参数为目标（`INinoFormatter<TCollection>`），请列出目标类型：`[assembly: NinoFormatter(typeof(F<,,>), typeof(IList<>))]`。
+- 当多个注册都匹配时，`Priority` 较高的胜出：`[assembly: NinoFormatter(typeof(F<,>), Priority = 10)]`。
+- Nino 自己的 BCL 类型格式化器也是以同样的方式声明的。
+
+### 绑定格式化器的类型参数
+
+当 Nino 遇到一个注册的格式化器能处理的类型时，会这样绑定格式化器的每个类型参数：
+
+<TypeTable
+  type={{
+    '出现在 P 中': {
+      description: '通过把格式化的模式 P 与该类型匹配来绑定，例如 INinoFormatter<Ring<T>> 中的 T。',
+      type: 'RingFormatter<T, ...>',
+    },
+    '类型约束': {
+      description: '诸如 where TList : List<T> 的约束会绑定它提到的参数，匹配对象是已绑定的类型、其基类或其接口。',
+      type: 'where TList : List<T>',
+    },
+    'INinoFormatter<E> 约束': {
+      description: '绑定为 Nino 为 E 解析出的格式化器，因此元素格式化器可以组合并被内联（它们都是结构体）。',
+      type: 'where TFormatter : struct, INinoFormatter<T>',
+    },
+    '[NinoRaw]': {
+      description: '用于 unmanaged 参数：格式化器以原始内存拷贝其值，因此只会绑定 Nino 以原始字节写入的类型（不包括 Nullable、元组、nint、DateTimeOffset 以及非原始布局的 [NinoType] 结构体）。',
+      type: '[NinoRaw] T, where T : unmanaged',
+    },
+    '[NinoCreated]': {
+      description: '格式化器通过 NinoFactory<T>.Create() 创建实例，因此只会绑定具有公共静态 [NinoRefDeserialization] 工厂方法或可无参调用的公共构造函数的非抽象类。请用它代替 new()：new() 只接受无参构造函数，并且会被编译为 Activator.CreateInstance<T>()。',
+      type: '[NinoCreated] TCollection',
+    },
+  }}
+/>
+
+其他约束保持其 C# 含义（`class`、`struct`、`unmanaged`、`new()`）。
+
+<Callout type="info">
+
+格式化器也可以在运行时通过 `NinoFormatterCache<T>.Register<TFormatter>()` 为顶层 API 注册（在首次使用之前）；之后它会优先于被拦截的调用。
+
+</Callout>
+
+<Callout type="info" title="声明式注册，无需启动代码">
+
+`[assembly: NinoFormatter]` 是特性而不是调用：没有模块初始化器，启动时也无需运行任何代码。运行时会在首次遇到某个程序集的类型时读取它的注册（查找未命中时则读取所有已加载程序集）。因此在 HybridCLR 热更新程序集中声明的格式化器会在程序集加载后立即生效，Nino 自己的 BCL 格式化器也是以同样方式声明的。
+
+</Callout>

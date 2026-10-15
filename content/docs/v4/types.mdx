@@ -1,0 +1,112 @@
+---
+title: Supported Types
+description: "Every type Nino can serialize: primitives, strings, tuples, collections, immutable collections and your own collection types."
+icon: Shapes
+---
+
+<AnchorRedirect
+  map={{
+    'custom-types': '/en/docs/v4/defining-types',
+    'ninotype-options': '/en/docs/v4/defining-types#ninotype-options',
+    'which-members-are-serialized': '/en/docs/v4/defining-types#which-members-are-serialized',
+    'unmanaged-ninotype-structs': '/en/docs/v4/defining-types#structs',
+    'generic-types': '/en/docs/v4/defining-types#generic-types',
+    'polymorphism': '/en/docs/v4/polymorphism',
+  }}
+/>
+
+This page lists the types Nino serializes out of the box. Any of them can be a top-level value, a member of a `[NinoType]`, or an element of a collection, nested as deep as you like.
+
+<Callout type="idea">
+
+Mistakes are reported by Nino's analyzer while you type (diagnostics `NINO001`–`NINO022`), many with a one-click code fix. A member whose type Nino cannot serialize is reported as a warning (NINO007) and skipped. See the [diagnostics list](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md).
+
+</Callout>
+
+## Serializable Types
+
+### Primitive and Unmanaged Types
+
+Nino supports all [unmanaged types](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/unmanaged-types), including user-defined ones. They are written as their raw bytes (little-endian, padding zeroed), and arrays and lists of them are written with a single block copy:
+- `bool`, `byte`, `sbyte`, `char`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, `float`, `double`, `decimal`
+- `enum`
+- `DateTime`, `TimeSpan`, `Guid`
+- `System.Numerics` and Unity types such as `Vector3`, `Quaternion`, `Matrix4x4`
+- unmanaged structs, generic structs, record structs and generic record structs
+
+A few unmanaged types have their own portable format instead of raw bytes:
+- `DateTimeOffset`: UTC ticks plus the offset in minutes
+- `nint`/`nuint`: always 8 bytes
+- `Nullable<T>`, `ValueTuple<...>`, `KeyValuePair<TKey, TValue>`: written member by member, because their memory layout differs between runtimes (see [Limitations](/en/docs/v4/limit))
+
+<Callout type="info">
+
+The raw layout is the canonical 64-bit layout. On runtimes that lay a struct out differently (for example 32-bit platforms), Nino converts field by field, so every platform reads and writes the same bytes.
+
+</Callout>
+
+### Strings
+
+`string` is supported. By default it is written as UTF-16 (one block copy); mark a member with [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) to write it as UTF-8.
+
+### Other Built-in Types
+- `Nullable<T>` (`T?`) of any serializable `T`
+- `ValueTuple` and `Tuple` with 1 to 7 elements
+- `KeyValuePair<TKey, TValue>`
+- `object`: a member declared as `object` can hold any `[NinoType]` instance; its runtime type is preserved
+
+### Collection Types
+
+Nino supports collections whose elements are serializable types:
+- `T[]`, multi-dimensional arrays `T[,]`, `T[,,]`, `T[,,,]`, and `ArraySegment<T>`
+- `List<T>`, `HashSet<T>`, `Queue<T>`, `Stack<T>`, `LinkedList<T>`, `SortedSet<T>`
+- `Dictionary<TKey, TValue>`, `SortedDictionary<TKey, TValue>`, `SortedList<TKey, TValue>`
+- `ConcurrentDictionary<TKey, TValue>`, `ConcurrentQueue<T>`, `ConcurrentStack<T>`, `ConcurrentBag<T>`
+- `PriorityQueue<TElement, TPriority>` (.NET 6 and later; not on .NET Standard or Unity)
+- `ImmutableArray<T>` and `ImmutableList<T>` with the `Nino.Immutable` package
+- Interfaces: `IEnumerable<T>`, `ICollection<T>`, `IList<T>`, `IReadOnlyCollection<T>`, `IReadOnlyList<T>` (read back as `List<T>`), `ISet<T>` and `IReadOnlySet<T>` (.NET 8+) (read back as `HashSet<T>`), `IDictionary<TKey, TValue>`, `IReadOnlyDictionary<TKey, TValue>` and `ReadOnlyDictionary<TKey, TValue>` (read back as `Dictionary<TKey, TValue>`)
+- Any other class implementing `ICollection<T>`, `IDictionary<TKey, TValue>` or `IProducerConsumerCollection<T>`
+
+<Callout type="info">
+
+Collections can be nested freely, for example:
+- `List<Dictionary<int, SampleStruct>>[]`
+- `Dictionary<int[], List<bool>[]>`
+- `IDictionary<string, IList<List<bool>[]>[]>[]`
+
+</Callout>
+
+#### User Collections
+
+Your own collection types work without any attribute: a class derived from `List<T>`, `HashSet<T>`, `Queue<T>`, `Stack<T>` or `Dictionary<TKey, TValue>`, or implementing `IDictionary<TKey, TValue>`, `IProducerConsumerCollection<T>` or `ICollection<T>`, is written exactly like the collection it extends.
+
+```csharp
+public class Inventory : List<Item> { }
+
+public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
+```
+
+- Nino creates a collection only when the slot is `null`: through a public static [`[NinoRefDeserialization]`](/en/docs/v4/pooling#creating-instances-with-ninorefdeserialization) factory method if the type declares one (for example to take it from a pool), otherwise through a public constructor callable without arguments.
+- Collections are filled through the public collection API (`Add`/`Clear`, the dictionary indexer, `Enqueue`, `Push`, `TryAdd`). Subclasses of `List<T>`, `HashSet<T>` and `Dictionary<TKey, TValue>` are filled through the base type, so members hidden with `new` are not called.
+- If the collection type is also a `[NinoType]`, its elements are written first and then its own serialized members.
+- The declared type decides what is created: a `List<int>` member holding an `Inventory` is read back as a `List<int>`.
+
+<Callout type="warn">
+
+These collections are not supported, and members of these types are skipped with warning NINO007: abstract collections, collections without a usable constructor or factory, struct collections, non-generic collections (`ArrayList`), `ReadOnlyCollection<T>`, and types implementing `ICollection<T>` for two different `T`.
+
+Deserializing into a collection whose `IsReadOnly` is `true` throws an `InvalidOperationException`, as does data that holds the same key twice for a dictionary or `HashSet<T>`.
+
+</Callout>
+
+## Not Supported
+
+These have no formatter; a member of such a type is skipped with warning NINO007 (mark it `[NinoIgnore]`, or give it a [custom formatter](/en/docs/v4/custom-formatters)):
+
+- delegates, `Task`, pointers and other runtime-only types;
+- `Memory<T>`, `ReadOnlyMemory<T>` (use `T[]` or `ArraySegment<T>`), and `Span<T>`, which cannot be a member of a class anyway;
+- non-generic collections (`ArrayList`, `Hashtable`) and `ReadOnlyCollection<T>`.
+
+## Your Own Types
+
+Classes, structs, records and interfaces become serializable with `[NinoType]`. See [Defining Types](/en/docs/v4/defining-types) and [Polymorphism](/en/docs/v4/polymorphism).

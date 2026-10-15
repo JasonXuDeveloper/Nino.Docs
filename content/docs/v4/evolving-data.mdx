@@ -1,0 +1,112 @@
+---
+title: Evolving Your Data
+description: "Positional, version-tolerant and keyed formats: what each one lets you change after data has been written."
+icon: GitBranch
+---
+
+Data outlives code. A save file, a cached asset or a message from an older client is read by a newer build of your types, and sometimes the other way round. Nino gives every type one of three formats, chosen on `[NinoType]`:
+
+| | Positional (default) | `versionTolerant: true` | `keyed: true` |
+| --- | :---: | :---: | :---: |
+| Append members at the end | ✗ | ✓ | ✓ |
+| Append members to a base class | ✗ | ✓ | ✓ |
+| Insert, remove or reorder members | ✗ | ✗ | ✓ |
+| Rename members | ✓ | ✓ | ✗ |
+| New code reads old data | ✗ | ✓ | ✓ |
+| Old code reads new data | ✗ | ✓ | ✓ |
+| Overhead | none | 4 bytes per hierarchy level | 8 bytes per member, plus 4 per object |
+| Speed | fastest | about the same | serialize ~1.3×, deserialize ~1.2× the positional time |
+
+In every format, **changing a member's type** is not tolerated. **Renaming a member** is free in positional and version-tolerant types, which write no names, but not in keyed types, where the key is the hash of the name: a renamed keyed member reads as "one member removed, another added". Rename *types* with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name).
+
+## Positional
+
+A bare `[NinoType]` writes the members one after another with no names, lengths or keys. It is the fastest and smallest format, and the right one for data that is written and read by the same build: network messages between matching client and server versions, caches you can rebuild, snapshots in memory.
+
+<Callout type="warn">
+
+Any change to the member list (adding, removing, reordering, changing an index) makes old data unreadable: reading it throws or, worse, produces wrong values.
+
+</Callout>
+
+## Version Tolerance
+
+```csharp
+[NinoType(versionTolerant: true)] // [!code highlight]
+public class SaveData
+{
+    public int Id;
+    public string Name;
+    public bool Tutorial; // [!code ++]
+}
+```
+
+Each level of the hierarchy (each `[NinoType]` class from the root down to the type) is written behind its own 4-byte length:
+
+- **Old data, new code:** members missing from the data keep their current value (when deserializing into an existing instance) or their default.
+- **New data, old code:** bytes the old code does not know are skipped.
+- Members can be appended to the type **or any of its base classes**, and this holds at any nesting depth: inside collections, dictionaries and polymorphic members.
+
+<Callout type="warn">
+
+Not tolerated: inserting, removing or reordering members within a level, appending members to a `[NinoType]` interface (append them to a class), and adding or removing a `[NinoType]` class in the hierarchy. With `[NinoType(false)]`, give a new member an index greater than every existing one.
+
+</Callout>
+
+<Callout type="info">
+
+Defining the symbol `WEAK_VERSION_TOLERANCE` in a project turns `versionTolerant` on for every type declared in that project; types from referenced assemblies keep their own format. Prefer the per-type option.
+
+</Callout>
+
+## Keyed Members
+
+```csharp
+[NinoType(keyed: true)] // [!code highlight]
+public class EnemyConfig
+{
+    public string Name;
+    public int Health;    // reorder, remove or insert members freely
+    public float Speed;
+}
+```
+
+Each member is written with a **key**, the 32-bit FNV-1a hash of its name computed by the generator, and its length, much like MessagePack's `[Key("name")]` but without writing strings:
+
+- Unknown keys in the data are skipped; members missing from the data keep their current value or their default.
+- Reading first assumes the declaration order, so data written by the same schema is read with one 8-byte compare per unmanaged member; at the first mismatch it falls back to dispatching each key.
+- Two member names of one type (inherited ones included) that hash to the same key are a compile-time error (NINO014), so a collision cannot corrupt data.
+- Keyed structs are never written as raw memory. Polymorphism works as usual: the type id comes before the body.
+
+This is the format for data authored in an editor and kept for a long time: game configuration, level data, settings files.
+
+## Choosing
+
+<Accordions type="single">
+<Accordion title="Messages between a client and a server">
+
+Positional, when both sides always run the same build. If clients and servers are upgraded at different times (rolling upgrades, old app versions in the wild), use `versionTolerant` and only ever **append** fields, or `keyed` if you also need to retire fields. See [Network Layer](/en/docs/v4/advanced/networking).
+
+</Accordion>
+<Accordion title="Save games and user files">
+
+`versionTolerant` if you only add fields over time, `keyed` if you want the freedom to remove and reorder them. Add [`trackReferences`](/en/docs/v4/reference-tracking) when the saved graph shares objects or has cycles. See [Save Games and Persistence](/en/docs/v4/advanced/persistence).
+
+</Accordion>
+<Accordion title="Configuration authored in the Unity editor">
+
+`keyed`: designers add, remove and reorder fields all the time, and the cost (8 bytes per member) rarely matters for configuration.
+
+</Accordion>
+<Accordion title="Caches and in-memory snapshots">
+
+Positional. If the schema changes, throw the cache away and rebuild it.
+
+</Accordion>
+</Accordions>
+
+<Callout type="idea">
+
+The options can be mixed: a keyed save file can hold positional raw structs (such as `Vector3` or your own `[NinoType]` structs) inside it. Each type has its own format.
+
+</Callout>

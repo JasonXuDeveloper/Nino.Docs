@@ -1,0 +1,136 @@
+---
+title: 多态
+description: 基类、接口与抽象类：值会以其运行时类型读回。
+icon: Network
+---
+
+Nino 会序列化值的运行时类型，因此声明为基类或接口的值会被读回为它的真实类型：
+
+```csharp
+[NinoType] // [!code highlight]
+public class BaseClass
+{
+  public int Id;
+}
+
+public class DerivedClass : BaseClass   // inherits [NinoType]
+{
+  public string Name;
+}
+```
+
+```csharp
+var list = new List<BaseClass>
+{
+    new BaseClass { Id = 1 },
+    new DerivedClass { Id = 2, Name = "Nino" }
+};
+byte[] bytes = NinoSerializer.Serialize(list);
+List<BaseClass> result = NinoDeserializer.Deserialize<List<BaseClass>>(bytes);
+// result[0] is a BaseClass, result[1] is a DerivedClass
+```
+
+<Callout type="info">
+
+在 v4 中，子类型会从最近的 `[NinoType]` 基类或接口**继承** `[NinoType]`（包括其选项），除非基类设置了 `allowInheritance: false`。你仍然可以在子类型上加 `[NinoType]` 来为它设置自己的选项。
+
+</Callout>
+
+<Callout type="info">
+
+每个非 sealed 的类、抽象类或接口都会带一个 4 字节的类型 id（类型全名的稳定哈希）写入，这样值就能被读回为正确的子类型。sealed 类只需要 1 字节的 null 标记，结构体则不需要任何头部。要在不破坏已有数据的情况下重命名或移动类型，请使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
+
+</Callout>
+
+## 抽象
+
+接口和抽象类的用法相同。给接口或抽象类加上 `[NinoType]`；实现它的类和结构体会继承该特性：
+
+<Tabs items={["接口示例", "抽象类示例"]}>
+
+<Tab value="接口示例">
+
+```csharp
+[NinoType] // [!code highlight]
+public interface IBase
+{
+    int A { get; set; }
+}
+
+public class Impl : IBase
+{
+    public int A { get; set; }
+}
+
+public struct ImplStruct : IBase
+{
+    public int A { get; set; }
+}
+```
+
+</Tab>
+<Tab value="抽象类示例">
+
+```csharp
+[NinoType] // [!code highlight]
+public abstract class Base
+{
+    public int A { get; set; }
+}
+
+public class Derived : Base
+{
+    public int B { get; set; }
+}
+```
+
+</Tab>
+</Tabs>
+
+`[NinoType]` 接口通过实现类型中的同名成员来序列化接口自身的成员。
+
+## 多态值的写入方式 [#how-a-polymorphic-value-is-written]
+
+头部取决于槽位（成员、元素、顶层类型参数）的**声明**类型：
+
+| 声明类型 | 头部 | 多态 |
+| --- | --- | :---: |
+| `struct` | 无 | 否 |
+| `sealed class` | 1 字节空标志 | 否 |
+| 非密封类、抽象类、接口 | 4 字节类型 ID（`0` = null） | 是 |
+| `object` | 4 字节类型 ID | 是，任意 `[NinoType]` |
+
+类型 ID 是运行时类型全名的 FNV-1a 哈希，由生成器计算，因此无需分配标签，也无需在程序集之间保持同步。重命名或移动类型请使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
+
+<Callout type="idea">
+
+没有子类型的类请设为密封。密封类只需 1 字节且无需分派；非密封类即使没有任何子类型，也需要 4 字节和一次类型检查。
+
+</Callout>
+
+## 分派 [#dispatch]
+
+Nino 使用混合分派：
+
+- 对于与基类声明在同一程序集中的子类型，使用**生成的分派**：写入时是一串精确的类型检查，读取时是对类型 ID 的 `switch`，都直接调用子类型的格式化器。
+- 其他情况使用**无锁注册表**：其他程序集中的子类型、封闭泛型类型、被追踪的类型，以及子类型超过 64 个的继承体系。
+
+读取时会检查数据中的类型确实派生自声明类型；数据中指向无关类型时会抛出异常，而不会被存入。
+
+## 其他程序集中的子类型 [#subtypes-in-other-assemblies]
+
+无论子类型声明在哪里，都会被自动发现，包括之后加载的程序集（插件、HybridCLR 热更新 DLL）：遇到未知的类型 ID 时，Nino 会先查找新加载程序集的注册表再报错。无需任何注册调用。
+
+唯一的例外是：某个封闭泛型子类型（`Box<int>`）在进程中只会被**读取**，从未在代码中出现也从未被写入。请在启动时注册它：
+
+```csharp
+NinoPolymorphic.Register<Box<int>>();
+```
+
+## 关闭继承 [#opting-out]
+
+`[NinoType(allowInheritance: false)]` 会阻止子类型继承该特性：除非子类型自己声明 `[NinoType]`，否则无法通过基类序列化（NINO003，提供代码修复）。
+
+## 引用反序列化 [#ref-deserialization]
+
+当反序列化到的已有值的运行时类型与数据中的类型不同时，旧实例会被丢弃（并被回收，参见[对象池](/zh/docs/v4/pooling)），然后创建正确类型的新实例。类型相同时则原地填充。

@@ -1,0 +1,57 @@
+---
+title: Overview
+description: "Guides for using Nino in real systems: hot paths, network protocols, save games, Unity and HybridCLR."
+icon: Layers
+---
+
+import { Gamepad2, Gauge, Network, Save } from 'lucide-react';
+
+<AnchorRedirect
+  map={{
+    'former-name': '/en/docs/v4/defining-types#former-name',
+    'string-encoding': '/en/docs/v4/defining-types#string-encoding',
+    'member-order': '/en/docs/v4/defining-types#member-order',
+    'custom-constructors': '/en/docs/v4/constructors',
+    'rules': '/en/docs/v4/constructors#rules',
+    'version-tolerance': '/en/docs/v4/evolving-data#version-tolerance',
+    'keyed-members': '/en/docs/v4/evolving-data#keyed-members',
+    'reference-tracking': '/en/docs/v4/reference-tracking',
+    'ref-deserialization-and-pooling': '/en/docs/v4/pooling',
+    'deserializing-into-existing-instances': '/en/docs/v4/pooling#deserializing-into-existing-instances',
+    'creating-instances-with-ninorefdeserialization': '/en/docs/v4/pooling#creating-instances-with-ninorefdeserialization',
+    'ninopooled': '/en/docs/v4/pooling#ninopooled',
+    'custom-formatters': '/en/docs/v4/custom-formatters',
+    'interceptors': '/en/docs/v4/performance#interceptors',
+    'analyzers-and-code-fixes': '/en/docs/v4/analyzers',
+  }}
+/>
+
+The feature pages explain what each option does. These guides put them together for the systems you actually build, with complete patterns you can copy. Every snippet uses only Nino's public API and standard .NET types.
+
+<Cards>
+  <Card icon={<Gauge />} title="High-Performance Serialization" href="/en/docs/v4/advanced/high-performance">
+    Zero-allocation serialize and deserialize: reused buffers, spans, ref deserialization, pools and raw structs.
+  </Card>
+  <Card icon={<Network />} title="Network Layer" href="/en/docs/v4/advanced/networking">
+    Length-prefixed framing, polymorphic messages, `System.IO.Pipelines`, per-connection pooling and rolling upgrades.
+  </Card>
+  <Card icon={<Save />} title="Save Games and Persistence" href="/en/docs/v4/advanced/persistence">
+    Files that survive updates: keyed and version-tolerant types, object graphs, safe writes.
+  </Card>
+  <Card icon={<Gamepad2 />} title="Unity and HybridCLR" href="/en/docs/v4/advanced/unity">
+    Project setup, IL2CPP, assembly definitions, hot update and frame-time tips.
+  </Card>
+</Cards>
+
+## Which Feature Do I Need?
+
+| You want to | Use |
+| --- | --- |
+| Add members to a saved type later | [`versionTolerant: true`](/en/docs/v4/evolving-data#version-tolerance) |
+| Reorder, remove or insert members later | [`keyed: true`](/en/docs/v4/evolving-data#keyed-members) |
+| Rename a type or move it to another namespace | [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name) |
+| Keep shared references or cycles | [`trackReferences: true`](/en/docs/v4/reference-tracking) |
+| Stop allocating on every deserialization | [ref deserialization and `[NinoPooled]`](/en/docs/v4/pooling) |
+| Serialize a type Nino does not know | [`[assembly: NinoFormatter]`](/en/docs/v4/custom-formatters) |
+| Encode one member differently | [`[NinoCustomFormatter]`](/en/docs/v4/custom-formatters#for-one-member) |
+| Read a value as the type it really is | [Polymorphism](/en/docs/v4/polymorphism) |

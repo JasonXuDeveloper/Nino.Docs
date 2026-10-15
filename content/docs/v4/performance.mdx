@@ -1,0 +1,106 @@
+---
+title: Performance Guide
+description: "How Nino v4 gets its speed, and what you can do to keep it: interceptors, raw structs, buffer reuse, threading."
+icon: Zap
+---
+
+Nino is fast with no tuning at all. This page explains what happens under the hood, so you can keep your types and calls on the fast paths. For measurements, see [Benchmarks](/en/docs/v4/perf); for complete patterns, see [High-Performance Serialization](/en/docs/v4/advanced/high-performance).
+
+## Interceptors
+
+When your project is compiled by **Roslyn 4.8 or later** (the .NET 8 SDK and later, Visual Studio 2022 17.8+, a current Rider), the generator intercepts every `NinoSerializer`/`NinoDeserializer` call whose type argument is known at the call site and redirects it, at compile time, to the generated formatter. The call no longer goes through the formatter cache's virtual call; the bytes are exactly the same.
+
+```csharp
+// Intercepted: the type is known here
+byte[] bytes = NinoSerializer.Serialize(player);
+Player copy = NinoDeserializer.Deserialize<Player>(bytes);
+
+// Not intercepted: T is a type parameter, so the regular call runs
+static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
+```
+
+Measured on .NET 8 (ns per call, regular → intercepted): deserializing a non-sealed class 15.5 → 11.6, a sealed class 29.5 → 24, a struct with a string 16.7 → 15.0.
+
+- **Always on, nothing to configure.** The `Nino.Generator` package contains generator builds for Roslyn 4.3, 4.8 and 4.12; NuGet picks the newest your compiler can load. The 4.8 and 4.12 builds intercept, and the package's build props add `NinoGen` to `InterceptorsNamespaces` / `InterceptorsPreviewNamespaces` for you.
+- **It depends on the compiler, not the target framework**: a `netstandard2.0` library built with the .NET 8+ SDK is intercepted too.
+- **Older compilers simply use the regular path**, which writes the same bytes. Unity's compiler is one of them, so Unity projects never intercept.
+- Calls the regular path already handles directly (raw values, arrays of raw elements) and calls inside generic code are left alone.
+- A formatter registered at runtime with `NinoFormatterCache<T>.Register<TFormatter>()` still takes precedence, so intercepted and regular calls never disagree.
+
+<Callout type="warn">
+
+If your project sets `InterceptorsNamespaces` or `InterceptorsPreviewNamespaces` itself, **append** to the existing value (`$(InterceptorsNamespaces);MyNamespace`) instead of replacing it. Otherwise the `NinoGen` entry is lost and Nino generates no interceptors (the regular calls still work).
+
+</Callout>
+
+## Struct Formatters, Inlined
+
+Every formatter is a struct, and element formatters are type parameters (`ListFormatter<TList, T, TFormatter>`). Members call `default(TFormatter).Serialize(...)`: a direct call the JIT or AOT compiler inlines, so serializing a `List<Player>` compiles to one loop with the player's members written inside it. There is no virtual dispatch per element and no reflection anywhere.
+
+The one indirection left is the top-level call, which goes through `NinoFormatterCache<T>` (a static generic field) unless it is intercepted.
+
+## Raw Memory for Unmanaged Data
+
+Unmanaged values are copied as raw memory:
+
+- primitives, enums, `DateTime`, `Guid`, `Vector3` and other unmanaged structs;
+- consecutive unmanaged members of a `[NinoType]`, written as **one block** with one bounds check;
+- arrays and `List<T>` of unmanaged elements: **one block copy** of the whole collection;
+- a `[NinoType]` struct that qualifies as raw (see [Structs](/en/docs/v4/defining-types#structs)), alone or in arrays and lists.
+
+Padding bytes are zeroed on write, so equal values always produce equal bytes. Arrays of padded structs are copied through a SIMD mask in the same pass, which costs the same as a plain `memcpy`.
+
+To stay on this path:
+
+- prefer `T[]` and `List<T>` of unmanaged `T` for bulk data (positions, samples, tiles);
+- keep hot structs free of references (`string`, arrays) so they qualify as raw;
+- remember that `versionTolerant`, `keyed` and custom member formatters turn raw copying off for that struct.
+
+<Callout type="info">
+
+The raw layout is the canonical 64-bit layout. Where a runtime lays a struct out differently (32-bit platforms, old Mono), Nino converts field by field into the same bytes, so data stays portable at some cost in speed. See [Platforms and Binary Format](/en/docs/v4/platforms).
+
+</Callout>
+
+## Allocation
+
+- **Serializing allocates nothing** except the `byte[]` you ask for. Serialize into a reused `NinoArrayBufferWriter` (or any `IBufferWriter<byte>`) and a call allocates 0 B.
+- **Deserializing allocates only the result objects**, and even those can be reused: deserialize into an existing instance with `ref`, and take new instances from `[NinoPooled]` pools. Reusing instances allocates 0 B. See [Ref Deserialization and Pooling](/en/docs/v4/pooling).
+- Strings are UTF-16 by default (one block copy). `[NinoUtf8]` is smaller on the wire but transcodes.
+
+## Buffers
+
+| Destination | What happens |
+| --- | --- |
+| `NinoSerializer.Serialize(value)` | Writes into a pooled scratch buffer, then copies into a new `byte[]` of the exact size. |
+| `NinoArrayBufferWriter` | Written **in place**. Pooled from `ArrayPool<byte>.Shared`; reuse it with `ResetWrittenCount()`. |
+| Any other `IBufferWriter<byte>` (`ArrayBufferWriter<byte>`, `PipeWriter`...) | Written into a thread-local scratch buffer, then copied once into the writer. |
+| `ref Writer` | Written in place into the writer's `NinoArrayBufferWriter`. Lets you write several values back to back. |
+
+On the reading side, `NinoDeserializer` takes a `ReadOnlySpan<byte>`: pass a slice of whatever memory you already have (a pooled array, a pipe segment, a memory-mapped file) without copying it.
+
+## Thread Safety
+
+Every `NinoSerializer` and `NinoDeserializer` method is **safe to call concurrently** without locks:
+
+- no hot path writes shared memory, so serializing threads never contend for a cache line;
+- scratch buffers and reference-tracking tables are per thread, taken out of their slot while in use, so re-entrant calls (a custom formatter that serializes) are safe;
+- formatter lookup is a static generic field written once; polymorphic tables are immutable snapshots, replaced copy-on-write and read lock free;
+- `NinoPool<T>` keeps a per-thread stack of up to 64 instances and a locked shared stack it only touches in batches; its hot fields sit on their own 64-byte cache line.
+
+What is **not** thread safe is the state you own: a `NinoArrayBufferWriter`, a `Writer` or `Reader`, and the objects you deserialize into. Keep one buffer per thread or per connection.
+
+<Callout type="warn">
+
+`NinoSettings` values are plain fields read without synchronization. Set them at startup, before the first serialization call on any thread.
+
+</Callout>
+
+## Polymorphism
+
+A polymorphic value costs a 4-byte type id. For subtypes declared in the same assembly as their base, the generator emits a dispatch chain for writing and a `switch` on the id for reading, so the common case calls the subtype's formatter directly; subtypes from other assemblies, closed generics and tracked types go through a lock-free registry. Seal classes that have no subtypes: a sealed class needs only a 1-byte null flag and no dispatch.
+
+## Measuring
+
+- Measure with BenchmarkDotNet or other long runs. With tiered compilation, short runs measure unoptimized Tier-0 code, where Nino's `static readonly` layout checks are not yet folded into constants.
+- Deserializing large collections is often dominated by allocating and zeroing the result, not by Nino. Measure with reused instances to see the serializer's share.

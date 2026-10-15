@@ -1,0 +1,61 @@
+---
+title: 介绍
+description: Nino 是一个高性能的 C# 二进制序列化库，基于源生成器，适用于 .NET、Unity 与 HybridCLR。
+icon: BookOpen
+---
+
+import { ArrowRightLeft, Gauge, Layers, Rocket, Sparkles, Swords } from 'lucide-react';
+
+Nino 把你的 C# 类型转换为紧凑的字节，并能再转换回来。Roslyn 源生成器会在编译期为每个标记了 `[NinoType]` 的类型生成序列化代码，因此序列化过程不涉及反射、运行时代码生成，也不需要注册步骤；它在 .NET、Unity（Mono 与 IL2CPP）以及 HybridCLR 上的表现完全一致。
+
+<Stats lang="zh" />
+
+```csharp
+using Nino.Core;
+
+[NinoType]
+public class GameData
+{
+    public int Score;
+    public string PlayerName;
+    public List<Item> Items;
+}
+
+byte[] bytes = NinoSerializer.Serialize(data);
+GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
+```
+
+## 从这里开始
+
+<Cards>
+  <Card icon={<Rocket />} title="快速开始" href="/zh/docs/v4/start">
+    在 .NET 或 Unity 项目中安装 Nino，并序列化你的第一个类型。
+  </Card>
+  <Card icon={<Sparkles />} title="v4 新特性" href="/zh/docs/v4/whats-new">
+    重写了运行时与生成器：运行更快，构建也更快。
+  </Card>
+  <Card icon={<ArrowRightLeft />} title="从 v3 迁移" href="/zh/docs/v4/migration">
+    API 变化、特性变化，以及如何处理 v3 写入的数据。
+  </Card>
+  <Card icon={<Gauge />} title="基准测试" href="/zh/docs/v4/perf">
+    与 v3 和 MemoryPack 对比的构建时间与运行时，附完整表格。
+  </Card>
+  <Card icon={<Swords />} title="Nino 与 MemoryPack 对比" href="/zh/docs/v4/vs-memorypack">
+    Nino 领先在哪里，MemoryPack 仍然领先在哪里。
+  </Card>
+  <Card icon={<Layers />} title="进阶用法" href="/zh/docs/v4/advanced">
+    热点路径、网络协议、存档、Unity 与 HybridCLR。
+  </Card>
+</Cards>
+
+## Nino 能处理什么
+
+- **你使用的类型**：基础类型、枚举、结构体、类、记录、泛型、可空类型、元组、BCL 集合、你自己的集合、不可变集合，以及 `Vector3` 等 Unity 类型。参见[支持的类型](/zh/docs/v4/types)和[定义类型](/zh/docs/v4/defining-types)。
+- **对象模型**：通过基类和接口实现的[多态](/zh/docs/v4/polymorphism)、[自定义构造函数](/zh/docs/v4/constructors)、私有成员，以及[共享引用与循环引用](/zh/docs/v4/reference-tracking)。
+- **会变化的数据**：[版本兼容](/zh/docs/v4/evolving-data#version-tolerance)、[键控成员](/zh/docs/v4/evolving-data#keyed-members)以及[重命名的类型](/zh/docs/v4/defining-types#former-name)。
+- **热路径**：缓冲区复用、零分配的[反序列化到已有实例与对象池](/zh/docs/v4/pooling)，以及去掉最后一层间接调用的[拦截器](/zh/docs/v4/performance#interceptors)。
+- **在编译期发现错误**：[分析器](/zh/docs/v4/analyzers)会在你输入时报告问题，大多附带代码修复。
+
+## 旧版本
+
+Nino [v3](/zh/docs/v3) 和 [v2](/zh/docs/v2) 的文档仍然可以访问。它们的二进制格式与 v4 不兼容；参见[版本迭代](/zh/docs/v4/versioning)。
