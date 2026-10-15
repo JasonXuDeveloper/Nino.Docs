@@ -78,6 +78,10 @@ public partial struct PackedSample // 12 bytes, no padding
 }
 ```
 
+Why the padding: by default (`LayoutKind.Sequential`) every field is aligned to its own size, up to 8 bytes, and the struct's size is rounded up to its largest alignment. `DateTime` wraps a `ulong`, so it must start at a multiple of 8: after a 4-byte `int` the runtime inserts 4 empty bytes. Reordering fields (largest first) removes padding between fields, but not at the end: `DateTime, int` is still 16 bytes.
+
+`Pack = N` caps every field's alignment at `N`. To remove all padding, set `Pack` to the size of the **smallest** field: every field then starts right after the previous one. A larger `Pack` can leave gaps: `short, long, short` is 24 bytes by default, 12 with `Pack = 2` (no padding), and still 16 with `Pack = 4`. `Pack = 1` always removes padding, but misaligns more fields than needed.
+
 `Pack` changes the struct's layout in memory as well: `Time` is no longer 8-byte aligned. That is free on x64 and ARM64, but changes the bytes on the wire, so pick the layout before you store data.
 
 To stay on this path:
