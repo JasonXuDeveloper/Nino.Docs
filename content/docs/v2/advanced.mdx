@@ -1,0 +1,194 @@
+---
+title: Advanced Usage
+---
+
+This page describes how to use Nino in more advanced scenarios.
+
+## Weak Version Tolerance
+Nino supports a weaker (more flexible) version tolerance mechanism. This means that you can add new fields to a managed nino serializable type without breaking the deserialization of the old version of serialized data.
+
+However, there are several restrictions to this mechanism:
+- You can only add new members to the end of the type.
+- You need to explicitly order the members via `[NinoType(false)]` and `[NinoMember(order)]` attribute to ensure the new members are added after the old members.
+- You cannot remove any existing members. And changing existing member types contains restrictions as well (refer to [Type System](/en/docs/v2/types#version-compatibility)).
+- You cannot define new serializable types, or need to ensure that the TypeId of the version compatible type in the generated serialization code by Nino remains unchanged, for example:
+  ```csharp
+  case 26:
+  {
+      // use Nino.UnitTests.SaveData.SaveData()
+  ```
+  We need to ensure that after adding a new serializable type, the TypeId of the version compatible type (such as `SaveData`) has not changed (here it is `26`).
+
+By default, this weak version tolerance mechanism is disabled. To enable it, you need to add the define symbol `WEAK_VERSION_TOLERANCE` to your project.
+
+<Callout type="warn">
+
+Note that enabling this feature will introduce a 5% overhead in  deserialization performance.
+
+</Callout>
+
+### Usage
+```csharp
+// assuming WEAK_VERSION_TOLERANCE is defined
+[NinoType(false)]
+public class SaveData
+{
+    [NinoMember(1)] public int Id;
+    [NinoMember(2)] public string Name;
+    [NinoMember(3)] public DateTime NewField1; // [!code ++]
+    [NinoMember(4)] public Generic<int> NewField2; // [!code ++]
+}
+```
+
+In this example, we added two new fields `NewField1` and `NewField2` to the `SaveData` class. By using the `[NinoType(false)]` and `[NinoMember(order)]` attribute, we can ensure that the new fields are added after the old fields. This way, the old version of serialized data can still be deserialized correctly (requires the symbol `WEAK_VERSION_TOLERANCE` to be defined).
+
+<Callout type="info">
+
+This is in fact one of our unit test cases, we have verified that it works.
+
+</Callout>
+
+## Custom Constructors
+Nino now supports using custom constructors to `deserialize` a nino serialized object. This is useful when you want to perform additional operations when deserializing an object, such as initializing fields or properties that are not serialized.
+
+In addition, this is useful for records, nino can either use the primary constructor or a custom constructor to deserialize the record.
+
+### Usage
+The following attribute uses `Field1, Field2, ...` as the arguments for a constructor to deserialize the object.
+```csharp
+[NinoConstructor(nameof(Field1), nameof(Field2), ...)]
+```
+
+For `record`s, Nino will **prioritize** using the primary constructor to deserialize the object. If the primary constructor is not suitable for deserialization, you can use the `[NinoConstructor]` attribute to specify a custom constructor to deserialize the object.
+
+For `class`es, Nino will **automatically** use the `first public constructor` to deserialize the object. Where either the constructor is parameterless or all parameters shares the same name as the **fields or properties in the class that are to be deserialized**. If the constructor is not suitable for deserialization, you can use the `[NinoConstructor]` attribute to specify a custom constructor to deserialize the object.
+
+For `struct`s, Nino will **automatically** use the parameterless constructor to deserialize the object. If the struct should not use a parameterless constructor (struct always have parameterless constructor though) when deserializing, you can use the `[NinoConstructor]` attribute to specify a custom constructor to deserialize the object.
+
+### Restrictions
+- The custom constructor must be a `public` constructor.
+- The custom constructor must have the same number of parameters as the number of parameters in `NinoConstructor` attribute.
+- The parameters in `NinoConstructor` attribute must match the name (ignoring cases) of the fields or properties in the class, struct, or record that are to be deserialized (i.e. these members have to be serialized in the first place).
+- The parameters in `NinoConstructor` attribute represents the name of the type's members to be passed as the parameters in the constructor.
+
+### Examples
+<Tabs items={["Multiple Constructors", "Primary Constructor", "Not To Use Primary Constructor"]}>
+
+<Tab value="Multiple Constructors">
+
+```csharp
+[NinoType]
+public record SimpleRecord
+{
+    public int Id;
+    public string Name;
+    public DateTime CreateTime;
+
+    public SimpleRecord()
+    {
+        Id = 0;
+        Name = string.Empty;
+        CreateTime = DateTime.MinValue;
+    }
+
+    [NinoConstructor(nameof(Id), nameof(Name))] // [!code highlight]
+    public SimpleRecord(int id, string name)
+    {
+        Id = id;
+        Name = name;
+        CreateTime = DateTime.Now;
+    }
+}
+```
+
+</Tab>
+<Tab value="Primary Constructor">
+
+```csharp
+[NinoType]
+public record SimpleRecord2(int Id, string Name, DateTime CreateTime); // [!code highlight]
+
+[NinoType]
+public record SimpleRecord4(int Id, string Name, DateTime CreateTime) // Will be used // [!code highlight]
+{
+    [NinoIgnore] public bool Flag;
+
+    public int ShouldNotIgnore;
+
+    // Nino will not use this // [!code highlight]
+    public SimpleRecord4() : this(0, "", DateTime.MinValue)
+    {
+    }
+}
+```
+
+</Tab>
+<Tab value="Not To Use Primary Constructor">
+
+```csharp
+[NinoType]
+public record SimpleRecord5(int Id, string Name, DateTime CreateTime) // Will not be used // [!code highlight]
+{
+    [NinoIgnore] public bool Flag;
+
+    public int ShouldNotIgnore;
+
+    // Nino will use this, but not good since we will discard the primary constructor values when deserializing
+    [NinoConstructor] // [!code highlight]
+    public SimpleRecord5() : this(0, "", DateTime.MinValue)
+    {
+    }
+}
+```
+
+</Tab>
+</Tabs>
+
+Moreover, not only for records we have the ability to use custom constructors, but also for classes and structs.
+<Tabs items={["Force Struct to use Parameterized Constructor", "Automatically used Class Parameterized Constructor"]}>
+
+<Tab value="Force Struct to use Parameterized Constructor">
+
+```csharp
+[NinoType]
+public struct SimpleStruct
+{
+    public int Id;
+    public string Name;
+    public DateTime CreateTime;
+    
+    // Will use this constructor to create the struct when deserializing
+    [NinoConstructor(nameof(Id), nameof(Name), nameof(CreateTime))] // [!code highlight]
+    public SimpleStruct(int a, string b, DateTime c)
+    {
+        Id = a;
+        Name = b;
+        CreateTime = c;
+    }
+}
+```
+
+</Tab>
+<Tab value="Automatically used Class Parameterized Constructor">
+
+```csharp
+[NinoType]
+public class SimpleClassWithConstructor
+{
+    public int Id;
+    public string Name;
+    public DateTime CreateTime;
+    
+    // [NinoConstructor(nameof(Id), nameof(Name), nameof(CreateTime))] - we try not to use this and test if it still works
+    // should automatically use this constructor since this is the only public constructor
+    public SimpleClassWithConstructor(int id, string name, DateTime createTime) // [!code highlight]
+    {
+        Id = id;
+        Name = name;
+        CreateTime = createTime;
+    }
+}
+```
+
+</Tab>
+</Tabs>
