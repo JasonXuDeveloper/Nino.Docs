@@ -58,7 +58,7 @@ v4 与 MemoryPack 在同一次运行中。数据大小基本相同（`SimpleClas
 
 <BenchmarkChart chart="serialize" lang="zh" table={false} />
 
-`SimpleStruct` 有 4 字节填充。v4 会将其清零，因此输出是确定性的；v3 和 MemoryPack 会原样拷贝填充中的内容。单个值只需一两次内联的常量写入；`SimpleStruct[100]`（1.6 KB）的掩码拷贝比普通 `memcpy` 多约 5 ns，所以 v4 在这一项落后。没有填充的结构体（如 `Vector4[10000]`）与另外两者一样是一次整块拷贝。
+`SimpleStruct`（`int` + `DateTime`）声明了 `[StructLayout(LayoutKind.Sequential, Pack = 4)]`，大小为 12 字节且没有填充，所有序列化器都整块拷贝它。如果不加 `Pack`，它是 16 字节，其中 4 字节是填充，Nino 写入时会把填充清零；参见[结构体布局](/zh/docs/v4/performance#struct-layout)。
 
 ### 反序列化（新实例） [#deserialize]
 
@@ -139,6 +139,7 @@ public sealed partial class SimpleClass : SimpleClassBase
 [NinoType]
 [MemoryPackable]
 [MessagePackObject]
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
 public partial struct SimpleStruct
 {
     [Key(0)] public int Id;

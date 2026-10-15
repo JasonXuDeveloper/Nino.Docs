@@ -58,7 +58,7 @@ v4 and MemoryPack in the same run. Payload sizes are about the same (`SimpleClas
 
 <BenchmarkChart chart="serialize" lang="en" table={false} />
 
-`SimpleStruct` has 4 bytes of padding. v4 zeroes it, so the output is deterministic; v3 and MemoryPack copy whatever the padding contains. For a single value that is one or two inlined constant stores; for `SimpleStruct[100]` (1.6 KB) the masked copy costs about 5 ns over a plain `memcpy`, which is why v4 is behind there. Structs without padding (`Vector4[10000]`) are one block copy, as in the other two.
+`SimpleStruct` (`int` + `DateTime`) is declared with `[StructLayout(LayoutKind.Sequential, Pack = 4)]`, so it is 12 bytes with no padding and every serializer copies it as one block. Without `Pack` it would be 16 bytes with 4 bytes of padding, which Nino zeroes on write; see [Struct Layout](/en/docs/v4/performance#struct-layout).
 
 ### Deserialize (New Instances)
 
@@ -139,6 +139,7 @@ public sealed partial class SimpleClass : SimpleClassBase
 [NinoType]
 [MemoryPackable]
 [MessagePackObject]
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
 public partial struct SimpleStruct
 {
     [Key(0)] public int Id;

@@ -95,7 +95,9 @@ export function RuntimeTable({ op, lang = 'en' }: { op: Op; lang?: Locale }) {
       </table>
       {rerun && (
         <p className="text-sm text-fd-muted-foreground">
-          {zh ? '* 以 20 次迭代重新运行。' : '* Re-run with 20 iterations.'}
+          {zh
+            ? '* 将 SimpleStruct 声明为 Pack = 4 后，以相同设置单独重跑。'
+            : '* Re-run separately with the same settings after SimpleStruct was declared with Pack = 4.'}
         </p>
       )}
     </>
