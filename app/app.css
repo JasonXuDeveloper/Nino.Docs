@@ -1,0 +1,270 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+/*
+ * Nino theme, taken from the icon: navy background, with a
+ * cyan #22d3ee -> blue #3b82f6 -> indigo #6366f1 -> violet #8b5cf6 gradient.
+ */
+@theme {
+  --color-nino-cyan: #22d3ee;
+  --color-nino-blue: #3b82f6;
+  --color-nino-indigo: #6366f1;
+  --color-nino-violet: #8b5cf6;
+
+  --color-fd-background: hsl(232, 40%, 98.5%);
+  --color-fd-foreground: hsl(236, 45%, 12%);
+  --color-fd-muted: hsl(232, 45%, 95%);
+  --color-fd-muted-foreground: hsl(234, 16%, 42%);
+  --color-fd-popover: hsl(0, 0%, 100%);
+  --color-fd-popover-foreground: hsl(236, 45%, 12%);
+  --color-fd-card: hsl(232, 50%, 97%);
+  --color-fd-card-foreground: hsl(236, 45%, 12%);
+  --color-fd-border: hsl(232, 35%, 88%);
+  --color-fd-primary: hsl(243, 75%, 59%);
+  --color-fd-primary-foreground: hsl(0, 0%, 100%);
+  --color-fd-secondary: hsl(232, 45%, 95%);
+  --color-fd-secondary-foreground: hsl(236, 45%, 12%);
+  --color-fd-accent: hsl(232, 50%, 92%);
+  --color-fd-accent-foreground: hsl(236, 45%, 12%);
+  --color-fd-ring: hsl(239, 84%, 67%);
+}
+
+.dark {
+  --color-fd-background: hsl(234, 50%, 7%);
+  --color-fd-foreground: hsl(232, 45%, 94%);
+  --color-fd-muted: hsl(234, 40%, 12%);
+  --color-fd-muted-foreground: hsl(232, 20%, 68%);
+  --color-fd-popover: hsl(234, 45%, 10%);
+  --color-fd-popover-foreground: hsl(232, 45%, 94%);
+  --color-fd-card: hsl(234, 45%, 10%);
+  --color-fd-card-foreground: hsl(232, 45%, 94%);
+  --color-fd-border: hsla(235, 50%, 60%, 0.18);
+  --color-fd-primary: hsl(234, 89%, 74%);
+  --color-fd-primary-foreground: hsl(234, 50%, 8%);
+  --color-fd-secondary: hsl(234, 40%, 14%);
+  --color-fd-secondary-foreground: hsl(232, 45%, 94%);
+  --color-fd-accent: hsl(236, 40%, 18%);
+  --color-fd-accent-foreground: hsl(232, 60%, 92%);
+  --color-fd-ring: hsl(234, 89%, 74%);
+}
+
+.dark #nd-sidebar {
+  --color-fd-muted: hsl(234, 40%, 14%);
+  --color-fd-secondary: hsl(234, 40%, 16%);
+}
+
+/* Soft brand glow at the top of every page in dark mode */
+.dark body {
+  background-image: radial-gradient(
+    ellipse 70% 22rem at 50% -8rem,
+    rgba(99, 102, 241, 0.2),
+    transparent
+  );
+  background-repeat: no-repeat;
+}
+
+@utility nino-gradient-bg {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-nino-cyan),
+    var(--color-nino-blue) 40%,
+    var(--color-nino-indigo) 70%,
+    var(--color-nino-violet)
+  );
+}
+
+@utility nino-gradient-text {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-nino-cyan),
+    var(--color-nino-blue) 40%,
+    var(--color-nino-indigo) 70%,
+    var(--color-nino-violet)
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* Buttons on the home and 404 pages */
+@utility nino-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.6rem;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition:
+    transform 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+@utility nino-btn-primary {
+  color: white;
+  background-image: linear-gradient(
+    90deg,
+    var(--color-nino-blue),
+    var(--color-nino-violet)
+  );
+  box-shadow: 0 6px 24px -8px rgba(99, 102, 241, 0.7);
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 28px -8px rgba(99, 102, 241, 0.85);
+  }
+}
+
+@utility nino-btn-secondary {
+  border: 1px solid var(--color-fd-border);
+  background-color: var(--color-fd-card);
+  &:hover {
+    background-color: var(--color-fd-accent);
+  }
+}
+
+@utility nino-btn-ghost {
+  color: var(--color-fd-muted-foreground);
+  &:hover {
+    color: var(--color-fd-foreground);
+    background-color: var(--color-fd-accent);
+  }
+}
+
+.nino-hero::before {
+  content: "";
+  position: absolute;
+  inset: -10rem 0 auto;
+  z-index: -1;
+  height: 36rem;
+  background:
+    radial-gradient(
+      ellipse 40% 50% at 30% 40%,
+      rgba(34, 211, 238, 0.14),
+      transparent
+    ),
+    radial-gradient(
+      ellipse 40% 50% at 70% 40%,
+      rgba(139, 92, 246, 0.18),
+      transparent
+    );
+  pointer-events: none;
+}
+
+.nino-logo {
+  filter: drop-shadow(0 16px 40px rgba(99, 102, 241, 0.4));
+}
+
+.nino-card:hover {
+  box-shadow: 0 12px 32px -16px rgba(99, 102, 241, 0.45);
+}
+
+/* Old-version notice above the docs */
+.nino-banner {
+  color: white;
+  background-image: linear-gradient(
+    90deg,
+    #0e7490,
+    #1d4ed8 40%,
+    #4338ca 70%,
+    #6d28d9
+  );
+}
+
+.nino-banner a {
+  color: white;
+}
+
+/* Highlighted numbers in MDX (old version overviews) */
+.nino-hl {
+  @apply nino-gradient-text font-semibold;
+}
+
+/* Animated showcase (home page and What's New) */
+.nino-showcase {
+  background-color: var(--color-fd-card);
+  isolation: isolate;
+}
+
+.nino-grid-glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(99, 102, 241, 0.09) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(99, 102, 241, 0.09) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, black, transparent);
+}
+
+.nino-grid-glow::before,
+.nino-grid-glow::after {
+  content: "";
+  position: absolute;
+  width: 26rem;
+  height: 26rem;
+  border-radius: 9999px;
+  filter: blur(70px);
+  opacity: 0.35;
+  animation: nino-drift 14s ease-in-out infinite alternate;
+}
+
+.nino-grid-glow::before {
+  top: -12rem;
+  left: -6rem;
+  background: radial-gradient(circle, var(--color-nino-cyan), transparent 65%);
+}
+
+.nino-grid-glow::after {
+  top: -10rem;
+  right: -8rem;
+  background: radial-gradient(
+    circle,
+    var(--color-nino-violet),
+    transparent 65%
+  );
+  animation-delay: -7s;
+}
+
+.dark .nino-grid-glow::before,
+.dark .nino-grid-glow::after {
+  opacity: 0.45;
+}
+
+@keyframes nino-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(4rem, 3rem, 0) scale(1.15);
+  }
+}
+
+.nino-stat-card {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.nino-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px -16px rgba(99, 102, 241, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nino-grid-glow::before,
+  .nino-grid-glow::after {
+    animation: none;
+  }
+  .nino-stat-card,
+  .nino-stat-card:hover {
+    transition: none;
+    transform: none;
+  }
+}
+
+.nino-hero {
+  isolation: isolate;
+}
