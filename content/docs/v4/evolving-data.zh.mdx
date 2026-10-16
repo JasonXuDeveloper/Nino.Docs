@@ -8,14 +8,14 @@ icon: GitBranch
 
 | | 按位置（默认） | `versionTolerant: true` | `keyed: true` |
 | --- | :---: | :---: | :---: |
-| 在末尾追加成员 | ✗ | ✓ | ✓ |
-| 向基类追加成员 | ✗ | ✓ | ✓ |
+| 向没有子类的类型追加成员 | ✗ | ✓ | ✓ |
+| 向基类追加成员 | ✗ | ✗ | ✓ |
 | 插入、删除或重排成员 | ✗ | ✗ | ✓ |
 | 重命名成员 | ✓ | ✓ | ✓（配合 `[NinoFormerName]`） |
 | 新代码读旧数据 | ✗ | ✓ | ✓ |
 | 旧代码读新数据 | ✗ | ✓ | ✓ |
-| 额外开销 | 无 | 每层继承 4 字节 | 每个成员 8 字节，每个对象另加 4 字节 |
-| 速度 | 最快 | 接近按位置：每层一个长度 | 较慢：每个成员多写一个键和长度，读取时每个成员要检查一次键 |
+| 额外开销 | 无 | 每个对象 4 字节 | 每个成员 8 字节，每个对象另加 4 字节 |
+| 速度 | 最快 | 接近按位置：每个对象一个长度 | 较慢：每个成员多写一个键和长度，读取时每个成员要检查一次键 |
 
 格式本身也是数据的一部分：给某个类型打开或关闭 `versionTolerant`、`keyed`，都会让之前写出的数据无法读取。请在保存任何数据之前做好选择。
 
@@ -45,15 +45,15 @@ public class Settings
 }
 ```
 
-继承体系中的每一层（从根到当前类型的每个 `[NinoType]` 类）都写在各自的 4 字节长度之后：
+对象的成员（`[NinoType]` 基类的成员在前）写在同一个 4 字节长度之后，无论继承层次有多深：
 
 - **新代码读旧数据：** 数据中缺少的成员保留原有的值：反序列化到已有实例时是该实例当前的值，否则是构造函数设置的值（包括字段初始化器）。1.1 读取 1.0 的文件时，`MusicVolume` 是 `0.8f`，而不是 `0`。通过构造函数重新创建的类型（位置记录、只读成员）中，缺少的构造函数参数传入 `default`，而不是参数声明的默认值。
 - **旧代码读新数据：** 旧代码不认识的字节会被跳过。
-- 可以向类型本身**或它的任意基类**追加成员，并且在任意嵌套深度都成立：集合、字典和多态成员中也一样。
+- 可以向**最末端的派生类型**追加成员，也就是对象数据的末尾，并且在任意嵌套深度都成立：每个版本兼容对象都带有自己的长度，集合、字典和多态成员中也一样。
 
 <Callout type="warn">
 
-以下改动不被兼容：在同一层内插入、删除或重排成员，向 `[NinoType]` 接口追加成员（请追加到类中），以及在继承体系中增加或移除 `[NinoType]` 类。使用 `[NinoType(false)]` 时，新成员的索引必须大于所有已有成员。
+以下改动不被兼容：向拥有 `[NinoType]` 子类的基类追加成员（参见[下文](#appending-to-a-base-class)），插入、删除或重排成员，向 `[NinoType]` 接口追加成员，以及在继承体系中增加或移除 `[NinoType]` 类。使用 `[NinoType(false)]` 时，新成员的索引必须大于所有已有成员。
 
 </Callout>
 
@@ -62,6 +62,35 @@ public class Settings
 在项目中定义符号 `WEAK_VERSION_TOLERANCE`，会为该项目中声明的所有类型打开 `versionTolerant`；引用的其他程序集中的类型保持各自的格式。更推荐按类型设置。
 
 </Callout>
+
+### 向基类追加成员 [#appending-to-a-base-class]
+
+各层的成员共用对象的这一个长度，从根类开始依次写出。因此追加到基类的成员会落在子类成员**之前**，把它们往后挤：
+
+```csharp
+// Version 2 appends Armor to the base class
+[NinoType(versionTolerant: true)]
+public class Unit
+{
+    public int Hp;
+    public int Armor; // [!code ++]
+}
+
+public sealed class Archer : Unit
+{
+    public int Arrows;
+}
+
+// after its header, version 1 writes an Archer as  length | Hp | Arrows
+// and version 2 writes it as                        length | Hp | Armor | Arrows
+```
+
+- **版本 2 读取版本 1 的数据：** `Armor` 读到的是 `Arrows` 的字节；数据在 `Arrows` 之前就结束了，`Arrows` 像其他缺少的成员一样保留原有的值（新建的 `Archer` 中为 `0`）。
+- **版本 1 读取版本 2 的数据：** `Arrows` 读到的是 `Armor` 的字节，真正的 `Arrows` 被当作未知的尾部成员跳过。
+
+这里两个成员类型相同，所以只是值错了。类型不同时，字节会被当作另一种类型来读：结果是错误的值，或抛出 `InvalidOperationException`。编译期不会报告这种错误，因为生成器只能看到代码的一个版本。
+
+`Unit` 自身的实例不受影响（`Armor` 是它们的最后一个成员），受影响的是所有子类的数据。因此只向继承体系最底层的类追加成员，例如密封的消息类。所有子类都需要的成员，分别加到每个子类中；或者把整个继承体系改为 [`keyed`](#keyed-members)，键控类型的任何类都可以添加成员。
 
 ## 键控成员 [#keyed-members]
 
@@ -108,12 +137,12 @@ public class PlayerSave
 <Accordions type="single">
 <Accordion title="客户端与服务器之间的消息">
 
-两端始终运行同一构建版本时，用按位置格式。如果客户端和服务器的升级时间不一致（滚动升级、玩家手里还有旧版本），用 `versionTolerant` 并且只**追加**字段；如果还需要淘汰字段，用 `keyed`。参见[网络层](/zh/docs/v4/advanced/networking)。
+两端始终运行同一构建版本时，用按位置格式。如果客户端和服务器的升级时间不一致（滚动升级、玩家手里还有旧版本），用 `versionTolerant`，并且只向各个消息类本身**追加**字段（不要加到它们共同的基类上）；如果还需要淘汰字段，或要向基类添加字段，用 `keyed`。参见[网络层](/zh/docs/v4/advanced/networking)。
 
 </Accordion>
 <Accordion title="游戏存档与用户文件">
 
-只会不断增加字段时用 `versionTolerant`，想自由地删除和重排字段时用 `keyed`。如果存档中的对象图有共享对象或循环，再加上 [`trackReferences`](/zh/docs/v4/reference-tracking)。参见[存档与持久化](/zh/docs/v4/advanced/persistence)。
+只会不断向没有子类的类增加字段时用 `versionTolerant`，想自由地删除和重排字段时用 `keyed`。如果存档中的对象图有共享对象或循环，再加上 [`trackReferences`](/zh/docs/v4/reference-tracking)。参见[存档与持久化](/zh/docs/v4/advanced/persistence)。
 
 </Accordion>
 <Accordion title="在 Unity 编辑器中编辑的配置">

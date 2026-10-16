@@ -25,6 +25,7 @@ static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 - **取决于编译器，而不是目标框架**：用 .NET 8+ SDK 编译的 `netstandard2.0` 库同样会被拦截。
 - **旧编译器直接走常规路径**，写出的字节相同。Unity 包中附带的是生成器的 Roslyn 4.3 版本，所以 Unity 项目不会拦截。
 - 以下调用不会被拦截，因为拦截也没有收益：原始值和原始元素数组（常规路径本来就直接拷贝），在其他程序集中声明的 `[NinoType]`（调用方项目只能通过格式化器缓存访问它的格式化器，与常规调用相同），以及泛型代码内部的调用。
+- [固定大小类型](#fixed-size-types)的 `Serialize(value)` 会被导向直接写入大小正好的 `byte[]` 的代码。
 - 在运行时用 `NinoFormatterCache<T>.Register<TFormatter>()` 注册的格式化器仍然优先，因此拦截调用和常规调用的结果永远一致。请在 `T` 第一次使用之前注册：第一次调用会固定格式化器，之后再注册会抛出异常（参见[运行时注册](/zh/docs/v4/custom-formatters#registering-at-run-time)）。
 
 <Callout type="warn">
@@ -96,6 +97,44 @@ public partial struct PackedSample // 12 字节，没有填充
 
 </Callout>
 
+## 固定大小的类型 [#fixed-size-types]
+
+有些类型无论取什么值，写出的字节数都相同。对这类类型，`NinoSerializer.Serialize(value)` 会按最终大小分配 `byte[]`，再把值直接写进去：不用暂存缓冲区，不用 writer，没有扩容检查，也没有最后的拷贝。写出的字节与通用路径相同。
+
+```csharp title="PlayerInput.cs"
+[NinoType]
+public struct Aim                    // raw: 8 bytes
+{
+    public float Yaw;
+    public float Pitch;
+}
+
+[NinoType]
+public sealed class PlayerInput      // fixed size: 1 (null flag) + 4 + 8 + 8 + 1 = 22 bytes
+{
+    public int Tick;
+    public long PlayerId;
+    public Aim Aim;
+    public bool Fire;
+}
+
+byte[] bytes = NinoSerializer.Serialize(input);         // a new byte[22], written in place
+int size = NinoSerializer.GetFixedSize<PlayerInput>();  // 22
+```
+
+满足以下条件的类型是固定大小的：
+
+- 非泛型的 `[NinoType]` **结构体**或**密封类**；
+- 按位置格式：不是 `versionTolerant`（所在项目也没有定义 `WEAK_VERSION_TOLERANCE`），不是 `keyed`，不是 `trackReferences`，也不是集合类型；
+- 所有成员都是在 32 位和 64 位运行时上布局相同的非托管值（基元类型、枚举、`DateTime`、`Guid`，以及由它们组成的原始结构体），或者是其他固定大小的结构体，并且没有 `[NinoCustomFormatter]`。
+
+`string`、数组或集合、类、`T?`、元组、`DateTimeOffset` 或 `nint` 成员都会让类型的大小不固定。按原始内存写入的结构体（参见[原始内存](#raw-memory-for-unmanaged-data)）同样是固定大小的，并且本来就直接拷贝到大小正好的数组中；这项优化把同样的做法扩展到了不能按原始内存写入的结构体（有被忽略的字段、嵌套了结构体）和密封类。
+
+- **自动生效。** 在 Roslyn 4.8+ 上，[拦截器](#interceptors)会把固定大小类型的 `Serialize(value)` 导向这条路径；没有拦截器时（Unity、泛型代码、旧编译器），常规调用经过一次检查后也走这条路径，优化后的代码会把这次检查折叠为常量。
+- 只有返回 `byte[]` 的 `Serialize(value)` 会改变。序列化到 `IBufferWriter<byte>` 或 `Writer`，以及固定大小类型的数组和列表，写法都与之前相同。
+- 值为 `null` 的密封类写出 1 字节的 null 标志；其他值都正好占 `GetFixedSize<T>()` 字节。
+- `NinoSerializer.GetFixedSize<T>()` 对固定大小的类型和原始值返回其大小，对其他类型返回 `-1`。可以用它来确定缓冲区大小，或在启动时检查消息的大小。
+
 ## 内存分配 [#allocation]
 
 - **序列化不分配内存**，唯一的例外是你要求返回的 `byte[]`。序列化到复用的 `NinoArrayBufferWriter`（或任意 `IBufferWriter<byte>`）时，每次调用分配 0 B。
@@ -106,7 +145,7 @@ public partial struct PackedSample // 12 字节，没有填充
 
 | 写入目标 | 过程 |
 | --- | --- |
-| `NinoSerializer.Serialize(value)` | 写入池化的暂存缓冲区，再拷贝到一个大小正好的新 `byte[]`。 |
+| `NinoSerializer.Serialize(value)` | 写入池化的暂存缓冲区，再拷贝到一个大小正好的新 `byte[]`。[固定大小的类型](#fixed-size-types)则直接写入一个大小正好的 `byte[]`。 |
 | `NinoArrayBufferWriter` | **直接写入**。数组租自 `ArrayPool<byte>.Shared`；用 `ResetWrittenCount()` 复用。 |
 | 其他 `IBufferWriter<byte>`（`ArrayBufferWriter<byte>`、`PipeWriter` 等） | 先写入线程本地的暂存缓冲区，再一次性拷贝到目标写入器。 |
 | `ref Writer` | 直接写入该 writer 所属的 `NinoArrayBufferWriter`，可以连续写入多个值。 |

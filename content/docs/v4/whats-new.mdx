@@ -63,7 +63,7 @@ Neither library allocates when serializing, and payloads are about the same size
     On Roslyn 4.8+ (the .NET 8 SDK and later), calls with a known type go straight to the generated formatter. Always on; Unity (which uses the Roslyn 4.3 build) and older compilers use the regular path and write the same bytes.
   </Card>
   <Card icon={<KeyRound />} title="Keyed members and versioning" href="/en/docs/v4/evolving-data">
-    `keyed: true` lets you reorder, remove and insert members; `versionTolerant: true` lets you append them, even to base classes.
+    `keyed: true` lets you reorder, remove and insert members; `versionTolerant: true` lets you append them, at 4 bytes per object.
   </Card>
   <Card icon={<Share2 />} title="trackReferences" href="/en/docs/v4/reference-tracking">
     Shared references and cycles survive a round trip, at 4 bytes per tracked object.
@@ -93,7 +93,7 @@ Neither library allocates when serializing, and payloads are about the same size
 - **Analyzers and code fixes**: mistakes are reported while you type (NINO001–NINO024), many with a one-click fix. See the [diagnostics list](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md).
 
 ### Faster to run
-- **Struct formatters the JIT/AOT compiler inlines**, raw memory copies for unmanaged `[NinoType]` structs and their arrays and lists, and no allocations beyond the result objects.
+- **Struct formatters the JIT/AOT compiler inlines**, raw memory copies for unmanaged `[NinoType]` structs and their arrays and lists, and no allocations beyond the result objects. [Fixed-size types](/en/docs/v4/performance#fixed-size-types) are written straight into a `byte[]` of their exact size.
 - **Interceptors on modern compilers**: on Roslyn 4.8+ (the .NET 8 SDK and later), `NinoSerializer`/`NinoDeserializer` calls with a known type are redirected at compile time to the generated formatter (no virtual call). Always on, nothing to configure; older compilers use the regular path, with the same bytes. See [Interceptors](/en/docs/v4/performance#interceptors).
 - **Thread safe and cache friendly**: lock-free, copy-on-write registries; no shared mutable state on hot paths.
 
@@ -105,7 +105,7 @@ Neither library allocates when serializing, and payloads are about the same size
 See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 
 ### Evolve your data
-- **Opt-in version tolerance**: `[NinoType(versionTolerant: true)]` lets you append members to the type or any of its base classes, at any nesting depth.
+- **Opt-in version tolerance**: `[NinoType(versionTolerant: true)]` lets you append members to the most derived type, at any nesting depth, and old code skips the members it does not know.
 - **Keyed members**: `[NinoType(keyed: true)]` writes members by name hash, so they can be reordered, removed and inserted.
 - **Reference tracking**: `[NinoType(trackReferences: true)]` keeps shared references and cycles.
 - **Deep object graphs**: objects nested deeper than 128 are written and read later from a shallow point, so recursive types of any depth, and hostile data, cannot overflow the stack. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).

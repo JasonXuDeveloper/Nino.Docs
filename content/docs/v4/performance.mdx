@@ -25,6 +25,7 @@ The saving is a few nanoseconds per call, which matters most for small values ca
 - **It depends on the compiler, not the target framework**: a `netstandard2.0` library built with the .NET 8+ SDK is intercepted too.
 - **Older compilers simply use the regular path**, which writes the same bytes. The Unity package ships the generator's Roslyn 4.3 build, so Unity projects never intercept.
 - Left alone, because interception would gain nothing: raw values and arrays of raw elements (the regular path already copies them directly), `[NinoType]`s declared in another assembly (the calling project reaches their formatter only through the formatter cache, as the regular call does), and calls inside generic code.
+- `Serialize(value)` of a [fixed-size type](#fixed-size-types) is routed to code that writes straight into a `byte[]` of the type's size.
 - A formatter registered at runtime with `NinoFormatterCache<T>.Register<TFormatter>()` still takes precedence, so intercepted and regular calls never disagree. Register it before `T` is first used: the first call fixes the formatter, and a later registration throws (see [Registering at Run Time](/en/docs/v4/custom-formatters#registering-at-run-time)).
 
 <Callout type="warn">
@@ -96,6 +97,44 @@ The raw layout is the canonical 64-bit layout. Where a runtime lays a struct out
 
 </Callout>
 
+## Fixed-Size Types [#fixed-size-types]
+
+Some types take the same number of bytes whatever their values. For those, `NinoSerializer.Serialize(value)` allocates the `byte[]` at its final size and writes the value straight into it: no scratch buffer, no writer, no growth checks and no final copy. The bytes are the same as on the general path.
+
+```csharp title="PlayerInput.cs"
+[NinoType]
+public struct Aim                    // raw: 8 bytes
+{
+    public float Yaw;
+    public float Pitch;
+}
+
+[NinoType]
+public sealed class PlayerInput      // fixed size: 1 (null flag) + 4 + 8 + 8 + 1 = 22 bytes
+{
+    public int Tick;
+    public long PlayerId;
+    public Aim Aim;
+    public bool Fire;
+}
+
+byte[] bytes = NinoSerializer.Serialize(input);         // a new byte[22], written in place
+int size = NinoSerializer.GetFixedSize<PlayerInput>();  // 22
+```
+
+A type is fixed-size when it is:
+
+- a non-generic `[NinoType]` **struct** or **sealed class**;
+- positional: not `versionTolerant` (and its project does not define `WEAK_VERSION_TOLERANCE`), not `keyed`, not `trackReferences`, and not a collection type;
+- made only of members that are unmanaged values with the same layout on 32-bit and 64-bit runtimes (primitives, enums, `DateTime`, `Guid`, raw structs of those) or other fixed-size structs, with no `[NinoCustomFormatter]`.
+
+A `string`, an array or collection, a class, a `T?`, a tuple, `DateTimeOffset` or `nint` member makes a type variable-size. A struct written as raw memory (see [Raw Memory](#raw-memory-for-unmanaged-data)) is fixed-size too and was already copied straight into an array of its size; this extends the same to structs that are not raw (an ignored field, a nested struct) and to sealed classes.
+
+- **Automatic.** On Roslyn 4.8+ the [interceptor](#interceptors) routes `Serialize(value)` of a fixed-size type to this path; without interceptors (Unity, generic code, older compilers) the regular call takes the same path after a check that optimized code reduces to a constant.
+- Only `Serialize(value)` returning a `byte[]` changes. Serializing into an `IBufferWriter<byte>` or a `Writer`, and arrays or lists of fixed-size types, are written as before.
+- A `null` sealed class is written as its 1-byte null flag; every other value takes exactly `GetFixedSize<T>()` bytes.
+- `NinoSerializer.GetFixedSize<T>()` returns the size for a fixed-size type or a raw value, and `-1` for any other type. Use it to size buffers or to check a message's size at startup.
+
 ## Allocation
 
 - **Serializing allocates nothing** except the `byte[]` you ask for. Serialize into a reused `NinoArrayBufferWriter` (or any `IBufferWriter<byte>`) and a call allocates 0 B.
@@ -106,7 +145,7 @@ The raw layout is the canonical 64-bit layout. Where a runtime lays a struct out
 
 | Destination | What happens |
 | --- | --- |
-| `NinoSerializer.Serialize(value)` | Writes into a pooled scratch buffer, then copies into a new `byte[]` of the exact size. |
+| `NinoSerializer.Serialize(value)` | Writes into a pooled scratch buffer, then copies into a new `byte[]` of the exact size. A [fixed-size type](#fixed-size-types) is written straight into a `byte[]` of its size instead. |
 | `NinoArrayBufferWriter` | Written **in place**. Pooled from `ArrayPool<byte>.Shared`; reuse it with `ResetWrittenCount()`. |
 | Any other `IBufferWriter<byte>` (`ArrayBufferWriter<byte>`, `PipeWriter`...) | Written into a thread-local scratch buffer, then copied once into the writer. |
 | `ref Writer` | Written in place into the writer's `NinoArrayBufferWriter`. Lets you write several values back to back. |

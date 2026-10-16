@@ -8,14 +8,14 @@ Data outlives code. A save file, a cached asset or a message from an older clien
 
 | | Positional (default) | `versionTolerant: true` | `keyed: true` |
 | --- | :---: | :---: | :---: |
-| Append members at the end | ✗ | ✓ | ✓ |
-| Append members to a base class | ✗ | ✓ | ✓ |
+| Append members to a type without subclasses | ✗ | ✓ | ✓ |
+| Append members to a base class | ✗ | ✗ | ✓ |
 | Insert, remove or reorder members | ✗ | ✗ | ✓ |
 | Rename members | ✓ | ✓ | ✓ with `[NinoFormerName]` |
 | New code reads old data | ✗ | ✓ | ✓ |
 | Old code reads new data | ✗ | ✓ | ✓ |
-| Overhead | none | 4 bytes per hierarchy level | 8 bytes per member, plus 4 per object |
-| Speed | fastest | close to positional: one length per level | slower: a key and length per member, and a key check per member when reading |
+| Overhead | none | 4 bytes per object | 8 bytes per member, plus 4 per object |
+| Speed | fastest | close to positional: one length per object | slower: a key and length per member, and a key check per member when reading |
 
 The format itself is part of the data: turning `versionTolerant` or `keyed` on or off for a type makes data written before unreadable. Choose before you store anything.
 
@@ -45,15 +45,15 @@ public class Settings
 }
 ```
 
-Each level of the hierarchy (each `[NinoType]` class from the root down to the type) is written behind its own 4-byte length:
+The object's members, those of its `[NinoType]` base classes first, are written behind one 4-byte length, however deep the hierarchy is:
 
 - **Old data, new code:** members missing from the data keep the value they already have: the existing instance's value when you deserialize into it, otherwise whatever the constructor set, field initializers included. A 1.0 file loaded by 1.1 gets `MusicVolume = 0.8f`, not `0`. Types re-created through a constructor (positional records, get-only members) get `default` for a missing constructor argument, not the parameter's default value.
 - **New data, old code:** bytes the old code does not know are skipped.
-- Members can be appended to the type **or any of its base classes**, and this holds at any nesting depth: inside collections, dictionaries and polymorphic members.
+- Members can be appended to the **most derived type**, the end of the object's data, and this holds at any nesting depth: each tolerant object carries its own length, inside collections, dictionaries and polymorphic members too.
 
 <Callout type="warn">
 
-Not tolerated: inserting, removing or reordering members within a level, appending members to a `[NinoType]` interface (append them to a class), and adding or removing a `[NinoType]` class in the hierarchy. With `[NinoType(false)]`, give a new member an index greater than every existing one.
+Not tolerated: appending members to a base class that has `[NinoType]` subclasses (see [below](#appending-to-a-base-class)), inserting, removing or reordering members, appending members to a `[NinoType]` interface, and adding or removing a `[NinoType]` class in the hierarchy. With `[NinoType(false)]`, give a new member an index greater than every existing one.
 
 </Callout>
 
@@ -62,6 +62,35 @@ Not tolerated: inserting, removing or reordering members within a level, appendi
 Defining the symbol `WEAK_VERSION_TOLERANCE` in a project turns `versionTolerant` on for every type declared in that project; types from referenced assemblies keep their own format. Prefer the per-type option.
 
 </Callout>
+
+### Appending to a Base Class [#appending-to-a-base-class]
+
+The members of every level share the object's one length, root first. A member appended to a base class therefore lands **before** the members of its subclasses and shifts them:
+
+```csharp
+// Version 2 appends Armor to the base class
+[NinoType(versionTolerant: true)]
+public class Unit
+{
+    public int Hp;
+    public int Armor; // [!code ++]
+}
+
+public sealed class Archer : Unit
+{
+    public int Arrows;
+}
+
+// after its header, version 1 writes an Archer as  length | Hp | Arrows
+// and version 2 writes it as                        length | Hp | Armor | Arrows
+```
+
+- **Version 2 reads version 1 data:** `Armor` gets the bytes of `Arrows`, and the data ends before `Arrows`, which keeps its value like any missing member (`0` in a new `Archer`).
+- **Version 1 reads version 2 data:** `Arrows` gets the bytes of `Armor`, and the real `Arrows` is skipped as an unknown trailing member.
+
+Here the members have the same type, so the values are only wrong. When the types differ, the bytes are misread as another type: the result is wrong values or an `InvalidOperationException`. Nothing reports the mistake at compile time, because the generator only ever sees one version of your code.
+
+Instances of `Unit` itself are not affected (`Armor` is their last member); the data of every subclass is. So append members only to the classes at the bottom of a hierarchy, such as sealed message classes. A member that every subclass needs goes into each of them, or make the hierarchy [`keyed`](#keyed-members), whose members can be added to any class.
 
 ## Keyed Members
 
@@ -108,12 +137,12 @@ public class PlayerSave
 <Accordions type="single">
 <Accordion title="Messages between a client and a server">
 
-Positional, when both sides always run the same build. If clients and servers are upgraded at different times (rolling upgrades, old app versions in the wild), use `versionTolerant` and only ever **append** fields, or `keyed` if you also need to retire fields. See [Network Layer](/en/docs/v4/advanced/networking).
+Positional, when both sides always run the same build. If clients and servers are upgraded at different times (rolling upgrades, old app versions in the wild), use `versionTolerant` and only ever **append** fields to the message classes themselves (not to their shared base class), or `keyed` if you also need to retire fields or add them to the base. See [Network Layer](/en/docs/v4/advanced/networking).
 
 </Accordion>
 <Accordion title="Save games and user files">
 
-`versionTolerant` if you only add fields over time, `keyed` if you want the freedom to remove and reorder them. Add [`trackReferences`](/en/docs/v4/reference-tracking) when the saved graph shares objects or has cycles. See [Save Games and Persistence](/en/docs/v4/advanced/persistence).
+`versionTolerant` if you only add fields over time, to classes without subclasses; `keyed` if you want the freedom to remove and reorder them. Add [`trackReferences`](/en/docs/v4/reference-tracking) when the saved graph shares objects or has cycles. See [Save Games and Persistence](/en/docs/v4/advanced/persistence).
 
 </Accordion>
 <Accordion title="Configuration authored in the Unity editor">

@@ -115,7 +115,7 @@ public NinoTypeAttribute(
       default: 'true',
     },
     versionTolerant: {
-      description: <>Members can be appended later, to this type or any base class. See <a href="/en/docs/v4/evolving-data#version-tolerance">Version Tolerance</a>.</>,
+      description: <>Members can be appended later to the most derived type; a member appended to a base class shifts the members of its subclasses. See <a href="/en/docs/v4/evolving-data#version-tolerance">Version Tolerance</a>.</>,
       type: 'bool',
       default: 'false',
     },
@@ -256,7 +256,7 @@ public class ChatMessage
 }
 ```
 
-The attribute applies to every string the member's own formatter writes: the member itself, and the `string` elements, keys, values and tuple items of a collection or tuple member (`List<string>`, `string[]`, `Dictionary<string, int>`, `(string, int)`). Strings inside a nested `[NinoType]` keep that type's own encoding, and on a member that holds no strings the attribute does nothing. Writer and reader must agree: data written as UTF-8 cannot be read by a type that declares the member without `[NinoUtf8]`. Both encodings write the length in chars, not in bytes, so a UTF-8 string is decoded in one pass into a string allocated at its final size (see [Binary Format](/en/docs/v4/platforms#binary-format)).
+The attribute applies to every string the member's own formatter writes: the member itself, and the `string` elements, keys, values and tuple items of a collection or tuple member (`List<string>`, `string[]`, `Dictionary<string, int>`, `(string, int)`). Strings inside a nested `[NinoType]` keep that type's own encoding, and on a member that holds no strings the attribute does nothing. Writer and reader must agree: data written as UTF-8 cannot be read by a type that declares the member without `[NinoUtf8]`. A UTF-8 string is written with its length in chars and its length in bytes, so the reader allocates the string at its final size and transcodes exactly its bytes into it in one pass (see [Binary Format](/en/docs/v4/platforms#binary-format)).
 
 ## Former Name
 
@@ -277,7 +277,7 @@ On a field or property of a `keyed` type, `[NinoFormerName("OldName")]` (repeata
 
 ## Structs
 
-A `[NinoType]` struct has no header at all. When it is unmanaged, not `versionTolerant` or `keyed`, uses the default sequential layout, has no custom member formatters and every instance field is serialized, it is written as its **raw memory**: one copy, and arrays and lists of it as one block. Otherwise it is written member by member.
+A `[NinoType]` struct has no header at all. When it is unmanaged, not `versionTolerant` or `keyed`, uses the default sequential layout, has no custom member formatters and every instance field is serialized, it is written as its **raw memory**: one copy, and arrays and lists of it as one block. Otherwise it is written member by member. Either way, a struct whose members are all unmanaged values or such structs is [fixed-size](/en/docs/v4/performance#fixed-size-types): `NinoSerializer.Serialize(value)` writes it straight into a `byte[]` of its size.
 
 ```csharp
 [NinoType]

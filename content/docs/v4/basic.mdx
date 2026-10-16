@@ -40,7 +40,7 @@ byte[] bytes = NinoSerializer.Serialize(player);
 
 ### Reusing a Buffer
 
-`Serialize<T>(value)` allocates one `byte[]` for the result. To allocate nothing, serialize into a buffer you keep.
+`Serialize<T>(value)` allocates one `byte[]` for the result. For a [fixed-size type](/en/docs/v4/performance#fixed-size-types) that array is allocated at its final size and written in place; other values are written into a per-thread scratch buffer and copied out. To allocate nothing, serialize into a buffer you keep.
 
 `NinoArrayBufferWriter` is Nino's own `IBufferWriter<byte>`, backed by `ArrayPool<byte>.Shared`. Nino writes into it **in place**. Any other `IBufferWriter<byte>` (.NET's `ArrayBufferWriter<byte>`, a `PipeWriter`, a writer wrapping a `Stream`) receives the bytes with one extra copy at the end.
 
@@ -200,7 +200,7 @@ An object graph with a **cycle** (`a.Next = b; b.Next = a;`) would be written fo
 
 ## Invalid Data
 
-Every length read from a payload is checked against the bytes left before anything is allocated, so malformed or hostile input cannot trigger huge allocations. Invalid data throws an `InvalidOperationException` whose message starts with `Nino:`: truncated data ("unexpected end of data"), an impossible length, an unknown type id, a type id that is not a subtype of the declared type, or a `[NinoUtf8]` string that is not valid UTF-8. Nothing reads past the end of the span.
+Every length read from a payload is checked against the bytes left before anything is allocated, so malformed or hostile input cannot trigger huge allocations. Invalid data throws an `InvalidOperationException` whose message starts with `Nino:`: truncated data ("unexpected end of data"), an impossible length, an unknown type id, a type id that is not a subtype of the declared type, or a `[NinoUtf8]` string whose bytes are not valid UTF-8 or do not match its char and byte counts. Nothing reads past the end of the span.
 
 Deeply nested data cannot overflow the stack either: see [Deep Object Graphs](#deep-object-graphs).
 

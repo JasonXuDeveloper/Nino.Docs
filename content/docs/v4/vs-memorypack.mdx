@@ -68,7 +68,7 @@ Full tables: [Benchmarks](/en/docs/v4/perf).
 | Subtypes in other assemblies | ✅ automatic | ⚠️ `[MemoryPackUnionFormatter]`; in Unity, registered manually at startup |
 | Hot-update assemblies (HybridCLR) | ✅ found lazily, no init call | — not documented |
 | **Evolving data** | | |
-| Append members | ✅ `versionTolerant` (also to base classes) | ✅ default mode (new code reads old data only) |
+| Append members | ✅ `versionTolerant` (most derived type), `keyed` (any class) | ✅ default mode (new code reads old data only) |
 | Old code reads new data | ✅ `versionTolerant`, `keyed` | ✅ `GenerateType.VersionTolerant` |
 | Remove members | ✅ `keyed` | ✅ `VersionTolerant` with explicit orders |
 | Reorder or insert members | ✅ `keyed` | ❌ |
@@ -119,7 +119,7 @@ The cost is 3 more bytes per polymorphic value. See [Polymorphism](/en/docs/v4/p
 
 - **Speed**: up to <BenchValue k="serialize.max" /> faster serialization and up to <BenchValue k="deserialize.max" /> faster deserialization of classes and polymorphic graphs, with the numbers above.
 - **Zero-allocation reuse**: reuse deserialization that reuses nested objects, lists and dictionaries, `[NinoPooled]` pools, and a recycler for every instance that is dropped.
-- **Data that changes**: keyed members can be reordered, removed and inserted; version-tolerant types accept members appended to base classes; old code reads new data.
+- **Data that changes**: keyed members can be reordered, removed and inserted, in any class of a hierarchy; old code reads new data in both keyed and version-tolerant types.
 - **Polymorphism without bookkeeping**: no tags, any non-sealed class, subtypes in other assemblies and hot-update DLLs found automatically.
 - **Portable, deterministic bytes**: identical on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, with padding zeroed.
 - **Wider reach**: `netstandard2.0`, OpenUPM for Unity, HybridCLR without init calls.

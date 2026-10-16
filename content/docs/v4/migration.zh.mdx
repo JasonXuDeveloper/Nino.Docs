@@ -145,9 +145,17 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 
 ### v4 beta 之后的行为变化 [#behavior-changes-since-the-v4-betas]
 
-4.0.0-rc.1 还改变了三处行为，基于 beta 编写的代码和数据可能依赖它们：
+4.0.0-rc.1 还改变了以下行为，基于 beta 编写的代码和数据可能依赖它们：
 
-- **`[NinoUtf8]` 字符串改以字符数作前缀**，与 UTF-16 字符串相同，而不再是字节数。beta 写出的、含 `[NinoUtf8]` 成员的数据无法读取；不含这类成员的数据不受这项变化影响。参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
+<Callout type="warn">
+
+**beta 写出的数据，如果含有 `versionTolerant` 类型（包括定义了 `WEAK_VERSION_TOLERANCE` 的项目中的所有类型）或 `[NinoUtf8]` 字符串，4.0.0-rc.1 无法读取。** 请用 beta 读出，再用 rc.1 重新写入（参见[读取旧版本写出的数据](/zh/docs/v4/versioning#reading-data-from-an-older-version)），或者丢弃这些数据。
+
+</Callout>
+
+- **`[NinoUtf8]` 字符串同时记录字符数和字节数。** 先写 UTF-16 字符数，与 UTF-16 字符串相同；不是 `null` 也不是空串时，再写字节数和 UTF-8 字节。beta 只写字节数。参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
+- **`versionTolerant` 对象为整个继承体系只写一个长度**，而不再是每层继承一个长度。因此成员只能追加到最末端的派生类型：向拥有子类的基类追加成员，现在会让子类的成员错位。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
+- **固定大小的类型直接序列化到大小正好的数组中。** 对所有成员都是固定大小的结构体或密封类调用 `NinoSerializer.Serialize(value)`，会直接按最终大小分配结果并写入，不经过临时缓冲区，也没有拷贝；写出的字节不变。新增了 `NinoSerializer.GetFixedSize<T>()`。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
 - **`NinoFormatterCache<T>.Register<TFormatter>()` 必须在 `T` 第一次使用之前调用。** `T` 第一次被序列化或反序列化时，它的格式化器就固定下来；之后再注册会抛出 `InvalidOperationException`，而不是只对部分调用生效。请把这类调用移到启动代码中。参见[运行时注册](/zh/docs/v4/custom-formatters#registering-at-run-time)。
 - **`ReadSlice()` 返回的 reader，其 `Reader.Position` 是在整个输入中的偏移**，而不是从切片起点算起。如果自定义格式化器拿它与切片长度比较，应在切片开始时记下位置，再做减法。参见[切片中的位置](/zh/docs/v4/custom-formatters#positions-in-a-slice)。
 
@@ -184,7 +192,7 @@ public class SaveData
 </Tab>
 </Tabs>
 
-v4 的版本兼容比 v3 更灵活：成员可以追加到该类型**或任意一层基类**的末尾。如果要调整顺序、删除或插入成员，请使用 `[NinoType(keyed: true)]`。参见[版本兼容](/zh/docs/v4/evolving-data#version-tolerance)和[键控成员](/zh/docs/v4/evolving-data#keyed-members)。
+v4 的版本兼容按类型设置。成员可以追加到**最末端的派生类型**（没有 `[NinoType]` 子类的类），在任意嵌套深度都成立，旧代码会跳过它不认识的成员；追加到基类的成员会让子类的成员错位，不被兼容。如果要调整顺序、删除或插入成员，或向基类添加成员，请使用 `[NinoType(keyed: true)]`。参见[版本兼容](/zh/docs/v4/evolving-data#version-tolerance)和[键控成员](/zh/docs/v4/evolving-data#keyed-members)。
 
 <Callout type="warn">
 

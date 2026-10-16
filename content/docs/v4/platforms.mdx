@@ -28,13 +28,13 @@ All multi-byte values are **little-endian** and written unaligned. There is no s
 | `T?` | 1 byte has-value flag, then the value if present |
 | Length of a string, array or collection | `int32`; `-1` means `null` |
 | `string` | `int32` length in UTF-16 chars (`-1` = null), then the UTF-16 code units |
-| `string` with `[NinoUtf8]` | `int32` length in UTF-16 chars (`-1` = null), then the UTF-8 bytes |
+| `string` with `[NinoUtf8]` | `int32` length in UTF-16 chars (`-1` = null, `0` = empty), then `int32` length in bytes, then the UTF-8 bytes |
 | Array or list of unmanaged `T` | length, then one block of elements |
 | Other collections | length, then each element |
 | Dictionary | length, then key/value pairs |
 | `T[,]` and higher ranks | each dimension's length, then elements in row-major order |
 
-Both string encodings start with the same prefix: the string's length in UTF-16 chars (`string.Length`; `-1` for `null`, `0` for an empty string). A `[NinoUtf8]` string carries no byte count, and nothing marks where its bytes end. The reader allocates the string at its final length and decodes the bytes that follow into it in one pass, stopping as soon as the string is full; the bytes it decoded are the string's, and the next value starts right after them. A length larger than the bytes left is rejected before anything is allocated, since every char takes at least one byte. Data that ends early, is not valid UTF-8 (overlong forms and encoded surrogates included) or would end in the middle of a surrogate pair throws an `InvalidOperationException`. When writing, an unpaired surrogate is encoded as U+FFFD, which is one char as well, so the length always matches the string that is read back.
+Both string encodings start with the same prefix: the string's length in UTF-16 chars (`string.Length`; `-1` for `null`, `0` for an empty string). Nothing follows the prefix of a `null` or empty string. A non-empty `[NinoUtf8]` string then carries its length in bytes, followed by exactly that many UTF-8 bytes. The reader allocates the string at its final length in chars and transcodes exactly the given number of bytes into it, in one pass; the next value starts right after them. A byte count larger than the bytes left, a char count that does not match the decoded bytes, and bytes that are not valid UTF-8 (overlong forms and encoded surrogates included) or end in the middle of a character throw an `InvalidOperationException`. When writing, an unpaired surrogate is encoded as U+FFFD, which is one char as well, so the char count always matches the string that is read back.
 
 Objects get a header that depends on the **declared** type:
 
@@ -44,7 +44,17 @@ Objects get a header that depends on the **declared** type:
 | `sealed class` | 1 byte: `0` = null, `1` = instance |
 | non-sealed class, abstract class, interface | `int32` type id: `0` = null, otherwise the runtime type's id |
 
-The type id is the FNV-1a hash of the type's name in runtime form (`Namespace.Outer+Inner`). The same hash code is compiled into the generator and the runtime, so ids cannot diverge. `versionTolerant` types add a length per hierarchy level, `keyed` types a key and length per member, and `trackReferences` types a reference header; see [Evolving Your Data](/en/docs/v4/evolving-data) and [Reference Tracking](/en/docs/v4/reference-tracking).
+The type id is the FNV-1a hash of the type's name in runtime form (`Namespace.Outer+Inner`). The same hash code is compiled into the generator and the runtime, so ids cannot diverge.
+
+The body after the header depends on the type's format:
+
+| Format | Body |
+| --- | --- |
+| positional (default) | the members, those of `[NinoType]` base classes first |
+| `versionTolerant` | `int32` byte length, then the members of the whole hierarchy, root first: one length per object, whatever the depth |
+| `keyed` | `int32` byte length, then `int32` key, `int32` length and value for each member |
+
+A `trackReferences` type adds an `int32` reference header (`0` = null, `n > 0` = the n-th object already written, `-1` = a new object, followed by its usual encoding). See [Evolving Your Data](/en/docs/v4/evolving-data) and [Reference Tracking](/en/docs/v4/reference-tracking).
 
 Every length read from a payload is validated against the bytes left before anything is allocated, so malformed or hostile input cannot trigger huge allocations, and truncated data throws instead of reading past the end.
 

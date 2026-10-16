@@ -212,6 +212,7 @@ public sealed class ParticleSystemState
 - Arrays and `List<T>` of unmanaged elements are one copy.
 - A struct with a `string` or an array inside is not raw; keep those in a separate class if the struct is hot.
 - `versionTolerant`, `keyed` and custom member formatters turn raw copying off for that struct.
+- A struct or sealed class made only of unmanaged members is [fixed-size](/en/docs/v4/performance#fixed-size-types): `NinoSerializer.Serialize(value)` writes it straight into a `byte[]` of its size, with no scratch buffer or copy.
 
 ### Deterministic Bytes
 

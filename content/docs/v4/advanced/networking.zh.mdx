@@ -39,7 +39,7 @@ public sealed class Chat : Message
 
 - 把消息和 `Message` 声明在同一个程序集中：这样 Nino 会用生成的代码分派（写入时是一串类型判断，读取时是对 ID 的 `switch`），而不是查注册表。把它们声明为 `sealed`，这样声明为 `Move` 的成员只需 1 字节头部，而不是 4 字节 ID。
 - 类型 ID 来自类型名，所以给消息类改名或换命名空间会导致旧版本的对端无法识别。改名时请使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
-- `versionTolerant` 让你以后可以添加字段，参见[滚动升级](#rolling-upgrades)。子类型会随 `[NinoType]` 一起继承它；如果给某个消息单独加了 `[NinoType]`，记得在那里也写上 `versionTolerant: true`。
+- `versionTolerant` 让你以后可以给各个消息添加字段（不能加到 `Message` 本身），参见[滚动升级](#rolling-upgrades)。子类型会随 `[NinoType]` 一起继承它；如果给某个消息单独加了 `[NinoType]`，记得在那里也写上 `versionTolerant: true`。
 
 用普通的模式匹配分发消息：
 
@@ -225,11 +225,11 @@ void OnFrame(ReadOnlySpan<byte> frame)
 | 改动 | 按位置 | `versionTolerant` | `keyed` |
 | --- | :---: | :---: | :---: |
 | 在消息末尾新增字段 | ✗ | ✓ | ✓ |
-| 在 `Message` 基类中新增字段 | ✗ | ✓ | ✓ |
+| 在 `Message` 基类中新增字段 | ✗ | ✗ 所有消息的字段都会错位 | ✓ |
 | 删除或重排字段 | ✗ | ✗ | ✓ |
 | 新增消息类型 | 旧对端无法读取 | 旧对端无法读取 | 旧对端无法读取 |
 
-- 在基类上设置 `versionTolerant`（所有消息都会继承），旧对端会跳过它不认识的字段，新对端上缺失的字段保留消息构造时的值（可以用 `public int Priority = 1;` 这样的字段初始化器为旧版发送方指定默认值）。复用或池化的消息是原地填充的，这时缺失的字段保留的是**上一条**消息的值：请在 `OnNinoPoolReturn` 中重置这些字段，或者在还有旧版对端连接时不要复用实例。
+- 在基类上设置 `versionTolerant`（所有消息都会继承），旧对端会跳过它不认识的字段，新对端上缺失的字段保留消息构造时的值（可以用 `public int Priority = 1;` 这样的字段初始化器为旧版发送方指定默认值）。只向密封的消息类添加字段：`Message` 的成员写在每个消息自己的成员之前，向 `Message` 追加字段会让新旧对端在错误的位置读取彼此的字段（参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)）。如果要添加每个消息都带的字段，把整个继承体系改为 `keyed`，或者分别加到每个消息中。复用或池化的消息是原地填充的，这时缺失的字段保留的是**上一条**消息的值：请在 `OnNinoPoolReturn` 中重置这些字段，或者在还有旧版对端连接时不要复用实例。
 - 对端收到**它不认识的消息类型**时无法反序列化，调用会抛出 `InvalidOperationException`（未知的类型 ID）。请在握手时协商协议版本，只向声明支持的对端发送新的消息类型；如果想交换消息类型列表，`NinoTypeId.Of(typeof(T))` 可以给出每种消息的 ID。
 - 如果两端总是一起发布（游戏客户端和它的专用服务器），就保持按位置格式：它最小也最快。
 
