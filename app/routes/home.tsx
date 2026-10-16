@@ -117,7 +117,7 @@ const copy: Record<
       {
         icon: GitBranch,
         label: '数据可演进',
-        text: '键控成员、版本兼容与引用追踪，按类型选择。',
+        text: '键控成员、版本容错与引用追踪，按类型选择。',
       },
       {
         icon: Hammer,

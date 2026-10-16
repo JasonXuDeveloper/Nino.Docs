@@ -65,7 +65,7 @@ public sealed class TickDelta
 它作用于单个字段或属性，无论外层类型在哪里被序列化都会生效。使用自定义格式化器的成员不会参与原始内存结构体的整块写入。格式化器不是结构体，或者针对的类型不对时，分析器会报告 NINO008。
 
 ## 用于整个类型：`[assembly: NinoFormatter]` [#for-a-type-assembly-ninoformatter]
-要让 Nino 支持它不认识的类型（你自己的或第三方的），在程序集上注册一个格式化器。类型参数和元素格式化器都会被自动推断：约束为 `INinoFormatter<E>` 的类型参数会得到 Nino 为 `E` 解析出的格式化器，所以元素的序列化和反序列化会被内联。生成代码直接调用这个格式化器，运行时也使用同一份注册信息。
+要让 Nino 支持它不认识的类型（你自己的或第三方的），在程序集上注册一个格式化器。类型参数和元素格式化器都会自动推断：约束为 `INinoFormatter<E>` 的类型参数会得到 Nino 为 `E` 解析出的格式化器，因此元素的序列化和反序列化都能内联。生成代码直接调用这个格式化器，运行时也使用同一份注册信息。
 
 ```csharp
 [assembly: NinoFormatter(typeof(RingFormatter<,>))]
@@ -208,10 +208,10 @@ NinoDeserializer.Deserialize(ref owner, ref reader);
 NinoFormatterCache<Ring<int>>.Register<RingFormatter<int, UnmanagedFormatter<int>>>();
 ```
 
-它会被顶层的 `NinoSerializer`/`NinoDeserializer` 调用使用（包括被拦截的调用和装箱重载），也会被通过格式化器缓存访问 `T` 的成员使用（泛型 `[NinoType]` 的类型参数、其他程序集中的类型）。生成器在编译期已经确定格式化器的成员不受影响。一般情况下，请优先使用对所有地方都生效的 `[assembly: NinoFormatter]`。
+使用它的有：顶层的 `NinoSerializer`/`NinoDeserializer` 调用（包括拦截后的调用和装箱重载），以及通过格式化器缓存访问 `T` 的成员（泛型 `[NinoType]` 的类型参数、其他程序集中的类型）。生成器在编译期就已确定格式化器的成员不受影响。一般情况下，请优先使用对所有地方都生效的 `[assembly: NinoFormatter]`。
 
 <Callout type="warn">
 
-`T` 第一次经由上述任一途径被序列化或反序列化后，它使用的格式化器在整个进程中就固定下来。此后再为 `T` 注册格式化器（即使是同一个）会抛出 `InvalidOperationException`，而不是被已经在用旧格式化器的代码悄悄忽略。
+`T` 第一次经由上述任一途径被序列化或反序列化后，它使用的格式化器在整个进程中就固定下来。此后再为 `T` 注册格式化器（即使是同一个）会抛出 `InvalidOperationException`，而不是让已经在用旧格式化器的代码悄悄忽略它。
 
 </Callout>
