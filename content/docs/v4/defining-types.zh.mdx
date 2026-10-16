@@ -4,7 +4,7 @@ description: "用 [NinoType] 标记类、结构体、记录和接口，并决定
 icon: Braces
 ---
 
-任何标记了 `[NinoType]` 的 `class`、`struct`、`record`、`record struct` 或 `interface` 都可以序列化。源生成器在编译期写好它的格式化器，无需注册。本页介绍哪些成员会被写入、写入顺序，以及改变格式的各个选项。
+任何标记了 `[NinoType]` 的 `class`、`struct`、`record`、`record struct` 或 `interface` 都可以序列化。源生成器在编译期生成它的格式化器，无需注册。本页介绍哪些成员会写入、按什么顺序写入，以及哪些选项会改变格式。
 
 ```csharp
 using Nino.Core;
@@ -120,19 +120,19 @@ public NinoTypeAttribute(
       default: 'false',
     },
     keyed: {
-      description: <>每个成员带键写入，之后可以重排、删除和插入成员。参见<a href="/zh/docs/v4/evolving-data#keyed-members">键控成员</a>。</>,
+      description: <>每个成员带键写入，之后可以调整顺序、删除和插入成员。参见<a href="/zh/docs/v4/evolving-data#keyed-members">键控成员</a>。</>,
       type: 'bool',
       default: 'false',
     },
     trackReferences: {
-      description: <>仅适用于类。共享引用和循环引用在序列化前后保持不变。参见<a href="/zh/docs/v4/reference-tracking">引用追踪</a>。</>,
+      description: <>仅适用于类。共享引用和循环引用在序列化往返后保持不变。参见<a href="/zh/docs/v4/reference-tracking">引用追踪</a>。</>,
       type: 'bool',
       default: 'false',
     },
   }}
 />
 
-建议使用命名参数，便于阅读：`[NinoType(versionTolerant: true)]`。不带参数的 `[NinoType]` 是最快、最紧凑的格式：按位置写入，每个成员没有额外开销。
+建议使用命名参数，方便阅读：`[NinoType(versionTolerant: true)]`。不带参数的 `[NinoType]` 是最快、最紧凑的格式：按位置写入，每个成员没有额外开销。
 
 ## 哪些成员会被序列化 [#which-members-are-serialized]
 
@@ -144,11 +144,11 @@ public NinoTypeAttribute(
 
 以下成员会被跳过：
 
-- **只有 getter 的自动属性**（`public int Id { get; }`），除非某个构造函数有同名参数（不区分大小写）接收它，因为没有别的办法能还原它的值。参见[构造函数](/zh/docs/v4/constructors)；
-- **显式接口实现**（`int IHasId.Id { get; set; }`），生成代码无法通过名称访问它。`[NinoType]` 接口的成员会通过实现类型中同名的成员来序列化；
-- 类型无法序列化的成员（委托、`Task`、指针等），会报告警告 NINO007。
+- **只有 getter 的自动属性**（`public int Id { get; }`），除非某个构造函数有同名参数（不区分大小写），因为没有别的办法能还原它的值。参见[构造函数](/zh/docs/v4/constructors)；
+- **显式接口实现**（`int IHasId.Id { get; set; }`），因为生成代码无法通过名称访问它。`[NinoType]` 接口的成员会通过实现类型中同名的成员来序列化；
+- 类型无法序列化的成员（委托、`Task`、指针等），并报告警告 NINO007。
 
-`override` 成员与它重写的成员视为同一个，只收集一次。用 `new` 隐藏基类成员时，两者是不同的成员，都会被序列化，基类的在前。如果被隐藏的基类成员不是公共的，生成代码只能通过 `[UnsafeAccessor]` 访问它（.NET 8+，且限于非泛型类型）；否则会跳过该成员并报告警告 NINO022。
+`override` 成员和它重写的成员算作同一个，只收集一次。用 `new` 隐藏基类成员时，两者是不同的成员，都会序列化，基类的在前。如果被隐藏的基类成员不是公共的，生成代码只能通过 `[UnsafeAccessor]` 访问它（.NET 8+，且限于非泛型类型）；否则会跳过该成员并报告警告 NINO022。
 
 ### 忽略成员 [#ignoring-a-member]
 
@@ -216,11 +216,11 @@ public partial class Account
 - 没有设置 `containNonPublicMembers` 却给非公开成员标记 `[NinoMember]`，会报错（NINO009）。
 - 基类的私有成员永远不属于子类型。
 
-编译器看不到生成的访问器，因此 Nino 会屏蔽它所序列化的私有成员上“字段从未使用 / 从未赋值”之类的警告。
+编译器看不到生成的访问器，所以在 Nino 要序列化的私有成员上，Nino 会屏蔽“字段从未使用 / 从未赋值”之类的编译器警告。
 
 ## 成员顺序 [#member-order]
 
-不使用 `keyed: true` 时，成员顺序**就是**数据格式。默认先写基类成员，再按声明顺序写入，除非用以下方式改变：
+不使用 `keyed: true` 时，成员顺序**就是**数据格式。默认先写基类成员，再按声明顺序写类型自身的成员。可以用以下方式改变顺序：
 
 - `[NinoType(false)]` 配合 `[NinoMember(index)]`：按索引升序。
 - 在类、结构体或接口上使用 `[NinoExplicitOrder(...)]`：先按给定顺序写入列出的成员（按名称），其余成员随后按声明顺序写入。
@@ -238,13 +238,13 @@ public class Ordered
 
 <Callout type="warn">
 
-调整顺序、插入或删除成员（或修改索引）都会让之前写出的数据无法读取。如果数据需要长期保存，请提前规划[版本容错或键控成员](/zh/docs/v4/evolving-data)。
+调整顺序、插入或删除成员（或修改索引）都会让之前写出的数据无法读取。请提前用[版本容错或键控成员](/zh/docs/v4/evolving-data)为将来的改动做好准备。
 
 </Callout>
 
 ## 字符串编码 [#string-encoding]
 
-字符串默认以 UTF-16 写入：一个长度加一次整块拷贝，速度最快。给成员加上 `[NinoUtf8]` 则改为 UTF-8，以 ASCII 为主的文本体积可减半，代价是需要转码（运行时已做向量化）。适合字节比 CPU 更贵的场景：要广播给大量客户端的聊天内容和玩家昵称，或者落盘的大型文本表。以中文为主的文本请保持 UTF-16：每个汉字在 UTF-8 下占 3 字节，在 UTF-16 下只占 2 字节。
+字符串默认以 UTF-16 写入：一个长度加一次整块拷贝，速度最快。给成员加上 `[NinoUtf8]` 则改为 UTF-8，以 ASCII 为主的文本体积可减半，代价是需要转码（运行时已做向量化）。适合字节比 CPU 更贵的场景：要广播给大量客户端的聊天内容和玩家昵称，或者落盘的大型文本表。以中日韩文字为主的文本请保持 UTF-16：这类字符在 UTF-8 下每个占 3 字节，在 UTF-16 下只占 2 字节。
 
 ```csharp
 [NinoType]
@@ -256,11 +256,11 @@ public class ChatMessage
 }
 ```
 
-该特性作用于这个成员的格式化器直接写出的所有字符串：成员本身，以及集合或元组成员中的 `string` 元素、键、值和元组项（`List<string>`、`string[]`、`Dictionary<string, int>`、`(string, int)`）。嵌套的 `[NinoType]` 内部的字符串仍按那个类型自己的设置编码；成员中不含字符串时，该特性不起作用。读写双方必须一致：以 UTF-8 写出的数据，不能由一个没有给该成员标 `[NinoUtf8]` 的类型读取。UTF-8 字符串会同时写入字符数和字节数，因此读取时可以按最终长度分配字符串，再把它的字节一遍转码进去（参见[二进制格式](/zh/docs/v4/platforms#binary-format)）。
+该特性作用于这个成员的格式化器直接写出的所有字符串：成员本身，以及集合或元组成员中的 `string` 元素、键、值和元组项（`List<string>`、`string[]`、`Dictionary<string, int>`、`(string, int)`）。嵌套的 `[NinoType]` 里的字符串仍按那个类型自己的设置编码；成员中不含字符串时，该特性不起作用。读写双方必须一致：以 UTF-8 写出的数据，不能由一个没有给该成员标 `[NinoUtf8]` 的类型读取。UTF-8 字符串会同时写入字符数和字节数，所以读取时可以按最终长度分配字符串，再一次性把这些字节转码进去（参见[二进制格式](/zh/docs/v4/platforms#binary-format)）。
 
-## 曾用名 [#former-name]
+## 旧名称 [#former-name]
 
-声明类型为非密封类、抽象类、接口或 `object` 的位置上，值会连同其运行时类型的**类型 ID** 一起写入。类型 ID 是该类型全名的 32 位哈希，读取时据此还原成正确的类型。类型改名或换命名空间后，ID 也会变，密封的子类型也不例外，例如通过 `Message` 基类发送的各个消息类。典型场景：你把协议类从 `Game.Net` 挪到了 `Game.Protocol`，而上个版本的存档或客户端用的还是旧 ID。用 `[NinoFormerName]` 可以继续读取旧数据：
+如果槽位的声明类型是非密封类、抽象类、接口或 `object`，值会连同它运行时类型的**类型 ID** 一起写入。类型 ID 是类型全名的 32 位哈希，读取时靠它还原成正确的类型。类型改名或换命名空间后，ID 也会变，密封的子类型也一样，例如通过 `Message` 基类发送的各个消息类。典型场景：你把协议类从 `Game.Net` 挪到了 `Game.Protocol`，而上个版本的存档或客户端用的还是旧 ID。用 `[NinoFormerName]` 可以继续读取旧数据：
 
 ```csharp
 [NinoType]
@@ -271,13 +271,13 @@ public class ItemRenamed
 }
 ```
 
-曾用名使用全名的**运行时形式**：`Namespace.Type`，嵌套类型与外层类型之间用 `+` 连接（`Namespace.Outer+Inner`），不带 `global::`。类型 ID 由曾用名计算，所以改名后的类型仍写出旧读取方认识的 ID，而读取方用新旧两个名字都能找到它。`NinoTypeId.Of(typeof(T))` 可以查看某个类型写出的 ID。
+旧名称使用全名的**运行时形式**：`Namespace.Type`，嵌套类型与外层类型之间用 `+` 连接（`Namespace.Outer+Inner`），不带 `global::`。类型 ID 由旧名称计算，所以改名后的类型仍然写出旧读取方认识的 ID，读取方用新旧两个名字都能找到它。`NinoTypeId.Of(typeof(T))` 可以查看某个类型写出的 ID。
 
 在 `keyed` 类型的字段或属性上，`[NinoFormerName("OldName")]`（可重复使用）可以继续读取以成员旧名称写出的数据，参见[重命名键控成员](/zh/docs/v4/evolving-data#renaming-keyed-members)。按位置和版本容错的类型不写成员名，重命名成员时什么都不用做。
 
 ## 结构体 [#structs]
 
-`[NinoType]` 结构体没有任何头部。当它是非托管类型、未启用 `versionTolerant` 或 `keyed`、使用默认的顺序布局、没有自定义成员格式化器，并且每个实例字段都参与序列化时，会按**原始内存**写入：单个值一次拷贝，它的数组和列表也是整块拷贝。否则逐个成员写入。无论哪种情况，只要所有成员都是非托管值或这样的结构体，它就是[固定大小的](/zh/docs/v4/performance#fixed-size-types)：`NinoSerializer.Serialize(value)` 会把它直接写进大小正好的 `byte[]`。
+`[NinoType]` 结构体没有任何头部。满足以下条件时，它按**原始内存**写入：是非托管类型，没有开启 `versionTolerant` 或 `keyed`，使用默认的顺序布局，没有自定义成员格式化器，并且每个实例字段都参与序列化。这时单个值只需一次拷贝，它的数组和列表也是整块拷贝。否则逐个成员写入。无论哪种情况，只要所有成员都是非托管值或这样的结构体，它就是[固定大小的](/zh/docs/v4/performance#fixed-size-types)：`NinoSerializer.Serialize(value)` 会把它直接写进大小正好的 `byte[]`。
 
 ```csharp
 [NinoType]
@@ -289,17 +289,17 @@ public struct Hit          // raw: one 16-byte copy, no padding
 }
 ```
 
-如果一个结构体最终没有任何成员参与序列化（所有字段都被忽略），会报错（NINO023）：它会被写成 0 字节，由它组成的集合将无法读回。请至少序列化一个成员，或者把它标记为 `versionTolerant` 或 `keyed`。
+如果一个结构体最终没有任何成员参与序列化（所有字段都被忽略），会报错（NINO023）：它会被写成 0 字节，由它组成的集合也无法读回。请至少序列化一个成员，或者把这个结构体标记为 `versionTolerant` 或 `keyed`。
 
 <Callout type="warn">
 
-原始内存结构体按规范的字段顺序写入：调整字段顺序或修改 `StructLayout` 都会破坏已有数据。如果想避免按原始内存拷贝，可以把它标记为 `versionTolerant`（或用 `[NinoIgnore]` 忽略某个字段）。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+原始结构体按规范的字段顺序写入：调整字段顺序或修改 `StructLayout` 都会破坏已有数据。如果想避免按原始内存拷贝，可以把它标记为 `versionTolerant`（或用 `[NinoIgnore]` 忽略某个字段）。参见[平台与二进制格式](/zh/docs/v4/platforms)。
 
 </Callout>
 
 ## 记录 [#records]
 
-位置记录（positional record）通过主构造函数创建，其参数就是参与序列化的属性。带有成员体的记录与普通类相同。
+位置记录（positional record）通过主构造函数创建，构造函数的参数就是参与序列化的属性。带类体的记录和普通类一样。
 
 ```csharp
 [NinoType]
@@ -309,7 +309,7 @@ public record Point(int X, int Y);
 public record struct Range(int Start, int Length);
 ```
 
-由于这些属性是 `init` 只读的，位置记录每次反序列化都会重新创建，即使是反序列化到已有实例也一样，因此不能使用 [`trackReferences`](/zh/docs/v4/reference-tracking) 或 [`[NinoPooled]`](/zh/docs/v4/pooling)。需要这些功能时，请使用属性可写的记录。实例的创建方式参见[构造函数](/zh/docs/v4/constructors)。
+由于这些属性只有 `init` 访问器，位置记录每次反序列化都会重新创建，即使是反序列化到已有实例也一样，因此不能使用 [`trackReferences`](/zh/docs/v4/reference-tracking) 或 [`[NinoPooled]`](/zh/docs/v4/pooling)。需要这些功能时，请使用属性可写的记录。实例的创建方式参见[构造函数](/zh/docs/v4/constructors)。
 
 ## 泛型类型 [#generic-types]
 
@@ -324,17 +324,17 @@ public class Box<T>
 public record struct Pair<TKey, TValue>(TKey Key, TValue Value);
 ```
 
-每个泛型 `[NinoType]` 定义只生成一个格式化器，而不是每个封闭类型各一个。类型参数必须是可序列化的类型（`Box<int>`、`Box<List<string>>`、`Box<Player>`）。生成器会注册编译中出现过的所有封闭类型（成员类型、基类型、`NinoSerializer`/`NinoDeserializer` 调用的类型参数），确保 AOT 平台具备所需的实例化；其余的由运行时在首次使用时构造。
+每个泛型 `[NinoType]` 定义只生成一个格式化器，而不是每个封闭类型各一个。类型参数必须是可序列化的类型（`Box<int>`、`Box<List<string>>`、`Box<Player>`）。生成器会注册 Compilation 中出现过的所有封闭类型（成员类型、基类型、`NinoSerializer`/`NinoDeserializer` 调用的类型参数），确保 AOT 平台有需要的实例化；其余的由运行时在第一次用到时构造。
 
 <Callout type="warn">
 
-如果某个封闭泛型类型在进程中只会被多态地**读取**（按类型 ID），代码中既不出现它的名字，也从不写入它，就需要在启动时注册：`NinoPolymorphic.Register<Box<int>>()`。这种情况只出现在通过反射或在其他程序集中构造的实例化上。
+如果进程只会多态地**读取**某个封闭泛型类型（按类型 ID），代码中既不出现它的名字，也从不写入它，就需要在启动时注册：`NinoPolymorphic.Register<Box<int>>()`。只有通过反射或在其他程序集中构造的实例化，才会遇到这种情况。
 
 </Callout>
 
 ## 继承 [#inheritance]
 
-子类型会从最近的 `[NinoType]` 基类或接口继承 `[NinoType]` 及其选项；如果想给子类型单独设置选项，在子类型上再加一个 `[NinoType]` 即可。子类型自己的 `[NinoType]` 会取代继承来的选项，所以需要保留的选项要重新写上：例如版本容错基类的子类型应写成 `[NinoType(versionTolerant: true)]`。唯一的例外是 `trackReferences`：只要类本身或任意一个 `[NinoType]` 基类、接口要求追踪，这个类就会被追踪，与它自己的特性怎么写无关，因此启用了追踪的继承体系始终保持追踪。参见[多态](/zh/docs/v4/polymorphism)。
+子类型会从最近的 `[NinoType]` 基类或接口继承 `[NinoType]` 及其选项；如果想给子类型单独设置选项，在子类型上再加一个 `[NinoType]` 即可。子类型自己的 `[NinoType]` 会取代继承来的选项，所以需要保留的选项要重新写上：例如版本容错基类的子类型应写成 `[NinoType(versionTolerant: true)]`。唯一的例外是 `trackReferences`：只要类本身或任意一个 `[NinoType]` 基类、接口要求追踪，这个类就会被追踪，与它自己的特性怎么写无关，因此开启了追踪的继承体系会一直保持追踪。参见[多态](/zh/docs/v4/polymorphism)。
 
 ## 下一步 [#next]
 

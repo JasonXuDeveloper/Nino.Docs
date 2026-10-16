@@ -20,7 +20,7 @@ using Nino.Core;
 [NinoType(keyed: true)]
 public sealed class SaveGame
 {
-    public int Version;              // 你自己的内容版本，见下文
+    public int Version;              // your own content version, see below
     public DateTime SavedAt;
     public Player Player;
     public List<Quest> Quests;
@@ -44,7 +44,7 @@ public class Item
 }
 
 [NinoType]
-public struct GridPos            // 按位置的原始结构体：永远不要重排它的字段
+public struct GridPos            // positional raw struct: never reorder its fields
 {
     public int X, Y, Layer;
 }
@@ -75,14 +75,14 @@ public sealed class Player
 
 ## 对象图 [#object-graphs]
 
-默认情况下，每个引用都各自写一份副本。如果存档里有多处指向同一个对象（既在队伍里又在公会里的角色，或者任务引用了 NPC、NPC 又引用回这个任务），请给这些共享的类型加上 `trackReferences: true`：
+默认情况下，每个引用都各自写一份副本。如果存档里有多处指向同一个对象（既在队伍里又在公会里的角色，或者任务引用了 NPC、NPC 又引用回这个任务），就给这些共享的类型加上 `trackReferences: true`：
 
 ```csharp
 [NinoType(keyed: true, trackReferences: true)] // [!code highlight]
 public class Character
 {
     public string Name;
-    public Character Mentor;         // 可能指向另一个已保存的角色，或指回自己
+    public Character Mentor;         // may point to another saved character, or back to this one
     public List<Character> Party;
 }
 ```
@@ -99,8 +99,8 @@ using Nino.Core;
 
 public static class SaveFile
 {
-    private const int Magic = 0x5641534E;   // 任意你喜欢的常量
-    private const int FormatVersion = 3;    // 手动修改存档布局时递增
+    private const int Magic = 0x5641534E;   // any constant you like
+    private const int FormatVersion = 3;    // bump when you change the save layout by hand
 
     public static byte[] Encode(SaveGame save)
     {
@@ -110,7 +110,7 @@ public static class SaveFile
         writer.Write(FormatVersion);
         NinoSerializer.Serialize(save, ref writer);
         writer.Flush();
-        writer.ReleaseReferences();         // 存档使用了 trackReferences
+        writer.ReleaseReferences();         // the save uses trackReferences
         return buffer.ToArray();
     }
 
@@ -125,7 +125,7 @@ public static class SaveFile
 
         var save = NinoDeserializer.Deserialize<SaveGame>(ref reader);
         reader.ReleaseReferences();
-        return Migrate(save, version);      // 在版本之间修正内容
+        return Migrate(save, version);      // fix up content between versions
     }
 }
 ```
@@ -141,7 +141,7 @@ public static void Save(string path, SaveGame save)
     string temp = path + ".tmp";
     File.WriteAllBytes(temp, bytes);
     if (File.Exists(path))
-        File.Replace(temp, path, path + ".bak");   // 保留上一份存档作为备份
+        File.Replace(temp, path, path + ".bak");   // keeps the previous save as a backup
     else
         File.Move(temp, path);
 }

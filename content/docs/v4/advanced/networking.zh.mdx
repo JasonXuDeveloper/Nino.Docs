@@ -57,7 +57,7 @@ void Handle(Message message)
 
 ## 分帧 [#frame-the-stream]
 
-TCP 是字节流，每条消息都需要分帧。最简单的做法是加 4 字节小端序的长度前缀。Nino 的 `Writer` 可以先预留 4 字节，在后面序列化消息，再回填长度，全部在同一个缓冲区里完成：
+TCP 是字节流，每条消息都需要分帧。最简单的做法是加 4 字节小端序的长度前缀。Nino 的 `Writer` 可以先预留 4 字节，接着序列化消息，最后回填长度，全部在同一个缓冲区里完成：
 
 ```csharp title="FrameWriter.cs"
 using System.IO.Pipelines;
@@ -161,7 +161,7 @@ public static class FrameReader
 
 <Callout type="info">
 
-Nino 在分配内存之前，会把数据中的每个长度与剩余字节数比对，所以恶意的帧无法让它分配巨大的数组；数据被截断时会抛出异常，而不会越界读取。但你仍然应该像上面那样自己限制帧的大小，以免对端让管道缓冲数 GB 的数据。嵌套很深的数据也不会让服务器栈溢出：嵌套超过 128 层的对象会延后，从较浅的位置读取。参见[无效数据](/zh/docs/v4/basic#invalid-data)和[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
+Nino 在分配内存之前，会把数据中的每个长度与剩余字节数比对，所以恶意的帧无法让它分配巨大的数组；数据被截断时会抛出异常，而不会越界读取。但你仍然应该像上面那样自己限制帧的大小，以免对端让管道缓冲数 GB 的数据。嵌套很深的数据也不会让服务器栈溢出：嵌套超过 128 层的对象会推迟到较浅的层级再读取。参见[无效数据](/zh/docs/v4/basic#invalid-data)和[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
 
 </Callout>
 
@@ -197,7 +197,7 @@ if (message is INinoPooled pooled)
 </Tab>
 <Tab value="每种类型一个实例">
 
-如果消息是同步处理、处理完不会保留，就用复用反序列化填充上一个实例。下一条消息类型相同时原地填充；类型不同时，旧实例会被丢弃（如果是池化类型，会被回收）：
+如果消息是同步处理的、处理完不会保留，就用 `ref` 反序列化到上一个实例。下一条消息类型相同时原地填充；类型不同时，旧实例会被丢弃（如果是池化类型，还会被回收）：
 
 ```csharp
 private Message _last; // per connection, used by one thread at a time
@@ -229,7 +229,7 @@ void OnFrame(ReadOnlySpan<byte> frame)
 | 删除或重排字段 | ✗ | ✗ | ✓ |
 | 新增消息类型 | 旧对端无法读取 | 旧对端无法读取 | 旧对端无法读取 |
 
-- 在基类上设置 `versionTolerant`（所有消息都会继承），旧对端会跳过它不认识的字段，新对端上缺失的字段保留消息构造时的值（可以用 `public int Priority = 1;` 这样的字段初始化器为旧版发送方指定默认值）。只向密封的消息类添加字段：`Message` 的成员写在每个消息自己的成员之前，向 `Message` 追加字段会让新旧对端在错误的位置读取彼此的字段（参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)）。如果要添加每个消息都带的字段，把整个继承体系改为 `keyed`，或者分别加到每个消息中。复用或池化的消息是原地填充的，这时缺失的字段保留的是**上一条**消息的值：请在 `OnNinoPoolReturn` 中重置这些字段，或者在还有旧版对端连接时不要复用实例。
+- 在基类上设置 `versionTolerant`（所有消息都会继承），旧对端会跳过它不认识的字段，新对端上缺失的字段则保留消息构造函数赋予的值（可以用 `public int Priority = 1;` 这样的字段初始化器为旧版发送方指定默认值）。只向密封的消息类添加字段：`Message` 的成员写在每个消息自己的成员之前，向 `Message` 追加字段会让新旧对端在错误的位置读取彼此的字段（参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)）。如果要添加每条消息都带的字段，就把整个继承体系改为 `keyed`，或者分别加到每个消息类中。复用或池化的消息是原地填充的，这时缺失的字段保留的是**上一条**消息的值：请在 `OnNinoPoolReturn` 中重置这些字段，或者在还有旧版对端连接时不要复用实例。
 - 对端收到**它不认识的消息类型**时无法反序列化，调用会抛出 `InvalidOperationException`（未知的类型 ID）。请在握手时协商协议版本，只向声明支持的对端发送新的消息类型；如果想交换消息类型列表，`NinoTypeId.Of(typeof(T))` 可以给出每种消息的 ID。
 - 如果两端总是一起发布（游戏客户端和它的专用服务器），就保持按位置格式：它最小也最快。
 

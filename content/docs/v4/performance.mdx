@@ -19,12 +19,12 @@ Player copy = NinoDeserializer.Deserialize<Player>(bytes);
 static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 ```
 
-The saving is a few nanoseconds per call, which matters most for small values called in a tight loop.
+The saving is a few nanoseconds per call, which matters most when small values are serialized in a tight loop.
 
 - **Always on, nothing to configure, no opt-out.** The `Nino.Generator` package contains generator builds for Roslyn 4.3, 4.8 and 4.12; NuGet picks the newest your compiler can load. The 4.8 and 4.12 builds intercept, and the package's build props add `NinoGen` to `InterceptorsNamespaces` / `InterceptorsPreviewNamespaces` for you.
 - **It depends on the compiler, not the target framework**: a `netstandard2.0` library built with the .NET 8+ SDK is intercepted too.
 - **Older compilers simply use the regular path**, which writes the same bytes. The Unity package ships the generator's Roslyn 4.3 build, so Unity projects never intercept.
-- Left alone, because interception would gain nothing: raw values and arrays of raw elements (the regular path already copies them directly), `[NinoType]`s declared in another assembly (the calling project reaches their formatter only through the formatter cache, as the regular call does), and calls inside generic code.
+- Some calls are left alone, because intercepting them would gain nothing: raw values and arrays of raw elements (the regular path already copies them directly), `[NinoType]`s declared in another assembly (the calling project reaches their formatter only through the formatter cache, as the regular call does), and calls inside generic code.
 - `Serialize(value)` of a [fixed-size type](#fixed-size-types) is routed to code that writes straight into a `byte[]` of the type's size.
 - A formatter registered at runtime with `NinoFormatterCache<T>.Register<TFormatter>()` still takes precedence, so intercepted and regular calls never disagree. Register it before `T` is first used: the first call fixes the formatter, and a later registration throws (see [Registering at Run Time](/en/docs/v4/custom-formatters#registering-at-run-time)).
 
@@ -79,7 +79,7 @@ public partial struct PackedSample // 12 bytes, no padding
 }
 ```
 
-Why the padding: by default (`LayoutKind.Sequential`) every field is aligned to its own size, up to 8 bytes, and the struct's size is rounded up to its largest alignment. `DateTime` wraps a `ulong`, so it must start at a multiple of 8: after a 4-byte `int` the runtime inserts 4 empty bytes. Reordering fields (largest first) removes padding between fields, but not at the end: `DateTime, int` is still 16 bytes.
+Where the padding comes from: by default (`LayoutKind.Sequential`) every field is aligned to its own size, up to 8 bytes, and the struct's size is rounded up to its largest alignment. `DateTime` wraps a `ulong`, so it must start at a multiple of 8: after a 4-byte `int` the runtime inserts 4 empty bytes. Reordering fields (largest first) removes padding between fields, but not at the end: `DateTime, int` is still 16 bytes.
 
 `Pack = N` caps every field's alignment at `N`. To remove all padding, set `Pack` to the size of the **smallest** field: every field then starts right after the previous one. A larger `Pack` can leave gaps: `short, long, short` is 24 bytes by default, 12 with `Pack = 2` (no padding), and still 16 with `Pack = 4`. `Pack = 1` always removes padding, but misaligns more fields than needed.
 
@@ -128,10 +128,10 @@ A type is fixed-size when it is:
 - positional: not `versionTolerant` (and its project does not define `WEAK_VERSION_TOLERANCE`), not `keyed`, not `trackReferences`, and not a collection type;
 - made only of members that are unmanaged values with the same layout on 32-bit and 64-bit runtimes (primitives, enums, `DateTime`, `Guid`, raw structs of those) or other fixed-size structs, with no `[NinoCustomFormatter]`.
 
-A `string`, an array or collection, a class, a `T?`, a tuple, `DateTimeOffset` or `nint` member makes a type variable-size. A struct written as raw memory (see [Raw Memory](#raw-memory-for-unmanaged-data)) is fixed-size too and was already copied straight into an array of its size; this extends the same to structs that are not raw (an ignored field, a nested struct) and to sealed classes.
+A `string`, an array or collection, a class, a `T?`, a tuple, `DateTimeOffset` or `nint` member makes a type variable-size. A struct written as raw memory (see [Raw Memory](#raw-memory-for-unmanaged-data)) is fixed-size too, and has always been copied straight into an array of its size; this path extends the same treatment to structs that are not raw (an ignored field, a nested struct) and to sealed classes.
 
 - **Automatic.** On Roslyn 4.8+ the [interceptor](#interceptors) routes `Serialize(value)` of a fixed-size type to this path; without interceptors (Unity, generic code, older compilers) the regular call takes the same path after a check that optimized code reduces to a constant.
-- Only `Serialize(value)` returning a `byte[]` changes. Serializing into an `IBufferWriter<byte>` or a `Writer`, and arrays or lists of fixed-size types, are written as before.
+- Only `Serialize(value)`, which returns a `byte[]`, takes this path. Serializing into an `IBufferWriter<byte>` or a `Writer`, and arrays or lists of fixed-size types, work as before.
 - A `null` sealed class is written as its 1-byte null flag; every other value takes exactly `GetFixedSize<T>()` bytes.
 - `NinoSerializer.GetFixedSize<T>()` returns the size for a fixed-size type or a raw value, and `-1` for any other type. Use it to size buffers or to check a message's size at startup.
 
@@ -139,7 +139,7 @@ A `string`, an array or collection, a class, a `T?`, a tuple, `DateTimeOffset` o
 
 - **Serializing allocates nothing** except the `byte[]` you ask for. Serialize into a reused `NinoArrayBufferWriter` (or any `IBufferWriter<byte>`) and a call allocates 0 B.
 - **Deserializing allocates only the result objects**, and even those can be reused: deserialize into an existing instance with `ref`, and take new instances from `[NinoPooled]` pools. Reusing instances allocates 0 B. See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
-- Strings are UTF-16 by default (one block copy). `[NinoUtf8]` is smaller on the wire but transcodes.
+- Strings are UTF-16 by default (one block copy). `[NinoUtf8]` is smaller on the wire but has to transcode.
 
 ## Buffers
 
@@ -158,7 +158,7 @@ Every `NinoSerializer` and `NinoDeserializer` method is **safe to call concurren
 
 - no hot path writes shared memory, so serializing threads never contend for a cache line;
 - scratch buffers and reference-tracking tables are per thread, and a nested call on the same thread (a custom formatter that serializes) gets its own, so re-entrant calls are safe;
-- formatter lookup is a static generic field written once; polymorphic tables are immutable snapshots, replaced copy-on-write and read lock free;
+- formatter lookup is a static generic field written once; polymorphic tables are immutable snapshots, replaced copy-on-write and read lock-free;
 - `NinoPool<T>` keeps a per-thread stack of up to 64 instances and a locked shared stack it only touches in batches; its hot fields sit on their own 64-byte cache line.
 
 What is **not** thread safe is the state you own: a `NinoArrayBufferWriter`, a `Writer` or `Reader`, and the objects you deserialize into. Keep one buffer per thread or per connection.

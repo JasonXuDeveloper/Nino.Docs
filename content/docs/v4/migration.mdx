@@ -37,7 +37,7 @@ Update `[NinoFormerName]` arguments to the runtime type name form.
 </Step>
 <Step>
 
-Build, and fix what the analyzer reports (`NINO001`–`NINO024`); most diagnostics have a code fix.
+Build, and fix what the analyzer reports (`NINO001`–`NINO024`); many diagnostics come with a code fix.
 
 </Step>
 <Step>
@@ -49,7 +49,7 @@ Convert or discard persisted v3 data.
 
 ## Serialization API
 
-In v3, the generator emitted static `Serializer` and `Deserializer` classes (and extension methods) into each assembly's `<AssemblyName>.NinoGen` namespace. In v4, there is one API in `Nino.Core`, the same for every assembly.
+In v3, the generator emitted static `Serializer` and `Deserializer` classes (and extension methods) into each assembly's `<AssemblyName>.NinoGen` namespace. v4 has a single API in `Nino.Core`, shared by every assembly.
 
 | v3 | v4 |
 | --- | --- |
@@ -115,7 +115,7 @@ NinoSerializer.Serialize(obj, buffer);
 
 <Callout type="info">
 
-`Span<T>` values could be passed to v3's generated `Serialize`. In v4, `T` is a generic type argument, which cannot be a `ref struct`: serialize an array, a `List<T>` or an `ArraySegment<T>` instead.
+v3's generated `Serialize` accepted `Span<T>` values. In v4, `T` is a generic type argument and cannot be a `ref struct`, so serialize an array, a `List<T>` or an `ArraySegment<T>` instead.
 
 </Callout>
 
@@ -145,7 +145,7 @@ Code written against an early v4 beta uses names that changed before the release
 
 ### Behavior Changes since the v4 Betas [#behavior-changes-since-the-v4-betas]
 
-4.0.0-rc.1 also changed these behaviors that code and data from the betas may depend on:
+4.0.0-rc.1 also changed the following behaviors, which code and data from the betas may depend on:
 
 <Callout type="warn">
 
@@ -157,7 +157,7 @@ Code written against an early v4 beta uses names that changed before the release
 - **A `versionTolerant` object writes one length for its whole hierarchy**, instead of one length per inheritance level. Members can therefore be appended only to the most derived type: a member appended to a base class that has subclasses now shifts the subclasses' members. See [Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class).
 - **Fixed-size types are serialized into an array of their exact size.** `NinoSerializer.Serialize(value)` of a struct or sealed class whose members are all fixed-size allocates the result at its final size and writes into it, without a scratch buffer or copy; the bytes are the same. `NinoSerializer.GetFixedSize<T>()` is new. See [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
 - **`NinoFormatterCache<T>.Register<TFormatter>()` must run before `T` is first used.** The first serialization or deserialization of `T` fixes its formatter; registering one afterwards throws an `InvalidOperationException` instead of taking effect for some calls only. Move such calls to startup. See [Registering at Run Time](/en/docs/v4/custom-formatters#registering-at-run-time).
-- **`Reader.Position` of a reader returned by `ReadSlice()` is an offset in the whole input**, not from the start of the slice. A custom formatter that compared it with the slice's length should record the position when the slice starts and subtract it. See [Positions in a Slice](/en/docs/v4/custom-formatters#positions-in-a-slice).
+- **On a reader returned by `ReadSlice()`, `Reader.Position` is an offset into the whole input**, not into the slice. A custom formatter that compared it with the slice's length should record the position where the slice starts and subtract it. See [Positions in a Slice](/en/docs/v4/custom-formatters#positions-in-a-slice).
 
 ### Version tolerance
 
@@ -192,7 +192,7 @@ public class SaveData
 </Tab>
 </Tabs>
 
-In v4, version tolerance is chosen per type. Members can be appended to the **most derived type** (a class without `[NinoType]` subclasses), at any nesting depth, and old code skips members it does not know; members appended to a base class shift those of its subclasses and are not tolerated. For reordering, removing or inserting members, or adding them to a base class, use `[NinoType(keyed: true)]`. See [Version Tolerance](/en/docs/v4/evolving-data#version-tolerance) and [Keyed Members](/en/docs/v4/evolving-data#keyed-members).
+In v4, you choose version tolerance per type. Members can be appended to the **most derived type** (a class without `[NinoType]` subclasses), at any nesting depth, and old code skips the members it does not know. Members appended to a base class shift its subclasses' members, so they are not tolerated. To reorder, remove or insert members, or to add them to a base class, use `[NinoType(keyed: true)]`. See [Version Tolerance](/en/docs/v4/evolving-data#version-tolerance) and [Keyed Members](/en/docs/v4/evolving-data#keyed-members).
 
 <Callout type="warn">
 
@@ -253,17 +253,17 @@ public class Circle : Shape { public float Radius; }
 </Tab>
 </Tabs>
 
-Keeping `[NinoType]` on a subtype is harmless and lets it set its own options. Its options replace the inherited ones, so repeat any you want to keep, such as `versionTolerant: true`; only `trackReferences` stays on for every subtype of a tracked type.
+Keeping `[NinoType]` on a subtype does no harm and lets the subtype set its own options. Those options replace the inherited ones, so repeat any you want to keep, such as `versionTolerant: true`. The one exception is `trackReferences`, which stays on for every subtype of a tracked type.
 
 ## Generated Code
-- Generated formatters live in the `<AssemblyName>.NinoGen` namespace but are not meant to be called directly. Remove any code that referenced the v3 generated classes (`Serializer`, `Deserializer`, `NinoTypeConst`, ...).
-- There is one generated file per `[NinoType]`, and editing one type re-generates only that type.
-- Problems that v3 reported as compile errors in generated code are now analyzer diagnostics on your code. A member whose type cannot be serialized is a warning (NINO007) and is skipped, instead of a compile error. See the [diagnostics list](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md).
+- Generated formatters live in the `<AssemblyName>.NinoGen` namespace, but they are not meant to be called directly. Remove any code that referenced the v3 generated classes (`Serializer`, `Deserializer`, `NinoTypeConst`, ...).
+- There is one generated file per `[NinoType]`, and editing a type re-generates only that type.
+- Problems that v3 reported as compile errors in generated code are now analyzer diagnostics on your code. A member whose type cannot be serialized now gets a warning (NINO007) and is skipped, instead of breaking the build. See the [diagnostics list](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md).
 
 ## Unity
 - Unity 2022.3 or later is still required.
 - The OpenUPM package ships the source generator. You no longer need to install the `Microsoft.CodeAnalysis` NuGet packages into your Unity project manually; remove them if you only added them for Nino.
-- Calls are not intercepted in Unity: the package ships the generator's Roslyn 4.3 build, and interceptors need Roslyn 4.8. Calls use the regular path and write the same bytes.
+- Calls are not intercepted in Unity: the package ships the generator's Roslyn 4.3 build, and interceptors need Roslyn 4.8. Calls take the regular path and write the same bytes.
 - `asmdef` files still need to reference `Nino.Core.dll` when `Override References` is used.
 
 ## HybridCLR
@@ -286,7 +286,7 @@ In the v4 application, import the neutral data and write it with `NinoSerializer
 </Step>
 <Step>
 
-If you cannot convert offline (for example save games on players' devices), ship the converter logic with the game and mark new data with a **header** (a magic number or version byte). Data with the header is read with v4; data without it is converted once and saved again with v4.
+If you cannot convert offline (for example, save games on players' devices), ship the converter logic with the game and mark new data with a **header** (a magic number or version byte). Data with the header is read with v4; data without it is converted once and saved again with v4.
 
 </Step>
 </Steps>
@@ -295,6 +295,6 @@ See also [Versioning](/en/docs/v4/versioning#reading-data-from-an-older-version)
 
 <Callout type="idea">
 
-Data that lives only in memory or on the wire between processes you deploy together (network messages, caches) does not need converting: deploy all ends with v4 at once.
+Data that lives only in memory, or on the wire between processes you deploy together (network messages, caches), does not need converting: upgrade every end to v4 at the same time.
 
 </Callout>

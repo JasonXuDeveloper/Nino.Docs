@@ -53,12 +53,12 @@ const copy: Record<
       {
         icon: Cpu,
         label: 'Zero reflection',
-        text: 'Formatters are generated at compile time: runs on IL2CPP, NativeAOT and HybridCLR.',
+        text: 'Formatters are generated at compile time, so Nino runs on IL2CPP, NativeAOT and HybridCLR.',
       },
       {
         icon: Recycle,
         label: 'Zero allocation',
-        text: 'Serialize without garbage; deserialize into existing objects and pools.',
+        text: 'Serialize without garbage; deserialize into existing objects and pooled instances.',
       },
       {
         icon: Boxes,
@@ -73,12 +73,12 @@ const copy: Record<
       {
         icon: Hammer,
         label: 'Incremental generator',
-        text: 'One file per type and 16× less code than v3; an edit re-generates only that type.',
+        text: 'One file per type and 16× less code than v3; editing a type re-generates only that type.',
       },
       {
         icon: Globe,
         label: 'Same bytes everywhere',
-        text: 'CoreCLR, Mono and IL2CPP, 64-bit and 32-bit all read and write one format.',
+        text: 'CoreCLR, Mono and IL2CPP, 64-bit and 32-bit all read and write the same format.',
       },
     ],
     guides: 'Guides:',
@@ -95,24 +95,24 @@ const copy: Record<
     description: `Nino 是基于源生成器的 C# 二进制序列化库：${headlineSerialize ? `最高比 MemoryPack 快 ${headlineSerialize} 倍，` : ''}零 GC 分配，适用于 Unity、Godot 与 .NET 服务端。`,
     pill: 'C# 二进制序列化库 · v4',
     headline: ['最快的二进制序列化库', '为 C# 而生。'],
-    sub: '源生成器实现，零 GC 分配，适用于 Unity、Godot 与 .NET 服务端。',
+    sub: '基于源生成器，零 GC 分配，适用于 Unity、Godot 与 .NET 服务端。',
     start: '快速开始',
     github: '在 GitHub 上查看',
     highlights: [
       {
         icon: Cpu,
         label: '零反射',
-        text: '格式化器在编译期生成：可用于 IL2CPP、NativeAOT 与 HybridCLR。',
+        text: '格式化器在编译期生成，所以 IL2CPP、NativeAOT 与 HybridCLR 都能直接使用。',
       },
       {
         icon: Recycle,
         label: '零分配',
-        text: '序列化不产生垃圾；反序列化可复用已有对象与对象池。',
+        text: '序列化不产生垃圾；反序列化可以直接填充已有对象和池化实例。',
       },
       {
         icon: Boxes,
         label: '无需标签的多态',
-        text: '子类自动继承 [NinoType]，按运行时类型还原，无需维护联合标签。',
+        text: '子类型自动继承 [NinoType]，读回时还原为运行时类型，不用维护 Union 标签。',
       },
       {
         icon: GitBranch,
@@ -122,12 +122,12 @@ const copy: Record<
       {
         icon: Hammer,
         label: '增量生成器',
-        text: '每个类型一个文件，代码比 v3 少 16 倍；修改后只重新生成该类型。',
+        text: '每个类型一个文件，生成的代码只有 v3 的 1/16；修改一个类型只重新生成这个类型。',
       },
       {
         icon: Globe,
         label: '处处同一格式',
-        text: 'CoreCLR、Mono 与 IL2CPP，64 位与 32 位，读写同一种格式。',
+        text: 'CoreCLR、Mono 与 IL2CPP，64 位与 32 位，读写的都是同一种格式。',
       },
     ],
     guides: '使用指南：',

@@ -4,11 +4,11 @@ description: "基于 Nino 缓冲区和 span API 的几个小工具：在 Stream 
 icon: ArrowDownUp
 ---
 
-Nino 序列化到 `IBufferWriter<byte>`，从 `ReadOnlySpan<byte>` 反序列化。流、异步 I/O、多段输入、序列化回调和压缩，都只是在这两个调用外面多写几行。本页给出每一种可以直接复制的写法。
+Nino 序列化到 `IBufferWriter<byte>`，从 `ReadOnlySpan<byte>` 反序列化。流、异步 I/O、多段输入、序列化回调和压缩，在这两个调用之上多写几行就能实现。本页为每一种都给出了可以直接复制的写法。
 
 ## 流 [#streams]
 
-流没有消息边界，所以每个值都写成一帧：先是 4 字节小端序的长度，再是数据。`Writer` 先预留长度的位置，在其后序列化值，再回填长度，全部在同一个缓冲区里完成：
+流没有消息边界，所以每个值都写成一帧：先是 4 字节小端序的长度，再是数据。`Writer` 先预留长度的位置，接着序列化值，最后回填长度，全部在同一个缓冲区里完成：
 
 ```csharp title="NinoStream.cs"
 using System;
@@ -92,7 +92,7 @@ using (var file = File.OpenRead(path))
 
 ## 异步 [#async]
 
-`Writer` 是 `ref struct`，不能出现在 `async` 方法中，所以先用 `Frame` 同步构建帧，再 await I/O。把下面几个方法加到 `NinoStream` 中：
+`Writer` 是 `ref struct`，不能用在 `async` 方法里，所以先用 `Frame` 同步构建帧，再 await I/O。把下面几个方法加到 `NinoStream` 中：
 
 ```csharp
 public static async ValueTask WriteAsync<T>(Stream stream, T value, NinoArrayBufferWriter buffer,
@@ -163,7 +163,7 @@ public static T Deserialize<T>(in ReadOnlySequence<byte> data)
 
 ## 回调 [#callbacks]
 
-Nino 不提供序列化回调。把前后要执行的逻辑放进一个接口，再写一个小工具方法，在调用 Nino 的前后各调用一次：
+Nino 自己不调用任何钩子。把前后要执行的逻辑放进一个接口，再写一个小工具方法，在调用 Nino 的前后调用它们：
 
 ```csharp
 public interface ISerializationCallbacks
@@ -191,11 +191,11 @@ public static class CallbackSerializer
 
 - 泛型工具方法里的调用不会被[拦截](/zh/docs/v4/performance#interceptors)，因为那里的 `T` 是类型参数。这些调用走常规路径，每次慢几纳秒。
 - 嵌套对象的钩子也由你的工具方法负责：在根对象的 `OnAfterDeserialize` 中调用它们。
-- 属于构造过程的逻辑，可以放在 [`[NinoConstructor]`](/zh/docs/v4/constructors) 或属性 setter 中，它们会在反序列化过程中执行。
+- 属于构造过程的逻辑，可以放在 [`[NinoConstructor]`](/zh/docs/v4/constructors) 或属性 setter 里，它们在反序列化过程中就会执行。
 
 ## 压缩 [#compression]
 
-压缩 Nino 写出的字节；读取前先解压到池化的缓冲区。使用 span 时，先写入未压缩的长度，读取方才知道要租多大的缓冲区：
+压缩 Nino 写出的字节；读取前先解压到池化的缓冲区。使用 span 时，先写入未压缩的长度，这样读取方才知道要租多大的缓冲区：
 
 ```csharp title="NinoBrotli.cs"
 using System;
@@ -255,4 +255,4 @@ using (var gzip = new GZipStream(File.OpenRead(path), CompressionMode.Decompress
     save = NinoStream.Read<SaveGame>(gzip);
 ```
 
-`BrotliEncoder`、`BrotliDecoder` 和 `BrotliStream` 需要 .NET Core 2.1 及以上，.NET Standard 中没有。想要更快的速度（压缩率低一些），可以用 LZ4 库，它们提供与 `BrotliEncoder.TryCompress` 一样的 span 输入、span 输出接口。
+`BrotliEncoder`、`BrotliDecoder` 和 `BrotliStream` 需要 .NET Core 2.1 及以上，.NET Standard 中没有。如果想要更快、可以接受压缩率低一些，可以用 LZ4 库，它们提供和 `BrotliEncoder.TryCompress` 一样的 span 输入、span 输出接口。

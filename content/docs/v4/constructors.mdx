@@ -11,9 +11,9 @@ Nino needs a way to create each type it deserializes. The generator picks one at
 3. Otherwise (some members are get-only, `init`-only or `readonly`): the accessible (`public` or `internal`) constructor with the most parameters that all match serialized members by name, ignoring case. For a positional record this is the primary constructor. Members that are not parameters are set right after the call.
 4. Structs fall back to `new T()`; a class with none of the above is an error (NINO004).
 
-So most classes need nothing: a parameterless constructor and settable members is the fastest path. Write a constructor for Nino when the type should be **immutable** or should **validate** what it reads, for example item definitions loaded from a config table, where a broken row should fail at load time instead of in the middle of a match.
+So most classes need nothing: a parameterless constructor and settable members are the fastest path. Write a constructor for Nino when the type should be **immutable** or should **validate** what it reads, for example item definitions loaded from a config table, where a broken row should fail at load time instead of in the middle of a match.
 
-`[NinoConstructor]` takes the names of the serialized members passed as arguments, in order, so parameter names do not have to match. Without arguments, parameters are matched by name:
+`[NinoConstructor]` takes, in order, the names of the serialized members passed as arguments, so the parameter names do not have to match. Without names, parameters are matched to members by name:
 
 <Tabs items={["Constructor", "Factory method", "Primary constructor", "Struct"]}>
 
@@ -111,12 +111,12 @@ public struct SimpleStruct
 - The constructor or factory method marked `[NinoConstructor]` must be `public` or `internal` (NINO021).
 - Every name in `[NinoConstructor]` (or every parameter, when no names are given) must match a serialized member (NINO005).
 - If no constructor can be used, NINO004 is reported.
-- A type re-created through a constructor reads read-only members that are not constructor parameters and drops them (NINO006): add them to the constructor, make them settable, or `[NinoIgnore]` them.
+- When a type is re-created through a constructor, a read-only member that is not a constructor parameter is read and then dropped (NINO006): add it to the constructor, make it settable, or `[NinoIgnore]` it.
 - C# 11 `required` members: a constructor marked `[SetsRequiredMembers]` is used when one matches; otherwise the generated code sets the required members with an object initializer, so every required member must be serialized and assignable by generated code (`public` or `internal`).
 
 ## Constructor or Factory?
 
-Nino has two ways to hook into instance creation, for different jobs:
+Nino has two ways to hook into instance creation, each for a different job:
 
 | | `[NinoConstructor]` | [`[NinoFactory]`](/en/docs/v4/pooling#creating-instances-with-ninofactory) |
 | --- | --- | --- |

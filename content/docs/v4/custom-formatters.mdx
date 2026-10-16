@@ -16,12 +16,12 @@ public interface INinoFormatter<T>
 }
 ```
 
-`Deserialize` receives the current value by `ref`: `default` means "create a new value", an existing instance may be reused. Formatters are called as `default(TFormatter)`, so they have no instance state; keep any state in static fields.
+`Deserialize` receives the current value by `ref`: `default` means "create a new value", and an existing instance may be reused. Formatters are called as `default(TFormatter)`, so they have no instance state; keep any state in static fields.
 
 ## For One Member
-Use `[NinoCustomFormatter]` to serialize a single member with your formatter. The formatter must implement `INinoFormatter<T>` for **exactly** the member type (NINO008).
+Use `[NinoCustomFormatter]` to serialize a single member with your own formatter. The formatter must implement `INinoFormatter<T>` for **exactly** the member type (NINO008).
 
-A typical case is a replay file or a state-sync stream that records, per tick, how much each value changed. The deltas are usually tiny, yet a `long` always takes 8 bytes. A zig-zag varint writes values between -64 and 63 in 1 byte and values up to ±8191 in 2:
+A typical case is a replay file or a state-sync stream that records, per tick, how much each value changed. The deltas are usually tiny, yet a `long` always takes 8 bytes. A zig-zag varint writes values from -64 to 63 in 1 byte, and values up to ±8191 in 2:
 
 ```csharp
 /// Writes a long as a zig-zag varint.
@@ -62,7 +62,7 @@ public sealed class TickDelta
 }
 ```
 
-It applies to one field or property, wherever the containing type is serialized. A member with a custom formatter is never part of a raw struct block. The analyzer reports a formatter that is not a struct, or is for another type (NINO008).
+The attribute applies to one field or property, wherever the containing type is serialized. A member with a custom formatter is never part of a raw struct block. The analyzer reports a formatter that is not a struct, or is for another type (NINO008).
 
 ## For a Type: `[assembly: NinoFormatter]`
 To teach Nino a type it does not know (your own or a third-party one), register a formatter on your assembly. Type arguments and element formatters are inferred: a type parameter constrained to `INinoFormatter<E>` receives the formatter Nino resolves for `E`, so element (de)serialization is inlined. Generated code calls the formatter directly, and the runtime uses the same registration.
@@ -119,7 +119,7 @@ public sealed class RingHolder
 
 - The formatter is a struct, not nested in a generic type, that implements `INinoFormatter<P>` exactly once. Register a generic formatter as an open definition (`typeof(F<,>)`) and a non-generic one as itself (`typeof(F)`). Every type parameter must be inferable from `P`, from a type constraint (`where TList : List<T>`), or from an `INinoFormatter<E>` constraint. An unusable registration is ignored and reported as NINO020.
 - To target a bare type parameter (`INinoFormatter<TCollection>`), list the target type definitions: `[assembly: NinoFormatter(typeof(F<,,>), typeof(IList<>))]`. Without targets it applies to every type its constraints admit.
-- Lookup order: formatters registered for the type's own definition (and for arrays), then raw unmanaged values, then `[NinoType]`s, then formatters of a bare type parameter. Among matching registrations the higher `Priority` wins (`Priority = 10`), and ties go to the ordinally smaller full name.
+- Lookup order: formatters registered for the type's own definition (and for arrays), then raw unmanaged values, then `[NinoType]`s, then formatters of a bare type parameter. When several registrations match, the higher `Priority` wins (for example `Priority = 10`); on a tie, the full name that sorts first ordinally wins.
 
 <Callout type="info" title="Declarative, no startup code">
 

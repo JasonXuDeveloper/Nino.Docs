@@ -11,11 +11,11 @@ icon: Cpu
 | `Nino.Core`（运行时） | `netstandard2.0`、`netstandard2.1`、`net8.0`、`net10.0` |
 | `Nino.Generator`（源生成器、分析器） | Roslyn 4.3 及以上；同一个包内含 Roslyn 4.3、4.8 和 4.12 三个版本 |
 | 生成的代码 | C# 9 及以上 |
-| Unity | 2022.3 及以上，Mono 和 IL2CPP，所有播放器平台 |
+| Unity | 2022.3 及以上，Mono 和 IL2CPP，所有 Player 平台 |
 | Godot | Godot 4 .NET 项目（.NET 8） |
 | 热更新 | HybridCLR，无需初始化调用 |
 
-**所有目标写出的字节完全相同。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 各自使用当前平台上最快的实现（向量化拷贝，.NET 8+ 上的 `[UnsafeAccessor]`），测试套件会用同一组基准数据校验每个版本。.NET 10 服务器写出的数据，32 位 Android 手机上的 Unity IL2CPP 客户端可以直接读取，反过来也一样。
+**所有目标写出的字节完全相同。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 各自使用该平台上最好的底层实现（向量化拷贝，.NET 8+ 上的 `[UnsafeAccessor]`），测试套件会用同一组标准样本数据校验每个版本。.NET 10 服务器写出的数据，32 位 Android 手机上的 Unity IL2CPP 客户端可以直接读取，反过来也一样。
 
 ## 二进制格式 [#binary-format]
 
@@ -34,7 +34,7 @@ icon: Cpu
 | 字典 | 长度，然后是键/值对 |
 | `T[,]` 及更高维度 | 各维长度，然后按行优先顺序写入元素 |
 
-两种字符串编码的前缀相同：字符串的 UTF-16 字符数（即 `string.Length`；`null` 为 `-1`，空字符串为 `0`）。`null` 和空字符串的前缀之后不再有任何内容。非空的 `[NinoUtf8]` 字符串接着写入它的字节数，然后正好是这么多个 UTF-8 字节。读取时，Nino 按字符数一次分配好最终长度的字符串，再把给定数量的字节一遍转码进去；下一个值紧随其后。字节数超过剩余字节数、字符数与解码出的字节不符，或字节不是合法的 UTF-8（包括超长编码和编码后的代理项）、在一个字符中间结束时，会抛出 `InvalidOperationException`。写入时，不成对的代理项会编码为 U+FFFD，它同样占 1 个字符，因此字符数总与读回的字符串一致。
+两种字符串编码的前缀相同：字符串的 UTF-16 字符数（即 `string.Length`；`null` 为 `-1`，空字符串为 `0`）。`null` 和空字符串的前缀之后不再有任何内容。非空的 `[NinoUtf8]` 字符串接着写入它的字节数，然后正好是这么多个 UTF-8 字节。读取时，Nino 按字符数一次分配好最终长度的字符串，再把给定数量的字节一次性转码进去；下一个值紧随其后。以下情况会抛出 `InvalidOperationException`：字节数超过剩余字节数；字符数与解码出的字节对不上；字节不是合法的 UTF-8（包括超长编码和编码后的代理项），或在一个字符中间结束。写入时，不成对的代理项会编码为 U+FFFD，它同样占 1 个字符，所以字符数总是与读回的字符串一致。
 
 对象的头部由**声明**类型决定：
 
@@ -54,9 +54,9 @@ icon: Cpu
 | `versionTolerant` | `int32` 字节长度，然后是整个继承体系的成员，从根类开始：每个对象一个长度，与继承层次的深度无关 |
 | `keyed` | `int32` 字节长度，然后每个成员依次写 `int32` 键、`int32` 长度和值 |
 
-`trackReferences` 类型多写一个 `int32` 引用头（`0` = null，`n > 0` = 已写出的第 n 个对象，`-1` = 新对象，后面跟它通常的编码）。参见[数据演进](/zh/docs/v4/evolving-data)和[引用追踪](/zh/docs/v4/reference-tracking)。
+`trackReferences` 类型多写一个 `int32` 引用头部（`0` = null，`n > 0` = 已写出的第 n 个对象，`-1` = 新对象，后面跟它通常的编码）。参见[数据演进](/zh/docs/v4/evolving-data)和[引用追踪](/zh/docs/v4/reference-tracking)。
 
-从数据中读出的每个长度，都会先与剩余字节数比对，再分配内存。因此格式错误或恶意构造的输入不会引发超大内存分配，被截断的数据会抛出异常，而不会越界读取。
+从数据中读出的每个长度，都会先和剩余字节数比对，然后才分配内存。因此格式错误或恶意构造的输入不会引发超大内存分配，被截断的数据会抛出异常，而不会越界读取。
 
 ## 可移植的设计 [#portable-by-design]
 
@@ -65,7 +65,7 @@ Nino 自己定义字节格式，而不是照搬运行时内存里的内容。各
 <Accordions type="multiple">
 <Accordion title={<><code>Nullable&lt;T&gt;</code></>} value="nullable">
 
-CoreCLR 和 Unity 2021.3+ 的布局是 `bool hasValue; T value;`，而旧版 Mono（Unity 2019.4 及更早）把值放在前面。直接拷贝 `T?` 的内存，两者会得到不同的字节。Nino 把单个 `T?` 写成一个有值字节加上值；`T?` 的数组和列表使用规范布局，运行时布局不同时逐个元素转换。
+CoreCLR 和 Unity 2021.3+ 的布局是 `bool hasValue; T value;`，而旧版 Mono（Unity 2019.4 及更早）把值放在前面。直接拷贝 `T?` 的内存，两边会得到不同的字节。Nino 把单个 `T?` 写成一个有值字节加上值；`T?` 的数组和列表使用规范布局，运行时布局不同时逐个元素转换。
 
 </Accordion>
 <Accordion title={<><code>ValueTuple</code> 与 <code>KeyValuePair</code></>} value="tuple">
@@ -75,7 +75,7 @@ CoreCLR 和 Unity 2021.3+ 的布局是 `bool hasValue; T value;`，而旧版 Mon
 </Accordion>
 <Accordion title={<><code>decimal</code>、<code>DateTimeOffset</code>、<code>nint</code></>} value="bcl">
 
-`decimal` 在 CoreCLR 上按 8 字节对齐，在 Mono 和 IL2CPP 上按 4 字节对齐，所以包含它的结构体布局可能不同；Nino 会转换成规范布局。`DateTimeOffset` 写成 UTC 刻度加上以分钟计的偏移（10 字节），从不直接拷贝。`nint`/`nuint` 始终占 8 字节。
+`decimal` 在 CoreCLR 上按 8 字节对齐，在 Mono 和 IL2CPP 上按 4 字节对齐，所以包含它的结构体布局可能不同；Nino 会转换成规范布局。`DateTimeOffset` 写成 UTC 刻度（ticks）加上以分钟为单位的偏移（10 字节），从不直接拷贝。`nint`/`nuint` 始终占 8 字节。
 
 </Accordion>
 <Accordion title="32 位平台" value="32bit">
@@ -98,7 +98,7 @@ CoreCLR 和 Unity 2021.3+ 的布局是 `bool hasValue; T value;`，而旧版 Mon
 ## Unity [#unity]
 
 - 从 [OpenUPM](/zh/docs/v4/start#unity-project) 安装。包中含有 `Nino.Core.dll` 和源生成器（`Nino.Generator.dll`，已标记为 `RoslynAnalyzer`），以及 `System.Buffers`、`System.Memory` 和 `System.Runtime.CompilerServices.Unsafe`。
-- Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员或标记 `[NinoPooled]` 的类型必须是 `partial`（NINO002，附带代码修复）。
+- Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员或标了 `[NinoPooled]` 的类型必须是 `partial`（NINO002，提供代码修复）。
 - Unity 包附带的是源生成器的 Roslyn 4.3 版本，所以调用不会被拦截，而是走常规路径，写出的字节相同。
 - 生成的注册表标记了 `[RuntimeInitializeOnLoadMethod]`（编辑器中还有 `[InitializeOnLoadMethod]`），会在启动时运行，也不会被 IL2CPP 裁剪掉。
 - `Vector3`、`Quaternion`、`Matrix4x4` 等 Unity 类型是非托管类型，按原始内存写入。
@@ -107,10 +107,10 @@ CoreCLR 和 Unity 2021.3+ 的布局是 `bool hasValue; T value;`，而旧版 Mon
 
 ## Godot [#godot]
 
-- Godot 4 的 C# 项目就是普通的 .NET 项目（`Godot.NET.Sdk`，目标 .NET 8）。用 `dotnet add package Nino` 安装，参见 [Godot 项目](/zh/docs/v4/start#godot-project)。
+- Godot 4 的 C# 项目就是普通的 .NET 项目（`Godot.NET.Sdk`，目标框架 .NET 8）。用 `dotnet add package Nino` 安装，参见 [Godot 项目](/zh/docs/v4/start#godot-project)。
 - 项目由 .NET 8+ SDK 编译，所以源生成器、分析器和拦截器都会运行，私有成员通过 `[UnsafeAccessor]` 访问，无需 `partial`（泛型类型除外）。
 - Godot 的数学结构体（`Vector2`、`Vector3`、`Quaternion`、`Transform3D`、`Color` 等）是非托管类型，按原始内存拷贝。
-- 双精度版本的 Godot（`real_t` 为 `double`）中，这些结构体的字段是 `double`，布局与默认的单精度版本不同。含有 Godot 数学类型的数据，一种版本写出的另一种读不了；需要在两者之间共享的数据，请改用自己的结构体或基元字段。
+- 在双精度版本的 Godot 中（`real_t` 为 `double`），这些结构体的字段是 `double`，布局与默认的单精度版本不同。含有 Godot 数学类型的数据，一个版本写出的，另一个版本读不了；需要在两者之间共享的数据，请改用自己的结构体或基元字段。
 - 请序列化你自己的数据类型；`Node`、`Resource` 等是引擎对象，Nino 不序列化它们。
 
 ## HybridCLR 与热更新 [#hybridclr-and-hot-update]

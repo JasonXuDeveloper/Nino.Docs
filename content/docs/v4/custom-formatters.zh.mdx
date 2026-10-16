@@ -4,7 +4,7 @@ description: 用你自己的格式化器序列化某个成员，或让 Nino 支�
 icon: Puzzle
 ---
 
-Nino 为[内置类型](/zh/docs/v4/types)提供了格式化器，并为每个 `[NinoType]` 生成一个。当你想换一种方式编码某个成员（变长整数、定点数），或者要序列化 Nino 不认识的类型（第三方集合、引擎中的类）时，就需要自己写格式化器。
+Nino 为[内置类型](/zh/docs/v4/types)提供了格式化器，并为每个 `[NinoType]` 生成一个。想换一种方式编码某个成员（变长整数、定点数），或者要序列化 Nino 不认识的类型（第三方集合、引擎里的类）时，就自己写一个格式化器。
 
 格式化器是实现了 `INinoFormatter<T>` 的**结构体**：
 
@@ -16,12 +16,12 @@ public interface INinoFormatter<T>
 }
 ```
 
-`Deserialize` 通过 `ref` 接收当前值：`default` 表示需要创建新值，已有实例则可以复用。格式化器以 `default(TFormatter)` 的形式调用，没有实例状态；需要保存的状态请放在静态字段中。
+`Deserialize` 通过 `ref` 接收当前值：`default` 表示要创建新值，已有实例则可以复用。格式化器以 `default(TFormatter)` 的形式调用，所以没有实例状态；需要保存的状态请放在静态字段里。
 
 ## 用于单个成员 [#for-one-member]
-用 `[NinoCustomFormatter]` 指定某个成员使用你的格式化器。格式化器实现的 `INinoFormatter<T>` 必须与成员类型**完全一致**（NINO008）。
+用 `[NinoCustomFormatter]` 让某个成员使用你自己的格式化器。格式化器实现的 `INinoFormatter<T>` 中，`T` 必须**正好**是成员类型（NINO008）。
 
-典型的例子是回放文件或状态同步流：每一帧记录各个数值的变化量。变化量通常很小，而 `long` 永远占 8 字节。改用 zig-zag 变长整数后，-64 到 63 之间的值只占 1 字节，±8191 以内只占 2 字节：
+典型的例子是回放文件或状态同步流：每个 tick 记录各个数值的变化量。变化量通常很小，而 `long` 总是占 8 字节。改用 zig-zag 变长整数后，-64 到 63 之间的值只占 1 字节，±8191 以内只占 2 字节：
 
 ```csharp
 /// Writes a long as a zig-zag varint.
@@ -62,10 +62,10 @@ public sealed class TickDelta
 }
 ```
 
-它作用于单个字段或属性，无论外层类型在哪里被序列化都会生效。使用自定义格式化器的成员不会参与原始内存结构体的整块写入。格式化器不是结构体，或者针对的类型不对时，分析器会报告 NINO008。
+这个特性作用于单个字段或属性，无论外层类型在哪里序列化都会生效。使用自定义格式化器的成员不会参与原始结构体的整块写入。格式化器不是结构体，或者针对的类型不对时，分析器会报告 NINO008。
 
 ## 用于整个类型：`[assembly: NinoFormatter]` [#for-a-type-assembly-ninoformatter]
-要让 Nino 支持它不认识的类型（你自己的或第三方的），在程序集上注册一个格式化器。类型参数和元素格式化器都会自动推断：约束为 `INinoFormatter<E>` 的类型参数会得到 Nino 为 `E` 解析出的格式化器，因此元素的序列化和反序列化都能内联。生成代码直接调用这个格式化器，运行时也使用同一份注册信息。
+要让 Nino 支持它不认识的类型（你自己的或第三方的），就在程序集上注册一个格式化器。类型参数和元素格式化器都会自动推断：约束为 `INinoFormatter<E>` 的类型参数会得到 Nino 为 `E` 解析出的格式化器，因此元素的序列化和反序列化都能内联。生成代码直接调用这个格式化器，运行时也使用同一份注册信息。
 
 ```csharp
 [assembly: NinoFormatter(typeof(RingFormatter<,>))]
@@ -119,11 +119,11 @@ public sealed class RingHolder
 
 - 格式化器必须是结构体，不能嵌套在泛型类型中，并且只实现一次 `INinoFormatter<P>`。泛型格式化器以开放定义注册（`typeof(F<,>)`），非泛型格式化器直接注册（`typeof(F)`）。每个类型参数都必须能推断出来：要么出现在 `P` 中，要么出现在类型约束中（`where TList : List<T>`），要么受 `INinoFormatter<E>` 约束。无法使用的注册会被忽略，并报告 NINO020。
 - 如果格式化的目标是一个裸类型参数（`INinoFormatter<TCollection>`），可以列出适用的类型定义：`[assembly: NinoFormatter(typeof(F<,,>), typeof(IList<>))]`。不列出时，它适用于约束允许的所有类型。
-- 查找顺序：先找为该类型自身定义（以及数组）注册的格式化器，然后是原始非托管值，然后是 `[NinoType]`，最后是裸类型参数的格式化器。多个注册同时匹配时，`Priority` 高者优先（如 `Priority = 10`），相同时取完整名称按序数比较较小的那个。
+- 查找顺序：先找为该类型自身定义（以及数组）注册的格式化器，然后是原始非托管值，然后是 `[NinoType]`，最后是裸类型参数的格式化器。多个注册同时匹配时，`Priority` 高的优先（例如 `Priority = 10`）；优先级相同时，取完整名称按序数排序靠前的那个。
 
 <Callout type="info" title="声明式注册，无需启动代码">
 
-`[assembly: NinoFormatter]` 是一个特性，而不是一次调用：没有模块初始化器，启动时也不需要执行任何代码。运行时第一次遇到某个程序集中的类型时，会读取它的注册信息（查找失败时则读取所有已加载的程序集）。因此，HybridCLR 热更新程序集中声明的格式化器在程序集加载后即可使用。Nino 自带的 BCL 格式化器也是这样声明的。
+`[assembly: NinoFormatter]` 是一个特性，而不是一次调用：没有模块初始化器，启动时也不需要执行任何代码。运行时第一次遇到某个程序集里的类型时，会读取该程序集的注册信息（查找失败时则读取所有已加载的程序集）。因此，HybridCLR 热更新程序集里声明的格式化器，程序集一加载就能用。Nino 自带的 BCL 格式化器也是这样声明的。
 
 </Callout>
 
@@ -177,41 +177,41 @@ Nino 遇到一个格式化器能处理的类型时，会这样绑定格式化器
 
 ### 切片中的位置 [#positions-in-a-slice]
 
-`Reader.ReadSlice()` 读取一个 `int32` 字节长度，并返回覆盖其后数据块的 reader（`ReserveInt32()` 加 `PatchLength(...)` 写出的就是这种数据块）。它的 `Position` **不会**从 `0` 重新开始：与父 reader 一样，它是相对整个输入起点的偏移。`Remaining` 和 `Eof` 则在切片末尾为止。要统计切片内读取了多少字节，先记下起始位置再相减：
+`Reader.ReadSlice()` 读取一个 `int32` 字节长度，并返回覆盖其后数据块的 reader（`ReserveInt32()` 加 `PatchLength(...)` 写出的就是这种数据块）。它的 `Position` **不会**从 `0` 重新开始：与父 reader 一样，它是相对整个输入起点的偏移。`Remaining` 和 `Eof` 则以切片末尾为界。要统计切片内读了多少字节，先记下起始位置，再相减：
 
 ```csharp
-Reader slice = reader.ReadSlice();     // 父 reader 跳过整个数据块
-int start = slice.Position;            // 整个输入中的偏移，不是 0
+Reader slice = reader.ReadSlice();     // the parent skips the whole block
+int start = slice.Position;            // an offset in the whole input, not 0
 slice.Read(out int kind);
 // ...
-int consumed = slice.Position - start; // 切片内读取的字节数
-bool complete = slice.Eof;             // Remaining == 0：切片已读完
-reader.EndSlice(in slice);             // 切片中读出的对象对后续的回引仍然可见
+int consumed = slice.Position - start; // bytes read inside the slice
+bool complete = slice.Eof;             // Remaining == 0: the slice is used up
+reader.EndSlice(in slice);             // objects read in the slice stay visible to back references
 ```
 
 `Writer.Position` 同样是在 `NinoArrayBufferWriter` 中的绝对位置。
 
-如果要写入的值有自己的格式化器（`[NinoType]`、`List<T>` 等），就把 writer 或 reader 传给常规 API，这样引用追踪和多态都能照常处理：
+如果要写入的值有自己的格式化器（`[NinoType]`、`List<T>` 等），就把 writer 或 reader 传给常规 API，这样引用和多态都能照常处理：
 
 ```csharp
 NinoSerializer.Serialize(value.Owner, ref writer);
 NinoDeserializer.Deserialize(ref owner, ref reader);
 ```
 
-读取时必须按写入的顺序读回完全相同的内容：字节中不带 schema。
+读取时必须按写入的顺序，读回完全相同的内容：字节里不带 schema。
 
 ## 运行时注册 [#registering-at-run-time]
 
-`NinoFormatterCache<T>.Register<TFormatter>()` 在运行时注册（或替换）`T` 的格式化器。请在启动时调用，**必须早于 `T` 第一次被序列化或反序列化**：
+`NinoFormatterCache<T>.Register<TFormatter>()` 在运行时注册（或替换）`T` 的格式化器。请在启动时调用，**必须早于 `T` 第一次序列化或反序列化**：
 
 ```csharp
 NinoFormatterCache<Ring<int>>.Register<RingFormatter<int, UnmanagedFormatter<int>>>();
 ```
 
-使用它的有：顶层的 `NinoSerializer`/`NinoDeserializer` 调用（包括拦截后的调用和装箱重载），以及通过格式化器缓存访问 `T` 的成员（泛型 `[NinoType]` 的类型参数、其他程序集中的类型）。生成器在编译期就已确定格式化器的成员不受影响。一般情况下，请优先使用对所有地方都生效的 `[assembly: NinoFormatter]`。
+使用它的有：顶层的 `NinoSerializer`/`NinoDeserializer` 调用（包括拦截后的调用和装箱重载），以及通过格式化器缓存访问 `T` 的成员（泛型 `[NinoType]` 的类型参数、其他程序集中的类型）。生成器在编译期就确定了格式化器的成员，仍然使用原来的格式化器。请优先使用 `[assembly: NinoFormatter]`，它对所有地方都生效。
 
 <Callout type="warn">
 
-`T` 第一次经由上述任一途径被序列化或反序列化后，它使用的格式化器在整个进程中就固定下来。此后再为 `T` 注册格式化器（即使是同一个）会抛出 `InvalidOperationException`，而不是让已经在用旧格式化器的代码悄悄忽略它。
+`T` 第一次经由上述任一途径序列化或反序列化后，它的格式化器在整个进程中就固定下来。此后再为 `T` 注册格式化器（即使是同一个）会抛出 `InvalidOperationException`，而不是让已经在用旧格式化器的代码悄悄忽略它。
 
 </Callout>

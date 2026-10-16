@@ -50,7 +50,7 @@ public struct GridPos            // positional raw struct: never reorder its fie
 }
 ```
 
-A field added in a later update is missing from older saves. It keeps the value the constructor gives it, so give new fields a sensible initializer: with `public int Difficulty = 1;` added to `SaveGame`, every old save loads on normal difficulty instead of `0`.
+A field added in a later update is missing from older saves. When they load, it keeps the value the constructor gives it, so give new fields a sensible initializer: with `public int Difficulty = 1;` added to `SaveGame`, every old save loads on normal difficulty instead of `0`.
 
 <Callout type="warn">
 
@@ -87,7 +87,7 @@ public class Character
 }
 ```
 
-Each object is written once; later references are written as a 4-byte index, and cycles resolve. Tracking covers `[NinoType]` classes, not collections, and cannot be used with types re-created from constructor arguments such as positional records (NINO016). See [Reference Tracking](/en/docs/v4/reference-tracking).
+Each object is written once; later references are written as a 4-byte index, and cycles are restored. Tracking covers `[NinoType]` classes, not collections, and cannot be used with types re-created from constructor arguments such as positional records (NINO016). See [Reference Tracking](/en/docs/v4/reference-tracking).
 
 ## Add a File Header
 

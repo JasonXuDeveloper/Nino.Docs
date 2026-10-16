@@ -17,7 +17,7 @@ Data outlives code. A save file, a cached asset or a message from an older clien
 | Overhead | none | 4 bytes per object | 8 bytes per member, plus 4 per object |
 | Speed | fastest | close to positional: one length per object | slower: a key and length per member, and a key check per member when reading |
 
-The format itself is part of the data: turning `versionTolerant` or `keyed` on or off for a type makes data written before unreadable. Choose before you store anything.
+The format itself is part of the data: turning `versionTolerant` or `keyed` on or off for a type makes previously written data unreadable. Choose before you store anything.
 
 In every format, **changing a member's type** is not tolerated. **Renaming a member** is free in positional and version-tolerant types, which write no names. In keyed types the key is the hash of the name, so mark a renamed member with its old name ([Renaming Keyed Members](#renaming-keyed-members)); without it, the rename reads as "one member removed, another added". Rename *types* with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name) on the type.
 
@@ -45,11 +45,11 @@ public class Settings
 }
 ```
 
-The object's members, those of its `[NinoType]` base classes first, are written behind one 4-byte length, however deep the hierarchy is:
+An object's members (those of its `[NinoType]` base classes first) are written after a single 4-byte length, however deep the hierarchy is:
 
 - **Old data, new code:** members missing from the data keep the value they already have: the existing instance's value when you deserialize into it, otherwise whatever the constructor set, field initializers included. A 1.0 file loaded by 1.1 gets `MusicVolume = 0.8f`, not `0`. Types re-created through a constructor (positional records, get-only members) get `default` for a missing constructor argument, not the parameter's default value.
 - **New data, old code:** bytes the old code does not know are skipped.
-- Members can be appended to the **most derived type**, the end of the object's data, and this holds at any nesting depth: each tolerant object carries its own length, inside collections, dictionaries and polymorphic members too.
+- Members can be appended to the **most derived type**, which is the end of the object's data. This works at any nesting depth: each tolerant object carries its own length, inside collections, dictionaries and polymorphic members too.
 
 <Callout type="warn">
 
@@ -65,7 +65,7 @@ Defining the symbol `WEAK_VERSION_TOLERANCE` in a project turns `versionTolerant
 
 ### Appending to a Base Class [#appending-to-a-base-class]
 
-The members of every level share the object's one length, root first. A member appended to a base class therefore lands **before** the members of its subclasses and shifts them:
+All levels of the hierarchy share the object's single length, and their members are written root first. A member appended to a base class therefore lands **before** the members of its subclasses and shifts them:
 
 ```csharp
 // Version 2 appends Armor to the base class
@@ -88,9 +88,9 @@ public sealed class Archer : Unit
 - **Version 2 reads version 1 data:** `Armor` gets the bytes of `Arrows`, and the data ends before `Arrows`, which keeps its value like any missing member (`0` in a new `Archer`).
 - **Version 1 reads version 2 data:** `Arrows` gets the bytes of `Armor`, and the real `Arrows` is skipped as an unknown trailing member.
 
-Here the members have the same type, so the values are only wrong. When the types differ, the bytes are misread as another type: the result is wrong values or an `InvalidOperationException`. Nothing reports the mistake at compile time, because the generator only ever sees one version of your code.
+Here the two members have the same type, so the values are merely wrong. When the types differ, the bytes are misread as another type, and the result is wrong values or an `InvalidOperationException`. Nothing reports the mistake at compile time, because the generator only ever sees one version of your code.
 
-Instances of `Unit` itself are not affected (`Armor` is their last member); the data of every subclass is. So append members only to the classes at the bottom of a hierarchy, such as sealed message classes. A member that every subclass needs goes into each of them, or make the hierarchy [`keyed`](#keyed-members), whose members can be added to any class.
+Instances of `Unit` itself are not affected (`Armor` is their last member); the data of every subclass is. So append members only to the classes at the bottom of a hierarchy, such as sealed message classes. Put a member that every subclass needs into each subclass, or make the hierarchy [`keyed`](#keyed-members), where members can be added to any class.
 
 ## Keyed Members
 
@@ -104,11 +104,11 @@ public class EnemyConfig
 }
 ```
 
-Each member is written with a **key**, the 32-bit FNV-1a hash of its name computed by the generator, and its length, much like MessagePack's `[Key("name")]` but without writing strings:
+Each member is written with a **key** (the 32-bit FNV-1a hash of its name, computed by the generator) and its length. This is much like MessagePack's `[Key("name")]`, except that no strings are written:
 
-- Unknown keys in the data are skipped; members missing from the data keep their value, by the same rule as [version tolerance](#version-tolerance) (field initializers apply).
+- Unknown keys in the data are skipped; members missing from the data keep their value, following the same rule as [version tolerance](#version-tolerance) (field initializers apply).
 - Reading first assumes the declaration order, so data written by the same schema is read with one 8-byte compare per unmanaged member; at the first mismatch it falls back to dispatching each key.
-- Two member names of one type (inherited ones included) that hash to the same key are a compile-time error (NINO014), so a collision cannot corrupt data.
+- If two member names in a type (inherited ones included) hash to the same key, that is a compile-time error (NINO014), so a collision cannot corrupt data.
 - Keyed structs are never written as raw memory. Polymorphism works as usual: the type id comes before the body.
 
 This is the format for data authored in an editor and kept for a long time: game configuration, level data, settings files.
@@ -129,7 +129,7 @@ public class PlayerSave
 ```
 
 - A former name that collides with another member of the type is a compile-time error.
-- In positional and version-tolerant types the attribute has no effect, since they write no names; the analyzer warns about it there.
+- In positional and version-tolerant types the attribute has no effect, since they write no names; the analyzer warns about it there (NINO024).
 - Old code still knows only the old name, so data written after the rename loses this member when old code reads it.
 
 ## Choosing

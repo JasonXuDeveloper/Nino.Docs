@@ -40,9 +40,9 @@ byte[] bytes = NinoSerializer.Serialize(player);
 
 ### 复用缓冲区 [#reusing-a-buffer]
 
-`Serialize<T>(value)` 每次都会为结果分配一个 `byte[]`。[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)会按最终大小分配这个数组并直接写入；其他值先写入线程独享的暂存缓冲区，再拷贝出来。想做到零分配，就序列化到一个长期持有的缓冲区里。
+`Serialize<T>(value)` 每次都会为结果分配一个 `byte[]`。对于[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)，这个数组按最终大小分配，数据直接写进去；其他值先写入线程独享的暂存缓冲区，再拷贝出来。想做到零分配，就序列化到一个自己长期持有的缓冲区里。
 
-`NinoArrayBufferWriter` 是 Nino 自带的 `IBufferWriter<byte>`，底层数组租自 `ArrayPool<byte>.Shared`，Nino 会**直接写入**其中。其他 `IBufferWriter<byte>`（.NET 的 `ArrayBufferWriter<byte>`、`PipeWriter`、包装 `Stream` 的写入器）则会在最后多一次拷贝。
+`NinoArrayBufferWriter` 是 Nino 自带的 `IBufferWriter<byte>`，底层数组租自 `ArrayPool<byte>.Shared`，Nino 会**直接写入**其中。换成其他 `IBufferWriter<byte>`（.NET 的 `ArrayBufferWriter<byte>`、`PipeWriter`、包装 `Stream` 的写入器），最后会多一次拷贝。
 
 ```csharp
 var buffer = new NinoArrayBufferWriter();      // or new NinoArrayBufferWriter(initialCapacity)
@@ -63,7 +63,7 @@ NinoSerializer.Serialize(player, buffer);      // no allocation this time
 
 ### 一个缓冲区写多个值 [#several-values-in-one-buffer]
 
-`Writer` 是写入 `NinoArrayBufferWriter` 的 `ref struct`。需要连续写入多个值，或者在[自定义格式化器](/zh/docs/v4/custom-formatters)中写数据时使用它：
+`Writer` 是一个写入 `NinoArrayBufferWriter` 的 `ref struct`。要连续写入多个值，或者在[自定义格式化器](/zh/docs/v4/custom-formatters)里写数据时，就用它：
 
 ```csharp
 var buffer = new NinoArrayBufferWriter();
@@ -76,7 +76,7 @@ writer.ReleaseReferences(); // ends reference tracking, see below
 
 <Callout type="info">
 
-顶层重载会把[引用追踪](/zh/docs/v4/reference-tracking)的范围限定在单次调用内。自己创建 `Writer`（或 `Reader`）时，通过它写入的所有内容共用一张引用表，直到调用 `ReleaseReferences()` 为止。请在一条完整消息结束时调用它；如果没有写入任何启用追踪的类型，这个调用没有开销。
+顶层重载会把[引用追踪](/zh/docs/v4/reference-tracking)的范围限定在单次调用内。自己创建 `Writer`（或 `Reader`）时，通过它写入的所有内容共用一张引用表，直到调用 `ReleaseReferences()` 为止。请在每条逻辑消息结束时调用它；如果没有写入任何开启追踪的类型，这个调用没有开销。
 
 </Callout>
 
@@ -99,7 +99,7 @@ void NinoDeserializer.Deserialize(ReadOnlySpan<byte> data, Type type, ref object
 void NinoDeserializer.DeserializeBoxed(ref object value, ref Reader reader, Type type);
 ```
 
-数据类型是 `ReadOnlySpan<byte>`：`byte[]`、`ArraySegment<byte>`、`Span<byte>`、`Memory<byte>.Span`，或者现有缓冲区的任意切片都可以直接传入，无需拷贝。
+输入数据是 `ReadOnlySpan<byte>`：`byte[]`、`ArraySegment<byte>`、`Span<byte>`、`Memory<byte>.Span`，或者现有缓冲区的任意切片，都可以直接传入，不用拷贝。
 
 ```csharp
 Player player = NinoDeserializer.Deserialize<Player>(bytes);
@@ -108,7 +108,7 @@ Player fromSlice = NinoDeserializer.Deserialize<Player>(rented.AsSpan(0, receive
 
 ### 反序列化到已有值 [#into-an-existing-value]
 
-用 `ref` 传入已有的值，Nino 会原地填充，尽可能复用这个实例以及其中的嵌套对象、列表、数组和字典。传入 `null`（或 `default`）则创建新值。
+用 `ref` 传入已有的值，Nino 会原地填充它，尽量复用这个实例以及其中的嵌套对象、列表、数组和字典。传入 `null`（或 `default`）则创建新值。
 
 ```csharp
 Player player = null;
@@ -119,7 +119,7 @@ foreach (var message in messages)
 }
 ```
 
-过程中被丢弃的实例（数据中为 `null`、列表变短、字典少了某个键、多态类型变了）可以归还到对象池。Nino 没有 `out` 重载：要新实例就用返回值，要复用就用 `ref`。详见 [复用反序列化与对象池](/zh/docs/v4/pooling)。
+过程中被丢弃的实例（数据中为 `null`、列表变短、字典少了某个键、多态类型变了）可以归还到对象池。Nino 没有 `out` 重载：要新实例就用返回值，要复用就用 `ref`。详见[复用反序列化与对象池](/zh/docs/v4/pooling)。
 
 ### 从一个缓冲区读多个值 [#several-values-from-one-buffer]
 
@@ -134,7 +134,7 @@ reader.ReleaseReferences();
 
 ### 多段数据 [#multi-segment-data]
 
-Nino 没有 `ReadOnlySequence<byte>` 重载。`System.IO.Pipelines` 给出的序列通常只有一段，直接传入即可；如果有多段，先拷贝到一块连续内存：
+Nino 没有 `ReadOnlySequence<byte>` 重载。`System.IO.Pipelines` 给出的序列通常只有一段，直接传入即可；如果有多段，就先拷贝到一块连续内存里：
 
 ```csharp
 static Player Read(ReadOnlySequence<byte> data)
@@ -158,7 +158,7 @@ static Player Read(ReadOnlySequence<byte> data)
 
 ## 运行时类型 [#runtime-types]
 
-类型只有在运行时才知道时（插件系统、编辑器工具、以 `Type` 为键的消息表），使用装箱重载。序列化和反序列化必须用**同一个**类型：
+如果类型要到运行时才知道（插件系统、编辑器工具、以 `Type` 为键的消息表），就用装箱重载。序列化和反序列化必须用**同一个**类型：
 
 ```csharp
 object value = GetComponentData();
@@ -170,11 +170,11 @@ NinoSerializer.SerializeBoxed(shape, buffer, typeof(Shape));
 object read = NinoDeserializer.Deserialize(buffer.WrittenSpan, typeof(Shape));
 ```
 
-装箱重载按 `Type` 查找格式化器（首次调用后缓存），值类型会被装箱。编译期已知类型时，请优先使用泛型重载。
+装箱重载按 `Type` 查找格式化器（首次调用后缓存），值类型会被装箱。编译期就知道类型时，请优先用泛型重载。
 
 ## 深层对象图 [#deep-object-graphs]
 
-递归类型（链表、树、节点里又包含节点）可以任意深。Nino 在原处写入前 128 层嵌套的对象；更深的对象会延后，从较浅的位置写入，读取时也一样。因此无论对象图有多深，写入和读取占用的栈都有上限：10 万个节点的链表在 512 KB 栈的线程上也能正常往返，而且无法构造出让读取方栈溢出的数据，所以递归类型可以放心用在来自不可信来源的消息里。嵌套不到 128 层的数据，写出的字节与以前完全相同。
+递归类型（链表、树、节点里又包含节点）可以嵌套任意深。前 128 层嵌套的对象，Nino 在原处直接写入；更深的对象会推迟，之后从较浅的层级写入，读取时也一样。因此无论对象图有多深，写入和读取占用的栈都有上限：10 万个节点的链表在 512 KB 栈的线程上也能正常往返，而且无法构造出让读取方栈溢出的数据，所以递归类型可以放心用在来自不可信来源的消息里。嵌套不到 128 层的数据不受影响，写出的字节完全不变。
 
 ```csharp
 [NinoType]
@@ -184,24 +184,24 @@ public class TreeNode
     public List<TreeNode> Children;
 }
 
-// 想多深都可以：两边都不会 StackOverflowException。
+// As deep as you like: no StackOverflowException on either side.
 byte[] bytes = NinoSerializer.Serialize(deepTree);
 var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
 ```
 
-被延后的对象会在读到它所在位置时立即创建并放进去，成员则在同一次调用中稍后读取，所以复用反序列化和 `[NinoPooled]` 依然会复用每一个实例。有两类类无法这样延后，总是在原处嵌套：
+被推迟的对象，在读到它的槽位时就立即创建并放入槽位，它的成员则在同一次调用中稍后读取，所以复用反序列化和 `[NinoPooled]` 仍然会复用每一个实例。有两种类不能这样推迟，总是在原处嵌套：
 
 - 由**构造函数**创建的类（位置记录、init-only 或只读成员），因为成员读完之前还没有实例；
 - **按值比较**的类（记录、重写了 `GetHashCode` 或实现了 `IComparable` 的类），因为 `HashSet<T>`、字典的键或有序集合可能会在成员读取之前就持有它。
 
-这两类对象嵌套超过 512 层时会抛出 `InvalidOperationException`。需要很深递归的类型，请提供无参构造函数和可赋值的成员。
+由这两种类组成的对象图，嵌套到 512 层就会抛出 `InvalidOperationException`。需要深度递归的类型，请给它无参构造函数和可赋值的成员。
 
-带**环**的对象图（`a.Next = b; b.Next = a;`）会被无限写下去。写入时会抛出带类型名的 `InvalidOperationException`；给环上的类型加上 [`trackReferences: true`](/zh/docs/v4/reference-tracking)，即可让每个对象只写一次并保留这个环。
+带**环**的对象图（`a.Next = b; b.Next = a;`）永远写不完，所以写入时会抛出带类型名的 `InvalidOperationException`。给环上的类型加上 [`trackReferences: true`](/zh/docs/v4/reference-tracking)，即可让每个对象只写一次并保留这个环。
 
 ## 无效数据 [#invalid-data]
 
-从数据中读出的每个长度，都会先与剩余字节数比对，再分配内存，因此格式错误或恶意构造的数据不会引发超大内存分配。无效数据会抛出 `InvalidOperationException`，消息以 `Nino:` 开头，例如数据被截断（"unexpected end of data"）、长度不可能成立、类型 ID 未知、类型 ID 不是声明类型的子类型，或 `[NinoUtf8]` 字符串的字节不是合法的 UTF-8、与它记录的字符数和字节数对不上。读取永远不会越过 span 的末尾。
+从数据中读出的每个长度，都会先和剩余字节数比对，然后才分配内存，因此格式错误或恶意构造的数据不会引发超大内存分配。无效数据会抛出 `InvalidOperationException`，消息以 `Nino:` 开头，例如数据被截断（"unexpected end of data"）、长度不合法、类型 ID 未知、类型 ID 不是声明类型的子类型，或 `[NinoUtf8]` 字符串的字节不是合法的 UTF-8、与它记录的字符数和字节数对不上。读取永远不会越过 span 的末尾。
 
 嵌套很深的数据也不会导致栈溢出：参见[深层对象图](#deep-object-graphs)。
 
-但如果数据是按**另一个**布局兼容的类型写出的，Nino 无法察觉：字节中不带 schema。请自行为数据加上版本信息（参见[数据演进](/zh/docs/v4/evolving-data)和[存档文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）。
+但如果数据是按**另一个**布局兼容的类型写出的，Nino 察觉不到：字节里不带 schema。请自己给数据加上版本信息（参见[数据演进](/zh/docs/v4/evolving-data)和[存档文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）。

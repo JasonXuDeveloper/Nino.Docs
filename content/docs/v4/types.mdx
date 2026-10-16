@@ -19,7 +19,7 @@ This page lists the types Nino serializes out of the box. Any of them can be a t
 
 <Callout type="idea">
 
-A member whose type Nino cannot serialize is reported by the analyzer as warning NINO007 while you type, and skipped. See [Analyzer Diagnostics](/en/docs/v4/analyzers).
+If Nino cannot serialize a member's type, the analyzer reports warning NINO007 as you type, and the member is skipped. See [Analyzer Diagnostics](/en/docs/v4/analyzers).
 
 </Callout>
 
@@ -27,7 +27,7 @@ A member whose type Nino cannot serialize is reported by the analyzer as warning
 
 ### Primitive and Unmanaged Types
 
-Nino supports all [unmanaged types](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/unmanaged-types), including user-defined ones. They are written as their raw bytes (little-endian, padding zeroed), and arrays and lists of them are written with a single block copy:
+Nino supports all [unmanaged types](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/unmanaged-types), including user-defined ones. They are written as their raw bytes (little-endian, padding zeroed), and arrays and lists of them take a single block copy:
 - `bool`, `byte`, `sbyte`, `char`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, `float`, `double`, `decimal`
 - `enum`
 - `DateTime`, `TimeSpan`, `Guid`
@@ -47,7 +47,7 @@ The raw layout is the canonical 64-bit layout. On runtimes that lay a struct out
 
 ### Strings
 
-`string` is supported. By default it is written as UTF-16 (one block copy); mark a member with [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) to write it as UTF-8, together with the strings inside a collection or tuple member (`List<string>`, `Dictionary<string, int>`).
+`string` is supported. By default it is written as UTF-16 (one block copy); mark a member with [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) to write it as UTF-8. This also covers the strings inside a collection or tuple member (`List<string>`, `Dictionary<string, int>`).
 
 ### Other Built-in Types
 - `Nullable<T>` (`T?`) of any serializable `T`
@@ -57,7 +57,7 @@ The raw layout is the canonical 64-bit layout. On runtimes that lay a struct out
 
 ### Collection Types
 
-Nino supports collections whose elements are serializable types:
+Nino supports the following collections, as long as their elements are serializable:
 - `T[]`, multi-dimensional arrays `T[,]`, `T[,,]`, `T[,,,]`, and `ArraySegment<T>`
 - `List<T>`, `HashSet<T>`, `Queue<T>`, `Stack<T>`, `LinkedList<T>`, `SortedSet<T>`
 - `Dictionary<TKey, TValue>`, `SortedDictionary<TKey, TValue>`, `SortedList<TKey, TValue>`
@@ -118,7 +118,7 @@ public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 
 Some collection shapes are not supported; see [Not Supported](#not-supported).
 
-Deserializing into a collection whose `IsReadOnly` is `true` throws an `InvalidOperationException`, as does data that holds the same key twice for a dictionary or `HashSet<T>`.
+Deserializing into a collection whose `IsReadOnly` is `true` throws an `InvalidOperationException`, and so does data that holds the same key twice for a dictionary or a `HashSet<T>`.
 
 </Callout>
 

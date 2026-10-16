@@ -10,7 +10,7 @@ icon: GitFork
   }}
 />
 
-Nino 会写入值的运行时类型，所以声明为基类或接口的值，读回来仍是它真正的类型。配置表里一个技能的效果列表、回放中的事件、网络协议中的各种消息，都是这种情况：声明的是一个类型，实际是许多具体类型。
+Nino 会写入值的运行时类型，所以声明为基类或接口的值，读回来仍是它真正的类型。配置表里技能的效果列表、回放中的事件、网络协议里的各种消息，都需要这一点：声明的是一个类型，实际存放的是多种具体类型。
 
 ```csharp title="Effects.cs"
 [NinoType] // [!code highlight]
@@ -51,7 +51,7 @@ List<Effect> effects = NinoDeserializer.Deserialize<List<Effect>>(bytes);
 
 ## 接口与抽象类 [#interfaces-and-abstract-classes]
 
-接口和抽象类的用法完全一样：给接口或抽象类加上 `[NinoType]`，实现它的类和结构体会自动继承：
+接口和抽象类的用法完全一样：给接口或抽象类加上 `[NinoType]`，实现它的类和结构体会自动继承这个特性：
 
 <Tabs items={["接口示例", "抽象类示例"]}>
 
@@ -108,7 +108,7 @@ public class Derived : Base
 | 非密封类、抽象类、接口 | 4 字节类型 ID（`0` 表示 null） | 是 |
 | `object` | 4 字节类型 ID | 是，可以是任意 `[NinoType]` |
 
-类型 ID 是运行时类型全名的 FNV-1a 哈希，由生成器在编译期计算，因此不用分配标签，也不用在多个程序集之间保持同步。类型改名或换命名空间时，使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
+类型 ID 是运行时类型全名的 FNV-1a 哈希，由生成器计算，所以不用分配标签，也不用在多个程序集之间保持同步。类型改名或换命名空间时，请使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
 
 <Callout type="idea">
 
@@ -118,7 +118,7 @@ public class Derived : Base
 
 ### 查看类型 ID [#inspecting-type-ids]
 
-`NinoTypeId` 在运行时计算出同样的 ID，可用于日志、协议校验，或在握手时比对双方支持的消息集合：
+`NinoTypeId` 在运行时算出同样的 ID，可以用于日志、协议校验，或者在握手时比对双方的消息集合：
 
 ```csharp
 int id = NinoTypeId.Of(typeof(Move));          // the id Move is written with ([NinoFormerName] honored)
@@ -131,16 +131,16 @@ ID 永远不会是 `0`，`0` 表示 null。
 
 Nino 采用混合分派：
 
-- **生成的分派代码**：用于与基类在同一程序集中声明的子类型。写入时是一串精确的类型判断，读取时是对类型 ID 的 `switch`，都直接调用子类型的格式化器。
-- **无锁注册表**：用于其余所有情况，包括其他程序集中的子类型、封闭泛型类型、启用引用追踪的类型，以及子类型超过 64 个的继承体系。
+- **生成的分派代码**：用于和基类声明在同一程序集里的子类型。写入时是一串精确的类型判断，读取时是对类型 ID 的 `switch`，两者都直接调用子类型的格式化器。
+- **无锁注册表**：用于其余所有情况，包括其他程序集中的子类型、封闭泛型类型、开启了引用追踪的类型，以及子类型超过 64 个的继承体系。
 
-读取时会检查数据中的类型确实派生自声明类型；如果数据指向一个无关的类型，会直接抛出异常，而不是把它存进去。
+读取时，Nino 会检查数据中的类型确实派生自声明类型；如果数据指向一个无关的类型，会直接抛出异常，而不会把它存进去。
 
 ## 其他程序集中的子类型 [#subtypes-in-other-assemblies]
 
-无论子类型声明在哪里，Nino 都能自动找到，包括之后才加载的程序集（插件、HybridCLR 热更新 DLL）：遇到未知的类型 ID 时，Nino 会先查找新加载程序集的注册表，找不到才报错。不需要任何注册调用。例如，热更新在自己的 DLL 中新增了 `public sealed class Freeze : Effect`：DLL 加载之后，AOT 程序集中的战斗代码读取包含 `Freeze` 的 `List<Effect>`，无需任何改动。子类型所在的程序集必须引用 `Nino.Core`，这样源生成器才会在那里运行；如果类型 ID 对应的类型不在任何已加载的程序集中，会抛出 `InvalidOperationException`。
+无论子类型声明在哪里，Nino 都能自动找到，包括之后才加载的程序集（插件、HybridCLR 热更新 DLL）：遇到未知的类型 ID 时，Nino 会先查找新加载程序集的注册表，找不到才报错。不需要任何注册调用。例如，热更新在自己的 DLL 中新增了 `public sealed class Freeze : Effect`。DLL 加载之后，AOT 程序集里的战斗代码不用做任何改动，就能读取包含 `Freeze` 的 `List<Effect>`。子类型所在的程序集必须引用 `Nino.Core`，这样源生成器才会在那里运行；如果类型 ID 对应的类型不在任何已加载的程序集中，会抛出 `InvalidOperationException`。
 
-唯一的例外是：某个封闭泛型子类型（如 `Box<int>`）在进程中只会被**读取**，代码里既不出现它的名字，也从不写入它。这种情况需要在启动时注册：
+唯一的例外是封闭泛型子类型（如 `Box<int>`）：如果进程只会**读取**它，代码里既不出现它的名字，也从不写入它，就需要在启动时注册：
 
 ```csharp
 NinoPolymorphic.Register<Box<int>>();

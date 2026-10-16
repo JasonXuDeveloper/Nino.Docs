@@ -8,16 +8,16 @@ What Nino v4 does not do, and the limitations of earlier versions that v4 remove
 
 ## Current Limitations
 - **Source generator required.** Nino needs its source generator (Roslyn 4.3 or later) and C# 9 or later in the project that declares `[NinoType]`s.
-- **Not compatible with v3 data.** The v4 format cannot read data written by v3 or the v4 betas/previews. See [Migrating from v3](/en/docs/v4/migration#converting-v3-data).
+- **Not compatible with v3 data.** v4 cannot read data written by v3 or by the v4 betas/previews. See [Migrating from v3](/en/docs/v4/migration#converting-v3-data).
 - **Positional by default.** Without `versionTolerant` or `keyed`, inserting, removing or reordering members breaks existing data. `versionTolerant` only tolerates members appended to the most derived type; use `keyed` for anything else. Changing a member's type is never tolerated.
 - **Raw structs are layout-sensitive.** An unmanaged `[NinoType]` struct written as raw memory is written in its canonical field order: reordering its fields or changing its `StructLayout` breaks existing data. Mark it `versionTolerant` (or `[NinoIgnore]` a field) to write it member by member instead.
 - **Little-endian hosts only.** All multi-byte values are written little-endian. On a big-endian host, constructing a `Writer` or `Reader` throws `PlatformNotSupportedException` instead of producing incompatible bytes. Every platform .NET and Unity run on today is little-endian.
-- **Some types are not supported.** Delegates, `Task`, pointers, `Memory<T>`, non-generic and some user-defined collection shapes, several BCL classes (`BigInteger`, `Uri`, most immutable collections) and Unity or Godot classes have no formatter; such members are skipped with warning NINO007. The full list is in [Supported Types](/en/docs/v4/types#not-supported); a [custom formatter](/en/docs/v4/custom-formatters) adds any of them.
+- **Some types are not supported.** Delegates, `Task`, pointers, `Memory<T>`, non-generic and some user-defined collection shapes, several BCL classes (`BigInteger`, `Uri`, most immutable collections) and Unity or Godot classes have no formatter; such members are skipped with warning NINO007. The full list is in [Supported Types](/en/docs/v4/types#not-supported); a [custom formatter](/en/docs/v4/custom-formatters) can add any of them.
 - **Collections are values.** The same collection instance in two members is written twice and read back as two instances; `trackReferences` only tracks `[NinoType]` classes.
 - **Some types cannot be tracked or pooled.** Types re-created from constructor arguments or read-only members (positional records, for example) cannot use `trackReferences` (NINO016) or `[NinoPooled]` (NINO018). `[NinoPooled]` also requires a `sealed` class.
-- **Deep graphs of constructor-built types.** Classes created by their constructor or compared by value (records, for example) are always nested in place, so a graph of them fails past 512 nested objects. Other classes can nest to any depth. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
-- **Structs need at least one member.** A struct that serializes no member is an error (NINO023): it would be written as zero bytes. Serialize a member, or mark it `versionTolerant` or `keyed`.
-- **Version-tolerant base classes and interfaces.** A version-tolerant object writes the members of its whole hierarchy behind one length, so members appended to a base class (or a `[NinoType]` interface) shift the members of its subclasses and are not tolerated. Nothing reports this at compile time. See [Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class).
+- **Deep graphs of constructor-built types.** Classes created by their constructor or compared by value (records, for example) are always nested in place, so a graph of them fails once it is nested 512 levels deep. Other classes can nest to any depth. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
+- **Structs need at least one member.** A struct that serializes no members is an error (NINO023): it would be written as zero bytes. Serialize at least one member, or mark the struct `versionTolerant` or `keyed`.
+- **Version-tolerant base classes and interfaces.** A version-tolerant object writes the members of its whole hierarchy after a single length, so members appended to a base class (or a `[NinoType]` interface) shift the members of its subclasses and are not tolerated. Nothing reports this at compile time. See [Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class).
 - **Runtime-only generic instantiations.** A closed generic `[NinoType]` that a process only reads by type id, and never names in code or writes, must be registered at startup with `NinoPolymorphic.Register<T>()`.
 - **`PriorityQueue<TElement, TPriority>`** is supported only where the BCL has it: .NET 6 and later, not .NET Standard or Unity.
 - **Interceptors** need Roslyn 4.8 or later (the .NET 8 SDK and later). Unity, which uses the Roslyn 4.3 build, and older compilers make regular calls that are a few nanoseconds slower and write the same bytes.
@@ -78,7 +78,7 @@ Resolved since v3.0.3.
 </Accordion>
 <Accordion value="resolved-10" title={<>Deeply nested data overflows the stack</>}>
 
-Resolved in v4: objects nested deeper than 128 are written and read later, from a shallow point, so recursive types of any depth (and hostile data) take a bounded stack, and an untracked cycle throws instead of recursing. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
+Resolved in v4: objects nested more than 128 levels deep are deferred, then written and read from a shallower level, so recursive types of any depth (and hostile data) use a bounded amount of stack, and an untracked cycle throws instead of recursing forever. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
 
 </Accordion>
 </Accordions>

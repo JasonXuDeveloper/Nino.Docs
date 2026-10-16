@@ -4,11 +4,11 @@ description: "Short helpers over Nino's buffer and span APIs: length-prefixed fr
 icon: ArrowDownUp
 ---
 
-Nino serializes into an `IBufferWriter<byte>` and deserializes from a `ReadOnlySpan<byte>`. Streams, async I/O, multi-segment input, serialization callbacks and compression are a few lines on top of those two calls. This page has ready-to-copy versions of each.
+Nino serializes into an `IBufferWriter<byte>` and deserializes from a `ReadOnlySpan<byte>`. Streams, async I/O, multi-segment input, serialization callbacks and compression each take a few lines on top of those two calls. This page has a ready-to-copy version of each.
 
 ## Streams
 
-A stream has no message boundaries, so write each value as a frame: a 4-byte little-endian length, then the payload. `Writer` reserves the length slot, serializes the value after it and patches the length in, all in one buffer:
+A stream has no message boundaries, so write each value as a frame: a 4-byte little-endian length, then the payload. `Writer` reserves the length slot, serializes the value after it and then patches in the length, all in one buffer:
 
 ```csharp title="NinoStream.cs"
 using System;
@@ -163,7 +163,7 @@ Pipes usually return one segment per read, so most frames take the first branch 
 
 ## Callbacks
 
-Nino calls no hooks of its own. Put the before and after logic in an interface and call it around Nino, once, in a small helper:
+Nino calls no hooks of its own. Put the before and after logic in an interface, and call it around Nino in one small helper:
 
 ```csharp
 public interface ISerializationCallbacks
@@ -255,4 +255,4 @@ using (var gzip = new GZipStream(File.OpenRead(path), CompressionMode.Decompress
     save = NinoStream.Read<SaveGame>(gzip);
 ```
 
-`BrotliEncoder`, `BrotliDecoder` and `BrotliStream` need .NET Core 2.1 or later, and are not in .NET Standard. For more speed and less compression, LZ4 libraries expose the same span-in, span-out shape as `BrotliEncoder.TryCompress`.
+`BrotliEncoder`, `BrotliDecoder` and `BrotliStream` need .NET Core 2.1 or later, and are not in .NET Standard. If you want more speed and can accept less compression, LZ4 libraries offer the same span-in, span-out shape as `BrotliEncoder.TryCompress`.

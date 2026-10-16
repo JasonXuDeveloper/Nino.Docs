@@ -4,7 +4,7 @@ description: Preserve shared references and cycles.
 icon: Share2
 ---
 
-By default, an object referenced twice is written twice and read back as two instances, and serializing a cycle throws an `InvalidOperationException` (see [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs)). Mark a class `trackReferences: true` to preserve the object graph. Every subtype is tracked too, even one that declares its own `[NinoType]` without the option:
+By default, an object referenced twice is written twice and read back as two instances, and serializing a cycle throws an `InvalidOperationException` (see [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs)). Set `trackReferences: true` on a class to preserve the object graph. Every subtype is tracked too, even one that declares its own `[NinoType]` without the option:
 
 ```csharp
 [NinoType(trackReferences: true)] // [!code highlight]
@@ -39,7 +39,7 @@ var loaded = NinoDeserializer.Deserialize<List<Hero>>(NinoSerializer.Serialize(p
 
 Without tracking, the save would load two separate `Guild` objects, and a rename after loading would show on one hero only. Only the shared type needs the option: `Hero` itself is not tracked.
 
-- Each tracked object is written behind a 4-byte reference header: an object already written in the same call is written as its index only.
+- Each tracked object is written after a 4-byte reference header; an object already written in the same call is written as just its index.
 - Shared references keep their identity across members of any declared type, including `object` and interfaces.
 - Tracking covers `[NinoType]` classes, not collections: the same `List<T>` in two members is still written twice.
 - Cost: a small fixed cost per top-level call, plus 4 bytes and one identity lookup per tracked object. Calls without tracked objects pay nothing.
@@ -55,7 +55,7 @@ Types that must be re-created from constructor arguments or read-only members (f
 <Accordions type="single">
 <Accordion title="Use it for object graphs">
 
-Scene graphs, entity relationships, editors' undo stacks, save games where several objects point to the same one, trees with parent links: anything where identity matters or cycles exist. A list repeating one tracked object 100 times is written in a fraction of the bytes and time of the untracked list.
+Scene graphs, entity relationships, editors' undo stacks, save games where several objects point to the same one, trees with parent links: anything where identity matters or cycles exist. A list that repeats one tracked object 100 times takes a fraction of the bytes and time of the same list untracked.
 
 </Accordion>
 <Accordion title="Skip it for messages and plain data">
@@ -65,7 +65,7 @@ Network messages, configuration and other tree-shaped data have no shared refere
 </Accordion>
 <Accordion title="Writing and reading several values yourself">
 
-The top-level `NinoSerializer`/`NinoDeserializer` calls scope the reference table to one call. When you create a `Writer` or `Reader` yourself, references are shared across everything written through it until you call `ReleaseReferences()`, which you must do when the logical message ends.
+The top-level `NinoSerializer`/`NinoDeserializer` calls scope the reference table to one call. When you create a `Writer` or `Reader` yourself, references are shared across everything written through it until you call `ReleaseReferences()`. Call it at the end of each logical message.
 
 </Accordion>
 </Accordions>

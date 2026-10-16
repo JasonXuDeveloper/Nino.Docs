@@ -42,7 +42,7 @@ byte[] bytes = NinoSerializer.Serialize(player);
 
 `Serialize<T>(value)` allocates one `byte[]` for the result. For a [fixed-size type](/en/docs/v4/performance#fixed-size-types) that array is allocated at its final size and written in place; other values are written into a per-thread scratch buffer and copied out. To allocate nothing, serialize into a buffer you keep.
 
-`NinoArrayBufferWriter` is Nino's own `IBufferWriter<byte>`, backed by `ArrayPool<byte>.Shared`. Nino writes into it **in place**. Any other `IBufferWriter<byte>` (.NET's `ArrayBufferWriter<byte>`, a `PipeWriter`, a writer wrapping a `Stream`) receives the bytes with one extra copy at the end.
+`NinoArrayBufferWriter` is Nino's own `IBufferWriter<byte>`, backed by `ArrayPool<byte>.Shared`, and Nino writes into it **in place**. Any other `IBufferWriter<byte>` (.NET's `ArrayBufferWriter<byte>`, a `PipeWriter`, a writer that wraps a `Stream`) costs one extra copy at the end.
 
 ```csharp
 var buffer = new NinoArrayBufferWriter();      // or new NinoArrayBufferWriter(initialCapacity)
@@ -57,7 +57,7 @@ NinoSerializer.Serialize(player, buffer);      // no allocation this time
 
 <Callout type="warn">
 
-A `NinoArrayBufferWriter` is **not** thread safe: use one per thread, per connection or per operation. Call `Dispose()` when you no longer need it, to return its array to the pool.
+A `NinoArrayBufferWriter` is **not** thread safe: use one per thread, per connection or per operation. When you no longer need it, call `Dispose()` to return its array to the pool.
 
 </Callout>
 
@@ -76,7 +76,7 @@ writer.ReleaseReferences(); // ends reference tracking, see below
 
 <Callout type="info">
 
-The top-level overloads scope [reference tracking](/en/docs/v4/reference-tracking) to one call. When you create a `Writer` (or `Reader`) yourself, objects are tracked across everything written through it until you call `ReleaseReferences()`. Call it when the logical message ends; it costs nothing when no tracked type was written.
+The top-level overloads scope [reference tracking](/en/docs/v4/reference-tracking) to one call. When you create a `Writer` (or `Reader`) yourself, tracking spans everything written through it until you call `ReleaseReferences()`. Call it at the end of each logical message; it costs nothing if no tracked type was written.
 
 </Callout>
 
@@ -119,7 +119,7 @@ foreach (var message in messages)
 }
 ```
 
-Instances dropped along the way (the data holds `null`, a list shrinks, a dictionary key disappears, the polymorphic type changes) can be returned to an object pool. There is no `out` overload: use the return value for a new instance, or `ref` to reuse one. See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
+Instances that are dropped along the way (the data holds `null`, a list shrinks, a dictionary key disappears, the polymorphic type changes) can go back to an object pool. There is no `out` overload: use the return value for a new instance, or `ref` to reuse one. See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 
 ### Several Values from One Buffer
 
@@ -134,7 +134,7 @@ reader.ReleaseReferences();
 
 ### Multi-Segment Data
 
-There is no `ReadOnlySequence<byte>` overload. A sequence from `System.IO.Pipelines` is usually a single segment, which you pass directly; otherwise copy it into one contiguous block first:
+There is no `ReadOnlySequence<byte>` overload. A sequence from `System.IO.Pipelines` is usually a single segment, which you can pass directly; otherwise, copy it into one contiguous block first:
 
 ```csharp
 static Player Read(ReadOnlySequence<byte> data)
@@ -174,7 +174,7 @@ The boxed overloads resolve the formatter by `Type` (cached after the first call
 
 ## Deep Object Graphs
 
-Recursive types (a linked list, a tree, a node that holds another node) can be any depth. Nino writes the first 128 nested objects in place; an object nested deeper is written later, from a shallow point, and read back the same way. Writing and reading take a bounded amount of stack however deep the graph is: a 100,000-node linked list round-trips on a 512 KB thread stack, and data cannot be crafted to overflow the reader's stack, so recursive types are safe in messages from untrusted sources. Data less than 128 objects deep is written exactly as before.
+Recursive types (a linked list, a tree, a node that holds another node) can nest to any depth. Nino writes the first 128 levels of nested objects in place; an object nested deeper is deferred and written later from a shallower level, and it is read back the same way. Writing and reading use a bounded amount of stack, however deep the graph is: a 100,000-node linked list round-trips on a 512 KB thread stack, and data cannot be crafted to overflow the reader's stack, so recursive types are safe in messages from untrusted sources. Data nested less than 128 levels deep is not affected: its bytes do not change.
 
 ```csharp
 [NinoType]
@@ -189,18 +189,18 @@ byte[] bytes = NinoSerializer.Serialize(deepTree);
 var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
 ```
 
-A deferred object is created and put in its slot as soon as its slot is read, and its members are read later in the same call, so reuse deserialization and `[NinoPooled]` still reuse every instance. Two kinds of classes cannot wait like that, and are always nested in place:
+A deferred object is created and placed in its slot as soon as the slot is read, and its members are read later in the same call, so reuse deserialization and `[NinoPooled]` still reuse every instance. Two kinds of classes cannot be deferred like that and are always nested in place:
 
 - classes created by their **constructor** (positional records, init-only or read-only members), since there is no instance until their members are read;
 - classes **compared by value** (records, classes that override `GetHashCode` or implement `IComparable`), since a `HashSet<T>`, dictionary key or sorted collection could hold one before its members are read.
 
-A graph of those fails with an `InvalidOperationException` once 512 objects are nested. Give a deeply recursive type a parameterless constructor and settable members.
+A graph of such classes throws an `InvalidOperationException` once it is nested 512 levels deep. Give a deeply recursive type a parameterless constructor and settable members.
 
-An object graph with a **cycle** (`a.Next = b; b.Next = a;`) would be written forever. Writing it throws an `InvalidOperationException` that names the type; mark the types on the cycle [`trackReferences: true`](/en/docs/v4/reference-tracking) to write each object once and keep the cycle.
+An object graph with a **cycle** (`a.Next = b; b.Next = a;`) would never finish writing, so writing it throws an `InvalidOperationException` that names the type. Mark the types on the cycle [`trackReferences: true`](/en/docs/v4/reference-tracking) to write each object once and keep the cycle.
 
 ## Invalid Data
 
-Every length read from a payload is checked against the bytes left before anything is allocated, so malformed or hostile input cannot trigger huge allocations. Invalid data throws an `InvalidOperationException` whose message starts with `Nino:`: truncated data ("unexpected end of data"), an impossible length, an unknown type id, a type id that is not a subtype of the declared type, or a `[NinoUtf8]` string whose bytes are not valid UTF-8 or do not match its char and byte counts. Nothing reads past the end of the span.
+Every length read from a payload is checked against the remaining bytes before anything is allocated, so malformed or hostile input cannot trigger huge allocations. Invalid data throws an `InvalidOperationException` whose message starts with `Nino:`: truncated data ("unexpected end of data"), an impossible length, an unknown type id, a type id that is not a subtype of the declared type, or a `[NinoUtf8]` string whose bytes are not valid UTF-8 or do not match its char and byte counts. Nothing reads past the end of the span.
 
 Deeply nested data cannot overflow the stack either: see [Deep Object Graphs](#deep-object-graphs).
 

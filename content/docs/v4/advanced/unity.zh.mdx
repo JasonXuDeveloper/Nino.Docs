@@ -11,7 +11,7 @@ icon: Gamepad2
 
 ### 安装包 [#install-the-package]
 
-Nino 支持 Unity 2022.3 及以上版本，覆盖所有播放器平台，Mono 和 IL2CPP 均可。从 [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/) 安装：
+Nino 支持 Unity 2022.3 及以上版本，支持所有 Player 平台，Mono 和 IL2CPP 均可。从 [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/) 安装：
 
 ```shell
 openupm add com.jasonxudeveloper.nino
@@ -52,18 +52,18 @@ public class PlayerState
 
 <Callout type="info">
 
-- **私有成员需要 `partial`。** Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员（或标记了 `[NinoPooled]`）的类型必须声明为 `partial`，外层的包含类型也一样。分析器会报告 NINO002 并帮你修复。
+- **私有成员需要 `partial`。** Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员（或标记了 `[NinoPooled]`）的类型必须声明为 `partial`，包含它的外层类型也一样。分析器会报告 NINO002 并帮你修复。
 - **没有拦截器。** Unity 包附带的是源生成器的 Roslyn 4.3 版本（Unity 支持的最低编译器版本），所以调用走常规路径。写出的字节完全相同，每次调用只差几纳秒。
-- **字节与 .NET 一致。** .NET 服务器写出的数据 Unity 客户端可以直接读取，反过来也一样，32 位 IL2CPP 播放器和旧版 Mono 运行时也不例外。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+- **字节与 .NET 一致。** .NET 服务器写出的数据，Unity 客户端可以直接读取，反过来也一样，32 位的 IL2CPP Player 和旧版 Mono 运行时也不例外。参见[平台与二进制格式](/zh/docs/v4/platforms)。
 
 </Callout>
 
 ## IL2CPP [#il2cpp]
 
 - 生成的代码是普通 C#：序列化时不使用反射，也不使用 `System.Reflection.Emit`。
-- 每个生成的注册表都标记了 `[RuntimeInitializeOnLoadMethod]`（编辑器中还有 `[InitializeOnLoadMethod]`），它会在启动时运行，并防止被 IL2CPP 链接器裁剪掉。即使没有这一步，注册也会在首次使用时按需完成。
+- 每个生成的注册表都标记了 `[RuntimeInitializeOnLoadMethod]`（编辑器中还有 `[InitializeOnLoadMethod]`），因此注册表会在启动时运行，也不会被 IL2CPP 链接器裁剪掉。即使没有这一步，注册也会在第一次用到时按需完成。
 - 代码中**写出名字**的泛型 `[NinoType]` 实例化和内置泛型集合（成员类型、`NinoSerializer.Serialize<List<MyStruct>>` 调用）都会由生成器注册，因此 IL2CPP 会提前编译它们。
-- 只通过反射创建、并且只会被多态**读取**的实例化，需要在启动时加一行：`NinoPolymorphic.Register<Box<MyStruct>>()`。
+- 只通过反射创建、并且只会多态**读取**的实例化，需要在启动时加一行：`NinoPolymorphic.Register<Box<MyStruct>>()`。
 
 ## HybridCLR 热更新 [#hybridclr-hot-update]
 
@@ -92,7 +92,7 @@ Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
 | 用 `Assembly.Load` 加载热更新 DLL | 在读取包含其中类型的数据之前。 | |
 | `NinoRegistry.EnsureInitialized(assembly)` 或 `EnsureAllInitialized()` | 想把一次性的注册表加载放到加载界面，而不是第一次用到该程序集的调用。 | 始终是可选的：注册表在首次使用时自动加载。 |
 | `NinoPolymorphic.Register<T>()` | 某个封闭泛型 `[NinoType]`（如 `Box<MyStruct>`）在本进程中只会通过基类型**读取**，代码里从未写出它的名字，也从未写入过它。 | 普通子类型，无论在哪个程序集（包括热更新程序集），都会自动找到。 |
-| `NinoFormatterCache<T>.Register<TFormatter>()` | `T` 的格式化器要在运行时选定。必须在 `T` 第一次被序列化或反序列化之前注册：第一次使用会固定格式化器，之后再注册会抛出 `InvalidOperationException`。 | 用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明的格式化器：无需任何调用。 |
+| `NinoFormatterCache<T>.Register<TFormatter>()` | `T` 的格式化器要在运行时选定。必须在 `T` 第一次序列化或反序列化之前注册：第一次使用会固定格式化器，之后再注册会抛出 `InvalidOperationException`。 | 用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明的格式化器：无需任何调用。 |
 
 ```csharp
 public static class NinoStartup
@@ -140,7 +140,7 @@ ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
 
 ## 降低帧耗时的技巧 [#frame-time-tips]
 
-- **网络或回放数据不引起 GC 峰值：** 每个 tick 都用复用反序列化填充上一个 tick 的对象，并给批量创建的类（子弹、事件）加上 `[NinoPooled]`。参见[高性能序列化](/zh/docs/v4/advanced/high-performance)。
+- **网络或回放数据不引起 GC 峰值：** 每个 tick 都用 `ref` 反序列化到上一个 tick 的对象中，并给批量创建的类（子弹、事件）加上 `[NinoPooled]`。参见[高性能序列化](/zh/docs/v4/advanced/high-performance)。
 - **每个发送方复用一个 `NinoArrayBufferWriter`** 来写出数据，而不是每帧调用 `Serialize(value)` 分配一个 `byte[]`。
 - **批量数据保持非托管：** `Vector3`、`Color32` 或你自己的非托管 `[NinoType]` 结构体组成的数组，只需一次内存拷贝。
 - **在编辑器中编辑的配置**经常变动：使用 [`keyed: true`](/zh/docs/v4/evolving-data#keyed-members)，策划增加或调整字段时，已有资源也不会损坏。

@@ -4,7 +4,7 @@ description: "Nino v4 与 v3（3.3.13）和 MemoryPack 1.21.4 的构建时间与
 icon: ChartColumn
 ---
 
-Nino v4 与 Nino v3 **3.3.13**（v3 的最后一个版本）以及 [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** 的构建时间与运行时测量。绝对耗时因机器而异，重点看比例。功能对比参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)。
+本页是 Nino v4 与 Nino v3 **3.3.13**（v3 的最后一个版本）以及 [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** 的构建时间和运行时测量结果。绝对耗时因机器而异，请重点看比例。功能对比参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)。
 
 ## 测试环境 [#setup]
 
@@ -13,23 +13,23 @@ Nino v4 与 Nino v3 **3.3.13**（v3 的最后一个版本）以及 [MemoryPack](
 | CPU | 运行时：Intel Xeon 2.10 GHz，4 核，AVX-512；构建耗时：Intel Xeon 2.80 GHz，4 核 |
 | 操作系统 | Ubuntu 24.04 |
 | 运行时 | .NET 10.0.13（SDK 10.0.402），服务器 GC |
-| 工具 | BenchmarkDotNet 0.15.2，5 次预热、15 次迭代，四个测试类在同一次运行中完成 |
+| 测试框架 | BenchmarkDotNet 0.15.2，5 次预热、15 次正式迭代，四个测试类在同一次运行中完成 |
 | 项目 | [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.Benchmark)（运行时），[`src/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.GeneratorBenchmark)（构建时间） |
 
 ## 构建时间与生成代码 [#build-time-and-generated-code]
 
-测试负载：`N` 个抽象根类，每个根类下有 8 层派生类链、一个密封叶子类和一个结构体（共 `N × 11` 个类型），成员包括基元类型、字符串、`List<T>`、`Dictionary<int, string>`、对其他 `[NinoType]` 的引用以及私有字段。测试工具在编译上运行生成器（进程内 Roslyn 4.3），生成程序集，并在修改后重新运行生成器。耗时取五次运行中后三次的中位数。
+测试负载：`N` 个抽象根类，每个根类下有 8 层派生类链、一个密封叶子类和一个结构体（共 `N × 11` 个类型），成员包括基元类型、字符串、`List<T>`、`Dictionary<int, string>`、对其他 `[NinoType]` 的引用以及私有字段。测试程序对 Compilation 运行生成器（进程内的 Roslyn 4.3），生成程序集，并在修改代码后重新运行生成器。耗时取五次运行中后三次的中位数。
 
 ### 330 个类型（N = 30） [#330-types-n--30]
 
 | | v3（3.3.13） | v4 | v4 对比 v3 |
 | --- | ---: | ---: | ---: |
-| 生成的源码 | 18.7 MB（363,233 行） | 1.15 MB（21,679 行） | **小 16 倍** |
-| 编译生成的代码（emit） | 56.0 s | 1.27 s | **快 44 倍** |
-| 运行生成器 | 1.11 s | 0.14 s | **快 7.9 倍** |
-| 修改一个成员后重新生成 | 1.31 s | 0.19 s | **快 6.9 倍** |
-| 修改一处注释后重新生成 | 1.11 s | 0.19 s | **快 5.8 倍** |
-| 生成代码的 IL | 2.2 MB | 0.37 MB | **小 6.0 倍** |
+| 生成源码 | 18.7 MB（363,233 行） | 1.15 MB（21,679 行） | **仅 1/16** |
+| 编译生成代码（emit） | 56.0 秒 | 1.27 秒 | **快 44 倍** |
+| 运行生成器 | 1.11 秒 | 0.14 秒 | **快 7.9 倍** |
+| 修改成员后重新生成 | 1.31 秒 | 0.19 秒 | **快 6.9 倍** |
+| 修改注释后重新生成 | 1.11 秒 | 0.19 秒 | **快 5.8 倍** |
+| 生成代码的 IL | 2.2 MB | 0.37 MB | **约 1/6** |
 
 <BenchmarkChart chart="compile" lang="zh" table={false} />
 
@@ -37,18 +37,18 @@ Nino v4 与 Nino v3 **3.3.13**（v3 的最后一个版本）以及 [MemoryPack](
 
 | | v3（3.3.13） | v4 | v4 对比 v3 |
 |---|---:|---:|---:|
-| 生成源码 | 62.0 MB（1,204,143 行） | 3.9 MB（72,429 行） | **小 16 倍** |
+| 生成源码 | 62.0 MB（1,204,143 行） | 3.9 MB（72,429 行） | **仅 1/16** |
 | 编译生成代码（emit） | 636 秒 | 2.2 秒 | **快 289 倍** |
 | 运行生成器 | 5.5 秒 | 0.68 秒 | **快 8.1 倍** |
 | 修改成员后重新生成 | 4.1 秒 | 0.57 秒 | **快 7.2 倍** |
 | 修改注释后重新生成 | 4.1 秒 | 0.45 秒 | **快 9.0 倍** |
-| 生成代码的 IL | 7.3 MB | 1.3 MB | **小 5.6 倍** |
+| 生成代码的 IL | 7.3 MB | 1.3 MB | **约 1/5.6** |
 
-v3 的编译耗时增长远快于类型数量：类型多 3.3 倍，编译耗时多 11 倍（56 秒 → 636 秒）。v4 随类型数量线性增长：每个类型约 3.5 KB 源码和 2 ms 编译时间。
+v3 的编译耗时增长远快于类型数量：类型数变为 3.3 倍，编译耗时变为 11 倍（56 秒 → 636 秒）。v4 随类型数量线性增长：每个类型约 3.5 KB 源码、2 毫秒编译时间。
 
 ## 运行时 [#runtime]
 
-v4 与 MemoryPack 在同一次运行中。数据大小基本相同（`SimpleClass`：v4 为 <BenchValue k="payload.v4" /> 字节，MemoryPack 为 <BenchValue k="payload.memorypack" /> 字节）。
+v4 与 MemoryPack 在同一次运行中测量。数据大小基本相同（`SimpleClass`：v4 为 <BenchValue k="payload.v4" /> 字节，MemoryPack 为 <BenchValue k="payload.memorypack" /> 字节）。
 
 <BenchSource lang="zh" />
 
@@ -68,13 +68,13 @@ v4 与 MemoryPack 在同一次运行中。数据大小基本相同（`SimpleClas
 
 <Callout type="info">
 
-`Vector4[10000]` 每次调用都会在大对象堆上分配一个 160 KB 的数组，因此它测量的主要是第 2 代垃圾回收，而不是序列化器本身，结果随运行波动。拷贝本身在两者中都是一次 `memcpy`。
+`Vector4[10000]` 每次调用都会在大对象堆上分配一个 160 KB 的数组，所以测到的主要是第 2 代垃圾回收，而不是序列化器本身，每次运行的结果也有波动。拷贝本身在两者中都是一次 `memcpy`。
 
 </Callout>
 
 ### 反序列化到已有实例（对象池） [#pooling]
 
-Nino 可以反序列化到已有的对象图（复用反序列化），并从 `[NinoPooled]` 对象池获取新实例；MemoryPack 则覆盖已有实例。
+Nino 反序列化到已有的对象图中（复用反序列化），新实例从 `[NinoPooled]` 对象池中取；MemoryPack 则覆盖已有实例。
 
 <ReuseTable lang="zh" />
 
@@ -87,16 +87,16 @@ Nino 可以反序列化到已有的对象图（复用反序列化），并从 `[
 ### 复现 [#reproducing]
 
 ```shell
-# 构建时间与生成代码
+# build time and generated code
 dotnet run -c Release --project src/Nino.GeneratorBenchmark -- 30 8
 
-# 运行时
+# runtime
 dotnet run -c Release --project src/Nino.Benchmark -- --filter '*Test.Nino*' '*Test.MemoryPack*' --iterationCount 15 --warmupCount 5
 ```
 
 ## Nino、MemoryPack 与 MessagePack [#nino-memorypack-and-messagepack]
 
-`Nino.Benchmark` 项目还在下面的数据结构上把 Nino 和 [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) 做了对比。
+`Nino.Benchmark` 项目还用下面的数据结构，把 Nino 和 [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) 做了对比。
 
 ### 数据结构 [#data-structures]
 
@@ -213,6 +213,6 @@ Vectors = Enumerable.Range(0, 10000)
 
 ### 结果 [#results]
 
-结果为序列化和反序列化上述数据所用的时间，越低越好。
+结果是序列化和反序列化上述数据所用的时间，越低越好。
 
 <ResultsTable lang="zh" />

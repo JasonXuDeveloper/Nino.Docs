@@ -4,7 +4,7 @@ description: 保留共享引用和循环引用。
 icon: Share2
 ---
 
-默认情况下，被引用两次的对象会写入两次，读回后变成两个实例；序列化带环的对象图会抛出 `InvalidOperationException`（参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)）。给类加上 `trackReferences: true` 即可保留对象图。它的所有子类型也都会被追踪，即使子类型自己声明的 `[NinoType]` 没有写这个选项：
+默认情况下，被引用两次的对象会写入两次，读回来变成两个实例；序列化带环的对象图会抛出 `InvalidOperationException`（参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)）。给类加上 `trackReferences: true` 即可保留对象图。它的所有子类型也都会被追踪，即使子类型自己声明的 `[NinoType]` 没有写这个选项：
 
 ```csharp
 [NinoType(trackReferences: true)] // [!code highlight]
@@ -22,7 +22,7 @@ var copy = NinoDeserializer.Deserialize<Node>(bytes);
 // copy.Next.Next == copy
 ```
 
-共享引用和循环引用同样重要。比如一个 RPG 存档里，两名队员属于同一个公会：
+共享引用和循环引用同样重要。比如在一个 RPG 存档里，两名队员属于同一个公会：
 
 ```csharp
 [NinoType(trackReferences: true)]
@@ -39,14 +39,14 @@ var loaded = NinoDeserializer.Deserialize<List<Hero>>(NinoSerializer.Serialize(p
 
 如果不追踪，读档后会得到两个独立的 `Guild` 对象，之后给公会改名只会反映在其中一名队员身上。只有被共享的类型需要这个选项，`Hero` 本身不需要追踪。
 
-- 每个启用追踪的对象前面都有 4 字节的引用头：同一次调用中已经写过的对象，只写它的序号。
-- 无论槽位的声明类型是什么（包括 `object` 和接口），共享引用都能保持同一个对象。
+- 每个被追踪的对象前面都有 4 字节的引用头部；同一次调用中已经写过的对象，只写它的序号。
+- 无论槽位的声明类型是什么（包括 `object` 和接口），共享引用都能保持对象身份。
 - 追踪只针对 `[NinoType]` 类，不包括集合：同一个 `List<T>` 出现在两个成员中，仍然会写两次。
 - 开销：每次顶层调用有一小笔固定开销，每个被追踪的对象再多 4 字节和一次身份查找。不涉及追踪类型的调用没有任何开销。
 
 <Callout type="warn">
 
-必须通过构造函数参数或只读成员重新创建的类型（例如位置记录）不能启用追踪（NINO016）。在结构体上设置 `trackReferences` 会被忽略，并给出警告（NINO015）。
+必须通过构造函数参数或只读成员重新创建的类型（例如位置记录）不能开启追踪（NINO016）。在结构体上设置 `trackReferences` 会被忽略，并给出警告（NINO015）。
 
 </Callout>
 
@@ -55,7 +55,7 @@ var loaded = NinoDeserializer.Deserialize<List<Hero>>(NinoSerializer.Serialize(p
 <Accordions type="single">
 <Accordion title="用于对象图">
 
-场景图、实体关系、编辑器的撤销栈、多个对象指向同一对象的存档、带父节点引用的树：凡是对象身份有意义或存在循环的地方都适用。一个列表把同一个追踪对象重复 100 次时，写出的字节数和耗时都只是不追踪时的一小部分。
+场景图、实体关系、编辑器的撤销栈、多个对象指向同一对象的存档、带父节点引用的树：凡是对象身份有意义或存在循环的地方都适用。一个列表把同一个被追踪的对象重复 100 次时，写出的字节数和耗时都只是不追踪时的一小部分。
 
 </Accordion>
 <Accordion title="消息和普通数据不需要">
@@ -65,7 +65,7 @@ var loaded = NinoDeserializer.Deserialize<List<Hero>>(NinoSerializer.Serialize(p
 </Accordion>
 <Accordion title="自己连续写入、读取多个值时">
 
-顶层的 `NinoSerializer`/`NinoDeserializer` 调用会把引用表限定在单次调用内。如果你自己创建 `Writer` 或 `Reader`，通过它写入的所有内容会共享引用，直到调用 `ReleaseReferences()` 为止；请在一条完整消息结束时调用它。
+顶层的 `NinoSerializer`/`NinoDeserializer` 调用会把引用表限定在单次调用内。如果你自己创建 `Writer` 或 `Reader`，通过它写入的所有内容会共享引用，直到调用 `ReleaseReferences()` 为止。请在每条逻辑消息结束时调用它。
 
 </Accordion>
 </Accordions>

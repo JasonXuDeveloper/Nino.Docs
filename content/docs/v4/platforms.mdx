@@ -15,11 +15,11 @@ icon: Cpu
 | Godot | Godot 4 .NET projects (.NET 8) |
 | Hot update | HybridCLR, with no initialization call |
 
-**Every target writes identical bytes.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` each use the best primitives available to them (vectorized copies, `[UnsafeAccessor]` on .NET 8+), and the test suite checks the same golden payloads against each build. Data written by a .NET 10 server is read by a Unity IL2CPP client on a 32-bit Android phone, and the other way round.
+**Every target writes identical bytes.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` each use the best primitives available to them (vectorized copies, `[UnsafeAccessor]` on .NET 8+), and the test suite checks the same golden payloads against each build. Data written by a .NET 10 server can be read by a Unity IL2CPP client on a 32-bit Android phone, and the other way round.
 
 ## Binary Format
 
-All multi-byte values are **little-endian** and written unaligned. There is no schema and no field names in positional types: the generated code knows the layout.
+All multi-byte values are **little-endian** and written unaligned. Positional types carry no schema and no field names: the generated code knows the layout.
 
 | Value | Encoding |
 | --- | --- |
@@ -34,7 +34,7 @@ All multi-byte values are **little-endian** and written unaligned. There is no s
 | Dictionary | length, then key/value pairs |
 | `T[,]` and higher ranks | each dimension's length, then elements in row-major order |
 
-Both string encodings start with the same prefix: the string's length in UTF-16 chars (`string.Length`; `-1` for `null`, `0` for an empty string). Nothing follows the prefix of a `null` or empty string. A non-empty `[NinoUtf8]` string then carries its length in bytes, followed by exactly that many UTF-8 bytes. The reader allocates the string at its final length in chars and transcodes exactly the given number of bytes into it, in one pass; the next value starts right after them. A byte count larger than the bytes left, a char count that does not match the decoded bytes, and bytes that are not valid UTF-8 (overlong forms and encoded surrogates included) or end in the middle of a character throw an `InvalidOperationException`. When writing, an unpaired surrogate is encoded as U+FFFD, which is one char as well, so the char count always matches the string that is read back.
+Both string encodings start with the same prefix: the string's length in UTF-16 chars (`string.Length`; `-1` for `null`, `0` for an empty string). Nothing follows the prefix of a `null` or empty string. A non-empty `[NinoUtf8]` string then carries its length in bytes, followed by exactly that many UTF-8 bytes. The reader allocates the string at its final length in chars and transcodes exactly the given number of bytes into it, in one pass; the next value starts right after them. Nino throws an `InvalidOperationException` when the byte count is larger than the bytes left, when the char count does not match the decoded bytes, or when the bytes are not valid UTF-8 (overlong forms and encoded surrogates included) or end in the middle of a character. When writing, an unpaired surrogate is encoded as U+FFFD, which is one char as well, so the char count always matches the string that is read back.
 
 Objects get a header that depends on the **declared** type:
 
@@ -75,7 +75,7 @@ CoreCLR and Unity 2021.3+ store `bool hasValue; T value;`, while old Mono (Unity
 </Accordion>
 <Accordion title={<><code>decimal</code>, <code>DateTimeOffset</code>, <code>nint</code></>} value="bcl">
 
-`decimal` is aligned to 8 bytes on CoreCLR and to 4 on Mono and IL2CPP, so a struct holding one can have a different layout; Nino converts it to the canonical layout. `DateTimeOffset` is written as UTC ticks plus offset minutes (10 bytes), never raw. `nint`/`nuint` are always 8 bytes.
+`decimal` is aligned to 8 bytes on CoreCLR and to 4 on Mono and IL2CPP, so a struct holding one can have a different layout; Nino converts it to the canonical layout. `DateTimeOffset` is written as UTC ticks plus the offset in minutes (10 bytes), never raw. `nint`/`nuint` are always 8 bytes.
 
 </Accordion>
 <Accordion title="32-bit platforms" value="32bit">
@@ -110,7 +110,7 @@ See [Unity and HybridCLR](/en/docs/v4/advanced/unity) for project setup and IL2C
 - Godot 4 C# projects are regular .NET projects (`Godot.NET.Sdk`, targeting .NET 8). Install with `dotnet add package Nino`; see [Godot Project](/en/docs/v4/start#godot-project).
 - The project is compiled by the .NET 8+ SDK, so the source generator, the analyzers and the interceptors all run, and `[UnsafeAccessor]` reaches private members without `partial` (except in generic types).
 - Godot's math structs (`Vector2`, `Vector3`, `Quaternion`, `Transform3D`, `Color`, ...) are unmanaged and are copied as raw memory.
-- In a Godot build with double precision (`real_t` = `double`), these structs hold `double` fields, so their layout differs from the default single-precision build. Data with Godot math types written by one is not readable by the other; use your own structs or primitive fields for data shared between the two.
+- In a Godot build with double precision (`real_t` = `double`), these structs hold `double` fields, so their layout differs from the default single-precision build. Data containing Godot math types written by one build cannot be read by the other; use your own structs or primitive fields for data shared between the two.
 - Serialize your own data types; Godot objects such as `Node` and `Resource` are engine objects and are not serialized.
 
 ## HybridCLR and Hot Update

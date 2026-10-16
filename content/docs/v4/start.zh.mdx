@@ -8,7 +8,7 @@ icon: Rocket
 
 <Callout type="idea">
 
-第一次接触 v4，或者正从 v3 升级？请先看 [v4 新特性](/zh/docs/v4/whats-new)和[迁移指南](/zh/docs/v4/migration)。v4 的二进制格式与 v3 及更早的 v4 测试版**不兼容**。
+第一次接触 v4，或者正从 v3 升级？请先看 [v4 新特性](/zh/docs/v4/whats-new)和[迁移指南](/zh/docs/v4/migration)。v4 的二进制格式与 v3 以及更早的 v4 beta 版本**不兼容**。
 
 </Callout>
 
@@ -36,7 +36,7 @@ openupm add com.jasonxudeveloper.nino
 <Tab value="Godot">
 
 ```shell
-# 在 Godot 项目 .csproj 所在的目录执行
+# in the folder with your Godot project's .csproj
 dotnet add package Nino
 ```
 
@@ -49,9 +49,9 @@ dotnet add package Nino
 
 <Callout type="info">
 
-运行时（`Nino.Core`）面向 `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0`，凡是能引用 .NET Standard 2.0 库的项目都能使用。所有目标框架写出的字节完全相同。
+运行时（`Nino.Core`）的目标框架是 `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0`，凡是能引用 .NET Standard 2.0 库的项目都能用。所有目标框架写出的字节完全相同。
 
-源生成器要求编译器为 Roslyn 4.3 及以上（Visual Studio 2022 17.3+、Rider，或 .NET 6.0.400 及以上的 SDK）。生成的代码用到了 C# 9 特性，所以项目的 `LangVersion` 至少为 9。较老的 .NET Framework 项目默认是 C# 7.3，需要设置 `<LangVersion>9</LangVersion>` 或更高。
+源生成器需要 Roslyn 4.3 及以上的编译器（Visual Studio 2022 17.3+、Rider，或 .NET 6.0.400 及以上的 SDK）。生成的代码用到了 C# 9 特性，所以项目的 `LangVersion` 至少要是 9。较老的 .NET Framework 项目默认是 C# 7.3，需要设置 `<LangVersion>9</LangVersion>` 或更高。
 
 </Callout>
 
@@ -69,13 +69,13 @@ dotnet add package Nino
 - `Nino.Serialization`：运行时库（`Nino.Core.dll`）
 - `Nino.Generator`：源生成器、分析器和代码修复
 
-`Nino.Immutable` 是可选包，提供 `ImmutableArray<T>` 和 `ImmutableList<T>` 的格式化器。
+`Nino.Immutable` 是可选包，为 `ImmutableArray<T>` 和 `ImmutableList<T>` 提供格式化器。
 
 </Callout>
 
 <Callout type="idea">
 
-使用 .NET 8 SDK 及以上版本编译时，类型已知的 `NinoSerializer`/`NinoDeserializer` 调用会在编译期直接导向生成的格式化器（拦截器）。这一切自动完成，参见[拦截器](/zh/docs/v4/performance#interceptors)。
+使用 .NET 8 SDK 及以上版本编译时，类型已知的 `NinoSerializer`/`NinoDeserializer` 调用会在编译期直接改为调用生成的格式化器（拦截器）。这是自动完成的，参见[拦截器](/zh/docs/v4/performance#interceptors)。
 
 </Callout>
 
@@ -83,57 +83,57 @@ dotnet add package Nino
 
 <Callout type="info">
 
-Nino 支持 Unity 2022.3 及以上版本，覆盖所有播放器平台（Mono 和 IL2CPP）。
+Nino 支持 Unity 2022.3 及以上版本，支持所有 Player 平台（Mono 和 IL2CPP）。
 
 GitHub 上的 `Nino.Unity` 示例项目演示了 Nino 在 Unity 中的用法，并附带一套可在 `TestRunner` 中运行的单元测试。
 
 </Callout>
 
-通过 Unity Package Manager 从 [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation) 安装，例如：
+用 Unity Package Manager 从 [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation) 安装，例如：
 
 ```shell
 openupm add com.jasonxudeveloper.nino
 ```
 
-包内同时包含 `Nino.Core.dll` 和源生成器（`Nino.Generator.dll`，已标记为 `RoslynAnalyzer`），不需要再装别的东西。这是源生成器的 Roslyn 4.3 版本（Unity 支持的最低编译器版本），所以 Unity 中的调用不会被[拦截](/zh/docs/v4/performance#interceptors)，而是走常规路径，写出的字节完全相同。
+包里同时带有 `Nino.Core.dll` 和源生成器（`Nino.Generator.dll`，已标记为 `RoslynAnalyzer`），不需要再装别的东西。这是源生成器的 Roslyn 4.3 版本，对应 Unity 支持的最低编译器版本，所以 Unity 中的调用不会被[拦截](/zh/docs/v4/performance#interceptors)，而是走常规路径，写出的字节完全相同。
 
 <Callout type="warn">
 
-如果使用了 `asmdef`，请确认勾选了 `Auto Referenced`；如果启用了 `Override References`，则需要手动添加对 `Nino.Core.dll` 的引用。
+如果用了 `asmdef`，请确认勾选了 `Auto Referenced`；如果开启了 `Override References`，则要手动添加对 `Nino.Core.dll` 的引用。
 
 </Callout>
 
 <Callout type="info">
 
-Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`。因此，序列化非公开成员（或使用 `[NinoPooled]`）的类型必须声明为 `partial`，外层的包含类型也一样。分析器会报告 NINO002 并提供修复。
+Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`。因此，序列化非公开成员（或使用 `[NinoPooled]`）的类型必须声明为 `partial`，包含它的外层类型也一样。分析器会报告 NINO002 并提供修复。
 
 </Callout>
 
 <Callout type="idea">
 
-遇到问题时，先确认 `Nino.Unity` 示例项目能否正常运行。如果问题仍然存在，欢迎到 GitHub 提交 issue。
+遇到问题时，先确认 `Nino.Unity` 示例项目能正常运行。如果问题依旧，请到 GitHub 提交 issue。
 
 </Callout>
 
 #### 热更新代码 [#hot-update-code]
-- Nino 支持 **HybridCLR**。生成的注册表会在其中某个类型首次被用到时按需加载，所以用 `Assembly.Load` 加载的热更新程序集**不需要任何初始化调用**。详见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity#hybridclr-hot-update)。
+- Nino 支持 **HybridCLR**。生成的注册表会在其中某个类型第一次用到时才加载，所以用 `Assembly.Load` 加载的热更新程序集**不需要任何初始化调用**。详见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity#hybridclr-hot-update)。
 - 热更新代码可以放在 Unity 的 `asmdef` 里，也可以放在通过 NuGet 安装 Nino 的独立 C# 项目中（[见上文](#net-project)），编译出的 DLL 照常交给 HybridCLR 使用即可。
 
 ### Godot 项目 [#godot-project]
 
-Godot 4 的 C# 项目（Godot 的 .NET 版）本质上是使用 `Godot.NET.Sdk`、面向 .NET 8 的普通 .NET 项目，所以像其他 NuGet 包一样安装即可：
+Godot 4 的 C# 项目（Godot 的 .NET 版）就是普通的 .NET 项目，用 `Godot.NET.Sdk` 构建，目标框架是 .NET 8，所以像其他 NuGet 包一样安装即可：
 
 ```shell
-# 在 Godot 项目 .csproj 所在的目录执行
+# in the folder with your Godot project's .csproj
 dotnet add package Nino
 ```
 
 然后构建项目（Godot 的 **Build** 按钮、IDE 或 `dotnet build` 均可）。
 
 - 项目由 .NET 8+ SDK 编译，源生成器、分析器和[拦截器](/zh/docs/v4/performance#interceptors)都会生效。
-- .NET 8 提供了 `[UnsafeAccessor]`，序列化私有成员时类型不必声明为 `partial`（泛型类型除外）。
+- .NET 8 有 `[UnsafeAccessor]`，所以序列化私有成员时类型不必声明为 `partial`（泛型类型除外）。
 - Godot 的数学结构体（`Vector2`、`Vector3`、`Quaternion`、`Transform3D`、`Color` 等）都是非托管类型，和其他非托管结构体一样按原始内存拷贝。
-- 请序列化你自己的数据类和结构体。`Node`、`Resource` 等 Godot 对象属于引擎对象而非数据，不会被序列化。
+- 要序列化的是你自己的数据类和结构体。`Node`、`Resource` 等 Godot 对象是引擎对象而不是数据，Nino 不会序列化它们。
 
 详见[平台](/zh/docs/v4/platforms#godot)。
 
@@ -195,12 +195,12 @@ NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
 
 ## 启动时 [#at-startup]
 
-Nino 不需要任何初始化调用：生成的代码会自行注册，之后加载的程序集也会在首次使用时被找到。以下四项是可选的：
+Nino 不需要任何初始化调用：生成的代码会自行注册，之后加载的程序集在第一次用到时也会被找到。以下四项调用是可选的：
 
 - `NinoSettings`（池大小、回收器），在第一次序列化调用之前设置。
-- `NinoPolymorphic.Register<T>()`：用于某个封闭泛型 `[NinoType]`，本进程只会通过基类型读取它，代码中从未写出它的名字。
-- `NinoRegistry.EnsureInitialized(assembly)`：现在就加载某个插件程序集的注册表，而不是等到首次使用。
-- `NinoFormatterCache<T>.Register<TFormatter>()`：注册运行时选定的格式化器。必须在 `T` 第一次被序列化或反序列化之前调用，之后再注册会抛出异常。参见[运行时注册](/zh/docs/v4/custom-formatters#registering-at-run-time)。
+- `NinoPolymorphic.Register<T>()`：用于这样的封闭泛型 `[NinoType]`：进程只通过基类型读取它，代码里从来没写过它的名字。
+- `NinoRegistry.EnsureInitialized(assembly)`：立即加载某个插件的注册表，而不是等到第一次用到时。
+- `NinoFormatterCache<T>.Register<TFormatter>()`：注册运行时选定的格式化器。必须在 `T` 第一次序列化或反序列化之前调用，之后再注册会抛出异常。参见[运行时注册](/zh/docs/v4/custom-formatters#registering-at-run-time)。
 
 Unity 和 HybridCLR 项目请参见[启动检查清单](/zh/docs/v4/advanced/unity#startup-checklist)。
 

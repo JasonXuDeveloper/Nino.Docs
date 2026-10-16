@@ -144,11 +144,11 @@ With the default `autoCollect: true`, Nino collects:
 
 And it skips:
 
-- **get-only auto-properties** (`public int Id { get; }`), unless a constructor takes them as a parameter of the same name (ignoring case), since nothing else could restore them. See [Constructors](/en/docs/v4/constructors);
+- **get-only auto-properties** (`public int Id { get; }`), unless a constructor has a parameter with the same name (ignoring case), since nothing else can restore them. See [Constructors](/en/docs/v4/constructors);
 - **explicit interface implementations** (`int IHasId.Id { get; set; }`), which generated code cannot name. A `[NinoType]` interface serializes its members through the implementing type's members of the same name;
 - members whose type Nino cannot serialize (delegates, `Task`, pointers...), reported as warning NINO007.
 
-An `override` is the member it overrides, collected once. A member that hides a base member with `new` is a separate member: both are serialized, the base one first. When the hidden base member is not public, generated code can only reach it through `[UnsafeAccessor]` (.NET 8+, non-generic types); otherwise it is skipped with warning NINO022.
+An `override` counts as the member it overrides and is collected once. A member that hides a base member with `new` is a separate member: both are serialized, the base one first. When the hidden base member is not public, generated code can only reach it through `[UnsafeAccessor]` (.NET 8+, non-generic types); otherwise it is skipped with warning NINO022.
 
 ### Ignoring a Member
 
@@ -216,11 +216,11 @@ public partial class Account
 - A non-public `[NinoMember]` without `containNonPublicMembers` is an error (NINO009).
 - Private members of a base class are never part of a subtype.
 
-Nino also suppresses the compiler's "field is never used / never assigned" warnings for private members it serializes, since the compiler cannot see the generated accessors.
+Nino also suppresses the compiler's "field is never used / never assigned" warnings on the private members it serializes, since the compiler cannot see the generated accessors.
 
 ## Member Order
 
-Without `keyed: true`, the order of members **is** the format. Members are written base-class members first, then in declaration order, unless you change it:
+Without `keyed: true`, the order of members **is** the format. By default, base-class members come first, then the type's own members in declaration order. You can change this with:
 
 - `[NinoMember(index)]` with `[NinoType(false)]`: by index, ascending.
 - `[NinoExplicitOrder(...)]` on a class, struct or interface: the listed members (by name) first, in the given order; the others follow in declaration order.
@@ -238,7 +238,7 @@ public class Ordered
 
 <Callout type="warn">
 
-Reordering, inserting or removing members (or changing their indices) breaks data written before. Plan for change with [version tolerance or keyed members](/en/docs/v4/evolving-data).
+Reordering, inserting or removing members (or changing their indices) breaks previously written data. Plan for change with [version tolerance or keyed members](/en/docs/v4/evolving-data).
 
 </Callout>
 
@@ -260,7 +260,7 @@ The attribute applies to every string the member's own formatter writes: the mem
 
 ## Former Name
 
-A value stored in a slot declared as a non-sealed class, an abstract class, an interface or `object` is written with the **type id** of its runtime type, a 32-bit hash of that type's full name, so it can be read back as the right type. Renaming the type or moving it to another namespace changes the id, and that includes sealed subtypes such as the message classes sent through a `Message` base. A typical case: you move your protocol classes from `Game.Net` to `Game.Protocol`, while save files or clients from the previous release still use the old ids. Keep reading old data with `[NinoFormerName]`:
+A value stored in a slot declared as a non-sealed class, an abstract class, an interface or `object` is written with the **type id** of its runtime type, a 32-bit hash of that type's full name, so it can be read back as the right type. Renaming the type or moving it to another namespace changes the id. This applies to sealed subtypes too, such as the message classes sent through a `Message` base. A typical case: you move your protocol classes from `Game.Net` to `Game.Protocol`, while save files or clients from the previous release still use the old ids. Keep reading old data with `[NinoFormerName]`:
 
 ```csharp
 [NinoType]
@@ -273,11 +273,11 @@ public class ItemRenamed
 
 The former name is the **runtime form** of the full name: `Namespace.Type`, `+` between a nested type and its container (`Namespace.Outer+Inner`), no `global::`. The type id is computed from the former name, so the renamed type keeps writing the id old readers expect, and readers find the type under both names. `NinoTypeId.Of(typeof(T))` returns the id a type writes.
 
-On a field or property of a `keyed` type, `[NinoFormerName("OldName")]` (repeatable) keeps reading data written under the member's old names; see [Renaming Keyed Members](/en/docs/v4/evolving-data#renaming-keyed-members). Positional and version-tolerant types write no member names, so they need nothing to rename a member.
+On a field or property of a `keyed` type, `[NinoFormerName("OldName")]` (repeatable) keeps reading data written under the member's old names; see [Renaming Keyed Members](/en/docs/v4/evolving-data#renaming-keyed-members). Positional and version-tolerant types write no member names, so renaming a member needs nothing there.
 
 ## Structs
 
-A `[NinoType]` struct has no header at all. When it is unmanaged, not `versionTolerant` or `keyed`, uses the default sequential layout, has no custom member formatters and every instance field is serialized, it is written as its **raw memory**: one copy, and arrays and lists of it as one block. Otherwise it is written member by member. Either way, a struct whose members are all unmanaged values or such structs is [fixed-size](/en/docs/v4/performance#fixed-size-types): `NinoSerializer.Serialize(value)` writes it straight into a `byte[]` of its size.
+A `[NinoType]` struct has no header at all. It is written as its **raw memory** when it is unmanaged, is not `versionTolerant` or `keyed`, uses the default sequential layout, has no custom member formatters, and serializes every instance field. A single value is then one copy, and arrays and lists of it are one block. Otherwise it is written member by member. Either way, a struct whose members are all unmanaged values or such structs is [fixed-size](/en/docs/v4/performance#fixed-size-types): `NinoSerializer.Serialize(value)` writes it straight into a `byte[]` of its size.
 
 ```csharp
 [NinoType]
@@ -289,7 +289,7 @@ public struct Hit          // raw: one 16-byte copy, no padding
 }
 ```
 
-A struct that ends up serializing no member at all (every field ignored) is an error (NINO023): it would be written as zero bytes, and a collection of it could not be read back. Serialize a member, or mark it `versionTolerant` or `keyed`.
+A struct that ends up serializing no members at all (every field ignored) is an error (NINO023): it would be written as zero bytes, and a collection of it could not be read back. Serialize at least one member, or mark the struct `versionTolerant` or `keyed`.
 
 <Callout type="warn">
 

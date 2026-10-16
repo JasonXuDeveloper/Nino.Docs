@@ -37,7 +37,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 </Step>
 <Step>
 
-构建项目，修复分析器报告的问题（`NINO001`–`NINO024`），大多数诊断都附带代码修复。
+构建项目，修复分析器报告的问题（`NINO001`–`NINO024`），许多诊断都带代码修复。
 
 </Step>
 <Step>
@@ -49,7 +49,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 
 ## 序列化 API [#serialization-api]
 
-v3 的生成器会在每个程序集的 `<AssemblyName>.NinoGen` 命名空间里生成静态的 `Serializer` 和 `Deserializer` 类（以及扩展方法）。v4 则只有 `Nino.Core` 中的一套 API，所有程序集共用。
+v3 的生成器会在每个程序集的 `<AssemblyName>.NinoGen` 命名空间里生成静态的 `Serializer` 和 `Deserializer` 类（以及扩展方法）。v4 只有 `Nino.Core` 里的一套 API，所有程序集共用。
 
 | v3 | v4 |
 | --- | --- |
@@ -115,7 +115,7 @@ NinoSerializer.Serialize(obj, buffer);
 
 <Callout type="info">
 
-v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参数，不能是 `ref struct`，请改为序列化数组、`List<T>` 或 `ArraySegment<T>`。
+v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参数，不能是 `ref struct`，所以请改为序列化数组、`List<T>` 或 `ArraySegment<T>`。
 
 </Callout>
 
@@ -133,7 +133,7 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 
 ### v4 beta 中的旧名称 [#names-from-the-v4-betas]
 
-基于早期 v4 beta 编写的代码会用到一些在正式版发布前改过名的 API：
+针对早期 v4 beta 写的代码，会用到一些在正式发布前改了名的 API：
 
 | v4 beta | v4 |
 | --- | --- |
@@ -145,7 +145,7 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 
 ### v4 beta 之后的行为变化 [#behavior-changes-since-the-v4-betas]
 
-4.0.0-rc.1 还改变了以下行为，基于 beta 编写的代码和数据可能依赖它们：
+4.0.0-rc.1 还改变了以下行为，为 beta 写的代码和 beta 写出的数据可能依赖这些行为：
 
 <Callout type="warn">
 
@@ -153,11 +153,11 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 
 </Callout>
 
-- **`[NinoUtf8]` 字符串同时记录字符数和字节数。** 先写 UTF-16 字符数，与 UTF-16 字符串相同；不是 `null` 也不是空串时，再写字节数和 UTF-8 字节。beta 只写字节数。参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
-- **`versionTolerant` 对象为整个继承体系只写一个长度**，而不再是每层继承一个长度。因此成员只能追加到最末端的派生类型：向拥有子类的基类追加成员，现在会让子类的成员错位。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
-- **固定大小的类型直接序列化到大小正好的数组中。** 对所有成员都是固定大小的结构体或密封类调用 `NinoSerializer.Serialize(value)`，会直接按最终大小分配结果并写入，不经过暂存缓冲区，也没有拷贝；写出的字节不变。新增了 `NinoSerializer.GetFixedSize<T>()`。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
-- **`NinoFormatterCache<T>.Register<TFormatter>()` 必须在 `T` 第一次使用之前调用。** `T` 第一次被序列化或反序列化时，它的格式化器就固定下来；之后再注册会抛出 `InvalidOperationException`，而不是只对部分调用生效。请把这类调用移到启动代码中。参见[运行时注册](/zh/docs/v4/custom-formatters#registering-at-run-time)。
-- **`ReadSlice()` 返回的 reader，其 `Reader.Position` 是在整个输入中的偏移**，而不是从切片起点算起。如果自定义格式化器拿它与切片长度比较，应在切片开始时记下位置，再做减法。参见[切片中的位置](/zh/docs/v4/custom-formatters#positions-in-a-slice)。
+- **`[NinoUtf8]` 字符串同时记录字符数和字节数。** 先写 UTF-16 字符数，和 UTF-16 字符串一样；字符串既不是 `null` 也不是空串时，再写字节数和 UTF-8 字节。beta 只写字节数。参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
+- **`versionTolerant` 对象整个继承体系只写一个长度**，不再每层继承各写一个。因此成员只能追加到最末端的派生类型：向有子类的基类追加成员，现在会让子类的成员错位。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
+- **固定大小的类型直接序列化到大小正好的数组中。** 对所有成员都是固定大小的结构体或密封类调用 `NinoSerializer.Serialize(value)`，会直接按最终大小分配结果再写入，不经过暂存缓冲区，也没有拷贝；写出的字节不变。新增了 `NinoSerializer.GetFixedSize<T>()`。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
+- **`NinoFormatterCache<T>.Register<TFormatter>()` 必须在 `T` 第一次使用之前调用。** `T` 第一次序列化或反序列化时，它的格式化器就固定下来；之后再注册会抛出 `InvalidOperationException`，而不是只对部分调用生效。请把这类调用移到启动代码中。参见[运行时注册](/zh/docs/v4/custom-formatters#registering-at-run-time)。
+- **在 `ReadSlice()` 返回的 reader 上，`Reader.Position` 是相对整个输入的偏移**，而不是相对切片起点。如果自定义格式化器拿它和切片长度比较，应当在切片开始处记下位置，再把它减掉。参见[切片中的位置](/zh/docs/v4/custom-formatters#positions-in-a-slice)。
 
 ### 版本容错 [#version-tolerance]
 
@@ -192,15 +192,15 @@ public class SaveData
 </Tab>
 </Tabs>
 
-v4 的版本容错按类型设置。成员可以追加到**最末端的派生类型**（没有 `[NinoType]` 子类的类），在任意嵌套深度都成立，旧代码会跳过它不认识的成员；追加到基类的成员会让子类的成员错位，不在容错范围内。如果要调整顺序、删除或插入成员，或向基类添加成员，请使用 `[NinoType(keyed: true)]`。参见[版本容错](/zh/docs/v4/evolving-data#version-tolerance)和[键控成员](/zh/docs/v4/evolving-data#keyed-members)。
+v4 的版本容错按类型设置。成员可以追加到**最末端的派生类型**（没有 `[NinoType]` 子类的类），嵌套多深都可以，旧代码会跳过它不认识的成员。追加到基类的成员会让子类的成员错位，所以不在容错范围内。要调整顺序、删除或插入成员，或者向基类添加成员，请使用 `[NinoType(keyed: true)]`。参见[版本容错](/zh/docs/v4/evolving-data#version-tolerance)和[键控成员](/zh/docs/v4/evolving-data#keyed-members)。
 
 <Callout type="warn">
 
-在 v3 中，`WEAK_VERSION_TOLERANCE` 还允许把成员改成大小相同的非托管类型（`int` → `float`）。v4 中不要依赖这一点：修改成员类型不是兼容的改动。
+在 v3 中，`WEAK_VERSION_TOLERANCE` 还允许把成员改成大小相同的非托管类型（`int` → `float`）。v4 中不要依赖这一点：修改成员类型不在容错范围内。
 
 </Callout>
 
-### 曾用名 [#former-names]
+### 旧名称 [#former-names]
 
 <Tabs groupId="nino-version" persist items={["v3", "v4"]}>
 
@@ -224,7 +224,7 @@ public class Weapon { ... }
 </Tab>
 </Tabs>
 
-曾用名只对 v4 自己写出的数据有意义（v3 的数据本来就读不了），所以只有升级到 v4 之后才改名的类型需要它。
+旧名称只对 v4 自己写出的数据有意义（v3 的数据本来就读不了），所以只有升级到 v4 之后才改名的类型需要它。
 
 ### 多态 [#polymorphism]
 
@@ -253,12 +253,12 @@ public class Circle : Shape { public float Radius; }
 </Tab>
 </Tabs>
 
-在子类型上保留 `[NinoType]` 没有坏处，子类型还能借此设置自己的选项。但这些选项会取代继承来的选项，想保留的（例如 `versionTolerant: true`）需要再写一遍；只有 `trackReferences` 例外，被追踪类型的所有子类型都会保持追踪。
+在子类型上保留 `[NinoType]` 没有坏处，子类型还能借此设置自己的选项。但这些选项会取代继承来的选项，想保留的（例如 `versionTolerant: true`）要再写一遍。唯一的例外是 `trackReferences`：被追踪类型的所有子类型都会保持追踪。
 
 ## 生成的代码 [#generated-code]
-- 生成的格式化器位于 `<AssemblyName>.NinoGen` 命名空间，但不应直接调用。请删掉所有引用 v3 生成类（`Serializer`、`Deserializer`、`NinoTypeConst` 等）的代码。
-- 每个 `[NinoType]` 对应一个生成文件，修改一个类型只会重新生成该类型。
-- v3 中表现为生成代码编译错误的问题，现在改为在你的代码上报告分析器诊断。成员类型无法序列化时，只报告警告（NINO007）并跳过该成员，不再导致编译错误。参见[诊断列表](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)。
+- 生成的格式化器位于 `<AssemblyName>.NinoGen` 命名空间，但不应该直接调用。请删掉所有引用 v3 生成类（`Serializer`、`Deserializer`、`NinoTypeConst` 等）的代码。
+- 每个 `[NinoType]` 对应一个生成文件，改一个类型只会重新生成这个类型。
+- 在 v3 中表现为生成代码编译错误的问题，现在会以分析器诊断的形式标在你自己的代码上。成员类型无法序列化时，只报告警告（NINO007）并跳过该成员，不会再导致编译失败。参见[诊断列表](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)。
 
 ## Unity [#unity]
 - 仍然要求 Unity 2022.3 及以上。
@@ -267,7 +267,7 @@ public class Circle : Shape { public float Radius; }
 - 启用 `Override References` 时，`asmdef` 仍需手动引用 `Nino.Core.dll`。
 
 ## HybridCLR [#hybridclr]
-- 热更新程序集**无需初始化调用**：程序集中的类型第一次被用到时，Nino 就会找到它生成的注册表，即使程序集是通过 `Assembly.Load` 加载的。
+- 热更新程序集**无需初始化调用**：程序集里的类型第一次用到时，Nino 就会找到该程序集生成的注册表，即使它是用 `Assembly.Load` 加载的也一样。
 - v4 的文档和测试覆盖 HybridCLR；ILRuntime 不再列为支持的方案。
 
 ## 转换 v3 数据 [#converting-v3-data]
@@ -276,12 +276,12 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 <Steps>
 <Step>
 
-写一个小的**转换程序**，继续引用 Nino v3 和你的 v3 类型。它用 v3 的 `Deserializer` 读出旧数据，导出成通用格式（例如 JSON），或者把对象交给另一个引用 v4 的程序集（例如在单独的 `AssemblyLoadContext` 中加载）。
+写一个小的**转换程序**，它仍然引用 Nino v3 和你的 v3 类型。它用 v3 的 `Deserializer` 读出旧数据，再导出成中立的格式（例如 JSON），或者把对象交给另一个引用 v4 的程序集（例如在单独的 `AssemblyLoadContext` 中加载该程序集）。
 
 </Step>
 <Step>
 
-在 v4 程序中导入这些数据，再用 `NinoSerializer` 写出。
+在 v4 程序中导入这些中立格式的数据，再用 `NinoSerializer` 写出。
 
 </Step>
 <Step>
@@ -295,6 +295,6 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 
 <Callout type="idea">
 
-只在内存中，或者只在一起部署的进程之间传输的数据（网络消息、缓存）不需要转换，各端同时升级到 v4 即可。
+只存在于内存中、或者只在一起部署的进程之间传输的数据（网络消息、缓存）不需要转换，所有端同时升级到 v4 即可。
 
 </Callout>

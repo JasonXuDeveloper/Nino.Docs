@@ -95,23 +95,23 @@ Install Nino through the Unity Package Manager from [OpenUPM](https://openupm.co
 openupm add com.jasonxudeveloper.nino
 ```
 
-The package ships `Nino.Core.dll` together with the source generator (`Nino.Generator.dll`, labelled as a `RoslynAnalyzer`), so nothing else has to be installed. It is the generator's Roslyn 4.3 build, the oldest compiler Unity supports, so calls are not [intercepted](/en/docs/v4/performance#interceptors) in Unity; they take the regular path and write the same bytes.
+The package ships `Nino.Core.dll` together with the source generator (`Nino.Generator.dll`, labelled as a `RoslynAnalyzer`), so nothing else has to be installed. This is the generator's Roslyn 4.3 build, which matches the oldest compiler Unity supports, so calls are not [intercepted](/en/docs/v4/performance#interceptors) in Unity. They take the regular path and write the same bytes.
 
 <Callout type="warn">
 
-If you use `asmdef` files, make sure `Auto Referenced` is enabled, or, when `Override References` is used, explicitly add a reference to `Nino.Core.dll`.
+If you use `asmdef` files, make sure `Auto Referenced` is enabled. If `Override References` is on, add a reference to `Nino.Core.dll` explicitly.
 
 </Callout>
 
 <Callout type="info">
 
-Unity compiles against .NET Standard, which has no `[UnsafeAccessor]`. A type that serializes non-public members (or uses `[NinoPooled]`) must therefore be declared `partial`, together with every type that contains it. The analyzer reports this (NINO002) and offers a fix.
+Unity compiles against .NET Standard, which has no `[UnsafeAccessor]`. A type that serializes non-public members (or uses `[NinoPooled]`) must therefore be declared `partial`, and so must every type that contains it. The analyzer reports this (NINO002) and offers a fix.
 
 </Callout>
 
 <Callout type="idea">
 
-If you run into problems, first check that you can run the `Nino.Unity` sample project. If the problem persists, please open an issue on GitHub.
+If you run into problems, first check that the `Nino.Unity` sample project runs. If the problem persists, please open an issue on GitHub.
 
 </Callout>
 
@@ -132,8 +132,8 @@ Then build the project (from Godot's **Build** button, your IDE or `dotnet build
 
 - The source generator, the analyzers and the [interceptors](/en/docs/v4/performance#interceptors) all run, since the project is compiled by the .NET 8+ SDK.
 - .NET 8 has `[UnsafeAccessor]`, so serializing private members does not require `partial` types (except generic types).
-- Godot's math structs (`Vector2`, `Vector3`, `Quaternion`, `Transform3D`, `Color`, ...) are unmanaged and are copied as raw memory, like any unmanaged struct.
-- Serialize your own data classes and structs. Godot objects such as `Node` and `Resource` are engine objects, not data, and are not serialized.
+- Godot's math structs (`Vector2`, `Vector3`, `Quaternion`, `Transform3D`, `Color`, ...) are unmanaged, so they are copied as raw memory like any other unmanaged struct.
+- Serialize your own data classes and structs. Godot objects such as `Node` and `Resource` are engine objects, not data, and Nino does not serialize them.
 
 See [Platforms](/en/docs/v4/platforms#godot) for details.
 
@@ -195,14 +195,14 @@ NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
 
 ## At Startup
 
-Nino needs no initialization call: generated code registers itself, and assemblies loaded later are found on first use. Four things are optional:
+Nino needs no initialization call: generated code registers itself, and assemblies loaded later are found on first use. Four calls are optional:
 
 - `NinoSettings` (pool sizes, recyclers), set before the first serialization call.
-- `NinoPolymorphic.Register<T>()` for a closed generic `[NinoType]` that a process only reads through a base type and never names in code.
-- `NinoRegistry.EnsureInitialized(assembly)` to load a plugin's registry now instead of on first use.
-- `NinoFormatterCache<T>.Register<TFormatter>()` for a formatter chosen at run time. It must run before `T` is first serialized or deserialized; registering later throws. See [Registering at Run Time](/en/docs/v4/custom-formatters#registering-at-run-time).
+- `NinoPolymorphic.Register<T>()`, for a closed generic `[NinoType]` that the process only reads through a base type and never names in code.
+- `NinoRegistry.EnsureInitialized(assembly)`, to load a plugin's registry now instead of on first use.
+- `NinoFormatterCache<T>.Register<TFormatter>()`, for a formatter chosen at run time. It must run before `T` is first serialized or deserialized; registering later throws. See [Registering at Run Time](/en/docs/v4/custom-formatters#registering-at-run-time).
 
-Unity and HybridCLR projects: see the [startup checklist](/en/docs/v4/advanced/unity#startup-checklist).
+For Unity and HybridCLR projects, see the [startup checklist](/en/docs/v4/advanced/unity#startup-checklist).
 
 ## Next Steps
 

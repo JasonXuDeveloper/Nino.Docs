@@ -10,14 +10,14 @@ icon: Recycle
   }}
 />
 
-Deserializing a class normally allocates a new object graph on every call. With **reuse deserialization**, deserializing into existing objects and reusing their instances, Nino v4 fills objects you already have and takes new ones from a pool, so a steady stream of messages or frames is deserialized with **0 B** allocated.
+Deserializing a class normally allocates a new object graph on every call. With **reuse deserialization**, Nino v4 fills the objects you already have and takes any new ones from a pool, so a steady stream of messages or frames is deserialized with **0 B** allocated.
 
 ## Deserializing into Existing Instances
 `NinoDeserializer.Deserialize(data, ref value)` (or `Deserialize(ref value, ref reader)` with your own `Reader`) populates an existing value in place:
 
 - **`null` target:** a new instance is created; see [Where Instances Come From](#where-instances-come-from).
 - **Existing instance of the right type:** populated in place. Lists and arrays reuse their elements by index; dictionaries are merged by key (each value is read into the value its key already maps to, and keys missing from the data are removed).
-- **Types that cannot be assigned after construction** (only `init` setters or constructor parameters) are re-created, and the old instance is dropped.
+- **Types whose members cannot be assigned after construction** (only `init` setters or constructor parameters) are re-created, and the old instance is dropped.
 
 ```csharp
 Frame frame = null;
@@ -30,7 +30,7 @@ while (socket.TryReceive(out byte[] data))
 
 ## Where Instances Come From
 
-Whenever Nino needs a new instance (a `null` slot, a list that grows, a polymorphic slot whose type changes), it gets one from:
+Whenever Nino needs a new instance (a `null` slot, a list that grows, a polymorphic slot whose type changes), it gets it from:
 
 | Type | New instances come from |
 | --- | --- |
@@ -120,8 +120,8 @@ The typical use is as a collection element: a `List<Bullet>` grows and shrinks e
   - `OnNinoPoolReturn()` runs on `ReturnToPool()`: release state that Nino does not deserialize.
 - Returning an instance twice throws `InvalidOperationException`. Instances never returned are collected normally.
 - `ReturnToPool()` returns only that instance. Its lists, arrays and nested objects (pooled or not) stay attached and are reused with it next time. So **a type that holds pooled children should be pooled itself**: otherwise, when it is dropped, its children go to the garbage collector with it. To return a child to its own pool instead, return it in `OnNinoPoolReturn()` and set the field to `null`.
-- Pools are thread-safe: each thread keeps up to 64 instances of its own, and the shared stack keeps up to 256 by default. Change it at startup with `NinoSettings.DefaultPoolMaxRetained` or `NinoSettings.SetPoolMaxRetained<T>(int)`.
-- `NinoPool<T>.Shared` is the pool itself: `Count` is the number of instances in the shared stack (not counting those held per thread), and `Clear()` drops every pooled instance: the shared stack at once, and each thread's own stack the next time that thread uses it.
+- Pools are thread-safe: each thread keeps up to 64 instances of its own, and the shared stack keeps up to 256 by default. Change the limit at startup with `NinoSettings.DefaultPoolMaxRetained` or `NinoSettings.SetPoolMaxRetained<T>(int)`.
+- `NinoPool<T>.Shared` is the pool itself: `Count` is the number of instances in the shared stack (not counting those held per thread), and `Clear()` drops every pooled instance (the shared stack at once, and each thread's own stack the next time that thread uses it).
 
 ### Pooled Collections [#your-own-pooled-collections]
 

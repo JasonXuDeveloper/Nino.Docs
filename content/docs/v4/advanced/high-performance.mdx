@@ -28,7 +28,7 @@ public sealed class FrameEncoder : IDisposable
 }
 ```
 
-A buffer is not thread safe. Give each thread (or each connection, or each encoder) its own. For code that has no natural owner, a thread-static buffer works:
+A buffer is not thread safe, so give each thread (or each connection, or each encoder) its own. For code that has no natural owner, a thread-static buffer works:
 
 ```csharp
 static class ScratchBuffer
@@ -52,7 +52,7 @@ Copy or send `WrittenSpan` before the buffer is used again, and do not hand a th
 
 ### Several Values Back to Back
 
-A `Writer` writes into a `NinoArrayBufferWriter` and lets you put several values in one buffer, or reserve space to fill in later:
+A `Writer` writes into a `NinoArrayBufferWriter`. Use it to put several values in one buffer, or to reserve space and fill it in later:
 
 ```csharp
 var buffer = new NinoArrayBufferWriter();
@@ -71,7 +71,7 @@ reader.ReleaseReferences();
 
 ## Serialize into Any IBufferWriter
 
-Any `IBufferWriter<byte>` works as a destination: a `PipeWriter`, Kestrel's response body writer, an `ArrayBufferWriter<byte>`. Nino writes into a thread-local scratch buffer and copies the result into the writer once, so nothing is allocated per call:
+Any `IBufferWriter<byte>` works as a destination: a `PipeWriter`, Kestrel's response body writer, an `ArrayBufferWriter<byte>`. Nino writes into a thread-local scratch buffer and then copies the result into the writer once, so nothing is allocated per call:
 
 ```csharp
 NinoSerializer.Serialize(message, pipeWriter); // one copy into the pipe's memory
@@ -109,7 +109,7 @@ while (TryReceive(out ReadOnlySpan<byte> frame))
 
 - Lists and arrays are reused element by element; dictionaries are merged by key.
 - Types that cannot be filled in place (positional records, `init`-only or get-only members) are re-created.
-- When an existing instance is **dropped** (the data holds `null`, a list shrinks, a key disappears, the polymorphic type changes), the slot hands it to its recycler once, instead of being silently overwritten. This is what makes reuse deserialization safe with pools; see [Reuse Deserialization and Pooling](/en/docs/v4/pooling#deserializing-into-existing-instances).
+- When an existing instance is **dropped** (the data holds `null`, a list shrinks, a key disappears, the polymorphic type changes), it is handed once to the slot's recycler instead of being silently overwritten. This is what makes reuse deserialization safe with pools; see [Reuse Deserialization and Pooling](/en/docs/v4/pooling#deserializing-into-existing-instances).
 
 ## Pool What You Create
 
@@ -171,7 +171,7 @@ Simulate(bullet);
 bullet.ReturnToPool(); // its List<int> stays attached and is reused next time
 ```
 
-Returning an instance twice throws `InvalidOperationException`. An instance that is never returned is simply collected.
+Returning an instance twice throws `InvalidOperationException`. An instance that is never returned is simply garbage collected.
 
 </Step>
 </Steps>
@@ -184,7 +184,7 @@ NinoSettings.SetPoolMaxRetained<Bullet>(4096);
 
 <Callout type="idea">
 
-Already have your own pools? Mark a public static factory `[NinoFactory]` to make Nino create instances through it, and register `NinoSettings.SetRecycler<T>(...)` to receive the instances it drops. See [Reuse Deserialization and Pooling](/en/docs/v4/pooling#creating-instances-with-ninofactory).
+Already have your own pools? Mark a public static factory method `[NinoFactory]` to make Nino create instances through it, and register `NinoSettings.SetRecycler<T>(...)` to receive the instances it drops. See [Reuse Deserialization and Pooling](/en/docs/v4/pooling#creating-instances-with-ninofactory).
 
 </Callout>
 
@@ -229,7 +229,7 @@ if (hash != lastHash) { Send(buffer.WrittenSpan); lastHash = hash; }
 - [ ] Serialize into a reused `NinoArrayBufferWriter`, one per thread or owner.
 - [ ] Deserialize from spans of the memory you already have.
 - [ ] Deserialize hot messages into existing instances with `ref`.
-- [ ] `[NinoPooled]` the classes you create and drop at a high rate.
+- [ ] Mark the classes you create and drop at a high rate `[NinoPooled]`.
 - [ ] Keep bulk data in arrays or lists of unmanaged structs.
 - [ ] Seal classes that have no subtypes (1-byte header, no dispatch).
 - [ ] Build with the .NET 8 SDK or later to get [interceptors](/en/docs/v4/performance#interceptors).

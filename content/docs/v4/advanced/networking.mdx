@@ -8,7 +8,7 @@ This guide builds the serialization half of a TCP protocol: a message hierarchy,
 
 ## Define the Messages
 
-Give all messages one `[NinoType]` base class. Every message is written with a 4-byte **type id** (a stable hash of its full name), so the receiver gets back the right subtype without a hand-maintained opcode table.
+Derive all messages from one `[NinoType]` base class. Every message is written with a 4-byte **type id** (a stable hash of its full name), so the receiver gets back the right subtype without a hand-maintained opcode table.
 
 ```csharp title="Messages.cs"
 using Nino.Core;
@@ -57,7 +57,7 @@ void Handle(Message message)
 
 ## Frame the Stream
 
-TCP is a byte stream, so each message needs a frame. A 4-byte little-endian length prefix is the simplest. Nino's `Writer` can reserve the 4 bytes, serialize the message after them, and patch the length in, all in one buffer:
+TCP is a byte stream, so each message needs a frame. A 4-byte little-endian length prefix is the simplest. Nino's `Writer` can reserve the 4 bytes, serialize the message after them, and then patch in the length, all in one buffer:
 
 ```csharp title="FrameWriter.cs"
 using System.IO.Pipelines;
@@ -161,13 +161,13 @@ public static class FrameReader
 
 <Callout type="info">
 
-Nino validates every length inside the payload against the bytes left before allocating, so a malicious frame cannot make it allocate a huge array, and truncated data throws instead of reading past the end. Still cap the frame size yourself, as above, so a peer cannot make the pipe buffer gigabytes. Deeply nested payloads cannot overflow the server's stack either: objects nested deeper than 128 are read later, from a shallow point. See [Invalid Data](/en/docs/v4/basic#invalid-data) and [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
+Nino validates every length inside the payload against the bytes left before allocating, so a malicious frame cannot make it allocate a huge array, and truncated data throws instead of reading past the end. Still cap the frame size yourself, as above, so a peer cannot make the pipe buffer gigabytes. Deeply nested payloads cannot overflow the server's stack either: objects nested more than 128 levels deep are deferred and read from a shallower level. See [Invalid Data](/en/docs/v4/basic#invalid-data) and [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
 
 </Callout>
 
 ## Reuse Messages per Connection
 
-A busy connection deserializes the same few message types over and over. Two ways to stop allocating them:
+A busy connection deserializes the same few message types over and over. There are two ways to stop allocating them:
 
 <Tabs items={["Pooled messages", "One instance per type"]}>
 <Tab value="Pooled messages">
@@ -229,7 +229,7 @@ When clients and servers are not always on the same build, choose the format wit
 | Remove or reorder fields | ✗ | ✗ | ✓ |
 | New message type | old peers cannot read it | old peers cannot read it | old peers cannot read it |
 
-- With `versionTolerant` on the base class (inherited by every message), an old peer skips fields it does not know and on a new peer a missing field keeps the value the message's constructor gave it (a field initializer such as `public int Priority = 1;` works as the default for old senders). Add fields to the sealed message classes only: `Message`'s members are written before each message's own, so a field appended to `Message` makes old and new peers read each other's fields in the wrong places ([Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class)). To add a field every message carries, make the hierarchy `keyed`, or add it to each message. A reused or pooled message is filled in place, so there a missing field keeps the value of the **previous** message: reset such fields in `OnNinoPoolReturn`, or do not reuse instances while old peers are connected.
+- With `versionTolerant` on the base class (inherited by every message), an old peer skips the fields it does not know, and on a new peer a missing field keeps the value the message's constructor gave it (a field initializer such as `public int Priority = 1;` works as the default for old senders). Add fields to the sealed message classes only: `Message`'s members are written before each message's own, so a field appended to `Message` makes old and new peers read each other's fields in the wrong places ([Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class)). To add a field every message carries, make the hierarchy `keyed`, or add it to each message. A reused or pooled message is filled in place, so there a missing field keeps the value of the **previous** message: reset such fields in `OnNinoPoolReturn`, or do not reuse instances while old peers are connected.
 - A peer that receives a **message type it does not know** cannot deserialize it: the call throws an `InvalidOperationException` (unknown type id). Negotiate a protocol version in your handshake and only send new message types to peers that announced support; `NinoTypeId.Of(typeof(T))` gives the id of each message type if you want to exchange the list.
 - If both sides always ship together (a game client and its dedicated server), stay positional: it is the smallest and fastest format.
 
