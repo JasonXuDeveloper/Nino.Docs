@@ -15,6 +15,7 @@ icon: TriangleAlert
 - **部分类型不受支持。** 委托、`Task`、指针、`Memory<T>`、非泛型集合和部分自定义集合形式、一些 BCL 类（`BigInteger`、`Uri`、大多数不可变集合）以及 Unity 或 Godot 的类都没有格式化器，这类成员会被跳过并报告警告 NINO007。完整列表见[支持的类型](/zh/docs/v4/types#not-supported)；用[自定义格式化器](/zh/docs/v4/custom-formatters)可以支持其中任何一种。
 - **集合按值处理。** 同一个集合实例出现在两个成员中，会写入两次，读回为两个实例；`trackReferences` 只追踪 `[NinoType]` 类。
 - **部分类型不能追踪引用或池化。** 通过构造函数参数或只读成员重新创建的类型（例如位置记录）不能使用 `trackReferences`（NINO016）或 `[NinoPooled]`（NINO018）。`[NinoPooled]` 还要求类是 `sealed`。
+- **由构造函数创建的类型无法任意深。** 由构造函数创建或按值比较的类（例如记录）总是在原处嵌套，所以这类对象嵌套超过 512 层时会失败。其他类可以任意深。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
 - **结构体至少要有一个成员。** 不序列化任何成员的结构体会报错（NINO023），因为它会被写成零字节。请至少序列化一个成员，或者标记 `versionTolerant` 或 `keyed`。
 - **接口不支持版本兼容。** 在 `[NinoType]` 接口上追加的成员不兼容旧数据，请把成员追加到类上。
 - **只在运行时出现的泛型实例化。** 如果某个封闭泛型 `[NinoType]` 在进程中只会按类型 ID 读取，代码里从未写出它的名字，也从未写入过它，就必须在启动时用 `NinoPolymorphic.Register<T>()` 注册。
@@ -73,6 +74,11 @@ v4 已解决：派生自 `List<T>`、`Dictionary<TKey, TValue>` 等类型，或�
 <Accordion value="resolved-9" title={<>多态的非托管结构体转换为接口后，序列化结果与转换前不同</>}>
 
 自 v3.0.3 起已解决。
+
+</Accordion>
+<Accordion value="resolved-10" title={<>嵌套很深的数据会导致栈溢出</>}>
+
+v4 已解决：嵌套超过 128 层的对象会延后，从较浅的位置写入和读取，所以任意深度的递归类型（以及恶意数据）占用的栈都有上限；未追踪的环会抛出异常，而不是无限递归。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
 
 </Accordion>
 </Accordions>

@@ -4,7 +4,7 @@ description: 保留共享引用和循环引用。
 icon: Share2
 ---
 
-默认情况下，被引用两次的对象会写入两次，读回后变成两个实例；序列化带环的对象图会无限递归，直到栈溢出、进程退出。给类加上 `trackReferences: true` 即可保留对象图。它的所有子类型也都会被追踪，即使子类型自己声明的 `[NinoType]` 没有写这个选项：
+默认情况下，被引用两次的对象会写入两次，读回后变成两个实例；序列化带环的对象图会抛出 `InvalidOperationException`（参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)）。给类加上 `trackReferences: true` 即可保留对象图。它的所有子类型也都会被追踪，即使子类型自己声明的 `[NinoType]` 没有写这个选项：
 
 ```csharp
 [NinoType(trackReferences: true)] // [!code highlight]

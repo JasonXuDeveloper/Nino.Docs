@@ -172,10 +172,36 @@ object read = NinoDeserializer.Deserialize(buffer.WrittenSpan, typeof(Shape));
 
 装箱重载按 `Type` 查找格式化器（首次调用后缓存），值类型会被装箱。编译期已知类型时，请优先使用泛型重载。
 
+## 深层对象图 [#deep-object-graphs]
+
+递归类型（链表、树、节点里又包含节点）可以任意深。Nino 在原处写入前 128 层嵌套的对象；更深的对象会延后，从较浅的位置写入，读取时也一样。因此无论对象图有多深，写入和读取占用的栈都有上限：10 万个节点的链表在 512 KB 栈的线程上也能正常往返，而且无法构造出让读取方栈溢出的数据，所以递归类型可以放心用在来自不可信来源的消息里。嵌套不到 128 层的数据，写出的字节与以前完全相同。
+
+```csharp
+[NinoType]
+public class TreeNode
+{
+    public int Value;
+    public List<TreeNode> Children;
+}
+
+// 想多深都可以：两边都不会 StackOverflowException。
+byte[] bytes = NinoSerializer.Serialize(deepTree);
+var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
+```
+
+被延后的对象会在读到它所在位置时立即创建并放进去，成员则在同一次调用中稍后读取，所以复用反序列化和 `[NinoPooled]` 依然会复用每一个实例。有两类类无法这样延后，总是在原处嵌套：
+
+- 由**构造函数**创建的类（位置记录、init-only 或只读成员），因为成员读完之前还没有实例；
+- **按值比较**的类（记录、重写了 `GetHashCode` 或实现了 `IComparable` 的类），因为 `HashSet<T>`、字典的键或有序集合可能会在成员读取之前就持有它。
+
+这两类对象嵌套超过 512 层时会抛出 `InvalidOperationException`。需要很深递归的类型，请提供无参构造函数和可赋值的成员。
+
+带**环**的对象图（`a.Next = b; b.Next = a;`）会被无限写下去。写入时会抛出带类型名的 `InvalidOperationException`；给环上的类型加上 [`trackReferences: true`](/zh/docs/v4/reference-tracking)，即可让每个对象只写一次并保留这个环。
+
 ## 无效数据 [#invalid-data]
 
 从数据中读出的每个长度，都会先与剩余字节数比对，再分配内存，因此格式错误或恶意构造的数据不会引发超大内存分配。无效数据会抛出 `InvalidOperationException`，消息以 `Nino:` 开头，例如数据被截断（"unexpected end of data"）、长度不可能成立、类型 ID 未知，或类型 ID 不是声明类型的子类型。读取永远不会越过 span 的末尾。
 
-嵌套深度没有限制。递归类型（节点里又包含节点、带子节点列表的树）可以让数据每几个字节就嵌套一层，嵌套足够深时读取会栈溢出，导致进程退出，而且无法捕获。不要从不可信的来源（例如游戏客户端发来的消息）接收递归类型。
+嵌套很深的数据也不会导致栈溢出：参见[深层对象图](#deep-object-graphs)。
 
 但如果数据是按**另一个**布局兼容的类型写出的，Nino 无法察觉：字节中不带 schema。请自行为数据加上版本信息（参见[数据演进](/zh/docs/v4/evolving-data)和[存档文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）。

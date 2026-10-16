@@ -15,6 +15,7 @@ What Nino v4 does not do, and the limitations of earlier versions that v4 remove
 - **Some types are not supported.** Delegates, `Task`, pointers, `Memory<T>`, non-generic and some user-defined collection shapes, several BCL classes (`BigInteger`, `Uri`, most immutable collections) and Unity or Godot classes have no formatter; such members are skipped with warning NINO007. The full list is in [Supported Types](/en/docs/v4/types#not-supported); a [custom formatter](/en/docs/v4/custom-formatters) adds any of them.
 - **Collections are values.** The same collection instance in two members is written twice and read back as two instances; `trackReferences` only tracks `[NinoType]` classes.
 - **Some types cannot be tracked or pooled.** Types re-created from constructor arguments or read-only members (positional records, for example) cannot use `trackReferences` (NINO016) or `[NinoPooled]` (NINO018). `[NinoPooled]` also requires a `sealed` class.
+- **Deep graphs of constructor-built types.** Classes created by their constructor or compared by value (records, for example) are always nested in place, so a graph of them fails past 512 nested objects. Other classes can nest to any depth. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
 - **Structs need at least one member.** A struct that serializes no member is an error (NINO023): it would be written as zero bytes. Serialize a member, or mark it `versionTolerant` or `keyed`.
 - **Version-tolerant interfaces.** Members appended to a `[NinoType]` interface are not tolerated; append them to a class.
 - **Runtime-only generic instantiations.** A closed generic `[NinoType]` that a process only reads by type id, and never names in code or writes, must be registered at startup with `NinoPolymorphic.Register<T>()`.
@@ -73,6 +74,11 @@ Resolved since v3.0.6 with `containNonPublicMembers`. On .NET 8 and later no `pa
 <Accordion value="resolved-9" title={<>Polymorphic unmanaged structs serialized differently with and without casting to their interface</>}>
 
 Resolved since v3.0.3.
+
+</Accordion>
+<Accordion value="resolved-10" title={<>Deeply nested data overflows the stack</>}>
+
+Resolved in v4: objects nested deeper than 128 are written and read later, from a shallow point, so recursive types of any depth (and hostile data) take a bounded stack, and an untracked cycle throws instead of recursing. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
 
 </Accordion>
 </Accordions>
