@@ -7,11 +7,15 @@
  * v4 release; the committed file is the fallback. Ratios are computed here
  * from the measured times, never typed in.
  *
- * Runtime against v3: V3_RUNTIME below, the one place for those numbers.
+ * Runtime against v3: src/data/bench-v3-runtime.json (V3_RUNTIME below), synced
+ * from the "v3 3.3.13 vs v4 (same machine)" section of the same release: Nino
+ * 3.3.13 run before and after v4 in the same CI job. Ratios use the v3 and v4
+ * times of that section, so both sides always come from one machine and one run.
  *
  * Build time (source generator, v3 3.3.13 vs v4): static, from
  * docs/v4-benchmarks.md in the Nino repository; it is not in the release report.
  */
+import benchV3 from '@/data/bench-v3-runtime.json';
 import bench from '@/data/bench-v4.json';
 
 export interface Measure {
@@ -98,7 +102,7 @@ export interface RuntimeCase {
   memorypack: Measure;
   /** MemoryPack time / v4 time; undefined = on par; < 1 = MemoryPack faster */
   ratio?: number;
-  /** v3 3.3.13 time / v4 time from V3_RUNTIME; undefined = not measured */
+  /** v3 3.3.13 time / v4 time, both from V3_RUNTIME; undefined = not measured */
   vsV3?: number;
   v3?: Measure;
   /** Marked * in the tables: re-run with more iterations (local snapshot only) */
@@ -150,31 +154,55 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
 /* ------------------------------------------------------------------ */
 
 /**
- * Fill in from a direct back-to-back BenchmarkDotNet run of Nino 3.3.13 (from
- * NuGet) and v4 on the same machine: mean times in nanoseconds, keyed by
- * "serialize:SimpleClass" / "deserialize:SimpleClasses" (the case keys
- * above). Both times must come from the same run. Empty = not measured yet:
- * the site then shows no v4-vs-v3 runtime numbers.
+ * Mean times in nanoseconds of Nino 3.3.13 (from NuGet) and v4 from one
+ * back-to-back run on one machine, keyed by "serialize:SimpleClass" /
+ * "deserialize:SimpleClasses" (the case keys above). Written by
+ * scripts/sync-benchmarks.ts; empty rows = not measured: the site then shows no
+ * v4-vs-v3 runtime numbers.
  */
 export const V3_RUNTIME: {
-  /** Machine and versions of the run, shown under the v3 charts */
+  origin: 'release' | 'local' | 'fixture';
+  tag: string;
+  url: string;
+  publishedAt: string | null;
+  /** BenchmarkDotNet's environment summary of the v3 run */
   environment: string | null;
+  /** Number of v3 runs (before and after v4) that v3Ns is the mean of */
+  runs: number;
+  /** Shown instead of the generated description (local runs) */
+  note: string | null;
   rows: Partial<Record<string, { v3Ns: number; v4Ns: number }>>;
 } = {
-  environment:
-    'Nino 3.3.13 (NuGet) run directly before and after the v4 run on the same machine (BenchmarkDotNet 0.15.2, .NET 10.0.13, server GC, Intel Xeon 2.10 GHz); v3 is the mean of the two runs. The SimpleStruct rows come from a separate run with the same protocol, after SimpleStruct was packed (Pack = 4).',
-  rows: {
-    'serialize:SimpleClass': { v3Ns: 158.3, v4Ns: 123.34 },
-    'serialize:SimpleClasses': { v3Ns: 22964.99, v4Ns: 15493.56 },
-    'serialize:SimpleStruct': { v3Ns: 1.71, v4Ns: 1.3 },
-    'serialize:SimpleStructs': { v3Ns: 15.82, v4Ns: 15.97 },
-    'serialize:Vectors': { v3Ns: 4443.69, v4Ns: 4381.3 },
-    'deserialize:SimpleClass': { v3Ns: 653.63, v4Ns: 657.59 },
-    'deserialize:SimpleClasses': { v3Ns: 67746.37, v4Ns: 72278.9 },
-    'deserialize:SimpleStructs': { v3Ns: 141.74, v4Ns: 132.74 },
-    'deserialize:Vectors': { v3Ns: 127218.79, v4Ns: 125254.2 },
-  },
+  ...benchV3,
+  origin: benchV3.origin as 'release' | 'local' | 'fixture',
 };
+
+/** "AMD EPYC 7763 2.45GHz, 1 CPU, 4 logical and 2 physical cores; Linux Ubuntu 24.04.2 LTS; .NET 10.0.0" */
+function environmentLabel(environment: string) {
+  const lines = environment
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const os = /^BenchmarkDotNet v[\d.]+,\s*(.+?)(?:\s*\(.*\))?$/.exec(
+    lines[0] ?? '',
+  )?.[1];
+  const cpu = lines[1];
+  const runtime = /\[Host\]\s*:\s*(\.NET [\d.]+)/.exec(environment)?.[1];
+  return [cpu, os, runtime].filter(Boolean).join('; ');
+}
+
+/** Where the v3 comparison comes from: one or two sentences for the v3 charts */
+export function v3SourceNote(zh: boolean): string | null {
+  if (Object.keys(V3_RUNTIME.rows).length === 0) return null;
+  if (V3_RUNTIME.note) return V3_RUNTIME.note;
+  const { tag, runs } = V3_RUNTIME;
+  const env = V3_RUNTIME.environment
+    ? environmentLabel(V3_RUNTIME.environment)
+    : '';
+  if (zh)
+    return `Nino 3.3.13（NuGet）在 Nino ${tag} 的基准测试${runs > 1 ? '之前和之后各运行一次' : '之前运行'}，同一个 CI 任务、同一台机器、相同设置${runs > 1 ? '；v3 取两次的平均值' : ''}。${env ? `${env}。` : ''}`;
+  return `Nino 3.3.13 (NuGet) ran ${runs > 1 ? 'before and after' : 'before'} the Nino ${tag} benchmark in the same CI job, on the same machine with the same settings${runs > 1 ? '; v3 is the mean of the two runs' : ''}.${env ? ` ${env}.` : ''}`;
+}
 
 function buildCase(op: 'serialize' | 'deserialize', info: CaseInfo) {
   const verb = op === 'serialize' ? 'Serialize' : 'Deserialize';

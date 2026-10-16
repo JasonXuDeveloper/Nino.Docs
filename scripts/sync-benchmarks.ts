@@ -1,15 +1,21 @@
 /**
- * Syncs the v4 runtime benchmarks from the "Performance Report" that Nino's
- * report workflow appends to each GitHub release, into src/data/bench-v4.json.
+ * Syncs the runtime benchmarks that Nino's report workflow appends to each
+ * GitHub release:
+ *
+ * - the "Performance Report" (v4 and MemoryPack) into src/data/bench-v4.json;
+ * - the "v3 3.3.13 vs v4 (same machine)" section (Nino 3.3.13 run before and
+ *   after the v4 run on the same runner) into src/data/bench-v3-runtime.json,
+ *   from the same release.
  *
  *   bun scripts/sync-benchmarks.ts                       # newest v4.* release with a report
  *   bun scripts/sync-benchmarks.ts --fixture <file.md>   # parse a release body from a file
- *   bun scripts/sync-benchmarks.ts --fixture <file> --out <file.json>
+ *   bun scripts/sync-benchmarks.ts --fixture <file> --out <file.json> [--out-v3 <file.json>]
  *
  * Runs before every build. It never fails the build: on any error (network,
  * rate limit, no matching release, a table it cannot read) it prints a warning
- * and leaves the committed src/data/bench-v4.json as it is. Set GITHUB_TOKEN
- * to raise the API rate limit.
+ * and leaves the committed JSON as it is. A release without the v3 section
+ * keeps the committed src/data/bench-v3-runtime.json. Set GITHUB_TOKEN to
+ * raise the API rate limit.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -19,6 +25,12 @@ const repo = 'JasonXuDeveloper/Nino';
 const dataFile = fileURLToPath(
   new URL('../src/data/bench-v4.json', import.meta.url),
 );
+const v3DataFile = fileURLToPath(
+  new URL('../src/data/bench-v3-runtime.json', import.meta.url),
+);
+
+/** Heading of the v3 section in the release body (report.yml's V3_HEADING) */
+export const v3Heading = 'v3 3.3.13 vs v4 (same machine)';
 
 export interface BenchRow {
   method: string;
@@ -36,6 +48,22 @@ export interface BenchFile {
   publishedAt: string | null;
   environment: string | null;
   rows: BenchRow[];
+}
+
+/** Nino v3 3.3.13 against v4, both measured in the same job on the same machine */
+export interface V3RuntimeFile {
+  origin: 'release' | 'local' | 'fixture';
+  tag: string;
+  url: string;
+  publishedAt: string | null;
+  /** BenchmarkDotNet's environment summary of the v3 run */
+  environment: string | null;
+  /** How many v3 runs v3Ns is the mean of (before and after v4: 2) */
+  runs: number;
+  /** Free text shown instead of the generated description (local runs only) */
+  note: string | null;
+  /** Mean times in ns, keyed "serialize:SimpleClass" (case keys of src/lib/benchmarks.ts) */
+  rows: Record<string, { v3Ns: number; v4Ns: number }>;
 }
 
 interface Release {
@@ -130,11 +158,31 @@ function column(header: string[], ...names: string[]) {
   return header.findIndex((cell) => wanted.includes(cell.toLowerCase()));
 }
 
+/** From `start` to the next "## " heading after it (or the end of the body) */
+function sectionFrom(body: string, start: number) {
+  const rest = body.slice(start);
+  const lineEnd = rest.indexOf('\n');
+  if (lineEnd < 0) return rest;
+  const next = rest.slice(lineEnd).search(/\n##\s/);
+  return next < 0 ? rest : rest.slice(0, lineEnd + next);
+}
+
+/**
+ * BenchmarkDotNet's environment summary: the first code block of a section
+ * (with `beforeTables`, only before its first table).
+ */
+function environmentOf(section: string, beforeTables = true) {
+  const firstTable = beforeTables ? section.indexOf('\n|') : -1;
+  const head = firstTable < 0 ? section : section.slice(0, firstTable);
+  const fence = /```[a-z]*\r?\n([\s\S]*?)```/i.exec(head);
+  return fence ? fence[1].trim() : null;
+}
+
 /** Parses the "Performance Report" section of a release body. Throws when it finds no usable table. */
 export function parseReport(body: string) {
   const start = body.search(/Performance Report/i);
   if (start < 0) throw new Error('no "Performance Report" section');
-  const section = body.slice(start);
+  const section = sectionFrom(body, start);
 
   const rows: BenchRow[] = [];
   for (const table of tables(section)) {
@@ -167,13 +215,55 @@ export function parseReport(body: string) {
   if (!rows.some((row) => row.method === 'NinoSerializeSimpleClass'))
     throw new Error('the report has no NinoSerializeSimpleClass row');
 
-  // BenchmarkDotNet's environment summary: the code block before the first table.
-  const firstTable = section.indexOf('\n|');
-  const head = firstTable < 0 ? section : section.slice(0, firstTable);
-  const fence = /```[a-z]*\r?\n([\s\S]*?)```/i.exec(head);
-  const environment = fence ? fence[1].trim() : null;
+  return { rows, environment: environmentOf(section) };
+}
 
-  return { rows, environment };
+/**
+ * Parses the v3 section of a release body: the compare.py tables (case,
+ * "v3 3.3.13", "v4", ...), one per v3 run. v3Ns is the mean of the runs; v4Ns
+ * is the v4 run they were all compared with. Returns null when the body has no
+ * v3 section; throws when the section has no usable table.
+ */
+export function parseV3Section(body: string) {
+  const start = body.indexOf(v3Heading);
+  if (start < 0) return null;
+  const section = sectionFrom(body, start);
+
+  const v3: Record<string, number[]> = {};
+  const v4: Record<string, number> = {};
+  let runs = 0;
+  for (const table of tables(section)) {
+    if (table.length < 3 || !isSeparator(table[1])) continue;
+    const header = table[0];
+    const name = column(header, 'case');
+    const v3Col = column(header, 'v3 3.3.13');
+    const v4Col = column(header, 'v4');
+    if (name < 0 || v3Col < 0 || v4Col < 0) continue;
+    runs++;
+    for (const row of table.slice(2)) {
+      const match = /^(Serialize|Deserialize)(\w+)$/.exec(row[name] ?? '');
+      const v3Ns = parseTime(row[v3Col] ?? '');
+      const v4Ns = parseTime(row[v4Col] ?? '');
+      if (!match || v3Ns === null || v4Ns === null || v3Ns <= 0 || v4Ns <= 0)
+        continue;
+      const key = `${match[1].toLowerCase()}:${match[2]}`;
+      v3[key] = [...(v3[key] ?? []), v3Ns];
+      v4[key] ??= v4Ns;
+    }
+  }
+  if (runs === 0) throw new Error('the v3 section has no comparison table');
+  if (!v3['serialize:SimpleClass'])
+    throw new Error('the v3 section has no SerializeSimpleClass row');
+
+  const round = (ns: number) => Math.round(ns * 1e4) / 1e4;
+  const rows: V3RuntimeFile['rows'] = {};
+  for (const [key, times] of Object.entries(v3))
+    rows[key] = {
+      v3Ns: round(times.reduce((a, b) => a + b, 0) / times.length),
+      v4Ns: round(v4[key]),
+    };
+  // The compare tables come first; the environment is the first v3 report's.
+  return { rows, runs, environment: environmentOf(section, false) };
 }
 
 /**
@@ -274,6 +364,43 @@ function summary(file: BenchFile) {
   return `${file.rows.length} rows from ${file.tag} (${file.origin})`;
 }
 
+function v3Summary(file: V3RuntimeFile) {
+  return `${Object.keys(file.rows).length} v3 cases (${file.runs} v3 runs) from ${file.tag} (${file.origin})`;
+}
+
+/** The v3 section of the release the v4 numbers came from; keeps the committed file when it has none */
+function syncV3(release: Release, out: string | undefined) {
+  const kept = () => {
+    const file = JSON.parse(readFileSync(v3DataFile, 'utf8')) as V3RuntimeFile;
+    return `keeping src/data/bench-v3-runtime.json (${v3Summary(file)})`;
+  };
+  try {
+    const v3 = parseV3Section(release.body ?? '');
+    if (!v3) {
+      console.warn(
+        `[benchmarks] ${release.tag_name} has no "${v3Heading}" section; ${kept()}`,
+      );
+      return;
+    }
+    const file: V3RuntimeFile = {
+      origin: 'release',
+      tag: release.tag_name,
+      url: release.html_url,
+      publishedAt: release.published_at ?? release.created_at,
+      environment: v3.environment,
+      runs: v3.runs,
+      note: null,
+      rows: v3.rows,
+    };
+    writeFileSync(out ?? v3DataFile, `${JSON.stringify(file, null, 2)}\n`);
+    console.log(`[benchmarks] synced ${v3Summary(file)}`);
+  } catch (error) {
+    console.warn(
+      `[benchmarks] warning: ${error instanceof Error ? error.message : String(error)}; ${kept()}`,
+    );
+  }
+}
+
 async function main() {
   const fixture = argument('--fixture');
   const out = argument('--out');
@@ -299,6 +426,29 @@ async function main() {
     } else {
       console.log(JSON.stringify(file, null, 2));
     }
+
+    const v3 = parseV3Section(readFileSync(fixture, 'utf8'));
+    if (!v3) {
+      console.log('[benchmarks] fixture has no v3 section');
+      return;
+    }
+    const v3File: V3RuntimeFile = {
+      origin: 'fixture',
+      tag: 'fixture',
+      url: file.url,
+      publishedAt: null,
+      environment: v3.environment,
+      runs: v3.runs,
+      note: null,
+      rows: v3.rows,
+    };
+    const outV3 = argument('--out-v3');
+    if (outV3) {
+      writeFileSync(outV3, `${JSON.stringify(v3File, null, 2)}\n`);
+      console.log(`[benchmarks] wrote ${outV3}: ${v3Summary(v3File)}`);
+    } else {
+      console.log(JSON.stringify(v3File, null, 2));
+    }
     return;
   }
 
@@ -320,10 +470,12 @@ async function main() {
     };
     writeFileSync(out ?? dataFile, `${JSON.stringify(file, null, 2)}\n`);
     console.log(`[benchmarks] synced ${summary(file)}`);
+    // Only from the release the v4 numbers came from, so the site never mixes releases.
+    syncV3(release, argument('--out-v3'));
   } catch (error) {
     const kept = JSON.parse(readFileSync(dataFile, 'utf8')) as BenchFile;
     console.warn(
-      `[benchmarks] warning: ${error instanceof Error ? error.message : String(error)}; keeping src/data/bench-v4.json (${summary(kept)})`,
+      `[benchmarks] warning: ${error instanceof Error ? error.message : String(error)}; keeping src/data/bench-v4.json (${summary(kept)}) and src/data/bench-v3-runtime.json`,
     );
   }
 }

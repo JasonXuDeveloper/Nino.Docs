@@ -16,6 +16,7 @@ import {
   serializeAllocatesNothing,
   sourceNote,
   V3_RUNTIME,
+  v3SourceNote,
 } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
 import { BarChart, type BarChartProps, type ChartSeries } from './bar-chart';
@@ -224,6 +225,7 @@ function v3Chart(
   });
   if (entries.length === 0) return null;
   const vs = (e: (typeof entries)[number]) => e.v3Ns / e.v4Ns;
+  const v3Note = v3SourceNote(zh);
   return {
     title: zh
       ? `${op === 'serialize' ? '序列化' : '反序列化'}：Nino v4 对比 v3（3.3.13）`
@@ -241,7 +243,7 @@ function v3Chart(
     })),
     axisLabel: zh ? '相对耗时（v3 = 1.0）' : 'Relative time (v3 = 1.0)',
     tickFormat: rel,
-    footnotes: V3_RUNTIME.environment ? [V3_RUNTIME.environment] : undefined,
+    footnotes: v3Note ? [v3Note] : undefined,
     table: {
       caption: zh ? '数据表' : 'Data table',
       head: zh
