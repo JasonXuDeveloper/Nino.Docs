@@ -20,6 +20,8 @@ bun run deploy         # build + wrangler pages deploy
 bun run format         # Biome format
 ```
 
+Cloudflare Pages builds with Bun 1.2.x and the Node version in `.node-version`. Keep `bun.lock` at `"lockfileVersion": 1`: Bun 1.3+ rewrites it to version 2, which Bun 1.2 cannot read (`bun install --frozen-lockfile` then fails the deploy). Install with Bun 1.2 (`npx @oven/bun-linux-x64@1.2.15`, or set `BUN_VERSION` in the Pages settings to match the version you use).
+
 ## Repository Structure
 
 ```
@@ -89,4 +91,4 @@ bun run format         # Biome format
 
 ## Build & Deploy
 
-`bun run build` runs `react-router build` (prerendering every page) and then `scripts/generate-static.ts`. Cloudflare Pages serves `build/client` and runs `functions/`. The feedback API needs `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` and `GITHUB_APP_INSTALLATION_ID` (Production only); see README.md.
+`bun run build` runs `scripts/git-history.ts` (unshallows the clone so each page's "last updated" date, fumadocs-mdx `lastModified` from git, is right; no date when the history is missing), then `react-router build` (prerendering every page) and then `scripts/generate-static.ts`. Cloudflare Pages serves `build/client` and runs `functions/`. The feedback API needs `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` and `GITHUB_APP_INSTALLATION_ID` (Production only); see README.md.
