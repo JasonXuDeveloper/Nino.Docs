@@ -200,7 +200,7 @@ An object graph with a **cycle** (`a.Next = b; b.Next = a;`) would be written fo
 
 ## Invalid Data
 
-Every length read from a payload is checked against the bytes left before anything is allocated, so malformed or hostile input cannot trigger huge allocations. Invalid data throws an `InvalidOperationException` whose message starts with `Nino:`: truncated data ("unexpected end of data"), an impossible length, an unknown type id, or a type id that is not a subtype of the declared type. Nothing reads past the end of the span.
+Every length read from a payload is checked against the bytes left before anything is allocated, so malformed or hostile input cannot trigger huge allocations. Invalid data throws an `InvalidOperationException` whose message starts with `Nino:`: truncated data ("unexpected end of data"), an impossible length, an unknown type id, a type id that is not a subtype of the declared type, or a `[NinoUtf8]` string that is not valid UTF-8. Nothing reads past the end of the span.
 
 Deeply nested data cannot overflow the stack either: see [Deep Object Graphs](#deep-object-graphs).
 

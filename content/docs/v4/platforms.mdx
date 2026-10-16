@@ -27,12 +27,14 @@ All multi-byte values are **little-endian** and written unaligned. There is no s
 | `bool` | 1 byte |
 | `T?` | 1 byte has-value flag, then the value if present |
 | Length of a string, array or collection | `int32`; `-1` means `null` |
-| `string` | length in UTF-16 chars, then UTF-16 code units |
-| `string` with `[NinoUtf8]` | length in bytes, then UTF-8 bytes |
+| `string` | `int32` length in UTF-16 chars (`-1` = null), then the UTF-16 code units |
+| `string` with `[NinoUtf8]` | `int32` length in UTF-16 chars (`-1` = null), then the UTF-8 bytes |
 | Array or list of unmanaged `T` | length, then one block of elements |
 | Other collections | length, then each element |
 | Dictionary | length, then key/value pairs |
 | `T[,]` and higher ranks | each dimension's length, then elements in row-major order |
+
+Both string encodings start with the same prefix: the string's length in UTF-16 chars (`string.Length`; `-1` for `null`, `0` for an empty string). A `[NinoUtf8]` string carries no byte count, and nothing marks where its bytes end. The reader allocates the string at its final length and decodes the bytes that follow into it in one pass, stopping as soon as the string is full; the bytes it decoded are the string's, and the next value starts right after them. A length larger than the bytes left is rejected before anything is allocated, since every char takes at least one byte. Data that ends early, is not valid UTF-8 (overlong forms and encoded surrogates included) or would end in the middle of a surrogate pair throws an `InvalidOperationException`. When writing, an unpaired surrogate is encoded as U+FFFD, which is one char as well, so the length always matches the string that is read back.
 
 Objects get a header that depends on the **declared** type:
 

@@ -20,7 +20,7 @@ icon: Milestone
 
 运行时和源生成器全部重写。**二进制格式与 v3 以及更早的 v4 beta/preview 版本不兼容**，公共 API 也有变化。主要变化：
 - `Nino.Core` 中的 `NinoSerializer` / `NinoDeserializer` 取代了生成的 `Serializer` / `Deserializer` 类及其扩展方法。
-- 新的数据格式：小端序、不对齐、填充字节清零，`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出的字节完全相同；类型 ID 是运行时类型名的 FNV-1a 哈希。
+- 新的数据格式：小端序、不对齐、填充字节清零，`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出的字节完全相同；类型 ID 是运行时类型名的 FNV-1a 哈希。字符串无论是 UTF-16 还是 `[NinoUtf8]`，都以字符数作前缀（自 4.0.0-rc.1 起；beta 版为 `[NinoUtf8]` 字符串写入的是字节数）。
 - `[NinoType]` 上按类型设置的选项：`versionTolerant`、`keyed`、`trackReferences`、`allowInheritance`。子类型会继承 `[NinoType]`。
 - 复用反序列化到已有实例（可回收丢弃的实例）、`[NinoPooled]` 对象池、`[NinoFactory]` 工厂方法和 `NinoSettings`。
 - 自定义集合、`PriorityQueue`、`Nino.Immutable`，以及可扩展的格式化器（`[assembly: NinoFormatter]`、`[NinoCustomFormatter]`）。

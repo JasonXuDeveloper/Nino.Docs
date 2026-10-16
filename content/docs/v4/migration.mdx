@@ -143,6 +143,14 @@ Code written against an early v4 beta uses names that changed before the release
 | `NinoDeserializer.DeserializeRef(ref value, ref reader)` | `NinoDeserializer.Deserialize(ref value, ref reader)` |
 | "ref deserialization" | reuse deserialization |
 
+### Behavior Changes since the v4 Betas [#behavior-changes-since-the-v4-betas]
+
+4.0.0-rc.1 also changed three behaviors that code and data from the betas may depend on:
+
+- **`[NinoUtf8]` strings are prefixed with their length in chars**, like UTF-16 strings, instead of their length in bytes. Data with `[NinoUtf8]` members written by a beta cannot be read; data without them is unaffected by this change. See [Binary Format](/en/docs/v4/platforms#binary-format).
+- **`NinoFormatterCache<T>.Register<TFormatter>()` must run before `T` is first used.** The first serialization or deserialization of `T` fixes its formatter; registering one afterwards throws an `InvalidOperationException` instead of taking effect for some calls only. Move such calls to startup. See [Registering at Run Time](/en/docs/v4/custom-formatters#registering-at-run-time).
+- **`Reader.Position` of a reader returned by `ReadSlice()` is an offset in the whole input**, not from the start of the slice. A custom formatter that compared it with the slice's length should record the position when the slice starts and subtract it. See [Positions in a Slice](/en/docs/v4/custom-formatters#positions-in-a-slice).
+
 ### Version tolerance
 
 <Tabs items={["v3", "v4"]}>

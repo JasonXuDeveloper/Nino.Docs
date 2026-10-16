@@ -92,6 +92,7 @@ Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
 | 用 `Assembly.Load` 加载热更新 DLL | 在读取包含其中类型的数据之前。 | |
 | `NinoRegistry.EnsureInitialized(assembly)` 或 `EnsureAllInitialized()` | 想把一次性的注册表加载放到加载界面，而不是第一次用到该程序集的调用。 | 始终是可选的：注册表在首次使用时自动加载。 |
 | `NinoPolymorphic.Register<T>()` | 某个封闭泛型 `[NinoType]`（如 `Box<MyStruct>`）在本进程中只会通过基类型**读取**，代码里从未写出它的名字，也从未写入过它。 | 普通子类型，无论在哪个程序集（包括热更新程序集），都会自动找到。 |
+| `NinoFormatterCache<T>.Register<TFormatter>()` | `T` 的格式化器要在运行时选定。必须在 `T` 第一次被序列化或反序列化之前注册：第一次使用会固定格式化器，之后再注册会抛出 `InvalidOperationException`。 | 用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明的格式化器：无需任何调用。 |
 
 ```csharp
 public static class NinoStartup
@@ -101,6 +102,7 @@ public static class NinoStartup
     {
         NinoSettings.SetPoolMaxRetained<Bullet>(1024); // only if the defaults do not fit
         NinoPolymorphic.Register<Box<MyStruct>>();     // only for read-only closed generics
+        NinoFormatterCache<Ring<int>>.Register<RingFormatter<int, UnmanagedFormatter<int>>>(); // only for formatters chosen at run time
     }
 }
 

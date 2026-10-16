@@ -143,6 +143,14 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 | `NinoDeserializer.DeserializeRef(ref value, ref reader)` | `NinoDeserializer.Deserialize(ref value, ref reader)` |
 | “ref 反序列化” | 复用反序列化 |
 
+### v4 beta 之后的行为变化 [#behavior-changes-since-the-v4-betas]
+
+4.0.0-rc.1 还改变了三处行为，基于 beta 编写的代码和数据可能依赖它们：
+
+- **`[NinoUtf8]` 字符串改以字符数作前缀**，与 UTF-16 字符串相同，而不再是字节数。beta 写出的、含 `[NinoUtf8]` 成员的数据无法读取；不含这类成员的数据不受这项变化影响。参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
+- **`NinoFormatterCache<T>.Register<TFormatter>()` 必须在 `T` 第一次使用之前调用。** `T` 第一次被序列化或反序列化时，它的格式化器就固定下来；之后再注册会抛出 `InvalidOperationException`，而不是只对部分调用生效。请把这类调用移到启动代码中。参见[运行时注册](/zh/docs/v4/custom-formatters#registering-at-run-time)。
+- **`ReadSlice()` 返回的 reader，其 `Reader.Position` 是在整个输入中的偏移**，而不是从切片起点算起。如果自定义格式化器拿它与切片长度比较，应在切片开始时记下位置，再做减法。参见[切片中的位置](/zh/docs/v4/custom-formatters#positions-in-a-slice)。
+
 ### 版本兼容 [#version-tolerance]
 
 <Tabs items={["v3", "v4"]}>

@@ -200,7 +200,7 @@ var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
 
 ## 无效数据 [#invalid-data]
 
-从数据中读出的每个长度，都会先与剩余字节数比对，再分配内存，因此格式错误或恶意构造的数据不会引发超大内存分配。无效数据会抛出 `InvalidOperationException`，消息以 `Nino:` 开头，例如数据被截断（"unexpected end of data"）、长度不可能成立、类型 ID 未知，或类型 ID 不是声明类型的子类型。读取永远不会越过 span 的末尾。
+从数据中读出的每个长度，都会先与剩余字节数比对，再分配内存，因此格式错误或恶意构造的数据不会引发超大内存分配。无效数据会抛出 `InvalidOperationException`，消息以 `Nino:` 开头，例如数据被截断（"unexpected end of data"）、长度不可能成立、类型 ID 未知、类型 ID 不是声明类型的子类型，或 `[NinoUtf8]` 字符串不是合法的 UTF-8。读取永远不会越过 span 的末尾。
 
 嵌套很深的数据也不会导致栈溢出：参见[深层对象图](#deep-object-graphs)。
 

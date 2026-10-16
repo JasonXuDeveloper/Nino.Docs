@@ -195,11 +195,12 @@ NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
 
 ## 启动时 [#at-startup]
 
-Nino 不需要任何初始化调用：生成的代码会自行注册，之后加载的程序集也会在首次使用时被找到。以下三项是可选的：
+Nino 不需要任何初始化调用：生成的代码会自行注册，之后加载的程序集也会在首次使用时被找到。以下四项是可选的：
 
 - `NinoSettings`（池大小、回收器），在第一次序列化调用之前设置。
 - `NinoPolymorphic.Register<T>()`：用于某个封闭泛型 `[NinoType]`，本进程只会通过基类型读取它，代码中从未写出它的名字。
 - `NinoRegistry.EnsureInitialized(assembly)`：现在就加载某个插件程序集的注册表，而不是等到首次使用。
+- `NinoFormatterCache<T>.Register<TFormatter>()`：注册运行时选定的格式化器。必须在 `T` 第一次被序列化或反序列化之前调用，之后再注册会抛出异常。参见[运行时注册](/zh/docs/v4/custom-formatters#registering-at-run-time)。
 
 Unity 和 HybridCLR 项目请参见[启动检查清单](/zh/docs/v4/advanced/unity#startup-checklist)。
 

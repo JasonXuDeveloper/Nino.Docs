@@ -25,7 +25,7 @@ The saving is a few nanoseconds per call, which matters most for small values ca
 - **It depends on the compiler, not the target framework**: a `netstandard2.0` library built with the .NET 8+ SDK is intercepted too.
 - **Older compilers simply use the regular path**, which writes the same bytes. The Unity package ships the generator's Roslyn 4.3 build, so Unity projects never intercept.
 - Left alone, because interception would gain nothing: raw values and arrays of raw elements (the regular path already copies them directly), `[NinoType]`s declared in another assembly (the calling project reaches their formatter only through the formatter cache, as the regular call does), and calls inside generic code.
-- A formatter registered at runtime with `NinoFormatterCache<T>.Register<TFormatter>()` still takes precedence, so intercepted and regular calls never disagree.
+- A formatter registered at runtime with `NinoFormatterCache<T>.Register<TFormatter>()` still takes precedence, so intercepted and regular calls never disagree. Register it before `T` is first used: the first call fixes the formatter, and a later registration throws (see [Registering at Run Time](/en/docs/v4/custom-formatters#registering-at-run-time)).
 
 <Callout type="warn">
 
@@ -118,7 +118,7 @@ On the reading side, `NinoDeserializer` takes a `ReadOnlySpan<byte>`: pass a sli
 Every `NinoSerializer` and `NinoDeserializer` method is **safe to call concurrently** without locks:
 
 - no hot path writes shared memory, so serializing threads never contend for a cache line;
-- scratch buffers and reference-tracking tables are per thread, taken out of their slot while in use, so re-entrant calls (a custom formatter that serializes) are safe;
+- scratch buffers and reference-tracking tables are per thread, and a nested call on the same thread (a custom formatter that serializes) gets its own, so re-entrant calls are safe;
 - formatter lookup is a static generic field written once; polymorphic tables are immutable snapshots, replaced copy-on-write and read lock free;
 - `NinoPool<T>` keeps a per-thread stack of up to 64 instances and a locked shared stack it only touches in batches; its hot fields sit on their own 64-byte cache line.
 

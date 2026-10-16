@@ -92,6 +92,7 @@ Most projects need none of these steps. Run the ones you need once, before the f
 | `Assembly.Load` of hot-update DLLs | Before reading data that contains their types. | |
 | `NinoRegistry.EnsureInitialized(assembly)` or `EnsureAllInitialized()` | You want the one-time registry load on a loading screen instead of the first call that meets the assembly. | Always optional: registries load on first use. |
 | `NinoPolymorphic.Register<T>()` | A closed generic `[NinoType]` such as `Box<MyStruct>` that this process only **reads** through a base type, and never names in code nor writes. | Ordinary subtypes in any assembly, hot update included: they are found automatically. |
+| `NinoFormatterCache<T>.Register<TFormatter>()` | A formatter for `T` is chosen at run time. Register it before `T` is first serialized or deserialized: the first use fixes the formatter, and a later registration throws an `InvalidOperationException`. | Formatters declared with `[assembly: NinoFormatter]` or `[NinoCustomFormatter]`: they need no call. |
 
 ```csharp
 public static class NinoStartup
@@ -101,6 +102,7 @@ public static class NinoStartup
     {
         NinoSettings.SetPoolMaxRetained<Bullet>(1024); // only if the defaults do not fit
         NinoPolymorphic.Register<Box<MyStruct>>();     // only for read-only closed generics
+        NinoFormatterCache<Ring<int>>.Register<RingFormatter<int, UnmanagedFormatter<int>>>(); // only for formatters chosen at run time
     }
 }
 

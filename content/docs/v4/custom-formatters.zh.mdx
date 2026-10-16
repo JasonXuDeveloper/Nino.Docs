@@ -171,6 +171,25 @@ Nino 遇到一个格式化器能处理的类型时，会这样绑定格式化器
 | `WriteLength(int)`、`WriteNullLength()` | `ReadLength()` | 集合长度，`-1` 表示 null；如果剩余数据不可能容纳这么多元素，`ReadLength` 会抛出异常 |
 | `ReserveInt32()`、`PatchInt32(...)`、`PatchLength(...)` | | 预留 4 字节稍后回填，例如字节长度 |
 | `WriteRaw(ReadOnlySpan<byte>)` | `ReadRaw(int)`、`Advance(int)` | 原始字节，或跳过若干字节 |
+| `Position` | `Position`、`Remaining`、`Eof` | 当前位置：`Position` 是绝对偏移，`Remaining` 是剩余字节数 |
+
+两种编码的字符串都以字符数（UTF-16 码元数）作前缀，而不是字节数；参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
+
+### 切片中的位置 [#positions-in-a-slice]
+
+`Reader.ReadSlice()` 读取一个 `int32` 字节长度，并返回覆盖其后数据块的 reader（`ReserveInt32()` 加 `PatchLength(...)` 写出的就是这种数据块）。它的 `Position` **不会**从 `0` 重新开始：与父 reader 一样，它是相对整个输入起点的偏移。`Remaining` 和 `Eof` 则在切片末尾为止。要统计切片内读取了多少字节，先记下起始位置再相减：
+
+```csharp
+Reader slice = reader.ReadSlice();     // 父 reader 跳过整个数据块
+int start = slice.Position;            // 整个输入中的偏移，不是 0
+slice.Read(out int kind);
+// ...
+int consumed = slice.Position - start; // 切片内读取的字节数
+bool complete = slice.Eof;             // Remaining == 0：切片已读完
+reader.EndSlice(in slice);             // 切片中读出的对象对后续的回引仍然可见
+```
+
+`Writer.Position` 同样是在 `NinoArrayBufferWriter` 中的绝对位置。
 
 如果要写入的值有自己的格式化器（`[NinoType]`、`List<T>` 等），就把 writer 或 reader 传给常规 API，这样引用追踪和多态都能照常处理：
 
@@ -183,10 +202,16 @@ NinoDeserializer.Deserialize(ref owner, ref reader);
 
 ## 运行时注册 [#registering-at-run-time]
 
-`NinoFormatterCache<T>.Register<TFormatter>()` 在运行时注册（或替换）`T` 的格式化器，必须在第一次序列化之前调用：
+`NinoFormatterCache<T>.Register<TFormatter>()` 在运行时注册（或替换）`T` 的格式化器。请在启动时调用，**必须早于 `T` 第一次被序列化或反序列化**：
 
 ```csharp
 NinoFormatterCache<Ring<int>>.Register<RingFormatter<int, UnmanagedFormatter<int>>>();
 ```
 
-它会被顶层的 `NinoSerializer`/`NinoDeserializer` 调用使用（包括被拦截的调用），也会被通过格式化器缓存访问 `T` 的成员使用（泛型 `[NinoType]` 的类型参数、其他程序集中的类型）。生成器在编译期已经确定格式化器的成员不受影响。一般情况下，请优先使用对所有地方都生效的 `[assembly: NinoFormatter]`。
+它会被顶层的 `NinoSerializer`/`NinoDeserializer` 调用使用（包括被拦截的调用和装箱重载），也会被通过格式化器缓存访问 `T` 的成员使用（泛型 `[NinoType]` 的类型参数、其他程序集中的类型）。生成器在编译期已经确定格式化器的成员不受影响。一般情况下，请优先使用对所有地方都生效的 `[assembly: NinoFormatter]`。
+
+<Callout type="warn">
+
+`T` 第一次经由上述任一途径被序列化或反序列化后，它使用的格式化器在整个进程中就固定下来。此后再为 `T` 注册格式化器（即使是同一个）会抛出 `InvalidOperationException`，而不是被已经在用旧格式化器的代码悄悄忽略。
+
+</Callout>

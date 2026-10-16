@@ -19,7 +19,7 @@ Each version below writes a binary format that earlier versions cannot read, and
 
 A rewrite of the runtime and the source generator. **The binary format is not compatible with v3 or the earlier v4 betas/previews**, and the public API changed. Main changes:
 - `NinoSerializer` / `NinoDeserializer` in `Nino.Core` replace the generated `Serializer` / `Deserializer` classes and their extension methods.
-- New wire format: little-endian, unaligned, padding zeroed, identical bytes on `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0`; type ids are FNV-1a hashes of the runtime type name.
+- New wire format: little-endian, unaligned, padding zeroed, identical bytes on `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0`; type ids are FNV-1a hashes of the runtime type name. Strings, UTF-16 or `[NinoUtf8]`, are prefixed with their length in chars (since 4.0.0-rc.1; the betas wrote the byte length of `[NinoUtf8]` strings).
 - Per-type options on `[NinoType]`: `versionTolerant`, `keyed`, `trackReferences`, `allowInheritance`. Subtypes inherit `[NinoType]`.
 - Reuse deserialization into existing instances with recycling, `[NinoPooled]` pools, `[NinoFactory]` factories and `NinoSettings`.
 - User collections, `PriorityQueue`, `Nino.Immutable`, pluggable formatters (`[assembly: NinoFormatter]`, `[NinoCustomFormatter]`).

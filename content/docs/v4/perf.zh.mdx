@@ -52,7 +52,7 @@ v4 与 MemoryPack 在同一次运行中。数据大小基本相同（`SimpleClas
 
 <BenchSource lang="zh" />
 
-### 序列化（到复用的缓冲区写入器） [#serialize]
+### 序列化（到复用的缓冲区写入器） [#serialize-to-a-reused-buffer-writer]
 
 <RuntimeTable op="serialize" lang="zh" />
 
@@ -60,7 +60,7 @@ v4 与 MemoryPack 在同一次运行中。数据大小基本相同（`SimpleClas
 
 `SimpleStruct`（`int` + `DateTime`）声明了 `[StructLayout(LayoutKind.Sequential, Pack = 4)]`，大小为 12 字节且没有填充，所有序列化器都整块拷贝它。如果不加 `Pack`，它是 16 字节，其中 4 字节是填充，Nino 写入时会把填充清零；参见[结构体布局](/zh/docs/v4/performance#struct-layout)。
 
-### 反序列化（新实例） [#deserialize]
+### 反序列化（新实例） [#deserialize-new-instances]
 
 <RuntimeTable op="deserialize" lang="zh" />
 
@@ -80,7 +80,7 @@ Nino 可以反序列化到已有的对象图（复用反序列化），并从 `[
 
 <BenchmarkChart chart="reuse" lang="zh" table={false} />
 
-每次调用分配的字节数见下方图表与[完整结果](#结果)。
+每次调用分配的字节数见下方图表与[完整结果](#results)。
 
 <BenchmarkChart chart={['allocation', 'payload']} lang="zh" />
 
@@ -98,7 +98,7 @@ dotnet run -c Release --project src/Nino.Benchmark -- --filter '*Test.Nino*' '*T
 
 `Nino.Benchmark` 项目还在下面的数据结构上把 Nino 和 [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) 做了对比。
 
-### 数据结构
+### 数据结构 [#data-structures]
 
 <Tabs items={["简单类", "简单结构体"]}>
 
@@ -150,9 +150,9 @@ public partial struct SimpleStruct
 </Tab>
 </Tabs>
 
-### 数据生成
+### 数据生成 [#data-generation]
 
-#### 生成函数
+#### 生成函数 [#generation-function]
 
 <Tabs items={["简单类", "简单结构体"]}>
 
@@ -196,7 +196,7 @@ public static SimpleStruct Create()
 </Tab>
 </Tabs>
 
-#### 基准测试数据
+#### 基准测试数据 [#benchmark-data]
 
 ```csharp
 SimpleClass = SimpleClass.Create();
@@ -211,7 +211,7 @@ Vectors = Enumerable.Range(0, 10000)
 
 序列化时写入一个复用的缓冲区写入器（Nino 使用 `NinoArrayBufferWriter`，其他库使用 `ArrayBufferWriter<byte>`），因此所有序列化器在序列化路径上都不会产生分配。
 
-### 结果
+### 结果 [#results]
 
 结果为序列化和反序列化上述数据所用的时间，越低越好。
 

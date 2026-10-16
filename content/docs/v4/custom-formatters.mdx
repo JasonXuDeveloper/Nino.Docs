@@ -171,6 +171,25 @@ A formatter writes with `Writer` and reads with `Reader`, both `ref struct`s. Th
 | `WriteLength(int)`, `WriteNullLength()` | `ReadLength()` | a collection length, `-1` for null; `ReadLength` throws if the payload cannot hold that many elements |
 | `ReserveInt32()`, `PatchInt32(...)`, `PatchLength(...)` | | 4 bytes to fill in later, such as a byte length |
 | `WriteRaw(ReadOnlySpan<byte>)` | `ReadRaw(int)`, `Advance(int)` | raw bytes, or skipping them |
+| `Position` | `Position`, `Remaining`, `Eof` | where you are: `Position` is an absolute offset, `Remaining` the bytes left |
+
+Both encodings of a string are prefixed with its length in chars (UTF-16 code units), not in bytes; see [Binary Format](/en/docs/v4/platforms#binary-format).
+
+### Positions in a Slice [#positions-in-a-slice]
+
+`Reader.ReadSlice()` reads an `int32` byte length and returns a reader over the block that follows (the kind of block `ReserveInt32()` and `PatchLength(...)` write). Its `Position` does **not** restart at `0`: like the parent's, it is an offset from the start of the whole input. `Remaining` and `Eof` stop at the end of the slice. To count the bytes read inside a slice, record the position first and subtract:
+
+```csharp
+Reader slice = reader.ReadSlice();     // the parent skips the whole block
+int start = slice.Position;            // an offset in the whole input, not 0
+slice.Read(out int kind);
+// ...
+int consumed = slice.Position - start; // bytes read inside the slice
+bool complete = slice.Eof;             // Remaining == 0: the slice is used up
+reader.EndSlice(in slice);             // objects read in the slice stay visible to back references
+```
+
+`Writer.Position` is likewise the absolute position in the `NinoArrayBufferWriter`.
 
 To write a value that has its own formatter (a `[NinoType]`, a `List<T>`), call the regular API with the writer or reader, so its references and polymorphism are handled as usual:
 
@@ -183,10 +202,16 @@ Always read exactly what you wrote, in the same order: the bytes carry no schema
 
 ## Registering at Run Time
 
-`NinoFormatterCache<T>.Register<TFormatter>()` registers (or replaces) the formatter of `T` at run time, before the first serialization call:
+`NinoFormatterCache<T>.Register<TFormatter>()` registers (or replaces) the formatter of `T` at run time. Call it at startup, **before `T` is first serialized or deserialized**:
 
 ```csharp
 NinoFormatterCache<Ring<int>>.Register<RingFormatter<int, UnmanagedFormatter<int>>>();
 ```
 
-It is used by the top-level `NinoSerializer`/`NinoDeserializer` calls (intercepted calls included) and by members that reach `T` through the formatter cache (type parameters of generic `[NinoType]`s, types from other assemblies). Members whose formatter the generator resolved at compile time keep that formatter. Prefer `[assembly: NinoFormatter]`, which applies everywhere.
+It is used by the top-level `NinoSerializer`/`NinoDeserializer` calls (intercepted calls and the boxed overloads included) and by members that reach `T` through the formatter cache (type parameters of generic `[NinoType]`s, types from other assemblies). Members whose formatter the generator resolved at compile time keep that formatter. Prefer `[assembly: NinoFormatter]`, which applies everywhere.
+
+<Callout type="warn">
+
+The first time `T` is serialized or deserialized through any of these paths, its formatter is fixed for the rest of the process. Registering a formatter for `T` after that, even the same one again, throws an `InvalidOperationException`, instead of being ignored by code that already runs with the old formatter.
+
+</Callout>
