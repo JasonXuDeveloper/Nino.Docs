@@ -1,30 +1,56 @@
 ---
-title: 概览
-description: 实用的高性能C#序列化库，包括但不限于对.NET Core 应用或Unity/Godot游戏带来令人难以置信的收益。
+title: 介绍
+description: Nino v2，实用的高性能 C# 序列化库，适用于各类 C# 项目，从 .NET Core 应用到 Unity 和 Godot 游戏。
 icon: BookOpen
 ---
 
-实用的高性能C#序列化库，包括但不限于对.NET Core 应用或Unity/Godot游戏带来令人难以置信的收益。
+import { ChartColumn, Layers, Play, Rocket, Shapes, TriangleAlert } from 'lucide-react';
+
+## Nino 是什么？ [#what-is-nino]
+
+Nino 是实用的高性能 C# 序列化库，适用于各类 C# 项目，包括但不限于 .NET Core 应用和 Unity、Godot 游戏。给类型加上 `[NinoType]`，源生成器就会在你写代码的同时生成它的序列化代码。运行时调用生成的 `Serializer` 和 `Deserializer` 即可：
+
+```csharp title="Program.cs"
+[NinoType]
+public class ObjClass
+{
+    public int Id;
+    public string Name { get; set; }
+}
+
+byte[] bytes = Serializer.Serialize(obj);
+Deserializer.Deserialize(bytes, out ObjClass copy);
+```
+
+## 为什么选 Nino v2 [#why-nino-v2]
+
+- **比快更快。** 序列化与反序列化性能远超 JSON、Protobuf、MessagePack 等常规方案，大部分测试结果优于 MemoryPack 等同类库。详见[基准测试](/zh/docs/v2/perf)。
+- **简单好用。** 源生成器在你写代码的同时生成序列化与反序列化函数。生成的代码是可以直接阅读的普通 C#，也能在 NativeAOT 等没有 JIT 的平台上运行。
+- **功能强大。** 支持基础类型、结构体、类、集合、字典等多种数据类型，也支持多态类型。详见[支持的类型](/zh/docs/v2/types)。
+
+## 从这里开始 [#start-here]
 
 <Cards>
-  <Card title="快速开始" href="/zh/docs/v2/start" />
-  <Card title="性能对比" href="/zh/docs/v2/perf" />
-</Cards>
-
-<Cards>
-  <Card title="比快更快">
-    序列化与反序列化性能完胜JSON、Protobuf、MessagePack等常规方案
-
-    *大部分压测数据优于MemoryPack等同类方案*
+  <Card icon={<Rocket />} title="快速开始" href="/zh/docs/v2/start">
+    在 .NET 或 Unity 项目中安装 Nino v2。
   </Card>
-  <Card title="简单好用">
-    通过Source Generator技术在用户编写代码时自动生成所需的数据序列化与反序列化函数
-
-    *生成代码透明可见且支持NativeAOT等非JIT环境*
+  <Card icon={<Play />} title="序列化与反序列化" href="/zh/docs/v2/basic">
+    序列化到数组和缓冲区写入器，从 span 反序列化。
   </Card>
-  <Card title="功能强大">
-    支持多种数据类型的序列化与反序列化，包括但不限于基础类型、结构体、类、集合、字典等
-
-    *除此之外更支持序列化与反序列化多态类型*
+  <Card icon={<Shapes />} title="支持的类型" href="/zh/docs/v2/types">
+    非托管类型、`[NinoType]` 类型、泛型、集合、多态与版本兼容。
+  </Card>
+  <Card icon={<Layers />} title="进阶用法" href="/zh/docs/v2/advanced">
+    弱版本兼容与自定义构造函数。
+  </Card>
+  <Card icon={<ChartColumn />} title="基准测试" href="/zh/docs/v2/perf">
+    Nino v2 与 MemoryPack、MessagePack 的对比。
+  </Card>
+  <Card icon={<TriangleAlert />} title="局限性" href="/zh/docs/v2/limit">
+    Nino v2 做不到的事。
   </Card>
 </Cards>
+
+## 新版本 [#newer-version]
+
+Nino v2 已归档。当前版本是 [Nino v4](/zh/docs/v4)，它的二进制格式与 v2、v3 都不兼容。从 v2 升级到 v3，参见[版本迭代](/zh/docs/v3/versioning#migrating-from-nino-v2)。

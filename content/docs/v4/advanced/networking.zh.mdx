@@ -1,10 +1,11 @@
 ---
 title: 网络层
+seoTitle: "C# 网络协议与 RPC 序列化 – Nino v4 文档"
 description: "基于 Nino 搭建消息协议：分帧、多态消息、System.IO.Pipelines、按连接池化、滚动升级。"
 icon: Network
 ---
 
-本指南实现一个 TCP 协议中与序列化相关的部分：消息继承体系、直接写入 `PipeWriter` 的长度前缀帧、从 `PipeReader` 无拷贝地读取帧，以及按连接复用消息对象。传输层（socket、Kestrel 连接、引擎自带的网络模块）由你决定；只要能提供 `PipeReader`/`PipeWriter`、`Stream` 或原始缓冲区，做法都一样。
+服务间通信、实时服务器（游戏、交易、协作）以及设备之间的连接，都需要一种消息格式。本指南实现一个 TCP 协议中与序列化相关的部分：消息继承体系、直接写入 `PipeWriter` 的长度前缀帧、从 `PipeReader` 无拷贝地读取帧，以及按连接复用消息对象。传输层（socket、Kestrel 连接、引擎自带的网络模块）由你决定；只要能提供 `PipeReader`/`PipeWriter`、`Stream` 或原始缓冲区，做法都一样。
 
 ## 定义消息 [#define-the-messages]
 
@@ -87,7 +88,7 @@ await pipe.Output.FlushAsync();
 
 <Callout type="info">
 
-如果传输层本身已经分帧（WebSocket 消息、UDP 数据报、消息队列），就不需要长度前缀，直接序列化到传输层的 `IBufferWriter<byte>` 即可：`NinoSerializer.Serialize(message, pipeWriter)`。
+如果传输层本身已经分帧（WebSocket 消息、UDP 数据报、消息队列），就不需要长度前缀，直接序列化到传输层的 `IBufferWriter<byte>`（`NinoSerializer.Serialize(message, pipeWriter)`）或复用的缓冲区即可；参见 [WebSocket 与 UDP](#websocket-and-udp) 和[消息队列与事件流](/zh/docs/v4/advanced/message-queues)。
 
 </Callout>
 
@@ -165,6 +166,70 @@ Nino 在分配内存之前，会把数据中的每个长度与剩余字节数比
 
 </Callout>
 
+## WebSocket 与 UDP [#websocket-and-udp]
+
+以完整消息为单位传输的协议不需要长度前缀：一个 Nino 负载就是一条 WebSocket 消息或一个数据报。序列化到复用的缓冲区并发送它的内存；接收到复用的缓冲区，再从中反序列化：
+
+```csharp title="MessageTransports.cs"
+using System.Net;
+using System.Net.Sockets;
+using System.Net.WebSockets;
+using Nino.Core;
+
+public static class MessageTransports
+{
+    // WebSocket: one Nino payload per WebSocket message
+    public static async Task SendAsync<T>(WebSocket socket, T message, NinoArrayBufferWriter buffer,
+        CancellationToken ct)
+    {
+        buffer.ResetWrittenCount();
+        NinoSerializer.Serialize(message, buffer);
+        await socket.SendAsync(buffer.WrittenMemory, WebSocketMessageType.Binary, endOfMessage: true, ct);
+    }
+
+    public static async Task<T> ReceiveAsync<T>(WebSocket socket, NinoArrayBufferWriter buffer,
+        CancellationToken ct)
+    {
+        buffer.ResetWrittenCount();
+        ValueWebSocketReceiveResult result;
+        do                                                  // a message may arrive in several parts
+        {
+            Memory<byte> free = buffer.GetMemory(4096);
+            result = await socket.ReceiveAsync(free, ct);
+            if (result.MessageType == WebSocketMessageType.Close)
+                throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely);
+            buffer.Advance(result.Count);
+        } while (!result.EndOfMessage);
+
+        return NinoDeserializer.Deserialize<T>(buffer.WrittenSpan);
+    }
+
+    // UDP: one Nino payload per datagram
+    public static void SendDatagram<T>(Socket socket, EndPoint remote, T message, NinoArrayBufferWriter buffer)
+    {
+        buffer.ResetWrittenCount();
+        NinoSerializer.Serialize(message, buffer);
+        socket.SendTo(buffer.WrittenSpan, SocketFlags.None, remote);
+    }
+
+    public static void ReceiveLoop<T>(Socket socket, Action<T> handle) where T : class
+    {
+        byte[] datagram = new byte[65527];   // allocated once
+        T message = null;                    // reused for every datagram
+        while (true)
+        {
+            int received = socket.Receive(datagram);
+            NinoDeserializer.Deserialize(datagram.AsSpan(0, received), ref message);
+            handle(message);
+        }
+    }
+}
+```
+
+- 一条 WebSocket 消息可能分几次 `ReceiveAsync` 才收完；循环把它们收集到缓冲区里，缓冲区按需增长，之后一直复用。如果对端不可信，请限制消息大小。
+- 在 IPv4 上，一个 UDP 数据报的负载最多 65,507 字节。消息要远小于路径 MTU（常见的预算是 1,200 字节左右），以免 IP 分片；如果在意顺序或丢包，请自己加序号。
+- UDP 循环复用了接收数组和消息实例，所以持续接收结构相同的数据报不会分配内存。
+
 ## 按连接复用消息 [#reuse-messages-per-connection]
 
 繁忙的连接会反复反序列化同样几种消息。有两种办法避免为它们分配内存：
@@ -211,6 +276,45 @@ void OnFrame(ReadOnlySpan<byte> frame)
 
 </Tab>
 </Tabs>
+
+## gRPC [#grpc]
+
+.NET 的 gRPC 并不要求使用 Protocol Buffers：一个方法由 `Method<TRequest, TResponse>` 描述，每种消息类型配一个编组器（marshaller）。Nino 编组器写入 gRPC 提供的缓冲区写入器，并从收到的负载序列中读取：
+
+```csharp title="NinoMarshaller.cs"
+using System.Buffers;
+using Grpc.Core;
+using Nino.Core;
+
+public static class NinoMarshaller
+{
+    public static Marshaller<T> Create<T>() => Marshallers.Create<T>(
+        serializer: (value, context) =>
+        {
+            NinoSerializer.Serialize(value, context.GetBufferWriter());
+            context.Complete();
+        },
+        deserializer: context =>
+        {
+            ReadOnlySequence<byte> payload = context.PayloadAsReadOnlySequence();
+            if (payload.IsSingleSegment)
+                return NinoDeserializer.Deserialize<T>(payload.First.Span);
+            return NinoDeserializer.Deserialize<T>(payload.ToArray()); // rare: copy once
+        });
+}
+
+[NinoType] public sealed class GetPriceRequest { public int InstrumentId; }
+[NinoType] public sealed class GetPriceReply { public double Bid, Ask; }
+
+public static class PricingMethods
+{
+    public static readonly Method<GetPriceRequest, GetPriceReply> GetPrice = new(
+        MethodType.Unary, "pricing.Pricing", "GetPrice",
+        NinoMarshaller.Create<GetPriceRequest>(), NinoMarshaller.Create<GetPriceReply>());
+}
+```
+
+客户端用 `CallInvoker` 调用这些 `Method` 定义，服务端用 `ServerServiceDefinition.CreateBuilder().AddMethod(...)` 注册；也可以交给支持自定义编组器的 code-first 库。两端都必须是使用相同消息类型的 .NET 程序，这是相对于 `.proto` 契约的取舍；参见[什么时候不适合](/zh/docs/v4#when-not-to-use-it)。
 
 ## 线程 [#threads]
 

@@ -10,3 +10,13 @@ export const source = loader({
   i18n,
   plugins: [lucideIconsPlugin()],
 });
+
+/** Frontmatter fields added in source.config.ts (`docSchema`) */
+export interface DocExtras {
+  seoTitle?: string;
+  faq?: boolean;
+}
+
+export function docExtras(page: { data: object }): DocExtras {
+  return page.data as DocExtras;
+}

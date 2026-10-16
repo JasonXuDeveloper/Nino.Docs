@@ -20,7 +20,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 
 <BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="zh" />
 
-类的序列化明显更快。反序列化与 v3 持平。反序列化的耗时主要花在分配结果对象上，而 v4 在此之外还要处理引用追踪、复用反序列化和数据校验。带填充字节的结构体数组序列化时慢几纳秒，因为 v4 会把填充字节清零，保证输出是确定的；没有填充的结构体（参见[结构体布局](/zh/docs/v4/performance#struct-layout)）与 v3 一样快。
+类的序列化明显更快，反序列化与 v3 持平。原因分析，以及 v4 慢几纳秒的那一种情况，见 [v3 与 v4 对比](/zh/docs/v4/v3-vs-v4#runtime)。
 
 ## 构建更快 [#faster-to-build]
 
@@ -28,33 +28,21 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 
 <BenchmarkChart chart="compile" lang="zh" />
 
-<Callout type="info" title="1,100 个类型（N = 100）">
-
-v3 编译生成代码要 636 秒，v4 只要 2.2 秒（**快 289 倍**），生成的源码只有 v3 的 1/16。v3 的编译耗时增长远快于类型数量：类型数变为 3.3 倍，编译耗时变为 11 倍（56 秒 → 636 秒）。v4 随类型数线性增长：每个类型约 3.5 KB 源码、2 毫秒编译时间。
-
-</Callout>
+项目越大，差距越明显。330 个和 1,100 个类型的具体数字及测量方法，见[构建时间与生成代码](/zh/docs/v4/perf#build-time-and-generated-code)。
 
 ## 比 MemoryPack 更快 [#faster-than-memorypack]
 
-在同一轮测试中与 MemoryPack 对比。序列化时 Nino 明显领先（最高快 <BenchValue k="serialize.max" />）；反序列化类和多态对象图时也领先（最高快 <BenchValue k="deserialize.max" />）；原始数组两者相差不大，都只做一次 `memcpy`。
+在同一轮测试中与 MemoryPack 对比。序列化时 Nino 明显领先（最高快 <BenchValue k="serialize.max" />）；反序列化类和多态对象图时也领先（最高快 <BenchValue k="deserialize.max" />）；非托管值的数组两者相差不大，都只做一次 `memcpy`。
 
 <BenchSource lang="zh" />
 
 <BenchmarkChart chart={['serialize', 'deserialize']} lang="zh" />
 
-<Callout type="info" title="Vector4[10000]">
-
-反序列化 `Vector4[10000]` 每次都要在大对象堆上分配一个 160 KB 的数组，所以测到的主要是第 2 代垃圾回收，每次运行的结果都有波动，MemoryPack 在这一项上可能领先。
-
-</Callout>
-
 ### 反序列化到已有对象 [#deserialize-into-existing-objects]
 
-v4 新增：通过 `ref` 反序列化到你已有的对象中，需要新实例时从 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池中取。与 MemoryPack 的覆盖模式相比，Nino 最高**快 <BenchValue k="reuse.max" />**；在池化路径上每次调用只分配 **0 B**，而 MemoryPack 每次调用都要分配（具体数字见图表）。
+v4 新增：通过 `ref` 反序列化到你已有的对象中，需要新实例时从 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池中取。与 MemoryPack 的覆盖模式相比，Nino 最高**快 <BenchValue k="reuse.max" />**；在池化路径上每次调用只分配 **0 B**，而 MemoryPack 每次调用都要分配（见[池化测试结果](/zh/docs/v4/perf#pooling)）。
 
-<BenchmarkChart chart={['reuse', 'allocation']} lang="zh" />
-
-两个库序列化时都不分配内存，数据大小也基本相同（`SimpleClass`：Nino <BenchValue k="payload.v4" /> 字节，MemoryPack <BenchValue k="payload.memorypack" /> 字节）。另请阅读[与 MemoryPack 的完整对比](/zh/docs/v4/vs-memorypack)（包括 MemoryPack 仍然领先的地方）和[基准测试数据表](/zh/docs/v4/perf)。
+两个库序列化时都不分配内存，数据大小也基本相同（`SimpleClass`：Nino <BenchValue k="payload.v4" /> 字节，MemoryPack <BenchValue k="payload.memorypack" /> 字节）。另请阅读[与 MemoryPack 的完整对比](/zh/docs/v4/vs-memorypack)（包括 [MemoryPack 仍然领先的地方](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)），全部测量结果见[基准测试](/zh/docs/v4/perf)。
 
 ## 功能一览 [#what-you-get]
 
@@ -65,8 +53,8 @@ v4 新增：通过 `ref` 反序列化到你已有的对象中，需要新实例�
   <Card icon={<KeyRound />} title="键控成员与版本容错" href="/zh/docs/v4/evolving-data">
     `keyed: true` 允许调整顺序、删除和插入成员；`versionTolerant: true` 允许追加成员，每个对象只多 4 字节。
   </Card>
-  <Card icon={<Share2 />} title="trackReferences" href="/zh/docs/v4/reference-tracking">
-    共享引用和循环引用都能原样读回，每个被追踪的对象只多 4 字节。
+  <Card icon={<Share2 />} title="引用追踪" href="/zh/docs/v4/reference-tracking">
+    开启 `trackReferences: true` 后，共享引用和循环引用都能原样读回，每个被追踪的对象只多 4 字节。
   </Card>
   <Card icon={<ShieldCheck />} title="分析器 NINO001–NINO024" href="/zh/docs/v4/analyzers">
     写代码时就报告错误，许多都带一键代码修复。

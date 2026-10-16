@@ -1,7 +1,22 @@
-import { lazy, Suspense } from 'react';
+/**
+ * <BenchChart data={benchmarks} version="v3" lang="en" /> for the archived
+ * versions (v2, v3). Drawn with the same visx BarChart as v4's
+ * <BenchmarkChart>, in the same form: one chart per operation behind a tab
+ * bar, the documented version in the accent and MemoryPack in neutral grey,
+ * bars relative to MemoryPack (= 1.0) with a badge per case.
+ *
+ * MessagePack is several to hundreds of times slower than both, so plotting it
+ * would flatten every other bar; its times are in the tooltip and the data
+ * table instead. Numbers come only from the page's own data file
+ * (src/data/bench-v3.json, bench-v2.json).
+ */
+import { lazy, Suspense, useState } from 'react';
+import { Segmented } from '@/components/showcase';
+import { formatTime } from '@/lib/benchmarks';
+import type { Locale } from '@/lib/i18n';
 
 export interface BenchmarkCase {
-  /** e.g. "SimpleClass · Serialize" */
+  /** "<Case> · Serialize" or "<Case> · Deserialize" */
   name: string;
   /** Mean time in nanoseconds */
   nino: number;
@@ -16,38 +31,135 @@ const BarChart = import.meta.env.SSR
       import('./charts/bar-chart').then((m) => ({ default: m.BarChart })),
     );
 
-const series = [
-  { key: 'nino', label: 'Nino', color: 'var(--nino-chart-v4)' },
-  { key: 'memorypack', label: 'MemoryPack', color: 'var(--nino-chart-other)' },
-  {
-    key: 'messagepack',
-    label: 'MessagePack',
-    color: 'var(--nino-chart-faint)',
-  },
-] as const;
+type Op = 'serialize' | 'deserialize';
 
-function formatTime(ns: number) {
-  if (ns >= 1_000_000) return `${(ns / 1_000_000).toFixed(2)} ms`;
-  if (ns >= 1_000) return `${(ns / 1_000).toFixed(2)} µs`;
-  return `${ns.toFixed(ns < 10 ? 2 : 1)} ns`;
+const opLabel: Record<Op, { en: string; zh: string }> = {
+  serialize: { en: 'Serialize', zh: '序列化' },
+  deserialize: { en: 'Deserialize', zh: '反序列化' },
+};
+
+function split(name: string) {
+  const [label, op] = name.split(' · ');
+  return { label, op: op?.toLowerCase() as Op | undefined };
 }
 
-/**
- * Benchmark means of the archived versions (v2, v3) against MemoryPack and
- * MessagePack. Each case is scaled to its slowest serializer, since the cases
- * differ by orders of magnitude. Renders nothing when `data` is empty.
- */
+/** MemoryPack time / Nino time, as v4's charts badge it */
+function badge(nino: number, memorypack: number, zh: boolean) {
+  const ratio = memorypack / nino;
+  const r = ratio.toFixed(2);
+  if (r === '1.00')
+    return { text: zh ? '持平' : 'on par', tone: 'par' as const };
+  if (ratio > 1)
+    return { text: zh ? `快 ${r} 倍` : `${r}× faster`, tone: 'win' as const };
+  return {
+    text: zh ? `${r} 倍：MemoryPack 更快` : `${r}×: MemoryPack faster`,
+    tone: 'loss' as const,
+  };
+}
+
 export function BenchChart({
   data,
+  version,
+  source,
   lang = 'en',
 }: {
   data: BenchmarkCase[];
-  lang?: 'en' | 'zh';
+  /** The documented version, e.g. "v3": names the accent series */
+  version?: string;
+  /** Footnote naming where the numbers come from */
+  source?: string;
+  lang?: Locale;
 }) {
-  if (data.length === 0) return null;
   const zh = lang === 'zh';
-  const present = series.filter((s) =>
-    data.some((row) => row[s.key] !== undefined),
+  const ops = (['serialize', 'deserialize'] as const).filter((op) =>
+    data.some((row) => split(row.name).op === op),
+  );
+  const [current, setCurrent] = useState<Op>(ops[0] ?? 'serialize');
+  if (data.length === 0) return null;
+
+  const nino = version ? `Nino ${version}` : 'Nino';
+  const rows = data.filter(
+    (row) => split(row.name).op === current && row.memorypack !== undefined,
+  );
+  const hasMessagePack = data.some((row) => row.messagepack !== undefined);
+  const op = zh ? opLabel[current].zh : opLabel[current].en;
+
+  const chart = (
+    <BarChart
+      key={current}
+      title={
+        zh ? `${op}：${nino} 对比 MemoryPack` : `${op}: ${nino} vs MemoryPack`
+      }
+      subtitle={
+        zh
+          ? '条形为相对 MemoryPack 的耗时（MemoryPack = 1.0），越短越快；数字为实测平均耗时。'
+          : 'Bars show time relative to MemoryPack (MemoryPack = 1.0), shorter is faster; labels are measured means.'
+      }
+      series={[
+        { key: 'nino', label: nino, color: 'var(--nino-chart-v4)' },
+        {
+          key: 'memorypack',
+          label: 'MemoryPack',
+          color: 'var(--nino-chart-other)',
+        },
+      ]}
+      rows={rows.map((row) => {
+        const memorypack = row.memorypack as number;
+        return {
+          label: split(row.name).label,
+          code: true,
+          values: { nino: row.nino / memorypack, memorypack: 1 },
+          text: {
+            nino: formatTime(row.nino),
+            memorypack: formatTime(memorypack),
+          },
+          detail:
+            row.messagepack === undefined
+              ? undefined
+              : `MessagePack: ${formatTime(row.messagepack)}`,
+          badge: badge(row.nino, memorypack, zh),
+        };
+      })}
+      axisLabel={
+        zh ? '相对耗时（MemoryPack = 1.0）' : 'Relative time (MemoryPack = 1.0)'
+      }
+      tickFormat={(value) => (value === 0 ? '0' : value.toFixed(1))}
+      footnotes={[
+        ...(hasMessagePack
+          ? [
+              zh
+                ? 'MessagePack 比两者慢得多，画进图里其他条形会挤成一条线；它的耗时见悬停提示和数据表。'
+                : 'MessagePack is much slower than both and would flatten the other bars, so its times are in the tooltips and the data table.',
+            ]
+          : []),
+        ...(source ? [source] : []),
+      ]}
+      table={{
+        caption: zh ? '数据表' : 'Data table',
+        head: [
+          zh ? '用例' : 'Case',
+          nino,
+          'MemoryPack',
+          ...(hasMessagePack ? ['MessagePack'] : []),
+          zh
+            ? `${version ?? 'Nino'} 对比 MemoryPack`
+            : `${version ?? 'Nino'} vs MemoryPack`,
+        ],
+        rows: rows.map((row) => [
+          split(row.name).label,
+          formatTime(row.nino),
+          formatTime(row.memorypack as number),
+          ...(hasMessagePack
+            ? [
+                row.messagepack === undefined
+                  ? '—'
+                  : formatTime(row.messagepack),
+              ]
+            : []),
+          badge(row.nino, row.memorypack as number, zh).text,
+        ]),
+      }}
+    />
   );
 
   return (
@@ -59,42 +171,17 @@ export function BenchChart({
         />
       }
     >
-      <BarChart
-        title={zh ? '基准测试' : 'Benchmarks'}
-        subtitle={
-          zh
-            ? '条形为相对每个用例中最慢者的耗时，越短越快；数字为实测平均耗时。'
-            : 'Bars show time relative to the slowest library in each case, shorter is faster; labels are measured means.'
-        }
-        series={[...present]}
-        rows={data.map((row) => {
-          const slowest = Math.max(...present.map((s) => row[s.key] ?? 0));
-          const values: Record<string, number | undefined> = {};
-          const text: Record<string, string> = {};
-          for (const s of present) {
-            const value = row[s.key];
-            values[s.key] = value === undefined ? undefined : value / slowest;
-            text[s.key] = value === undefined ? '' : formatTime(value);
-          }
-          return { label: row.name, values, text };
-        })}
-        axisLabel={
-          zh ? '相对耗时（最慢 = 1.0）' : 'Relative time (slowest = 1.0)'
-        }
-        tickFormat={(value) => value.toFixed(1)}
-        max={1}
-        table={{
-          caption: zh ? '数据表' : 'Data table',
-          head: [zh ? '用例' : 'Case', ...present.map((s) => s.label)],
-          rows: data.map((row) => [
-            row.name,
-            ...present.map((s) => {
-              const value = row[s.key];
-              return value === undefined ? '—' : formatTime(value);
-            }),
-          ]),
-        }}
-      />
+      <div className="not-prose my-6">
+        <Segmented
+          value={current}
+          onChange={setCurrent}
+          options={ops.map((value) => ({
+            value,
+            label: zh ? opLabel[value].zh : opLabel[value].en,
+          }))}
+        />
+        <div className="-mt-6">{chart}</div>
+      </div>
     </Suspense>
   );
 }

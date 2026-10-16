@@ -4,6 +4,13 @@ description: "An honest comparison with the fastest C# binary serializer we know
 icon: Swords
 ---
 
+<AnchorRedirect
+  map={{
+    'deserialize-into-existing-objects': '/en/docs/v4/perf#pooling',
+    'allocations-and-payload-size': '/en/docs/v4/perf#allocations-and-payload-size',
+  }}
+/>
+
 [MemoryPack](https://github.com/Cysharp/MemoryPack) is an excellent serializer and the one we measure Nino against. This page compares Nino v4 with MemoryPack **1.21.4**, using MemoryPack's own README for its features and Nino's source for Nino's. Where we could not verify a feature on either side, it is left out.
 
 ## Performance
@@ -14,24 +21,12 @@ Measured with BenchmarkDotNet, both libraries in the same run. Bars show time re
 
 <BenchmarkChart chart={['serialize', 'deserialize']} lang="en" />
 
-### Deserialize into Existing Objects
-
-Both libraries can fill objects you already have instead of allocating new ones. Nino deserializes by `ref` into the existing graph and takes any new instances from [`[NinoPooled]`](/en/docs/v4/pooling) pools; MemoryPack overwrites existing instances. Nino is up to **<BenchValue k="reuse.max" /> faster** and allocates **0 B** on the pooled paths, where MemoryPack allocates on every call.
-
-<BenchmarkChart chart="reuse" lang="en" table={false} />
-
-<ReuseTable lang="en" />
-
-### Allocations and Payload Size
-
-<BenchmarkChart chart={['allocation', 'payload']} lang="en" />
-
 ### Summary
 
 | | Nino v4 vs MemoryPack |
 | --- | --- |
-| Serialize | **<BenchValue k="serialize.min" />–<BenchValue k="serialize.max" /> faster** where Nino leads; the gap is smallest on raw struct arrays, which both copy as one block (see the chart for each case) |
-| Deserialize | **<BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" /> faster** where Nino leads; the two are close on raw struct arrays, and `Vector4[10000]` can favor MemoryPack (see below) |
+| Serialize | **<BenchValue k="serialize.min" />–<BenchValue k="serialize.max" /> faster** where Nino leads; the gap is smallest on arrays of unmanaged structs, which both copy as one block (see the chart for each case) |
+| Deserialize | **<BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" /> faster** where Nino leads; the two are close on arrays of unmanaged structs, and `Vector4[10000]` can favor MemoryPack (see below) |
 | Deserialize into existing / pooled instances | **0 B** allocated, up to **<BenchValue k="reuse.max" /> faster** than MemoryPack's overwrite mode |
 | Allocations when serializing | 0 B for both |
 | Payload size | About the same: `SimpleClass` is <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack |
@@ -42,7 +37,7 @@ Deserializing `Vector4[10000]` can favor MemoryPack. Each call allocates a 160 K
 
 </Callout>
 
-Full tables: [Benchmarks](/en/docs/v4/perf).
+Every case with its numbers, the polymorphic and pooled runs, and the benchmark code: [Benchmarks](/en/docs/v4/perf#runtime).
 
 ## Feature Matrix
 
@@ -129,7 +124,7 @@ The cost is 3 more bytes per polymorphic value. See [Polymorphism](/en/docs/v4/p
 
 <Cards>
   <Card title="Choose Nino when" >
-    You serialize game state, network messages or save files at a high rate, on Unity or .NET; you need polymorphism without tag tables, data that evolves, shared references, or zero GC through pooling; or you need identical bytes across Unity, IL2CPP and servers.
+    You serialize messages, cached values, stored records or application state at a high rate, on .NET servers, Unity or Godot; you need polymorphism without tag tables, data that evolves, shared references, or zero GC through pooling; or you need identical bytes across Unity, IL2CPP and servers.
   </Card>
   <Card title="Choose MemoryPack when">
     You need TypeScript clients, ASP.NET Core MVC formatters, per-call options, or the BCL and Unity class types listed above out of the box.

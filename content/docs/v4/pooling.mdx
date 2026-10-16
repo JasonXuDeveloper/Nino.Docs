@@ -30,7 +30,7 @@ while (socket.TryReceive(out byte[] data))
 
 ## Where Instances Come From
 
-Whenever Nino needs a new instance (a `null` slot, a list that grows, a polymorphic slot whose type changes), it gets it from:
+Whenever Nino needs a new instance for a slot (a member, a collection element or the variable you pass by `ref`), because the slot is `null`, a list grows or a polymorphic slot's type changes, it gets it from:
 
 | Type | New instances come from |
 | --- | --- |
@@ -46,7 +46,7 @@ Reuse deserialization drops an existing instance when the data holds `null` for 
 2. `ReturnToPool()`, if the instance implements `INinoPooled` (a `[NinoPooled]` class, or one of your own [pooled collections](#your-own-pooled-collections)); otherwise
 3. nothing: the garbage collector takes it.
 
-### Why `SetRecycler` [#why-setrecycler]
+### Why Register a Recycler [#why-setrecycler]
 
 An object rented through `[NinoFactory]` often carries members that were rented too. Here a player comes out of the pool with a pooled `Buffs` list:
 
@@ -92,8 +92,8 @@ Mark a public static method, callable without arguments, that returns the declar
 
 This works for collection types too (a `List<T>` subclass, an `IDictionary<TKey, TValue>` implementation, ...). The method may return an instance that still holds elements; they are dropped (and recycled) before the data is read. It must not return `null`; an invalid method reports NINO017.
 
-## `[NinoPooled]`
-`[NinoPooled]` gives a `[NinoType]` class a built-in object pool. Wherever Nino creates an instance (top level, member or collection element), it takes one from the pool and deserializes into it; dropped instances go back to the pool on their own.
+## Built-in Pools: `[NinoPooled]` [#ninopooled]
+`[NinoPooled]` gives a `[NinoType]` class a built-in object pool. Wherever Nino creates an instance (the value you deserialize, a member or a collection element), it takes one from the pool and deserializes into it; dropped instances go back to the pool on their own.
 
 ```csharp title="Bullet.cs"
 [NinoType, NinoPooled] // [!code highlight]
@@ -158,25 +158,55 @@ Declare the member as `PooledList<int>` instead of `List<int>`. Collection types
 
 ## Example: Zero-GC State Sync [#example]
 
-A server sends the full state every frame: the number of units and bullets changes every frame, and a unit's path is sometimes there and sometimes not.
+A server sends the full state every frame: the number of units and bullets changes every frame, and a unit's path is sometimes there and sometimes not. The file below holds every type the example needs.
 
 ```csharp title="Frame.cs"
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Nino.Core;
+
 [NinoType]
 public class Frame
 {
     public int Tick;
     public List<Unit> Units;     // length changes every frame
-    public List<Bullet> Bullets; // Bullet is the [NinoPooled] class above
+    public List<Bullet> Bullets; // so does this one
 }
 
 [NinoType, NinoPooled]
 public sealed partial class Unit
 {
     public int Id;
-    public PooledList<int> Path; // sometimes null
+    public PooledList<int> Path; // sometimes null; stays attached when the unit is pooled
 
     private static partial IEnumerable<Unit> OnNinoPoolWarmup() => null;
     private partial void OnNinoPoolReturn() { }
+}
+
+[NinoType, NinoPooled]
+public sealed partial class Bullet
+{
+    public int Id;
+    public float X, Y;
+
+    private static partial IEnumerable<Bullet> OnNinoPoolWarmup() => Enumerable.Range(0, 64).Select(_ => new Bullet());
+    private partial void OnNinoPoolReturn() { }
+}
+
+public sealed class PooledList<T> : List<T>, INinoPooled
+{
+    [ThreadStatic] private static Stack<PooledList<T>> _pool;
+
+    [NinoFactory] // called when a Path slot is null
+    public static PooledList<T> Rent() =>
+        _pool is { Count: > 0 } ? _pool.Pop() : new PooledList<T>();
+
+    public void ReturnToPool() // called when Nino drops a Path
+    {
+        Clear();
+        (_pool ??= new Stack<PooledList<T>>()).Push(this);
+    }
 }
 ```
 
@@ -189,7 +219,7 @@ foreach (byte[] data in frames)
 Once warmed up, every frame allocates **0 B**:
 
 - `Frame` and its two lists are reused in place.
-- When a list grows, new `Unit`s and `Bullet`s come from their pools; when it shrinks, the dropped ones go back.
+- When a list grows, new `Unit`s and `Bullet`s come from their pools; when it shrinks, the dropped ones go back, each `Unit` with its `Path` still attached.
 - When `Path` becomes `null`, the `PooledList<int>` goes back through `ReturnToPool()`; when it comes back, it is rented through `[NinoFactory]`.
 
 If `Unit` were not pooled, every `Unit` dropped from a shrinking list would go to the garbage collector with its `Path`: frames would keep allocating, and the list pool would slowly drain.

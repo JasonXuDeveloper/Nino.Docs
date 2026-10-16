@@ -4,29 +4,17 @@ description: "Nino v4 不做什么，以及 v4 解决了早期版本的哪些局
 icon: TriangleAlert
 ---
 
-本页列出 Nino v4 不做的事情，以及早期版本中已被 v4 消除的局限。
+本页列出选择 Nino v4 之前需要了解的事项，以及早期版本中已被 v4 消除的局限。
 
 ## 当前的局限 [#current-limitations]
 - **离不开源生成器。** Nino 依赖自己的源生成器（Roslyn 4.3 及以上），声明 `[NinoType]` 的项目需要 C# 9 及以上。
-- **不兼容 v3 数据。** v4 无法读取 v3 或 v4 beta/preview 版本写出的数据。参见[从 v3 迁移](/zh/docs/v4/migration#converting-v3-data)。
-- **默认按位置写入。** 不开启 `versionTolerant` 或 `keyed` 时，插入、删除或调整成员顺序都会破坏已有数据。`versionTolerant` 只允许向最末端的派生类型追加成员，其他改动请用 `keyed`。修改成员类型在任何格式下都不在容错范围内。
-- **原始结构体依赖布局。** 按原始内存写入的非托管 `[NinoType]` 结构体以规范的字段顺序写入：调整字段顺序或修改 `StructLayout` 都会破坏已有数据。把它标记为 `versionTolerant`（或对某个字段使用 `[NinoIgnore]`），就会改为逐个成员写入。
-- **只支持小端序主机。** 所有多字节值都按小端序写入。在大端序主机上，构造 `Writer` 或 `Reader` 时会抛出 `PlatformNotSupportedException`，而不会写出不兼容的字节。目前 .NET 和 Unity 运行的所有平台都是小端序。
-- **有些类型不支持。** 委托、`Task`、指针、`Memory<T>`、非泛型集合和部分自定义集合形式、一些 BCL 类（`BigInteger`、`Uri`、大多数不可变集合）以及 Unity 或 Godot 的类都没有格式化器，这类成员会被跳过并报告警告 NINO007。完整列表见[支持的类型](/zh/docs/v4/types#not-supported)；用[自定义格式化器](/zh/docs/v4/custom-formatters)可以支持其中任何一种。
-- **集合按值处理。** 同一个集合实例出现在两个成员中，会写入两次，读回来是两个实例；`trackReferences` 只追踪 `[NinoType]` 类。
-- **有些类型不能追踪引用或池化。** 通过构造函数参数或只读成员重新创建的类型（例如位置记录）不能使用 `trackReferences`（NINO016）或 `[NinoPooled]`（NINO018）。`[NinoPooled]` 还要求类是 `sealed`。
-- **由构造函数创建的类型组成的深层对象图。** 由构造函数创建或按值比较的类（例如记录）总是在原处嵌套，所以这类对象组成的对象图嵌套到 512 层就会失败。其他类可以嵌套任意深。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
-- **结构体至少要有一个成员。** 不序列化任何成员的结构体会报错（NINO023），因为它会被写成 0 字节。请至少序列化一个成员，或者把这个结构体标记为 `versionTolerant` 或 `keyed`。
-- **版本容错的基类和接口。** 版本容错的对象把整个继承体系的成员写在同一个长度之后，所以追加到基类（或 `[NinoType]` 接口）的成员会让子类的成员错位，不在容错范围内。编译期不会报告这种情况。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
-- **只在运行时出现的泛型实例化。** 如果进程只会按类型 ID 读取某个封闭泛型 `[NinoType]`，代码里从没写过它的名字，也从不写入它，就必须在启动时用 `NinoPolymorphic.Register<T>()` 注册。
-- **`PriorityQueue<TElement, TPriority>`** 只在 BCL 提供它的平台上可用：.NET 6 及以上，.NET Standard 和 Unity 中没有。
-- **拦截器**需要 Roslyn 4.8 及以上（.NET 8 SDK 及以上）。Unity 使用的是 Roslyn 4.3 版本，它和更旧的编译器一样走常规调用，每次慢几纳秒，写出的字节相同。
-- **没有按调用传入的选项。** 设置要么是进程级的（`NinoSettings`），要么按类型设置（特性），不能随某次调用传入。
-- **有时必须声明 `partial`。** `[NinoPooled]` 类，以及在 .NET 8 之前（包括 .NET Standard 和 Unity）或在泛型类型中序列化非公开成员的类型，都必须是 `partial`（NINO002）。这些情况下，被 `new` 隐藏的非公开基类成员无法访问（NINO022）。
+- **不兼容 v3 数据。** v4 无法读取 v3 以及 v4 测试版、预览版写出的数据。参见[从 v3 迁移](/zh/docs/v4/migration#converting-v3-data)。
+- **默认按位置存储。** 不带参数的 `[NinoType]` 最快，但成员一改，旧数据就读不了。需要保存或跨版本交换的数据，请在写入之前选好 `versionTolerant` 或 `keyed`：参见[数据演进](/zh/docs/v4/evolving-data)。
+- **部分类型没有内置格式化器。** 参见[支持的类型](/zh/docs/v4/types#not-supported)；用[自定义格式化器](/zh/docs/v4/custom-formatters)可以支持其中任何一种。
 
 ## 平台说明 [#platform-notes]
 
-Nino 自己定义字节格式，而不是直接拷贝内存，所以数据可以在 CoreCLR、Mono、IL2CPP 之间，以及 64 位和 32 位平台之间通用。`Nullable<T>`、`ValueTuple`、`decimal`、`DateTimeOffset`、32 位对齐和填充字节的处理方式，参见[平台与二进制格式](/zh/docs/v4/platforms#portable-by-design)。
+Nino 自己定义字节格式，而不是直接拷贝内存，所以数据可以在 CoreCLR、Mono、IL2CPP 之间，以及 64 位和 32 位平台之间通用。`Nullable<T>`、`ValueTuple`、`decimal`、`DateTimeOffset`、32 位对齐和填充字节的处理方式，参见[平台与二进制格式](/zh/docs/v4/platforms#portable-by-design)。字节序为小端；在大端主机上 Nino 会直接抛出异常，而不是写出字节（目前 .NET 和 Unity 支持的平台都是小端）。
 
 ## 已解决的局限 [#resolved-limitations]
 

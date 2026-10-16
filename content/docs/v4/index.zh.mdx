@@ -1,6 +1,7 @@
 ---
 title: 介绍
-description: Nino 是基于源生成器的 C# 二进制序列化库，面向 Unity、Godot 和 .NET 服务端。
+seoTitle: "Nino 介绍：高性能 C# / .NET 二进制序列化库 – Nino v4 文档"
+description: "Nino 是通用的高性能 C# / .NET 二进制序列化库：基于源生成器，热路径零 GC 分配，适用于 RPC、微服务、消息队列、缓存、存储与进程间通信，同时支持 Unity、Godot 和 HybridCLR。"
 icon: BookOpen
 ---
 
@@ -8,26 +9,26 @@ import { ArrowRightLeft, ChartColumn, Compass, Rocket, Sparkles, Swords } from '
 
 ## Nino 是什么 [#what-is-nino]
 
-Nino 是一个 C# 二进制序列化库。给类型加上 `[NinoType]`，Roslyn 源生成器就会在编译期生成它的序列化代码；运行时只需调用 `NinoSerializer.Serialize` 和 `NinoDeserializer.Deserialize`。整个过程没有反射，没有运行时代码生成，不需要 schema 文件，也不需要注册。
+Nino 是一个通用的高性能 C# / .NET 二进制序列化库。凡是 .NET 代码需要在对象和字节之间来回转换的地方都能用上它：服务间消息与 RPC、消息队列、缓存、文件与本地存储、进程间通信、数据管道与遥测。它可以运行在 .NET 服务器和桌面应用、NativeAOT、Unity（包括 HybridCLR）以及 Godot 上。给类型加上 `[NinoType]`，Roslyn 源生成器就会在编译期生成它的序列化代码；运行时只需调用 `NinoSerializer.Serialize` 和 `NinoDeserializer.Deserialize`。整个过程没有反射，没有运行时代码生成，不需要 schema 文件，也不需要注册。
 
 ```csharp
 using Nino.Core;
 
 [NinoType]
-public class GameData
+public class Order
 {
-    public int Score;
-    public string PlayerName;
-    public List<Item> Items;
+    public long Id;
+    public string Customer;
+    public List<OrderLine> Lines;
 }
 
-byte[] bytes = NinoSerializer.Serialize(data);
-GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
+byte[] bytes = NinoSerializer.Serialize(order);
+Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 ```
 
 ## 为什么选 Nino [#why-nino]
 
-- **快。** 在同一轮测试中与 MemoryPack 相比，Nino 序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象图最高快 <BenchValue k="deserialize.max" />；原始结构体数组两者相差不大。详见[基准测试](/zh/docs/v4/perf)。
+- **快。** 在同一轮测试中与 MemoryPack 相比，Nino 序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象图最高快 <BenchValue k="deserialize.max" />；非托管结构体数组两者都是整块拷贝，相差不大。详见[基准测试](/zh/docs/v4/perf)。
 - **热路径零 GC。** 序列化到复用的缓冲区时不分配内存；[反序列化到已有对象或池化实例](/zh/docs/v4/pooling)时同样不分配。
 - **一切在编译期完成。** 源生成器为每个类型生成一个格式化器，所以 IL2CPP、NativeAOT 和 HybridCLR 都能直接使用。用 .NET 8 SDK 及以上版本编译时，[拦截器](/zh/docs/v4/performance#interceptors)会把每次调用直接转给对应的格式化器。生成器是增量的：改一个类型只重新生成这个类型，生成的代码编译起来也比 v3 快得多（参见[构建时间](/zh/docs/v4/v3-vs-v4#build-time-and-generated-code)）。
 - **多态无需标签。** 声明为基类或接口的值，读回来仍是它的实际类型。类型 ID 是类型名的哈希，不用维护标签表；其他程序集里的子类型，Nino 也能自己找到。详见[多态](/zh/docs/v4/polymorphism)。
@@ -40,11 +41,13 @@ GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
 
 | 场景 | Nino 提供什么 |
 | --- | --- |
+| **网络与 RPC**（微服务、实时服务器、TCP、WebSocket、UDP、gRPC） | 直接序列化到 `PipeWriter` 这类 `IBufferWriter<byte>`，从 `ReadOnlySpan<byte>` 反序列化，消息对象可以池化复用；多态消息不需要维护操作码表。详见[网络层](/zh/docs/v4/advanced/networking)。 |
+| **消息队列与事件流**（Kafka 等消息中间件、数据管道、遥测、行情数据） | 负载紧凑，事件继承体系按真实类型读回，非托管记录的批次一次整块拷贝。详见[消息队列与事件流](/zh/docs/v4/advanced/message-queues)。 |
+| **缓存**（Redis、`IDistributedCache`、`HybridCache`、进程内的序列化数据） | 值小，自身不会每次调用都分配内存，类型在多次部署之间仍然可读。详见[缓存](/zh/docs/v4/advanced/caching)。 |
+| **持久化**（文件与文档、键值存储、追加日志、快照） | 键控类型和版本容错类型在版本更新后仍能读取旧数据；引用追踪能完整保留对象图。详见[持久化](/zh/docs/v4/advanced/persistence)。 |
+| **进程间通信与热路径**（管道、共享内存、ASP.NET Core、后台任务、Actor） | 分帧的流和固定大小的记录，每次调用 0 B，可以在任意线程上安全地并发使用。详见[零分配模式](/zh/docs/v4/advanced/zero-allocation)。 |
 | **Unity**（Mono、IL2CPP、HybridCLR） | 支持 Unity 2022.3 及以上版本，从 OpenUPM 安装，自带源生成器。`Vector3`、`Quaternion`、`Color32` 等非托管结构体按原始内存拷贝。热更新程序集不需要调用任何初始化方法。详见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)。 |
 | **Godot 4（.NET）** | 普通的 NuGet 包。Godot 的数学结构体都是非托管类型，按原始内存拷贝。详见 [Godot](/zh/docs/v4/platforms#godot)。 |
-| **游戏服务器与网络** | 直接序列化到 `PipeWriter` 这类 `IBufferWriter<byte>`，从 `ReadOnlySpan<byte>` 反序列化，消息对象可以池化复用。详见[网络层](/zh/docs/v4/advanced/networking)。 |
-| **存档与持久化** | 键控类型和版本容错类型在版本更新后仍能读取旧数据；引用追踪能完整保留对象图。详见[存档与持久化](/zh/docs/v4/advanced/persistence)。 |
-| **服务、缓存与进程间通信** | 数据紧凑，每次调用都不分配内存，可以在 ASP.NET Core、后台任务和 Actor 中安全地并发使用。详见[高性能序列化](/zh/docs/v4/advanced/high-performance)。 |
 
 ## 什么时候不适合 [#when-not-to-use-it]
 
@@ -72,7 +75,7 @@ GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
     与 v3 和 MemoryPack 对比构建时间和运行时性能，附完整数据表。
   </Card>
   <Card icon={<Compass />} title="进阶指南" href="/zh/docs/v4/advanced">
-    热路径、网络协议、游戏存档和 Unity 的完整实践方案。
+    热路径、网络与 RPC、消息队列、缓存、持久化和 Unity 的完整实践方案。
   </Card>
 </Cards>
 

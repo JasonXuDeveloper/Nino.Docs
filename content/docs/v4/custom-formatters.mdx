@@ -62,7 +62,7 @@ public sealed class TickDelta
 }
 ```
 
-The attribute applies to one field or property, wherever the containing type is serialized. A member with a custom formatter is never part of a raw struct block. The analyzer reports a formatter that is not a struct, or is for another type (NINO008).
+The attribute applies to one field or property, wherever the containing type is serialized. A member with a custom formatter is never copied as part of a block of [raw memory](/en/docs/v4/defining-types#structs). The analyzer reports a formatter that is not a struct, or is for another type (NINO008).
 
 ## For a Type: `[assembly: NinoFormatter]`
 To teach Nino a type it does not know (your own or a third-party one), register a formatter on your assembly. Type arguments and element formatters are inferred: a type parameter constrained to `INinoFormatter<E>` receives the formatter Nino resolves for `E`, so element (de)serialization is inlined. Generated code calls the formatter directly, and the runtime uses the same registration.
@@ -208,7 +208,7 @@ Always read exactly what you wrote, in the same order: the bytes carry no schema
 NinoFormatterCache<Ring<int>>.Register<RingFormatter<int, UnmanagedFormatter<int>>>();
 ```
 
-It is used by the top-level `NinoSerializer`/`NinoDeserializer` calls (intercepted calls and the boxed overloads included) and by members that reach `T` through the formatter cache (type parameters of generic `[NinoType]`s, types from other assemblies). Members whose formatter the generator resolved at compile time keep that formatter. Prefer `[assembly: NinoFormatter]`, which applies everywhere.
+It is used by the `NinoSerializer`/`NinoDeserializer` calls you make directly ([top-level calls](/en/docs/v4/basic#terms), intercepted calls and the [boxed overloads](/en/docs/v4/basic#runtime-types) included) and by members that find the formatter of `T` at run time through `NinoFormatterCache<T>` (type parameters of generic `[NinoType]`s, types from other assemblies). Members whose formatter the generator resolved at compile time keep that formatter. Prefer `[assembly: NinoFormatter]`, which applies everywhere.
 
 <Callout type="warn">
 

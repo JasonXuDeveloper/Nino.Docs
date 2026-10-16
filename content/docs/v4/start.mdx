@@ -1,5 +1,6 @@
 ---
 title: Quick Start
+seoTitle: "Quick Start: Install Nino in .NET, Unity and Godot – Nino v4 Docs"
 description: "Install Nino v4 in a .NET, Unity or Godot project and serialize your first type."
 icon: Rocket
 ---
@@ -150,11 +151,11 @@ The source generator writes the formatter of every `[NinoType]` at compile time;
 using Nino.Core;
 
 [NinoType]
-public class GameData
+public class UserProfile
 {
-    public int Score;
-    public string PlayerName;
-    public DateTime LastPlayed;
+    public long Id;
+    public string Name;
+    public DateTime LastLogin;
 }
 ```
 
@@ -164,7 +165,7 @@ public class GameData
 ### Serialize it
 
 ```csharp
-var data = new GameData { Score = 1000, PlayerName = "Player1", LastPlayed = DateTime.Now };
+var data = new UserProfile { Id = 42, Name = "Ada", LastLogin = DateTime.UtcNow };
 byte[] bytes = NinoSerializer.Serialize(data);
 ```
 
@@ -174,7 +175,7 @@ byte[] bytes = NinoSerializer.Serialize(data);
 ### Deserialize it
 
 ```csharp
-GameData restored = NinoDeserializer.Deserialize<GameData>(bytes);
+UserProfile restored = NinoDeserializer.Deserialize<UserProfile>(bytes);
 ```
 
 </Step>
@@ -185,7 +186,7 @@ GameData restored = NinoDeserializer.Deserialize<GameData>(bytes);
 Pass an existing instance by `ref` and Nino fills it in place, reusing its nested objects and collections. Pass `null` and a new one is created:
 
 ```csharp
-GameData current = null;
+UserProfile current = null;
 NinoDeserializer.Deserialize(bytes, ref current);    // creates the instance
 NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
 ```
@@ -210,5 +211,5 @@ For Unity and HybridCLR projects, see the [startup checklist](/en/docs/v4/advanc
   <Card title="Serialize and Deserialize" href="/en/docs/v4/basic">Every overload: buffer writers, spans, `Writer`/`Reader`, boxed values.</Card>
   <Card title="Defining Types" href="/en/docs/v4/defining-types">Choose members, order, private members, records, generics.</Card>
   <Card title="Supported Types" href="/en/docs/v4/types">Primitives, strings, tuples, collections and your own collections.</Card>
-  <Card title="Advanced Guides" href="/en/docs/v4/advanced">Complete patterns for hot paths, networking, save games and Unity.</Card>
+  <Card title="Advanced Guides" href="/en/docs/v4/advanced">Complete patterns for hot paths, networking and RPC, message queues, caching, persistence and Unity.</Card>
 </Cards>

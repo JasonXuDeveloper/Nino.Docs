@@ -1,10 +1,11 @@
 ---
 title: Overview
-description: "Guides for using Nino in real systems: hot paths, network protocols, save games, Unity and HybridCLR."
+seoTitle: "Advanced Guides: Nino in Real Systems – Nino v4 Docs"
+description: "Guides for using Nino in real systems: hot paths, networking and RPC, message queues, caching, persistence and storage, plus Unity and HybridCLR."
 icon: Map
 ---
 
-import { ArrowDownUp, Gamepad2, Gauge, Network, Save } from 'lucide-react';
+import { ArrowDownUp, DatabaseZap, Gamepad2, Gauge, Leaf, MessagesSquare, Network, Save } from 'lucide-react';
 
 <AnchorRedirect
   map={{
@@ -26,25 +27,56 @@ import { ArrowDownUp, Gamepad2, Gauge, Network, Save } from 'lucide-react';
   }}
 />
 
-The feature pages explain what each option does. These guides put them together for the systems you actually build, with complete patterns you can copy. Every snippet uses only Nino's public API and standard .NET types.
+The feature pages explain what each option does. These guides put them together for the systems you actually build, with complete patterns you can copy. Every snippet uses only Nino's public API and standard .NET types; where a third-party client appears (Redis, Kafka, gRPC), it is shown minimally, as an illustration.
+
+## Hot Paths and I/O [#hot-paths-and-io]
 
 <Cards>
   <Card icon={<Gauge />} title="High-Performance Serialization" href="/en/docs/v4/advanced/high-performance">
-    Zero-allocation serialize and deserialize: reused buffers, spans, reuse deserialization, pools and raw structs.
+    How Nino avoids allocations: reused buffers, spans, reuse deserialization, pools and raw structs.
+  </Card>
+  <Card icon={<Leaf />} title="Zero-Allocation Patterns" href="/en/docs/v4/advanced/zero-allocation">
+    Recipes for 0 B hot paths: caller-provided buffers, batches, fixed-size records, framed streams.
   </Card>
   <Card icon={<ArrowDownUp />} title="Streams, Async, Callbacks and Compression" href="/en/docs/v4/advanced/streams">
     Ready-to-copy helpers: framed `Stream` I/O, async reads and writes, `ReadOnlySequence` input, before/after hooks, Brotli and GZip.
   </Card>
+</Cards>
+
+## Use Cases [#use-cases]
+
+<Cards>
   <Card icon={<Network />} title="Network Layer" href="/en/docs/v4/advanced/networking">
-    Length-prefixed framing, polymorphic messages, `System.IO.Pipelines`, per-connection pooling and rolling upgrades.
+    Service-to-service and real-time protocols: TCP framing, WebSocket and UDP, gRPC marshallers, polymorphic messages, rolling upgrades.
   </Card>
-  <Card icon={<Save />} title="Save Games and Persistence" href="/en/docs/v4/advanced/persistence">
-    Files that survive updates: keyed and version-tolerant types, object graphs, safe writes.
+  <Card icon={<MessagesSquare />} title="Message Queues and Event Streams" href="/en/docs/v4/advanced/message-queues">
+    Kafka and other brokers, event hierarchies, batching, telemetry and tick streams, long-lived topics.
+  </Card>
+  <Card icon={<DatabaseZap />} title="Caching" href="/en/docs/v4/advanced/caching">
+    Redis, `IDistributedCache` and `HybridCache`, in-process blob caches, schema changes across deployments.
+  </Card>
+  <Card icon={<Save />} title="Persistence" href="/en/docs/v4/advanced/persistence">
+    Files that survive updates, key-value stores, append-only logs, snapshots and checkpoints.
   </Card>
   <Card icon={<Gamepad2 />} title="Unity and HybridCLR" href="/en/docs/v4/advanced/unity">
     Project setup, IL2CPP, assembly definitions, hot update and frame-time tips.
   </Card>
 </Cards>
+
+## Which Guide Do I Need? [#which-guide-do-i-need]
+
+| You are building | Start with |
+| --- | --- |
+| A service protocol, a real-time server (trading, collaboration, games), a WebSocket or UDP link | [Network Layer](/en/docs/v4/advanced/networking) |
+| gRPC services without `.proto` files, between .NET peers | [gRPC](/en/docs/v4/advanced/networking#grpc) |
+| Producers and consumers on Kafka, RabbitMQ or another broker | [Message Queues and Event Streams](/en/docs/v4/advanced/message-queues) |
+| Telemetry, metrics or market-data feeds | [Telemetry and Tick Streams](/en/docs/v4/advanced/message-queues#telemetry-and-tick-streams) |
+| A Redis or `IDistributedCache` layer, or an in-process cache of blobs | [Caching](/en/docs/v4/advanced/caching) |
+| Files, documents, save data, local key-value stores | [Persistence](/en/docs/v4/advanced/persistence) |
+| An event store, a journal, snapshots or checkpoints | [Append-Only Logs](/en/docs/v4/advanced/persistence#append-only-logs) |
+| IPC over named pipes or sockets | [Framed Streams](/en/docs/v4/advanced/zero-allocation#framed-streams) |
+| Records in shared or memory-mapped files | [Fixed-Size Records](/en/docs/v4/advanced/zero-allocation#fixed-size-records) |
+| A Unity, Godot or HybridCLR project | [Unity and HybridCLR](/en/docs/v4/advanced/unity), [Godot](/en/docs/v4/platforms#godot) |
 
 ## Which Feature Do I Need?
 

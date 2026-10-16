@@ -30,7 +30,7 @@ while (socket.TryReceive(out byte[] data))
 
 ## 实例从哪里来 [#where-instances-come-from]
 
-每当 Nino 需要一个新实例（槽位为 `null`、列表变长、多态槽位的类型改变），实例的来源如下：
+每当 Nino 需要为某个槽位（成员、集合元素，或你按 `ref` 传入的变量）新建实例时（槽位为 `null`、列表变长、多态槽位的类型改变），实例的来源如下：
 
 | 类型 | 新实例来自 |
 | --- | --- |
@@ -46,7 +46,7 @@ while (socket.TryReceive(out byte[] data))
 2. 如果实例实现了 `INinoPooled`（`[NinoPooled]` 类，或你自己的[池化集合](#your-own-pooled-collections)），调用它的 `ReturnToPool()`；否则
 3. 什么也不做，交给 GC。
 
-### 为什么需要 `SetRecycler` [#why-setrecycler]
+### 为什么要注册回收器 [#why-setrecycler]
 
 用 `[NinoFactory]` 从池中借出的对象，它的成员往往也是借来的。比如玩家对象借出时就带着一个借来的 `Buffs` 列表：
 
@@ -92,8 +92,8 @@ NinoSettings.SetRecycler<Player>(player => ObjectPool<Player>.Return(player)); /
 
 它同样适用于集合类型（`List<T>` 的子类、`IDictionary<TKey, TValue>` 的实现等）。该方法可以返回仍然装有元素的实例，这些元素会在读取数据之前丢弃（并回收）。它不能返回 `null`；无效的方法会报告 NINO017。
 
-## `[NinoPooled]` [#ninopooled]
-`[NinoPooled]` 为 `[NinoType]` 类提供内置的对象池。无论 Nino 在哪里创建它的实例（顶层、成员还是集合元素），都会先从池中取一个，再反序列化到这个实例中；被丢弃的实例会自动还回池中。
+## 内置对象池：`[NinoPooled]` [#ninopooled]
+`[NinoPooled]` 为 `[NinoType]` 类提供内置的对象池。无论 Nino 在哪里创建它的实例（你要反序列化的值本身、成员还是集合元素），都会先从池中取一个，再反序列化到这个实例中；被丢弃的实例会自动还回池中。
 
 ```csharp title="Bullet.cs"
 [NinoType, NinoPooled] // [!code highlight]
@@ -158,25 +158,55 @@ public sealed class PooledList<T> : List<T>, INinoPooled
 
 ## 完整示例：每帧 0 GC 的状态同步 [#example]
 
-服务器每帧发来一份完整状态：单位数量和子弹数量每帧都在变，单位的寻路路径时有时无。
+服务器每帧发来一份完整状态：单位数量和子弹数量每帧都在变，单位的寻路路径时有时无。下面的文件包含示例用到的全部类型。
 
 ```csharp title="Frame.cs"
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Nino.Core;
+
 [NinoType]
 public class Frame
 {
     public int Tick;
     public List<Unit> Units;     // length changes every frame
-    public List<Bullet> Bullets; // Bullet is the [NinoPooled] class above
+    public List<Bullet> Bullets; // so does this one
 }
 
 [NinoType, NinoPooled]
 public sealed partial class Unit
 {
     public int Id;
-    public PooledList<int> Path; // sometimes null
+    public PooledList<int> Path; // sometimes null; stays attached when the unit is pooled
 
     private static partial IEnumerable<Unit> OnNinoPoolWarmup() => null;
     private partial void OnNinoPoolReturn() { }
+}
+
+[NinoType, NinoPooled]
+public sealed partial class Bullet
+{
+    public int Id;
+    public float X, Y;
+
+    private static partial IEnumerable<Bullet> OnNinoPoolWarmup() => Enumerable.Range(0, 64).Select(_ => new Bullet());
+    private partial void OnNinoPoolReturn() { }
+}
+
+public sealed class PooledList<T> : List<T>, INinoPooled
+{
+    [ThreadStatic] private static Stack<PooledList<T>> _pool;
+
+    [NinoFactory] // called when a Path slot is null
+    public static PooledList<T> Rent() =>
+        _pool is { Count: > 0 } ? _pool.Pop() : new PooledList<T>();
+
+    public void ReturnToPool() // called when Nino drops a Path
+    {
+        Clear();
+        (_pool ??= new Stack<PooledList<T>>()).Push(this);
+    }
 }
 ```
 
@@ -189,7 +219,7 @@ foreach (byte[] data in frames)
 预热完成后，每帧分配 **0 B**：
 
 - `Frame` 和它的两个列表原地复用。
-- 列表变长时，新的 `Unit` 和 `Bullet` 从池中取；变短时，被丢弃的元素还回池中。
+- 列表变长时，新的 `Unit` 和 `Bullet` 从池中取；变短时，被丢弃的元素还回池中，`Unit` 连同它的 `Path` 一起还回。
 - `Path` 变成 `null` 时，`PooledList<int>` 通过 `ReturnToPool()` 还回池中；再次出现时通过 `[NinoFactory]` 借出。
 
 如果 `Unit` 没有池化，列表变短时被丢弃的 `Unit` 会交给 GC，挂在它身上的 `Path` 也跟着丢失：这样每帧都还会分配内存，池中的列表也会越来越少。

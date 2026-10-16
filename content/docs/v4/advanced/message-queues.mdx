@@ -1,0 +1,195 @@
+---
+title: Message Queues and Event Streams
+seoTitle: "Kafka and Message Queue Serialization in C# – Nino v4 Docs"
+description: "Nino payloads on Kafka and other brokers: polymorphic event types, serializers, batching, telemetry and tick streams, and topics that outlive a deployment."
+icon: MessagesSquare
+---
+
+Brokers such as Kafka, RabbitMQ, Azure Service Bus or NATS move opaque byte payloads. Nino fills them: a producer serializes an event, a consumer deserializes it from the bytes it received, and the payload is compact and fast to read on both sides. The same applies to an in-house event stream over a socket or a file.
+
+This guide covers what differs from request/response messaging: messages that stay on a topic for days, consumers that run older or newer code than producers, and high event rates.
+
+## Define the Events [#define-the-events]
+
+Derive the events of a stream from one base class. Nino writes the runtime type with each value, so a consumer reads an `OrderEvent` and gets back an `OrderPlaced`, with no type header of your own:
+
+```csharp title="OrderEvents.cs"
+using Nino.Core;
+
+[NinoType(versionTolerant: true)] // subtypes inherit [NinoType] and its options
+public abstract class OrderEvent
+{
+    public Guid OrderId;
+    public DateTime OccurredAt;
+}
+
+public sealed class OrderPlaced : OrderEvent
+{
+    public long CustomerId;
+    public List<OrderLine> Lines;
+}
+
+public sealed class OrderShipped : OrderEvent
+{
+    public string Carrier;
+    public string TrackingNumber;
+}
+
+public sealed class OrderCancelled : OrderEvent
+{
+    public string Reason;
+}
+
+[NinoType]
+public struct OrderLine          // unmanaged: copied as raw memory, lists of it as one block
+{
+    public int ProductId;
+    public int Quantity;
+    public decimal UnitPrice;
+}
+```
+
+```csharp
+switch (NinoDeserializer.Deserialize<OrderEvent>(payload))
+{
+    case OrderPlaced placed:       Reserve(placed); break;
+    case OrderShipped shipped:     Notify(shipped); break;
+    case OrderCancelled cancelled: Release(cancelled); break;
+}
+```
+
+The type id is a hash of the type's full name: rename an event with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name), or old messages on the topic can no longer be read. See [Polymorphism](/en/docs/v4/polymorphism).
+
+## Kafka [#kafka]
+
+[Confluent.Kafka](https://github.com/confluentinc/confluent-kafka-dotnet) takes a serializer and a deserializer per key and value type. Its deserializer receives a `ReadOnlySpan<byte>`, which Nino reads directly:
+
+```csharp title="NinoKafkaSerializer.cs"
+using Confluent.Kafka;
+using Nino.Core;
+
+public sealed class NinoKafkaSerializer<T> : ISerializer<T>, IDeserializer<T>
+{
+    public static readonly NinoKafkaSerializer<T> Instance = new();
+
+    public byte[] Serialize(T data, SerializationContext context) => NinoSerializer.Serialize(data);
+
+    public T Deserialize(ReadOnlySpan<byte> data, bool isNull, SerializationContext context) =>
+        isNull ? default : NinoDeserializer.Deserialize<T>(data);
+}
+```
+
+```csharp
+using var producer = new ProducerBuilder<Guid, OrderEvent>(config)
+    .SetKeySerializer(NinoKafkaSerializer<Guid>.Instance)
+    .SetValueSerializer(NinoKafkaSerializer<OrderEvent>.Instance)
+    .Build();
+await producer.ProduceAsync("orders", new Message<Guid, OrderEvent> { Key = evt.OrderId, Value = evt });
+
+using var consumer = new ConsumerBuilder<Guid, OrderEvent>(consumerConfig)
+    .SetKeyDeserializer(NinoKafkaSerializer<Guid>.Instance)
+    .SetValueDeserializer(NinoKafkaSerializer<OrderEvent>.Instance)
+    .Build();
+```
+
+Kafka's `ISerializer<T>` returns a `byte[]`, so producing allocates one array per message. A `Guid` key is a raw value: 16 bytes, written and read as one copy.
+
+## Other Brokers [#other-brokers]
+
+Most other clients accept a body as `byte[]` or `ReadOnlyMemory<byte>`:
+
+- For a `ReadOnlyMemory<byte>` body, serialize into a reused `NinoArrayBufferWriter` and pass `WrittenMemory`. Reset the buffer only after the publish call has completed (after the `await`), since the client may still be reading it.
+- For a `byte[]` body, pass `NinoSerializer.Serialize(evt)`.
+- On the consumer side, pass the delivered body (`ReadOnlyMemory<byte>.Span`, or the array) to `NinoDeserializer.Deserialize<T>`. There is no need to copy it first.
+
+If the broker hands out bodies whose memory is reused after your handler returns, deserialize inside the handler; the result does not reference the input bytes.
+
+## Batching [#batching]
+
+Small events (a click, a price change, a metric) are often cheaper to send in batches: one broker message, one network round trip, one header. Write a count and then the events back to back:
+
+```csharp title="EventBatch.cs"
+using Nino.Core;
+
+public static class EventBatch
+{
+    public static void Write(NinoArrayBufferWriter buffer, IReadOnlyList<OrderEvent> events)
+    {
+        buffer.ResetWrittenCount();
+        var writer = new Writer(buffer);
+        writer.Write(events.Count);
+        for (int i = 0; i < events.Count; i++)
+            NinoSerializer.Serialize(events[i], ref writer);
+        writer.Flush();
+    }
+
+    public static void Read(ReadOnlySpan<byte> payload, Action<OrderEvent> handle)
+    {
+        var reader = new Reader(payload);
+        int count = reader.Read<int>();
+        for (int i = 0; i < count; i++)
+            handle(NinoDeserializer.Deserialize<OrderEvent>(ref reader));
+    }
+}
+```
+
+Each event keeps its own type, so one batch can mix `OrderPlaced` and `OrderShipped`. A `List<OrderEvent>` member in a `[NinoType]` class does the same and adds a place for batch-level fields (a producer id, a sequence number).
+
+## Telemetry and Tick Streams [#telemetry-and-tick-streams]
+
+Metrics, traces and market data arrive at high rates as many small, flat records. Keep each record an unmanaged struct and send them in a list:
+
+```csharp title="Samples.cs"
+using Nino.Core;
+
+[NinoType]
+public struct Sample             // fixed-size, copied as raw memory
+{
+    public long Timestamp;
+    public int SeriesId;
+    public float Value;
+}
+
+[NinoType]
+public sealed class SampleBatch
+{
+    public string Host;
+    public long Sequence;
+    public List<Sample> Samples;   // one block copy; keeps its capacity between batches
+}
+
+public sealed class SampleConsumer
+{
+    private SampleBatch _batch;     // reused for every message
+
+    public void OnMessage(ReadOnlySpan<byte> payload)
+    {
+        NinoDeserializer.Deserialize(payload, ref _batch);
+        foreach (Sample sample in _batch.Samples)
+            Record(sample);
+    }
+}
+```
+
+- The list of samples is written and read as **one block copy**, whatever its length.
+- Deserializing into the same `SampleBatch` reuses the object and the list's backing array. The only allocation per message is the `Host` string, which is part of the data; send an id instead of a name if even that matters.
+- For records you look up by position (a day of ticks in a file), see [Fixed-Size Records](/en/docs/v4/advanced/zero-allocation#fixed-size-records).
+
+## Topics That Outlive a Deployment [#topics-that-outlive-a-deployment]
+
+A message written today may be consumed next month, by code that did not exist when it was written, and a consumer may replay a topic from the beginning.
+
+- Make every event type [`versionTolerant`](/en/docs/v4/evolving-data#version-tolerance) (append fields) or [`keyed`](/en/docs/v4/evolving-data#keyed-members) (any change). A consumer then skips fields it does not know, and a field missing from an old message keeps the value its constructor or initializer gives it.
+- In a `versionTolerant` hierarchy, append members only to the concrete events (`OrderPlaced`, ...), never to `OrderEvent`: a member appended to the base class shifts the members of every subclass. If the base needs a new member, use `keyed`. See [Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class).
+- A consumer that receives an event **type** it does not know cannot read it: deserializing throws an `InvalidOperationException` (unknown type id). Deploy consumers before the producers that emit a new event type, or put new types on a new topic.
+- [Positional](/en/docs/v4/evolving-data#positional) types (bare `[NinoType]`) are fine for messages that are consumed within a deployment (a work queue drained in seconds). Their bytes change with every member change.
+
+For an append-only log in a file (event sourcing on local storage), see [Append-Only Logs](/en/docs/v4/advanced/persistence#append-only-logs).
+
+## Checklist [#checklist]
+
+- [ ] Events derive from one `[NinoType]` base; renamed events carry `[NinoFormerName]`.
+- [ ] Event types on long-lived topics are `versionTolerant` or `keyed`.
+- [ ] New event types reach consumers before producers emit them.
+- [ ] Small, frequent events are batched; their records are unmanaged structs in lists.
+- [ ] Consumers deserialize into reused instances on hot topics.

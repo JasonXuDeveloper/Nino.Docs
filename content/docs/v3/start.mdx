@@ -1,76 +1,121 @@
 ---
 title: Quick Start
+description: Install Nino v3 in a .NET or Unity project.
 icon: Rocket
 ---
 
-This page describes how to quickly install Nino in different types of projects.
+<AnchorRedirect
+  map={{
+    'warning': '/en/docs/v3/start',
+  }}
+/>
 
-## Installation
+Nino v3 is a NuGet package for .NET projects and a UPM package for Unity. Both bring the runtime library and the source generator.
 
-### .NET Project
+<Callout type="warn" title="Do not use Nino v3.9.x">
 
-<Callout type="info">
-
-Nino supports projects with .NET 5.0 or higher, or .NET Standard 2.0 or higher
+`v3.9.*` releases were used to test features of Nino v4.0 and are not API-compatible with `3.*`. If you want those features, use Nino v4.0 directly.
 
 </Callout>
 
-- Nino supports installation via NuGet, simply search for `Nino` in the NuGet package manager in Visual Studio or Rider and install it
-- Alternatively, `dotnet` command can be used to install the latest version of Nino:
+## Installation [#installation]
+
+<Tabs groupId="platform" persist items={['.NET', 'Unity']}>
+<Tab value=".NET">
+
+```shell
+dotnet add package Nino
+```
+
+Details: [.NET Project](/en/docs/v3/start#net-project).
+
+</Tab>
+<Tab value="Unity">
+
+Install `com.jasonxudeveloper.nino` from [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation).
+
+Details: [Unity Project](/en/docs/v3/start#unity-project).
+
+</Tab>
+</Tabs>
+
+### .NET Project [#net-project]
+
+<Callout type="info">
+
+Nino supports projects targeting .NET 5.0 or later, or .NET Standard 2.0 or later.
+
+</Callout>
+
+- Search for `Nino` in the NuGet package manager of Visual Studio or Rider and install it
+- Or use the `dotnet` CLI:
     ```shell
     dotnet add package Nino
     ```
 
 <Callout type="info">
 
-Nino requires two NuGet packages to be installed: `Nino.Generator` and `Nino.Serialization`, both are necessary
-
-Look up and install the package `Nino` in the NuGet package manager to automatically install these two packages
+Nino needs two NuGet packages, both required: `Nino.Generator` and `Nino.Serialization`. Installing `Nino` brings in both.
 
 </Callout>
 
 <Callout type="warn">
 
-Please be aware that this installation does not support .NET Framework projects, and IDEs that do not support `Source Generator`
+This does not work for .NET Framework projects, or in IDEs that cannot run source generators (such as Visual Studio Code).
 
 </Callout>
 
-### Unity Project
+### Unity Project [#unity-project]
 
 <Callout type="info">
 
-Nino supports projects with Unity 2022.3 or higher, and is compatible with any player platform
+Nino supports Unity 2022.3 or later, on every player platform.
 
-We recommend running the `Nino.Unity` sample project from GitHub first to learn how to use Nino in Unity, it also includes a set of unit tests (via `TestRunner`)
-
-</Callout>
-
-`Nino` can be installed in Unity via the Unity Package Manager (`UPM`), please refer to [this link](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation) for more information
-
-<Callout type="info">
-
-By default, Unity 2022.3 or higher should have `Microsoft.CodeAnalysis` installed, if not, please install it manually
-
-We require `Microsoft.CodeAnalysis` NuGet package (latest version is fine) to be installed to support `Source Generator` in Unity
-   > This NuGet package can be manually installed in the Unity project, for example by executing `dotnet add package Microsoft.CodeAnalysis.CSharp --version 4.10.0` after entering the Unity directory (same level as Assets)
+The `Nino.Unity` sample project on GitHub shows how to use Nino in Unity and includes a set of unit tests (via `TestRunner`). Run it first.
 
 </Callout>
 
-<Callout type="warn">
+<Steps>
+<Step>
 
-If you are using `asmdef`, please make sure either `auto referencing` is enabled or when `override references` is used, explicitly add reference to `Nino.Core.dll` is needed
+### Install the package [#install-the-package]
 
-</Callout>
+Install Nino through the Unity Package Manager (UPM). See [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation) for the steps.
+
+</Step>
+<Step>
+
+### Check `Microsoft.CodeAnalysis` [#check-microsoftcodeanalysis]
+
+Source generators in Unity need the `Microsoft.CodeAnalysis` NuGet package (any recent version). Unity 2022.3 and later should already have it; if not, install it yourself, for example from the Unity project folder (the one that contains `Assets`):
+
+```shell
+dotnet add package Microsoft.CodeAnalysis.CSharp --version 4.10.0
+```
+
+</Step>
+<Step>
+
+### Reference `Nino.Core.dll` from your `asmdef` [#reference-ninocoredll]
+
+If you use `asmdef` files, make sure `Auto Referenced` is enabled. If `Override References` is on, add a reference to `Nino.Core.dll` explicitly.
+
+</Step>
+</Steps>
 
 <Callout type="idea">
 
-If you encounter any issues, please ensure that you have followed the above steps and can run the `Nino.Unity` sample project normally. If the problem persists, please submit an Issue on GitHub
+If you run into problems, check that you followed the steps above and that the `Nino.Unity` sample project runs. If the problem persists, please open an issue on GitHub.
 
 </Callout>
 
-#### Hot Update Code
-- Nino supports **HybridCLR** and **ILRuntime**
-- If you need to create a C# project externally (not an asmdef within Unity) to write hot update code, please create a .NET Core project and install the Nino library via NuGet ([refer to this](#net-project)), then use the compiled DLL in HybridCLR or ILRuntime
+#### Hot Update Code [#hot-update-code]
+- Nino supports **HybridCLR** and **ILRuntime**.
+- To write hot-update code in a separate C# project (not an `asmdef` inside Unity), create a .NET Core project, install Nino from NuGet ([see above](/en/docs/v3/start#net-project)), and use the compiled DLL in HybridCLR or ILRuntime.
 
-### Warning
-Please do not use `Nino v3.9.*` version, this version is mainly for testing the features that will be released in `Nino v4.0`, and is not compatible with the API of `3.*` version, if you need to use it, please directly use `Nino v4.0` version
+## Next Steps [#next-steps]
+
+<Cards>
+  <Card title="Serialize and Deserialize" href="/en/docs/v3/basic">Serialize to arrays and buffer writers, deserialize from spans.</Card>
+  <Card title="Supported Types" href="/en/docs/v3/types">Mark your types with `[NinoType]` and see what else Nino serializes.</Card>
+</Cards>

@@ -4,6 +4,13 @@ description: "与我们所知最快的 C# 二进制序列化库如实对比：Ni
 icon: Swords
 ---
 
+<AnchorRedirect
+  map={{
+    'deserialize-into-existing-objects': '/zh/docs/v4/perf#pooling',
+    'allocations-and-payload-size': '/zh/docs/v4/perf#allocations-and-payload-size',
+  }}
+/>
+
 [MemoryPack](https://github.com/Cysharp/MemoryPack) 是一个出色的序列化库，也是我们衡量 Nino 时用的标杆。本页对比 Nino v4 和 MemoryPack **1.21.4**：MemoryPack 的功能以它自己的 README 为准，Nino 的功能以 Nino 源码为准。无法核实的功能，两边都不列出。
 
 ## 性能 [#performance]
@@ -14,24 +21,12 @@ icon: Swords
 
 <BenchmarkChart chart={['serialize', 'deserialize']} lang="zh" />
 
-### 反序列化到已有对象 [#deserialize-into-existing-objects]
-
-两个库都能直接填充已有的对象，不必分配新对象。Nino 通过 `ref` 反序列化到已有的对象图中，需要新实例时从 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池中取；MemoryPack 则覆盖已有实例。Nino 最高**快 <BenchValue k="reuse.max" />**，在池化路径上分配 **0 B**，而 MemoryPack 每次调用都要分配。
-
-<BenchmarkChart chart="reuse" lang="zh" table={false} />
-
-<ReuseTable lang="zh" />
-
-### 内存分配与数据大小 [#allocations-and-payload-size]
-
-<BenchmarkChart chart={['allocation', 'payload']} lang="zh" />
-
 ### 汇总 [#summary]
 
 | | Nino v4 对比 MemoryPack |
 | --- | --- |
-| 序列化 | Nino 领先的用例中**快 <BenchValue k="serialize.min" />–<BenchValue k="serialize.max" />**；差距最小的是原始结构体数组，两者都是整块拷贝（各用例见图表） |
-| 反序列化 | Nino 领先的用例中**快 <BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" />**；原始结构体数组两者相差不大，`Vector4[10000]` 可能是 MemoryPack 更快（见下文） |
+| 序列化 | Nino 领先的用例中**快 <BenchValue k="serialize.min" />–<BenchValue k="serialize.max" />**；差距最小的是非托管结构体数组，两者都是整块拷贝（各用例见图表） |
+| 反序列化 | Nino 领先的用例中**快 <BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" />**；非托管结构体数组两者相差不大，`Vector4[10000]` 可能是 MemoryPack 更快（见下文） |
 | 反序列化到已有 / 池化实例 | 分配 **0 B**，最高比 MemoryPack 的覆盖模式**快 <BenchValue k="reuse.max" />** |
 | 序列化时的内存分配 | 两者都是 0 B |
 | 数据大小 | 基本相同：`SimpleClass` 在 Nino 中为 <BenchValue k="payload.v4" /> 字节，在 MemoryPack 中为 <BenchValue k="payload.memorypack" /> 字节 |
@@ -42,7 +37,7 @@ icon: Swords
 
 </Callout>
 
-完整数据表见[基准测试](/zh/docs/v4/perf)。
+每个用例的具体数字、多态与池化测试以及基准测试代码，见[基准测试](/zh/docs/v4/perf#runtime)。
 
 ## 功能矩阵 [#feature-matrix]
 
@@ -129,7 +124,7 @@ MemoryPack 写入 1 字节的 Union 标签（超过 249 时 3 字节），Nino �
 
 <Cards>
   <Card title="适合选 Nino 的情况">
-    在 Unity 或 .NET 上高频序列化游戏状态、网络消息或存档；需要不用标签表的多态、可演进的数据、共享引用，或借助池化做到零 GC；或者需要 Unity、IL2CPP 与服务器之间字节完全一致。
+    在 .NET 服务器、Unity 或 Godot 上高频序列化消息、缓存值、存储的记录或应用状态；需要不用标签表的多态、可演进的数据、共享引用，或借助池化做到零 GC；或者需要 Unity、IL2CPP 与服务器之间字节完全一致。
   </Card>
   <Card title="适合选 MemoryPack 的情况">
     需要 TypeScript 客户端、ASP.NET Core MVC 格式化器、按调用设置的选项，或者需要开箱即用地支持上面列出的 BCL 类型和 Unity 类。

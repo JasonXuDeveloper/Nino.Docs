@@ -1,10 +1,11 @@
 ---
 title: Network Layer
+seoTitle: "Network Protocol and RPC Serialization in C# – Nino v4 Docs"
 description: "Build a message protocol on Nino: framing, polymorphic messages, System.IO.Pipelines, pooling per connection, rolling upgrades."
 icon: Network
 ---
 
-This guide builds the serialization half of a TCP protocol: a message hierarchy, length-prefixed frames written straight into a `PipeWriter`, frames read from a `PipeReader` without copying, and messages reused per connection. The transport (sockets, Kestrel connections, your engine's networking) is up to you; anything that gives you a `PipeReader`/`PipeWriter`, a `Stream` or raw buffers works the same way.
+Service-to-service messaging, real-time servers (games, trading, collaboration) and device links all need a message format. This guide builds the serialization half of a TCP protocol: a message hierarchy, length-prefixed frames written straight into a `PipeWriter`, frames read from a `PipeReader` without copying, and messages reused per connection. The transport (sockets, Kestrel connections, your engine's networking) is up to you; anything that gives you a `PipeReader`/`PipeWriter`, a `Stream` or raw buffers works the same way.
 
 ## Define the Messages
 
@@ -87,7 +88,7 @@ await pipe.Output.FlushAsync();
 
 <Callout type="info">
 
-If your transport already frames messages (WebSocket messages, UDP datagrams, a message queue), skip the prefix and serialize straight into the transport's `IBufferWriter<byte>`: `NinoSerializer.Serialize(message, pipeWriter)`.
+If your transport already frames messages (WebSocket messages, UDP datagrams, a message queue), skip the prefix and serialize straight into the transport's `IBufferWriter<byte>` (`NinoSerializer.Serialize(message, pipeWriter)`) or a reused buffer; see [WebSocket and UDP](#websocket-and-udp) and [Message Queues and Event Streams](/en/docs/v4/advanced/message-queues).
 
 </Callout>
 
@@ -165,6 +166,70 @@ Nino validates every length inside the payload against the bytes left before all
 
 </Callout>
 
+## WebSocket and UDP [#websocket-and-udp]
+
+Transports that deliver whole messages need no length prefix: one Nino payload is one WebSocket message or one datagram. Serialize into a reused buffer and send its memory; receive into a reused buffer and deserialize from it:
+
+```csharp title="MessageTransports.cs"
+using System.Net;
+using System.Net.Sockets;
+using System.Net.WebSockets;
+using Nino.Core;
+
+public static class MessageTransports
+{
+    // WebSocket: one Nino payload per WebSocket message
+    public static async Task SendAsync<T>(WebSocket socket, T message, NinoArrayBufferWriter buffer,
+        CancellationToken ct)
+    {
+        buffer.ResetWrittenCount();
+        NinoSerializer.Serialize(message, buffer);
+        await socket.SendAsync(buffer.WrittenMemory, WebSocketMessageType.Binary, endOfMessage: true, ct);
+    }
+
+    public static async Task<T> ReceiveAsync<T>(WebSocket socket, NinoArrayBufferWriter buffer,
+        CancellationToken ct)
+    {
+        buffer.ResetWrittenCount();
+        ValueWebSocketReceiveResult result;
+        do                                                  // a message may arrive in several parts
+        {
+            Memory<byte> free = buffer.GetMemory(4096);
+            result = await socket.ReceiveAsync(free, ct);
+            if (result.MessageType == WebSocketMessageType.Close)
+                throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely);
+            buffer.Advance(result.Count);
+        } while (!result.EndOfMessage);
+
+        return NinoDeserializer.Deserialize<T>(buffer.WrittenSpan);
+    }
+
+    // UDP: one Nino payload per datagram
+    public static void SendDatagram<T>(Socket socket, EndPoint remote, T message, NinoArrayBufferWriter buffer)
+    {
+        buffer.ResetWrittenCount();
+        NinoSerializer.Serialize(message, buffer);
+        socket.SendTo(buffer.WrittenSpan, SocketFlags.None, remote);
+    }
+
+    public static void ReceiveLoop<T>(Socket socket, Action<T> handle) where T : class
+    {
+        byte[] datagram = new byte[65527];   // allocated once
+        T message = null;                    // reused for every datagram
+        while (true)
+        {
+            int received = socket.Receive(datagram);
+            NinoDeserializer.Deserialize(datagram.AsSpan(0, received), ref message);
+            handle(message);
+        }
+    }
+}
+```
+
+- A WebSocket message can arrive in several `ReceiveAsync` parts; the loop collects them into the buffer, which grows as needed and is then reused. Cap the message size if peers are untrusted.
+- A UDP datagram is at most 65,507 bytes of payload over IPv4. Keep messages well below the path MTU (about 1,200 bytes is a common budget) to avoid IP fragmentation, and add your own sequence numbers if order or loss matters.
+- In the UDP loop, the receive array and the message instance are reused, so a steady stream of datagrams of the same shape allocates nothing.
+
 ## Reuse Messages per Connection
 
 A busy connection deserializes the same few message types over and over. There are two ways to stop allocating them:
@@ -211,6 +276,45 @@ void OnFrame(ReadOnlySpan<byte> frame)
 
 </Tab>
 </Tabs>
+
+## gRPC [#grpc]
+
+gRPC for .NET does not require Protocol Buffers: a method is described by a `Method<TRequest, TResponse>` with a marshaller per message type. A Nino marshaller writes into the buffer writer gRPC provides and reads from the payload sequence it receives:
+
+```csharp title="NinoMarshaller.cs"
+using System.Buffers;
+using Grpc.Core;
+using Nino.Core;
+
+public static class NinoMarshaller
+{
+    public static Marshaller<T> Create<T>() => Marshallers.Create<T>(
+        serializer: (value, context) =>
+        {
+            NinoSerializer.Serialize(value, context.GetBufferWriter());
+            context.Complete();
+        },
+        deserializer: context =>
+        {
+            ReadOnlySequence<byte> payload = context.PayloadAsReadOnlySequence();
+            if (payload.IsSingleSegment)
+                return NinoDeserializer.Deserialize<T>(payload.First.Span);
+            return NinoDeserializer.Deserialize<T>(payload.ToArray()); // rare: copy once
+        });
+}
+
+[NinoType] public sealed class GetPriceRequest { public int InstrumentId; }
+[NinoType] public sealed class GetPriceReply { public double Bid, Ask; }
+
+public static class PricingMethods
+{
+    public static readonly Method<GetPriceRequest, GetPriceReply> GetPrice = new(
+        MethodType.Unary, "pricing.Pricing", "GetPrice",
+        NinoMarshaller.Create<GetPriceRequest>(), NinoMarshaller.Create<GetPriceReply>());
+}
+```
+
+Use these `Method` definitions with a `CallInvoker` on the client and `ServerServiceDefinition.CreateBuilder().AddMethod(...)` on the server, or with a code-first library that accepts custom marshallers. Both ends must be .NET with the same message types, which is the trade-off against `.proto` contracts; see [When Not to Use It](/en/docs/v4#when-not-to-use-it).
 
 ## Threads
 

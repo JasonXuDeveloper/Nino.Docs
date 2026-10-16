@@ -132,7 +132,7 @@ public NinoTypeAttribute(
   }}
 />
 
-建议使用命名参数，方便阅读：`[NinoType(versionTolerant: true)]`。不带参数的 `[NinoType]` 是最快、最紧凑的格式：按位置写入，每个成员没有额外开销。
+建议使用命名参数，方便阅读：`[NinoType(versionTolerant: true)]`。不带参数的 `[NinoType]` 是最快、最紧凑的格式：[按位置](/zh/docs/v4/evolving-data#positional)写入（成员按声明顺序排列，不带名称和长度），每个成员没有额外开销。
 
 ## 哪些成员会被序列化 [#which-members-are-serialized]
 
@@ -260,7 +260,7 @@ public class ChatMessage
 
 ## 旧名称 [#former-name]
 
-如果槽位的声明类型是非密封类、抽象类、接口或 `object`，值会连同它运行时类型的**类型 ID** 一起写入。类型 ID 是类型全名的 32 位哈希，读取时靠它还原成正确的类型。类型改名或换命名空间后，ID 也会变，密封的子类型也一样，例如通过 `Message` 基类发送的各个消息类。典型场景：你把协议类从 `Game.Net` 挪到了 `Game.Protocol`，而上个版本的存档或客户端用的还是旧 ID。用 `[NinoFormerName]` 可以继续读取旧数据：
+如果成员、元素或变量的声明类型是非密封类、抽象类、接口或 `object`，值会连同它运行时类型的**类型 ID** 一起写入。类型 ID 是类型全名的 32 位哈希，读取时靠它还原成正确的类型。类型改名或换命名空间后，ID 也会变，密封的子类型也一样，例如通过 `Message` 基类发送的各个消息类。典型场景：你把协议类从 `Game.Net` 挪到了 `Game.Protocol`，而上个版本的存档或客户端用的还是旧 ID。用 `[NinoFormerName]` 可以继续读取旧数据：
 
 ```csharp
 [NinoType]

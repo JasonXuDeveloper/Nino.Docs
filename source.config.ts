@@ -1,5 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { remarkImage } from 'fumadocs-core/mdx-plugins';
+import {
+  rehypeCodeDefaultOptions,
+  remarkImage,
+} from 'fumadocs-core/mdx-plugins';
 import { remarkFeedbackBlock } from 'fumadocs-core/mdx-plugins/remark-feedback-block';
 import {
   defineConfig,
@@ -27,12 +30,27 @@ function hasFullGitHistory() {
   }
 }
 
+/**
+ * Frontmatter: Fumadocs' fields plus
+ * - `seoTitle`: the <title> and social title when the page title alone is too
+ *   generic for search results ("Overview"); the page heading keeps `title`.
+ * - `faq`: the page's questions (## headings ending in "?") become FAQPage
+ *   structured data.
+ * Typed as the base schema: the extended type makes tsc's inference of the
+ * collection types explode (TS2589). Read the extra fields through
+ * `DocExtras` (src/lib/source.ts).
+ */
+const docSchema = frontmatterSchema.extend({
+  seoTitle: frontmatterSchema.shape.description,
+  faq: frontmatterSchema.shape.full,
+}) as unknown as typeof frontmatterSchema;
+
 // One collection for every version and language:
 // content/docs/{version}/{page}.mdx (English) and {page}.zh.mdx (Chinese)
 export const docs = defineDocs({
   dir: 'content/docs',
   docs: {
-    schema: frontmatterSchema,
+    schema: docSchema,
     postprocess: {
       includeProcessedMarkdown: true,
     },
@@ -49,6 +67,9 @@ export default defineConfig({
     }),
   ],
   mdxOptions: {
+    // `language-*` class on code blocks, so the Markdown copies keep the
+    // language of each fence (src/lib/markdown.tsx).
+    rehypeCodeOptions: { ...rehypeCodeDefaultOptions, addLanguageClass: true },
     remarkPlugins: [
       [remarkImage, { external: false, publicDir: 'public' }],
       // Block-level feedback: a "Feedback" button on each paragraph

@@ -4,6 +4,13 @@ description: Features, build time, generated code and runtime performance compar
 icon: Scale
 ---
 
+<AnchorRedirect
+  map={{
+    '330-types-n--30': '/en/docs/v4/perf#build-time-and-generated-code',
+    '1100-types-n--100': '/en/docs/v4/perf#build-time-and-generated-code',
+  }}
+/>
+
 This page compares Nino v3 with Nino v4 in three areas: features, build time and generated code, and runtime performance. For the upgrade steps, see [Migrating from v3](/en/docs/v4/migration).
 
 ## Features
@@ -31,41 +38,13 @@ This page compares Nino v3 with Nino v4 in three areas: features, build time and
 
 ## Build Time and Generated Code
 
-The baseline is v3 **3.3.13**, the last v3 release. The test project is a synthetic assembly of `N` abstract root classes, each with a chain of 8 derived classes, a sealed leaf and a struct (`N × 11` types), with primitives, strings, `List<T>`, `Dictionary<int, string>`, references to other `[NinoType]`s and private fields. Intel Xeon 2.80 GHz, 4 cores, Ubuntu 24.04, .NET SDK 10.0.402. Look at the ratios rather than the absolute times.
+The baseline is v3 **3.3.13**, the last v3 release, on a synthetic project of 330 and 1,100 polymorphic types. Look at the ratios rather than the absolute times.
 
 <BenchmarkChart chart="compile" lang="en" table={false} />
 
-<Tabs items={["330 types (N = 30)", "1,100 types (N = 100)"]}>
-
-<Tab value="330 types (N = 30)">
-
-| | v3 (3.3.13) | v4 | v4 vs v3 |
-|---|---:|---:|---:|
-| Generated source | 18.7 MB (363,233 lines) | 1.15 MB (21,679 lines) | **16× smaller** |
-| Compiling the generated code (emit) | 56.0 s | 1.27 s | **44× faster** |
-| Running the generator | 1.11 s | 0.14 s | **7.9× faster** |
-| Re-generating after editing a member | 1.31 s | 0.19 s | **6.9× faster** |
-| Re-generating after editing a comment | 1.11 s | 0.19 s | **5.8× faster** |
-| IL of the generated code | 2.2 MB | 0.37 MB | **6.0× smaller** |
-
-</Tab>
-<Tab value="1,100 types (N = 100)">
-
-| | v3 (3.3.13) | v4 | v4 vs v3 |
-|---|---:|---:|---:|
-| Generated source | 62.0 MB (1,204,143 lines) | 3.9 MB (72,429 lines) | **16× smaller** |
-| Compiling the generated code (emit) | 636 s | 2.2 s | **289× faster** |
-| Running the generator | 5.5 s | 0.68 s | **8.1× faster** |
-| Re-generating after editing a member | 4.1 s | 0.57 s | **7.2× faster** |
-| Re-generating after editing a comment | 4.1 s | 0.45 s | **9.0× faster** |
-| IL of the generated code | 7.3 MB | 1.3 MB | **5.6× smaller** |
-
-v3's compile time grows much faster than the number of types: 3.3× the types took 11× the compile time (56 s → 636 s).
-
-</Tab>
-</Tabs>
-
 v3 inlined the body of every subtype into each polymorphic base and re-generated every type on every edit. v4 emits each body once and grows linearly: about 3.5 KB of source and 2 ms of compile time per type. Editing a type in the IDE re-generates that type only.
+
+Each stage, for 330 and 1,100 types, with the harness and how the times were taken: [Build Time and Generated Code](/en/docs/v4/perf#build-time-and-generated-code).
 
 ## Runtime
 

@@ -57,22 +57,35 @@ public sealed class Weapon
 </Tab>
 <Tab value="Factory method">
 
-```csharp
+```csharp title="Currency.cs"
 [NinoType]
-public class Move
+public sealed class Currency
 {
-    public ushort ClientX;
-    public ushort ClientY;
+    private static readonly ConcurrentDictionary<string, Currency> s_known = new();
 
-    private Move() { }
+    public string Code { get; }   // ISO 4217, upper case
+    public int Decimals { get; }  // digits after the decimal point
 
-    [NinoConstructor(nameof(ClientX), nameof(ClientY))] // [!code highlight]
-    public static Move Create(ushort clientX, ushort clientY)
+    private Currency(string code, int decimals)
     {
-        return new Move { ClientX = clientX, ClientY = clientY };
+        Code = code;
+        Decimals = decimals;
+    }
+
+    [NinoConstructor(nameof(Code), nameof(Decimals))] // [!code highlight]
+    public static Currency Of(string code, int decimals)
+    {
+        if (code is not { Length: 3 })
+            throw new FormatException($"Invalid currency code '{code}'.");
+        if (decimals is < 0 or > 4)
+            throw new ArgumentOutOfRangeException(nameof(decimals));
+
+        // normalize, and share one instance per code: a constructor can do neither
+        return s_known.GetOrAdd(code.ToUpperInvariant(), static (c, d) => new Currency(c, d), decimals);
     }
 }
 ```
+
 
 </Tab>
 <Tab value="Primary constructor">
@@ -124,7 +137,56 @@ Nino has two ways to hook into instance creation, each for a different job:
 | Receives | the deserialized values of the listed members | nothing |
 | Use it to | build immutable types, validate, compute derived state | take an instance from your own pool |
 | After the call | members that are not parameters are assigned | every member is filled in place |
+| Reuse | the type is re-created on every read, so it cannot be pooled (NINO018) | instances are reused; the way to deserialize with 0 GC |
+
+## Taking Instances from a Pool [#from-a-pool]
+
+A `[NinoFactory]` method is called only when Nino needs a **new** instance: the slot is `null`, a list grows, or a polymorphic slot changes type. Nino then fills the instance in place. Combined with [reuse deserialization](/en/docs/v4/pooling#deserializing-into-existing-instances) and a [recycler](/en/docs/v4/pooling#why-setrecycler) for the instances it drops, a stream of messages allocates nothing once the pool is warm:
+
+```csharp title="Order.cs"
+[NinoType]
+public sealed class Order
+{
+    public long Id;
+    public List<OrderLine> Lines = new(); // kept with the order, reused in place
+
+    [NinoFactory] // [!code highlight]
+    public static Order Rent() => ObjectPool<Order>.Rent(); // ObjectPool<T>: see Pooled Collections
+
+    public void Return()
+    {
+        Lines.Clear();
+        ObjectPool<Order>.Return(this);
+    }
+}
+
+[NinoType]
+public sealed class OrderBatch
+{
+    public List<Order> Orders;
+}
+
+[NinoType]
+public struct OrderLine
+{
+    public int ProductId;
+    public int Quantity;
+}
+```
+
+```csharp
+// at startup: orders dropped by a shrinking list go back to the pool
+NinoSettings.SetRecycler<Order>(order => order.Return());
+
+OrderBatch batch = null;
+foreach (byte[] data in messages)
+    NinoDeserializer.Deserialize(data, ref batch); // more orders: Order.Rent(); fewer: Return()
+```
+
+- The method must be `public`, `static`, callable without arguments (parameterless, or every parameter optional) and return exactly the declaring type; NINO017 reports otherwise. It must not return `null`.
+- An instance that already sits in the slot is filled in place; the factory is not called for it.
+- [`ObjectPool<T>`](/en/docs/v4/pooling#your-own-pooled-collections) is the small thread-local pool from the pooling page; any pool works. If you do not need a pool of your own, [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled) generates one and returns dropped instances with no recycler to register.
 
 ## Re-created Types
 
-Types whose members cannot be assigned after construction (constructor parameters, `init`-only, get-only or `readonly` members) are always **re-created** when deserialized, even by [reuse deserialization](/en/docs/v4/pooling); the old instance is passed to the recycler. Such types cannot use [`trackReferences`](/en/docs/v4/reference-tracking) (NINO016) or [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled) (NINO018). Give them settable members when you need either.
+A type with a `[NinoConstructor]`, or whose members cannot be assigned after construction (constructor parameters, `init`-only, get-only or `readonly` members), is always **re-created** when deserialized, even by [reuse deserialization](/en/docs/v4/pooling); the old instance is passed to the [recycler](/en/docs/v4/pooling#where-dropped-instances-go). Such types cannot use [`trackReferences`](/en/docs/v4/reference-tracking) (NINO016) or [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled) (NINO018). A `[NinoFactory]` method on such a type is not used. When you need any of these, for example to deserialize with 0 GC, give the type settable members and [take instances from a pool](#from-a-pool) instead.

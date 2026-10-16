@@ -1,5 +1,6 @@
 ---
 title: 序列化与反序列化
+seoTitle: "C# 序列化与反序列化 – Nino v4 文档"
 description: "用 NinoSerializer 和 NinoDeserializer 序列化与反序列化，复用缓冲区和实例，处理运行时类型。"
 icon: Play
 ---
@@ -76,7 +77,7 @@ writer.ReleaseReferences(); // ends reference tracking, see below
 
 <Callout type="info">
 
-顶层重载会把[引用追踪](/zh/docs/v4/reference-tracking)的范围限定在单次调用内。自己创建 `Writer`（或 `Reader`）时，通过它写入的所有内容共用一张引用表，直到调用 `ReleaseReferences()` 为止。请在每条逻辑消息结束时调用它；如果没有写入任何开启追踪的类型，这个调用没有开销。
+直接传入值、拿回字节（或传入缓冲区写入器）的调用，[引用追踪](/zh/docs/v4/reference-tracking)只覆盖这一次调用。自己创建 `Writer`（或 `Reader`）时，通过它写入的所有内容共用一张引用表，直到调用 `ReleaseReferences()` 为止。请在每条逻辑消息结束时调用它；如果没有写入任何开启追踪的类型，这个调用没有开销。
 
 </Callout>
 
@@ -189,14 +190,14 @@ byte[] bytes = NinoSerializer.Serialize(deepTree);
 var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
 ```
 
-被推迟的对象，在读到它的槽位时就立即创建并放入槽位，它的成员则在同一次调用中稍后读取，所以复用反序列化和 `[NinoPooled]` 仍然会复用每一个实例。有两种类不能这样推迟，总是在原处嵌套：
+像 `TreeNode` 这样的递归类型，只要数据是一棵树（每个节点只被引用一次），就不需要 `trackReferences`。如果某个节点出现了两次，或者对象图里有环，就给这个类型加上 [`trackReferences: true`](/zh/docs/v4/reference-tracking)。不加的话，共享的节点会被写成多份独立的副本；环（`a.Next = b; b.Next = a;`）会在写入时被检测出来，抛出带类型名并提示 `trackReferences` 的 `InvalidOperationException`，而不会无限循环下去。
+
+被推迟的对象，在 Nino 读到存放它的成员或集合元素时就立即创建并放进去，它的成员则在同一次调用中稍后读取，所以复用反序列化和 `[NinoPooled]` 仍然会复用每一个实例。有两种类不能这样推迟，总是在原处嵌套：
 
 - 由**构造函数**创建的类（位置记录、init-only 或只读成员），因为成员读完之前还没有实例；
 - **按值比较**的类（记录、重写了 `GetHashCode` 或实现了 `IComparable` 的类），因为 `HashSet<T>`、字典的键或有序集合可能会在成员读取之前就持有它。
 
 由这两种类组成的对象图，嵌套到 512 层就会抛出 `InvalidOperationException`。需要深度递归的类型，请给它无参构造函数和可赋值的成员。
-
-带**环**的对象图（`a.Next = b; b.Next = a;`）永远写不完，所以写入时会抛出带类型名的 `InvalidOperationException`。给环上的类型加上 [`trackReferences: true`](/zh/docs/v4/reference-tracking)，即可让每个对象只写一次并保留这个环。
 
 ## 无效数据 [#invalid-data]
 
@@ -205,3 +206,20 @@ var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
 嵌套很深的数据也不会导致栈溢出：参见[深层对象图](#deep-object-graphs)。
 
 但如果数据是按**另一个**布局兼容的类型写出的，Nino 察觉不到：字节里不带 schema。请自己给数据加上版本信息（参见[数据演进](/zh/docs/v4/evolving-data)和[存档文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）。
+
+## 术语 [#terms]
+
+本文档中有特定含义的词：
+
+- **顶层调用**：你直接传入值和 `byte[]`、span 或缓冲区写入器的 `NinoSerializer.Serialize(...)` 或 `NinoDeserializer.Deserialize(...)` 调用；与之相对的是传入你自己创建的 `Writer` 或 `Reader` 的调用，以及 Nino 在一次调用内部读写的那些值。每次顶层调用都自成一体：它自己开始并结束[引用追踪](/zh/docs/v4/reference-tracking)。
+- **装箱重载**：接收 `object` 和 `Type` 的那些重载（`Serialize(object)`、`SerializeBoxed`、`Deserialize(data, type)`、`DeserializeBoxed`），用于运行时才知道的类型；参见[运行时类型](#runtime-types)。
+- **格式化器**：负责读写某一种类型的代码：每个 `[NinoType]` 都有生成的格式化器，BCL 类型的格式化器内置在 Nino 中，也可以[自己编写](/zh/docs/v4/custom-formatters)。**格式化器缓存**是 `NinoFormatterCache<T>`，调用通过这个静态字段找到 `T` 的格式化器。
+- **拦截的调用**：使用 .NET 8 SDK 及以上版本时，源生成器会把编译期就知道类型的每个调用直接转给该类型的格式化器，跳过格式化器缓存；参见[拦截器](/zh/docs/v4/performance#interceptors)。
+- **暂存缓冲区**：Nino 为每个线程保留的一个 `NinoArrayBufferWriter`。返回 `byte[]` 的调用，以及写入 `NinoArrayBufferWriter` 以外的缓冲区写入器的调用，会先序列化到这里，再把字节拷贝出去。
+- **原始值**（原始结构体）：Nino 按内存原样写入的非托管值，只需一次拷贝，填充字节清零：基元类型、枚举、`DateTime`、`Guid`，以及符合条件的非托管结构体（参见[结构体](/zh/docs/v4/defining-types#structs)）。原始值的数组和列表是一次整块拷贝。
+- **固定大小的类型**：每个值都占用相同字节数的结构体或密封类，字节数由 `NinoSerializer.GetFixedSize<T>()` 返回；参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
+- **按位置**：`[NinoType]` 的默认格式：成员按声明顺序写入，不带名称和长度。最小、最快，但成员的任何改动都会改变格式；参见[数据演进](/zh/docs/v4/evolving-data#positional)。
+- **槽位**：存放一个值的地方：一个成员、一个集合元素、一个字典值，或者你按 `ref` 传入的变量。Nino 为一个值写出什么，取决于槽位的声明类型。
+- **头部**：Nino 在类的值之前写入的字节：密封类是 1 字节的 null 标志，可能有子类型的类型是 4 字节的类型 id；结构体没有头部。参见[多态值的写入方式](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)。
+- **回收器**：接收[复用反序列化](/zh/docs/v4/pooling)从槽位中丢弃的实例的地方：用 `NinoSettings.SetRecycler<T>` 注册的处理函数；没有的话，交给实例自己的对象池（`ReturnToPool()`）；再没有就不处理。参见[被丢弃的实例去哪里](/zh/docs/v4/pooling#where-dropped-instances-go)。
+- **推迟的对象**：嵌套超过 128 层的对象，会在较浅的层级稍后写入和读取，让栈的用量保持有界；参见[深层对象图](#deep-object-graphs)。

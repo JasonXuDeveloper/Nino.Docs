@@ -1,6 +1,6 @@
 ---
 title: Reference Tracking
-description: Preserve shared references and cycles.
+description: "Serialize object graphs with shared references and cycles: opt in per type; types that don't opt in pay nothing."
 icon: Share2
 ---
 
@@ -42,7 +42,7 @@ Without tracking, the save would load two separate `Guild` objects, and a rename
 - Each tracked object is written after a 4-byte reference header; an object already written in the same call is written as just its index.
 - Shared references keep their identity across members of any declared type, including `object` and interfaces.
 - Tracking covers `[NinoType]` classes, not collections: the same `List<T>` in two members is still written twice.
-- Cost: a small fixed cost per top-level call, plus 4 bytes and one identity lookup per tracked object. Calls without tracked objects pay nothing.
+- Cost: a small fixed cost per `NinoSerializer`/`NinoDeserializer` call you make (a [top-level call](/en/docs/v4/basic#terms)), plus 4 bytes and one identity lookup per tracked object. Calls without tracked objects pay nothing.
 
 <Callout type="warn">
 
@@ -65,7 +65,7 @@ Network messages, configuration and other tree-shaped data have no shared refere
 </Accordion>
 <Accordion title="Writing and reading several values yourself">
 
-The top-level `NinoSerializer`/`NinoDeserializer` calls scope the reference table to one call. When you create a `Writer` or `Reader` yourself, references are shared across everything written through it until you call `ReleaseReferences()`. Call it at the end of each logical message.
+A call that takes your value and returns bytes (or writes into a buffer writer), and a call that reads a value from a span, keep the reference table to that one call. When you create a `Writer` or `Reader` yourself, references are shared across everything written through it until you call `ReleaseReferences()`. Call it at the end of each logical message.
 
 </Accordion>
 </Accordions>

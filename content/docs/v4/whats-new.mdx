@@ -20,7 +20,7 @@ The baseline is v3 **3.3.13**, the last v3 release, run back to back with v4 on 
 
 <BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="en" />
 
-Serializing classes is clearly faster. Deserializing is on par with v3. Its cost is dominated by allocating the result objects, and v4 also handles reference tracking, reuse deserialization and payload validation on top of that. Arrays of structs with padding serialize a few nanoseconds slower, because v4 zeroes the padding to keep the output deterministic; a struct without padding (see [Struct Layout](/en/docs/v4/performance#struct-layout)) copies as fast as in v3.
+Serializing classes is clearly faster; deserializing is on par with v3. Why, and the one case where v4 is a few nanoseconds slower: [v3 vs v4](/en/docs/v4/v3-vs-v4#runtime).
 
 ## Faster to Build
 
@@ -28,33 +28,21 @@ The v3 generator inlined the body of every subtype into each polymorphic base an
 
 <BenchmarkChart chart="compile" lang="en" />
 
-<Callout type="info" title="1,100 types (N = 100)">
-
-v3 takes 636 s to compile the generated code; v4 takes 2.2 s (**289× faster**) and generates 16× less source. v3's compile time grows much faster than the number of types: 3.3× the types took 11× the compile time (56 s → 636 s). v4 grows linearly: about 3.5 KB of source and 2 ms of compile time per type.
-
-</Callout>
+The larger the project, the bigger the gap. The numbers for 330 and 1,100 types, and how they were measured: [Build Time and Generated Code](/en/docs/v4/perf#build-time-and-generated-code).
 
 ## Faster than MemoryPack
 
-Measured against MemoryPack in the same run. Nino wins clearly when serializing (up to <BenchValue k="serialize.max" />), leads on classes and polymorphic graphs when deserializing (up to <BenchValue k="deserialize.max" />), and is close on raw arrays, where both do a single `memcpy`.
+Measured against MemoryPack in the same run. Nino wins clearly when serializing (up to <BenchValue k="serialize.max" />), leads on classes and polymorphic graphs when deserializing (up to <BenchValue k="deserialize.max" />), and is close on arrays of unmanaged values, where both do a single `memcpy`.
 
 <BenchSource lang="en" />
 
 <BenchmarkChart chart={['serialize', 'deserialize']} lang="en" />
 
-<Callout type="info" title="Vector4[10000]">
-
-Deserializing `Vector4[10000]` allocates a 160 KB array on the large object heap per call, so it mostly measures gen-2 garbage collections and varies between runs; MemoryPack can come out ahead there.
-
-</Callout>
-
 ### Deserialize into Existing Objects
 
-New in v4: deserialize by `ref` into the objects you already have, with any new instances taken from [`[NinoPooled]`](/en/docs/v4/pooling) pools. Against MemoryPack's overwrite mode, Nino is up to **<BenchValue k="reuse.max" /> faster**, and on the pooled paths it allocates **0 B** per call, while MemoryPack allocates on every call (see the chart).
+New in v4: deserialize by `ref` into the objects you already have, with any new instances taken from [`[NinoPooled]`](/en/docs/v4/pooling) pools. Against MemoryPack's overwrite mode, Nino is up to **<BenchValue k="reuse.max" /> faster**, and on the pooled paths it allocates **0 B** per call, while MemoryPack allocates on every call ([pooling results](/en/docs/v4/perf#pooling)).
 
-<BenchmarkChart chart={['reuse', 'allocation']} lang="en" />
-
-Neither library allocates when serializing, and payloads are about the same size (`SimpleClass`: <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack). Read the [full comparison with MemoryPack](/en/docs/v4/vs-memorypack), including where MemoryPack is still ahead, and the [benchmark tables](/en/docs/v4/perf).
+Neither library allocates when serializing, and payloads are about the same size (`SimpleClass`: <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack). Read the [full comparison with MemoryPack](/en/docs/v4/vs-memorypack), including [where MemoryPack is still ahead](/en/docs/v4/vs-memorypack#where-memorypack-is-ahead), and every measurement on [Benchmarks](/en/docs/v4/perf).
 
 ## What You Get
 
@@ -65,8 +53,8 @@ Neither library allocates when serializing, and payloads are about the same size
   <Card icon={<KeyRound />} title="Keyed members and versioning" href="/en/docs/v4/evolving-data">
     `keyed: true` lets you reorder, remove and insert members; `versionTolerant: true` lets you append them, at 4 bytes per object.
   </Card>
-  <Card icon={<Share2 />} title="trackReferences" href="/en/docs/v4/reference-tracking">
-    Shared references and cycles survive a round trip, at 4 bytes per tracked object.
+  <Card icon={<Share2 />} title="Reference tracking" href="/en/docs/v4/reference-tracking">
+    With `trackReferences: true`, shared references and cycles survive a round trip, at 4 bytes per tracked object.
   </Card>
   <Card icon={<ShieldCheck />} title="Analyzers NINO001–NINO024" href="/en/docs/v4/analyzers">
     Mistakes reported while you type, many with a one-click code fix.

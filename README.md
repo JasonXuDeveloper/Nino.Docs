@@ -33,7 +33,7 @@ Deploy from Git (Pages builds each push) or by hand with `bun run deploy` (`wran
 
 Functions:
 
-- `functions/[[path]].ts`: redirects paths without a language (such as `/`) to `/en` or `/zh` (the `FD_LOCALE` cookie, else the visitor's country), and serves a docs page as Markdown when the request prefers `text/markdown` (for LLM tools).
+- `functions/[[path]].ts`: redirects paths without a language (such as `/`) to `/en` or `/zh` (the `FD_LOCALE` cookie, else the visitor's country), serves a docs page as Markdown when the request prefers `text/markdown` (for LLM tools), and sets the headers of the `.md` copies (`text/markdown`, canonical link to the page).
 - `functions/api/feedback.ts`: the "How is this guide?" and per-paragraph feedback. It posts to the **Docs Feedback** discussion category of [JasonXuDeveloper/Nino](https://github.com/JasonXuDeveloper/Nino/discussions) through a GitHub App with Discussions read and write permission.
 
 Environment variables (Pages project, **Production**, encrypted):
@@ -46,7 +46,39 @@ Environment variables (Pages project, **Production**, encrypted):
 
 Feedback only works on **production**. Preview deployments and `bun run preview` have no credentials: the API answers `503`, and the page tells the reader the feedback could not be sent. Nothing else needs a secret; search is a static index (`/api/search.json`) searched in the browser.
 
-`public/_routes.json` keeps the old-URL paths out of the functions, so the `public/_redirects` rules (which Pages does not apply to requests that reach a function) still handle them. Pages serves each page at its trailing-slash URL (`/en/docs/v4/start/`) and redirects the bare path there; unknown paths get `404.html` with a 404 status.
+`public/_routes.json` keeps the old-URL paths out of the functions, so the `public/_redirects` rules (which Pages does not apply to requests that reach a function) still handle them. `scripts/generate-static.ts` moves every prerendered page from `x/index.html` to `x.html`, so Pages serves each page at its slash-less URL (`/en/docs/v4/start`, the URL used by every link, canonical tag and sitemap entry) and redirects `/en/docs/v4/start/` and `.html` there with a 308; unknown paths get `404.html` with a 404 status.
+
+## Search engines and AI answer engines
+
+Everything is generated at build time; nothing costs anything at run time.
+
+| What | Where |
+| --- | --- |
+| `<title>` ("Page – Nino v4 Docs", or the page's `seoTitle` frontmatter), description, canonical, hreflang (`en`, `zh`, `zh-CN`, `x-default`), Open Graph and Twitter cards, `robots` | `src/lib/seo.ts`, used by the `meta` exports of `app/routes/home.tsx` and `app/routes/docs.tsx` |
+| JSON-LD: `WebSite`, `TechArticle` (with `dateModified` from git), `BreadcrumbList` on every docs page; `FAQPage` on pages with `faq: true`; `SoftwareSourceCode` / `SoftwareApplication` (GitHub, NuGet, OpenUPM, MIT) on the home pages | `src/lib/seo.ts` |
+| Social cards: one 1200×630 PNG per page (`/og/en/docs/v4/start.png`), drawn with sharp; `public/og.png` is the fallback (`bun run og:default` redraws it) | `scripts/og.ts` |
+| `sitemap.xml` (home and every v4 page in both languages, `lastmod` from git, `xhtml:link` alternates), `robots.txt` | `scripts/generate-static.ts` |
+| `llms.txt` / `llms-full.txt` ([llmstxt.org](https://llmstxt.org)), Chinese at `llms.zh.txt` / `llms-full.zh.txt` (also `/zh/llms.txt`); a Markdown copy of every page at `<page>.md` (`.mdx` kept for old links) with the title, URL, version and last-updated date, components rendered to Markdown tables and text | `scripts/generate-static.ts`, `src/lib/markdown.tsx` |
+| Markdown responses: `.md` files are served as `text/markdown` with a `Link: <page>; rel="canonical"` header; a page requested with `Accept: text/markdown` gets its Markdown; `.data` files are `noindex` | `functions/[[path]].ts` |
+
+**Archived versions** (v3, v2) are `noindex, follow`, left out of the sitemap and listed only under "Optional" in `llms.txt`. Their APIs and binary formats differ from v4, so they must not rank for, or be quoted in answers about, the current version; they keep a self-referencing canonical (a canonical to the v4 page would be ignored, as the content differs) and the "old version" banner links to the v4 page.
+
+**Crawlers, including AI crawlers, are allowed.** `robots.txt` allows every crawler and names the search engines and AI crawlers (GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-SearchBot, Claude-User, PerplexityBot, Google-Extended, Applebot-Extended, Bingbot, Baiduspider, ...) explicitly: the goal is to be found, quoted and cited. Only `/api/` is disallowed. In the Cloudflare dashboard, keep **Security → Bots → "Block AI bots"** off and **"Manage your robots.txt" (AI Crawl Control)** off for `nino.xgamedev.net`: either one overrides this `robots.txt` or blocks those crawlers at the edge.
+
+### After the first deploy
+
+1. **Cloudflare Crawler Hints**: turn on **Caching → Configuration → Crawler Hints** for the zone (free). Cloudflare then sends IndexNow signals (Bing, Yandex and others) on its own when content changes; there is nothing to run after a deploy.
+2. **Google Search Console**: add a Domain property for `xgamedev.net` (verified with a DNS TXT record in Cloudflare) and submit `https://nino.xgamedev.net/sitemap.xml`.
+3. **Bing Webmaster Tools**: import the site from Search Console and submit the sitemap.
+4. **Baidu Search Resource Platform** (ziyuan.baidu.com): verify with the CNAME method (a DNS record in Cloudflare) and submit the sitemap.
+
+The HTML-tag verification methods are optional: set any of these on the Pages project (Production, plain text) and the build adds the matching `<meta>` tag to every page (`src/lib/site.ts`); unset ones are left out.
+
+| Variable | Tag |
+| --- | --- |
+| `VITE_GOOGLE_SITE_VERIFICATION` | `google-site-verification` |
+| `VITE_BING_SITE_VERIFICATION` | `msvalidate.01` |
+| `VITE_BAIDU_SITE_VERIFICATION` | `baidu-site-verification` |
 
 ## Benchmark data
 

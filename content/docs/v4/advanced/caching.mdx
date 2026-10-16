@@ -1,0 +1,189 @@
+---
+title: Caching
+seoTitle: "Caching with Redis and IDistributedCache in C# – Nino v4 Docs"
+description: "Nino as the value format of a cache: Redis and other distributed caches, IDistributedCache and HybridCache, in-process caches of serialized blobs, and schema changes across deployments."
+icon: DatabaseZap
+---
+
+A cache stores values as bytes: Redis strings, `IDistributedCache` entries, memcached items, or `byte[]` in a dictionary of your own. Nino turns a value into those bytes and back with no reflection and no per-call allocations of its own, and the payload is compact, so more entries fit in the same memory and less data crosses the network.
+
+The examples below use a profile type:
+
+```csharp title="UserProfile.cs"
+using Nino.Core;
+
+[NinoType(versionTolerant: true)] // cached data outlives a deployment, see below
+public sealed class UserProfile
+{
+    public long Id;
+    public string DisplayName;
+    public string Email;
+    public DateTime UpdatedAt;
+    public List<string> Roles;
+}
+```
+
+## Redis [#redis]
+
+Any Redis client takes and returns values as bytes. With [StackExchange.Redis](https://stackexchange.github.io/StackExchange.Redis/), serialize into a reused buffer and pass its memory directly, and read with `StringGetLease`, which hands you pooled bytes instead of a new `byte[]`:
+
+```csharp title="RedisProfileCache.cs"
+using Nino.Core;
+using StackExchange.Redis;
+
+public sealed class RedisProfileCache
+{
+    private readonly IDatabase _db;
+    [ThreadStatic] private static NinoArrayBufferWriter t_buffer;
+
+    public RedisProfileCache(IConnectionMultiplexer redis) => _db = redis.GetDatabase();
+
+    private static RedisKey Key(long id) => "profile:v1:" + id; // the key carries a schema version
+
+    public void Set(UserProfile profile, TimeSpan ttl)
+    {
+        var buffer = t_buffer ??= new NinoArrayBufferWriter(1024);
+        buffer.ResetWrittenCount();
+        NinoSerializer.Serialize(profile, buffer);
+        _db.StringSet(Key(profile.Id), buffer.WrittenMemory, ttl); // synchronous: done before the buffer is reused
+    }
+
+    public UserProfile Get(long id)
+    {
+        using Lease<byte> lease = _db.StringGetLease(Key(id));      // pooled bytes, no byte[] per read
+        if (lease == null)
+            return null;
+        return NinoDeserializer.Deserialize<UserProfile>(lease.Span);
+    }
+}
+```
+
+The Redis calls are an illustration; the Nino part is the same with any client. If you use the async API (`StringSetAsync`), await it before the buffer is reset, or serialize with `NinoSerializer.Serialize(profile)` and pass the `byte[]`.
+
+## IDistributedCache [#idistributedcache]
+
+`IDistributedCache` (Redis, SQL Server, and other ASP.NET Core cache providers) stores `byte[]`. Two extension methods are enough:
+
+```csharp title="DistributedCacheExtensions.cs"
+using Microsoft.Extensions.Caching.Distributed;
+using Nino.Core;
+
+public static class DistributedCacheExtensions
+{
+    public static Task SetNinoAsync<T>(this IDistributedCache cache, string key, T value,
+        DistributedCacheEntryOptions options, CancellationToken ct = default) =>
+        cache.SetAsync(key, NinoSerializer.Serialize(value), options, ct);
+
+    public static async Task<T> GetNinoAsync<T>(this IDistributedCache cache, string key,
+        CancellationToken ct = default)
+    {
+        byte[] bytes = await cache.GetAsync(key, ct);
+        return bytes == null ? default : NinoDeserializer.Deserialize<T>(bytes);
+    }
+}
+```
+
+The interface takes and returns arrays, so each call allocates one `byte[]`: that is the cache API's cost, not Nino's.
+
+## HybridCache [#hybridcache]
+
+`HybridCache` (`Microsoft.Extensions.Caching.Hybrid`, .NET 9 and later) writes values into an `IBufferWriter<byte>` and reads them from a `ReadOnlySequence<byte>`, which matches Nino's API directly:
+
+```csharp title="NinoHybridSerializer.cs"
+using System.Buffers;
+using Microsoft.Extensions.Caching.Hybrid;
+using Nino.Core;
+
+public sealed class NinoHybridSerializer<T> : IHybridCacheSerializer<T>
+{
+    public void Serialize(T value, IBufferWriter<byte> target) => NinoSerializer.Serialize(value, target);
+
+    public T Deserialize(ReadOnlySequence<byte> source)
+    {
+        if (source.IsSingleSegment)
+            return NinoDeserializer.Deserialize<T>(source.First.Span);
+
+        int length = checked((int)source.Length);
+        byte[] rented = ArrayPool<byte>.Shared.Rent(length);
+        try
+        {
+            source.CopyTo(rented);
+            return NinoDeserializer.Deserialize<T>(rented.AsSpan(0, length));
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rented);
+        }
+    }
+}
+
+// registration
+services.AddHybridCache()
+    .AddSerializer<UserProfile, NinoHybridSerializer<UserProfile>>();
+```
+
+Register one serializer per cached type. Calls inside the generic serializer are not [intercepted](/en/docs/v4/performance#interceptors), because `T` is a type parameter there; they take the regular path, a few nanoseconds slower per call.
+
+## In-Process Blob Caches [#in-process-blob-caches]
+
+An in-process cache usually holds live objects. Holding the serialized bytes instead has three effects:
+
+- **Isolation.** Every read deserializes a fresh copy, so a caller that modifies its value cannot corrupt the cached one or race with another thread.
+- **Footprint.** A `byte[]` is one object for the garbage collector to track, instead of a graph of objects, lists and strings.
+- **Reuse.** A caller that keeps an instance can deserialize into it with `ref` and allocate nothing.
+
+```csharp title="BlobCache.cs"
+using System.Collections.Concurrent;
+using Nino.Core;
+
+/// <summary>Holds values as bytes: compact, and every reader gets its own copy.</summary>
+public sealed class BlobCache<TKey, TValue>
+{
+    private readonly ConcurrentDictionary<TKey, byte[]> _entries = new();
+
+    public void Set(TKey key, TValue value) => _entries[key] = NinoSerializer.Serialize(value);
+
+    public bool TryGet(TKey key, out TValue value)
+    {
+        if (_entries.TryGetValue(key, out byte[] bytes))
+        {
+            value = NinoDeserializer.Deserialize<TValue>(bytes);
+            return true;
+        }
+        value = default;
+        return false;
+    }
+
+    /// <summary>Reads into an instance the caller keeps: no allocation once it has the right shape.</summary>
+    public bool TryGetInto(TKey key, ref TValue value)
+    {
+        if (!_entries.TryGetValue(key, out byte[] bytes))
+            return false;
+        NinoDeserializer.Deserialize(bytes, ref value);
+        return true;
+    }
+}
+```
+
+The trade-off is a deserialization per read. For values read far more often than they change and never modified by readers, caching the objects themselves is cheaper.
+
+## Schema Changes Across Deployments [#schema-changes]
+
+A shared cache outlives the process that wrote it: during a rolling deployment, old and new instances read each other's entries. Pick one of these for every cached type:
+
+| Approach | How | When |
+| --- | --- | --- |
+| Tolerant types | [`versionTolerant: true`](/en/docs/v4/evolving-data#version-tolerance) (append members) or [`keyed: true`](/en/docs/v4/evolving-data#keyed-members) (any change) | Entries should survive the deployment. |
+| Versioned keys | Put a schema version in the key (`profile:v2:42`) and bump it when the type changes | The type changes in ways the options above do not cover, or the cache is cheap to refill. |
+| Treat failures as misses | Catch the `InvalidOperationException` that invalid data throws, delete the entry and load from the source | A safety net on top of either approach, not a replacement: bytes written for a different type with a compatible layout can deserialize without an error. |
+
+A [positional](/en/docs/v4/evolving-data#positional) type (bare `[NinoType]`) is the smallest and fastest, but any change to its members makes old entries unreadable. Use it for cached values only together with versioned keys.
+
+Nino checks every length and bound while reading, so a truncated or corrupt entry throws instead of reading out of range. The bytes carry no schema, though: see [Invalid Data](/en/docs/v4/basic#invalid-data).
+
+## Checklist [#checklist]
+
+- [ ] Every cached type is `versionTolerant` or `keyed`, or its keys carry a schema version.
+- [ ] Writes reuse a buffer per thread; async writes await before the buffer is reset.
+- [ ] Reads deserialize from the client's pooled memory (`Lease<byte>`, a `ReadOnlySequence<byte>`) where the client offers it.
+- [ ] Deserialization failures are treated as cache misses.

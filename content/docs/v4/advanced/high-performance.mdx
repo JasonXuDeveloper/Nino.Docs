@@ -4,7 +4,7 @@ description: "Zero-allocation patterns: reused buffers, span-based reads, reuse 
 icon: Gauge
 ---
 
-`NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)` are already fast, but each call allocates its result. On a hot path (a server tick, a render frame, a message loop) these patterns bring both directions down to **0 B per call**.
+`NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)` are already fast, but each call allocates its result. On a hot path (a server tick, a render frame, a message loop) these patterns bring both directions down to **0 B per call**. For short, copyable recipes built on them, see [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation).
 
 ## Serialize into a Reused Buffer
 
@@ -71,7 +71,7 @@ reader.ReleaseReferences();
 
 ## Serialize into Any IBufferWriter
 
-Any `IBufferWriter<byte>` works as a destination: a `PipeWriter`, Kestrel's response body writer, an `ArrayBufferWriter<byte>`. Nino writes into a thread-local scratch buffer and then copies the result into the writer once, so nothing is allocated per call:
+Any `IBufferWriter<byte>` works as a destination: a `PipeWriter`, Kestrel's response body writer, an `ArrayBufferWriter<byte>`. Nino writes into a per-thread [scratch buffer](/en/docs/v4/basic#terms) and then copies the result into the writer once, so nothing is allocated per call:
 
 ```csharp
 NinoSerializer.Serialize(message, pipeWriter); // one copy into the pipe's memory
@@ -109,11 +109,11 @@ while (TryReceive(out ReadOnlySpan<byte> frame))
 
 - Lists and arrays are reused element by element; dictionaries are merged by key.
 - Types that cannot be filled in place (positional records, `init`-only or get-only members) are re-created.
-- When an existing instance is **dropped** (the data holds `null`, a list shrinks, a key disappears, the polymorphic type changes), it is handed once to the slot's recycler instead of being silently overwritten. This is what makes reuse deserialization safe with pools; see [Reuse Deserialization and Pooling](/en/docs/v4/pooling#deserializing-into-existing-instances).
+- When an existing instance is **dropped** (the data holds `null`, a list shrinks, a key disappears, the polymorphic type changes), it is handed once to the [recycler](/en/docs/v4/pooling#where-dropped-instances-go) of the member or element that held it, instead of being silently overwritten. This is what makes reuse deserialization safe with pools; see [Reuse Deserialization and Pooling](/en/docs/v4/pooling#deserializing-into-existing-instances).
 
 ## Pool What You Create
 
-Reuse deserialization reuses what you already hold. `[NinoPooled]` covers the rest: whenever Nino has to **create** an instance of the type (top level, member, element of a growing list), it takes one from a pool first, and dropped instances go back to that pool automatically.
+Reuse deserialization reuses what you already hold. `[NinoPooled]` covers the rest: whenever Nino has to **create** an instance of the type (the value you deserialize, a member, an element of a growing list), it takes one from a pool first, and dropped instances go back to that pool automatically.
 
 <Steps>
 <Step>
@@ -163,7 +163,7 @@ NinoDeserializer.Deserialize(frame2, ref snapshot); // bullets that disappeared 
 
 ### Return what you own
 
-When you are done with an instance you received at the top level, hand it back:
+When you are done with an instance that `Deserialize` returned to you, hand it back:
 
 ```csharp
 var bullet = NinoDeserializer.Deserialize<Bullet>(data);

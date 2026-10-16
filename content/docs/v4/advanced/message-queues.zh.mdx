@@ -1,0 +1,195 @@
+---
+title: 消息队列与事件流
+seoTitle: "C# 消息队列序列化：Kafka 与事件流 – Nino v4 文档"
+description: "在 Kafka 等消息中间件上使用 Nino：多态事件类型、序列化器、批量发送、遥测与行情数据流，以及跨越多次部署的主题。"
+icon: MessagesSquare
+---
+
+Kafka、RabbitMQ、Azure Service Bus、NATS 这类消息中间件传递的都是不透明的字节负载，Nino 正好用来填充它们：生产者序列化事件，消费者从收到的字节反序列化，负载紧凑，两端读写都快。自建的事件流（走 socket 或写文件）也是一样。
+
+本指南关注它和请求/响应式通信的不同之处：消息会在主题里保留好几天，消费者运行的代码可能比生产者旧也可能比它新，事件的速率也很高。
+
+## 定义事件 [#define-the-events]
+
+一个流里的事件从同一个基类派生。Nino 会随每个值写入它的运行时类型，所以消费者按 `OrderEvent` 读取，得到的就是 `OrderPlaced`，不需要自己写类型头：
+
+```csharp title="OrderEvents.cs"
+using Nino.Core;
+
+[NinoType(versionTolerant: true)] // subtypes inherit [NinoType] and its options
+public abstract class OrderEvent
+{
+    public Guid OrderId;
+    public DateTime OccurredAt;
+}
+
+public sealed class OrderPlaced : OrderEvent
+{
+    public long CustomerId;
+    public List<OrderLine> Lines;
+}
+
+public sealed class OrderShipped : OrderEvent
+{
+    public string Carrier;
+    public string TrackingNumber;
+}
+
+public sealed class OrderCancelled : OrderEvent
+{
+    public string Reason;
+}
+
+[NinoType]
+public struct OrderLine          // unmanaged: copied as raw memory, lists of it as one block
+{
+    public int ProductId;
+    public int Quantity;
+    public decimal UnitPrice;
+}
+```
+
+```csharp
+switch (NinoDeserializer.Deserialize<OrderEvent>(payload))
+{
+    case OrderPlaced placed:       Reserve(placed); break;
+    case OrderShipped shipped:     Notify(shipped); break;
+    case OrderCancelled cancelled: Release(cancelled); break;
+}
+```
+
+类型 id 是类型全名的哈希：给事件改名时要加上 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)，否则主题里的旧消息就读不出来了。详见[多态](/zh/docs/v4/polymorphism)。
+
+## Kafka [#kafka]
+
+[Confluent.Kafka](https://github.com/confluentinc/confluent-kafka-dotnet) 为键和值的类型各接收一个序列化器和反序列化器。它的反序列化器拿到的是 `ReadOnlySpan<byte>`，Nino 可以直接读取：
+
+```csharp title="NinoKafkaSerializer.cs"
+using Confluent.Kafka;
+using Nino.Core;
+
+public sealed class NinoKafkaSerializer<T> : ISerializer<T>, IDeserializer<T>
+{
+    public static readonly NinoKafkaSerializer<T> Instance = new();
+
+    public byte[] Serialize(T data, SerializationContext context) => NinoSerializer.Serialize(data);
+
+    public T Deserialize(ReadOnlySpan<byte> data, bool isNull, SerializationContext context) =>
+        isNull ? default : NinoDeserializer.Deserialize<T>(data);
+}
+```
+
+```csharp
+using var producer = new ProducerBuilder<Guid, OrderEvent>(config)
+    .SetKeySerializer(NinoKafkaSerializer<Guid>.Instance)
+    .SetValueSerializer(NinoKafkaSerializer<OrderEvent>.Instance)
+    .Build();
+await producer.ProduceAsync("orders", new Message<Guid, OrderEvent> { Key = evt.OrderId, Value = evt });
+
+using var consumer = new ConsumerBuilder<Guid, OrderEvent>(consumerConfig)
+    .SetKeyDeserializer(NinoKafkaSerializer<Guid>.Instance)
+    .SetValueDeserializer(NinoKafkaSerializer<OrderEvent>.Instance)
+    .Build();
+```
+
+Kafka 的 `ISerializer<T>` 返回 `byte[]`，所以每生产一条消息都会分配一个数组。`Guid` 键是原始值：16 字节，一次拷贝完成读写。
+
+## 其他消息中间件 [#other-brokers]
+
+其他客户端大多接受 `byte[]` 或 `ReadOnlyMemory<byte>` 形式的消息体：
+
+- 消息体是 `ReadOnlyMemory<byte>` 时，序列化到复用的 `NinoArrayBufferWriter`，传入 `WrittenMemory`。等发布调用完成后（`await` 之后）再重置缓冲区，因为客户端可能还在读取它。
+- 消息体是 `byte[]` 时，直接传 `NinoSerializer.Serialize(evt)`。
+- 消费端把收到的消息体（`ReadOnlyMemory<byte>.Span` 或数组）交给 `NinoDeserializer.Deserialize<T>`，不需要先拷贝一份。
+
+如果中间件在处理函数返回后会复用消息体的内存，就在处理函数内部完成反序列化；反序列化的结果不会引用输入的字节。
+
+## 批量发送 [#batching]
+
+小事件（一次点击、一次价格变动、一个指标）往往批量发送更划算：一条中间件消息、一次网络往返、一个消息头。先写入数量，再依次写入各个事件：
+
+```csharp title="EventBatch.cs"
+using Nino.Core;
+
+public static class EventBatch
+{
+    public static void Write(NinoArrayBufferWriter buffer, IReadOnlyList<OrderEvent> events)
+    {
+        buffer.ResetWrittenCount();
+        var writer = new Writer(buffer);
+        writer.Write(events.Count);
+        for (int i = 0; i < events.Count; i++)
+            NinoSerializer.Serialize(events[i], ref writer);
+        writer.Flush();
+    }
+
+    public static void Read(ReadOnlySpan<byte> payload, Action<OrderEvent> handle)
+    {
+        var reader = new Reader(payload);
+        int count = reader.Read<int>();
+        for (int i = 0; i < count; i++)
+            handle(NinoDeserializer.Deserialize<OrderEvent>(ref reader));
+    }
+}
+```
+
+每个事件保留各自的类型，所以同一批里可以混合 `OrderPlaced` 和 `OrderShipped`。在 `[NinoType]` 类里用一个 `List<OrderEvent>` 成员也能达到同样效果，还多了存放批次级字段（生产者 id、序号）的地方。
+
+## 遥测与行情数据流 [#telemetry-and-tick-streams]
+
+指标、链路追踪和行情数据以很高的速率到达，每条都是又小又扁平的记录。把每条记录定义为非托管结构体，放在列表里发送：
+
+```csharp title="Samples.cs"
+using Nino.Core;
+
+[NinoType]
+public struct Sample             // fixed-size, copied as raw memory
+{
+    public long Timestamp;
+    public int SeriesId;
+    public float Value;
+}
+
+[NinoType]
+public sealed class SampleBatch
+{
+    public string Host;
+    public long Sequence;
+    public List<Sample> Samples;   // one block copy; keeps its capacity between batches
+}
+
+public sealed class SampleConsumer
+{
+    private SampleBatch _batch;     // reused for every message
+
+    public void OnMessage(ReadOnlySpan<byte> payload)
+    {
+        NinoDeserializer.Deserialize(payload, ref _batch);
+        foreach (Sample sample in _batch.Samples)
+            Record(sample);
+    }
+}
+```
+
+- 无论多长，样本列表的读写都只是**一次整块拷贝**。
+- 反序列化到同一个 `SampleBatch` 会复用对象本身和列表的底层数组。每条消息唯一的分配是 `Host` 字符串，它本身就是数据；如果连这都在意，就发送 id 而不是名称。
+- 需要按位置查找的记录（一个文件里一整天的 tick），见[固定大小的记录](/zh/docs/v4/advanced/zero-allocation#fixed-size-records)。
+
+## 跨越多次部署的主题 [#topics-that-outlive-a-deployment]
+
+今天写入的消息可能下个月才被消费，读取它的代码在写入时还不存在；消费者也可能从头重放整个主题。
+
+- 每个事件类型都设为 [`versionTolerant`](/zh/docs/v4/evolving-data#version-tolerance)（追加字段）或 [`keyed`](/zh/docs/v4/evolving-data#keyed-members)（任意修改）。这样消费者会跳过不认识的字段，旧消息中缺少的字段保留构造函数或字段初始化器给出的值。
+- 在 `versionTolerant` 的继承体系中，只向具体的事件类（`OrderPlaced` 等）追加成员，不要加到 `OrderEvent` 上：追加到基类的成员会把每个子类的成员往后挤。如果基类需要新成员，请改用 `keyed`。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
+- 消费者收到不认识的事件**类型**时无法读取：反序列化会抛出 `InvalidOperationException`（未知的类型 id）。先部署消费者，再部署会产生新事件类型的生产者；或者把新类型放到新的主题里。
+- 在同一次部署内就会被消费掉的消息（几秒内清空的任务队列）用[按位置](/zh/docs/v4/evolving-data#positional)的类型（不带参数的 `[NinoType]`）即可。它们的字节会随成员的每次改动而变化。
+
+文件中的追加日志（基于本地存储的事件溯源）见[追加日志](/zh/docs/v4/advanced/persistence#append-only-logs)。
+
+## 检查清单 [#checklist]
+
+- [ ] 事件从同一个 `[NinoType]` 基类派生；改过名的事件带有 `[NinoFormerName]`。
+- [ ] 长期保留的主题上的事件类型是 `versionTolerant` 或 `keyed` 的。
+- [ ] 新的事件类型先到达消费者，生产者再开始发送。
+- [ ] 小而频繁的事件批量发送；记录是放在列表里的非托管结构体。
+- [ ] 热点主题上的消费者反序列化到复用的实例中。

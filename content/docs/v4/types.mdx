@@ -15,7 +15,7 @@ icon: Shapes
   }}
 />
 
-This page lists the types Nino serializes out of the box. Any of them can be a top-level value, a member of a `[NinoType]`, or an element of a collection, nested as deep as you like.
+This page lists the types Nino serializes out of the box. Any of them can be the value you pass to `NinoSerializer.Serialize`, a member of a `[NinoType]`, or an element of a collection, nested as deep as you like.
 
 <Callout type="idea">
 
@@ -84,7 +84,7 @@ Collections can be nested freely, for example:
 dotnet add package Nino.Immutable
 ```
 
-Reference it and use the types as members or top-level values; there is nothing to register. The package declares its formatters with [`[assembly: NinoFormatter]`](/en/docs/v4/custom-formatters#for-a-type-assembly-ninoformatter), exactly like Nino's own BCL formatters:
+Reference it and use the types as members or pass them to `NinoSerializer`/`NinoDeserializer` directly; there is nothing to register. The package declares its formatters with [`[assembly: NinoFormatter]`](/en/docs/v4/custom-formatters#for-a-type-assembly-ninoformatter), exactly like Nino's own BCL formatters:
 
 ```csharp
 [NinoType]
@@ -107,7 +107,7 @@ public class Inventory : List<Item> { }
 public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 ```
 
-- Nino creates a collection only when the slot is `null`: through a public static [`[NinoFactory]`](/en/docs/v4/pooling#creating-instances-with-ninofactory) factory method if the type declares one (for example to take it from a pool), otherwise through a public constructor callable without arguments.
+- Nino creates a collection only when the member or element that holds it is `null`: through a public static [`[NinoFactory]`](/en/docs/v4/pooling#creating-instances-with-ninofactory) factory method if the type declares one (for example to take it from a pool), otherwise through a public constructor callable without arguments.
 - Collections are filled through the public collection API (`Add`/`Clear`, the dictionary indexer, `Enqueue`, `Push`, `TryAdd`). Subclasses of `List<T>`, `HashSet<T>` and `Dictionary<TKey, TValue>` are filled through the base type, so members hidden with `new` are not called.
 - If the collection type is also a `[NinoType]`, its elements are written first and then its own serialized members.
 - The declared type decides what is created: a `List<int>` member holding an `Inventory` is read back as a `List<int>`.

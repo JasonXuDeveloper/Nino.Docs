@@ -1,57 +1,65 @@
 ---
-title: 限制
+title: 局限性
+description: Nino v3 做不到的事，以及后续 v3 版本解决了哪些局限。
 icon: TriangleAlert
 ---
 
-本页描述了Nino的限制。
+<AnchorRedirect
+  map={{
+    '当前限制': '/zh/docs/v3/limit#current-limitations',
+    '已解决的限制': '/zh/docs/v3/limit#resolved-limitations',
+  }}
+/>
 
-## 当前限制
-- 需要搭配Source Generator使用
-- 使用了`WEAK_VERSION_TOLERANCE`定义的项目无法反序列化由未使用`WEAK_VERSION_TOLERANCE`定义的项目序列化的数据，反之亦然
-- 如果定义了不支持序列化的类型（如Queue）则会导致编译错误
-- `ValueTuple`在`.NET Core`与`Unity/Mono`中行为不同  
-    <Callout type="info">
+Nino v3 不做什么，以及 v3 解决了早期版本的哪些局限。
 
-    这不是Nino的问题。如果你查看`Mono`中`ValueTuple`的实现，[这个链接](https://github.com/mono/mono/blob/0f53e9e151d92944cacab3e24ac359410c606df6/mcs/class/corlib/Mono/RuntimeStructs.cs#L83)，他们没有为所有`ValueTuple`指定结构布局，所以Nino会依次序列化/反序列化它的字段。请注意，Unity目前在编辑器及运行模式下使用的是`Mono`（当未选择IL2CPP时）。我不确定IL2CPP对此有何处理，但我认为它与Mono保持一致。  
-    
-    然而，在`.NET Core`的实现中，[这个链接](https://github.com/dotnet/runtime/blob/37e4d45236e68946db9d264593aa31a9c00534bc/src/libraries/System.Private.CoreLib/src/System/ValueTuple.cs#L425)，他们选择使用`LayoutKind.Auto`进行布局，这可能导致与`Mono`实现不同的结果。因此，`ValueTuple`在`.NET Core`与`Unity/Mono`之间并不兼容。  
+## 当前局限 [#current-limitations]
+- **必须使用源生成器。** Nino 需要搭配它的源生成器使用。
+- **`WEAK_VERSION_TOLERANCE` 是全局开关。** 定义了 `WEAK_VERSION_TOLERANCE` 的项目无法反序列化未定义该符号的项目序列化的数据，反之亦然。
+- **不支持的类型会导致编译失败。** 序列化不支持的类型（如 `Queue<T>`）会产生编译错误。
+- **`ValueTuple` 在 .NET Core 与 Unity/Mono 中表现不同。** 见下文。
 
-    </Callout>
+<Callout type="info" title="为什么 ValueTuple 不能跨运行时">
 
-## 已解决的限制
-- 无法在序列化后重命名类型名称/命名空间
-    <Callout type="info">
+这不是 Nino 的问题。[Mono 的 `ValueTuple` 实现](https://github.com/mono/mono/blob/0f53e9e151d92944cacab3e24ac359410c606df6/mcs/class/corlib/Mono/RuntimeStructs.cs#L83)没有为值元组指定结构布局，所以 Nino 会按顺序序列化和反序列化它的字段。Unity 在编辑器中，以及未选择 IL2CPP 的播放器中使用的都是 Mono。IL2CPP 的行为应与 Mono 一致。
 
-    该功能于v3.2.2实现，现在你可以在序列化后重命名类型名称/命名空间，仍然可以反序列化由旧类型名称/命名空间序列化的旧数据
+[.NET Core 的实现](https://github.com/dotnet/runtime/blob/37e4d45236e68946db9d264593aa31a9c00534bc/src/libraries/System.Private.CoreLib/src/System/ValueTuple.cs#L425)则用 `LayoutKind.Auto` 布局值元组，结果可能与 Mono 不同。因此 `ValueTuple` 的数据在 .NET Core 与 Unity/Mono 之间不兼容。
 
-    </Callout>
-- 无法版本兼容集合
-    <Callout type="info">
+</Callout>
 
-    该问题于v3.2.0解决，现在你可以修改已被序列化的类型的数据结构，仍然可以反序列化由旧数据结构序列化的旧数据，即使它是一个包含多态元素的集合（列表，字典等）
+## 已解决的局限 [#resolved-limitations]
 
-    </Callout>
+<Accordions type="multiple">
+<Accordion value="former-name" title="序列化之后不能修改类型名或命名空间">
 
-- 无法序列化/反序列化非public字段/属性
-    <Callout type="info">
+v3.2.2 已解决：改名后的类型仍能反序列化用旧类型名或旧命名空间序列化的数据。参见[类型改名](/zh/docs/v3/advanced#former-name)。
 
-    该问题于v3.0.6解决，但是有如下需要注意的地方：
-    - 如果在`NET8.0`以下版本使用，需要给包含private成员的类型添加`partial`修饰符，如`partial class MyClass`
-    - 如果在`NET8.0`以下版本使用，不可以在嵌套类型（NestedType）可序列化类型中定义private成员
-    - 如果在`NET8.0`及以上版本使用，**没有任何限制**
+</Accordion>
+<Accordion value="collections" title="集合没有版本兼容">
 
-    </Callout>
-- 对于多态非托管结构，序列化结构时根据是否将其转换为接口类型会产生不同的序列化结果，需要使用不同的反序列化方法才能获得正确的结果
-    <Callout type="info">
+v3.2.0 已解决：修改类型的成员之后，仍能反序列化修改前序列化的数据，即使数据位于包含多态元素的集合（列表、字典等）中。
 
-    该问题于v3.0.3修复 - 所有多态非托管结构都将以统一的方式进行序列化和反序列化，无论是否将其转换为接口类型
+</Accordion>
+<Accordion value="non-public" title="不能序列化或反序列化非 public 的字段和属性">
 
-    </Callout>
-- 如果你打算在大端平台上使用Nino，你需要在`Nino.Core`项目中添加`BIG_ENDIAN`定义符号然后手动编译一份`dll`来使用。默认情况下，Nino会认为运行在小端（C#默认小端），这可能会导致在大端系统上反序列化错误
-    <Callout type="info">
+v3.0.6 已解决，但有几点需要注意：
+- .NET 8.0 以下，包含 private 成员的类型必须是 `partial` 的，如 `partial class MyClass`。
+- .NET 8.0 以下，可序列化的嵌套类型中不能声明 private 成员。
+- .NET 8.0 及以上**没有任何限制**。
 
-    理论上全部运行.NET的平台（含Unity）都是小端的，所以你不需要担心这个问题。
+参见[选择成员](/zh/docs/v3/types#choosing-members)。
 
-    如果遇到大小端的问题，再去添加`BIG_ENDIAN`定义符号即可。
+</Accordion>
+<Accordion value="unmanaged-polymorphism" title="多态非托管结构体在转换为接口前后序列化结果不同">
 
-    </Callout>
+v3.0.3 已解决：所有多态非托管结构体都以同一种方式序列化和反序列化，无论是否转换为接口类型。
+
+</Accordion>
+<Accordion value="big-endian" title="大端平台">
+
+Nino 默认运行在小端平台上（C# 的默认情况），在大端平台上可能会反序列化出错。要在大端平台上使用，请给 `Nino.Core` 项目添加 `BIG_ENDIAN` 定义符号，自行编译后使用编译出的 DLL。
+
+实际上所有运行 .NET 的平台（包括 Unity）都是小端的，一般不需要担心这个问题。只有真的遇到大小端问题时，再添加 `BIG_ENDIAN` 即可。
+
+</Accordion>
+</Accordions>

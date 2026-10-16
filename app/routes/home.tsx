@@ -14,10 +14,9 @@ import { headlineSerialize } from '@/lib/benchmarks';
 import { cn } from '@/lib/cn';
 import { getLocale, type Locale } from '@/lib/i18n';
 import { baseOptions, githubUrl } from '@/lib/layout.shared';
+import { homeMeta } from '@/lib/seo';
 import { latestVersion } from '@/lib/versions';
 import type { Route } from './+types/home';
-
-const siteUrl = 'https://nino.xgamedev.net';
 
 interface Highlight {
   icon: typeof Cpu;
@@ -28,7 +27,6 @@ interface Highlight {
 const copy: Record<
   Locale,
   {
-    title: string;
     description: string;
     pill: string;
     headline: [string, string];
@@ -42,11 +40,10 @@ const copy: Record<
   }
 > = {
   en: {
-    title: 'Nino - The fastest binary serializer for C#',
-    description: `Nino is a source-generated binary serializer for C#: ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack, ` : ''}zero GC allocations, for Unity, Godot and .NET servers.`,
+    description: `Nino is a general-purpose, high-performance binary serializer for C# and .NET: source-generated, ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack, ` : ''}zero GC on hot paths. For RPC, microservices, message queues, caching, storage and IPC, with Unity and Godot support.`,
     pill: 'C# binary serializer · v4',
     headline: ['The fastest binary serializer', 'for C#.'],
-    sub: 'Source-generated, with zero GC allocations, for Unity, Godot and .NET servers.',
+    sub: 'Source-generated, with zero GC on hot paths. For services, networking and RPC, message queues, caching, storage and IPC, on .NET, Unity and Godot alike.',
     start: 'Get Started',
     github: 'View on GitHub',
     highlights: [
@@ -83,19 +80,21 @@ const copy: Record<
     ],
     guides: 'Guides:',
     useCases: [
+      { label: 'Networking and RPC', href: 'advanced/networking' },
+      { label: 'Message queues', href: 'advanced/message-queues' },
+      { label: 'Caching', href: 'advanced/caching' },
+      { label: 'Persistence', href: 'advanced/persistence' },
+      { label: 'Zero allocation', href: 'advanced/zero-allocation' },
       { label: 'Unity', href: 'advanced/unity' },
       { label: 'Godot', href: 'platforms#godot' },
-      { label: 'Game servers', href: 'advanced/networking' },
-      { label: 'Save games', href: 'advanced/persistence' },
     ],
     older: 'Older versions:',
   },
   zh: {
-    title: 'Nino - 最快的 C# 二进制序列化库',
-    description: `Nino 是基于源生成器的 C# 二进制序列化库：${headlineSerialize ? `最高比 MemoryPack 快 ${headlineSerialize} 倍，` : ''}零 GC 分配，适用于 Unity、Godot 与 .NET 服务端。`,
+    description: `Nino 是通用的高性能 C# / .NET 二进制序列化库：基于源生成器，${headlineSerialize ? `最高比 MemoryPack 快 ${headlineSerialize} 倍，` : ''}热路径零 GC 分配。适用于 RPC、微服务、消息队列、缓存、存储与进程间通信，同时支持 Unity 和 Godot。`,
     pill: 'C# 二进制序列化库 · v4',
     headline: ['最快的二进制序列化库', '为 C# 而生。'],
-    sub: '基于源生成器，零 GC 分配，适用于 Unity、Godot 与 .NET 服务端。',
+    sub: '基于源生成器，热路径零 GC 分配。适用于服务端、网络与 RPC、消息队列、缓存、存储和进程间通信，.NET、Unity 与 Godot 均可使用。',
     start: '快速开始',
     github: '在 GitHub 上查看',
     highlights: [
@@ -132,46 +131,31 @@ const copy: Record<
     ],
     guides: '使用指南：',
     useCases: [
+      { label: '网络与 RPC', href: 'advanced/networking' },
+      { label: '消息队列', href: 'advanced/message-queues' },
+      { label: '缓存', href: 'advanced/caching' },
+      { label: '持久化', href: 'advanced/persistence' },
+      { label: '零分配', href: 'advanced/zero-allocation' },
       { label: 'Unity', href: 'advanced/unity' },
       { label: 'Godot', href: 'platforms#godot' },
-      { label: '游戏服务器', href: 'advanced/networking' },
-      { label: '游戏存档', href: 'advanced/persistence' },
     ],
     older: '旧版本：',
   },
 };
 
+// Search result titles: the product and the category people search for. The page copy above keeps its own headline.
+const seoTitle: Record<Locale, string> = {
+  en: 'Nino – High-Performance Binary Serializer for C# and .NET',
+  zh: 'Nino – 高性能 C# / .NET 二进制序列化库',
+};
+
 export function meta({ params }: Route.MetaArgs) {
   const lang = getLocale(params.lang);
-  const t = copy[lang];
-
-  return [
-    { title: t.title },
-    { name: 'description', content: t.description },
-    { property: 'og:title', content: t.title },
-    { property: 'og:description', content: t.description },
-    { property: 'og:url', content: `${siteUrl}/${lang}` },
-    { property: 'og:locale', content: lang === 'zh' ? 'zh_CN' : 'en_US' },
-    { tagName: 'link', rel: 'canonical', href: `${siteUrl}/${lang}` },
-    {
-      tagName: 'link',
-      rel: 'alternate',
-      hrefLang: 'en',
-      href: `${siteUrl}/en`,
-    },
-    {
-      tagName: 'link',
-      rel: 'alternate',
-      hrefLang: 'zh',
-      href: `${siteUrl}/zh`,
-    },
-    {
-      tagName: 'link',
-      rel: 'alternate',
-      hrefLang: 'x-default',
-      href: `${siteUrl}/en`,
-    },
-  ];
+  return homeMeta({
+    lang,
+    title: seoTitle[lang],
+    description: copy[lang].description,
+  });
 }
 
 function GitHubIcon() {

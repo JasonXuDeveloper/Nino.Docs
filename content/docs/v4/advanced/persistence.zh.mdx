@@ -1,10 +1,11 @@
 ---
-title: 存档与持久化
-description: "在更新后依然可读的文件：键控与版本容错类型、共享引用的对象图、文件头与安全写入。"
+title: "持久化与存储"
+seoTitle: "C# 数据持久化与存储：更新后依然可读 – Nino v4 文档"
+description: "把 Nino 数据存入文件、数据库等存储，并在更新后依然可读：键控与版本容错类型、共享引用的对象图、文件头与安全写入。"
 icon: Save
 ---
 
-写存档时，将来读取它的游戏版本往往还没发布。本指南介绍如何组织持久化数据，让明年的更新依然能加载今年的存档。
+存下来的数据，会被写入时还不存在的版本读取：游戏存档、桌面应用的文档、本地缓存、快照、事件日志都是如此。本指南以游戏存档为例，介绍如何组织持久化数据，让明年的版本依然能加载今年的文件；后半部分介绍[键值存储](#key-value-stores)、[追加日志](#append-only-logs)和[快照](#snapshots-and-checkpoints)。
 
 ## 按类型选择格式 [#pick-a-format-per-type]
 
@@ -155,6 +156,164 @@ public static SaveGame Load(string path) =>
 在 Unity 中，请把存档写到 `Application.persistentDataPath` 目录下。
 
 </Callout>
+
+## 键值存储 [#key-value-stores]
+
+嵌入式存储（RocksDB、LMDB、FASTER、LiteDB 的文件存储、SQLite 的 `BLOB` 列）和本地缓存都是字节进、字节出。Nino 两头都能对上：把键和值分别序列化到复用的缓冲区，传入 span，再把取回的字节反序列化。下面的存储接口代表你所用存储的 API：
+
+```csharp title="TypedStore.cs"
+using Nino.Core;
+
+public interface IKeyValueStore            // stands in for your store's API
+{
+    void Put(ReadOnlySpan<byte> key, ReadOnlySpan<byte> value);
+    byte[] Get(ReadOnlySpan<byte> key);
+}
+
+public sealed class TypedStore<TKey, TValue> where TKey : unmanaged
+{
+    private readonly IKeyValueStore _store;
+    private readonly NinoArrayBufferWriter _key = new(64);
+    private readonly NinoArrayBufferWriter _value = new(1024);
+
+    public TypedStore(IKeyValueStore store) => _store = store;
+
+    public void Put(TKey key, TValue value)
+    {
+        _key.ResetWrittenCount();
+        NinoSerializer.Serialize(key, _key);
+        _value.ResetWrittenCount();
+        NinoSerializer.Serialize(value, _value);
+        _store.Put(_key.WrittenSpan, _value.WrittenSpan);
+    }
+
+    public bool TryGet(TKey key, out TValue value)
+    {
+        _key.ResetWrittenCount();
+        NinoSerializer.Serialize(key, _key);
+        byte[] bytes = _store.Get(_key.WrittenSpan);
+        value = bytes == null ? default : NinoDeserializer.Deserialize<TValue>(bytes);
+        return bytes != null;
+    }
+}
+```
+
+- 非托管类型的键（`int`、`Guid`、由若干 id 组成的结构体）按其原始的小端字节写入。按字节排序键的存储**不会**把小端整数按数值大小排序；如果需要按数值顺序做范围扫描，请自己用 `BinaryPrimitives.WriteInt64BigEndian` 写这类键。
+- 每个实例持有两个缓冲区，所以每个线程用一个，或者加锁保护。
+- 存下来的值比写入它的代码活得更久：和存档一样，值的类型要设为 `keyed` 或 `versionTolerant`。
+
+## 追加日志 [#append-only-logs]
+
+追加日志（事件存储、预写日志、变更记录）只追加记录，从不改写。给每条记录加上长度前缀，读取方就能找到记录的边界，并发现被崩溃截断的记录：
+
+```csharp title="EventLog.cs"
+using System.Buffers.Binary;
+using Nino.Core;
+
+[NinoType(versionTolerant: true)]
+public abstract class AccountEvent
+{
+    public long Sequence;
+}
+
+public sealed class Deposited : AccountEvent { public decimal Amount; }
+public sealed class Withdrawn : AccountEvent { public decimal Amount; }
+
+/// <summary>An append-only file of [int32 length][payload] records.</summary>
+public sealed class EventLog : IDisposable
+{
+    private readonly FileStream _file;
+    private readonly NinoArrayBufferWriter _buffer = new(1024);
+
+    public EventLog(string path) =>
+        _file = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
+
+    public void Append(AccountEvent evt)
+    {
+        _buffer.ResetWrittenCount();
+        var writer = new Writer(_buffer);
+        int slot = writer.ReserveInt32();
+        NinoSerializer.Serialize(evt, ref writer);
+        writer.PatchLength(slot);                 // bytes written after the slot
+        writer.Flush();
+        _file.Write(_buffer.WrittenSpan);
+        _file.Flush(flushToDisk: true);           // durable before the caller is told it is stored
+    }
+
+    public void Dispose()
+    {
+        _file.Dispose();
+        _buffer.Dispose();
+    }
+
+    /// <summary>Replays every complete record; a torn record at the end (a crash mid-write) is ignored.</summary>
+    public static IEnumerable<AccountEvent> Replay(string path)
+    {
+        byte[] data = File.ReadAllBytes(path);
+        int offset = 0;
+        while (data.Length - offset >= 4)
+        {
+            int length = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset));
+            if (length < 0 || length > data.Length - offset - 4)
+                yield break;                      // incomplete tail
+            yield return NinoDeserializer.Deserialize<AccountEvent>(data.AsSpan(offset + 4, length));
+            offset += 4 + length;
+        }
+    }
+}
+```
+
+- 每条记录都 `Flush(flushToDisk: true)` 是最安全的默认做法，也是最慢的。如果愿意用持久性换吞吐量，可以追加多条记录后再刷新一次（组提交）。
+- 长度前缀只能发现被截断的**末尾**。要检测文件中间的损坏，请在长度之后为每条记录加一个校验和（例如 `System.IO.Hashing.Crc32`）。
+- 事件会被写入时还不存在的版本读回：[消息队列的规则](/zh/docs/v4/advanced/message-queues#topics-that-outlive-a-deployment)同样适用。
+- 为了简短，`Replay` 一次读入整个文件。日志很大时，用格式相同的 [`Stream` 分帧辅助类](/zh/docs/v4/advanced/streams#streams)分块读取。
+
+## 快照与检查点 [#snapshots-and-checkpoints]
+
+每次启动都重放一份很长的日志会很慢。把状态的快照连同它所覆盖到的位置一起保存，之后只重放快照之后的部分：
+
+```csharp title="Snapshots.cs"
+using Nino.Core;
+
+[NinoType(keyed: true)]
+public sealed class AccountSnapshot
+{
+    public long LastSequence;   // the last event the snapshot includes
+    public decimal Balance;
+}
+
+public static class Snapshots
+{
+    public static void Write(string path, AccountSnapshot snapshot)
+    {
+        string temp = path + ".tmp";
+        File.WriteAllBytes(temp, NinoSerializer.Serialize(snapshot));
+        File.Move(temp, path, overwrite: true);   // never leaves a half-written snapshot
+    }
+
+    public static AccountSnapshot Load(string snapshotPath, string logPath)
+    {
+        var state = File.Exists(snapshotPath)
+            ? NinoDeserializer.Deserialize<AccountSnapshot>(File.ReadAllBytes(snapshotPath))
+            : new AccountSnapshot();
+        foreach (var evt in EventLog.Replay(logPath))
+        {
+            if (evt.Sequence <= state.LastSequence)
+                continue;                         // already in the snapshot
+            state.Balance += evt switch
+            {
+                Deposited d => d.Amount,
+                Withdrawn w => -w.Amount,
+                _ => 0m,
+            };
+            state.LastSequence = evt.Sequence;
+        }
+        return state;
+    }
+}
+```
+
+同样的做法可以给任何长时间运行的计算（模拟、流处理、训练任务）打检查点：把它的状态和已处理到的输入位置一起序列化，[安全地](#write-safely)写入磁盘，重启后从那里继续。含有共享引用的对象图，快照类型需要开启 [`trackReferences`](#object-graphs)。
 
 ## 测试旧存档 [#test-old-saves]
 

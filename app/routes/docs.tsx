@@ -1,4 +1,5 @@
 import browserCollections from 'collections/browser';
+import type * as PageTree from 'fumadocs-core/page-tree';
 import { useFumadocsLoader } from 'fumadocs-core/source/client';
 import { Banner } from 'fumadocs-ui/components/banner';
 import { DocsLayout } from 'fumadocs-ui/layouts/docs';
@@ -13,15 +14,16 @@ import { LLMCopyButton, ViewOptions } from '@/components/ai/page-actions';
 import { handlePageFeedback } from '@/components/feedback/actions';
 import { Feedback } from '@/components/feedback/client';
 import { LastUpdated } from '@/components/last-updated';
+import { firstCommitDate } from '@/lib/git-dates.server';
 import { getLocale, type Locale } from '@/lib/i18n';
 import { baseOptions } from '@/lib/layout.shared';
-import { source } from '@/lib/source';
+import { faqFromMarkdown, pageBodyMarkdown } from '@/lib/markdown';
+import { type DocSeo, docMeta, markdownPath } from '@/lib/seo';
+import { docsRepoUrl as repoUrl } from '@/lib/site';
+import { docExtras, source } from '@/lib/source';
 import { isVersion, latestVersion } from '@/lib/versions';
 import { getMDXComponents } from '@/mdx-components';
 import type { Route } from './+types/docs';
-
-const siteUrl = 'https://nino.xgamedev.net';
-const repoUrl = 'https://github.com/JasonXuDeveloper/Nino.Docs';
 
 export async function loader({ params }: Route.LoaderArgs) {
   const lang = getLocale(params.lang);
@@ -39,37 +41,76 @@ export async function loader({ params }: Route.LoaderArgs) {
       : (source.getPage([latestVersion, ...rest], lang)?.url ??
         `/${lang}/docs/${latestVersion}`);
 
+  // From the docs home to this page, for the BreadcrumbList.
+  const breadcrumbs = [
+    { name: 'Nino', url: `/${lang}` },
+    {
+      name: `Nino ${version} ${lang === 'zh' ? '文档' : 'Docs'}`,
+      url: `/${lang}/docs/${version}`,
+    },
+  ];
+  // A folder's index page is named after its folder in the sidebar
+  // ("Advanced Guides" rather than "Overview").
+  const folderNames = new Map<string, string>();
+  const collect = (nodes: PageTree.Node[]) => {
+    for (const node of nodes) {
+      if (node.type !== 'folder') continue;
+      // $id is "<lang>:<folder path>", e.g. "en:v4/advanced"
+      const folder = node.$id?.slice(node.$id.indexOf(':') + 1);
+      if (folder && typeof node.name === 'string')
+        folderNames.set(folder, node.name);
+      collect(node.children);
+    }
+  };
+  collect(source.getPageTree(lang).children);
+  for (let i = 1; i <= rest.length; i++) {
+    const slugs = [version, ...rest.slice(0, i)];
+    const parent = source.getPage(slugs, lang);
+    if (parent)
+      breadcrumbs.push({
+        name: folderNames.get(slugs.join('/')) ?? parent.data.title,
+        url: parent.url,
+      });
+  }
+
+  const lastModified = page.data.lastModified;
+  const seo: DocSeo = {
+    lang,
+    version,
+    latest: version === latestVersion,
+    url: page.url,
+    title: page.data.title,
+    seoTitle: docExtras(page).seoTitle,
+    description: page.data.description,
+    lastModified:
+      lastModified && !Number.isNaN(lastModified.getTime())
+        ? lastModified.toISOString()
+        : undefined,
+    published: firstCommitDate(`content/docs/${page.path}`),
+    alternates: {
+      en: source.getPage(page.slugs, 'en')?.url,
+      zh: source.getPage(page.slugs, 'zh')?.url,
+    },
+    breadcrumbs,
+    faq: docExtras(page).faq
+      ? faqFromMarkdown(await pageBodyMarkdown(page, lang))
+      : undefined,
+  };
+
   return {
     lang,
     version,
     latestUrl,
     path: page.path,
     url: page.url,
-    alternates: {
-      en: source.getPage(page.slugs, 'en')?.url,
-      zh: source.getPage(page.slugs, 'zh')?.url,
-    },
+    seo,
     pageTree: await source.serializePageTree(source.getPageTree(lang)),
   };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
   if (!loaderData) return [];
-  const { url, alternates, lang } = loaderData;
-
-  return [
-    { tagName: 'link', rel: 'canonical', href: `${siteUrl}${url}` },
-    { property: 'og:url', content: `${siteUrl}${url}` },
-    { property: 'og:locale', content: lang === 'zh' ? 'zh_CN' : 'en_US' },
-    ...Object.entries(alternates)
-      .filter(([, href]) => href)
-      .map(([hrefLang, href]) => ({
-        tagName: 'link',
-        rel: 'alternate',
-        hrefLang,
-        href: `${siteUrl}${href}`,
-      })),
-  ];
+  return docMeta(loaderData.seo);
 }
 
 interface ContentProps {
@@ -83,23 +124,18 @@ const clientLoader = browserCollections.docs.createClientLoader<ContentProps>({
     { default: Mdx, frontmatter, toc, lastModified },
     { lang, path, url },
   ) {
-    const title = `${frontmatter.title} | Nino`;
-
+    // <title>, description, canonical, social cards and JSON-LD come from
+    // `meta` above (src/lib/seo.ts).
     return (
       <DocsPage toc={toc} full={frontmatter.full}>
-        <title>{title}</title>
-        {frontmatter.description && (
-          <meta name="description" content={frontmatter.description} />
-        )}
-        <meta property="og:title" content={title} />
         <DocsTitle>{frontmatter.title}</DocsTitle>
         <DocsDescription className="mb-0">
           {frontmatter.description}
         </DocsDescription>
         <div className="mb-4 flex flex-row items-center gap-2 border-b pt-2 pb-4">
-          <LLMCopyButton markdownUrl={`${url}.mdx`} locale={lang} />
+          <LLMCopyButton markdownUrl={markdownPath(url)} locale={lang} />
           <ViewOptions
-            markdownUrl={`${url}.mdx`}
+            markdownUrl={markdownPath(url)}
             githubUrl={`${repoUrl}/blob/main/content/docs/${path}`}
             locale={lang}
           />

@@ -8,7 +8,7 @@ Nino is fast with no tuning at all. This page explains what happens under the ho
 
 ## Interceptors
 
-When your project is compiled by **Roslyn 4.8 or later** (the .NET 8 SDK and later, Visual Studio 2022 17.8+, a current Rider), the generator intercepts every `NinoSerializer`/`NinoDeserializer` call whose type argument is known at the call site and redirects it, at compile time, to the generated formatter. The call no longer goes through the formatter cache's virtual call; the bytes are exactly the same.
+When your project is compiled by **Roslyn 4.8 or later** (the .NET 8 SDK and later, Visual Studio 2022 17.8+, a current Rider), the generator intercepts every `NinoSerializer`/`NinoDeserializer` call whose type argument is known at the call site and redirects it, at compile time, to the generated formatter. The call no longer goes through the formatter cache (`NinoFormatterCache<T>`, where a regular call looks up the formatter of `T`) and its virtual call; the bytes are exactly the same.
 
 ```csharp
 // Intercepted: the type is known here
@@ -38,7 +38,7 @@ If your project sets `InterceptorsNamespaces` or `InterceptorsPreviewNamespaces`
 
 Every formatter is a struct, and element formatters are type parameters (`ListFormatter<TList, T, TFormatter>`). Members call `default(TFormatter).Serialize(...)`: a direct call the JIT or AOT compiler inlines, so serializing a `List<Player>` compiles to one loop with the player's members written inside it. There is no virtual dispatch per element and no reflection anywhere.
 
-The one indirection left is the top-level call, which goes through `NinoFormatterCache<T>` (a static generic field) unless it is intercepted.
+The one indirection left is your own call, such as `NinoSerializer.Serialize(value)`: unless it is intercepted, it finds the formatter of `T` through `NinoFormatterCache<T>` (a static generic field, the formatter cache).
 
 ## Raw Memory for Unmanaged Data
 
@@ -147,7 +147,7 @@ A `string`, an array or collection, a class, a `T?`, a tuple, `DateTimeOffset` o
 | --- | --- |
 | `NinoSerializer.Serialize(value)` | Writes into a pooled scratch buffer, then copies into a new `byte[]` of the exact size. A [fixed-size type](#fixed-size-types) is written straight into a `byte[]` of its size instead. |
 | `NinoArrayBufferWriter` | Written **in place**. Pooled from `ArrayPool<byte>.Shared`; reuse it with `ResetWrittenCount()`. |
-| Any other `IBufferWriter<byte>` (`ArrayBufferWriter<byte>`, `PipeWriter`...) | Written into a thread-local scratch buffer, then copied once into the writer. |
+| Any other `IBufferWriter<byte>` (`ArrayBufferWriter<byte>`, `PipeWriter`...) | Written into a per-thread [scratch buffer](/en/docs/v4/basic#terms), then copied once into the writer. |
 | `ref Writer` | Written in place into the writer's `NinoArrayBufferWriter`. Lets you write several values back to back. |
 
 On the reading side, `NinoDeserializer` takes a `ReadOnlySpan<byte>`: pass a slice of whatever memory you already have (a pooled array, a pipe segment, a memory-mapped file) without copying it.

@@ -1,38 +1,52 @@
 ---
 title: 进阶用法
+description: 在 Nino v2 中用弱版本兼容给存档数据添加成员，以及通过自定义构造函数反序列化。
 icon: Layers
 ---
 
-本页描述了Nino的进阶用法
+<AnchorRedirect
+  map={{
+    '弱版本兼容': '/zh/docs/v2/advanced#weak-version-tolerance',
+    '使用方法': '/zh/docs/v2/advanced#weak-version-tolerance-usage',
+    '自定义构造函数': '/zh/docs/v2/advanced#custom-constructors',
+    '使用方法-1': '/zh/docs/v2/advanced#constructor-usage',
+    '限制': '/zh/docs/v2/advanced#restrictions',
+    '示例': '/zh/docs/v2/advanced#constructor-examples',
+  }}
+/>
 
-## 弱版本兼容
+本页介绍弱版本兼容和自定义构造函数。
 
-Nino支持一种更弱（更灵活）的版本兼容机制。这意味着你可以向一个可Nino序列化类型中添加新字段而不会影响反序列化来自旧版本的序列化数据。这个通常用于游戏中的存档数据，在版本迭代中我们可能会给存档数据新增一些成员。
+## 弱版本兼容 [#weak-version-tolerance]
 
-然而，这个机制有一些限制：
+Nino 支持一种更弱、也更灵活的版本兼容机制：可以给托管的 `[NinoType]` 添加新字段，同时仍能反序列化旧版本序列化的数据。它通常用于游戏存档：游戏在版本迭代中，往往会给存档数据加一些成员。
+
+这个机制有几条限制：
 - 只能在类型的末尾添加新成员。
-- 需要通过`[NinoType(false)]`和`[NinoMember(order)]`属性来明确地对成员进行排序，以确保新成员在旧成员之后添加。
-- 不能删除任何现有成员。并且更改现有成员的类型也有限制（参考[类型系统](/zh/docs/v2/types#版本兼容)）。
-- 不能定义新的可序列化类型，或需要确保Nino生成的序列化代码里对这个类型的TypeId没有变动过，例如：
+- 必须用 `[NinoType(false)]` 和 `[NinoMember(order)]` 显式排列成员，确保新成员排在旧成员之后。
+- 不能删除已有成员，修改已有成员的类型也有限制（参见[版本兼容](/zh/docs/v2/types#version-compatibility)）。
+- 不能定义新的可序列化类型，除非 Nino 生成的代码中这个版本兼容类型的 TypeId 保持不变，例如：
   ```csharp
   case 26:
   {
       // use Nino.UnitTests.SaveData.SaveData()
   ```
-  我们需要确保在添加新的可序列化类型的后，需要进行版本兼容的类型（如`SaveData`）的TypeId（这里是`26`）没有变动过。
+  添加了新的可序列化类型之后，要检查版本兼容类型（这里是 `SaveData`，TypeId 为 `26`）的 TypeId 没有变化。
 
-默认情况下，这个弱版本兼容机制是禁用的。要启用它，你需要在项目中添加`WEAK_VERSION_TOLERANCE`定义符号。
+弱版本兼容默认关闭。要开启它，请在项目中定义 `WEAK_VERSION_TOLERANCE` 符号。
 
 <Callout type="warn">
 
-请注意，启用此功能会导致反序列化性能下降5%。
+开启后，反序列化会慢大约 5%。
 
 </Callout>
 
-### 使用方法
-```csharp
-// 假设已经定义了WEAK_VERSION_TOLERANCE
+### 使用方法 [#weak-version-tolerance-usage]
+
+```csharp title="SaveData.cs"
+// 已定义 WEAK_VERSION_TOLERANCE
 [NinoType(false)]
+public class SaveData
 {
     [NinoMember(1)] public int Id;
     [NinoMember(2)] public string Name;
@@ -41,40 +55,45 @@ Nino支持一种更弱（更灵活）的版本兼容机制。这意味着你可�
 }
 ```
 
-在这个例子中，我们向`SaveData`类添加了两个新字段`NewField1`和`NewField2`。通过使用`[NinoType(false)]`和`[NinoMember(order)]`属性，我们可以确保新字段在旧字段之后添加。这样，旧版本的序列化数据仍然可以正确反序列化（需要定义符号`WEAK_VERSION_TOLERANCE`）。
+这里给 `SaveData` 添加了两个字段 `NewField1` 和 `NewField2`。`[NinoType(false)]` 和 `[NinoMember(order)]` 让它们排在旧字段之后，所以旧版本序列化的数据仍然能正确反序列化（需定义 `WEAK_VERSION_TOLERANCE`）。
 
 <Callout type="info">
 
-这实际上是我们的一个单元测试用例，我们已经验证它可以正常工作。
+这正是 Nino 的一个单元测试用例，已经验证可以正常工作。
 
 </Callout>
 
-## 自定义构造函数
-Nino现在支持使用自定义构造函数来`反序列化`一个nino序列化的对象。这在你想要在反序列化对象时执行额外操作时非常有用，比如初始化那些没有被序列化的字段或属性。
+## 自定义构造函数 [#custom-constructors]
 
-另外，这对于`record`来说，nino可以使用主构造函数或自定义构造函数来反序列化record。
+Nino 可以通过你指定的构造函数来反序列化对象。如果想在反序列化时执行额外的逻辑，比如初始化不参与序列化的字段或属性，就可以用它。对于 record，Nino 既可以用主构造函数，也可以用自定义的构造函数。
 
-### 使用方法
-以下属性使用`Field1, Field2, ...`作为构造函数的参数来反序列化对象。
+### 使用方法 [#constructor-usage]
+
+下面的特性会把成员 `Field1, Field2, ...` 作为参数，传给它所标记的构造函数：
+
 ```csharp
 [NinoConstructor(nameof(Field1), nameof(Field2), ...)]
 ```
 
-对于`record`，Nino将**优先**使用主构造函数来反序列化对象。如果不想使用主构造函数，可以使用`[NinoConstructor]`属性来指定自定义构造函数来反序列化对象。
+不加这个特性时，Nino 会自己选构造函数：
 
-对于`class`，Nino将**自动**使用`第一个public构造函数`来反序列化对象。其中构造函数要么是无参数的，要么所有参数与类中要反序列化的**字段或属性的名称相同**。如果不想使用上述的构造函数进行反序列化，可以使用`[NinoConstructor]`属性来指定自定义构造函数来反序列化对象。
+| 类型 | 默认使用的构造函数 |
+| --- | --- |
+| `record` | 主构造函数。 |
+| `class` | **第一个 public 构造函数**，它要么没有参数，要么所有参数都与要反序列化的字段或属性同名。 |
+| `struct` | 无参构造函数（结构体总有一个）。 |
 
-对于`struct`，Nino将**自动**使用无参数构造函数来反序列化对象。如果struct不应该使用无参数构造函数（需要注意，struct始终有无参数构造函数），可以使用`[NinoConstructor]`属性来指定自定义构造函数来反序列化对象。
+默认选的构造函数不合适时，用 `[NinoConstructor]` 标记要用的那一个。
 
-### 限制
-- 自定义构造函数必须是`public`构造函数。
-- 自定义构造函数的参数数量必须与`NinoConstructor`标签中的参数数量相同。
-- `NinoConstructor`标签的参数必须与类、struct或record中会被反序列化的字段或属性的名称匹配（忽略大小写）
-- `NinoConstructor`标签的参数表示这个类型的对应会被反序列化的成员的名称，会按顺序传递给构造函数。
+### 限制 [#restrictions]
+- 构造函数必须是 `public` 的。
+- 参数个数必须与 `[NinoConstructor]` 中列出的名称个数相同。
+- `[NinoConstructor]` 中的每个名称都必须与类、结构体或 record 中会被反序列化的字段或属性同名（忽略大小写），也就是说这些成员本身必须参与序列化。
+- `[NinoConstructor]` 中的名称就是按顺序传给构造函数的成员。
 
-### 示例
-<Tabs items={["多个构造函数", "主构造函数", "忽略主构造函数"]}>
+### 示例 [#constructor-examples]
 
+<Tabs items={["多个构造函数", "主构造函数", "不用主构造函数"]}>
 <Tab value="多个构造函数">
 
 ```csharp
@@ -110,13 +129,13 @@ public record SimpleRecord
 public record SimpleRecord2(int Id, string Name, DateTime CreateTime); // [!code highlight]
 
 [NinoType]
-public record SimpleRecord4(int Id, string Name, DateTime CreateTime) // 会被使用 // [!code highlight]
+public record SimpleRecord4(int Id, string Name, DateTime CreateTime) // 会使用这个 // [!code highlight]
 {
     [NinoIgnore] public bool Flag;
 
     public int ShouldNotIgnore;
 
-    // Nino 不会使用这个构造函数 // [!code highlight]
+    // Nino 不会使用这个 // [!code highlight]
     public SimpleRecord4() : this(0, "", DateTime.MinValue)
     {
     }
@@ -124,17 +143,17 @@ public record SimpleRecord4(int Id, string Name, DateTime CreateTime) // 会被�
 ```
 
 </Tab>
-<Tab value="忽略主构造函数">
+<Tab value="不用主构造函数">
 
 ```csharp
 [NinoType]
-public record SimpleRecord5(int Id, string Name, DateTime CreateTime) // 不会被使用 // [!code highlight]
+public record SimpleRecord5(int Id, string Name, DateTime CreateTime) // 不会使用这个 // [!code highlight]
 {
     [NinoIgnore] public bool Flag;
 
     public int ShouldNotIgnore;
 
-    // Nino会使用这个构造函数，但是这么做不好，因为在反序列化时会忽略序列化的Id, Name, CreateTime
+    // Nino 会使用这个，但反序列化时主构造函数的值会被丢弃，不推荐
     [NinoConstructor] // [!code highlight]
     public SimpleRecord5() : this(0, "", DateTime.MinValue)
     {
@@ -145,10 +164,10 @@ public record SimpleRecord5(int Id, string Name, DateTime CreateTime) // 不会�
 </Tab>
 </Tabs>
 
-除此之外，我们不仅可以针对`record`使用自定义构造函数，也可以针对`class`和`struct`使用自定义构造函数。
-<Tabs items={["强制结构体使用带参数的构造函数", "自动使用类的第一个带参构造函数"]}>
+类和结构体同样可以使用自定义构造函数：
 
-<Tab value="强制结构体使用带参数的构造函数">
+<Tabs items={["结构体使用有参构造函数", "类使用有参构造函数"]}>
+<Tab value="结构体使用有参构造函数">
 
 ```csharp
 [NinoType]
@@ -157,8 +176,8 @@ public struct SimpleStruct
     public int Id;
     public string Name;
     public DateTime CreateTime;
-    
-    // 会使用这个构造函数来创建结构体
+
+    // 反序列化时用这个构造函数创建结构体
     [NinoConstructor(nameof(Id), nameof(Name), nameof(CreateTime))] // [!code highlight]
     public SimpleStruct(int a, string b, DateTime c)
     {
@@ -170,7 +189,7 @@ public struct SimpleStruct
 ```
 
 </Tab>
-<Tab value="自动使用类的第一个带参构造函数">
+<Tab value="类使用有参构造函数">
 
 ```csharp
 [NinoType]
@@ -179,9 +198,9 @@ public class SimpleClassWithConstructor
     public int Id;
     public string Name;
     public DateTime CreateTime;
-    
-    // [NinoConstructor(nameof(Id), nameof(Name), nameof(CreateTime))] - 我们尝试不使用这个，看看是否会自动使用
-    // 应该会自动使用这个构造函数，因为这是唯一的public构造函数
+
+    // 不需要 [NinoConstructor]：这是唯一的 public 构造函数，
+    // 参数也与成员同名，Nino 会自动使用它
     public SimpleClassWithConstructor(int id, string name, DateTime createTime) // [!code highlight]
     {
         Id = id;

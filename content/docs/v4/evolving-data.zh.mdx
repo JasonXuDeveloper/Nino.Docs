@@ -31,6 +31,8 @@ icon: GitBranch
 
 </Callout>
 
+非托管的 `[NinoType]` 结构体按原始内存拷贝，所以它的字节还取决于字段顺序和 `StructLayout`：调整字段顺序或修改布局，都会让已有数据无法读取。`versionTolerant` 或 `keyed` 的结构体则逐个成员写出。
+
 ## 版本容错 [#version-tolerance]
 
 游戏的 1.1 版在设置文件里加了音乐音量，而玩家手里还是 1.0 写出的文件：
@@ -64,6 +66,8 @@ public class Settings
 </Callout>
 
 ### 向基类追加成员 [#appending-to-a-base-class]
+
+在版本容错的继承体系中，只能向没有子类的类追加成员。如果基类需要新成员，请把整个继承体系改成 [`keyed`](#keyed-members)。原因如下。
 
 继承体系的各层共用对象的这一个长度，成员从根类开始依次写出。因此追加到基类的成员会落在子类成员**之前**，把它们往后挤：
 
@@ -111,7 +115,7 @@ public class EnemyConfig
 - 同一类型中（包括继承来的成员）如果两个成员名哈希到同一个键，会在编译期报错（NINO014），所以哈希冲突不会损坏数据。
 - 键控结构体永远不会按原始内存写入。多态照常工作：类型 ID 写在成员数据之前。
 
-这种格式适合在编辑器中编辑、需要长期保存的数据：游戏配置、关卡数据、设置文件。
+这种格式适合需要长期保存、会经历多个版本修改的数据：配置、文档、设置文件、游戏或关卡数据。
 
 ### 重命名键控成员 [#renaming-keyed-members]
 
@@ -142,7 +146,7 @@ public class PlayerSave
 </Accordion>
 <Accordion title="游戏存档与用户文件">
 
-如果只会陆续向没有子类的类添加字段，用 `versionTolerant`；想自由地删除和重排字段，用 `keyed`。如果存档中的对象图有共享对象或循环，再加上 [`trackReferences`](/zh/docs/v4/reference-tracking)。参见[存档与持久化](/zh/docs/v4/advanced/persistence)。
+如果只会陆续向没有子类的类添加字段，用 `versionTolerant`；想自由地删除和重排字段，用 `keyed`。如果存档中的对象图有共享对象或循环，再加上 [`trackReferences`](/zh/docs/v4/reference-tracking)。参见[持久化与存储](/zh/docs/v4/advanced/persistence)。
 
 </Accordion>
 <Accordion title="在 Unity 编辑器中编辑的配置">

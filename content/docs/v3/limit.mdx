@@ -1,56 +1,58 @@
 ---
 title: Limitations
+description: What Nino v3 cannot do, and the limitations that later v3 releases removed.
 icon: TriangleAlert
 ---
 
-This page describes the limitations of Nino.
+What Nino v3 does not do, and the limitations of earlier releases that v3 removed.
 
-## Current Limitations
-- Need to be used with Source Generator
-- `WEAK_VERSION_TOLERANCE` defined project cannot deserialize data serialized by a project without `WEAK_VERSION_TOLERANCE` defined, and vice versa
-- When attempting to serialize types that are not supported (such as Queue), a compilation error will occur
-- `ValueTuple` behaves differently in `.NET Core` and `Unity/Mono`
-  <Callout type="info">
+## Current Limitations [#current-limitations]
+- **Source generator required.** Nino has to be used with its source generator.
+- **`WEAK_VERSION_TOLERANCE` is all or nothing.** A project that defines `WEAK_VERSION_TOLERANCE` cannot deserialize data serialized by a project that does not define it, and vice versa.
+- **Unsupported types fail the build.** Serializing a type that is not supported (such as `Queue<T>`) causes a compilation error.
+- **`ValueTuple` differs between .NET Core and Unity/Mono.** See below.
 
-  This is not Nino's fault. If you look at the implementation for `ValueTuple` in `Mono`, [this link](https://github.com/mono/mono/blob/0f53e9e151d92944cacab3e24ac359410c606df6/mcs/class/corlib/Mono/RuntimeStructs.cs#L83), they did not specify the struct layout of all valuetuples, so its fields will be serialized/deserialized sequentially by Nino. Note that Unity is currently using `Mono` in its editor, or player mode as well (while IL2CPP is not selected). I am not sure what IL2CPP does with this but I believe it is consitent with Mono.
+<Callout type="info" title="Why ValueTuple is not portable">
 
-  However, in `.NET Core`'s implementation, [this link here](https://github.com/dotnet/runtime/blob/37e4d45236e68946db9d264593aa31a9c00534bc/src/libraries/System.Private.CoreLib/src/System/ValueTuple.cs#L425), they choose to use `LayoutKind.Auto` to layout valuetuples, that can lead to a different result compared to the `Mono` implementation. So `ValueTuple` is not compatible between `.NET Core` and `Unity/Mono`.
+This is not Nino's fault. [Mono's implementation of `ValueTuple`](https://github.com/mono/mono/blob/0f53e9e151d92944cacab3e24ac359410c606df6/mcs/class/corlib/Mono/RuntimeStructs.cs#L83) does not specify a struct layout for value tuples, so Nino serializes and deserializes their fields in sequence. Unity uses Mono in the editor, and in players when IL2CPP is not selected. IL2CPP is believed to behave like Mono.
 
-  </Callout>
+[.NET Core's implementation](https://github.com/dotnet/runtime/blob/37e4d45236e68946db9d264593aa31a9c00534bc/src/libraries/System.Private.CoreLib/src/System/ValueTuple.cs#L425) lays value tuples out with `LayoutKind.Auto`, which can produce a different layout from Mono's. So `ValueTuple` data is not compatible between .NET Core and Unity/Mono.
 
-## Resolved Limitations
-- Cannot rename type name/namespace after serialization
-    <Callout type="info">
+</Callout>
 
-    This feature was implemented in v3.2.2, and now you can rename the type name/namespace after serialization and still be able to deserialize the old data serialized by the old type name/namespace
+## Resolved Limitations [#resolved-limitations]
 
-    </Callout>
-- Have no version tolerance for collections
-    <Callout type="info">
+<Accordions type="multiple">
+<Accordion value="former-name" title="Cannot rename a type or its namespace after serialization">
 
-    This feature was implemented in v3.2.0, and now you can modify the data structure of a type and still be able to deserialize the old data serialized by the old data structure, even it is a colection (list, dictionary, etc.) with polymorphic elements
+Resolved in v3.2.2: a renamed type can still deserialize data serialized under its old name or namespace. See [Former Name](/en/docs/v3/advanced#former-name).
 
-    </Callout>
-- Cannot serialize/deserialize non-public fields/properties
-    <Callout type="info">
+</Accordion>
+<Accordion value="collections" title="No version tolerance for collections">
 
-    This feature was implemented in v3.0.6, but there are some things to note:
-    - If you are using a version below `NET8.0`, you need to add the `partial` modifier to the type that contains private members, such as `partial class MyClass`
-    - If you are using a version below `NET8.0`, you cannot define private members in the serializable nested type
-    - If you are using version `NET8.0` and above, **there are no restrictions**
+Resolved in v3.2.0: you can change a type's members and still deserialize data serialized before the change, even inside a collection (list, dictionary, and so on) with polymorphic elements.
 
-    </Callout>
-- For polymorphic unmanaged struct, serializing the struct with and without casting to its interface produces different results, and requires different deserialization methods to obtain the correct result
-    <Callout type="info">
+</Accordion>
+<Accordion value="non-public" title="Cannot serialize or deserialize non-public fields and properties">
 
-    This problem was fixed since v3.0.3 - all polymorphic unmanaged structs will be serialized and deserialized in a uniformed way no matter whether it is casted to its interface or not
+Resolved in v3.0.6, with some caveats:
+- Before .NET 8.0, a type that contains private members must be `partial`, for example `partial class MyClass`.
+- Before .NET 8.0, a serializable nested type cannot declare private members.
+- On .NET 8.0 and later, **there are no restrictions**.
 
-    </Callout>
-- If your project aims to run on big-endian platforms, you need to add the define symbol `BIG_ENDIAN` to `Nino.Core` project and to compile it on your own then use the compiled `dll`. Otherwise, Nino assumes the platform is little-endian (default by C#) and may lead to incorrect deserialization on big-endian platforms.
-    <Callout type="info">
+See [Choosing Members](/en/docs/v3/types#choosing-members).
 
-    In theory, all platforms running on .NET (including Unity) are little-endian, so you don't need to worry about this issue.
+</Accordion>
+<Accordion value="unmanaged-polymorphism" title="Polymorphic unmanaged structs serialize differently with and without a cast to their interface">
 
-    If you encounter big-endian issues, then add the `BIG_ENDIAN` define symbol will solve the problem.
+Resolved in v3.0.3: every polymorphic unmanaged struct is serialized and deserialized the same way, whether or not it is cast to its interface.
 
-    </Callout>
+</Accordion>
+<Accordion value="big-endian" title="Big-endian platforms">
+
+Nino assumes a little-endian platform (the C# default), so data may deserialize incorrectly on a big-endian one. To target a big-endian platform, add the define symbol `BIG_ENDIAN` to the `Nino.Core` project, compile it yourself and use the compiled DLL.
+
+In practice every platform that runs .NET (Unity included) is little-endian, so you do not need to worry about this. Add `BIG_ENDIAN` only if you actually hit an endianness problem.
+
+</Accordion>
+</Accordions>

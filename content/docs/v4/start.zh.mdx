@@ -1,5 +1,6 @@
 ---
 title: 快速开始
+seoTitle: "快速开始：在 .NET、Unity、Godot 中安装 Nino – Nino v4 文档"
 description: "在 .NET、Unity 或 Godot 项目中安装 Nino v4，序列化第一个类型。"
 icon: Rocket
 ---
@@ -150,11 +151,11 @@ dotnet add package Nino
 using Nino.Core;
 
 [NinoType]
-public class GameData
+public class UserProfile
 {
-    public int Score;
-    public string PlayerName;
-    public DateTime LastPlayed;
+    public long Id;
+    public string Name;
+    public DateTime LastLogin;
 }
 ```
 
@@ -164,7 +165,7 @@ public class GameData
 ### 序列化 [#serialize-it]
 
 ```csharp
-var data = new GameData { Score = 1000, PlayerName = "Player1", LastPlayed = DateTime.Now };
+var data = new UserProfile { Id = 42, Name = "Ada", LastLogin = DateTime.UtcNow };
 byte[] bytes = NinoSerializer.Serialize(data);
 ```
 
@@ -174,7 +175,7 @@ byte[] bytes = NinoSerializer.Serialize(data);
 ### 反序列化 [#deserialize-it]
 
 ```csharp
-GameData restored = NinoDeserializer.Deserialize<GameData>(bytes);
+UserProfile restored = NinoDeserializer.Deserialize<UserProfile>(bytes);
 ```
 
 </Step>
@@ -185,7 +186,7 @@ GameData restored = NinoDeserializer.Deserialize<GameData>(bytes);
 用 `ref` 传入已有实例，Nino 会原地填充它，并复用其中的嵌套对象和集合；传入 `null` 则创建新实例：
 
 ```csharp
-GameData current = null;
+UserProfile current = null;
 NinoDeserializer.Deserialize(bytes, ref current);    // creates the instance
 NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
 ```
@@ -210,5 +211,5 @@ Unity 和 HybridCLR 项目请参见[启动检查清单](/zh/docs/v4/advanced/uni
   <Card title="序列化与反序列化" href="/zh/docs/v4/basic">全部重载：缓冲区写入器、Span、`Writer`/`Reader`、装箱值。</Card>
   <Card title="定义类型" href="/zh/docs/v4/defining-types">选择成员和顺序，私有成员、记录、泛型。</Card>
   <Card title="支持的类型" href="/zh/docs/v4/types">基元类型、字符串、元组、集合，以及你自己的集合类型。</Card>
-  <Card title="进阶指南" href="/zh/docs/v4/advanced">热路径、网络、存档和 Unity 的完整实践方案。</Card>
+  <Card title="进阶指南" href="/zh/docs/v4/advanced">热路径、网络与 RPC、消息队列、缓存、持久化和 Unity 的完整实践方案。</Card>
 </Cards>

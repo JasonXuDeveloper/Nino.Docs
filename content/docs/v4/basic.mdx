@@ -1,5 +1,6 @@
 ---
 title: Serialize and Deserialize
+seoTitle: "Serialize and Deserialize in C# – Nino v4 Docs"
 description: "Serialize and deserialize with NinoSerializer and NinoDeserializer, reuse buffers and instances, and handle runtime types."
 icon: Play
 ---
@@ -12,7 +13,7 @@ icon: Play
   }}
 />
 
-`NinoSerializer` and `NinoDeserializer` (namespace `Nino.Core`) are the whole runtime API. Both are static and **thread safe**: call them from any number of threads without locking. Per-call state (scratch buffers, reference tables) is kept per thread, and no hot path writes shared memory.
+`NinoSerializer` and `NinoDeserializer` (namespace `Nino.Core`) are the whole runtime API. Both are static and **thread safe**: call them from any number of threads without locking. Per-call state (the [scratch buffer](#terms) Nino serializes into, reference tables) is kept per thread, and no hot path writes shared memory.
 
 ## Serializing
 
@@ -76,7 +77,7 @@ writer.ReleaseReferences(); // ends reference tracking, see below
 
 <Callout type="info">
 
-The top-level overloads scope [reference tracking](/en/docs/v4/reference-tracking) to one call. When you create a `Writer` (or `Reader`) yourself, tracking spans everything written through it until you call `ReleaseReferences()`. Call it at the end of each logical message; it costs nothing if no tracked type was written.
+When you pass a value and get bytes back (or pass a buffer writer), [reference tracking](/en/docs/v4/reference-tracking) covers that one call. When you create a `Writer` (or `Reader`) yourself, tracking spans everything written through it until you call `ReleaseReferences()`. Call it at the end of each logical message; it costs nothing if no tracked type was written.
 
 </Callout>
 
@@ -189,14 +190,14 @@ byte[] bytes = NinoSerializer.Serialize(deepTree);
 var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
 ```
 
-A deferred object is created and placed in its slot as soon as the slot is read, and its members are read later in the same call, so reuse deserialization and `[NinoPooled]` still reuse every instance. Two kinds of classes cannot be deferred like that and are always nested in place:
+A recursive type like `TreeNode` needs no `trackReferences` as long as the data is a tree, where each node is referenced once. If a node appears twice or the graph has a cycle, mark the type [`trackReferences: true`](/en/docs/v4/reference-tracking). Without it, a shared node is written as separate copies, and a cycle (`a.Next = b; b.Next = a;`) is detected while writing and throws an `InvalidOperationException` that names the type and points to `trackReferences`, so it never loops forever.
+
+A deferred object is created and stored in its member or collection element as soon as Nino reaches that member, and its members are read later in the same call, so reuse deserialization and `[NinoPooled]` still reuse every instance. Two kinds of classes cannot be deferred like that and are always nested in place:
 
 - classes created by their **constructor** (positional records, init-only or read-only members), since there is no instance until their members are read;
 - classes **compared by value** (records, classes that override `GetHashCode` or implement `IComparable`), since a `HashSet<T>`, dictionary key or sorted collection could hold one before its members are read.
 
 A graph of such classes throws an `InvalidOperationException` once it is nested 512 levels deep. Give a deeply recursive type a parameterless constructor and settable members.
-
-An object graph with a **cycle** (`a.Next = b; b.Next = a;`) would never finish writing, so writing it throws an `InvalidOperationException` that names the type. Mark the types on the cycle [`trackReferences: true`](/en/docs/v4/reference-tracking) to write each object once and keep the cycle.
 
 ## Invalid Data
 
@@ -205,3 +206,20 @@ Every length read from a payload is checked against the remaining bytes before a
 Deeply nested data cannot overflow the stack either: see [Deep Object Graphs](#deep-object-graphs).
 
 Nino does not detect data written for a **different** type with a compatible layout: the bytes carry no schema. Version your payloads yourself (see [Evolving Your Data](/en/docs/v4/evolving-data) and the [save file header](/en/docs/v4/advanced/persistence#add-a-file-header) pattern).
+
+## Terms [#terms]
+
+Words these docs use with a specific meaning:
+
+- **Top-level call**: a `NinoSerializer.Serialize(...)` or `NinoDeserializer.Deserialize(...)` call that takes your value and a `byte[]`, span or buffer writer, as opposed to a call that passes a `Writer` or `Reader` you created yourself, and to the values Nino reads and writes inside a call. Each top-level call is self-contained: it starts and ends its own [reference tracking](/en/docs/v4/reference-tracking).
+- **Boxed overloads**: the overloads that take an `object` and a `Type` (`Serialize(object)`, `SerializeBoxed`, `Deserialize(data, type)`, `DeserializeBoxed`), for types known only at run time; see [Runtime Types](#runtime-types).
+- **Formatter**: the code that writes and reads one type: generated for each `[NinoType]`, built into Nino for the BCL types, or [written by you](/en/docs/v4/custom-formatters). The **formatter cache** is `NinoFormatterCache<T>`, the static field through which a call finds the formatter of `T`.
+- **Intercepted call**: on the .NET 8 SDK and later, the generator redirects each call whose type is known at compile time straight to that type's formatter, skipping the formatter cache; see [Interceptors](/en/docs/v4/performance#interceptors).
+- **Scratch buffer**: a `NinoArrayBufferWriter` that Nino keeps per thread. A call that returns a `byte[]`, or writes into a buffer writer other than `NinoArrayBufferWriter`, serializes into it first and then copies the bytes out.
+- **Raw** (raw value, raw struct): an unmanaged value that Nino writes as its memory, in one copy, with padding bytes zeroed: primitives, enums, `DateTime`, `Guid`, and unmanaged structs that qualify (see [Structs](/en/docs/v4/defining-types#structs)). Arrays and lists of raw values are one block copy.
+- **Fixed-size type**: a struct or sealed class whose values always take the same number of bytes, returned by `NinoSerializer.GetFixedSize<T>()`; see [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
+- **Positional**: the default format of a `[NinoType]`: members in declaration order, with no names or lengths. Smallest and fastest, but any change to the members changes the format; see [Evolving Your Data](/en/docs/v4/evolving-data#positional).
+- **Slot**: a place that holds a value: a member, a collection element, a dictionary value, or the variable you pass by `ref`. What Nino writes for a value depends on the slot's declared type.
+- **Header**: the bytes Nino writes before a class value: a 1-byte null flag for a sealed class, a 4-byte type id for a type that can have subtypes; a struct has none. See [How a Polymorphic Value Is Written](/en/docs/v4/polymorphism#how-a-polymorphic-value-is-written).
+- **Recycler**: what receives an instance that [reuse deserialization](/en/docs/v4/pooling) drops from a slot: a handler registered with `NinoSettings.SetRecycler<T>`, otherwise the instance's own pool (`ReturnToPool()`), otherwise nobody. See [Where Dropped Instances Go](/en/docs/v4/pooling#where-dropped-instances-go).
+- **Deferred object**: an object nested more than 128 levels deep, written and read later from a shallower level so that the stack stays bounded; see [Deep Object Graphs](#deep-object-graphs).

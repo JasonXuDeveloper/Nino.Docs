@@ -1,6 +1,7 @@
 /**
- * Generate the favicons, the navbar logo and the social preview image from
- * public/favicon.png (the Nino icon).
+ * Generate the favicons and the navbar logo from public/favicon.png (the Nino
+ * icon). The social cards are drawn by scripts/og.ts (`bun run og:default`
+ * redraws public/og.png).
  *
  * Usage: bun run favicons
  */
@@ -28,35 +29,6 @@ function resize(size: number) {
   });
 }
 
-// 1200x630 card: navy background, glow, icon and title
-async function socialImage() {
-  const background =
-    Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630">
-  <defs>
-    <radialGradient id="glow" cx="50%" cy="38%" r="60%">
-      <stop offset="0" stop-color="#6366f1" stop-opacity="0.45"/>
-      <stop offset="1" stop-color="#0b0e24" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="text" x1="0" x2="1">
-      <stop offset="0" stop-color="#22d3ee"/>
-      <stop offset="0.4" stop-color="#3b82f6"/>
-      <stop offset="0.7" stop-color="#6366f1"/>
-      <stop offset="1" stop-color="#8b5cf6"/>
-    </linearGradient>
-  </defs>
-  <rect width="1200" height="630" fill="#0b0e24"/>
-  <rect width="1200" height="630" fill="url(#glow)"/>
-  <text x="600" y="470" text-anchor="middle" font-family="Inter, Helvetica, Arial, sans-serif" font-size="96" font-weight="800" fill="url(#text)">Nino</text>
-  <text x="600" y="540" text-anchor="middle" font-family="Inter, Helvetica, Arial, sans-serif" font-size="34" fill="#c7cbe8">High-performance binary serialization for C#</text>
-</svg>`);
-  const icon = await resize(260).png().toBuffer();
-  await sharp(background)
-    .composite([{ input: icon, top: 80, left: 470 }])
-    .png({ compressionLevel: 9 })
-    .toFile(path.join(publicDir, 'og.png'));
-  console.log('  og.png (1200x630)');
-}
-
 async function main() {
   console.log('Generating icons from', path.relative('.', source));
 
@@ -75,8 +47,6 @@ async function main() {
   );
   await writeFile(path.join(publicDir, 'favicon.ico'), ico.encode(buffers));
   console.log(`  favicon.ico (${icoSizes.join('+')})`);
-
-  await socialImage();
 }
 
 main().catch((error) => {

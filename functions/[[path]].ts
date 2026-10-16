@@ -5,6 +5,10 @@ interface Env {
 const localizedPathPattern = /^\/(en|zh)(?:\/|$)/;
 const docsMarkdownPattern = /^\/(en|zh)\/docs\/.+/;
 const markdownMime = 'text/markdown; charset=utf-8';
+const markdownFilePattern = /^\/(en|zh)\/docs\/.+\.mdx?$/;
+const siteUrl = 'https://nino.xgamedev.net';
+// Versions other than the latest are noindex (src/lib/seo.ts)
+const archivedPattern = /^\/(en|zh)\/docs\/(v3|v2)(\/|\.|$)/;
 const localeCookieName = 'FD_LOCALE';
 const zhCountries = new Set(['CN', 'TW', 'HK', 'MO', 'SG']);
 const bypassExtensions = new Set([
@@ -43,6 +47,18 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return context.next();
   }
 
+  // Markdown copies of the docs pages (/en/docs/v4/start.md, legacy .mdx)
+  if (markdownFilePattern.test(url.pathname)) {
+    return withMarkdownHeaders(await context.next(), url.pathname);
+  }
+
+  // React Router data files: never a search result
+  if (url.pathname.endsWith('.data')) {
+    return withHeaders(await context.next(), {
+      'X-Robots-Tag': 'noindex',
+    });
+  }
+
   if (prefersMarkdown(request) && docsMarkdownPattern.test(url.pathname)) {
     return serveMarkdown(context, url);
   }
@@ -59,6 +75,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         'Set-Cookie': serializeLocaleCookie(locale),
       },
     });
+  }
+
+  // Docs pages answer with HTML or Markdown depending on Accept (above)
+  if (docsMarkdownPattern.test(url.pathname)) {
+    return withHeaders(await context.next(), { Vary: 'Accept' });
   }
 
   return context.next();
@@ -99,21 +120,39 @@ async function serveMarkdown(
   url: URL,
 ) {
   const assetUrl = new URL(url);
-  // Pages serves /en/docs/v4/start/ (trailing slash); the Markdown copy is
-  // /en/docs/v4/start.mdx.
+  // The Markdown copy of /en/docs/v4/start (or .../start/) is
+  // /en/docs/v4/start.md.
   const pathname = url.pathname.replace(/\/+$/, '');
-  assetUrl.pathname = pathname.endsWith('.mdx') ? pathname : `${pathname}.mdx`;
+  assetUrl.pathname = /\.mdx?$/.test(pathname) ? pathname : `${pathname}.md`;
 
   const response = await context.env.ASSETS.fetch(assetUrl);
   if (response.status === 404) return context.next();
 
-  return new Response(response.body, {
-    status: response.status,
-    headers: {
-      'Content-Type': markdownMime,
-      'Cache-Control':
-        response.headers.get('cache-control') ?? 'public, max-age=3600',
-    },
+  const markdown = withMarkdownHeaders(response, assetUrl.pathname);
+  markdown.headers.set('Vary', 'Accept');
+  return markdown;
+}
+
+function withHeaders(response: Response, headers: Record<string, string>) {
+  const result = new Response(response.body, response);
+  for (const [name, value] of Object.entries(headers))
+    result.headers.set(name, value);
+  return result;
+}
+
+/**
+ * Markdown copies are served as text/markdown and point search engines at the
+ * HTML page (rel="canonical"), so they never compete with it in results.
+ */
+function withMarkdownHeaders(response: Response, pathname: string) {
+  if (!response.ok) return response;
+  const page = pathname.replace(/\.mdx?$/, '');
+  return withHeaders(response, {
+    'Content-Type': markdownMime,
+    'Cache-Control':
+      response.headers.get('cache-control') ?? 'public, max-age=3600',
+    Link: `<${siteUrl}${page}>; rel="canonical"`,
+    ...(archivedPattern.test(pathname) ? { 'X-Robots-Tag': 'noindex' } : {}),
   });
 }
 

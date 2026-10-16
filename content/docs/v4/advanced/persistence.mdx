@@ -1,10 +1,11 @@
 ---
-title: Save Games and Persistence
-description: "Files that survive updates: keyed and version-tolerant types, object graphs with shared references, headers and safe writes."
+title: "Persistence and Storage"
+seoTitle: "Persistence and Storage in C#: Data That Survives Updates – Nino v4 Docs"
+description: "Store Nino data in files, databases and other storage so it survives updates: keyed and version-tolerant types, object graphs with shared references, headers and safe writes."
 icon: Save
 ---
 
-A save file is read by builds that did not exist when it was written. This guide shows how to lay out persistent data so that next year's update still loads this year's saves.
+Stored data is read by builds that did not exist when it was written: a game save, a desktop app's document, a local cache, a snapshot, an event log. This guide shows how to lay out persistent data so that next year's release still loads this year's files, using a game save as the running example, and then covers [key-value stores](#key-value-stores), [append-only logs](#append-only-logs) and [snapshots](#snapshots-and-checkpoints).
 
 ## Pick a Format per Type
 
@@ -155,6 +156,164 @@ public static SaveGame Load(string path) =>
 On Unity, write under `Application.persistentDataPath`.
 
 </Callout>
+
+## Key-Value Stores [#key-value-stores]
+
+Embedded stores (RocksDB, LMDB, FASTER, LiteDB's file storage, SQLite `BLOB` columns) and local caches take bytes in and give bytes out. Nino fits both sides: serialize the key and the value into reused buffers, pass the spans, and deserialize what comes back. The store interface below stands in for your store's API:
+
+```csharp title="TypedStore.cs"
+using Nino.Core;
+
+public interface IKeyValueStore            // stands in for your store's API
+{
+    void Put(ReadOnlySpan<byte> key, ReadOnlySpan<byte> value);
+    byte[] Get(ReadOnlySpan<byte> key);
+}
+
+public sealed class TypedStore<TKey, TValue> where TKey : unmanaged
+{
+    private readonly IKeyValueStore _store;
+    private readonly NinoArrayBufferWriter _key = new(64);
+    private readonly NinoArrayBufferWriter _value = new(1024);
+
+    public TypedStore(IKeyValueStore store) => _store = store;
+
+    public void Put(TKey key, TValue value)
+    {
+        _key.ResetWrittenCount();
+        NinoSerializer.Serialize(key, _key);
+        _value.ResetWrittenCount();
+        NinoSerializer.Serialize(value, _value);
+        _store.Put(_key.WrittenSpan, _value.WrittenSpan);
+    }
+
+    public bool TryGet(TKey key, out TValue value)
+    {
+        _key.ResetWrittenCount();
+        NinoSerializer.Serialize(key, _key);
+        byte[] bytes = _store.Get(_key.WrittenSpan);
+        value = bytes == null ? default : NinoDeserializer.Deserialize<TValue>(bytes);
+        return bytes != null;
+    }
+}
+```
+
+- An unmanaged key (an `int`, a `Guid`, a struct of ids) is written as its raw little-endian bytes. Stores that sort keys bytewise do **not** sort little-endian integers numerically; if you need range scans in numeric order, write such keys yourself with `BinaryPrimitives.WriteInt64BigEndian`.
+- The instance holds two buffers, so use one per thread or guard it with a lock.
+- Stored values outlive the code that wrote them: make value types `keyed` or `versionTolerant`, as for save files.
+
+## Append-Only Logs [#append-only-logs]
+
+An append-only log (an event store, a write-ahead log, a journal of changes) appends records and never rewrites them. Frame each record with a length prefix, so a reader can find the record boundaries and detect a record that a crash cut short:
+
+```csharp title="EventLog.cs"
+using System.Buffers.Binary;
+using Nino.Core;
+
+[NinoType(versionTolerant: true)]
+public abstract class AccountEvent
+{
+    public long Sequence;
+}
+
+public sealed class Deposited : AccountEvent { public decimal Amount; }
+public sealed class Withdrawn : AccountEvent { public decimal Amount; }
+
+/// <summary>An append-only file of [int32 length][payload] records.</summary>
+public sealed class EventLog : IDisposable
+{
+    private readonly FileStream _file;
+    private readonly NinoArrayBufferWriter _buffer = new(1024);
+
+    public EventLog(string path) =>
+        _file = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
+
+    public void Append(AccountEvent evt)
+    {
+        _buffer.ResetWrittenCount();
+        var writer = new Writer(_buffer);
+        int slot = writer.ReserveInt32();
+        NinoSerializer.Serialize(evt, ref writer);
+        writer.PatchLength(slot);                 // bytes written after the slot
+        writer.Flush();
+        _file.Write(_buffer.WrittenSpan);
+        _file.Flush(flushToDisk: true);           // durable before the caller is told it is stored
+    }
+
+    public void Dispose()
+    {
+        _file.Dispose();
+        _buffer.Dispose();
+    }
+
+    /// <summary>Replays every complete record; a torn record at the end (a crash mid-write) is ignored.</summary>
+    public static IEnumerable<AccountEvent> Replay(string path)
+    {
+        byte[] data = File.ReadAllBytes(path);
+        int offset = 0;
+        while (data.Length - offset >= 4)
+        {
+            int length = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset));
+            if (length < 0 || length > data.Length - offset - 4)
+                yield break;                      // incomplete tail
+            yield return NinoDeserializer.Deserialize<AccountEvent>(data.AsSpan(offset + 4, length));
+            offset += 4 + length;
+        }
+    }
+}
+```
+
+- `Flush(flushToDisk: true)` per record is the safe default and the slowest. To trade durability for throughput, append several records and flush once (group commit).
+- The length prefix finds a torn **tail**. To detect corruption in the middle of a file, add a checksum per record (for example `System.IO.Hashing.Crc32`) after the length.
+- Events are read back by builds that did not exist when they were written: the [message queue rules](/en/docs/v4/advanced/message-queues#topics-that-outlive-a-deployment) apply unchanged.
+- `Replay` reads the whole file for brevity. For large logs, read it in chunks with the [`Stream` frame helpers](/en/docs/v4/advanced/streams#streams), which use the same format.
+
+## Snapshots and Checkpoints [#snapshots-and-checkpoints]
+
+Replaying a long log on every start is slow. Store a snapshot of the state together with the position it covers, and replay only what came after it:
+
+```csharp title="Snapshots.cs"
+using Nino.Core;
+
+[NinoType(keyed: true)]
+public sealed class AccountSnapshot
+{
+    public long LastSequence;   // the last event the snapshot includes
+    public decimal Balance;
+}
+
+public static class Snapshots
+{
+    public static void Write(string path, AccountSnapshot snapshot)
+    {
+        string temp = path + ".tmp";
+        File.WriteAllBytes(temp, NinoSerializer.Serialize(snapshot));
+        File.Move(temp, path, overwrite: true);   // never leaves a half-written snapshot
+    }
+
+    public static AccountSnapshot Load(string snapshotPath, string logPath)
+    {
+        var state = File.Exists(snapshotPath)
+            ? NinoDeserializer.Deserialize<AccountSnapshot>(File.ReadAllBytes(snapshotPath))
+            : new AccountSnapshot();
+        foreach (var evt in EventLog.Replay(logPath))
+        {
+            if (evt.Sequence <= state.LastSequence)
+                continue;                         // already in the snapshot
+            state.Balance += evt switch
+            {
+                Deposited d => d.Amount,
+                Withdrawn w => -w.Amount,
+                _ => 0m,
+            };
+            state.LastSequence = evt.Sequence;
+        }
+        return state;
+    }
+}
+```
+
+The same pattern checkpoints any long-running computation (a simulation, a stream processor, a training job): serialize its state and the input position it has reached, write it [safely](#write-safely), and resume from it after a restart. Object graphs with shared references need [`trackReferences`](#object-graphs) in the snapshot types.
 
 ## Test Old Saves
 

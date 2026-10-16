@@ -1,0 +1,189 @@
+---
+title: 缓存
+seoTitle: "C# 缓存序列化：Redis 与 IDistributedCache – Nino v4 文档"
+description: "用 Nino 作为缓存的值格式：Redis 等分布式缓存、IDistributedCache 与 HybridCache、进程内的序列化数据缓存，以及跨部署的结构变化。"
+icon: DatabaseZap
+---
+
+缓存里存的都是字节：Redis 字符串、`IDistributedCache` 条目、memcached 数据项，或者你自己字典里的 `byte[]`。Nino 负责在值和字节之间来回转换，不用反射，自身也不会每次调用都分配内存；序列化后的数据很紧凑，同样的内存能放下更多条目，经过网络的数据也更少。
+
+下面的例子都使用这个用户资料类型：
+
+```csharp title="UserProfile.cs"
+using Nino.Core;
+
+[NinoType(versionTolerant: true)] // cached data outlives a deployment, see below
+public sealed class UserProfile
+{
+    public long Id;
+    public string DisplayName;
+    public string Email;
+    public DateTime UpdatedAt;
+    public List<string> Roles;
+}
+```
+
+## Redis [#redis]
+
+任何 Redis 客户端都以字节的形式读写值。以 [StackExchange.Redis](https://stackexchange.github.io/StackExchange.Redis/) 为例：序列化到复用的缓冲区并直接传入它的内存；读取时用 `StringGetLease`，拿到的是池化的字节，而不是一个新的 `byte[]`：
+
+```csharp title="RedisProfileCache.cs"
+using Nino.Core;
+using StackExchange.Redis;
+
+public sealed class RedisProfileCache
+{
+    private readonly IDatabase _db;
+    [ThreadStatic] private static NinoArrayBufferWriter t_buffer;
+
+    public RedisProfileCache(IConnectionMultiplexer redis) => _db = redis.GetDatabase();
+
+    private static RedisKey Key(long id) => "profile:v1:" + id; // the key carries a schema version
+
+    public void Set(UserProfile profile, TimeSpan ttl)
+    {
+        var buffer = t_buffer ??= new NinoArrayBufferWriter(1024);
+        buffer.ResetWrittenCount();
+        NinoSerializer.Serialize(profile, buffer);
+        _db.StringSet(Key(profile.Id), buffer.WrittenMemory, ttl); // synchronous: done before the buffer is reused
+    }
+
+    public UserProfile Get(long id)
+    {
+        using Lease<byte> lease = _db.StringGetLease(Key(id));      // pooled bytes, no byte[] per read
+        if (lease == null)
+            return null;
+        return NinoDeserializer.Deserialize<UserProfile>(lease.Span);
+    }
+}
+```
+
+这里的 Redis 调用只是示意，换成任何客户端，Nino 这部分都一样。如果用异步 API（`StringSetAsync`），要等它完成后再重置缓冲区，或者改用 `NinoSerializer.Serialize(profile)` 直接传 `byte[]`。
+
+## IDistributedCache [#idistributedcache]
+
+`IDistributedCache`（Redis、SQL Server 以及 ASP.NET Core 的其他缓存实现）存取的是 `byte[]`。两个扩展方法就够了：
+
+```csharp title="DistributedCacheExtensions.cs"
+using Microsoft.Extensions.Caching.Distributed;
+using Nino.Core;
+
+public static class DistributedCacheExtensions
+{
+    public static Task SetNinoAsync<T>(this IDistributedCache cache, string key, T value,
+        DistributedCacheEntryOptions options, CancellationToken ct = default) =>
+        cache.SetAsync(key, NinoSerializer.Serialize(value), options, ct);
+
+    public static async Task<T> GetNinoAsync<T>(this IDistributedCache cache, string key,
+        CancellationToken ct = default)
+    {
+        byte[] bytes = await cache.GetAsync(key, ct);
+        return bytes == null ? default : NinoDeserializer.Deserialize<T>(bytes);
+    }
+}
+```
+
+这个接口按数组收发数据，所以每次调用都会分配一个 `byte[]`：这是缓存 API 的开销，不是 Nino 的。
+
+## HybridCache [#hybridcache]
+
+`HybridCache`（`Microsoft.Extensions.Caching.Hybrid`，.NET 9 及以上）把值写入 `IBufferWriter<byte>`，从 `ReadOnlySequence<byte>` 读出，和 Nino 的 API 正好对应：
+
+```csharp title="NinoHybridSerializer.cs"
+using System.Buffers;
+using Microsoft.Extensions.Caching.Hybrid;
+using Nino.Core;
+
+public sealed class NinoHybridSerializer<T> : IHybridCacheSerializer<T>
+{
+    public void Serialize(T value, IBufferWriter<byte> target) => NinoSerializer.Serialize(value, target);
+
+    public T Deserialize(ReadOnlySequence<byte> source)
+    {
+        if (source.IsSingleSegment)
+            return NinoDeserializer.Deserialize<T>(source.First.Span);
+
+        int length = checked((int)source.Length);
+        byte[] rented = ArrayPool<byte>.Shared.Rent(length);
+        try
+        {
+            source.CopyTo(rented);
+            return NinoDeserializer.Deserialize<T>(rented.AsSpan(0, length));
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rented);
+        }
+    }
+}
+
+// registration
+services.AddHybridCache()
+    .AddSerializer<UserProfile, NinoHybridSerializer<UserProfile>>();
+```
+
+每个缓存的类型注册一个序列化器。泛型序列化器内部的调用不会被[拦截](/zh/docs/v4/performance#interceptors)，因为那里的 `T` 是类型参数；它们走常规路径，每次调用慢几纳秒。
+
+## 进程内的序列化数据缓存 [#in-process-blob-caches]
+
+进程内缓存通常直接存放对象。改为存放序列化后的字节，会带来三点不同：
+
+- **隔离。** 每次读取都反序列化出一份新的副本，调用方修改自己拿到的值，不会破坏缓存里的数据，也不会和其他线程产生竞争。
+- **占用。** 一个 `byte[]` 对垃圾回收器来说只是一个对象，而不是一整张由对象、列表和字符串组成的图。
+- **复用。** 调用方如果保留了实例，可以用 `ref` 反序列化到其中，不分配内存。
+
+```csharp title="BlobCache.cs"
+using System.Collections.Concurrent;
+using Nino.Core;
+
+/// <summary>Holds values as bytes: compact, and every reader gets its own copy.</summary>
+public sealed class BlobCache<TKey, TValue>
+{
+    private readonly ConcurrentDictionary<TKey, byte[]> _entries = new();
+
+    public void Set(TKey key, TValue value) => _entries[key] = NinoSerializer.Serialize(value);
+
+    public bool TryGet(TKey key, out TValue value)
+    {
+        if (_entries.TryGetValue(key, out byte[] bytes))
+        {
+            value = NinoDeserializer.Deserialize<TValue>(bytes);
+            return true;
+        }
+        value = default;
+        return false;
+    }
+
+    /// <summary>Reads into an instance the caller keeps: no allocation once it has the right shape.</summary>
+    public bool TryGetInto(TKey key, ref TValue value)
+    {
+        if (!_entries.TryGetValue(key, out byte[] bytes))
+            return false;
+        NinoDeserializer.Deserialize(bytes, ref value);
+        return true;
+    }
+}
+```
+
+代价是每次读取都要反序列化一次。对于读远多于写、读取方也不会修改的值，直接缓存对象更划算。
+
+## 跨部署的结构变化 [#schema-changes]
+
+共享缓存比写入它的进程活得更久：滚动部署期间，新旧实例会读取彼此写入的条目。每个缓存的类型都要选定下面的一种做法：
+
+| 做法 | 方式 | 适用场景 |
+| --- | --- | --- |
+| 容错类型 | [`versionTolerant: true`](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）或 [`keyed: true`](/zh/docs/v4/evolving-data#keyed-members)（任意修改） | 条目需要在部署后继续可用。 |
+| 带版本的键 | 在键里加上结构版本（`profile:v2:42`），类型变化时递增 | 类型的变化超出了上面两个选项的范围，或者缓存重新填充的代价很低。 |
+| 失败即未命中 | 捕获无效数据抛出的 `InvalidOperationException`，删除该条目，再从数据源加载 | 作为前两种做法之上的兜底，而不是替代：按布局兼容的另一个类型写入的字节，可能不报错就被反序列化出来。 |
+
+[按位置](/zh/docs/v4/evolving-data#positional)的类型（不带参数的 `[NinoType]`）最小、最快，但成员的任何改动都会让旧条目无法读取。缓存值只有在配合带版本的键时才适合用它。
+
+Nino 读取时会检查每个长度和边界，所以被截断或损坏的条目会抛出异常，而不会越界读取。不过字节里不带结构信息，详见[无效数据](/zh/docs/v4/basic#invalid-data)。
+
+## 检查清单 [#checklist]
+
+- [ ] 每个缓存的类型都是 `versionTolerant` 或 `keyed`，或者它的键带有结构版本。
+- [ ] 写入时每个线程复用一个缓冲区；异步写入要等完成后再重置缓冲区。
+- [ ] 客户端提供池化内存（`Lease<byte>`、`ReadOnlySequence<byte>`）时，直接从中反序列化。
+- [ ] 反序列化失败按缓存未命中处理。

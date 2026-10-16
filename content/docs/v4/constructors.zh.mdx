@@ -57,22 +57,35 @@ public sealed class Weapon
 </Tab>
 <Tab value="工厂方法">
 
-```csharp
+```csharp title="Currency.cs"
 [NinoType]
-public class Move
+public sealed class Currency
 {
-    public ushort ClientX;
-    public ushort ClientY;
+    private static readonly ConcurrentDictionary<string, Currency> s_known = new();
 
-    private Move() { }
+    public string Code { get; }   // ISO 4217, upper case
+    public int Decimals { get; }  // digits after the decimal point
 
-    [NinoConstructor(nameof(ClientX), nameof(ClientY))] // [!code highlight]
-    public static Move Create(ushort clientX, ushort clientY)
+    private Currency(string code, int decimals)
     {
-        return new Move { ClientX = clientX, ClientY = clientY };
+        Code = code;
+        Decimals = decimals;
+    }
+
+    [NinoConstructor(nameof(Code), nameof(Decimals))] // [!code highlight]
+    public static Currency Of(string code, int decimals)
+    {
+        if (code is not { Length: 3 })
+            throw new FormatException($"Invalid currency code '{code}'.");
+        if (decimals is < 0 or > 4)
+            throw new ArgumentOutOfRangeException(nameof(decimals));
+
+        // normalize, and share one instance per code: a constructor can do neither
+        return s_known.GetOrAdd(code.ToUpperInvariant(), static (c, d) => new Currency(c, d), decimals);
     }
 }
 ```
+
 
 </Tab>
 <Tab value="主构造函数">
@@ -124,7 +137,56 @@ Nino 提供两种介入实例创建的方式，用途不同：
 | 接收 | 所列成员反序列化后的值 | 无 |
 | 适合 | 构造不可变类型、校验数据、计算派生状态 | 从你自己的对象池中取实例 |
 | 调用之后 | 不是参数的成员会被逐个赋值 | 所有成员都原地填充 |
+| 复用 | 每次读取都重新创建，因此不能池化（NINO018） | 实例被复用，是 0 GC 反序列化的做法 |
+
+## 从对象池取实例 [#from-a-pool]
+
+只有当 Nino 需要一个**新**实例时，才会调用 `[NinoFactory]` 方法：槽位为 `null`、列表变长，或多态槽位换了类型。之后 Nino 原地填充这个实例。再配合[复用反序列化](/zh/docs/v4/pooling#deserializing-into-existing-instances)，并为被丢弃的实例注册[回收器](/zh/docs/v4/pooling#why-setrecycler)，对象池预热之后，处理源源不断的消息也不会再分配内存：
+
+```csharp title="Order.cs"
+[NinoType]
+public sealed class Order
+{
+    public long Id;
+    public List<OrderLine> Lines = new(); // kept with the order, reused in place
+
+    [NinoFactory] // [!code highlight]
+    public static Order Rent() => ObjectPool<Order>.Rent(); // ObjectPool<T>: see Pooled Collections
+
+    public void Return()
+    {
+        Lines.Clear();
+        ObjectPool<Order>.Return(this);
+    }
+}
+
+[NinoType]
+public sealed class OrderBatch
+{
+    public List<Order> Orders;
+}
+
+[NinoType]
+public struct OrderLine
+{
+    public int ProductId;
+    public int Quantity;
+}
+```
+
+```csharp
+// at startup: orders dropped by a shrinking list go back to the pool
+NinoSettings.SetRecycler<Order>(order => order.Return());
+
+OrderBatch batch = null;
+foreach (byte[] data in messages)
+    NinoDeserializer.Deserialize(data, ref batch); // more orders: Order.Rent(); fewer: Return()
+```
+
+- 该方法必须是 `public`、`static`，可以不传参数调用（无参，或所有参数都有默认值），并且返回值类型正好是声明它的类型；否则报告 NINO017。它不能返回 `null`。
+- 槽位里已有实例时，直接原地填充，不会调用工厂方法。
+- [`ObjectPool<T>`](/zh/docs/v4/pooling#your-own-pooled-collections) 是对象池页面里那个简单的线程本地池，换成任何对象池都可以。如果不需要自己的对象池，[`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled) 会生成一个，被丢弃的实例自动还回池中，无需注册回收器。
 
 ## 重新创建的类型 [#re-created-types]
 
-如果类型的成员在构造之后无法再赋值（构造函数参数、`init` 属性、只读属性或 `readonly` 字段），那么每次反序列化都会**重新创建**它，即使是[复用反序列化](/zh/docs/v4/pooling)也不例外，旧实例会交给回收器。这类类型不能使用 [`trackReferences`](/zh/docs/v4/reference-tracking)（NINO016）或 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)（NINO018）。需要这两项功能时，请让成员可写。
+如果类型标记了 `[NinoConstructor]`，或者成员在构造之后无法再赋值（构造函数参数、`init` 属性、只读属性或 `readonly` 字段），那么每次反序列化都会**重新创建**它，即使是[复用反序列化](/zh/docs/v4/pooling)也不例外，旧实例会交给[回收器](/zh/docs/v4/pooling#where-dropped-instances-go)。这类类型不能使用 [`trackReferences`](/zh/docs/v4/reference-tracking)（NINO016）或 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)（NINO018）。这类类型上的 `[NinoFactory]` 方法也不会被调用。需要这些功能时（例如要做到 0 GC 反序列化），请让成员可写，改为[从对象池取实例](#from-a-pool)。

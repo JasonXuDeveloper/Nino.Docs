@@ -13,6 +13,7 @@ import {
 import SearchDialog from '@/components/search';
 import { getLocale } from '@/lib/i18n';
 import { i18nUI } from '@/lib/i18n-ui';
+import { languageTag, siteName, siteVerification } from '@/lib/site';
 import type { Route } from './+types/root';
 import NotFound from './routes/not-found';
 import './app.css';
@@ -53,15 +54,27 @@ export function Layout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <html lang={locale === 'zh' ? 'zh-CN' : 'en'} suppressHydrationWarning>
+    <html lang={languageTag[locale]} suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta property="og:site_name" content="Nino" />
-        <meta
-          property="og:image"
-          content="https://nino.xgamedev.net/android-chrome-512x512.png"
-        />
+        <meta property="og:site_name" content={siteName} />
+        <meta name="theme-color" content="#2a4a8a" />
+        {siteVerification.google && (
+          <meta
+            name="google-site-verification"
+            content={siteVerification.google}
+          />
+        )}
+        {siteVerification.bing && (
+          <meta name="msvalidate.01" content={siteVerification.bing} />
+        )}
+        {siteVerification.baidu && (
+          <meta
+            name="baidu-site-verification"
+            content={siteVerification.baidu}
+          />
+        )}
         <Meta />
         <Links />
       </head>

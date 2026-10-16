@@ -1,6 +1,6 @@
 ---
 title: 引用追踪
-description: 保留共享引用和循环引用。
+description: "序列化含共享引用与循环引用的对象图：按类型开启，不开启的类型没有任何开销。"
 icon: Share2
 ---
 
@@ -42,7 +42,7 @@ var loaded = NinoDeserializer.Deserialize<List<Hero>>(NinoSerializer.Serialize(p
 - 每个被追踪的对象前面都有 4 字节的引用头部；同一次调用中已经写过的对象，只写它的序号。
 - 无论槽位的声明类型是什么（包括 `object` 和接口），共享引用都能保持对象身份。
 - 追踪只针对 `[NinoType]` 类，不包括集合：同一个 `List<T>` 出现在两个成员中，仍然会写两次。
-- 开销：每次顶层调用有一小笔固定开销，每个被追踪的对象再多 4 字节和一次身份查找。不涉及追踪类型的调用没有任何开销。
+- 开销：你每调用一次 `NinoSerializer`/`NinoDeserializer`（[顶层调用](/zh/docs/v4/basic#terms)），有一小笔固定开销；每个被追踪的对象再多 4 字节和一次身份查找。不涉及追踪类型的调用没有任何开销。
 
 <Callout type="warn">
 
@@ -65,7 +65,7 @@ var loaded = NinoDeserializer.Deserialize<List<Hero>>(NinoSerializer.Serialize(p
 </Accordion>
 <Accordion title="自己连续写入、读取多个值时">
 
-顶层的 `NinoSerializer`/`NinoDeserializer` 调用会把引用表限定在单次调用内。如果你自己创建 `Writer` 或 `Reader`，通过它写入的所有内容会共享引用，直到调用 `ReleaseReferences()` 为止。请在每条逻辑消息结束时调用它。
+传入值、返回字节（或写入缓冲区写入器）的调用，以及从 span 读出一个值的调用，引用表都只在这一次调用内有效。如果你自己创建 `Writer` 或 `Reader`，通过它写入的所有内容会共享引用，直到调用 `ReleaseReferences()` 为止。请在每条逻辑消息结束时调用它。
 
 </Accordion>
 </Accordions>

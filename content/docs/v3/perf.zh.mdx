@@ -1,16 +1,98 @@
 ---
-title: 微基准测试
+title: 基准测试
+description: "Nino v3 与 MemoryPack、MessagePack 的运行时基准测试，附数据结构和测试环境。"
 icon: ChartColumn
 ---
 
 import benchmarks from '@/data/bench-v3.json';
 
-本页包含了`Nino`与`MessagePack`以及`MemoryPack`的性能对比数据
+<AnchorRedirect
+  map={{
+    '数据结构': '/zh/docs/v3/perf#data-structures',
+    '数据生成': '/zh/docs/v3/perf#data-generation',
+    '生成函数': '/zh/docs/v3/perf#generation-function',
+    '测试数据': '/zh/docs/v3/perf#benchmark-data',
+    '测试环境': '/zh/docs/v3/perf#setup',
+    '测试结果': '/zh/docs/v3/perf#results',
+    '柱状图缩放后': '/zh/docs/v3/perf#results',
+    '表格数据': '/zh/docs/v3/perf#results-table',
+  }}
+/>
 
-## 数据结构
+Nino v3、[MemoryPack](https://github.com/Cysharp/MemoryPack) 和 [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) 在同一份数据上的序列化与反序列化耗时。绝对耗时因机器而异，请看比值。当前版本的数据见 [v4 基准测试](/zh/docs/v4/perf)。
 
-<Tabs items={["Simple Class", "Simple Struct"]}>
+## 测试环境 [#setup]
 
+| | |
+| --- | --- |
+| CPU | Apple M1，8 核 |
+| 操作系统 | macOS Sequoia 15.1.1 |
+| 运行时 | .NET 9.0.0（SDK 9.0.101） |
+| 测试框架 | BenchmarkDotNet 0.14.0，ShortRun：1 次启动，3 次预热、3 次测量迭代，服务器 GC |
+
+<Accordions type="single">
+<Accordion title="完整的 BenchmarkDotNet 环境信息" value="environment">
+
+```text title="BenchmarkDotNet"
+BenchmarkDotNet v0.14.0, macOS Sequoia 15.1.1 (24B91) [Darwin 24.1.0]
+Apple M1, 1 CPU, 8 logical and 8 physical cores
+.NET SDK 9.0.101
+  [Host]            : .NET 8.0.6 (8.0.624.26715), Arm64 RyuJIT AdvSIMD
+  ShortRun-.NET 9.0 : .NET 9.0.0 (9.0.24.52809), Arm64 RyuJIT AdvSIMD
+
+Job=ShortRun-.NET 9.0  Runtime=.NET 9.0  Server=True
+IterationCount=3  LaunchCount=1  WarmupCount=3
+```
+
+</Accordion>
+</Accordions>
+
+## 测试结果 [#results]
+
+序列化或反序列化下方数据的平均耗时，越低越好。
+
+<BenchChart data={benchmarks} version="v3" source="Nino v3，BenchmarkDotNet 0.14.0，Apple M1，.NET 9.0.0。" lang="zh" />
+
+### 结果表 [#results-table]
+
+| 方法 | 平均耗时（ns） | 误差（ns） | 标准差（ns） | 比值 | 比值标准差 | 载荷 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `MessagePackDeserializeSimpleClass` | 2,185.4818 | 1,603.2680 | 87.8805 | 5.17 | 0.30 | - |
+| `MemoryPackDeserializeSimpleClass` | 803.8791 | 2,727.8901 | 149.5249 | 1.90 | 0.32 | - |
+| `NinoDeserializeSimpleClass` | 423.6331 | 392.2947 | 21.5030 | 1.00 | 0.06 | - |
+| `MessagePackSerializeSimpleClass` | 1,756.9635 | 162.8690 | 8.9274 | 13.68 | 0.07 | 1.09KB |
+| `MemoryPackSerializeSimpleClass` | 313.9742 | 36.5482 | 2.0033 | 2.44 | 0.02 | 1.12KB |
+| `NinoSerializeSimpleClass` | 128.4621 | 7.9049 | 0.4333 | 1.00 | 0.00 | 1.13KB |
+| `MessagePackDeserializeSimpleClasses` | 121,233.0085 | 3,000.5145 | 164.4683 | 3.25 | 0.05 | - |
+| `MemoryPackDeserializeSimpleClasses` | 46,809.5000 | 4,394.9217 | 240.9005 | 1.26 | 0.02 | - |
+| `NinoDeserializeSimpleClasses` | 37,274.2878 | 11,407.1823 | 625.2662 | 1.00 | 0.02 | - |
+| `MessagePackSerializeSimpleClasses` | 184,607.4591 | 46,237.6641 | 2,534.4424 | 12.92 | 0.15 | 108.6KB |
+| `MemoryPackSerializeSimpleClasses` | 32,528.3135 | 1,266.2714 | 69.4086 | 2.28 | 0.00 | 112.11KB |
+| `NinoSerializeSimpleClasses` | 14,286.7016 | 143.3106 | 7.8553 | 1.00 | 0.00 | 112.5KB |
+| `MessagePackDeserializeSimpleStruct` | 46.9248 | 1.2035 | 0.0660 | 120.31 | 9.26 | - |
+| `MemoryPackDeserializeSimpleStruct` | 0.9389 | 0.2493 | 0.0137 | 2.41 | 0.19 | - |
+| `NinoDeserializeSimpleStruct` | 0.3922 | 0.6706 | 0.0368 | 1.01 | 0.11 | - |
+| `MessagePackSerializeSimpleStruct` | 146.7111 | 1.6760 | 0.0919 | 52.05 | 0.62 | 16B |
+| `MemoryPackSerializeSimpleStruct` | 3.6404 | 0.0488 | 0.0027 | 1.29 | 0.02 | 16B |
+| `NinoSerializeSimpleStruct` | 2.8189 | 0.7128 | 0.0391 | 1.00 | 0.02 | 16B |
+| `MessagePackDeserializeSimpleStructs` | 2,247.0066 | 81.3845 | 4.4610 | 24.59 | 0.13 | - |
+| `MemoryPackDeserializeSimpleStructs` | 106.7077 | 55.1043 | 3.0205 | 1.17 | 0.03 | - |
+| `NinoDeserializeSimpleStructs` | 91.3917 | 9.9898 | 0.5476 | 1.00 | 0.01 | - |
+| `MessagePackSerializeSimpleStructs` | 13,201.4372 | 552.1785 | 30.2668 | 528.49 | 1.06 | 1.57KB |
+| `MemoryPackSerializeSimpleStructs` | 27.9057 | 0.0661 | 0.0036 | 1.12 | 0.00 | 1.57KB |
+| `NinoSerializeSimpleStructs` | 24.9794 | 0.1411 | 0.0077 | 1.00 | 0.00 | 1.57KB |
+| `MessagePackDeserializeVectors` | 192,061.3674 | 72,587.8909 | 3,978.7873 | 8.44 | 0.60 | - |
+| `MemoryPackDeserializeVectors` | 22,620.0659 | 3,408.8960 | 186.8531 | 0.99 | 0.07 | - |
+| `NinoDeserializeVectors` | 22,848.6769 | 33,779.9756 | 1,851.5945 | 1.00 | 0.10 | - |
+| `MessagePackSerializeVectors` | 135,550.9609 | 2,408.4577 | 132.0157 | 55.23 | 0.20 | 205.08KB |
+| `MemoryPackSerializeVectors` | 2,487.1241 | 385.5445 | 21.1330 | 1.01 | 0.01 | 156.25KB |
+| `NinoSerializeVectors` | 2,454.1336 | 184.7375 | 10.1261 | 1.00 | 0.01 | 156.25KB |
+
+**比值**列是同一测试中各库的平均耗时除以 Nino 的平均耗时，**载荷**列是序列化后数据的大小。
+
+## 数据结构 [#data-structures]
+
+<Tabs groupId="bench-type" items={["Simple Class", "Simple Struct"]}>
 <Tab value="Simple Class">
 
 ```csharp
@@ -33,7 +115,6 @@ public partial class SimpleClass
 ```
 
 </Tab>
-
 <Tab value="Simple Struct">
 
 ```csharp
@@ -50,13 +131,13 @@ public partial struct SimpleStruct
 ```
 
 </Tab>
-
 </Tabs>
-## 数据生成
 
-### 生成函数
-<Tabs items={["Simple Class", "Simple Struct"]}>
+## 数据生成 [#data-generation]
 
+### 生成函数 [#generation-function]
+
+<Tabs groupId="bench-type" items={["Simple Class", "Simple Struct"]}>
 <Tab value="Simple Class">
 
 ```csharp
@@ -80,7 +161,6 @@ public static SimpleClass Create()
 ```
 
 </Tab>
-
 <Tab value="Simple Struct">
 
 ```csharp
@@ -98,7 +178,7 @@ public static SimpleStruct Create()
 </Tab>
 </Tabs>
 
-### 测试数据
+### 测试数据 [#benchmark-data]
 
 ```csharp
 _simpleClass = SimpleClass.Create();
@@ -106,67 +186,3 @@ _simpleClasses = Enumerable.Range(0, 100).Select(_ => SimpleClass.Create()).ToAr
 _simpleStruct = SimpleStruct.Create();
 _simpleStructs = Enumerable.Range(0, 100).Select(_ => SimpleStruct.Create()).ToArray();
 ```
-
-## 测试环境
-```text
-BenchmarkDotNet v0.14.0, macOS Sequoia 15.1.1 (24B91) [Darwin 24.1.0]
-Apple M1, 1 CPU, 8 logical and 8 physical cores
-.NET SDK 9.0.101
-  [Host]            : .NET 8.0.6 (8.0.624.26715), Arm64 RyuJIT AdvSIMD
-  ShortRun-.NET 9.0 : .NET 9.0.0 (9.0.24.52809), Arm64 RyuJIT AdvSIMD
-
-Job=ShortRun-.NET 9.0  Runtime=.NET 9.0  Server=True  
-IterationCount=3  LaunchCount=1  WarmupCount=3 
-```
-
-## 测试结果
-
-测试结果为序列化和反序列化上述数据的耗时，单位为纳秒，结果越低越好
-
-### 柱状图（缩放后）
-
-<BenchChart data={benchmarks} lang="zh" />
-
-### 表格数据
-
-| Method                              | Mean            | Error          | StdDev        | Ratio  | RatioSD | Payload  |
-|------------------------------------ |----------------:|---------------:|--------------:|-------:|--------:|---------:|
-| MessagePackDeserializeSimpleClass   |   2,185.4818 ns |  1,603.2680 ns |    87.8805 ns |   5.17 |    0.30 |        - |
-| MemoryPackDeserializeSimpleClass    |     803.8791 ns |  2,727.8901 ns |   149.5249 ns |   1.90 |    0.32 |        - |
-| NinoDeserializeSimpleClass          |     423.6331 ns |    392.2947 ns |    21.5030 ns |   1.00 |    0.06 |        - |
-|                                     |                 |                |               |        |         |          |
-| MessagePackSerializeSimpleClass     |   1,756.9635 ns |    162.8690 ns |     8.9274 ns |  13.68 |    0.07 |   1.09KB |
-| MemoryPackSerializeSimpleClass      |     313.9742 ns |     36.5482 ns |     2.0033 ns |   2.44 |    0.02 |   1.12KB |
-| NinoSerializeSimpleClass            |     128.4621 ns |      7.9049 ns |     0.4333 ns |   1.00 |    0.00 |   1.13KB |
-|                                     |                 |                |               |        |         |          |
-| MessagePackDeserializeSimpleClasses | 121,233.0085 ns |  3,000.5145 ns |   164.4683 ns |   3.25 |    0.05 |        - |
-| MemoryPackDeserializeSimpleClasses  |  46,809.5000 ns |  4,394.9217 ns |   240.9005 ns |   1.26 |    0.02 |        - |
-| NinoDeserializeSimpleClasses        |  37,274.2878 ns | 11,407.1823 ns |   625.2662 ns |   1.00 |    0.02 |        - |
-|                                     |                 |                |               |        |         |          |
-| MessagePackSerializeSimpleClasses   | 184,607.4591 ns | 46,237.6641 ns | 2,534.4424 ns |  12.92 |    0.15 |  108.6KB |
-| MemoryPackSerializeSimpleClasses    |  32,528.3135 ns |  1,266.2714 ns |    69.4086 ns |   2.28 |    0.00 | 112.11KB |
-| NinoSerializeSimpleClasses          |  14,286.7016 ns |    143.3106 ns |     7.8553 ns |   1.00 |    0.00 |  112.5KB |
-|                                     |                 |                |               |        |         |          |
-| MessagePackDeserializeSimpleStruct  |      46.9248 ns |      1.2035 ns |     0.0660 ns | 120.31 |    9.26 |        - |
-| MemoryPackDeserializeSimpleStruct   |       0.9389 ns |      0.2493 ns |     0.0137 ns |   2.41 |    0.19 |        - |
-| NinoDeserializeSimpleStruct         |       0.3922 ns |      0.6706 ns |     0.0368 ns |   1.01 |    0.11 |        - |
-|                                     |                 |                |               |        |         |          |
-| MessagePackSerializeSimpleStruct    |     146.7111 ns |      1.6760 ns |     0.0919 ns |  52.05 |    0.62 |      16B |
-| MemoryPackSerializeSimpleStruct     |       3.6404 ns |      0.0488 ns |     0.0027 ns |   1.29 |    0.02 |      16B |
-| NinoSerializeSimpleStruct           |       2.8189 ns |      0.7128 ns |     0.0391 ns |   1.00 |    0.02 |      16B |
-|                                     |                 |                |               |        |         |          |
-| MessagePackDeserializeSimpleStructs |   2,247.0066 ns |     81.3845 ns |     4.4610 ns |  24.59 |    0.13 |        - |
-| MemoryPackDeserializeSimpleStructs  |     106.7077 ns |     55.1043 ns |     3.0205 ns |   1.17 |    0.03 |        - |
-| NinoDeserializeSimpleStructs        |      91.3917 ns |      9.9898 ns |     0.5476 ns |   1.00 |    0.01 |        - |
-|                                     |                 |                |               |        |         |          |
-| MessagePackSerializeSimpleStructs   |  13,201.4372 ns |    552.1785 ns |    30.2668 ns | 528.49 |    1.06 |   1.57KB |
-| MemoryPackSerializeSimpleStructs    |      27.9057 ns |      0.0661 ns |     0.0036 ns |   1.12 |    0.00 |   1.57KB |
-| NinoSerializeSimpleStructs          |      24.9794 ns |      0.1411 ns |     0.0077 ns |   1.00 |    0.00 |   1.57KB |
-|                                     |                 |                |               |        |         |          |
-| MessagePackDeserializeVectors       | 192,061.3674 ns | 72,587.8909 ns | 3,978.7873 ns |   8.44 |    0.60 |        - |
-| MemoryPackDeserializeVectors        |  22,620.0659 ns |  3,408.8960 ns |   186.8531 ns |   0.99 |    0.07 |        - |
-| NinoDeserializeVectors              |  22,848.6769 ns | 33,779.9756 ns | 1,851.5945 ns |   1.00 |    0.10 |        - |
-|                                     |                 |                |               |        |         |          |
-| MessagePackSerializeVectors         | 135,550.9609 ns |  2,408.4577 ns |   132.0157 ns |  55.23 |    0.20 | 205.08KB |
-| MemoryPackSerializeVectors          |   2,487.1241 ns |    385.5445 ns |    21.1330 ns |   1.01 |    0.01 | 156.25KB |
-| NinoSerializeVectors                |   2,454.1336 ns |    184.7375 ns |    10.1261 ns |   1.00 |    0.01 | 156.25KB |

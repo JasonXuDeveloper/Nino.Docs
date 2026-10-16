@@ -1,6 +1,7 @@
 ---
 title: Introduction
-description: Nino is a source-generated binary serializer for C#, built for Unity, Godot and .NET servers.
+seoTitle: "Nino: High-Performance Binary Serializer for C# and .NET – v4 Docs"
+description: "Nino is a general-purpose, high-performance binary serializer for C# and .NET: source-generated and zero-GC on hot paths, for RPC, microservices, message queues, caches, storage and IPC, with Unity, Godot and HybridCLR support."
 icon: BookOpen
 ---
 
@@ -8,26 +9,26 @@ import { ArrowRightLeft, ChartColumn, Compass, Rocket, Sparkles, Swords } from '
 
 ## What Is Nino?
 
-Nino is a binary serializer for C#. Mark a type with `[NinoType]` and a Roslyn source generator writes its serialization code at compile time; at run time you call `NinoSerializer.Serialize` and `NinoDeserializer.Deserialize`. There is no reflection, no runtime code generation, no schema file and no registration step.
+Nino is a general-purpose, high-performance binary serializer for C# and .NET. Use it wherever .NET code turns objects into bytes and back: service messages and RPC, message queues, caches, files and local stores, inter-process communication, data pipelines and telemetry. It runs on .NET servers and desktop apps, NativeAOT, Unity (including HybridCLR) and Godot. Mark a type with `[NinoType]` and a Roslyn source generator writes its serialization code at compile time; at run time you call `NinoSerializer.Serialize` and `NinoDeserializer.Deserialize`. There is no reflection, no runtime code generation, no schema file and no registration step.
 
 ```csharp
 using Nino.Core;
 
 [NinoType]
-public class GameData
+public class Order
 {
-    public int Score;
-    public string PlayerName;
-    public List<Item> Items;
+    public long Id;
+    public string Customer;
+    public List<OrderLine> Lines;
 }
 
-byte[] bytes = NinoSerializer.Serialize(data);
-GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
+byte[] bytes = NinoSerializer.Serialize(order);
+Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 ```
 
 ## Why Nino
 
-- **Fast.** Against MemoryPack in the same run, Nino serializes up to <BenchValue k="serialize.max" /> faster and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; on raw struct arrays the two are close. See [Benchmarks](/en/docs/v4/perf).
+- **Fast.** Against MemoryPack in the same run, Nino serializes up to <BenchValue k="serialize.max" /> faster and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; on arrays of unmanaged structs, which both copy as one block, the two are close. See [Benchmarks](/en/docs/v4/perf).
 - **Zero GC on hot paths.** Serializing into a reused buffer allocates nothing. Deserializing [into existing objects and pooled instances](/en/docs/v4/pooling) allocates nothing either.
 - **Everything at compile time.** The generator writes one formatter per type, so Nino works on IL2CPP, NativeAOT and HybridCLR. On the .NET 8 SDK and later, [interceptors](/en/docs/v4/performance#interceptors) route each call straight to the right formatter. The generator is incremental: editing a type regenerates that type only, and the generated code compiles far faster than v3's ([build times](/en/docs/v4/v3-vs-v4#build-time-and-generated-code)).
 - **Polymorphism without tags.** Values declared as a base class or interface are read back as their runtime type. Type ids are hashes of type names, so there is no tag table to maintain, and Nino finds subtypes in other assemblies on its own. See [Polymorphism](/en/docs/v4/polymorphism).
@@ -40,11 +41,13 @@ GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
 
 | Use case | What Nino gives you |
 | --- | --- |
+| **Networking and RPC** (microservices, real-time servers, TCP, WebSocket, UDP, gRPC) | Serialize into an `IBufferWriter<byte>` such as a `PipeWriter`, deserialize from a `ReadOnlySpan<byte>`, reuse pooled messages; polymorphic messages without opcode tables. See [Network Layer](/en/docs/v4/advanced/networking). |
+| **Message queues and event streams** (Kafka and other brokers, data pipelines, telemetry, market data) | Compact payloads, event hierarchies read back as their real type, batches of unmanaged records copied as one block. See [Message Queues and Event Streams](/en/docs/v4/advanced/message-queues). |
+| **Caching** (Redis, `IDistributedCache`, `HybridCache`, in-process blobs) | Small values, no per-call allocations of its own, and types that stay readable across deployments. See [Caching](/en/docs/v4/advanced/caching). |
+| **Persistence** (files and documents, key-value stores, append-only logs, snapshots) | Keyed and version-tolerant types survive updates; reference tracking keeps object graphs intact. See [Persistence](/en/docs/v4/advanced/persistence). |
+| **IPC and hot paths** (pipes, shared memory, ASP.NET Core, workers, actors) | Framed streams and fixed-size records at 0 B per call, safe concurrent use from any thread. See [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation). |
 | **Unity** (Mono, IL2CPP, HybridCLR) | Unity 2022.3+, installed from OpenUPM with the generator included. `Vector3`, `Quaternion`, `Color32` and other unmanaged structs are copied as raw memory. Hot-update assemblies need no init call. See [Unity and HybridCLR](/en/docs/v4/advanced/unity). |
 | **Godot 4 (.NET)** | A regular NuGet package. Godot's math structs are unmanaged and copied as raw memory. See [Godot](/en/docs/v4/platforms#godot). |
-| **Game servers and networking** | Serialize into an `IBufferWriter<byte>` such as a `PipeWriter`, deserialize from a `ReadOnlySpan<byte>`, reuse pooled messages. See [Network Layer](/en/docs/v4/advanced/networking). |
-| **Save games and persistence** | Keyed and version-tolerant types survive updates; reference tracking keeps object graphs intact. See [Save Games and Persistence](/en/docs/v4/advanced/persistence). |
-| **Services, caches and IPC** | Compact payloads, no per-call allocations, safe concurrent use from ASP.NET Core, workers and actors. See [High-Performance Serialization](/en/docs/v4/advanced/high-performance). |
 
 ## When Not to Use It
 
@@ -72,7 +75,7 @@ GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
     Build time and runtime against v3 and MemoryPack, with the full tables.
   </Card>
   <Card icon={<Compass />} title="Advanced Guides" href="/en/docs/v4/advanced">
-    Complete patterns for hot paths, network protocols, save games and Unity.
+    Complete patterns for hot paths, networking and RPC, message queues, caching, persistence and Unity.
   </Card>
 </Cards>
 

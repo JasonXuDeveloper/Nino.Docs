@@ -31,6 +31,8 @@ Any change to the member list (adding, removing, reordering, changing an index) 
 
 </Callout>
 
+An unmanaged `[NinoType]` struct is copied as raw memory, so its bytes also depend on its field order and its `StructLayout`: reordering fields or changing the layout breaks existing data. A `versionTolerant` or `keyed` struct is written member by member instead.
+
 ## Version Tolerance
 
 Version 1.1 of a game adds a music volume to its settings file. Players still have files written by 1.0:
@@ -64,6 +66,8 @@ Defining the symbol `WEAK_VERSION_TOLERANCE` in a project turns `versionTolerant
 </Callout>
 
 ### Appending to a Base Class [#appending-to-a-base-class]
+
+In a version-tolerant hierarchy, append members only to the classes that have no subclasses. If a base class needs a new member, make the hierarchy [`keyed`](#keyed-members) instead. Here is why.
 
 All levels of the hierarchy share the object's single length, and their members are written root first. A member appended to a base class therefore lands **before** the members of its subclasses and shifts them:
 
@@ -111,7 +115,7 @@ Each member is written with a **key** (the 32-bit FNV-1a hash of its name, compu
 - If two member names in a type (inherited ones included) hash to the same key, that is a compile-time error (NINO014), so a collision cannot corrupt data.
 - Keyed structs are never written as raw memory. Polymorphism works as usual: the type id comes before the body.
 
-This is the format for data authored in an editor and kept for a long time: game configuration, level data, settings files.
+This is the format for data kept for a long time and edited by many releases: configuration, documents, settings files, game or level data.
 
 ### Renaming Keyed Members
 
@@ -142,7 +146,7 @@ Positional, when both sides always run the same build. If clients and servers ar
 </Accordion>
 <Accordion title="Save games and user files">
 
-`versionTolerant` if you only add fields over time, to classes without subclasses; `keyed` if you want the freedom to remove and reorder them. Add [`trackReferences`](/en/docs/v4/reference-tracking) when the saved graph shares objects or has cycles. See [Save Games and Persistence](/en/docs/v4/advanced/persistence).
+`versionTolerant` if you only add fields over time, to classes without subclasses; `keyed` if you want the freedom to remove and reorder them. Add [`trackReferences`](/en/docs/v4/reference-tracking) when the saved graph shares objects or has cycles. See [Persistence and Storage](/en/docs/v4/advanced/persistence).
 
 </Accordion>
 <Accordion title="Configuration authored in the Unity editor">

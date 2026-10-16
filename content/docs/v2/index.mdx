@@ -1,30 +1,56 @@
 ---
-title: Overview
-description: Definite useful and high performance serialization library for any C# projects, including but not limited to .NET Core apps or Unity/Godot games.
+title: Introduction
+description: Nino v2, a practical, high-performance serialization library for any C# project, from .NET Core apps to Unity and Godot games.
 icon: BookOpen
 ---
 
-Definite useful and high performance serialization library for any C# projects, including but not limited to .NET Core apps or Unity/Godot games.
+import { ChartColumn, Layers, Play, Rocket, Shapes, TriangleAlert } from 'lucide-react';
+
+## What Is Nino? [#what-is-nino]
+
+Nino is a practical, high-performance serialization library for any C# project, including but not limited to .NET Core apps and Unity or Godot games. Mark a type with `[NinoType]`, and a source generator writes its serialization code while you write your program. At run time you call the generated `Serializer` and `Deserializer`:
+
+```csharp title="Program.cs"
+[NinoType]
+public class ObjClass
+{
+    public int Id;
+    public string Name { get; set; }
+}
+
+byte[] bytes = Serializer.Serialize(obj);
+Deserializer.Deserialize(bytes, out ObjClass copy);
+```
+
+## Why Nino v2 [#why-nino-v2]
+
+- **Faster than fast.** Serialization and deserialization are much faster than common solutions such as JSON, Protobuf and MessagePack, and most benchmark results beat MemoryPack and similar libraries. See [Benchmarks](/en/docs/v2/perf).
+- **Easy to use.** The source generator writes the serialization and deserialization code while you write your program. The generated code is plain C# you can read, and it runs on platforms without a JIT, such as NativeAOT.
+- **Powerful yet versatile.** Primitives, structs, classes, collections, dictionaries and more, including polymorphic types. See [Supported Types](/en/docs/v2/types).
+
+## Start Here [#start-here]
 
 <Cards>
-  <Card title="Quick Start" href="/en/docs/v2/start" />
-  <Card title="Performance Analysis" href="/en/docs/v2/perf" />
-</Cards>
-
-<Cards>
-  <Card title="Faster than fast">
-    Serialization and deserialization runs significantly faster than JSON, Protobuf, MessagePack, etc. trivial solutions
-
-    *Most benchmark results are better than MemoryPack and other similar solutions*
+  <Card icon={<Rocket />} title="Quick Start" href="/en/docs/v2/start">
+    Install Nino v2 in a .NET or Unity project.
   </Card>
-  <Card title="Easy to use">
-    By using Source Generator, Nino automatically generates serialization and deserialization functions while the user is writing the program
-
-    *The generated code is transparent and support non JIT platforms like NativeAOT natively*
+  <Card icon={<Play />} title="Serialize and Deserialize" href="/en/docs/v2/basic">
+    Serialize to arrays and buffer writers, deserialize from spans.
   </Card>
-  <Card title="Powerful yet versatile">
-    Support serializing and deserializing various data structures, i.e. primitives, structs, classes, collections, dictionaries, etc.
-
-    *Besides Nino also supports serializing and deserializing objects with polymorphism*
+  <Card icon={<Shapes />} title="Supported Types" href="/en/docs/v2/types">
+    Unmanaged types, `[NinoType]` types, generics, collections, polymorphism and version compatibility.
+  </Card>
+  <Card icon={<Layers />} title="Advanced Usage" href="/en/docs/v2/advanced">
+    Weak version tolerance and custom constructors.
+  </Card>
+  <Card icon={<ChartColumn />} title="Benchmarks" href="/en/docs/v2/perf">
+    Nino v2 against MemoryPack and MessagePack.
+  </Card>
+  <Card icon={<TriangleAlert />} title="Limitations" href="/en/docs/v2/limit">
+    What Nino v2 cannot do.
   </Card>
 </Cards>
+
+## Newer Version [#newer-version]
+
+Nino v2 is archived. The current version is [Nino v4](/en/docs/v4); its binary format is not compatible with v2 or v3. To move from v2 to v3, see [Versioning](/en/docs/v3/versioning#migrating-from-nino-v2).

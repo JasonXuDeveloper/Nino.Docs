@@ -1,0 +1,53 @@
+---
+title: 常见问题
+seoTitle: "Nino 常见问题：高性能 C# / .NET 二进制序列化库"
+description: "关于 Nino 的简短回答：它是什么、如何安装、支持哪些平台、有多快，以及什么时候该选别的方案。"
+icon: CircleQuestionMark
+faq: true
+---
+
+关于 Nino 最常被问到的问题，每个回答都附有详细页面的链接。
+
+## Nino 是什么？ [#what-is-nino]
+
+Nino 是高性能的 C# / .NET 二进制序列化库。给类型加上 `[NinoType]`，Roslyn 源生成器就会在编译期生成它的序列化代码；运行时调用 `NinoSerializer.Serialize` 和 `NinoDeserializer.Deserialize` 即可。没有反射，没有运行时代码生成，没有 schema 文件，也不需要注册。Nino 以 MIT 协议开源：[github.com/JasonXuDeveloper/Nino](https://github.com/JasonXuDeveloper/Nino)。参见[介绍](/zh/docs/v4)。
+
+## 如何安装 Nino？ [#how-do-i-install-nino]
+
+在 .NET 或 Godot 项目中运行 `dotnet add package Nino`；`Nino` 包会引入运行时（`Nino.Serialization`）和源生成器（`Nino.Generator`）。在 Unity 中，从 OpenUPM 安装 `com.jasonxudeveloper.nino`（`openupm add com.jasonxudeveloper.nino`），其中已包含源生成器。参见[快速开始](/zh/docs/v4/start)。
+
+## Nino 支持哪些平台和 .NET 版本？ [#which-platforms-and-net-versions-does-nino-support]
+
+运行时面向 `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0`。Nino 可用于 .NET 服务端和桌面程序、Unity 2022.3 及以上版本（Mono 与 IL2CPP，所有 Player 平台）、Godot 4 .NET 项目以及 HybridCLR 热更新，并且所有目标写出的字节完全相同。源生成器需要 Roslyn 4.3 或更高版本，项目需使用 C# 9 或更高版本。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+
+## Nino 使用反射吗？能在 IL2CPP 和 NativeAOT 下使用吗？ [#does-nino-use-reflection-does-it-work-with-il2cpp-and-nativeaot]
+
+不使用反射：源生成器在编译期为每个类型生成一个格式化器，因此 Nino 可以在不支持运行时代码生成的 IL2CPP、NativeAOT 和 HybridCLR 环境中使用。参见[性能指南](/zh/docs/v4/performance)。
+
+## Nino 和 MemoryPack 相比有多快？ [#how-fast-is-nino-compared-with-memorypack]
+
+在同一次基准测试中，Nino v4 的序列化最高比 MemoryPack 快 <BenchValue k="serialize.max" />，类与多态对象图的反序列化最高快 <BenchValue k="deserialize.max" />；原始结构体数组上两者接近。序列化到复用的缓冲区时零分配。参见[基准测试](/zh/docs/v4/perf)和 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)。
+
+## Nino 适合用在哪里？ [#what-can-i-use-nino-for]
+
+凡是需要把 .NET 对象转成紧凑字节、再还原回来的地方：服务之间的网络协议与 RPC、消息队列与事件流、缓存、文件等持久化存储、进程间通信以及数据管道。同样的代码可以运行在 .NET 服务器、桌面应用、Unity 和 Godot 上。参见[进阶指南](/zh/docs/v4/advanced)。
+
+## 数据写出后还能修改类型吗？ [#can-i-change-my-types-after-data-has-been-written]
+
+可以，只要事先选好格式。普通的 `[NinoType]` 按位置写入，速度最快；`[NinoType(versionTolerant: true)]` 允许在末尾追加成员；`[NinoType(keyed: true)]` 允许添加、删除和重新排序成员。参见[数据演进](/zh/docs/v4/evolving-data)。
+
+## Nino 支持多态和共享引用吗？ [#does-nino-support-polymorphism-and-shared-references]
+
+支持。声明为基类或接口的值读回时仍是它的运行时类型，无需维护 Union 标签。按类型开启的引用追踪可以保留共享引用和循环引用。参见[多态](/zh/docs/v4/polymorphism)和[引用追踪](/zh/docs/v4/reference-tracking)。
+
+## Nino 是线程安全的吗？ [#is-nino-thread-safe]
+
+是的。`NinoSerializer` 和 `NinoDeserializer` 都是静态的，可以在任意多个线程中调用，无需加锁。你自己创建的 `NinoArrayBufferWriter` 不是线程安全的：每个线程或每个连接使用一个。参见[序列化与反序列化](/zh/docs/v4/basic)。
+
+## Nino v4 能读取 Nino v3 写出的数据吗？ [#can-nino-v4-read-data-written-by-nino-v3]
+
+不能。v4 使用新的二进制格式，无法读取 v3 以及 v4 测试版和预览版写出的数据，已存储的 v3 数据需要转换一次。参见[从 v3 迁移](/zh/docs/v4/migration)。
+
+## 什么时候不该用 Nino？ [#when-should-i-not-use-nino]
+
+当数据需要人来阅读或编辑时（请用 JSON、YAML 或 TOML），或者需要由其他语言的程序读取时：格式由你的 C# 类型定义，没有 schema 文件，也没有面向其他语言的生成器，这种情况请使用 Protocol Buffers、FlatBuffers 或 MessagePack。参见[局限性](/zh/docs/v4/limit)。

@@ -380,7 +380,7 @@ function payloadChart(zh: boolean): BarChartProps | null {
   };
 }
 
-function chartProps(id: ChartId, zh: boolean): BarChartProps | null {
+export function chartProps(id: ChartId, zh: boolean): BarChartProps | null {
   switch (id) {
     case 'serialize':
     case 'deserialize':

@@ -45,7 +45,7 @@ Cloudflare Pages builds with the Node version in `.node-version` and the Bun ver
 │   ├── lib/versions.ts        # version list and latestVersion
 │   ├── lib/source.ts, i18n.ts # Fumadocs loader and i18n (en, zh; dot parser)
 │   └── mdx-components.tsx     # components available in MDX
-├── scripts/                   # generate-static (404, sitemap, llms.txt, .md copies), lint-links, favicons
+├── scripts/                   # generate-static (404, sitemap, robots, llms.txt, .md copies), og (social cards), lint-links, favicons
 ├── functions/                 # Pages Functions: [[path]].ts (locale redirect, Markdown), api/feedback.ts
 ├── public/                    # favicons, og image, _redirects, _headers, _routes.json
 ├── app/entry.server.tsx       # prerender: wait for everything, no outlined Suspense chunks
@@ -56,7 +56,7 @@ Cloudflare Pages builds with the Node version in `.node-version` and the Bun ver
 ## Content Conventions
 
 - English `page.mdx`, Chinese `page.zh.mdx`. **Every v4 page exists in both languages** with the same structure.
-- Frontmatter: `title`, `description`, optional `icon` (a lucide-react name).
+- Frontmatter: `title`, `description`, optional `icon` (a lucide-react name), optional `seoTitle` (the full `<title>` when "Title – Nino v4 Docs" would be too generic, e.g. an "Overview" page; the heading keeps `title`) and `faq: true` (its `##` questions become FAQPage JSON-LD). Descriptions are the search snippet and the llms.txt summary: one or two sentences, specific, true to the source.
 - Sidebars: `meta.json` / `meta.zh.json`, with `---Section---` separators.
 - **Chinese headings carry an English id**: `## 键控成员 [#keyed-members]`. Links in both languages use the same English anchors, so `/zh/...#keyed-members` works. The link checker validates anchors.
 - Internal links are absolute with locale and version: `/en/docs/v4/pooling#settings`.
@@ -68,6 +68,12 @@ Cloudflare Pages builds with the Node version in `.node-version` and the Bun ver
 - Runtime against v3: only `V3_RUNTIME` in `src/lib/benchmarks.ts`, read from `src/data/bench-v3-runtime.json` (v3 and v4 mean times of one back-to-back run of v3 3.3.13 from NuGet and v4 on the same machine; v3 is the mean of the runs before and after v4). Ratios are computed from those two times, never from `bench-v4.json`; the v3 charts' footnote (`v3SourceNote`) names the release and the machine from that run's environment, or shows `note` for a local run. With no rows the site shows no v4-vs-v3 runtime numbers. Never type v3 numbers in by hand: they come from a release, or from a local `benchmarks/run.sh` with `origin: "local"`. v3 means **3.3.13**, never a 4.0 beta. Build-time numbers (generator benchmark) are static in `benchmarks.ts` (`build`, `buildLarge`) and the perf/v3-vs-v4 tables.
 - v3 and v2 pages keep their own `src/data/bench-v3.json` / `bench-v2.json`; never point them at the synced data.
 - Interceptors are always on with Roslyn 4.8+; there is no opt-out property. Do not reintroduce one.
+
+## SEO and GEO
+
+- Metadata and JSON-LD: `src/lib/seo.ts`; site facts (domain, links, the one-paragraph `productSummary`): `src/lib/site.ts`. Never put a value there that is not true per the Nino repository.
+- `scripts/generate-static.ts` moves pages to `x.html` (slash-less URLs serve 200), and writes the sitemap (v4 only), robots.txt (all crawlers, AI included), llms.txt, Markdown copies (`<page>.md`, rendered by `src/lib/markdown.tsx`; give every new MDX component a Markdown form there) and the social cards (`scripts/og.ts`, run under Node, not Bun).
+- Archived versions are `noindex` and out of the sitemap; see README.md, "Search engines and AI answer engines".
 
 ## Redirects
 
