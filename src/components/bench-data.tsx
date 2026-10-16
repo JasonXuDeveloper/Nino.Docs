@@ -5,6 +5,7 @@
 import {
   benchRows,
   benchSource,
+  extraRuntime,
   formatBytes,
   formatRatio,
   formatTime,
@@ -44,10 +45,30 @@ export function BenchSource({ lang = 'en' }: { lang?: Locale }) {
   );
 }
 
-/** v4 vs MemoryPack (and v3, once measured) for one operation */
-export function RuntimeTable({ op, lang = 'en' }: { op: Op; lang?: Locale }) {
+/**
+ * v4 vs MemoryPack (and v3, once measured) for one operation. `set="extra"`:
+ * reference tracking, version tolerance and fixed-size types, which render only
+ * once the synced report includes them (a note says so until then).
+ */
+export function RuntimeTable({
+  op,
+  set = 'main',
+  lang = 'en',
+}: {
+  op: Op;
+  set?: 'main' | 'extra';
+  lang?: Locale;
+}) {
   const zh = lang === 'zh';
-  const rows = runtime[op];
+  const rows = (set === 'extra' ? extraRuntime : runtime)[op];
+  if (rows.length === 0)
+    return (
+      <p className="text-sm text-fd-muted-foreground">
+        {zh
+          ? '这些用例已经在基准测试项目中，但目前发布的报告还没有包含它们。等某个版本的发布报告包含它们后，结果会显示在这里。'
+          : 'These cases are in the benchmark project, but the published report does not include them yet. Their results appear here once a release report does.'}
+      </p>
+    );
   const withV3 = rows.some((row) => row.vsV3 !== undefined);
   const rerun = rows.some((row) => row.rerun);
   return (
@@ -99,6 +120,38 @@ export function RuntimeTable({ op, lang = 'en' }: { op: Op; lang?: Locale }) {
             ? '* 将 SimpleStruct 声明为 Pack = 4 后，以相同设置单独重跑。'
             : '* Re-run separately with the same settings after SimpleStruct was declared with Pack = 4.'}
         </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * Reference tracking, version tolerance and fixed-size types: a serialize and
+ * a deserialize table once the synced report includes these benchmarks, one
+ * note until then. RuntimeTable is called, not rendered as an element, so the
+ * Markdown copies (src/lib/markdown.tsx) get the table itself.
+ */
+export function ExtraRuntimeTables({ lang = 'en' }: { lang?: Locale }) {
+  const zh = lang === 'zh';
+  if (extraRuntime.serialize.length + extraRuntime.deserialize.length === 0)
+    return RuntimeTable({ op: 'serialize', set: 'extra', lang });
+  return (
+    <>
+      {extraRuntime.serialize.length > 0 && (
+        <>
+          <p>
+            <strong>{zh ? '序列化' : 'Serialize'}</strong>
+          </p>
+          {RuntimeTable({ op: 'serialize', set: 'extra', lang })}
+        </>
+      )}
+      {extraRuntime.deserialize.length > 0 && (
+        <>
+          <p>
+            <strong>{zh ? '反序列化' : 'Deserialize'}</strong>
+          </p>
+          {RuntimeTable({ op: 'deserialize', set: 'extra', lang })}
+        </>
       )}
     </>
   );

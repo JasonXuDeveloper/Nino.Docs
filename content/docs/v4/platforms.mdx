@@ -36,6 +36,8 @@ All multi-byte values are **little-endian** and written unaligned. Positional ty
 
 Both string encodings start with the same prefix: the string's length in UTF-16 chars (`string.Length`; `-1` for `null`, `0` for an empty string). Nothing follows the prefix of a `null` or empty string. A non-empty `[NinoUtf8]` string then carries its length in bytes, followed by exactly that many UTF-8 bytes. The reader allocates the string at its final length in chars and transcodes exactly the given number of bytes into it, in one pass; the next value starts right after them. Nino throws an `InvalidOperationException` when the byte count is larger than the bytes left, when the char count does not match the decoded bytes, or when the bytes are not valid UTF-8 (overlong forms and encoded surrogates included) or end in the middle of a character. When writing, an unpaired surrogate is encoded as U+FFFD, which is one char as well, so the char count always matches the string that is read back.
 
+For example, `"é😀"` is 3 chars (U+00E9 and a surrogate pair) and 6 UTF-8 bytes, so it is written as `03 00 00 00` `06 00 00 00` `C3 A9 F0 9F 98 80`; `null` is `FF FF FF FF` and `""` is `00 00 00 00`.
+
 Objects get a header that depends on the **declared** type:
 
 | Declared type | Header |
@@ -51,8 +53,8 @@ The body after the header depends on the type's format:
 | Format | Body |
 | --- | --- |
 | positional (default) | the members, those of `[NinoType]` base classes first |
-| `versionTolerant` | `int32` byte length, then the members of the whole hierarchy, root first: one length per object, whatever the depth |
-| `keyed` | `int32` byte length, then `int32` key, `int32` length and value for each member |
+| `NinoFormat.VersionTolerant` | `int32` byte length, then the members of the whole hierarchy, root first: one length per object, whatever the depth |
+| `NinoFormat.Keyed` | `int32` byte length, then `int32` key, `int32` length and value for each member |
 
 A `trackReferences` type adds an `int32` reference header (`0` = null, `n > 0` = the n-th object already written, `-1` = a new object, followed by its usual encoding). See [Evolving Your Data](/en/docs/v4/evolving-data) and [Reference Tracking](/en/docs/v4/reference-tracking).
 

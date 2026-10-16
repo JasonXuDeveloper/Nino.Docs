@@ -12,7 +12,7 @@ The examples below use a profile type:
 ```csharp title="UserProfile.cs"
 using Nino.Core;
 
-[NinoType(versionTolerant: true)] // cached data outlives a deployment, see below
+[NinoType(format: NinoFormat.VersionTolerant)] // cached data outlives a deployment, see below
 public sealed class UserProfile
 {
     public long Id;
@@ -173,7 +173,7 @@ A shared cache outlives the process that wrote it: during a rolling deployment, 
 
 | Approach | How | When |
 | --- | --- | --- |
-| Tolerant types | [`versionTolerant: true`](/en/docs/v4/evolving-data#version-tolerance) (append members) or [`keyed: true`](/en/docs/v4/evolving-data#keyed-members) (any change) | Entries should survive the deployment. |
+| Tolerant types | [`format: NinoFormat.VersionTolerant`](/en/docs/v4/evolving-data#version-tolerance) (append members) or [`format: NinoFormat.Keyed`](/en/docs/v4/evolving-data#keyed-members) (any change) | Entries should survive the deployment. |
 | Versioned keys | Put a schema version in the key (`profile:v2:42`) and bump it when the type changes | The type changes in ways the options above do not cover, or the cache is cheap to refill. |
 | Treat failures as misses | Catch the `InvalidOperationException` that invalid data throws, delete the entry and load from the source | A safety net on top of either approach, not a replacement: bytes written for a different type with a compatible layout can deserialize without an error. |
 
@@ -183,7 +183,7 @@ Nino checks every length and bound while reading, so a truncated or corrupt entr
 
 ## Checklist [#checklist]
 
-- [ ] Every cached type is `versionTolerant` or `keyed`, or its keys carry a schema version.
+- [ ] Every cached type is `NinoFormat.VersionTolerant` or `NinoFormat.Keyed`, or its keys carry a schema version.
 - [ ] Writes reuse a buffer per thread; async writes await before the buffer is reset.
 - [ ] Reads deserialize from the client's pooled memory (`Lease<byte>`, a `ReadOnlySequence<byte>`) where the client offers it.
 - [ ] Deserialization failures are treated as cache misses.

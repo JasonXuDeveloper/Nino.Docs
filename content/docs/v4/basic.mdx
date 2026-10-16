@@ -27,8 +27,8 @@ void NinoSerializer.Serialize<T>(T value, IBufferWriter<byte> bufferWriter);
 // With an existing Writer (several values in one buffer, custom formatters)
 void NinoSerializer.Serialize<T>(T value, ref Writer writer);
 
-// Boxed values, when the type is only known at run time
-byte[] NinoSerializer.Serialize(object value);    // as value.GetType(); value must not be null
+// Boxed values, only for a type known only at run time as a Type (see Runtime Types)
+byte[] NinoSerializer.SerializeBoxed(object value, Type type);
 void NinoSerializer.SerializeBoxed(object value, IBufferWriter<byte> bufferWriter, Type type);
 void NinoSerializer.SerializeBoxed(object value, ref Writer writer, Type type);
 ```
@@ -94,9 +94,9 @@ void NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data, ref T value);
 T NinoDeserializer.Deserialize<T>(ref Reader reader);
 void NinoDeserializer.Deserialize<T>(ref T value, ref Reader reader);
 
-// Boxed values, when the type is only known at run time
-object NinoDeserializer.Deserialize(ReadOnlySpan<byte> data, Type type);
-void NinoDeserializer.Deserialize(ReadOnlySpan<byte> data, Type type, ref object value);
+// Boxed values, only for a type known only at run time as a Type (see Runtime Types)
+object NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, Type type);
+void NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, ref object value, Type type);
 void NinoDeserializer.DeserializeBoxed(ref object value, ref Reader reader, Type type);
 ```
 
@@ -159,19 +159,43 @@ static Player Read(ReadOnlySequence<byte> data)
 
 ## Runtime Types
 
-When the type is only known at run time (a plugin system, an editor tool, a message table keyed by `Type`), use the boxed overloads. Serialize and deserialize with the **same** type:
+Code that handles many types at once (RPC or message dispatch, a plugin system, editor tooling) rarely needs runtime types. Give the types a common `[NinoType]` base class or interface and serialize through it: `Serialize<TBase>` writes a type id, and `Deserialize<TBase>` reads it and creates the right type in generated code. This is the fastest way to handle many types, and it works with [reuse deserialization and pooling](/en/docs/v4/pooling), so a receive loop allocates 0 B:
 
 ```csharp
-object value = GetComponentData();
-byte[] bytes = NinoSerializer.Serialize(value);                    // written as value.GetType()
-object copy = NinoDeserializer.Deserialize(bytes, value.GetType());
+[NinoType]
+public abstract class Message { }
 
-// a value declared as a base type: write and read it as that type, so the subtype is preserved
-NinoSerializer.SerializeBoxed(shape, buffer, typeof(Shape));
-object read = NinoDeserializer.Deserialize(buffer.WrittenSpan, typeof(Shape));
+public sealed class Move : Message { public int X, Y; }    // inherits [NinoType]
+public sealed class Chat : Message { public string Text; }
+
+byte[] bytes = NinoSerializer.Serialize<Message>(new Move { X = 1, Y = 2 });
+Message message = NinoDeserializer.Deserialize<Message>(bytes); // a Move
 ```
 
-The boxed overloads resolve the formatter by `Type` (cached after the first call) and box value types. Prefer the generic overloads when the type is known at compile time.
+See [Polymorphism](/en/docs/v4/polymorphism#dispatching-through-a-common-base).
+
+### The Boxed API [#the-boxed-api]
+
+Use the boxed API **only** when the type is known only at run time, as a `Type`, and the types share no common `[NinoType]` base: reflection-driven tooling over arbitrary types, such as an inspector that saves whatever field it is pointed at. Serialize and deserialize with the **same** type:
+
+```csharp
+Type type = field.FieldType;                                   // known only at run time
+byte[] bytes = NinoSerializer.SerializeBoxed(field.GetValue(target), type);
+object copy = NinoDeserializer.DeserializeBoxed(bytes, type);
+
+// into an existing instance, reused when it is an instance of type
+object current = field.GetValue(target);
+NinoDeserializer.DeserializeBoxed(bytes, ref current, type);
+field.SetValue(target, current);
+```
+
+`SerializeBoxed(value, type)` writes exactly what `Serialize<T>(value)` with `T` = `type` would, `null` included for a type that can be null, so the generic and boxed calls read each other's data. The boxed API finds the formatter by `Type` (through reflection on first use, a dictionary lookup afterward) and boxes value types.
+
+<Callout type="warn" title="Don't use object as T">
+
+`NinoSerializer.Serialize(value)` with a variable declared as `object` calls `Serialize<object>`, not the boxed API. It accepts only `[NinoType]` values, writes a type id and dispatches through the global registry of every `[NinoType]`, which is slower than the generated dispatch of a common base. Declare the variable as the common base type instead, or call `SerializeBoxed` with the `Type`.
+
+</Callout>
 
 ## Deep Object Graphs
 
@@ -212,7 +236,7 @@ Nino does not detect data written for a **different** type with a compatible lay
 Words these docs use with a specific meaning:
 
 - **Top-level call**: a `NinoSerializer.Serialize(...)` or `NinoDeserializer.Deserialize(...)` call that takes your value and a `byte[]`, span or buffer writer, as opposed to a call that passes a `Writer` or `Reader` you created yourself, and to the values Nino reads and writes inside a call. Each top-level call is self-contained: it starts and ends its own [reference tracking](/en/docs/v4/reference-tracking).
-- **Boxed overloads**: the overloads that take an `object` and a `Type` (`Serialize(object)`, `SerializeBoxed`, `Deserialize(data, type)`, `DeserializeBoxed`), for types known only at run time; see [Runtime Types](#runtime-types).
+- **Boxed API**: `SerializeBoxed` and `DeserializeBoxed`, the overloads that take an `object` and a `Type`, for a type known only at run time that shares no common `[NinoType]` base with the others; see [The Boxed API](#the-boxed-api).
 - **Formatter**: the code that writes and reads one type: generated for each `[NinoType]`, built into Nino for the BCL types, or [written by you](/en/docs/v4/custom-formatters). The **formatter cache** is `NinoFormatterCache<T>`, the static field through which a call finds the formatter of `T`.
 - **Intercepted call**: on the .NET 8 SDK and later, the generator redirects each call whose type is known at compile time straight to that type's formatter, skipping the formatter cache; see [Interceptors](/en/docs/v4/performance#interceptors).
 - **Scratch buffer**: a `NinoArrayBufferWriter` that Nino keeps per thread. A call that returns a `byte[]`, or writes into a buffer writer other than `NinoArrayBufferWriter`, serializes into it first and then copies the bytes out.

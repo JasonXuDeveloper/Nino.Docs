@@ -90,7 +90,7 @@ NinoSettings.SetRecycler<Player>(player => ObjectPool<Player>.Return(player)); /
 ## 用 `[NinoFactory]` 创建实例 [#creating-instances-with-ninofactory]
 给一个公共静态方法加上这个特性，该方法要能无参调用，返回声明它的类型。每当 Nino 要创建这个类型的实例时，就调用它来代替构造函数，然后原地填充得到的实例。上面的 `Player.Rent()` 就是一个例子。
 
-它同样适用于集合类型（`List<T>` 的子类、`IDictionary<TKey, TValue>` 的实现等）。该方法可以返回仍然装有元素的实例，这些元素会在读取数据之前丢弃（并回收）。它不能返回 `null`；无效的方法会报告 NINO017。
+它同样适用于集合类型（`List<T>` 的子类、`IDictionary<TKey, TValue>` 的实现等）。该方法可以返回仍然装有元素的实例，这些元素会在读取数据之前丢弃（并回收）。它不能返回 `null`；无效的方法会报告 NINO017。如果类型有 `[NinoConstructor]`，工厂方法永远不会被调用，因为这样的类型总是通过构造函数重新创建；分析器会对此给出警告（NINO025）。
 
 ## 内置对象池：`[NinoPooled]` [#ninopooled]
 `[NinoPooled]` 为 `[NinoType]` 类提供内置的对象池。无论 Nino 在哪里创建它的实例（你要反序列化的值本身、成员还是集合元素），都会先从池中取一个，再反序列化到这个实例中；被丢弃的实例会自动还回池中。

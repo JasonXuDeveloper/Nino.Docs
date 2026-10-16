@@ -93,7 +93,6 @@ Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
 | 用 `Assembly.Load` 加载热更新 DLL | 在读取包含其中类型的数据之前。 | |
 | `NinoRegistry.EnsureInitialized(assembly)` 或 `EnsureAllInitialized()` | 想把一次性的注册表加载放到加载界面，而不是第一次用到该程序集的调用。 | 始终是可选的：注册表在首次使用时自动加载。 |
 | `NinoPolymorphic.Register<T>()` | 某个封闭泛型 `[NinoType]`（如 `Box<MyStruct>`）在本进程中只会通过基类型**读取**，代码里从未写出它的名字，也从未写入过它。 | 普通子类型，无论在哪个程序集（包括热更新程序集），都会自动找到。 |
-| `NinoFormatterCache<T>.Register<TFormatter>()` | `T` 的格式化器要在运行时选定。必须在 `T` 第一次序列化或反序列化之前注册：第一次使用会固定格式化器，之后再注册会抛出 `InvalidOperationException`。 | 用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明的格式化器：无需任何调用。 |
 
 ```csharp
 public static class NinoStartup
@@ -103,7 +102,6 @@ public static class NinoStartup
     {
         NinoSettings.SetPoolMaxRetained<Bullet>(1024); // only if the defaults do not fit
         NinoPolymorphic.Register<Box<MyStruct>>();     // only for read-only closed generics
-        NinoFormatterCache<Ring<int>>.Register<RingFormatter<int, UnmanagedFormatter<int>>>(); // only for formatters chosen at run time
     }
 }
 
@@ -114,16 +112,16 @@ NinoRegistry.EnsureInitialized(hotUpdate);             // optional: pay the regi
 
 ## 配置表 [#config-tables]
 
-在表格或编辑器中编辑的游戏数据（道具、关卡、掉落表）很适合用 Nino：导出一次 `.bytes` 文件，运行时直接加载，不需要任何解析。把表的类型标记为 `keyed: true`，这样新增或调整列不会让之前导出的文件失效：
+在表格或编辑器中编辑的游戏数据（道具、关卡、掉落表）很适合用 Nino：导出一次 `.bytes` 文件，运行时直接加载，不需要任何解析。把表的类型设为 `format: NinoFormat.Keyed`，这样新增或调整列不会让之前导出的文件失效：
 
 ```csharp title="ItemTable.cs"
-[NinoType(keyed: true)]
+[NinoType(format: NinoFormat.Keyed)]
 public sealed class ItemTable
 {
     public List<ItemRow> Rows;
 }
 
-[NinoType(keyed: true)]
+[NinoType(format: NinoFormat.Keyed)]
 public sealed class ItemRow
 {
     public int Id;
@@ -144,7 +142,7 @@ ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
 - **网络或回放数据不引起 GC 峰值：** 每个 tick 都用 `ref` 反序列化到上一个 tick 的对象中，并给批量创建的类（子弹、事件）加上 `[NinoPooled]`。参见[高性能序列化](/zh/docs/v4/advanced/high-performance)。
 - **每个发送方复用一个 `NinoArrayBufferWriter`** 来写出数据，而不是每帧调用 `Serialize(value)` 分配一个 `byte[]`。
 - **批量数据保持非托管：** `Vector3`、`Color32` 或你自己的非托管 `[NinoType]` 结构体组成的数组，只需一次内存拷贝。
-- **在编辑器中编辑的配置**经常变动：使用 [`keyed: true`](/zh/docs/v4/evolving-data#keyed-members)，策划增加或调整字段时，已有资源也不会损坏。
+- **在编辑器中编辑的配置**经常变动：使用 [`format: NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)，策划增加或调整字段时，已有资源也不会损坏。
 
 <Callout type="warn">
 
@@ -167,7 +165,7 @@ ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
 </Accordion>
 <Accordion title="读取不了旧版本的数据">
 
-Nino 默认按位置写入：修改类型的成员会破坏旧数据。需要保存的数据请使用 `versionTolerant` 或 `keyed`，参见[数据演进](/zh/docs/v4/evolving-data)。Nino v3 写出的数据 v4 完全无法读取，参见[从 v3 迁移](/zh/docs/v4/migration)。
+Nino 默认按位置写入：修改类型的成员会破坏旧数据。需要保存的数据请使用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，参见[数据演进](/zh/docs/v4/evolving-data)。Nino v3 写出的数据 v4 完全无法读取，参见[从 v3 迁移](/zh/docs/v4/migration)。
 
 </Accordion>
 </Accordions>

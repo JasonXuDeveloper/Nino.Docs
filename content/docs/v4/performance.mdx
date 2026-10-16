@@ -26,7 +26,7 @@ The saving is a few nanoseconds per call, which matters most when small values a
 - **Older compilers simply use the regular path**, which writes the same bytes. The Unity package ships the generator's Roslyn 4.3 build, so Unity projects never intercept.
 - Some calls are left alone, because intercepting them would gain nothing: raw values and arrays of raw elements (the regular path already copies them directly), `[NinoType]`s declared in another assembly (the calling project reaches their formatter only through the formatter cache, as the regular call does), and calls inside generic code.
 - `Serialize(value)` of a [fixed-size type](#fixed-size-types) is routed to code that writes straight into a `byte[]` of the type's size.
-- A formatter registered at runtime with `NinoFormatterCache<T>.Register<TFormatter>()` still takes precedence, so intercepted and regular calls never disagree. Register it before `T` is first used: the first call fixes the formatter, and a later registration throws (see [Registering at Run Time](/en/docs/v4/custom-formatters#registering-at-run-time)).
+- Intercepted and regular calls always use the same formatter: formatters are declared with attributes and cannot be replaced at run time, so the generator knows the one the runtime would find.
 
 <Callout type="warn">
 
@@ -89,7 +89,7 @@ To stay on this path:
 
 - prefer `T[]` and `List<T>` of unmanaged `T` for bulk data (positions, samples, tiles);
 - keep hot structs free of references (`string`, arrays) so they qualify as raw;
-- remember that `versionTolerant`, `keyed` and custom member formatters turn raw copying off for that struct.
+- remember that `NinoFormat.VersionTolerant`, `NinoFormat.Keyed` and custom member formatters turn raw copying off for that struct.
 
 <Callout type="info">
 
@@ -125,7 +125,7 @@ int size = NinoSerializer.GetFixedSize<PlayerInput>();  // 22
 A type is fixed-size when it is:
 
 - a non-generic `[NinoType]` **struct** or **sealed class**;
-- positional: not `versionTolerant` (and its project does not define `WEAK_VERSION_TOLERANCE`), not `keyed`, not `trackReferences`, and not a collection type;
+- `NinoFormat.Positional` (the default; `WEAK_VERSION_TOLERANCE` in its project turns that into `NinoFormat.VersionTolerant`), not `trackReferences`, and not a collection type;
 - made only of members that are unmanaged values with the same layout on 32-bit and 64-bit runtimes (primitives, enums, `DateTime`, `Guid`, raw structs of those) or other fixed-size structs, with no `[NinoCustomFormatter]`.
 
 A `string`, an array or collection, a class, a `T?`, a tuple, `DateTimeOffset` or `nint` member makes a type variable-size. A struct written as raw memory (see [Raw Memory](#raw-memory-for-unmanaged-data)) is fixed-size too, and has always been copied straight into an array of its size; this path extends the same treatment to structs that are not raw (an ignored field, a nested struct) and to sealed classes.
@@ -139,7 +139,7 @@ A `string`, an array or collection, a class, a `T?`, a tuple, `DateTimeOffset` o
 
 - **Serializing allocates nothing** except the `byte[]` you ask for. Serialize into a reused `NinoArrayBufferWriter` (or any `IBufferWriter<byte>`) and a call allocates 0 B.
 - **Deserializing allocates only the result objects**, and even those can be reused: deserialize into an existing instance with `ref`, and take new instances from `[NinoPooled]` pools. Reusing instances allocates 0 B. See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
-- Strings are UTF-16 by default (one block copy). `[NinoUtf8]` is smaller on the wire but has to transcode.
+- Strings are UTF-16 by default (one block copy). `[NinoUtf8]` is smaller on the wire for mostly-ASCII text but has to transcode, and a non-empty string carries a 4-byte byte count after its char count ([Binary Format](/en/docs/v4/platforms#binary-format)).
 
 ## Buffers
 

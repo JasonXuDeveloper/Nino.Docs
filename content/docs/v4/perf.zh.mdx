@@ -23,7 +23,7 @@ icon: ChartColumn
 
 | 对比对象 | 原因 | 测量内容 |
 | --- | --- | --- |
-| [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | .NET 上使用广泛、速度最快的二进制序列化库，和 Nino 一样基于源生成器 | 运行时性能，同一次 BenchmarkDotNet 运行：[序列化](#serialize-to-a-reused-buffer-writer)、[反序列化](#deserialize-new-instances)、[多态对象图](#polymorphism)、[复用实例](#pooling) |
+| [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | .NET 上使用广泛、速度最快的二进制序列化库，和 Nino 一样基于源生成器 | 运行时性能，同一次 BenchmarkDotNet 运行：[序列化](#serialize-to-a-reused-buffer-writer)、[反序列化](#deserialize-new-instances)、[多态对象图](#polymorphism)、[复用实例](#pooling)、[引用追踪、版本容错和固定大小的类型](#more-cases) |
 | Nino v3 **3.3.13** | v3 的最后一个版本，也就是你升级之前所用的版本 | 运行时性能，与 v4 在同一台机器上背靠背测量（运行时表格中的 **v4 对比 v3** 列），以及[构建时间](#build-time-and-generated-code) |
 | [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) | .NET 中最常用的二进制格式 | 运行时性能，同一次运行；列在[全部测量结果](#results)中 |
 
@@ -102,10 +102,19 @@ Nino 把数据反序列化到已有的对象图中（[复用反序列化](/zh/do
 
 <BenchmarkChart chart={['allocation', 'payload']} lang="zh" />
 
+### 引用追踪、版本容错和固定大小的类型 [#more-cases]
+
+另有三个基准测试类，比较的是会改变类型写入方式的功能，各自对照 MemoryPack 中最接近的模式：
+
+- **引用追踪**（[`ReferenceTest`](#referencetest)）：一张 200 个节点的对象图，带共享对象和环。Nino 使用 `[NinoType(trackReferences: true)]`，MemoryPack 使用 `GenerateType.CircularReference`。
+- **版本容错**（[`VersionTolerantTest`](#versiontoleranttest)）：把 `SimpleClass` 的成员放进一个以后还能添加成员的类型，单个对象和 100 个的数组各测一次。Nino 使用 `format: NinoFormat.VersionTolerant`（每个对象一个长度），MemoryPack 使用 `GenerateType.VersionTolerant`（每个成员一个长度）。
+- **固定大小的类型**（[`FixedSizeTest`](#fixedsizetest)）：一个 40 字节的结构体、成员相同的密封类，以及这种类的 100 个元素的数组，都通过两个库返回 `byte[]` 的 API 测量，所以每次调用都包含分配结果数组的开销。反序列化这个结构体只是一次拷贝，耗时太短，无法可靠测量，因此不列出。
+
+<ExtraRuntimeTables lang="zh" />
+
 ### 尚未测量 [#not-measured-yet]
 
-- **引用追踪。** 基准测试项目中有 [`ReferenceTest`](#referencetest)（只测 Nino：其他序列化库不支持引用追踪），但发布的报告中还没有包含它。
-- **版本容错、键控和固定大小的类型**没有运行时基准测试。它们的开销写在各自的文档里：[数据演进](/zh/docs/v4/evolving-data)和[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
+- **键控类型**没有运行时基准测试。它的开销（每个成员一个键和一个长度，读取时每个成员还要检查一次键）写在[数据演进](/zh/docs/v4/evolving-data)中。
 
 ### 全部测量结果 [#results]
 
@@ -612,46 +621,75 @@ public List<PooledLeaf> MemoryPackLeavesOverwrite()
 
 ### ReferenceTest [#referencetest]
 
-一张 200 个节点的对象图，带共享的标签、共享的对等节点以及经由根对象形成的环，开启了 `trackReferences`。只测 Nino，[发布的报告中还没有包含它](#not-measured-yet)。
+一张 200 个节点的对象图，带共享的标签、共享的对等节点以及经由根对象形成的环，写入复用的缓冲区写入器后再读回。Nino 用 `trackReferences` 追踪引用，MemoryPack 用 `GenerateType.CircularReference`（要求每个成员都有 `[MemoryPackOrder]`）；两者都只写入每个对象一次，读回时共享引用和环仍指向同一个实例。对应上文[结果表格](#more-cases)中的“对象图”各行。
 
-<Tabs groupId="bench-code" items={["类型", "方法"]}>
+<Tabs groupId="bench-code" items={["类型", "数据", "方法"]}>
 <Tab value="类型">
 
 ```csharp title="ReferenceTest.cs"
 [NinoType(trackReferences: true)]
+[MemoryPackable(GenerateType.CircularReference)]
 public sealed partial class RefNode
 {
-    public int Id;
-    public double Weight;
-    public RefGraph Graph;   // back to the root: a cycle
-    public RefTag Tag;       // one of 16 shared tags
-    public RefNode Peer;     // an earlier node
+    [MemoryPackOrder(0)] public int Id;
+    [MemoryPackOrder(1)] public double Weight;
+    [MemoryPackOrder(2)] public RefGraph Graph;   // back to the root: a cycle
+    [MemoryPackOrder(3)] public RefTag Tag;       // one of 16 shared tags
+    [MemoryPackOrder(4)] public RefNode Peer;     // an earlier node
 }
 
 [NinoType(trackReferences: true)]
+[MemoryPackable(GenerateType.CircularReference)]
 public sealed partial class RefTag
 {
-    public int Id;
-    public string Name;
+    [MemoryPackOrder(0)] public int Id;
+    [MemoryPackOrder(1)] public string Name;
 }
 
 [NinoType(trackReferences: true)]
+[MemoryPackable(GenerateType.CircularReference)]
 public sealed partial class RefGraph
 {
-    public int Version;
-    public List<RefNode> Nodes;
-    public List<RefTag> Tags;
+    [MemoryPackOrder(0)] public int Version;
+    [MemoryPackOrder(1)] public List<RefNode> Nodes;
+    [MemoryPackOrder(2)] public List<RefTag> Tags;
 }
+```
+
+</Tab>
+<Tab value="数据">
+
+```csharp title="ReferenceTest.cs"
+// In RefGraph: count nodes sharing 16 tags; each node's peer is an earlier node
+// (a back reference, so the nesting stays shallow), and every node refers back to the graph.
+public static RefGraph Create(int count)
+{
+    var r = new Random(3);
+    var graph = new RefGraph { Version = 1, Nodes = new List<RefNode>(count) };
+    graph.Tags = Enumerable.Range(0, 16).Select(i => new RefTag { Id = i, Name = "tag" + i }).ToList();
+    for (int i = 0; i < count; i++)
+    {
+        graph.Nodes.Add(new RefNode
+        {
+            Id = i, Weight = r.NextDouble(), Graph = graph, Tag = graph.Tags[r.Next(graph.Tags.Count)],
+            Peer = i == 0 ? null : graph.Nodes[r.Next(i)]
+        });
+    }
+
+    return graph;
+}
+
+// In ReferenceTest:
+private static readonly RefGraph Graph = RefGraph.Create(200);
+private static readonly byte[] NinoGraph = NinoSerializer.Serialize(Graph);
+private static readonly byte[] MemoryPackGraph = MemoryPackSerializer.Serialize(Graph);
 ```
 
 </Tab>
 <Tab value="方法">
 
 ```csharp title="ReferenceTest.cs"
-private static readonly RefGraph Graph = RefGraph.Create(200);
-private static readonly byte[] NinoGraph = NinoSerializer.Serialize(Graph);
-
-[Benchmark]
+[Benchmark(Baseline = true), BenchmarkCategory("GraphSerialize")]
 public int NinoSerializeGraph()
 {
     _ninoBuffer.ResetWrittenCount();
@@ -659,8 +697,179 @@ public int NinoSerializeGraph()
     return _ninoBuffer.WrittenCount;
 }
 
-[Benchmark]
+[Benchmark, BenchmarkCategory("GraphSerialize")]
+public int MemoryPackSerializeGraph()
+{
+    _memoryPackBuffer.ResetWrittenCount();
+    MemoryPackSerializer.Serialize(_memoryPackBuffer, Graph);
+    return _memoryPackBuffer.WrittenCount;
+}
+
+[Benchmark(Baseline = true), BenchmarkCategory("GraphDeserialize")]
 public RefGraph NinoDeserializeGraph() => NinoDeserializer.Deserialize<RefGraph>(NinoGraph);
+
+[Benchmark, BenchmarkCategory("GraphDeserialize")]
+public RefGraph MemoryPackDeserializeGraph() => MemoryPackSerializer.Deserialize<RefGraph>(MemoryPackGraph);
+```
+
+</Tab>
+</Tabs>
+
+### VersionTolerantTest [#versiontoleranttest]
+
+把 `SimpleClass` 的成员放进一个版本容错的类型，单个对象和 100 个的数组各测一次，像 [`SimpleTest`](#simpletest) 测 `SimpleClass` 那样写入复用的缓冲区写入器再读回：两者之差就是版本容错的开销。Nino 在对象体之前写入它的长度（`NinoFormat.VersionTolerant`）；MemoryPack 写入成员数和每个成员的长度（`GenerateType.VersionTolerant`，要求每个成员都有 `[MemoryPackOrder]`）。对应上文[结果表格](#more-cases)中的 `TolerantClass` 各行。
+
+<Tabs groupId="bench-code" items={["类型", "数据", "方法"]}>
+<Tab value="类型">
+
+```csharp title="VersionTolerantTest.cs"
+[NinoType(format: NinoFormat.VersionTolerant)]
+[MemoryPackable(GenerateType.VersionTolerant)]
+public sealed partial class TolerantClass
+{
+    [MemoryPackOrder(0)] public int Id;
+    [MemoryPackOrder(1)] public bool Tag;
+    [MemoryPackOrder(2)] public Guid Guid;
+    [MemoryPackOrder(3)] public DateTime CreateTime;
+    [MemoryPackOrder(4)] public string Name { get; set; }
+    [MemoryPackOrder(5)] [NinoUtf8] public string Desc;
+    [MemoryPackOrder(6)] public int[] Numbers { get; set; }
+    [MemoryPackOrder(7)] public List<DateTime> Dates { get; set; }
+    [MemoryPackOrder(8)] public Dictionary<int, string> Map1;
+    [MemoryPackOrder(9)] public Dictionary<int, int> Map2 { get; set; }
+}
+```
+
+</Tab>
+<Tab value="数据">
+
+```csharp title="VersionTolerantTest.cs"
+// In TolerantClass: a copy of a SimpleClass from SimpleTest's data.
+public static TolerantClass From(SimpleClass c) => new()
+{
+    Id = c.Id, Tag = c.Tag, Guid = c.Guid, CreateTime = c.CreateTime, Name = c.Name, Desc = c.Desc,
+    Numbers = c.Numbers, Dates = c.Dates, Map1 = c.Map1, Map2 = c.Map2,
+};
+
+// In VersionTolerantTest:
+private static readonly TolerantClass TolerantClass = TolerantClass.From(SimpleClass.Create());
+private static readonly TolerantClass[] TolerantClasses =
+    Enumerable.Range(0, 100).Select(_ => TolerantClass.From(SimpleClass.Create())).ToArray();
+
+private static readonly byte[] NinoTolerantClass = NinoSerializer.Serialize(TolerantClass);
+private static readonly byte[] MemoryPackTolerantClass = MemoryPackSerializer.Serialize(TolerantClass);
+```
+
+</Tab>
+<Tab value="方法">
+
+```csharp title="VersionTolerantTest.cs"
+[Benchmark(Baseline = true), BenchmarkCategory("TolerantClassSerialize")]
+public int NinoSerializeTolerantClass()
+{
+    _ninoBuffer.ResetWrittenCount();
+    NinoSerializer.Serialize(TolerantClass, _ninoBuffer);
+    return _ninoBuffer.WrittenCount;
+}
+
+[Benchmark, BenchmarkCategory("TolerantClassSerialize")]
+public int MemoryPackSerializeTolerantClass()
+{
+    _memoryPackBuffer.ResetWrittenCount();
+    MemoryPackSerializer.Serialize(_memoryPackBuffer, TolerantClass);
+    return _memoryPackBuffer.WrittenCount;
+}
+
+[Benchmark(Baseline = true), BenchmarkCategory("TolerantClassDeserialize")]
+public TolerantClass NinoDeserializeTolerantClass() =>
+    NinoDeserializer.Deserialize<TolerantClass>(NinoTolerantClass);
+
+[Benchmark, BenchmarkCategory("TolerantClassDeserialize")]
+public TolerantClass MemoryPackDeserializeTolerantClass() =>
+    MemoryPackSerializer.Deserialize<TolerantClass>(MemoryPackTolerantClass);
+
+// TolerantClasses (the array of 100) has the same methods.
+```
+
+</Tab>
+</Tabs>
+
+### FixedSizeTest [#fixedsizetest]
+
+每个值都占用相同字节数的类型（[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)）：`Serialize(value)` 返回一个按这个大小分配的新 `byte[]`，并把值直接写进去，不经过暂存缓冲区、写入器，也没有拷贝。通过两个序列化库返回 `byte[]` 的 API 测量，所以每次序列化调用都包含分配结果数组的开销；另外还测了这种类的 100 个元素的数组，它的长度不固定，走常规路径。对应上文[结果表格](#more-cases)中的 `FixedStruct` 和 `FixedClass` 各行。
+
+<Tabs groupId="bench-code" items={["类型", "数据", "方法"]}>
+<Tab value="类型">
+
+```csharp title="FixedSizeTest.cs"
+// Unmanaged members only (40 bytes, no padding): every value serializes to the same number of bytes.
+[NinoType]
+[MemoryPackable]
+public partial struct FixedStruct
+{
+    public int Id;
+    public Vector3 Position;
+    public long Ticks;
+    public Guid Guid;
+}
+
+// The same members in a sealed class: its size is fixed too (a null flag and 40 bytes).
+[NinoType]
+[MemoryPackable]
+public sealed partial class FixedClass
+{
+    public int Id;
+    public Vector3 Position;
+    public long Ticks;
+    public Guid Guid;
+}
+```
+
+</Tab>
+<Tab value="数据">
+
+```csharp title="FixedSizeTest.cs"
+// In FixedStruct (FixedClass has the same Create):
+public static FixedStruct Create(Random r) => new()
+{
+    Id = r.Next(),
+    Position = new Vector3(r.NextSingle(), r.NextSingle(), r.NextSingle()),
+    Ticks = DateTime.Now.AddSeconds(r.Next()).Ticks,
+    Guid = Guid.NewGuid(),
+};
+
+// In FixedSizeTest:
+private static readonly FixedStruct FixedStruct = FixedStruct.Create(new Random(4));
+private static readonly FixedClass FixedClass = FixedClass.Create(new Random(5));
+private static readonly FixedClass[] FixedClasses =
+    Enumerable.Range(0, 100).Select(i => FixedClass.Create(new Random(6 + i))).ToArray();
+
+static FixedSizeTest()
+{
+    // These cases measure the fixed-size path: stop if either type ever stops taking it.
+    if (NinoSerializer.GetFixedSize<FixedStruct>() < 0 || NinoSerializer.GetFixedSize<FixedClass>() < 0)
+        throw new InvalidOperationException("FixedStruct and FixedClass must be of fixed size");
+}
+```
+
+</Tab>
+<Tab value="方法">
+
+```csharp title="FixedSizeTest.cs"
+[Benchmark(Baseline = true), BenchmarkCategory("FixedClassSerialize")]
+public byte[] NinoSerializeFixedClass() => NinoSerializer.Serialize(FixedClass);
+
+[Benchmark, BenchmarkCategory("FixedClassSerialize")]
+public byte[] MemoryPackSerializeFixedClass() => MemoryPackSerializer.Serialize(FixedClass);
+
+[Benchmark(Baseline = true), BenchmarkCategory("FixedClassDeserialize")]
+public FixedClass NinoDeserializeFixedClass() => NinoDeserializer.Deserialize<FixedClass>(NinoFixedClass);
+
+[Benchmark, BenchmarkCategory("FixedClassDeserialize")]
+public FixedClass MemoryPackDeserializeFixedClass() =>
+    MemoryPackSerializer.Deserialize<FixedClass>(MemoryPackFixedClass);
+
+// FixedStruct and FixedClasses (the array of 100) have the same methods.
 ```
 
 </Tab>
@@ -676,6 +885,9 @@ benchmarks/run.sh
 
 # runtime, v4 only, a subset
 dotnet run -c Release --project src/Nino.Benchmark -- --filter '*SimpleTest*' --iterationCount 15 --warmupCount 5
+
+# reference tracking, version tolerance and fixed-size types
+dotnet run -c Release --project src/Nino.Benchmark -- --filter '*ReferenceTest*' '*VersionTolerantTest*' '*FixedSizeTest*'
 
 # build time and generated code (N = 30, 8 derived classes per root)
 dotnet run -c Release --project src/Nino.GeneratorBenchmark -- 30 8

@@ -11,14 +11,14 @@ icon: Save
 
 | 数据 | 格式 | 原因 |
 | --- | --- | --- |
-| 存档根对象与长期保留的记录 | `keyed: true` | 任何一次更新都可以增删、重排字段。 |
-| 只会增加字段的记录 | `versionTolerant: true` | 只向没有子类的类追加字段；每个对象 4 字节，而不是每个成员 8 字节。 |
+| 存档根对象与长期保留的记录 | `format: NinoFormat.Keyed` | 任何一次更新都可以增删、重排字段。 |
+| 只会增加字段的记录 | `format: NinoFormat.VersionTolerant` | 只向没有子类的类追加字段；每个对象 4 字节，而不是每个成员 8 字节。 |
 | 小型值结构体（`Vector3`、你的 `GridPos`） | 按位置（不带参数的 `[NinoType]`） | 按原始字节写入，紧凑，也很少变化。定下来后就不要再改。 |
 
 ```csharp title="SaveData.cs"
 using Nino.Core;
 
-[NinoType(keyed: true)]
+[NinoType(format: NinoFormat.Keyed)]
 public sealed class SaveGame
 {
     public int Version;              // your own content version, see below
@@ -28,7 +28,7 @@ public sealed class SaveGame
     public Dictionary<string, int> Flags;
 }
 
-[NinoType(keyed: true)]
+[NinoType(format: NinoFormat.Keyed)]
 public sealed class Player
 {
     public string Name;
@@ -37,7 +37,7 @@ public sealed class Player
     public List<Item> Inventory;
 }
 
-[NinoType(versionTolerant: true)]
+[NinoType(format: NinoFormat.VersionTolerant)]
 public class Item
 {
     public int DefinitionId;
@@ -64,7 +64,7 @@ public struct GridPos            // positional raw struct: never reorder its fie
 在键控的存档类型中给字段改名时，把旧名称标出来。改名前写出的存档会读进新字段，新存档则以新名称写入：
 
 ```csharp
-[NinoType(keyed: true)]
+[NinoType(format: NinoFormat.Keyed)]
 public sealed class Player
 {
     [NinoFormerName("Lvl")] // [!code highlight]
@@ -79,7 +79,7 @@ public sealed class Player
 默认情况下，每个引用都各自写一份副本。如果存档里有多处指向同一个对象（既在队伍里又在公会里的角色，或者任务引用了 NPC、NPC 又引用回这个任务），就给这些共享的类型加上 `trackReferences: true`：
 
 ```csharp
-[NinoType(keyed: true, trackReferences: true)] // [!code highlight]
+[NinoType(format: NinoFormat.Keyed, trackReferences: true)] // [!code highlight]
 public class Character
 {
     public string Name;
@@ -200,7 +200,7 @@ public sealed class TypedStore<TKey, TValue> where TKey : unmanaged
 
 - 非托管类型的键（`int`、`Guid`、由若干 id 组成的结构体）按其原始的小端字节写入。按字节排序键的存储**不会**把小端整数按数值大小排序；如果需要按数值顺序做范围扫描，请自己用 `BinaryPrimitives.WriteInt64BigEndian` 写这类键。
 - 每个实例持有两个缓冲区，所以每个线程用一个，或者加锁保护。
-- 存下来的值比写入它的代码活得更久：和存档一样，值的类型要设为 `keyed` 或 `versionTolerant`。
+- 存下来的值比写入它的代码活得更久：和存档一样，值的类型要设为 `NinoFormat.Keyed` 或 `NinoFormat.VersionTolerant`。
 
 ## 追加日志 [#append-only-logs]
 
@@ -210,7 +210,7 @@ public sealed class TypedStore<TKey, TValue> where TKey : unmanaged
 using System.Buffers.Binary;
 using Nino.Core;
 
-[NinoType(versionTolerant: true)]
+[NinoType(format: NinoFormat.VersionTolerant)]
 public abstract class AccountEvent
 {
     public long Sequence;
@@ -275,7 +275,7 @@ public sealed class EventLog : IDisposable
 ```csharp title="Snapshots.cs"
 using Nino.Core;
 
-[NinoType(keyed: true)]
+[NinoType(format: NinoFormat.Keyed)]
 public sealed class AccountSnapshot
 {
     public long LastSequence;   // the last event the snapshot includes
@@ -333,7 +333,7 @@ public void LoadsEveryShippedSave()
 
 ## 检查清单 [#checklist]
 
-- [ ] 根对象和长期保留的记录使用 `keyed`（只会增加字段的用 `versionTolerant`）。
+- [ ] 根对象和长期保留的记录使用 `NinoFormat.Keyed`（只会增加字段的用 `NinoFormat.VersionTolerant`）。
 - [ ] 小型原始结构体已定型：不再调整字段顺序或类型。
 - [ ] 共享或循环的对象使用 `trackReferences`。
 - [ ] 改名的类型和改名的键控成员都带有 `[NinoFormerName]`。

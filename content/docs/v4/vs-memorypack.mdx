@@ -63,11 +63,11 @@ Every case with its numbers, the polymorphic and pooled runs, and the benchmark 
 | Subtypes in other assemblies | ✅ automatic | ⚠️ `[MemoryPackUnionFormatter]`; in Unity, registered manually at startup |
 | Hot-update assemblies (HybridCLR) | ✅ found lazily, no init call | — not documented |
 | **Evolving data** | | |
-| Append members | ✅ `versionTolerant` (most derived type), `keyed` (any class) | ✅ default mode (new code reads old data only) |
-| Old code reads new data | ✅ `versionTolerant`, `keyed` | ✅ `GenerateType.VersionTolerant` |
-| Remove members | ✅ `keyed` | ✅ `VersionTolerant` with explicit orders |
-| Reorder or insert members | ✅ `keyed` | ❌ |
-| Rename members | ✅ positional, `versionTolerant`; `keyed` with `[NinoFormerName]` | ✅ |
+| Append members | ✅ `NinoFormat.VersionTolerant` (most derived type), `NinoFormat.Keyed` (any class) | ✅ default mode (new code reads old data only) |
+| Old code reads new data | ✅ `NinoFormat.VersionTolerant`, `NinoFormat.Keyed` | ✅ `GenerateType.VersionTolerant` |
+| Remove members | ✅ `NinoFormat.Keyed` | ✅ `VersionTolerant` with explicit orders |
+| Reorder or insert members | ✅ `NinoFormat.Keyed` | ❌ |
+| Rename members | ✅ positional, `NinoFormat.VersionTolerant`; `NinoFormat.Keyed` with `[NinoFormerName]` | ✅ |
 | Rename or move types | ✅ `[NinoFormerName]` | ✅ union tags do not depend on names |
 | **Object graphs** | | |
 | Shared and circular references | ✅ `trackReferences`, any constructor that can fill in place | ⚠️ `GenerateType.CircularReference`, parameterless constructors only |
@@ -75,7 +75,7 @@ Every case with its numbers, the polymorphic and pooled runs, and the benchmark 
 | Deserialize into an existing instance | ✅ reuses elements by index, merges dictionaries | ⚠️ arrays reused only at the same length; collections cleared and refilled |
 | Object pools | ✅ `[NinoPooled]`, factories, recycler for dropped instances | ⚠️ `MemoryPoolFormatter<T>` rents arrays from `ArrayPool` |
 | **Tooling** | | |
-| Analyzer | ✅ NINO001–NINO024, many with code fixes | ✅ MEMPACK001–MEMPACK035 |
+| Analyzer | ✅ NINO001–NINO025, many with code fixes | ✅ MEMPACK001–MEMPACK035 |
 | Compile-time call interception | ✅ Roslyn 4.8+ (.NET 8 SDK) | — not documented |
 | **I/O and integrations** | | |
 | `IBufferWriter<byte>` / `PipeWriter` | ✅ | ✅ |

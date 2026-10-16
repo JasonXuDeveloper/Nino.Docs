@@ -9,6 +9,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import {
   BenchSource,
   benchValue,
+  ExtraRuntimeTables,
   ResultsTable,
   ReuseTable,
   RuntimeTable,
@@ -202,6 +203,10 @@ function markdownComponents(lang: Locale, pageUrl: string) {
     RuntimeTable(props: ComponentProps<typeof RuntimeTable>) {
       asMarkdown();
       return RuntimeTable(props);
+    },
+    ExtraRuntimeTables(props: ComponentProps<typeof ExtraRuntimeTables>) {
+      asMarkdown();
+      return ExtraRuntimeTables(props);
     },
     ReuseTable(props: ComponentProps<typeof ReuseTable>) {
       asMarkdown();

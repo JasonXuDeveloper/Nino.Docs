@@ -20,8 +20,9 @@ Each version below writes a binary format that earlier versions cannot read, and
 
 A rewrite of the runtime and the source generator. **The binary format is not compatible with v3 or the earlier v4 betas/previews**, and the public API changed. Main changes:
 - `NinoSerializer` / `NinoDeserializer` in `Nino.Core` replace the generated `Serializer` / `Deserializer` classes and their extension methods.
-- New wire format: little-endian, unaligned, padding zeroed, identical bytes on `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0`; type ids are FNV-1a hashes of the runtime type name. Strings, UTF-16 or `[NinoUtf8]`, are prefixed with their length in chars, and a `[NinoUtf8]` string also with its length in bytes; a `versionTolerant` object writes one length for its whole hierarchy (both since 4.0.0-rc.1, see [Behavior Changes since the v4 Betas](/en/docs/v4/migration#behavior-changes-since-the-v4-betas)).
-- Per-type options on `[NinoType]`: `versionTolerant`, `keyed`, `trackReferences`, `allowInheritance`. Subtypes inherit `[NinoType]`.
+- New wire format: little-endian, unaligned, padding zeroed, identical bytes on `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0`; type ids are FNV-1a hashes of the runtime type name. Strings, UTF-16 or `[NinoUtf8]`, are prefixed with their length in chars, and a `[NinoUtf8]` string also with its length in bytes; a version-tolerant object writes one length for its whole hierarchy (both since 4.0.0-rc.1, see [Behavior Changes since the v4 Betas](/en/docs/v4/migration#behavior-changes-since-the-v4-betas)).
+- Per-type options on `[NinoType]`: `format` (`NinoFormat.Positional`, `VersionTolerant` or `Keyed`), `trackReferences`, `allowInheritance`. Subtypes inherit `[NinoType]`.
+- A boxed API for types known only at run time (`SerializeBoxed`, `DeserializeBoxed`); `[NinoExplicitOrder]` and run-time formatter registration are removed.
 - Reuse deserialization into existing instances with recycling, `[NinoPooled]` pools, `[NinoFactory]` factories and `NinoSettings`.
 - User collections, `PriorityQueue`, `Nino.Immutable`, pluggable formatters (`[assembly: NinoFormatter]`, `[NinoCustomFormatter]`).
 - An incremental generator, analyzers with code fixes, and interceptors on the .NET 8 SDK and later.
@@ -68,6 +69,6 @@ Data you store, such as save games, should start with your own header (a magic n
 
 <Callout type="idea">
 
-From v4 on, mark long-lived data such as save games `[NinoType(versionTolerant: true)]` or `[NinoType(keyed: true)]`, so that later changes to your own types need no conversion step. See [Evolving Your Data](/en/docs/v4/evolving-data).
+From v4 on, mark long-lived data such as save games `[NinoType(format: NinoFormat.VersionTolerant)]` or `[NinoType(format: NinoFormat.Keyed)]`, so that later changes to your own types need no conversion step. See [Evolving Your Data](/en/docs/v4/evolving-data).
 
 </Callout>

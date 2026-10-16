@@ -139,6 +139,8 @@ Nino has two ways to hook into instance creation, each for a different job:
 | After the call | members that are not parameters are assigned | every member is filled in place |
 | Reuse | the type is re-created on every read, so it cannot be pooled (NINO018) | instances are reused; the way to deserialize with 0 GC |
 
+Use one or the other. A type with a `[NinoConstructor]` is always re-created through it, so a `[NinoFactory]` on the same type is never called, and the analyzer warns about it (NINO025): remove `[NinoFactory]` to keep the constructor, or `[NinoConstructor]` to create instances with the factory and fill them in place.
+
 ## Taking Instances from a Pool [#from-a-pool]
 
 A `[NinoFactory]` method is called only when Nino needs a **new** instance: the slot is `null`, a list grows, or a polymorphic slot changes type. Nino then fills the instance in place. Combined with [reuse deserialization](/en/docs/v4/pooling#deserializing-into-existing-instances) and a [recycler](/en/docs/v4/pooling#why-setrecycler) for the instances it drops, a stream of messages allocates nothing once the pool is warm:
@@ -189,4 +191,4 @@ foreach (byte[] data in messages)
 
 ## Re-created Types
 
-A type with a `[NinoConstructor]`, or whose members cannot be assigned after construction (constructor parameters, `init`-only, get-only or `readonly` members), is always **re-created** when deserialized, even by [reuse deserialization](/en/docs/v4/pooling); the old instance is passed to the [recycler](/en/docs/v4/pooling#where-dropped-instances-go). Such types cannot use [`trackReferences`](/en/docs/v4/reference-tracking) (NINO016) or [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled) (NINO018). A `[NinoFactory]` method on such a type is not used. When you need any of these, for example to deserialize with 0 GC, give the type settable members and [take instances from a pool](#from-a-pool) instead.
+A type with a `[NinoConstructor]`, or whose members cannot be assigned after construction (constructor parameters, `init`-only, get-only or `readonly` members), is always **re-created** when deserialized, even by [reuse deserialization](/en/docs/v4/pooling); the old instance is passed to the [recycler](/en/docs/v4/pooling#where-dropped-instances-go). Such types cannot use [`trackReferences`](/en/docs/v4/reference-tracking) (NINO016) or [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled) (NINO018). A `[NinoFactory]` method on such a type is not used (next to a `[NinoConstructor]`, the analyzer reports it as NINO025). When you need any of these, for example to deserialize with 0 GC, give the type settable members and [take instances from a pool](#from-a-pool) instead.

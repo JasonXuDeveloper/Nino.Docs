@@ -93,7 +93,6 @@ Most projects need none of these steps. Run the ones you need once, before the f
 | `Assembly.Load` of hot-update DLLs | Before reading data that contains their types. | |
 | `NinoRegistry.EnsureInitialized(assembly)` or `EnsureAllInitialized()` | You want the one-time registry load on a loading screen instead of the first call that meets the assembly. | Always optional: registries load on first use. |
 | `NinoPolymorphic.Register<T>()` | A closed generic `[NinoType]` such as `Box<MyStruct>` that this process only **reads** through a base type, and never names in code or writes. | Ordinary subtypes in any assembly, hot update included: they are found automatically. |
-| `NinoFormatterCache<T>.Register<TFormatter>()` | A formatter for `T` is chosen at run time. Register it before `T` is first serialized or deserialized: the first use fixes the formatter, and a later registration throws an `InvalidOperationException`. | Formatters declared with `[assembly: NinoFormatter]` or `[NinoCustomFormatter]`: they need no call. |
 
 ```csharp
 public static class NinoStartup
@@ -103,7 +102,6 @@ public static class NinoStartup
     {
         NinoSettings.SetPoolMaxRetained<Bullet>(1024); // only if the defaults do not fit
         NinoPolymorphic.Register<Box<MyStruct>>();     // only for read-only closed generics
-        NinoFormatterCache<Ring<int>>.Register<RingFormatter<int, UnmanagedFormatter<int>>>(); // only for formatters chosen at run time
     }
 }
 
@@ -114,16 +112,16 @@ NinoRegistry.EnsureInitialized(hotUpdate);             // optional: pay the regi
 
 ## Config Tables
 
-Game data authored in spreadsheets or the editor (items, levels, drop tables) is a good fit for Nino: export it to a `.bytes` file once, and load it at runtime without any parsing. Mark the table types `keyed: true`, so that adding or reordering a column does not break files exported before:
+Game data authored in spreadsheets or the editor (items, levels, drop tables) is a good fit for Nino: export it to a `.bytes` file once, and load it at runtime without any parsing. Give the table types `format: NinoFormat.Keyed`, so that adding or reordering a column does not break files exported before:
 
 ```csharp title="ItemTable.cs"
-[NinoType(keyed: true)]
+[NinoType(format: NinoFormat.Keyed)]
 public sealed class ItemTable
 {
     public List<ItemRow> Rows;
 }
 
-[NinoType(keyed: true)]
+[NinoType(format: NinoFormat.Keyed)]
 public sealed class ItemRow
 {
     public int Id;
@@ -144,7 +142,7 @@ ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
 - **No GC spikes from network or replay data:** deserialize each tick into the previous tick's object with `ref`, and mark the classes you create in bulk (bullets, events) `[NinoPooled]`. See [High-Performance Serialization](/en/docs/v4/advanced/high-performance).
 - **Reuse one `NinoArrayBufferWriter`** per sender for outgoing data instead of calling `Serialize(value)` and allocating a `byte[]` each frame.
 - **Keep bulk data unmanaged:** arrays of `Vector3`, `Color32` or your own unmanaged `[NinoType]` structs are one memory copy.
-- **Configuration authored in the editor** changes all the time: use [`keyed: true`](/en/docs/v4/evolving-data#keyed-members) so designers can add and reorder fields without breaking existing assets.
+- **Configuration authored in the editor** changes all the time: use [`format: NinoFormat.Keyed`](/en/docs/v4/evolving-data#keyed-members) so designers can add and reorder fields without breaking existing assets.
 
 <Callout type="warn">
 
@@ -167,7 +165,7 @@ The type serializes private members, or is `[NinoPooled]`, and Unity has no `[Un
 </Accordion>
 <Accordion title="Data from an older build cannot be read">
 
-Nino's default format is positional: changing a type's members breaks old data. Use `versionTolerant` or `keyed` for anything that is stored. See [Evolving Your Data](/en/docs/v4/evolving-data). Data written by Nino v3 cannot be read by v4 at all; see [Migrating from v3](/en/docs/v4/migration).
+Nino's default format is positional: changing a type's members breaks old data. Use `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` for anything that is stored. See [Evolving Your Data](/en/docs/v4/evolving-data). Data written by Nino v3 cannot be read by v4 at all; see [Migrating from v3](/en/docs/v4/migration).
 
 </Accordion>
 </Accordions>

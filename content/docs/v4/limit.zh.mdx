@@ -9,7 +9,7 @@ icon: TriangleAlert
 ## 当前的局限 [#current-limitations]
 - **离不开源生成器。** Nino 依赖自己的源生成器（Roslyn 4.3 及以上），声明 `[NinoType]` 的项目需要 C# 9 及以上。
 - **不兼容 v3 数据。** v4 无法读取 v3 以及 v4 测试版、预览版写出的数据。参见[从 v3 迁移](/zh/docs/v4/migration#converting-v3-data)。
-- **默认按位置存储。** 不带参数的 `[NinoType]` 最快，但成员一改，旧数据就读不了。需要保存或跨版本交换的数据，请在写入之前选好 `versionTolerant` 或 `keyed`：参见[数据演进](/zh/docs/v4/evolving-data)。
+- **默认按位置存储。** 不带参数的 `[NinoType]` 最快，但成员一改，旧数据就读不了。需要保存或跨版本交换的数据，请在写入之前选好 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`：参见[数据演进](/zh/docs/v4/evolving-data)。
 - **部分类型没有内置格式化器。** 参见[支持的类型](/zh/docs/v4/types#not-supported)；用[自定义格式化器](/zh/docs/v4/custom-formatters)可以支持其中任何一种。
 
 ## 平台说明 [#platform-notes]
@@ -26,12 +26,12 @@ v4 已解决：`ValueTuple`、`KeyValuePair` 和 `Nullable<T>` 有明确定义�
 </Accordion>
 <Accordion value="resolved-2" title={<>启用 <code>WEAK_VERSION_TOLERANCE</code> 的项目无法读取未启用该符号的项目的数据，反之亦然</>}>
 
-v4 已解决：版本容错改为每个类型自己的选项（`[NinoType(versionTolerant: true)]`），属于类型自身的格式，不再依赖项目设置。`WEAK_VERSION_TOLERANCE` 仍为兼容而保留，只影响定义了该符号的项目中声明的类型。
+v4 已解决：版本容错改为每个类型自己的选项（`[NinoType(format: NinoFormat.VersionTolerant)]`），属于类型自身的格式，不再依赖项目设置。`WEAK_VERSION_TOLERANCE` 仍为兼容而保留，只影响定义了该符号的项目中声明的类型。
 
 </Accordion>
 <Accordion value="resolved-3" title={<>成员只能追加在末尾，不能删除或调整顺序</>}>
 
-v4 已解决：`[NinoType(keyed: true)]` 允许在继承体系的任意一个类中调整顺序、删除和插入成员。版本容错的类型仍然只允许追加成员，并且只能追加到最末端的派生类型。
+v4 已解决：`[NinoType(format: NinoFormat.Keyed)]` 允许在继承体系的任意一个类中调整顺序、删除和插入成员。版本容错的类型仍然只允许追加成员，并且只能追加到最末端的派生类型。
 
 </Accordion>
 <Accordion value="resolved-4" title={<>不支持的类型会导致编译错误</>}>

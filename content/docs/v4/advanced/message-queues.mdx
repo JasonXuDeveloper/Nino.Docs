@@ -16,7 +16,7 @@ Derive the events of a stream from one base class. Nino writes the runtime type 
 ```csharp title="OrderEvents.cs"
 using Nino.Core;
 
-[NinoType(versionTolerant: true)] // subtypes inherit [NinoType] and its options
+[NinoType(format: NinoFormat.VersionTolerant)] // subtypes inherit [NinoType] and its options
 public abstract class OrderEvent
 {
     public Guid OrderId;
@@ -179,8 +179,8 @@ public sealed class SampleConsumer
 
 A message written today may be consumed next month, by code that did not exist when it was written, and a consumer may replay a topic from the beginning.
 
-- Make every event type [`versionTolerant`](/en/docs/v4/evolving-data#version-tolerance) (append fields) or [`keyed`](/en/docs/v4/evolving-data#keyed-members) (any change). A consumer then skips fields it does not know, and a field missing from an old message keeps the value its constructor or initializer gives it.
-- In a `versionTolerant` hierarchy, append members only to the concrete events (`OrderPlaced`, ...), never to `OrderEvent`: a member appended to the base class shifts the members of every subclass. If the base needs a new member, use `keyed`. See [Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class).
+- Make every event type [`NinoFormat.VersionTolerant`](/en/docs/v4/evolving-data#version-tolerance) (append fields) or [`NinoFormat.Keyed`](/en/docs/v4/evolving-data#keyed-members) (any change). A consumer then skips fields it does not know, and a field missing from an old message keeps the value its constructor or initializer gives it.
+- In a `NinoFormat.VersionTolerant` hierarchy, append members only to the concrete events (`OrderPlaced`, ...), never to `OrderEvent`: a member appended to the base class shifts the members of every subclass. If the base needs a new member, use `NinoFormat.Keyed`. See [Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class).
 - A consumer that receives an event **type** it does not know cannot read it: deserializing throws an `InvalidOperationException` (unknown type id). Deploy consumers before the producers that emit a new event type, or put new types on a new topic.
 - [Positional](/en/docs/v4/evolving-data#positional) types (bare `[NinoType]`) are fine for messages that are consumed within a deployment (a work queue drained in seconds). Their bytes change with every member change.
 
@@ -189,7 +189,7 @@ For an append-only log in a file (event sourcing on local storage), see [Append-
 ## Checklist [#checklist]
 
 - [ ] Events derive from one `[NinoType]` base; renamed events carry `[NinoFormerName]`.
-- [ ] Event types on long-lived topics are `versionTolerant` or `keyed`.
+- [ ] Event types on long-lived topics are `NinoFormat.VersionTolerant` or `NinoFormat.Keyed`.
 - [ ] New event types reach consumers before producers emit them.
 - [ ] Small, frequent events are batched; their records are unmanaged structs in lists.
 - [ ] Consumers deserialize into reused instances on hot topics.

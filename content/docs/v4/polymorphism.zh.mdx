@@ -137,6 +137,26 @@ Nino 采用混合分派：
 
 读取时，Nino 会检查数据中的类型确实派生自声明类型；如果数据指向一个无关的类型，会直接抛出异常，而不会把它存进去。
 
+## 通过共同基类型分派 [#dispatching-through-a-common-base]
+
+RPC 或消息分派、插件系统、编辑器工具，都应该给相关类型一个共同的 `[NinoType]` 基类或接口，再用 `Serialize<TBase>` / `Deserialize<TBase>` 通过它来序列化和反序列化。类型 ID 的写入和分派都由生成代码完成，比下面两种做法都快，而且能配合[复用反序列化](#reuse-deserialization)和 `[NinoPooled]` 使用，接收循环可以做到 0 B 分配。完整示例参见[网络层](/zh/docs/v4/advanced/networking)。
+
+```csharp
+[NinoType]
+public interface ICommand { }
+
+public sealed class SpawnUnit : ICommand { public int UnitId; }   // implementations inherit [NinoType]
+public sealed class DeleteUnit : ICommand { public int UnitId; }
+
+byte[] bytes = NinoSerializer.Serialize<ICommand>(command);
+ICommand read = NinoDeserializer.Deserialize<ICommand>(bytes);
+```
+
+另外还有两种做法，但都更慢：
+
+- **把 `object` 作为声明类型**（成员、元素，或 `Serialize<object>` 调用）：只接受 `[NinoType]` 的值，会写入类型 ID，读取时通过包含所有 `[NinoType]` 的全局注册表分派，而不是某个基类型的生成分派。请优先使用共同基类型。
+- **[装箱 API](/zh/docs/v4/basic#the-boxed-api)**（带 `Type` 的 `SerializeBoxed` / `DeserializeBoxed`）：按 `Type` 查找格式化器，值类型会被装箱。只有当类型要到运行时才以 `Type` 的形式得知、并且这些类型没有共同的 `[NinoType]` 基类型时才使用，例如基于反射、面向任意类型的工具。
+
 ## 其他程序集中的子类型 [#subtypes-in-other-assemblies]
 
 无论子类型声明在哪里，Nino 都能自动找到，包括之后才加载的程序集（插件、HybridCLR 热更新 DLL）：遇到未知的类型 ID 时，Nino 会先查找新加载程序集的注册表，找不到才报错。不需要任何注册调用。例如，热更新在自己的 DLL 中新增了 `public sealed class Freeze : Effect`。DLL 加载之后，AOT 程序集里的战斗代码不用做任何改动，就能读取包含 `Freeze` 的 `List<Effect>`。子类型所在的程序集必须引用 `Nino.Core`，这样源生成器才会在那里运行；如果类型 ID 对应的类型不在任何已加载的程序集中，会抛出 `InvalidOperationException`。

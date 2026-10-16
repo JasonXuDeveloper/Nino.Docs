@@ -11,6 +11,11 @@
  *   bun scripts/sync-benchmarks.ts --fixture <file.md>   # parse a release body from a file
  *   bun scripts/sync-benchmarks.ts --fixture <file> --out <file.json> [--out-v3 <file.json>]
  *
+ * Fixtures: scripts/fixtures/release-body.md (made-up numbers, the methods the
+ * site requires), release-body-v3.md (with the v3 section) and
+ * release-body-new.md (a sample of the ReferenceTest, VersionTolerantTest and
+ * FixedSizeTest rows; its numbers are noise, only its format matters).
+ *
  * Runs before every build. It never fails the build: on any error (network,
  * rate limit, no matching release, a table it cannot read) it prints a warning
  * and leaves the committed JSON as it is. A release without the v3 section
@@ -308,6 +313,36 @@ export const requiredMethods = [
   'MemoryPackDeserializeOverwrite',
 ];
 
+/**
+ * Methods of the benchmark classes added after the current report format:
+ * ReferenceTest (MemoryPack in its CircularReference mode), VersionTolerantTest
+ * and FixedSizeTest. parseReport keeps every row it reads, so these are synced
+ * with the rest; the site shows them (src/lib/benchmarks.ts, extraRuntime) only
+ * when both libraries' rows of a case are present. Not required: a release
+ * whose report predates them is still used. NinoDeserializeFixedStruct (and
+ * its MemoryPack pair) is synced but never shown: it is below a nanosecond.
+ */
+export const newMethods = [
+  ...['Graph', 'TolerantClass', 'TolerantClasses'].flatMap((name) =>
+    ['Serialize', 'Deserialize'].flatMap((verb) => [
+      `Nino${verb}${name}`,
+      `MemoryPack${verb}${name}`,
+    ]),
+  ),
+  ...['FixedStruct', 'FixedClass', 'FixedClasses'].flatMap((name) =>
+    ['Serialize', 'Deserialize'].flatMap((verb) => [
+      `Nino${verb}${name}`,
+      `MemoryPack${verb}${name}`,
+    ]),
+  ),
+];
+
+/** Which of `newMethods` a report has */
+export function presentNewMethods(rows: BenchRow[]) {
+  const have = new Set(rows.map((row) => row.method));
+  return newMethods.filter((method) => have.has(method));
+}
+
 export function missingMethods(rows: BenchRow[]) {
   const have = new Set(rows.map((row) => row.method));
   return requiredMethods.filter((method) => !have.has(method));
@@ -420,6 +455,10 @@ async function main() {
       console.warn(
         `[benchmarks] fixture lacks ${missing.length} of the ${requiredMethods.length} methods the site needs (a release like this would not be used)`,
       );
+    const extra = presentNewMethods(rows);
+    console.warn(
+      `[benchmarks] fixture has ${extra.length} of the ${newMethods.length} ReferenceTest/VersionTolerantTest/FixedSizeTest methods${extra.length > 0 && extra.length < newMethods.length ? ` (missing: ${newMethods.filter((m) => !extra.includes(m)).join(', ')})` : ''}`,
+    );
     if (out) {
       writeFileSync(out, `${JSON.stringify(file, null, 2)}\n`);
       console.log(`[benchmarks] wrote ${out}: ${summary(file)}`);
@@ -469,7 +508,9 @@ async function main() {
       rows,
     };
     writeFileSync(out ?? dataFile, `${JSON.stringify(file, null, 2)}\n`);
-    console.log(`[benchmarks] synced ${summary(file)}`);
+    console.log(
+      `[benchmarks] synced ${summary(file)}, ${presentNewMethods(rows).length} of ${newMethods.length} ReferenceTest/VersionTolerantTest/FixedSizeTest methods`,
+    );
     // Only from the release the v4 numbers came from, so the site never mixes releases.
     syncV3(release, argument('--out-v3'));
   } catch (error) {

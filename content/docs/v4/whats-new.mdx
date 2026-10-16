@@ -51,12 +51,12 @@ Neither library allocates when serializing, and payloads are about the same size
     On Roslyn 4.8+ (the .NET 8 SDK and later), calls with a known type go straight to the generated formatter. Always on; Unity (which uses the Roslyn 4.3 build) and older compilers use the regular path and write the same bytes.
   </Card>
   <Card icon={<KeyRound />} title="Keyed members and versioning" href="/en/docs/v4/evolving-data">
-    `keyed: true` lets you reorder, remove and insert members; `versionTolerant: true` lets you append them, at 4 bytes per object.
+    `format: NinoFormat.Keyed` lets you reorder, remove and insert members; `format: NinoFormat.VersionTolerant` lets you append them, at 4 bytes per object.
   </Card>
   <Card icon={<Share2 />} title="Reference tracking" href="/en/docs/v4/reference-tracking">
     With `trackReferences: true`, shared references and cycles survive a round trip, at 4 bytes per tracked object.
   </Card>
-  <Card icon={<ShieldCheck />} title="Analyzers NINO001–NINO024" href="/en/docs/v4/analyzers">
+  <Card icon={<ShieldCheck />} title="Analyzers NINO001–NINO025" href="/en/docs/v4/analyzers">
     Mistakes reported while you type, many with a one-click code fix.
   </Card>
   <Card icon={<Recycle />} title="Low GC and pooling" href="/en/docs/v4/pooling">
@@ -78,7 +78,7 @@ Neither library allocates when serializing, and payloads are about the same size
 ### Faster to build
 - **Truly incremental source generator**: one file per `[NinoType]`, equatable models, no whole-compilation scans. Editing a type re-generates only that type, and an edit that changes no model (a comment, a method body) re-generates nothing.
 - **Much less generated code**: collections, strings, nullables, tuples and other built-in types are implemented once in `Nino.Core` as generic formatters; the generator only emits code for your `[NinoType]`s.
-- **Analyzers and code fixes**: mistakes are reported while you type (NINO001–NINO024), many with a one-click fix. See the [diagnostics list](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md).
+- **Analyzers and code fixes**: mistakes are reported while you type (NINO001–NINO025), many with a one-click fix. See the [diagnostics list](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md).
 
 ### Faster to run
 - **Struct formatters that the JIT/AOT compiler inlines**, raw memory copies for unmanaged `[NinoType]` structs and their arrays and lists, and no allocations beyond the result objects. [Fixed-size types](/en/docs/v4/performance#fixed-size-types) are written straight into a `byte[]` of their exact size.
@@ -93,8 +93,8 @@ Neither library allocates when serializing, and payloads are about the same size
 See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 
 ### Evolve your data
-- **Opt-in version tolerance**: `[NinoType(versionTolerant: true)]` lets you append members to the most derived type, at any nesting depth, and old code skips the members it does not know.
-- **Keyed members**: `[NinoType(keyed: true)]` writes members by name hash, so they can be reordered, removed and inserted.
+- **Opt-in version tolerance**: `[NinoType(format: NinoFormat.VersionTolerant)]` lets you append members to the most derived type, at any nesting depth, and old code skips the members it does not know.
+- **Keyed members**: `[NinoType(format: NinoFormat.Keyed)]` writes members by name hash, so they can be reordered, removed and inserted.
 - **Reference tracking**: `[NinoType(trackReferences: true)]` keeps shared references and cycles.
 - **Deep object graphs**: objects nested more than 128 levels deep are deferred, then written and read from a shallower level, so recursive types of any depth, and hostile data, cannot overflow the stack. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
 
@@ -108,6 +108,12 @@ See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 - **One format everywhere**: `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` produce identical bytes, and data is portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit.
 - **No init calls**: generated registries are found lazily, so hot-update assemblies (HybridCLR) just work.
 - **Unity**: the generator ships in the package; there is nothing else to install.
+
+### A small, explicit API
+- **One option for the format**: `[NinoType(format: ...)]` takes a `NinoFormat` (`Positional`, the default, `VersionTolerant` or `Keyed`). Defining `WEAK_VERSION_TOLERANCE` in a project turns its `Positional` types into `VersionTolerant` ones. See [Evolving Your Data](/en/docs/v4/evolving-data).
+- **Fixed-size types**: `NinoSerializer.Serialize(value)` of a type whose values always take the same number of bytes allocates the result at its final size, and `NinoSerializer.GetFixedSize<T>()` returns that size. See [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
+- **A boxed API for runtime types**: `SerializeBoxed(value, type)` and `DeserializeBoxed(data, type)` serialize a type known only as a `Type`, writing exactly what `Serialize<T>` writes. For message dispatch, plugins and tools, a common `[NinoType]` base with `Serialize<TBase>` is faster and allocation-free; see [Runtime Types](/en/docs/v4/basic#runtime-types).
+- **Removed**: `[NinoExplicitOrder]` (use `[NinoType(false)]` with `[NinoMember(index)]`), the betas' `Serialize(object)` (now `SerializeBoxed`) and run-time formatter registration with `NinoFormatterCache<T>.Register<TFormatter>()` (declare formatters with `[assembly: NinoFormatter]` or `[NinoCustomFormatter]`). See [Migrating from v3](/en/docs/v4/migration).
 
 ## Quick Example
 

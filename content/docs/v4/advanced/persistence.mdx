@@ -11,14 +11,14 @@ Stored data is read by builds that did not exist when it was written: a game sav
 
 | Data | Format | Why |
 | --- | --- | --- |
-| The save root and long-lived records | `keyed: true` | Fields can be added, removed and reordered in any update. |
-| Records that only ever grow | `versionTolerant: true` | Append fields to classes without subclasses; 4 bytes per object instead of 8 per member. |
+| The save root and long-lived records | `format: NinoFormat.Keyed` | Fields can be added, removed and reordered in any update. |
+| Records that only ever grow | `format: NinoFormat.VersionTolerant` | Append fields to classes without subclasses; 4 bytes per object instead of 8 per member. |
 | Small value structs (`Vector3`, your `GridPos`) | positional (bare `[NinoType]`) | Raw, compact, and unlikely to change. Freeze them. |
 
 ```csharp title="SaveData.cs"
 using Nino.Core;
 
-[NinoType(keyed: true)]
+[NinoType(format: NinoFormat.Keyed)]
 public sealed class SaveGame
 {
     public int Version;              // your own content version, see below
@@ -28,7 +28,7 @@ public sealed class SaveGame
     public Dictionary<string, int> Flags;
 }
 
-[NinoType(keyed: true)]
+[NinoType(format: NinoFormat.Keyed)]
 public sealed class Player
 {
     public string Name;
@@ -37,7 +37,7 @@ public sealed class Player
     public List<Item> Inventory;
 }
 
-[NinoType(versionTolerant: true)]
+[NinoType(format: NinoFormat.VersionTolerant)]
 public class Item
 {
     public int DefinitionId;
@@ -64,7 +64,7 @@ Keyed members are identified by the hash of their **name**. When you rename a fi
 In a keyed save type, rename the field and list its old name. Saves written before the rename load into the new field, and new saves are written under the new name:
 
 ```csharp
-[NinoType(keyed: true)]
+[NinoType(format: NinoFormat.Keyed)]
 public sealed class Player
 {
     [NinoFormerName("Lvl")] // [!code highlight]
@@ -79,7 +79,7 @@ Keep the attribute for as long as old saves may still be loaded. A build that pr
 By default every reference is written as its own copy. If several parts of a save point to the same object (a party member who is also in a guild, a quest that references an NPC that references the quest), mark the shared types `trackReferences: true`:
 
 ```csharp
-[NinoType(keyed: true, trackReferences: true)] // [!code highlight]
+[NinoType(format: NinoFormat.Keyed, trackReferences: true)] // [!code highlight]
 public class Character
 {
     public string Name;
@@ -200,7 +200,7 @@ public sealed class TypedStore<TKey, TValue> where TKey : unmanaged
 
 - An unmanaged key (an `int`, a `Guid`, a struct of ids) is written as its raw little-endian bytes. Stores that sort keys bytewise do **not** sort little-endian integers numerically; if you need range scans in numeric order, write such keys yourself with `BinaryPrimitives.WriteInt64BigEndian`.
 - The instance holds two buffers, so use one per thread or guard it with a lock.
-- Stored values outlive the code that wrote them: make value types `keyed` or `versionTolerant`, as for save files.
+- Stored values outlive the code that wrote them: make value types `NinoFormat.Keyed` or `NinoFormat.VersionTolerant`, as for save files.
 
 ## Append-Only Logs [#append-only-logs]
 
@@ -210,7 +210,7 @@ An append-only log (an event store, a write-ahead log, a journal of changes) app
 using System.Buffers.Binary;
 using Nino.Core;
 
-[NinoType(versionTolerant: true)]
+[NinoType(format: NinoFormat.VersionTolerant)]
 public abstract class AccountEvent
 {
     public long Sequence;
@@ -275,7 +275,7 @@ Replaying a long log on every start is slow. Store a snapshot of the state toget
 ```csharp title="Snapshots.cs"
 using Nino.Core;
 
-[NinoType(keyed: true)]
+[NinoType(format: NinoFormat.Keyed)]
 public sealed class AccountSnapshot
 {
     public long LastSequence;   // the last event the snapshot includes
@@ -333,7 +333,7 @@ public void LoadsEveryShippedSave()
 
 ## Checklist
 
-- [ ] Root and long-lived records are `keyed` (or `versionTolerant` if they only grow).
+- [ ] Root and long-lived records are `NinoFormat.Keyed` (or `NinoFormat.VersionTolerant` if they only grow).
 - [ ] Small raw structs are frozen: never reorder or retype their fields.
 - [ ] Shared or cyclic objects are `trackReferences`.
 - [ ] Renamed types and renamed keyed members carry `[NinoFormerName]`.

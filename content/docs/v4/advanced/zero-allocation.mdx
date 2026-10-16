@@ -156,7 +156,7 @@ unsafe
 Another process can write the same file (or a shared-memory map created with `MemoryMappedFile.CreateNew`) through the [memory-you-own](#write-into-memory-you-own) pattern; coordinate readers and writers yourself, Nino adds no locking.
 
 - Use a **struct** for records you index: a sealed class is fixed-size too, but a `null` instance is written as 1 byte.
-- Adding `versionTolerant`, `keyed` or a `string` member makes a type variable-size. Fix the layout of indexed records, and put a format version in the file header (see [Add a File Header](/en/docs/v4/advanced/persistence#add-a-file-header)).
+- Switching a type to `NinoFormat.VersionTolerant` or `NinoFormat.Keyed`, or adding a `string` member, makes it variable-size. Fix the layout of indexed records, and put a format version in the file header (see [Add a File Header](/en/docs/v4/advanced/persistence#add-a-file-header)).
 - `NinoSerializer.Serialize(tick)` of a fixed-size type allocates a `byte[]` of exactly that size and writes into it, without a scratch buffer or copy. Use it when you need the array; use the recipes above when you do not.
 
 ## Framed Streams Without Per-Message Allocations [#framed-streams]

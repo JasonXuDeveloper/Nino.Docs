@@ -27,8 +27,8 @@ void NinoSerializer.Serialize<T>(T value, IBufferWriter<byte> bufferWriter);
 // With an existing Writer (several values in one buffer, custom formatters)
 void NinoSerializer.Serialize<T>(T value, ref Writer writer);
 
-// Boxed values, when the type is only known at run time
-byte[] NinoSerializer.Serialize(object value);    // as value.GetType(); value must not be null
+// Boxed values, only for a type known only at run time as a Type (see Runtime Types)
+byte[] NinoSerializer.SerializeBoxed(object value, Type type);
 void NinoSerializer.SerializeBoxed(object value, IBufferWriter<byte> bufferWriter, Type type);
 void NinoSerializer.SerializeBoxed(object value, ref Writer writer, Type type);
 ```
@@ -94,9 +94,9 @@ void NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data, ref T value);
 T NinoDeserializer.Deserialize<T>(ref Reader reader);
 void NinoDeserializer.Deserialize<T>(ref T value, ref Reader reader);
 
-// Boxed values, when the type is only known at run time
-object NinoDeserializer.Deserialize(ReadOnlySpan<byte> data, Type type);
-void NinoDeserializer.Deserialize(ReadOnlySpan<byte> data, Type type, ref object value);
+// Boxed values, only for a type known only at run time as a Type (see Runtime Types)
+object NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, Type type);
+void NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, ref object value, Type type);
 void NinoDeserializer.DeserializeBoxed(ref object value, ref Reader reader, Type type);
 ```
 
@@ -159,19 +159,43 @@ static Player Read(ReadOnlySequence<byte> data)
 
 ## 运行时类型 [#runtime-types]
 
-如果类型要到运行时才知道（插件系统、编辑器工具、以 `Type` 为键的消息表），就用装箱重载。序列化和反序列化必须用**同一个**类型：
+需要同时处理很多类型的代码（RPC 或消息分派、插件系统、编辑器工具），其实很少真的需要运行时类型。给这些类型一个共同的 `[NinoType]` 基类或接口，通过它来序列化即可：`Serialize<TBase>` 会写入类型 ID，`Deserialize<TBase>` 读出类型 ID 后，在生成代码里创建对应的类型。这是处理多种类型最快的方式，而且能配合[复用反序列化和对象池](/zh/docs/v4/pooling)使用，接收循环可以做到 0 B 分配：
 
 ```csharp
-object value = GetComponentData();
-byte[] bytes = NinoSerializer.Serialize(value);                    // written as value.GetType()
-object copy = NinoDeserializer.Deserialize(bytes, value.GetType());
+[NinoType]
+public abstract class Message { }
 
-// a value declared as a base type: write and read it as that type, so the subtype is preserved
-NinoSerializer.SerializeBoxed(shape, buffer, typeof(Shape));
-object read = NinoDeserializer.Deserialize(buffer.WrittenSpan, typeof(Shape));
+public sealed class Move : Message { public int X, Y; }    // inherits [NinoType]
+public sealed class Chat : Message { public string Text; }
+
+byte[] bytes = NinoSerializer.Serialize<Message>(new Move { X = 1, Y = 2 });
+Message message = NinoDeserializer.Deserialize<Message>(bytes); // a Move
 ```
 
-装箱重载按 `Type` 查找格式化器（首次调用后缓存），值类型会被装箱。编译期就知道类型时，请优先用泛型重载。
+参见[多态](/zh/docs/v4/polymorphism#dispatching-through-a-common-base)。
+
+### 装箱 API [#the-boxed-api]
+
+**只有**当类型要到运行时才以 `Type` 的形式得知、而且这些类型没有共同的 `[NinoType]` 基类型时，才使用装箱 API：比如基于反射、面向任意类型的工具，像一个指向哪个字段就保存哪个字段的检视器。序列化和反序列化必须用**同一个**类型：
+
+```csharp
+Type type = field.FieldType;                                   // known only at run time
+byte[] bytes = NinoSerializer.SerializeBoxed(field.GetValue(target), type);
+object copy = NinoDeserializer.DeserializeBoxed(bytes, type);
+
+// into an existing instance, reused when it is an instance of type
+object current = field.GetValue(target);
+NinoDeserializer.DeserializeBoxed(bytes, ref current, type);
+field.SetValue(target, current);
+```
+
+`SerializeBoxed(value, type)` 写出的字节与 `T` = `type` 时的 `Serialize<T>(value)` 完全相同（对可以为 null 的类型，`null` 也一样），所以泛型调用和装箱调用可以互相读取对方的数据。装箱 API 按 `Type` 查找格式化器（第一次用到时通过反射，之后查字典），值类型会被装箱。
+
+<Callout type="warn" title="不要把 object 当作 T">
+
+变量声明为 `object` 时，`NinoSerializer.Serialize(value)` 调用的是 `Serialize<object>`，而不是装箱 API。它只接受 `[NinoType]` 的值，会写入类型 ID，并通过包含所有 `[NinoType]` 的全局注册表分派，比共同基类型的生成分派慢。请把变量声明为共同的基类型，或者带上 `Type` 调用 `SerializeBoxed`。
+
+</Callout>
 
 ## 深层对象图 [#deep-object-graphs]
 
@@ -212,7 +236,7 @@ var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
 本文档中有特定含义的词：
 
 - **顶层调用**：你直接传入值和 `byte[]`、span 或缓冲区写入器的 `NinoSerializer.Serialize(...)` 或 `NinoDeserializer.Deserialize(...)` 调用；与之相对的是传入你自己创建的 `Writer` 或 `Reader` 的调用，以及 Nino 在一次调用内部读写的那些值。每次顶层调用都自成一体：它自己开始并结束[引用追踪](/zh/docs/v4/reference-tracking)。
-- **装箱重载**：接收 `object` 和 `Type` 的那些重载（`Serialize(object)`、`SerializeBoxed`、`Deserialize(data, type)`、`DeserializeBoxed`），用于运行时才知道的类型；参见[运行时类型](#runtime-types)。
+- **装箱 API**：`SerializeBoxed` 和 `DeserializeBoxed`，即接收 `object` 和 `Type` 的那些重载，用于运行时才知道、并且与其他类型没有共同 `[NinoType]` 基类型的类型；参见[装箱 API](#the-boxed-api)。
 - **格式化器**：负责读写某一种类型的代码：每个 `[NinoType]` 都有生成的格式化器，BCL 类型的格式化器内置在 Nino 中，也可以[自己编写](/zh/docs/v4/custom-formatters)。**格式化器缓存**是 `NinoFormatterCache<T>`，调用通过这个静态字段找到 `T` 的格式化器。
 - **拦截的调用**：使用 .NET 8 SDK 及以上版本时，源生成器会把编译期就知道类型的每个调用直接转给该类型的格式化器，跳过格式化器缓存；参见[拦截器](/zh/docs/v4/performance#interceptors)。
 - **暂存缓冲区**：Nino 为每个线程保留的一个 `NinoArrayBufferWriter`。返回 `byte[]` 的调用，以及写入 `NinoArrayBufferWriter` 以外的缓冲区写入器的调用，会先序列化到这里，再把字节拷贝出去。

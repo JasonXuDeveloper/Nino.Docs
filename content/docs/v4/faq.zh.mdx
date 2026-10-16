@@ -34,11 +34,15 @@ Nino 是高性能的 C# / .NET 二进制序列化库。给类型加上 `[NinoTyp
 
 ## 数据写出后还能修改类型吗？ [#can-i-change-my-types-after-data-has-been-written]
 
-可以，只要事先选好格式。普通的 `[NinoType]` 按位置写入，速度最快；`[NinoType(versionTolerant: true)]` 允许在末尾追加成员；`[NinoType(keyed: true)]` 允许添加、删除和重新排序成员。参见[数据演进](/zh/docs/v4/evolving-data)。
+可以，只要事先选好格式。普通的 `[NinoType]` 按位置写入，速度最快；`[NinoType(format: NinoFormat.VersionTolerant)]` 允许在末尾追加成员；`[NinoType(format: NinoFormat.Keyed)]` 允许添加、删除和重新排序成员。参见[数据演进](/zh/docs/v4/evolving-data)。
 
 ## Nino 支持多态和共享引用吗？ [#does-nino-support-polymorphism-and-shared-references]
 
 支持。声明为基类或接口的值读回时仍是它的运行时类型，无需维护 Union 标签。按类型开启的引用追踪可以保留共享引用和循环引用。参见[多态](/zh/docs/v4/polymorphism)和[引用追踪](/zh/docs/v4/reference-tracking)。
+
+## 如何序列化多种消息类型，或者运行时才知道的类型？ [#how-do-i-serialize-many-message-types-or-a-type-known-only-at-run-time]
+
+给这些类型一个共同的 `[NinoType]` 基类或接口，然后调用 `Serialize<TBase>` / `Deserialize<TBase>`：类型 ID 的写入和分派都由生成代码完成，速度最快，还能配合复用反序列化和对象池，每条消息 0 B 分配。RPC 和消息分派、插件系统、编辑器工具都适用这种做法。只有当类型只能以 `Type` 的形式得知、并且这些类型没有共同的基类型时（例如基于反射、面向任意类型的工具），才使用 `SerializeBoxed(value, type)` 和 `DeserializeBoxed(data, type)`。不要把 `object` 当作类型参数：它只接受 `[NinoType]` 的值，并通过较慢的全局注册表分派。参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
 
 ## Nino 是线程安全的吗？ [#is-nino-thread-safe]
 

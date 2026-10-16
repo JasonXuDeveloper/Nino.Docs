@@ -27,7 +27,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 </Step>
 <Step>
 
-在需要的类型上用 `[NinoType(versionTolerant: true)]` 取代 `WEAK_VERSION_TOLERANCE`（可选，见下文）。
+在需要的类型上用 `[NinoType(format: NinoFormat.VersionTolerant)]` 取代 `WEAK_VERSION_TOLERANCE`（可选，见下文）。
 
 </Step>
 <Step>
@@ -37,7 +37,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 </Step>
 <Step>
 
-构建项目，修复分析器报告的问题（`NINO001`–`NINO024`），许多诊断都带代码修复。
+构建项目，修复分析器报告的问题（`NINO001`–`NINO025`），许多诊断都带代码修复。
 
 </Step>
 <Step>
@@ -61,7 +61,7 @@ v3 的生成器会在每个程序集的 `<AssemblyName>.NinoGen` 命名空间里
 | `Deserializer.Deserialize(out T value, ref reader)` | `T value = NinoDeserializer.Deserialize<T>(ref reader)` |
 | `Serializer.GetBufferWriter()` / `ReturnBufferWriter(...)` | 复用一个 `NinoArrayBufferWriter`（参见[序列化与反序列化](/zh/docs/v4/basic#reusing-a-buffer)） |
 | （无） | `NinoDeserializer.Deserialize(data, ref value)`：反序列化到已有实例 |
-| （无） | `NinoSerializer.Serialize(object)`、`NinoDeserializer.Deserialize(data, Type)`：装箱 / 运行时类型 |
+| （无） | `NinoSerializer.SerializeBoxed(value, type)`、`NinoDeserializer.DeserializeBoxed(data, type)`：仅用于运行时才知道、并且与其他类型没有共同 `[NinoType]` 基类型的类型（参见[运行时类型](/zh/docs/v4/basic#runtime-types)） |
 
 <Tabs groupId="nino-version" persist items={["v3", "v4"]}>
 
@@ -123,11 +123,12 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 
 | v3 | v4 |
 | --- | --- |
-| `[NinoType]`、`[NinoType(autoCollect, containNonPublicMembers)]` | 不变；新增可选参数 `allowInheritance`、`versionTolerant`、`keyed`、`trackReferences` |
+| `[NinoType]`、`[NinoType(autoCollect, containNonPublicMembers)]` | 不变；新增可选参数 `allowInheritance`、`format`（`NinoFormat.Positional`、`NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`）、`trackReferences` |
 | 每个子类型都要单独标记 `[NinoType]` | 子类型从基类或接口**继承** `[NinoType]`（除非基类设置了 `allowInheritance: false`） |
-| `WEAK_VERSION_TOLERANCE`（整个项目） | 按类型使用 `[NinoType(versionTolerant: true)]`；该符号仍然有效，会为项目中的所有类型开启版本容错 |
+| `WEAK_VERSION_TOLERANCE`（整个项目） | 按类型使用 `[NinoType(format: NinoFormat.VersionTolerant)]`；该符号仍然有效，会让项目中所有 `NinoFormat.Positional` 的类型改为版本容错 |
 | `[NinoFormerName("global::Old.Namespace.Type")]`（名称从 `NinoTypeConst.g.cs` 复制） | `[NinoFormerName("Old.Namespace.Type")]`：运行时写法，不带 `global::`，嵌套类型用 `+` 分隔 |
-| `[NinoMember(index)]`、`[NinoIgnore]`、`[NinoUtf8]`、`[NinoConstructor(...)]`、`[NinoExplicitOrder(...)]` | 不变；`[NinoConstructor]` 也可以标记静态工厂方法 |
+| `[NinoMember(index)]`、`[NinoIgnore]`、`[NinoUtf8]`、`[NinoConstructor(...)]` | 不变；`[NinoConstructor]` 也可以标记静态工厂方法 |
+| `[NinoExplicitOrder(...)]` | 已移除；改用 `[NinoType(false)]`，并按成员原来的写入顺序给每个成员编上 `[NinoMember(index)]`（参见[成员顺序](/zh/docs/v4/defining-types#member-order)） |
 | `[NinoPrivateProxy]`（由生成器生成） | 已移除；私有成员通过 `[UnsafeAccessor]`（.NET 8+）或 `partial` 类型中生成的访问器访问 |
 | （无） | `[NinoPooled]`、`[NinoFactory]`、`[NinoCustomFormatter]`、`[assembly: NinoFormatter]` |
 
@@ -141,6 +142,10 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 | `NinoFactory<T>` | `NinoActivator<T>` |
 | `NinoDeserializer.DeserializeRef(ref value, data)` | `NinoDeserializer.Deserialize(data, ref value)` |
 | `NinoDeserializer.DeserializeRef(ref value, ref reader)` | `NinoDeserializer.Deserialize(ref value, ref reader)` |
+| `NinoSerializer.Serialize(object value)` | `NinoSerializer.SerializeBoxed(value, type)`，或者借助共同的 `[NinoType]` 基类型调用 `Serialize<TBase>`（见下文） |
+| `NinoDeserializer.Deserialize(data, type)` | `NinoDeserializer.DeserializeBoxed(data, type)` |
+| `NinoDeserializer.Deserialize(data, type, ref value)` | `NinoDeserializer.DeserializeBoxed(data, ref value, type)` |
+| `[NinoExplicitOrder(...)]` | `[NinoType(false)]` 配合 `[NinoMember(index)]`（见上文） |
 | “ref 反序列化” | 复用反序列化 |
 
 ### v4 beta 之后的行为变化 [#behavior-changes-since-the-v4-betas]
@@ -149,14 +154,16 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 
 <Callout type="warn">
 
-**beta 写出的数据，如果含有 `versionTolerant` 类型（包括定义了 `WEAK_VERSION_TOLERANCE` 的项目中的所有类型）或 `[NinoUtf8]` 字符串，4.0.0-rc.1 无法读取。** 请用 beta 读出，再用 rc.1 重新写入（参见[读取旧版本写出的数据](/zh/docs/v4/versioning#reading-data-from-an-older-version)），或者丢弃这些数据。
+**任何 v4 beta 或 preview 写出的数据，4.0.0-rc.1 都无法读取**：数据格式在很多地方都变了（例如版本容错的类型，包括定义了 `WEAK_VERSION_TOLERANCE` 的项目中的所有类型，以及 `[NinoUtf8]` 字符串）。 请用 beta 读出，再用 rc.1 重新写入（参见[读取旧版本写出的数据](/zh/docs/v4/versioning#reading-data-from-an-older-version)），或者丢弃这些数据。
 
 </Callout>
 
-- **`[NinoUtf8]` 字符串同时记录字符数和字节数。** 先写 UTF-16 字符数，和 UTF-16 字符串一样；字符串既不是 `null` 也不是空串时，再写字节数和 UTF-8 字节。beta 只写字节数。参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
-- **`versionTolerant` 对象整个继承体系只写一个长度**，不再每层继承各写一个。因此成员只能追加到最末端的派生类型：向有子类的基类追加成员，现在会让子类的成员错位。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
+- **`[NinoUtf8]` 字符串同时记录字符数和字节数。** 先写 UTF-16 字符数，和 UTF-16 字符串一样；字符串既不是 `null` 也不是空串时，再写字节数和 UTF-8 字节。beta 在字节之前只写一个长度。参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
+- **版本容错的对象整个继承体系只写一个长度**，不再每层继承各写一个。因此成员只能追加到最末端的派生类型：向有子类的基类追加成员，现在会让子类的成员错位。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
 - **固定大小的类型直接序列化到大小正好的数组中。** 对所有成员都是固定大小的结构体或密封类调用 `NinoSerializer.Serialize(value)`，会直接按最终大小分配结果再写入，不经过暂存缓冲区，也没有拷贝；写出的字节不变。新增了 `NinoSerializer.GetFixedSize<T>()`。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
-- **`NinoFormatterCache<T>.Register<TFormatter>()` 必须在 `T` 第一次使用之前调用。** `T` 第一次序列化或反序列化时，它的格式化器就固定下来；之后再注册会抛出 `InvalidOperationException`，而不是只对部分调用生效。请把这类调用移到启动代码中。参见[运行时注册](/zh/docs/v4/custom-formatters#registering-at-run-time)。
+- **对声明为 `object` 的变量调用 `NinoSerializer.Serialize(obj)`，会写入类型 ID。** beta 有一个 `Serialize(object)` 重载，按值的运行时类型写入。这个重载已经移除，同样的调用现在会编译成 `Serialize<object>`：它只接受 `[NinoType]` 的值，并且先写 4 字节的类型 ID。写出的字节因此不同，也只有 `Deserialize<object>` 能读取。请给这些类型一个共同的 `[NinoType]` 基类型并调用 `Serialize<TBase>`；如果类型要到运行时才知道，就调用 `SerializeBoxed(obj, type)`；`SerializeBoxed(obj, obj.GetType())` 写出的内容与旧重载相同（采用 rc.1 的格式）。参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
+- **不能再在运行时注册格式化器。** `NinoFormatterCache<T>.Register<TFormatter>()` 已移除，请改用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明格式化器。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
+- **`[NinoFactory]` 与 `[NinoConstructor]` 同时出现时会报告。** 这样的工厂方法本来就不会被调用，现在分析器会给出警告（NINO025）。参见[构造函数还是工厂方法？](/zh/docs/v4/constructors#constructor-or-factory)。
 - **在 `ReadSlice()` 返回的 reader 上，`Reader.Position` 是相对整个输入的偏移**，而不是相对切片起点。如果自定义格式化器拿它和切片长度比较，应当在切片开始处记下位置，再把它减掉。参见[切片中的位置](/zh/docs/v4/custom-formatters#positions-in-a-slice)。
 
 ### 版本容错 [#version-tolerance]
@@ -180,7 +187,7 @@ public class SaveData
 <Tab value="v4">
 
 ```csharp
-[NinoType(versionTolerant: true)]
+[NinoType(format: NinoFormat.VersionTolerant)]
 public class SaveData
 {
     public int Id;
@@ -192,7 +199,7 @@ public class SaveData
 </Tab>
 </Tabs>
 
-v4 的版本容错按类型设置。成员可以追加到**最末端的派生类型**（没有 `[NinoType]` 子类的类），嵌套多深都可以，旧代码会跳过它不认识的成员。追加到基类的成员会让子类的成员错位，所以不在容错范围内。要调整顺序、删除或插入成员，或者向基类添加成员，请使用 `[NinoType(keyed: true)]`。参见[版本容错](/zh/docs/v4/evolving-data#version-tolerance)和[键控成员](/zh/docs/v4/evolving-data#keyed-members)。
+v4 的版本容错按类型设置。成员可以追加到**最末端的派生类型**（没有 `[NinoType]` 子类的类），嵌套多深都可以，旧代码会跳过它不认识的成员。追加到基类的成员会让子类的成员错位，所以不在容错范围内。要调整顺序、删除或插入成员，或者向基类添加成员，请使用 `[NinoType(format: NinoFormat.Keyed)]`。参见[版本容错](/zh/docs/v4/evolving-data#version-tolerance)和[键控成员](/zh/docs/v4/evolving-data#keyed-members)。
 
 <Callout type="warn">
 
@@ -253,7 +260,7 @@ public class Circle : Shape { public float Radius; }
 </Tab>
 </Tabs>
 
-在子类型上保留 `[NinoType]` 没有坏处，子类型还能借此设置自己的选项。但这些选项会取代继承来的选项，想保留的（例如 `versionTolerant: true`）要再写一遍。唯一的例外是 `trackReferences`：被追踪类型的所有子类型都会保持追踪。
+在子类型上保留 `[NinoType]` 没有坏处，子类型还能借此设置自己的选项。但这些选项会取代继承来的选项，想保留的（例如 `format: NinoFormat.VersionTolerant`）要再写一遍。唯一的例外是 `trackReferences`：被追踪类型的所有子类型都会保持追踪。
 
 ## 生成的代码 [#generated-code]
 - 生成的格式化器位于 `<AssemblyName>.NinoGen` 命名空间，但不应该直接调用。请删掉所有引用 v3 生成类（`Serializer`、`Deserializer`、`NinoTypeConst` 等）的代码。

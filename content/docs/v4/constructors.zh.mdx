@@ -139,6 +139,8 @@ Nino 提供两种介入实例创建的方式，用途不同：
 | 调用之后 | 不是参数的成员会被逐个赋值 | 所有成员都原地填充 |
 | 复用 | 每次读取都重新创建，因此不能池化（NINO018） | 实例被复用，是 0 GC 反序列化的做法 |
 
+两者只能选一个。有 `[NinoConstructor]` 的类型总是通过它重新创建，所以同一类型上的 `[NinoFactory]` 永远不会被调用，分析器会对此给出警告（NINO025）：想保留构造函数就删掉 `[NinoFactory]`，想用工厂创建实例并原地填充就删掉 `[NinoConstructor]`。
+
 ## 从对象池取实例 [#from-a-pool]
 
 只有当 Nino 需要一个**新**实例时，才会调用 `[NinoFactory]` 方法：槽位为 `null`、列表变长，或多态槽位换了类型。之后 Nino 原地填充这个实例。再配合[复用反序列化](/zh/docs/v4/pooling#deserializing-into-existing-instances)，并为被丢弃的实例注册[回收器](/zh/docs/v4/pooling#why-setrecycler)，对象池预热之后，处理源源不断的消息也不会再分配内存：
@@ -189,4 +191,4 @@ foreach (byte[] data in messages)
 
 ## 重新创建的类型 [#re-created-types]
 
-如果类型标记了 `[NinoConstructor]`，或者成员在构造之后无法再赋值（构造函数参数、`init` 属性、只读属性或 `readonly` 字段），那么每次反序列化都会**重新创建**它，即使是[复用反序列化](/zh/docs/v4/pooling)也不例外，旧实例会交给[回收器](/zh/docs/v4/pooling#where-dropped-instances-go)。这类类型不能使用 [`trackReferences`](/zh/docs/v4/reference-tracking)（NINO016）或 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)（NINO018）。这类类型上的 `[NinoFactory]` 方法也不会被调用。需要这些功能时（例如要做到 0 GC 反序列化），请让成员可写，改为[从对象池取实例](#from-a-pool)。
+如果类型标记了 `[NinoConstructor]`，或者成员在构造之后无法再赋值（构造函数参数、`init` 属性、只读属性或 `readonly` 字段），那么每次反序列化都会**重新创建**它，即使是[复用反序列化](/zh/docs/v4/pooling)也不例外，旧实例会交给[回收器](/zh/docs/v4/pooling#where-dropped-instances-go)。这类类型不能使用 [`trackReferences`](/zh/docs/v4/reference-tracking)（NINO016）或 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)（NINO018）。这类类型上的 `[NinoFactory]` 方法也不会被调用（与 `[NinoConstructor]` 同时出现时，分析器会报告 NINO025）。需要这些功能时（例如要做到 0 GC 反序列化），请让成员可写，改为[从对象池取实例](#from-a-pool)。

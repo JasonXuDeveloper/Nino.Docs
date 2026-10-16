@@ -16,7 +16,7 @@ Kafka、RabbitMQ、Azure Service Bus、NATS 这类消息中间件传递的都是
 ```csharp title="OrderEvents.cs"
 using Nino.Core;
 
-[NinoType(versionTolerant: true)] // subtypes inherit [NinoType] and its options
+[NinoType(format: NinoFormat.VersionTolerant)] // subtypes inherit [NinoType] and its options
 public abstract class OrderEvent
 {
     public Guid OrderId;
@@ -179,8 +179,8 @@ public sealed class SampleConsumer
 
 今天写入的消息可能下个月才被消费，读取它的代码在写入时还不存在；消费者也可能从头重放整个主题。
 
-- 每个事件类型都设为 [`versionTolerant`](/zh/docs/v4/evolving-data#version-tolerance)（追加字段）或 [`keyed`](/zh/docs/v4/evolving-data#keyed-members)（任意修改）。这样消费者会跳过不认识的字段，旧消息中缺少的字段保留构造函数或字段初始化器给出的值。
-- 在 `versionTolerant` 的继承体系中，只向具体的事件类（`OrderPlaced` 等）追加成员，不要加到 `OrderEvent` 上：追加到基类的成员会把每个子类的成员往后挤。如果基类需要新成员，请改用 `keyed`。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
+- 每个事件类型都设为 [`NinoFormat.VersionTolerant`](/zh/docs/v4/evolving-data#version-tolerance)（追加字段）或 [`NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)（任意修改）。这样消费者会跳过不认识的字段，旧消息中缺少的字段保留构造函数或字段初始化器给出的值。
+- 在 `NinoFormat.VersionTolerant` 的继承体系中，只向具体的事件类（`OrderPlaced` 等）追加成员，不要加到 `OrderEvent` 上：追加到基类的成员会把每个子类的成员往后挤。如果基类需要新成员，请改用 `NinoFormat.Keyed`。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
 - 消费者收到不认识的事件**类型**时无法读取：反序列化会抛出 `InvalidOperationException`（未知的类型 id）。先部署消费者，再部署会产生新事件类型的生产者；或者把新类型放到新的主题里。
 - 在同一次部署内就会被消费掉的消息（几秒内清空的任务队列）用[按位置](/zh/docs/v4/evolving-data#positional)的类型（不带参数的 `[NinoType]`）即可。它们的字节会随成员的每次改动而变化。
 
@@ -189,7 +189,7 @@ public sealed class SampleConsumer
 ## 检查清单 [#checklist]
 
 - [ ] 事件从同一个 `[NinoType]` 基类派生；改过名的事件带有 `[NinoFormerName]`。
-- [ ] 长期保留的主题上的事件类型是 `versionTolerant` 或 `keyed` 的。
+- [ ] 长期保留的主题上的事件类型是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed` 的。
 - [ ] 新的事件类型先到达消费者，生产者再开始发送。
 - [ ] 小而频繁的事件批量发送；记录是放在列表里的非托管结构体。
 - [ ] 热点主题上的消费者反序列化到复用的实例中。

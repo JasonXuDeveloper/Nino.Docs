@@ -13,6 +13,7 @@ import { BenchChart } from '@/components/bench-chart';
 import {
   BenchSource,
   BenchValue,
+  ExtraRuntimeTables,
   ResultsTable,
   ReuseTable,
   RuntimeTable,
@@ -35,6 +36,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     BenchmarkChart,
     BenchSource,
     BenchValue,
+    ExtraRuntimeTables,
     ResultsTable,
     ReuseTable,
     RuntimeTable,

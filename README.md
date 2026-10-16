@@ -87,7 +87,10 @@ The v4 runtime numbers (Nino and MemoryPack) come from `src/data/bench-v4.json`.
 ```bash
 bun run sync:benchmarks                                              # sync now
 bun scripts/sync-benchmarks.ts --fixture scripts/fixtures/release-body.md  # test the parser
+bun scripts/sync-benchmarks.ts --fixture scripts/fixtures/release-body-new.md  # sample of the ReferenceTest, VersionTolerantTest and FixedSizeTest rows
 ```
+
+The reference tracking, version tolerance and fixed-size rows (`ReferenceTest`, `VersionTolerantTest`, `FixedSizeTest`) are synced with the rest but are not required: the Benchmarks page shows them once a release report includes them, and says they are still to come until then. `release-body-new.md` is a sample local run: its numbers are noise, only its format matters.
 
 ## Redirects
 

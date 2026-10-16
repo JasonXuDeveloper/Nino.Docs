@@ -156,7 +156,7 @@ unsafe
 另一个进程可以按[写入你自己的内存](#write-into-memory-you-own)的做法写入同一个文件（或用 `MemoryMappedFile.CreateNew` 创建的共享内存映射）；读写双方需要自行协调，Nino 不提供任何锁。
 
 - 需要按下标访问的记录用**结构体**：密封类也是固定大小的，但 `null` 实例只写 1 个字节。
-- 加上 `versionTolerant`、`keyed` 或 `string` 成员后，类型就不再是固定大小的。按下标访问的记录要固定布局，并在文件头里写上格式版本（见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）。
+- 把类型改为 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，或者加上 `string` 成员后，它就不再是固定大小的。按下标访问的记录要固定布局，并在文件头里写上格式版本（见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）。
 - 对固定大小的类型调用 `NinoSerializer.Serialize(tick)`，会按正好的大小分配 `byte[]` 并直接写入，不经过暂存缓冲区，也没有拷贝。需要数组时用它；不需要时用上面的做法。
 
 ## 分帧读写流，不按消息分配 [#framed-streams]

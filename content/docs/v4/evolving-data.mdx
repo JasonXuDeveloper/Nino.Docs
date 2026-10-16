@@ -4,9 +4,9 @@ description: "Positional, version-tolerant and keyed formats: what each one lets
 icon: GitBranch
 ---
 
-Data outlives code. A save file, a cached asset or a message from an older client is read by a newer build of your types, and sometimes the other way round. Nino gives every type one of three formats, chosen on `[NinoType]`:
+Data outlives code. A save file, a cached asset or a message from an older client is read by a newer build of your types, and sometimes the other way round. Nino gives every type one of three formats, the values of the `NinoFormat` enum, chosen with `[NinoType(format: ...)]`:
 
-| | Positional (default) | `versionTolerant: true` | `keyed: true` |
+| | `NinoFormat.Positional` (default) | `format: NinoFormat.VersionTolerant` | `format: NinoFormat.Keyed` |
 | --- | :---: | :---: | :---: |
 | Append members to a type without subclasses | ✗ | ✓ | ✓ |
 | Append members to a base class | ✗ | ✗ | ✓ |
@@ -17,7 +17,7 @@ Data outlives code. A save file, a cached asset or a message from an older clien
 | Overhead | none | 4 bytes per object | 8 bytes per member, plus 4 per object |
 | Speed | fastest | close to positional: one length per object | slower: a key and length per member, and a key check per member when reading |
 
-The format itself is part of the data: turning `versionTolerant` or `keyed` on or off for a type makes previously written data unreadable. Choose before you store anything.
+The format itself is part of the data: changing a type's `format` makes previously written data unreadable. Choose before you store anything.
 
 In every format, **changing a member's type** is not tolerated. **Renaming a member** is free in positional and version-tolerant types, which write no names. In keyed types the key is the hash of the name, so mark a renamed member with its old name ([Renaming Keyed Members](#renaming-keyed-members)); without it, the rename reads as "one member removed, another added". Rename *types* with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name) on the type.
 
@@ -31,14 +31,14 @@ Any change to the member list (adding, removing, reordering, changing an index) 
 
 </Callout>
 
-An unmanaged `[NinoType]` struct is copied as raw memory, so its bytes also depend on its field order and its `StructLayout`: reordering fields or changing the layout breaks existing data. A `versionTolerant` or `keyed` struct is written member by member instead.
+An unmanaged `[NinoType]` struct is copied as raw memory, so its bytes also depend on its field order and its `StructLayout`: reordering fields or changing the layout breaks existing data. A `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` struct is written member by member instead.
 
 ## Version Tolerance
 
 Version 1.1 of a game adds a music volume to its settings file. Players still have files written by 1.0:
 
 ```csharp
-[NinoType(versionTolerant: true)] // [!code highlight]
+[NinoType(format: NinoFormat.VersionTolerant)] // [!code highlight]
 public class Settings
 {
     public float SfxVolume = 1f;
@@ -61,19 +61,19 @@ Not tolerated: appending members to a base class that has `[NinoType]` subclasse
 
 <Callout type="info">
 
-Defining the symbol `WEAK_VERSION_TOLERANCE` in a project turns `versionTolerant` on for every type declared in that project; types from referenced assemblies keep their own format. Prefer the per-type option.
+Defining the symbol `WEAK_VERSION_TOLERANCE` in a project makes every `NinoFormat.Positional` type declared in that project `NinoFormat.VersionTolerant`; types from referenced assemblies keep their own format. Prefer the per-type option.
 
 </Callout>
 
 ### Appending to a Base Class [#appending-to-a-base-class]
 
-In a version-tolerant hierarchy, append members only to the classes that have no subclasses. If a base class needs a new member, make the hierarchy [`keyed`](#keyed-members) instead. Here is why.
+In a version-tolerant hierarchy, append members only to the classes that have no subclasses. If a base class needs a new member, make the hierarchy [`NinoFormat.Keyed`](#keyed-members) instead. Here is why.
 
 All levels of the hierarchy share the object's single length, and their members are written root first. A member appended to a base class therefore lands **before** the members of its subclasses and shifts them:
 
 ```csharp
 // Version 2 appends Armor to the base class
-[NinoType(versionTolerant: true)]
+[NinoType(format: NinoFormat.VersionTolerant)]
 public class Unit
 {
     public int Hp;
@@ -94,12 +94,12 @@ public sealed class Archer : Unit
 
 Here the two members have the same type, so the values are merely wrong. When the types differ, the bytes are misread as another type, and the result is wrong values or an `InvalidOperationException`. Nothing reports the mistake at compile time, because the generator only ever sees one version of your code.
 
-Instances of `Unit` itself are not affected (`Armor` is their last member); the data of every subclass is. So append members only to the classes at the bottom of a hierarchy, such as sealed message classes. Put a member that every subclass needs into each subclass, or make the hierarchy [`keyed`](#keyed-members), where members can be added to any class.
+Instances of `Unit` itself are not affected (`Armor` is their last member); the data of every subclass is. So append members only to the classes at the bottom of a hierarchy, such as sealed message classes. Put a member that every subclass needs into each subclass, or make the hierarchy [`NinoFormat.Keyed`](#keyed-members), where members can be added to any class.
 
 ## Keyed Members
 
 ```csharp
-[NinoType(keyed: true)] // [!code highlight]
+[NinoType(format: NinoFormat.Keyed)] // [!code highlight]
 public class EnemyConfig
 {
     public string Name;
@@ -122,7 +122,7 @@ This is the format for data kept for a long time and edited by many releases: co
 Put `[NinoFormerName("OldName")]` on the renamed field or property, once per earlier name. Reading accepts the current name and every former name; writing always uses the current name.
 
 ```csharp
-[NinoType(keyed: true)]
+[NinoType(format: NinoFormat.Keyed)]
 public class PlayerSave
 {
     [NinoFormerName("Hp")]                   // [!code highlight]
@@ -141,17 +141,17 @@ public class PlayerSave
 <Accordions type="single">
 <Accordion title="Messages between a client and a server">
 
-Positional, when both sides always run the same build. If clients and servers are upgraded at different times (rolling upgrades, old app versions in the wild), use `versionTolerant` and only ever **append** fields to the message classes themselves (not to their shared base class), or `keyed` if you also need to retire fields or add them to the base. See [Network Layer](/en/docs/v4/advanced/networking).
+Positional, when both sides always run the same build. If clients and servers are upgraded at different times (rolling upgrades, old app versions in the wild), use `NinoFormat.VersionTolerant` and only ever **append** fields to the message classes themselves (not to their shared base class), or `NinoFormat.Keyed` if you also need to retire fields or add them to the base. See [Network Layer](/en/docs/v4/advanced/networking).
 
 </Accordion>
 <Accordion title="Save games and user files">
 
-`versionTolerant` if you only add fields over time, to classes without subclasses; `keyed` if you want the freedom to remove and reorder them. Add [`trackReferences`](/en/docs/v4/reference-tracking) when the saved graph shares objects or has cycles. See [Persistence and Storage](/en/docs/v4/advanced/persistence).
+`NinoFormat.VersionTolerant` if you only add fields over time, to classes without subclasses; `NinoFormat.Keyed` if you want the freedom to remove and reorder them. Add [`trackReferences`](/en/docs/v4/reference-tracking) when the saved graph shares objects or has cycles. See [Persistence and Storage](/en/docs/v4/advanced/persistence).
 
 </Accordion>
 <Accordion title="Configuration authored in the Unity editor">
 
-`keyed`: designers add, remove and reorder fields all the time, and the cost (8 bytes per member) rarely matters for configuration.
+`NinoFormat.Keyed`: designers add, remove and reorder fields all the time, and the cost (8 bytes per member) rarely matters for configuration.
 
 </Accordion>
 <Accordion title="Caches and in-memory snapshots">

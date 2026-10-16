@@ -23,7 +23,7 @@ This page has every benchmark number the documentation quotes, the code that pro
 
 | Against | Why | What is measured |
 | --- | --- | --- |
-| [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | The fastest widely used binary serializer for .NET, and source-generated like Nino | Runtime, in the same BenchmarkDotNet run: [serialize](#serialize-to-a-reused-buffer-writer), [deserialize](#deserialize-new-instances), [polymorphic graphs](#polymorphism), [reusing instances](#pooling) |
+| [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | The fastest widely used binary serializer for .NET, and source-generated like Nino | Runtime, in the same BenchmarkDotNet run: [serialize](#serialize-to-a-reused-buffer-writer), [deserialize](#deserialize-new-instances), [polymorphic graphs](#polymorphism), [reusing instances](#pooling), [reference tracking, version tolerance and fixed-size types](#more-cases) |
 | Nino v3 **3.3.13** | The last v3 release, the version you would upgrade from | Runtime, back to back with v4 on the same machine (the **v4 vs v3** column of the runtime tables), and [build time](#build-time-and-generated-code) |
 | [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) | The most common binary format in .NET | Runtime, in the same run; listed in [All Measurements](#results) |
 
@@ -102,10 +102,19 @@ Bytes allocated per call, and the size of one serialized `SimpleClass` (<BenchVa
 
 <BenchmarkChart chart={['allocation', 'payload']} lang="en" />
 
+### Reference Tracking, Version Tolerance and Fixed-Size Types [#more-cases]
+
+Three more benchmark classes compare features that change how a type is written, each against the closest MemoryPack mode:
+
+- **Reference tracking** ([`ReferenceTest`](#referencetest)): a graph of 200 nodes with shared objects and cycles. Nino uses `[NinoType(trackReferences: true)]`, MemoryPack `GenerateType.CircularReference`.
+- **Version tolerance** ([`VersionTolerantTest`](#versiontoleranttest)): `SimpleClass`'s members in a type that can gain members later, alone and as an array of 100. Nino uses `format: NinoFormat.VersionTolerant` (one length per object), MemoryPack `GenerateType.VersionTolerant` (a length per member).
+- **Fixed-size types** ([`FixedSizeTest`](#fixedsizetest)): a 40-byte struct, the same members in a sealed class, and an array of 100 of the classes, through the `byte[]` APIs of both libraries, so allocating the result is part of every call. Deserializing the struct is a single copy, too short to measure reliably, and is not shown.
+
+<ExtraRuntimeTables lang="en" />
+
 ### Not Measured Yet [#not-measured-yet]
 
-- **Reference tracking.** [`ReferenceTest`](#referencetest) is in the benchmark project (Nino only: the other serializers do not track references), but the published report does not include it yet.
-- **Version-tolerant, keyed and fixed-size types** have no runtime benchmark. Their costs are described where they are documented: [Evolving Your Data](/en/docs/v4/evolving-data) and [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
+- **Keyed types** have no runtime benchmark. Their cost (a key and a length per member, and a key check per member when reading) is described in [Evolving Your Data](/en/docs/v4/evolving-data).
 
 ### All Measurements [#results]
 
@@ -612,46 +621,75 @@ public List<PooledLeaf> MemoryPackLeavesOverwrite()
 
 ### ReferenceTest [#referencetest]
 
-A graph of 200 nodes with shared tags, shared peers and cycles through the root, with `trackReferences`. Nino only, and [not in the published report yet](#not-measured-yet).
+A graph of 200 nodes with shared tags, shared peers and cycles through the root, written into a reused buffer writer and read back. Nino tracks references with `trackReferences`, MemoryPack with `GenerateType.CircularReference` (which needs a `[MemoryPackOrder]` on each member); both write each object once and read shared references and cycles back as one instance. The "Object graph" rows of the [results above](#more-cases).
 
-<Tabs groupId="bench-code" items={["Types", "Methods"]}>
+<Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
 <Tab value="Types">
 
 ```csharp title="ReferenceTest.cs"
 [NinoType(trackReferences: true)]
+[MemoryPackable(GenerateType.CircularReference)]
 public sealed partial class RefNode
 {
-    public int Id;
-    public double Weight;
-    public RefGraph Graph;   // back to the root: a cycle
-    public RefTag Tag;       // one of 16 shared tags
-    public RefNode Peer;     // an earlier node
+    [MemoryPackOrder(0)] public int Id;
+    [MemoryPackOrder(1)] public double Weight;
+    [MemoryPackOrder(2)] public RefGraph Graph;   // back to the root: a cycle
+    [MemoryPackOrder(3)] public RefTag Tag;       // one of 16 shared tags
+    [MemoryPackOrder(4)] public RefNode Peer;     // an earlier node
 }
 
 [NinoType(trackReferences: true)]
+[MemoryPackable(GenerateType.CircularReference)]
 public sealed partial class RefTag
 {
-    public int Id;
-    public string Name;
+    [MemoryPackOrder(0)] public int Id;
+    [MemoryPackOrder(1)] public string Name;
 }
 
 [NinoType(trackReferences: true)]
+[MemoryPackable(GenerateType.CircularReference)]
 public sealed partial class RefGraph
 {
-    public int Version;
-    public List<RefNode> Nodes;
-    public List<RefTag> Tags;
+    [MemoryPackOrder(0)] public int Version;
+    [MemoryPackOrder(1)] public List<RefNode> Nodes;
+    [MemoryPackOrder(2)] public List<RefTag> Tags;
 }
+```
+
+</Tab>
+<Tab value="Data">
+
+```csharp title="ReferenceTest.cs"
+// In RefGraph: count nodes sharing 16 tags; each node's peer is an earlier node
+// (a back reference, so the nesting stays shallow), and every node refers back to the graph.
+public static RefGraph Create(int count)
+{
+    var r = new Random(3);
+    var graph = new RefGraph { Version = 1, Nodes = new List<RefNode>(count) };
+    graph.Tags = Enumerable.Range(0, 16).Select(i => new RefTag { Id = i, Name = "tag" + i }).ToList();
+    for (int i = 0; i < count; i++)
+    {
+        graph.Nodes.Add(new RefNode
+        {
+            Id = i, Weight = r.NextDouble(), Graph = graph, Tag = graph.Tags[r.Next(graph.Tags.Count)],
+            Peer = i == 0 ? null : graph.Nodes[r.Next(i)]
+        });
+    }
+
+    return graph;
+}
+
+// In ReferenceTest:
+private static readonly RefGraph Graph = RefGraph.Create(200);
+private static readonly byte[] NinoGraph = NinoSerializer.Serialize(Graph);
+private static readonly byte[] MemoryPackGraph = MemoryPackSerializer.Serialize(Graph);
 ```
 
 </Tab>
 <Tab value="Methods">
 
 ```csharp title="ReferenceTest.cs"
-private static readonly RefGraph Graph = RefGraph.Create(200);
-private static readonly byte[] NinoGraph = NinoSerializer.Serialize(Graph);
-
-[Benchmark]
+[Benchmark(Baseline = true), BenchmarkCategory("GraphSerialize")]
 public int NinoSerializeGraph()
 {
     _ninoBuffer.ResetWrittenCount();
@@ -659,8 +697,179 @@ public int NinoSerializeGraph()
     return _ninoBuffer.WrittenCount;
 }
 
-[Benchmark]
+[Benchmark, BenchmarkCategory("GraphSerialize")]
+public int MemoryPackSerializeGraph()
+{
+    _memoryPackBuffer.ResetWrittenCount();
+    MemoryPackSerializer.Serialize(_memoryPackBuffer, Graph);
+    return _memoryPackBuffer.WrittenCount;
+}
+
+[Benchmark(Baseline = true), BenchmarkCategory("GraphDeserialize")]
 public RefGraph NinoDeserializeGraph() => NinoDeserializer.Deserialize<RefGraph>(NinoGraph);
+
+[Benchmark, BenchmarkCategory("GraphDeserialize")]
+public RefGraph MemoryPackDeserializeGraph() => MemoryPackSerializer.Deserialize<RefGraph>(MemoryPackGraph);
+```
+
+</Tab>
+</Tabs>
+
+### VersionTolerantTest [#versiontoleranttest]
+
+The members of `SimpleClass` in a version-tolerant type, alone and as an array of 100, written into a reused buffer writer and read back as [`SimpleTest`](#simpletest) does with `SimpleClass`: the difference between the two is the cost of version tolerance. Nino prefixes the body with its length (`NinoFormat.VersionTolerant`); MemoryPack writes a member count and the length of every member (`GenerateType.VersionTolerant`, which needs a `[MemoryPackOrder]` on each member). The `TolerantClass` rows of the [results above](#more-cases).
+
+<Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
+<Tab value="Types">
+
+```csharp title="VersionTolerantTest.cs"
+[NinoType(format: NinoFormat.VersionTolerant)]
+[MemoryPackable(GenerateType.VersionTolerant)]
+public sealed partial class TolerantClass
+{
+    [MemoryPackOrder(0)] public int Id;
+    [MemoryPackOrder(1)] public bool Tag;
+    [MemoryPackOrder(2)] public Guid Guid;
+    [MemoryPackOrder(3)] public DateTime CreateTime;
+    [MemoryPackOrder(4)] public string Name { get; set; }
+    [MemoryPackOrder(5)] [NinoUtf8] public string Desc;
+    [MemoryPackOrder(6)] public int[] Numbers { get; set; }
+    [MemoryPackOrder(7)] public List<DateTime> Dates { get; set; }
+    [MemoryPackOrder(8)] public Dictionary<int, string> Map1;
+    [MemoryPackOrder(9)] public Dictionary<int, int> Map2 { get; set; }
+}
+```
+
+</Tab>
+<Tab value="Data">
+
+```csharp title="VersionTolerantTest.cs"
+// In TolerantClass: a copy of a SimpleClass from SimpleTest's data.
+public static TolerantClass From(SimpleClass c) => new()
+{
+    Id = c.Id, Tag = c.Tag, Guid = c.Guid, CreateTime = c.CreateTime, Name = c.Name, Desc = c.Desc,
+    Numbers = c.Numbers, Dates = c.Dates, Map1 = c.Map1, Map2 = c.Map2,
+};
+
+// In VersionTolerantTest:
+private static readonly TolerantClass TolerantClass = TolerantClass.From(SimpleClass.Create());
+private static readonly TolerantClass[] TolerantClasses =
+    Enumerable.Range(0, 100).Select(_ => TolerantClass.From(SimpleClass.Create())).ToArray();
+
+private static readonly byte[] NinoTolerantClass = NinoSerializer.Serialize(TolerantClass);
+private static readonly byte[] MemoryPackTolerantClass = MemoryPackSerializer.Serialize(TolerantClass);
+```
+
+</Tab>
+<Tab value="Methods">
+
+```csharp title="VersionTolerantTest.cs"
+[Benchmark(Baseline = true), BenchmarkCategory("TolerantClassSerialize")]
+public int NinoSerializeTolerantClass()
+{
+    _ninoBuffer.ResetWrittenCount();
+    NinoSerializer.Serialize(TolerantClass, _ninoBuffer);
+    return _ninoBuffer.WrittenCount;
+}
+
+[Benchmark, BenchmarkCategory("TolerantClassSerialize")]
+public int MemoryPackSerializeTolerantClass()
+{
+    _memoryPackBuffer.ResetWrittenCount();
+    MemoryPackSerializer.Serialize(_memoryPackBuffer, TolerantClass);
+    return _memoryPackBuffer.WrittenCount;
+}
+
+[Benchmark(Baseline = true), BenchmarkCategory("TolerantClassDeserialize")]
+public TolerantClass NinoDeserializeTolerantClass() =>
+    NinoDeserializer.Deserialize<TolerantClass>(NinoTolerantClass);
+
+[Benchmark, BenchmarkCategory("TolerantClassDeserialize")]
+public TolerantClass MemoryPackDeserializeTolerantClass() =>
+    MemoryPackSerializer.Deserialize<TolerantClass>(MemoryPackTolerantClass);
+
+// TolerantClasses (the array of 100) has the same methods.
+```
+
+</Tab>
+</Tabs>
+
+### FixedSizeTest [#fixedsizetest]
+
+Types whose values always take the same number of bytes ([fixed-size types](/en/docs/v4/performance#fixed-size-types)): `Serialize(value)` returns a new `byte[]` allocated at exactly that size and writes the value straight into it, with no scratch buffer, writer or copy. Measured through the `byte[]` APIs of both serializers, so allocating the result is part of every serialize call, plus an array of 100 of the classes, whose length varies and which takes the regular path. The `FixedStruct` and `FixedClass` rows of the [results above](#more-cases).
+
+<Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
+<Tab value="Types">
+
+```csharp title="FixedSizeTest.cs"
+// Unmanaged members only (40 bytes, no padding): every value serializes to the same number of bytes.
+[NinoType]
+[MemoryPackable]
+public partial struct FixedStruct
+{
+    public int Id;
+    public Vector3 Position;
+    public long Ticks;
+    public Guid Guid;
+}
+
+// The same members in a sealed class: its size is fixed too (a null flag and 40 bytes).
+[NinoType]
+[MemoryPackable]
+public sealed partial class FixedClass
+{
+    public int Id;
+    public Vector3 Position;
+    public long Ticks;
+    public Guid Guid;
+}
+```
+
+</Tab>
+<Tab value="Data">
+
+```csharp title="FixedSizeTest.cs"
+// In FixedStruct (FixedClass has the same Create):
+public static FixedStruct Create(Random r) => new()
+{
+    Id = r.Next(),
+    Position = new Vector3(r.NextSingle(), r.NextSingle(), r.NextSingle()),
+    Ticks = DateTime.Now.AddSeconds(r.Next()).Ticks,
+    Guid = Guid.NewGuid(),
+};
+
+// In FixedSizeTest:
+private static readonly FixedStruct FixedStruct = FixedStruct.Create(new Random(4));
+private static readonly FixedClass FixedClass = FixedClass.Create(new Random(5));
+private static readonly FixedClass[] FixedClasses =
+    Enumerable.Range(0, 100).Select(i => FixedClass.Create(new Random(6 + i))).ToArray();
+
+static FixedSizeTest()
+{
+    // These cases measure the fixed-size path: stop if either type ever stops taking it.
+    if (NinoSerializer.GetFixedSize<FixedStruct>() < 0 || NinoSerializer.GetFixedSize<FixedClass>() < 0)
+        throw new InvalidOperationException("FixedStruct and FixedClass must be of fixed size");
+}
+```
+
+</Tab>
+<Tab value="Methods">
+
+```csharp title="FixedSizeTest.cs"
+[Benchmark(Baseline = true), BenchmarkCategory("FixedClassSerialize")]
+public byte[] NinoSerializeFixedClass() => NinoSerializer.Serialize(FixedClass);
+
+[Benchmark, BenchmarkCategory("FixedClassSerialize")]
+public byte[] MemoryPackSerializeFixedClass() => MemoryPackSerializer.Serialize(FixedClass);
+
+[Benchmark(Baseline = true), BenchmarkCategory("FixedClassDeserialize")]
+public FixedClass NinoDeserializeFixedClass() => NinoDeserializer.Deserialize<FixedClass>(NinoFixedClass);
+
+[Benchmark, BenchmarkCategory("FixedClassDeserialize")]
+public FixedClass MemoryPackDeserializeFixedClass() =>
+    MemoryPackSerializer.Deserialize<FixedClass>(MemoryPackFixedClass);
+
+// FixedStruct and FixedClasses (the array of 100) have the same methods.
 ```
 
 </Tab>
@@ -676,6 +885,9 @@ benchmarks/run.sh
 
 # runtime, v4 only, a subset
 dotnet run -c Release --project src/Nino.Benchmark -- --filter '*SimpleTest*' --iterationCount 15 --warmupCount 5
+
+# reference tracking, version tolerance and fixed-size types
+dotnet run -c Release --project src/Nino.Benchmark -- --filter '*ReferenceTest*' '*VersionTolerantTest*' '*FixedSizeTest*'
 
 # build time and generated code (N = 30, 8 derived classes per root)
 dotnet run -c Release --project src/Nino.GeneratorBenchmark -- 30 8

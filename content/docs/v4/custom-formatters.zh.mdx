@@ -125,6 +125,8 @@ public sealed class RingHolder
 
 `[assembly: NinoFormatter]` 是一个特性，而不是一次调用：没有模块初始化器，启动时也不需要执行任何代码。运行时第一次遇到某个程序集里的类型时，会读取该程序集的注册信息（查找失败时则读取所有已加载的程序集）。因此，HybridCLR 热更新程序集里声明的格式化器，程序集一加载就能用。Nino 自带的 BCL 格式化器也是这样声明的。
 
+没有在运行时注册或替换格式化器的 API：所有格式化器都用 `[assembly: NinoFormatter]` 声明，单个成员则用 `[NinoCustomFormatter]`。因此进程运行期间，一个类型的格式化器不会改变，生成代码和运行时用的始终是同一个。
+
 </Callout>
 
 ### 格式化器类型参数的绑定 [#binding-the-formatters-type-parameters]
@@ -173,7 +175,7 @@ Nino 遇到一个格式化器能处理的类型时，会这样绑定格式化器
 | `WriteRaw(ReadOnlySpan<byte>)` | `ReadRaw(int)`、`Advance(int)` | 原始字节，或跳过若干字节 |
 | `Position` | `Position`、`Remaining`、`Eof` | 当前位置：`Position` 是绝对偏移，`Remaining` 是剩余字节数 |
 
-两种编码的字符串都以字符数（UTF-16 码元数）开头；不是 `null` 也不是空串的 UTF-8 字符串，接着还有字节数。参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
+两种编码的字符串都以 `int32` 字符数（UTF-16 码元数）开头：`null` 为 `-1`，空串为 `0`，两者之后都不再有内容。`WriteUtf8` 接着写入 `int32` 字节数，然后正好是这么多个 UTF-8 字节：`"é😀"` 写成 `03 00 00 00` `06 00 00 00` `C3 A9 F0 9F 98 80`。不成对的代理项写成 U+FFFD。参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
 
 ### 切片中的位置 [#positions-in-a-slice]
 
@@ -199,19 +201,3 @@ NinoDeserializer.Deserialize(ref owner, ref reader);
 ```
 
 读取时必须按写入的顺序，读回完全相同的内容：字节里不带 schema。
-
-## 运行时注册 [#registering-at-run-time]
-
-`NinoFormatterCache<T>.Register<TFormatter>()` 在运行时注册（或替换）`T` 的格式化器。请在启动时调用，**必须早于 `T` 第一次序列化或反序列化**：
-
-```csharp
-NinoFormatterCache<Ring<int>>.Register<RingFormatter<int, UnmanagedFormatter<int>>>();
-```
-
-使用它的有：你直接发起的 `NinoSerializer`/`NinoDeserializer` 调用（[顶层调用](/zh/docs/v4/basic#terms)，包括拦截后的调用和[装箱重载](/zh/docs/v4/basic#runtime-types)），以及在运行时通过 `NinoFormatterCache<T>` 查找 `T` 的格式化器的成员（泛型 `[NinoType]` 的类型参数、其他程序集中的类型）。生成器在编译期就确定了格式化器的成员，仍然使用原来的格式化器。请优先使用 `[assembly: NinoFormatter]`，它对所有地方都生效。
-
-<Callout type="warn">
-
-`T` 第一次经由上述任一途径序列化或反序列化后，它的格式化器在整个进程中就固定下来。此后再为 `T` 注册格式化器（即使是同一个）会抛出 `InvalidOperationException`，而不是让已经在用旧格式化器的代码悄悄忽略它。
-
-</Callout>

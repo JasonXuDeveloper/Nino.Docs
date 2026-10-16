@@ -12,7 +12,7 @@ icon: DatabaseZap
 ```csharp title="UserProfile.cs"
 using Nino.Core;
 
-[NinoType(versionTolerant: true)] // cached data outlives a deployment, see below
+[NinoType(format: NinoFormat.VersionTolerant)] // cached data outlives a deployment, see below
 public sealed class UserProfile
 {
     public long Id;
@@ -173,7 +173,7 @@ public sealed class BlobCache<TKey, TValue>
 
 | 做法 | 方式 | 适用场景 |
 | --- | --- | --- |
-| 容错类型 | [`versionTolerant: true`](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）或 [`keyed: true`](/zh/docs/v4/evolving-data#keyed-members)（任意修改） | 条目需要在部署后继续可用。 |
+| 容错类型 | [`format: NinoFormat.VersionTolerant`](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）或 [`format: NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)（任意修改） | 条目需要在部署后继续可用。 |
 | 带版本的键 | 在键里加上结构版本（`profile:v2:42`），类型变化时递增 | 类型的变化超出了上面两个选项的范围，或者缓存重新填充的代价很低。 |
 | 失败即未命中 | 捕获无效数据抛出的 `InvalidOperationException`，删除该条目，再从数据源加载 | 作为前两种做法之上的兜底，而不是替代：按布局兼容的另一个类型写入的字节，可能不报错就被反序列化出来。 |
 
@@ -183,7 +183,7 @@ Nino 读取时会检查每个长度和边界，所以被截断或损坏的条目
 
 ## 检查清单 [#checklist]
 
-- [ ] 每个缓存的类型都是 `versionTolerant` 或 `keyed`，或者它的键带有结构版本。
+- [ ] 每个缓存的类型都是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，或者它的键带有结构版本。
 - [ ] 写入时每个线程复用一个缓冲区；异步写入要等完成后再重置缓冲区。
 - [ ] 客户端提供池化内存（`Lease<byte>`、`ReadOnlySequence<byte>`）时，直接从中反序列化。
 - [ ] 反序列化失败按缓存未命中处理。

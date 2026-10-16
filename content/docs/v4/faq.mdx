@@ -34,11 +34,15 @@ Anything that turns .NET objects into compact bytes and back: network protocols 
 
 ## Can I change my types after data has been written?
 
-Yes, if you choose a format for it. A plain `[NinoType]` is positional and the fastest. `[NinoType(versionTolerant: true)]` lets you append members, and `[NinoType(keyed: true)]` lets you add, remove and reorder members. See [Evolving Your Data](/en/docs/v4/evolving-data).
+Yes, if you choose a format for it. A plain `[NinoType]` is positional and the fastest. `[NinoType(format: NinoFormat.VersionTolerant)]` lets you append members, and `[NinoType(format: NinoFormat.Keyed)]` lets you add, remove and reorder members. See [Evolving Your Data](/en/docs/v4/evolving-data).
 
 ## Does Nino support polymorphism and shared references?
 
 Yes. A value declared as a base class or interface is read back as its runtime type, with no union tags to maintain. Reference tracking, enabled per type, preserves shared references and cycles. See [Polymorphism](/en/docs/v4/polymorphism) and [Reference Tracking](/en/docs/v4/reference-tracking).
+
+## How do I serialize many message types, or a type known only at run time?
+
+Give the types a common `[NinoType]` base class or interface and call `Serialize<TBase>` / `Deserialize<TBase>`: generated code writes the type id and dispatches on it, it is the fastest option, and it works with reuse deserialization and pooling for 0 B per message. This covers RPC and message dispatch, plugin systems and editor tooling. Only when the type is known only as a `Type` and the types share no common base (reflection-driven tooling over arbitrary types), use `SerializeBoxed(value, type)` and `DeserializeBoxed(data, type)`. Avoid `object` as the type argument: it accepts only `[NinoType]` values and dispatches through a slower global registry. See [Runtime Types](/en/docs/v4/basic#runtime-types).
 
 ## Is Nino thread safe?
 

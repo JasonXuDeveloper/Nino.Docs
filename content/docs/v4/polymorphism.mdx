@@ -137,6 +137,26 @@ Nino uses hybrid dispatch:
 
 When reading, Nino checks that the type in the data really derives from the declared type; data that names an unrelated type throws instead of being stored.
 
+## Dispatching Through a Common Base [#dispatching-through-a-common-base]
+
+For RPC or message dispatch, plugin systems and editor tooling, give the types a common `[NinoType]` base class or interface, and serialize and deserialize through it with `Serialize<TBase>` / `Deserialize<TBase>`. The type id is written and dispatched on by generated code, which is faster than the alternatives below, and it works with [reuse deserialization](#reuse-deserialization) and `[NinoPooled]`, so a receive loop allocates 0 B. For a complete example, see [Network Layer](/en/docs/v4/advanced/networking).
+
+```csharp
+[NinoType]
+public interface ICommand { }
+
+public sealed class SpawnUnit : ICommand { public int UnitId; }   // implementations inherit [NinoType]
+public sealed class DeleteUnit : ICommand { public int UnitId; }
+
+byte[] bytes = NinoSerializer.Serialize<ICommand>(command);
+ICommand read = NinoDeserializer.Deserialize<ICommand>(bytes);
+```
+
+Two alternatives exist, and both are slower:
+
+- **`object` as the declared type** (a member, element or `Serialize<object>` call): only `[NinoType]` values are accepted, a type id is written, and reading dispatches through the global registry of every `[NinoType]` instead of the generated dispatch of one base. Prefer the common base.
+- **The [boxed API](/en/docs/v4/basic#the-boxed-api)** (`SerializeBoxed` / `DeserializeBoxed` with a `Type`): finds the formatter by `Type` and boxes value types. Use it only when the type is known only at run time, as a `Type`, and the types share no common `[NinoType]` base, as in reflection-driven tooling over arbitrary types.
+
 ## Subtypes in Other Assemblies
 
 Subtypes are found automatically wherever they are declared, including assemblies loaded later (plugins, HybridCLR hot-update DLLs): when a type id is unknown, Nino looks in the registries of newly loaded assemblies before it fails. There is no registration call. For example, a hot update adds `public sealed class Freeze : Effect` in its own DLL. Once the DLL is loaded, the battle code in the AOT assembly reads a `List<Effect>` that contains a `Freeze`, with no change to that code. The subtype's assembly must reference `Nino.Core`, so the generator runs there too; an id whose type is in no loaded assembly throws `InvalidOperationException`.

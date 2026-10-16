@@ -9,7 +9,7 @@ What to know before choosing Nino v4, and the limitations of earlier versions th
 ## Current Limitations
 - **Source generator required.** Nino needs its source generator (Roslyn 4.3 or later) and C# 9 or later in the project that declares `[NinoType]`s.
 - **Not compatible with v3 data.** v4 cannot read data written by v3 or by the v4 betas and previews. See [Migrating from v3](/en/docs/v4/migration#converting-v3-data).
-- **Positional by default.** A bare `[NinoType]` is the fastest format but does not survive member changes. For data you store or exchange across versions, choose `versionTolerant` or `keyed` before writing any: see [Evolving Your Data](/en/docs/v4/evolving-data).
+- **Positional by default.** A bare `[NinoType]` is the fastest format but does not survive member changes. For data you store or exchange across versions, choose `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` before writing any: see [Evolving Your Data](/en/docs/v4/evolving-data).
 - **Some types have no built-in formatter.** See [Supported Types](/en/docs/v4/types#not-supported); a [custom formatter](/en/docs/v4/custom-formatters) can add any of them.
 
 ## Platform Notes
@@ -26,12 +26,12 @@ Resolved in v4: `ValueTuple`, `KeyValuePair` and `Nullable<T>` have a defined, r
 </Accordion>
 <Accordion value="resolved-2" title={<><code>WEAK_VERSION_TOLERANCE</code> projects cannot read data from projects without it, and vice versa</>}>
 
-Resolved in v4: version tolerance is an option of each type (`[NinoType(versionTolerant: true)]`) and is part of the type's own format, so it no longer depends on project settings. `WEAK_VERSION_TOLERANCE` still exists for compatibility and only affects the types declared in the project that defines it.
+Resolved in v4: version tolerance is an option of each type (`[NinoType(format: NinoFormat.VersionTolerant)]`) and is part of the type's own format, so it no longer depends on project settings. `WEAK_VERSION_TOLERANCE` still exists for compatibility and only affects the types declared in the project that defines it.
 
 </Accordion>
 <Accordion value="resolved-3" title={<>Members can only be appended at the end; no removing or reordering</>}>
 
-Resolved in v4: `[NinoType(keyed: true)]` allows reordering, removing and inserting members, in any class of a hierarchy. Version-tolerant types still accept appended members only, in the most derived type.
+Resolved in v4: `[NinoType(format: NinoFormat.Keyed)]` allows reordering, removing and inserting members, in any class of a hierarchy. Version-tolerant types still accept appended members only, in the most derived type.
 
 </Accordion>
 <Accordion value="resolved-4" title={<>Unsupported types cause a compilation error</>}>

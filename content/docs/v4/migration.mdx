@@ -27,7 +27,7 @@ Replace `Serializer`/`Deserializer` calls with `NinoSerializer`/`NinoDeserialize
 </Step>
 <Step>
 
-Replace `WEAK_VERSION_TOLERANCE` with `[NinoType(versionTolerant: true)]` on the types that need it (optional, see below).
+Replace `WEAK_VERSION_TOLERANCE` with `[NinoType(format: NinoFormat.VersionTolerant)]` on the types that need it (optional, see below).
 
 </Step>
 <Step>
@@ -37,7 +37,7 @@ Update `[NinoFormerName]` arguments to the runtime type name form.
 </Step>
 <Step>
 
-Build, and fix what the analyzer reports (`NINO001`–`NINO024`); many diagnostics come with a code fix.
+Build, and fix what the analyzer reports (`NINO001`–`NINO025`); many diagnostics come with a code fix.
 
 </Step>
 <Step>
@@ -61,7 +61,7 @@ In v3, the generator emitted static `Serializer` and `Deserializer` classes (and
 | `Deserializer.Deserialize(out T value, ref reader)` | `T value = NinoDeserializer.Deserialize<T>(ref reader)` |
 | `Serializer.GetBufferWriter()` / `ReturnBufferWriter(...)` | a reused `NinoArrayBufferWriter` (see [Serialize and Deserialize](/en/docs/v4/basic#reusing-a-buffer)) |
 | (none) | `NinoDeserializer.Deserialize(data, ref value)`: deserialize into an existing instance |
-| (none) | `NinoSerializer.Serialize(object)`, `NinoDeserializer.Deserialize(data, Type)`: boxed / runtime types |
+| (none) | `NinoSerializer.SerializeBoxed(value, type)`, `NinoDeserializer.DeserializeBoxed(data, type)`: only for a type known only at run time that shares no common `[NinoType]` base with the others (see [Runtime Types](/en/docs/v4/basic#runtime-types)) |
 
 <Tabs groupId="nino-version" persist items={["v3", "v4"]}>
 
@@ -123,11 +123,12 @@ v3's generated `Serialize` accepted `Span<T>` values. In v4, `T` is a generic ty
 
 | v3 | v4 |
 | --- | --- |
-| `[NinoType]`, `[NinoType(autoCollect, containNonPublicMembers)]` | unchanged; new optional parameters `allowInheritance`, `versionTolerant`, `keyed`, `trackReferences` |
+| `[NinoType]`, `[NinoType(autoCollect, containNonPublicMembers)]` | unchanged; new optional parameters `allowInheritance`, `format` (`NinoFormat.Positional`, `NinoFormat.VersionTolerant` or `NinoFormat.Keyed`), `trackReferences` |
 | every subtype needs its own `[NinoType]` | subtypes **inherit** `[NinoType]` from their base class or interface (unless it sets `allowInheritance: false`) |
-| `WEAK_VERSION_TOLERANCE` (whole project) | `[NinoType(versionTolerant: true)]` per type; the symbol still exists and turns it on for every type of the project |
+| `WEAK_VERSION_TOLERANCE` (whole project) | `[NinoType(format: NinoFormat.VersionTolerant)]` per type; the symbol still exists and makes every `NinoFormat.Positional` type of the project version-tolerant |
 | `[NinoFormerName("global::Old.Namespace.Type")]` (name copied from `NinoTypeConst.g.cs`) | `[NinoFormerName("Old.Namespace.Type")]`: runtime form, no `global::`, `+` for nested types |
-| `[NinoMember(index)]`, `[NinoIgnore]`, `[NinoUtf8]`, `[NinoConstructor(...)]`, `[NinoExplicitOrder(...)]` | unchanged; `[NinoConstructor]` can also mark a static factory method |
+| `[NinoMember(index)]`, `[NinoIgnore]`, `[NinoUtf8]`, `[NinoConstructor(...)]` | unchanged; `[NinoConstructor]` can also mark a static factory method |
+| `[NinoExplicitOrder(...)]` | removed; use `[NinoType(false)]` and give each member a `[NinoMember(index)]`, numbered in the order the members were written (see [Member Order](/en/docs/v4/defining-types#member-order)) |
 | `[NinoPrivateProxy]` (emitted by the generator) | removed; private members are reached through `[UnsafeAccessor]` (.NET 8+) or a generated accessor in the `partial` type |
 | (none) | `[NinoPooled]`, `[NinoFactory]`, `[NinoCustomFormatter]`, `[assembly: NinoFormatter]` |
 
@@ -141,6 +142,10 @@ Code written against an early v4 beta uses names that changed before the release
 | `NinoFactory<T>` | `NinoActivator<T>` |
 | `NinoDeserializer.DeserializeRef(ref value, data)` | `NinoDeserializer.Deserialize(data, ref value)` |
 | `NinoDeserializer.DeserializeRef(ref value, ref reader)` | `NinoDeserializer.Deserialize(ref value, ref reader)` |
+| `NinoSerializer.Serialize(object value)` | `NinoSerializer.SerializeBoxed(value, type)`, or `Serialize<TBase>` with a common `[NinoType]` base (see below) |
+| `NinoDeserializer.Deserialize(data, type)` | `NinoDeserializer.DeserializeBoxed(data, type)` |
+| `NinoDeserializer.Deserialize(data, type, ref value)` | `NinoDeserializer.DeserializeBoxed(data, ref value, type)` |
+| `[NinoExplicitOrder(...)]` | `[NinoType(false)]` with `[NinoMember(index)]` (see above) |
 | "ref deserialization" | reuse deserialization |
 
 ### Behavior Changes since the v4 Betas [#behavior-changes-since-the-v4-betas]
@@ -149,14 +154,16 @@ Code written against an early v4 beta uses names that changed before the release
 
 <Callout type="warn">
 
-**Data written by a beta that contains `versionTolerant` types (including every type of a project that defines `WEAK_VERSION_TOLERANCE`) or `[NinoUtf8]` strings cannot be read by 4.0.0-rc.1.** Read it with the beta and write it again with rc.1, as described in [Reading Data from an Older Version](/en/docs/v4/versioning#reading-data-from-an-older-version), or discard it.
+**Data written by any v4 beta or preview cannot be read by 4.0.0-rc.1**: the wire format changed throughout (for example version-tolerant types, including every type of a project that defines `WEAK_VERSION_TOLERANCE`, and `[NinoUtf8]` strings). Read it with the beta and write it again with rc.1, as described in [Reading Data from an Older Version](/en/docs/v4/versioning#reading-data-from-an-older-version), or discard it.
 
 </Callout>
 
-- **`[NinoUtf8]` strings carry their length in chars and their length in bytes.** The string's length in UTF-16 chars comes first, like a UTF-16 string's; a string that is not `null` or empty then has its length in bytes and the UTF-8 bytes. The betas wrote the byte length only. See [Binary Format](/en/docs/v4/platforms#binary-format).
-- **A `versionTolerant` object writes one length for its whole hierarchy**, instead of one length per inheritance level. Members can therefore be appended only to the most derived type: a member appended to a base class that has subclasses now shifts the subclasses' members. See [Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class).
+- **`[NinoUtf8]` strings carry their length in chars and their length in bytes.** The string's length in UTF-16 chars comes first, like a UTF-16 string's; a string that is not `null` or empty then has its length in bytes and the UTF-8 bytes. The betas wrote a single length before the bytes. See [Binary Format](/en/docs/v4/platforms#binary-format).
+- **A version-tolerant object writes one length for its whole hierarchy**, instead of one length per inheritance level. Members can therefore be appended only to the most derived type: a member appended to a base class that has subclasses now shifts the subclasses' members. See [Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class).
 - **Fixed-size types are serialized into an array of their exact size.** `NinoSerializer.Serialize(value)` of a struct or sealed class whose members are all fixed-size allocates the result at its final size and writes into it, without a scratch buffer or copy; the bytes are the same. `NinoSerializer.GetFixedSize<T>()` is new. See [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
-- **`NinoFormatterCache<T>.Register<TFormatter>()` must run before `T` is first used.** The first serialization or deserialization of `T` fixes its formatter; registering one afterwards throws an `InvalidOperationException` instead of taking effect for some calls only. Move such calls to startup. See [Registering at Run Time](/en/docs/v4/custom-formatters#registering-at-run-time).
+- **`NinoSerializer.Serialize(obj)` with a variable declared as `object` writes a type id.** The betas had a `Serialize(object)` overload that wrote the value as its runtime type. It is gone, so the same call now compiles to `Serialize<object>`, which accepts only `[NinoType]` values and writes a 4-byte type id first: the bytes differ, and only `Deserialize<object>` reads them. Give the types a common `[NinoType]` base and call `Serialize<TBase>`, or, for a type known only at run time, call `SerializeBoxed(obj, type)`; `SerializeBoxed(obj, obj.GetType())` writes what the old overload wrote (in rc.1's format). See [Runtime Types](/en/docs/v4/basic#runtime-types).
+- **Formatters cannot be registered at run time.** `NinoFormatterCache<T>.Register<TFormatter>()` is removed; declare the formatter with `[assembly: NinoFormatter]` or `[NinoCustomFormatter]` instead. See [Custom Formatters](/en/docs/v4/custom-formatters).
+- **`[NinoFactory]` next to a `[NinoConstructor]` is reported.** Such a factory was never called; the analyzer now warns about it (NINO025). See [Constructor or Factory?](/en/docs/v4/constructors#constructor-or-factory).
 - **On a reader returned by `ReadSlice()`, `Reader.Position` is an offset into the whole input**, not into the slice. A custom formatter that compared it with the slice's length should record the position where the slice starts and subtract it. See [Positions in a Slice](/en/docs/v4/custom-formatters#positions-in-a-slice).
 
 ### Version tolerance
@@ -180,7 +187,7 @@ public class SaveData
 <Tab value="v4">
 
 ```csharp
-[NinoType(versionTolerant: true)]
+[NinoType(format: NinoFormat.VersionTolerant)]
 public class SaveData
 {
     public int Id;
@@ -192,7 +199,7 @@ public class SaveData
 </Tab>
 </Tabs>
 
-In v4, you choose version tolerance per type. Members can be appended to the **most derived type** (a class without `[NinoType]` subclasses), at any nesting depth, and old code skips the members it does not know. Members appended to a base class shift its subclasses' members, so they are not tolerated. To reorder, remove or insert members, or to add them to a base class, use `[NinoType(keyed: true)]`. See [Version Tolerance](/en/docs/v4/evolving-data#version-tolerance) and [Keyed Members](/en/docs/v4/evolving-data#keyed-members).
+In v4, you choose version tolerance per type. Members can be appended to the **most derived type** (a class without `[NinoType]` subclasses), at any nesting depth, and old code skips the members it does not know. Members appended to a base class shift its subclasses' members, so they are not tolerated. To reorder, remove or insert members, or to add them to a base class, use `[NinoType(format: NinoFormat.Keyed)]`. See [Version Tolerance](/en/docs/v4/evolving-data#version-tolerance) and [Keyed Members](/en/docs/v4/evolving-data#keyed-members).
 
 <Callout type="warn">
 
@@ -253,7 +260,7 @@ public class Circle : Shape { public float Radius; }
 </Tab>
 </Tabs>
 
-Keeping `[NinoType]` on a subtype does no harm and lets the subtype set its own options. Those options replace the inherited ones, so repeat any you want to keep, such as `versionTolerant: true`. The one exception is `trackReferences`, which stays on for every subtype of a tracked type.
+Keeping `[NinoType]` on a subtype does no harm and lets the subtype set its own options. Those options replace the inherited ones, so repeat any you want to keep, such as `format: NinoFormat.VersionTolerant`. The one exception is `trackReferences`, which stays on for every subtype of a tracked type.
 
 ## Generated Code
 - Generated formatters live in the `<AssemblyName>.NinoGen` namespace, but they are not meant to be called directly. Remove any code that referenced the v3 generated classes (`Serializer`, `Deserializer`, `NinoTypeConst`, ...).

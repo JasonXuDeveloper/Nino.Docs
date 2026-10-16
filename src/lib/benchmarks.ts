@@ -54,8 +54,20 @@ export function sourceNote(zh: boolean) {
   return zh ? `${parts.join('，')}。` : `${parts.join(', ')}.`;
 }
 
+/**
+ * Rows the site never shows: deserializing FixedStruct (one 40-byte copy) takes
+ * well under a nanosecond in both libraries, below what BenchmarkDotNet can
+ * measure reliably.
+ */
+const hiddenMethods = new Set([
+  'NinoDeserializeFixedStruct',
+  'MemoryPackDeserializeFixedStruct',
+]);
+
 /** All rows of the report, in report order (for the full results table) */
-export const benchRows: readonly BenchRow[] = bench.rows as BenchRow[];
+export const benchRows: readonly BenchRow[] = (bench.rows as BenchRow[]).filter(
+  (row) => !hiddenMethods.has(row.method),
+);
 
 function digits(value: number) {
   if (value >= 100) return Math.round(value).toLocaleString('en-US');
@@ -231,6 +243,51 @@ export const runtime: Record<'serialize' | 'deserialize', RuntimeCase[]> = {
     buildCase('deserialize', info),
   ),
 };
+
+/**
+ * Reference tracking (ReferenceTest), version tolerance (VersionTolerantTest)
+ * and fixed-size types (FixedSizeTest), against MemoryPack's CircularReference
+ * and VersionTolerant modes and its byte[] API. Kept apart from `runtime`, so
+ * the headline ratios stay those of the main cases. A case shows only when the
+ * synced report has both of its rows; a report without these benchmarks shows
+ * none (the page then says the results are still to come).
+ * Deserializing FixedStruct is left out (see hiddenMethods).
+ */
+const extraCases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
+  serialize: [
+    {
+      name: 'Object graph, 200 tracked nodes',
+      zh: '对象图，200 个追踪的节点',
+      key: 'Graph',
+    },
+    { name: 'TolerantClass', code: true, key: 'TolerantClass' },
+    { name: 'TolerantClass[100]', code: true, key: 'TolerantClasses' },
+    { name: 'FixedStruct', code: true, key: 'FixedStruct' },
+    { name: 'FixedClass', code: true, key: 'FixedClass' },
+    { name: 'FixedClass[100]', code: true, key: 'FixedClasses' },
+  ],
+  deserialize: [
+    {
+      name: 'Object graph, 200 tracked nodes',
+      zh: '对象图，200 个追踪的节点',
+      key: 'Graph',
+    },
+    { name: 'TolerantClass', code: true, key: 'TolerantClass' },
+    { name: 'TolerantClass[100]', code: true, key: 'TolerantClasses' },
+    { name: 'FixedClass', code: true, key: 'FixedClass' },
+    { name: 'FixedClass[100]', code: true, key: 'FixedClasses' },
+  ],
+};
+
+export const extraRuntime: Record<'serialize' | 'deserialize', RuntimeCase[]> =
+  {
+    serialize: extraCases.serialize.flatMap((info) =>
+      buildCase('serialize', info),
+    ),
+    deserialize: extraCases.deserialize.flatMap((info) =>
+      buildCase('deserialize', info),
+    ),
+  };
 
 /** Fastest / slowest win against MemoryPack (ignores on-par and losses) */
 export function ratioRange(op: 'serialize' | 'deserialize') {

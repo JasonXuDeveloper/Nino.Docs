@@ -90,7 +90,7 @@ A recycler is registered per **declared type** and applies to every slot of that
 ## Creating Instances with `[NinoFactory]`
 Mark a public static method, callable without arguments, that returns the declaring type. Whenever Nino has to create an instance of that type, it calls the method instead of the constructor and then populates the instance in place. `Player.Rent()` above is one.
 
-This works for collection types too (a `List<T>` subclass, an `IDictionary<TKey, TValue>` implementation, ...). The method may return an instance that still holds elements; they are dropped (and recycled) before the data is read. It must not return `null`; an invalid method reports NINO017.
+This works for collection types too (a `List<T>` subclass, an `IDictionary<TKey, TValue>` implementation, ...). The method may return an instance that still holds elements; they are dropped (and recycled) before the data is read. It must not return `null`; an invalid method reports NINO017. On a type with a `[NinoConstructor]` the factory is never called, because such a type is re-created through its constructor; the analyzer warns about it (NINO025).
 
 ## Built-in Pools: `[NinoPooled]` [#ninopooled]
 `[NinoPooled]` gives a `[NinoType]` class a built-in object pool. Wherever Nino creates an instance (the value you deserialize, a member or a collection element), it takes one from the pool and deserializes into it; dropped instances go back to the pool on their own.
