@@ -20,7 +20,7 @@ bun run deploy         # build + wrangler pages deploy
 bun run format         # Biome format
 ```
 
-Cloudflare Pages builds with Bun 1.2.x and the Node version in `.node-version`. Keep `bun.lock` at `"lockfileVersion": 1`: Bun 1.3+ rewrites it to version 2, which Bun 1.2 cannot read (`bun install --frozen-lockfile` then fails the deploy). Install with Bun 1.2 (`npx @oven/bun-linux-x64@1.2.15`, or set `BUN_VERSION` in the Pages settings to match the version you use).
+Cloudflare Pages builds with the Node version in `.node-version` and the Bun version in the Pages environment variable `BUN_VERSION` (set it to the Bun version used locally; the build image's default, 1.2.15, cannot read the version 2 `bun.lock` that Bun 1.3+ writes, and `bun install --frozen-lockfile` then fails the deploy).
 
 ## Repository Structure
 
