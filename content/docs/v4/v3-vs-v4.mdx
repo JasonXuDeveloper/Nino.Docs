@@ -4,7 +4,7 @@ description: Features, build time, generated code and runtime performance compar
 icon: Scale
 ---
 
-This page compares Nino v3 with Nino v4: features, build time and generated code, and runtime performance. For upgrading, see [Migrating from v3](/en/docs/v4/migration).
+This page compares Nino v3 with Nino v4 in three areas: features, build time and generated code, and runtime performance. For the upgrade steps, see [Migrating from v3](/en/docs/v4/migration).
 
 ## Features
 
@@ -12,7 +12,7 @@ This page compares Nino v3 with Nino v4: features, build time and generated code
 | --- | --- | --- |
 | API | generated `Serializer` / `Deserializer` per assembly, extension methods | `NinoSerializer` / `NinoDeserializer` in `Nino.Core` |
 | Binary format | positional | positional by default, identical bytes on every target framework; padding zeroed (deterministic output) |
-| Version tolerance | `WEAK_VERSION_TOLERANCE` for the whole project, append at the end | `versionTolerant` per type; append to the most derived type, at any depth; old code skips new members |
+| Version tolerance | `WEAK_VERSION_TOLERANCE` for the whole project, append at the end | `versionTolerant` per type; append to the most derived type, at any nesting depth; old code skips new members |
 | Keyed members (reorder / remove / insert) | no | `[NinoType(keyed: true)]` |
 | Shared references and cycles | no | `[NinoType(trackReferences: true)]` |
 | Deserialize into existing instances | no | `Deserialize(data, ref value)`, with recycling of dropped instances |
@@ -23,7 +23,7 @@ This page compares Nino v3 with Nino v4: features, build time and generated code
 | Custom formatters | no | `[NinoCustomFormatter]` per member, `[assembly: NinoFormatter]` per type |
 | Boxed / runtime-typed API | no | `Serialize(object)`, `Deserialize(data, Type)` |
 | Diagnostics | compile errors in generated code | 24 analyzer diagnostics (NINO001–NINO024), many with code fixes |
-| Incremental generator | no: whole-compilation scans, all types re-generated on every edit | one file per type, only edited types re-generated |
+| Incremental generator | no: scans the whole compilation and re-generates every type on every edit | one file per type, only edited types re-generated |
 | Interceptors | no | always on with Roslyn 4.8+ (the .NET 8 SDK and later) |
 | Hot update (HybridCLR) | supported | supported, no initialization call |
 | Unity | 2022.3+, `Microsoft.CodeAnalysis` installed manually | 2022.3+, generator included in the package |
@@ -31,7 +31,7 @@ This page compares Nino v3 with Nino v4: features, build time and generated code
 
 ## Build Time and Generated Code
 
-v4 against v3 **3.3.13**, the last v3 release. Measured on a synthetic assembly of `N` abstract root classes, each with a chain of 8 derived classes, a sealed leaf and a struct (`N × 11` types), with primitives, strings, `List<T>`, `Dictionary<int, string>`, references to other `[NinoType]`s and private fields. Intel Xeon 2.80 GHz, 4 cores, Ubuntu 24.04, .NET SDK 10.0.402; the ratios are what to look at.
+The baseline is v3 **3.3.13**, the last v3 release. The test project is a synthetic assembly of `N` abstract root classes, each with a chain of 8 derived classes, a sealed leaf and a struct (`N × 11` types), with primitives, strings, `List<T>`, `Dictionary<int, string>`, references to other `[NinoType]`s and private fields. Intel Xeon 2.80 GHz, 4 cores, Ubuntu 24.04, .NET SDK 10.0.402. Look at the ratios rather than the absolute times.
 
 <BenchmarkChart chart="compile" lang="en" table={false} />
 
@@ -65,12 +65,12 @@ v3's compile time grows much faster than the number of types: 3.3× the types to
 </Tab>
 </Tabs>
 
-v3 inlined the bodies of every subtype into each polymorphic base and re-generated every type on every edit. v4 emits each body once and grows linearly: about 3.5 KB of source and 2 ms of compile time per type. Editing a type in the IDE re-generates that type only.
+v3 inlined the body of every subtype into each polymorphic base and re-generated every type on every edit. v4 emits each body once and grows linearly: about 3.5 KB of source and 2 ms of compile time per type. Editing a type in the IDE re-generates that type only.
 
 ## Runtime
 
-Nino v4 against v3 3.3.13 from NuGet, measured back to back on the same machine. See [Benchmarks](/en/docs/v4/perf) for absolute times and the comparison with MemoryPack.
+Nino v4 is measured against v3 3.3.13 from NuGet, back to back on the same machine. See [Benchmarks](/en/docs/v4/perf) for absolute times and the comparison with MemoryPack.
 
 <BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="en" />
 
-Serializing classes is clearly faster. Deserializing is on par with v3, which is bound by allocating the result objects, while v4 also does reference tracking, reuse deserialization and payload validation. Arrays of structs with padding serialize a few nanoseconds slower, because v4 zeroes the padding so the output is deterministic; a struct without padding (see [Struct Layout](/en/docs/v4/performance#struct-layout)) copies as fast as in v3. v4 adds what v3 could not do: deserializing into existing and pooled instances, which allocates **0 B** per call. See [What's New in v4](/en/docs/v4/whats-new).
+Serializing classes is clearly faster. Deserializing is on par with v3. Its cost is dominated by allocating the result objects, and v4 also handles reference tracking, reuse deserialization and payload validation on top of that. Arrays of structs with padding serialize a few nanoseconds slower, because v4 zeroes the padding to keep the output deterministic; a struct without padding (see [Struct Layout](/en/docs/v4/performance#struct-layout)) copies as fast as in v3. v4 also does something v3 could not: it deserializes into existing and pooled instances, allocating **0 B** per call. See [What's New in v4](/en/docs/v4/whats-new).

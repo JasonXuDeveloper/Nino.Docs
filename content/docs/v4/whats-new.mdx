@@ -6,7 +6,7 @@ icon: Sparkles
 
 import { Cpu, GitBranch, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound } from 'lucide-react';
 
-Nino v4 is a rewrite of the runtime and the source generator: faster to run than v3 **and** MemoryPack, dramatically faster to build, and with the features long-lived projects need.
+Nino v4 rewrites the runtime and the source generator. It runs faster than v3 **and** MemoryPack, builds dramatically faster, and adds the features long-lived projects need.
 
 <Callout type="warn">
 
@@ -16,11 +16,11 @@ The v4 binary format is **not compatible** with v3 or the earlier v4 betas/previ
 
 ## Serializes Faster than v3 [#faster-than-v3]
 
-Against v3 **3.3.13**, the last v3 release, measured back to back with v4 on the same machine.
+The baseline is v3 **3.3.13**, the last v3 release, run back to back with v4 on the same machine.
 
 <BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="en" />
 
-Serializing classes is clearly faster. Deserializing is on par with v3, which is bound by allocating the result objects, while v4 also does reference tracking, reuse deserialization and payload validation. Arrays of structs with padding serialize a few nanoseconds slower, because v4 zeroes the padding so the output is deterministic; a struct without padding (see [Struct Layout](/en/docs/v4/performance#struct-layout)) copies as fast as in v3.
+Serializing classes is clearly faster. Deserializing is on par with v3. Its cost is dominated by allocating the result objects, and v4 also handles reference tracking, reuse deserialization and payload validation on top of that. Arrays of structs with padding serialize a few nanoseconds slower, because v4 zeroes the padding to keep the output deterministic; a struct without padding (see [Struct Layout](/en/docs/v4/performance#struct-layout)) copies as fast as in v3.
 
 ## Faster to Build
 
@@ -30,13 +30,13 @@ The v3 generator inlined the body of every subtype into each polymorphic base an
 
 <Callout type="info" title="1,100 types (N = 100)">
 
-v3 takes 636 s to compile the generated code; v4 takes 2.2 s (**289× faster**), from 16× less source. v3's compile time grows much faster than the number of types: 3.3× the types took 11× the compile time (56 s → 636 s). v4 grows linearly: about 3.5 KB of source and 2 ms of compile time per type.
+v3 takes 636 s to compile the generated code; v4 takes 2.2 s (**289× faster**) and generates 16× less source. v3's compile time grows much faster than the number of types: 3.3× the types took 11× the compile time (56 s → 636 s). v4 grows linearly: about 3.5 KB of source and 2 ms of compile time per type.
 
 </Callout>
 
 ## Faster than MemoryPack
 
-Against MemoryPack in the same run. Nino wins clearly when serializing (up to <BenchValue k="serialize.max" />), leads on classes and polymorphic graphs when deserializing (up to <BenchValue k="deserialize.max" />), and is close on raw arrays, where both are one `memcpy`.
+Measured against MemoryPack in the same run. Nino wins clearly when serializing (up to <BenchValue k="serialize.max" />), leads on classes and polymorphic graphs when deserializing (up to <BenchValue k="deserialize.max" />), and is close on raw arrays, where both do a single `memcpy`.
 
 <BenchSource lang="en" />
 
@@ -50,7 +50,7 @@ Deserializing `Vector4[10000]` allocates a 160 KB array on the large object heap
 
 ### Deserialize into Existing Objects
 
-New in v4: deserialize by `ref` into the objects you already have, with any new instances taken from [`[NinoPooled]`](/en/docs/v4/pooling) pools. Against MemoryPack's overwrite mode, Nino is up to **<BenchValue k="reuse.max" /> faster**, and allocates **0 B** per call on the pooled paths where MemoryPack allocates for every call (numbers in the chart).
+New in v4: deserialize by `ref` into the objects you already have, with any new instances taken from [`[NinoPooled]`](/en/docs/v4/pooling) pools. Against MemoryPack's overwrite mode, Nino is up to **<BenchValue k="reuse.max" /> faster**, and on the pooled paths it allocates **0 B** per call, while MemoryPack allocates on every call (see the chart).
 
 <BenchmarkChart chart={['reuse', 'allocation']} lang="en" />
 
@@ -69,10 +69,10 @@ Neither library allocates when serializing, and payloads are about the same size
     Shared references and cycles survive a round trip, at 4 bytes per tracked object.
   </Card>
   <Card icon={<ShieldCheck />} title="Analyzers NINO001–NINO024" href="/en/docs/v4/analyzers">
-    Mistakes reported while you type, most with a one-click code fix.
+    Mistakes reported while you type, many with a one-click code fix.
   </Card>
   <Card icon={<Recycle />} title="Low GC and pooling" href="/en/docs/v4/pooling">
-    Reuse deserialization reuses your objects, `[NinoPooled]` pools the rest, and every dropped instance is recycled.
+    Reuse deserialization fills the objects you already have, `[NinoPooled]` pools the rest, and every dropped instance is recycled.
   </Card>
   <Card icon={<Layers />} title="Thread safe" href="/en/docs/v4/performance#thread-safety">
     Every API can be called concurrently without locks; no hot path writes shared memory.
@@ -93,7 +93,7 @@ Neither library allocates when serializing, and payloads are about the same size
 - **Analyzers and code fixes**: mistakes are reported while you type (NINO001–NINO024), many with a one-click fix. See the [diagnostics list](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md).
 
 ### Faster to run
-- **Struct formatters the JIT/AOT compiler inlines**, raw memory copies for unmanaged `[NinoType]` structs and their arrays and lists, and no allocations beyond the result objects. [Fixed-size types](/en/docs/v4/performance#fixed-size-types) are written straight into a `byte[]` of their exact size.
+- **Struct formatters that the JIT/AOT compiler inlines**, raw memory copies for unmanaged `[NinoType]` structs and their arrays and lists, and no allocations beyond the result objects. [Fixed-size types](/en/docs/v4/performance#fixed-size-types) are written straight into a `byte[]` of their exact size.
 - **Interceptors on modern compilers**: on Roslyn 4.8+ (the .NET 8 SDK and later), `NinoSerializer`/`NinoDeserializer` calls with a known type are redirected at compile time to the generated formatter (no virtual call). Always on, nothing to configure; older compilers use the regular path, with the same bytes. See [Interceptors](/en/docs/v4/performance#interceptors).
 - **Thread safe and cache friendly**: lock-free, copy-on-write registries; no shared mutable state on hot paths.
 
@@ -108,7 +108,7 @@ See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 - **Opt-in version tolerance**: `[NinoType(versionTolerant: true)]` lets you append members to the most derived type, at any nesting depth, and old code skips the members it does not know.
 - **Keyed members**: `[NinoType(keyed: true)]` writes members by name hash, so they can be reordered, removed and inserted.
 - **Reference tracking**: `[NinoType(trackReferences: true)]` keeps shared references and cycles.
-- **Deep object graphs**: objects nested deeper than 128 are written and read later from a shallow point, so recursive types of any depth, and hostile data, cannot overflow the stack. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
+- **Deep object graphs**: objects nested more than 128 levels deep are deferred and written and read later from a shallower level, so recursive types of any depth, and hostile data, cannot overflow the stack. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
 
 ### More types, your way
 - **User collections**: types derived from `List<T>`, `HashSet<T>`, `Dictionary<TKey, TValue>` and friends, without attributes.
@@ -119,7 +119,7 @@ See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 ### Runs everywhere
 - **One format everywhere**: `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` produce identical bytes, and data is portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit.
 - **No init calls**: generated registries are found lazily, so hot-update assemblies (HybridCLR) just work.
-- **Unity**: the generator ships in the package; nothing else to install.
+- **Unity**: the generator ships in the package; there is nothing else to install.
 
 ## Quick Example
 

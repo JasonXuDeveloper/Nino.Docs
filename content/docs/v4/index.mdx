@@ -27,12 +27,12 @@ GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
 
 ## Why Nino
 
-- **Fast.** Against MemoryPack in the same run, Nino serializes up to <BenchValue k="serialize.max" /> faster and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; raw struct arrays are close. See [Benchmarks](/en/docs/v4/perf).
+- **Fast.** Against MemoryPack in the same run, Nino serializes up to <BenchValue k="serialize.max" /> faster and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; on raw struct arrays the two are close. See [Benchmarks](/en/docs/v4/perf).
 - **Zero GC on hot paths.** Serializing into a reused buffer allocates nothing. Deserializing [into existing objects and pooled instances](/en/docs/v4/pooling) allocates nothing either.
-- **Everything at compile time.** The generator writes one formatter per type, so Nino works on IL2CPP, NativeAOT and HybridCLR. On the .NET 8 SDK and later, calls are [intercepted](/en/docs/v4/performance#interceptors) to the exact formatter. The generator is incremental: editing a type regenerates that type only, and the generated code compiles far faster than v3's ([build times](/en/docs/v4/v3-vs-v4#build-time-and-generated-code)).
-- **Polymorphism without tags.** Values declared as a base class or interface are read back as their runtime type. Type ids are hashes of type names, so there is no tag table to maintain, and subtypes in other assemblies are found automatically. See [Polymorphism](/en/docs/v4/polymorphism).
+- **Everything at compile time.** The generator writes one formatter per type, so Nino works on IL2CPP, NativeAOT and HybridCLR. On the .NET 8 SDK and later, [interceptors](/en/docs/v4/performance#interceptors) route each call straight to the right formatter. The generator is incremental: editing a type regenerates that type only, and the generated code compiles far faster than v3's ([build times](/en/docs/v4/v3-vs-v4#build-time-and-generated-code)).
+- **Polymorphism without tags.** Values declared as a base class or interface are read back as their runtime type. Type ids are hashes of type names, so there is no tag table to maintain, and Nino finds subtypes in other assemblies on its own. See [Polymorphism](/en/docs/v4/polymorphism).
 - **Data that evolves.** Per type, choose [version tolerance](/en/docs/v4/evolving-data#version-tolerance) (append members), [keyed members](/en/docs/v4/evolving-data#keyed-members) (add, remove and reorder members) or [reference tracking](/en/docs/v4/reference-tracking) (shared references and cycles). Types that don't opt in pay nothing.
-- **The same bytes everywhere.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` write identical bytes, on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit. A Unity client and a .NET server read each other's data. See [Platforms and Binary Format](/en/docs/v4/platforms).
+- **The same bytes everywhere.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` write identical bytes on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, so a Unity client and a .NET server can read each other's data. See [Platforms and Binary Format](/en/docs/v4/platforms).
 - **Thread safe.** Every `NinoSerializer` and `NinoDeserializer` method can be called from any number of threads, with no locks on the hot path.
 - **Mistakes caught while you type.** 24 [analyzer diagnostics](/en/docs/v4/analyzers) (NINO001–NINO024), many with a one-click code fix.
 
@@ -49,9 +49,9 @@ GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
 ## When Not to Use It
 
 - **You need a human-readable format.** Nino writes binary. Use JSON, YAML or TOML for files that people read or edit.
-- **Another language reads the data.** The format is defined by your C# types; there is no schema file and no code generator for other languages. Use Protocol Buffers, FlatBuffers or MessagePack to talk to non-.NET peers.
+- **Another language reads the data.** The format is defined by your C# types; there is no schema file and no code generator for other languages. To talk to non-.NET peers, use Protocol Buffers, FlatBuffers or MessagePack.
 - **You need a TypeScript client or ASP.NET Core MVC formatters generated for you.** See [Limitations](/en/docs/v4/limit) and [where MemoryPack is ahead](/en/docs/v4/vs-memorypack#where-memorypack-is-ahead).
-- **You must read Nino v3 data directly.** v4 has a new binary format; old data has to be converted once. See [Migrating from v3](/en/docs/v4/migration#converting-v3-data).
+- **You must read Nino v3 data directly.** v4 has a new binary format, so old data has to be converted once. See [Migrating from v3](/en/docs/v4/migration#converting-v3-data).
 
 ## Start Here
 
@@ -84,4 +84,4 @@ GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
 
 ## Older Versions
 
-The documentation of Nino [v3](/en/docs/v3) and [v2](/en/docs/v2) is still available. Their binary formats are not compatible with v4; see [Versioning](/en/docs/v4/versioning).
+The documentation of Nino [v3](/en/docs/v3) and [v2](/en/docs/v2) is still available. Their binary formats are not compatible with v4. See [Versioning](/en/docs/v4/versioning).

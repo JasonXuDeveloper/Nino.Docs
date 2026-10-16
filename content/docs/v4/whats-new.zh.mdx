@@ -6,25 +6,25 @@ icon: Sparkles
 
 import { Cpu, GitBranch, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound } from 'lucide-react';
 
-Nino v4 重写了运行时和源生成器：运行速度超过 v3，**也**超过 MemoryPack；构建速度大幅提升；还补齐了长期项目需要的功能。
+Nino v4 重写了运行时和源生成器。运行速度超过 v3，**也**超过 MemoryPack；构建速度大幅提升；长期维护的项目需要的功能也都补齐了。
 
 <Callout type="warn">
 
-v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**，API 也有变化。请参阅[从 v3 迁移](/zh/docs/v4/migration)。
+v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**，API 也有变化。参见[从 v3 迁移](/zh/docs/v4/migration)。
 
 </Callout>
 
 ## 序列化比 v3 更快 [#faster-than-v3]
 
-对比对象是 v3 的最后一个版本 **3.3.13**，与 v4 在同一台机器上先后测量。
+对比基准是 v3 的最后一个版本 **3.3.13**，在同一台机器上与 v4 先后运行。
 
 <BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="zh" />
 
-类的序列化明显更快。反序列化与 v3 持平：它主要花在分配结果对象上，而 v4 同时还做了引用追踪、复用反序列化和数据校验。带填充字节的结构体数组序列化慢几纳秒，因为 v4 会把填充清零，保证输出确定；没有填充的结构体（参见[结构体布局](/zh/docs/v4/performance#struct-layout)）与 v3 一样快。
+类的序列化明显更快。反序列化与 v3 持平。反序列化的耗时主要花在分配结果对象上，而 v4 在此之外还要处理引用追踪、复用反序列化和数据校验。带填充字节的结构体数组序列化时慢几纳秒，因为 v4 会把填充字节清零，保证输出是确定的；没有填充的结构体（参见[结构体布局](/zh/docs/v4/performance#struct-layout)）与 v3 一样快。
 
 ## 构建更快 [#faster-to-build]
 
-v3 的生成器会把每个子类型的代码内联到它的每个多态基类中，而且每敲一次键都要重新生成全部类型。v4 每个类型只生成一个文件、只生成一次，之后只重新生成你改动的部分。
+v3 的生成器会把每个子类型的代码内联到它的每个多态基类中，而且每敲一次键都要重新生成全部类型。v4 每个类型只生成一个文件，只生成一次，之后只重新生成你改动的部分。
 
 <BenchmarkChart chart="compile" lang="zh" />
 
@@ -36,7 +36,7 @@ v3 编译生成代码要 636 秒，v4 只要 2.2 秒（**快 289 倍**），生�
 
 ## 比 MemoryPack 更快 [#faster-than-memorypack]
 
-与 MemoryPack 在同一轮测试中对比。序列化时 Nino 明显领先（最高快 <BenchValue k="serialize.max" />）；反序列化类和多态对象图时也领先（最高快 <BenchValue k="deserialize.max" />）；原始数组两者接近，都只是一次 `memcpy`。
+在同一轮测试中与 MemoryPack 对比。序列化时 Nino 明显领先（最高快 <BenchValue k="serialize.max" />）；反序列化类和多态对象图时也领先（最高快 <BenchValue k="deserialize.max" />）；原始数组两者相差不大，都只做一次 `memcpy`。
 
 <BenchSource lang="zh" />
 
@@ -44,13 +44,13 @@ v3 编译生成代码要 636 秒，v4 只要 2.2 秒（**快 289 倍**），生�
 
 <Callout type="info" title="Vector4[10000]">
 
-反序列化 `Vector4[10000]` 每次都要在大对象堆上分配一个 160 KB 的数组，测到的主要是第 2 代垃圾回收，结果每次运行都有波动，MemoryPack 在这一项上可能领先。
+反序列化 `Vector4[10000]` 每次都要在大对象堆上分配一个 160 KB 的数组，所以测到的主要是第 2 代垃圾回收，每次运行的结果都有波动，MemoryPack 在这一项上可能领先。
 
 </Callout>
 
 ### 反序列化到已有对象 [#deserialize-into-existing-objects]
 
-v4 新增：复用反序列化，把数据填充到已有的对象中，需要新实例时从 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池中取。与 MemoryPack 的覆盖模式相比，Nino 最高**快 <BenchValue k="reuse.max" />**；池化路径上每次调用分配 **0 B**，而 MemoryPack 每次调用都要分配（具体数字见图表）。
+v4 新增：通过 `ref` 反序列化到你已有的对象中，需要新实例时从 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池中取。与 MemoryPack 的覆盖模式相比，Nino 最高**快 <BenchValue k="reuse.max" />**；在池化路径上每次调用只分配 **0 B**，而 MemoryPack 每次调用都要分配（具体数字见图表）。
 
 <BenchmarkChart chart={['reuse', 'allocation']} lang="zh" />
 
@@ -69,16 +69,16 @@ v4 新增：复用反序列化，把数据填充到已有的对象中，需要�
     共享引用和循环引用都能原样读回，每个被追踪的对象只多 4 字节。
   </Card>
   <Card icon={<ShieldCheck />} title="分析器 NINO001–NINO024" href="/zh/docs/v4/analyzers">
-    写代码时就报告错误，多数附带一键修复。
+    写代码时就报告错误，许多都带一键代码修复。
   </Card>
   <Card icon={<Recycle />} title="低 GC 与对象池" href="/zh/docs/v4/pooling">
-    复用反序列化复用已有对象，`[NinoPooled]` 池化其余对象，被丢弃的实例都会回收。
+    复用反序列化直接填充已有对象，`[NinoPooled]` 负责池化其余对象，被丢弃的实例都会回收。
   </Card>
   <Card icon={<Layers />} title="线程安全" href="/zh/docs/v4/performance#thread-safety">
-    所有 API 都可以并发调用，无需加锁；热路径从不写共享内存。
+    所有 API 都可以并发调用，不需要加锁；热路径从不写共享内存。
   </Card>
   <Card icon={<Cpu />} title="各平台字节一致" href="/zh/docs/v4/platforms">
-    `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出相同的字节，CoreCLR、Mono、IL2CPP 以及 64 位和 32 位平台都一样。
+    `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出的字节相同，在 CoreCLR、Mono、IL2CPP 以及 64 位和 32 位平台上都一样。
   </Card>
   <Card icon={<GitBranch />} title="真正的增量生成" href="/zh/docs/v4/v3-vs-v4">
     每个类型一个文件；修改一个类型只重新生成这个类型。
@@ -88,38 +88,38 @@ v4 新增：复用反序列化，把数据填充到已有的对象中，需要�
 ## 亮点 [#highlights]
 
 ### 构建更快 [#faster-to-build-1]
-- **真正的增量源生成器**：每个 `[NinoType]` 一个文件，模型可比较相等（equatable），不再扫描整个编译。修改一个类型只重新生成这个类型；不影响模型的修改（注释、方法体）什么都不会重新生成。
-- **生成的代码大幅减少**：集合、字符串、可空类型、元组等内置类型，以泛型格式化器的形式在 `Nino.Core` 中实现一次；生成器只为你的 `[NinoType]` 生成代码。
-- **分析器与代码修复**：写代码时就报告错误（NINO001–NINO024），许多附带一键修复。参见[诊断列表](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)。
+- **真正的增量源生成器**：每个 `[NinoType]` 一个文件，模型可判等（equatable），不再扫描整个 Compilation。改一个类型只重新生成这个类型；不改变模型的修改（例如注释、方法体）不会触发任何重新生成。
+- **生成的代码大幅减少**：集合、字符串、可空类型、元组等内置类型，都在 `Nino.Core` 里以泛型格式化器的形式统一实现；生成器只为你的 `[NinoType]` 生成代码。
+- **分析器与代码修复**：写代码时就报告错误（NINO001–NINO024），许多都带一键修复。参见[诊断列表](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)。
 
 ### 运行更快 [#faster-to-run]
-- **结构体格式化器可被 JIT/AOT 编译器内联**；非托管 `[NinoType]` 结构体及其数组和列表直接拷贝原始内存；除结果对象外不产生任何分配。[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)直接写进大小正好的 `byte[]`。
-- **新版编译器上的拦截器**：在 Roslyn 4.8+（.NET 8 SDK 及以上）下，类型已知的 `NinoSerializer`/`NinoDeserializer` 调用会在编译期直接改为调用生成的格式化器（没有虚调用）。始终开启，无需配置；旧版编译器走常规路径，写出的字节相同。参见[拦截器](/zh/docs/v4/performance#interceptors)。
+- **JIT/AOT 编译器能内联结构体格式化器**；非托管 `[NinoType]` 结构体及其数组和列表直接拷贝原始内存；除了结果对象本身，不产生任何分配。[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)直接写进大小正好的 `byte[]`。
+- **新版编译器上的拦截器**：在 Roslyn 4.8+（.NET 8 SDK 及以上）下，类型已知的 `NinoSerializer`/`NinoDeserializer` 调用会在编译期直接改写为调用生成的格式化器（没有虚调用）。始终开启，无需配置；旧版编译器走常规路径，写出的字节相同。参见[拦截器](/zh/docs/v4/performance#interceptors)。
 - **线程安全、缓存友好**：注册表无锁，采用写时复制；热路径上没有共享的可变状态。
 
 ### 复用而非分配 [#reuse-instead-of-allocate]
 - **复用反序列化**：`NinoDeserializer.Deserialize(data, ref value)` 原地填充已有的对象、列表、数组和字典。
-- **池化反序列化**：给类加上 `[NinoPooled]`，Nino 就会反序列化到你用 `ReturnToPool()` 归还的实例中，并复用其中的列表、数组和字典。被丢弃的实例（数据为 `null`、列表变短、类型改变）会回到各自的池，或交给用 `NinoSettings.SetRecycler<T>` 注册的处理器。
+- **池化反序列化**：给类加上 `[NinoPooled]`，Nino 就会把数据反序列化到你用 `ReturnToPool()` 归还的实例中，并复用实例里的列表、数组和字典。被丢弃的实例（数据为 `null`、列表变短、类型改变）会回到各自的池，或交给用 `NinoSettings.SetRecycler<T>` 注册的处理器。
 - **`[NinoFactory]` 工厂方法**让 Nino 从你自己的对象池中获取新实例。
 
-参见 [复用反序列化与对象池](/zh/docs/v4/pooling)。
+参见[复用反序列化与对象池](/zh/docs/v4/pooling)。
 
 ### 数据演进 [#evolve-your-data]
-- **按需开启的版本容错**：`[NinoType(versionTolerant: true)]` 允许向最末端的派生类型追加成员，在任意嵌套深度都成立，旧代码会跳过它不认识的成员。
+- **按需开启的版本容错**：`[NinoType(versionTolerant: true)]` 允许向最末端的派生类型追加成员，嵌套多深都可以；旧代码会跳过它不认识的成员。
 - **键控成员**：`[NinoType(keyed: true)]` 按成员名的哈希写入成员，因此可以调整顺序、删除和插入。
 - **引用追踪**：`[NinoType(trackReferences: true)]` 保留共享引用和循环引用。
-- **深层对象图**：嵌套超过 128 层的对象会延后，从较浅的位置写入和读取，所以任意深度的递归类型以及恶意数据都不会导致栈溢出。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
+- **深层对象图**：嵌套超过 128 层的对象会推迟到较浅的层级再写入和读取，因此无论递归类型嵌套多深，还是遇到恶意数据，都不会栈溢出。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
 
 ### 更多类型，自由扩展 [#more-types-your-way]
 - **自定义集合**：派生自 `List<T>`、`HashSet<T>`、`Dictionary<TKey, TValue>` 等的类型，无需任何特性。
 - **更多内置类型**：.NET 6+ 上的 `PriorityQueue<TElement, TPriority>`，以及通过 `Nino.Immutable` 包支持的 `ImmutableArray<T>` / `ImmutableList<T>`。
-- **可扩展的格式化器**：用 `[assembly: NinoFormatter(typeof(MyFormatter<,>))]` 教 Nino 处理一个新类型（你自己的或第三方的）。类型参数和元素格式化器自动推断，生成的代码直接调用它，运行时也使用同一份注册信息。Nino 自带的 BCL 格式化器也是这样声明的。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
-- **子类型继承 `[NinoType]`**：自动从基类或接口继承。
+- **可扩展的格式化器**：用 `[assembly: NinoFormatter(typeof(MyFormatter<,>))]` 教 Nino 处理一个新类型（你自己的或第三方的）。类型参数和元素格式化器会自动推断，生成的代码直接调用它，运行时也使用同一份注册。Nino 自带的 BCL 格式化器也是这样声明的。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
+- **子类型继承 `[NinoType]`**：子类型自动从基类或接口继承该特性。
 
 ### 随处运行 [#runs-everywhere]
-- **到处都是同一种格式**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出完全相同的字节，数据在 CoreCLR、Mono、IL2CPP 之间以及 64 位和 32 位平台之间通用。
-- **无需初始化调用**：生成的注册表按需查找，热更新程序集（HybridCLR）直接可用。
-- **Unity**：源生成器随包附带，不用另外安装。
+- **处处同一格式**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出完全相同的字节，数据在 CoreCLR、Mono、IL2CPP 之间以及 64 位和 32 位平台之间通用。
+- **无需初始化调用**：生成的注册表在用到时才查找，所以热更新程序集（HybridCLR）直接可用。
+- **Unity**：源生成器随包附带，无需另外安装。
 
 ## 快速示例 [#quick-example]
 
@@ -149,5 +149,5 @@ packet.ReturnToPool();                                    // returning it twice 
   <Card title="从 v3 迁移" href="/zh/docs/v4/migration" description="逐步升级，附修改前后的代码。" />
   <Card title="设计文档" href="https://github.com/JasonXuDeveloper/Nino/blob/main/docs/v4-design.md" description="v4 的架构与二进制格式。" />
   <Card title="基准测试" href="/zh/docs/v4/perf" description="与 v3 和 MemoryPack 对比构建时间和运行性能的完整数据表。" />
-  <Card title="Nino 与 MemoryPack 对比" href="/zh/docs/v4/vs-memorypack" description="客观对比功能和性能。" />
+  <Card title="Nino 与 MemoryPack 对比" href="/zh/docs/v4/vs-memorypack" description="如实对比功能和性能。" />
 </Cards>

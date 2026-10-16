@@ -30,8 +30,8 @@ Both libraries can fill objects you already have instead of allocating new ones.
 
 | | Nino v4 vs MemoryPack |
 | --- | --- |
-| Serialize | **<BenchValue k="serialize.min" />–<BenchValue k="serialize.max" /> faster** where Nino leads; the gap is smallest on raw struct arrays, a block copy in both (per case in the chart) |
-| Deserialize | **<BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" /> faster** where Nino leads; raw struct arrays are close, and `Vector4[10000]` can favor MemoryPack (see below) |
+| Serialize | **<BenchValue k="serialize.min" />–<BenchValue k="serialize.max" /> faster** where Nino leads; the gap is smallest on raw struct arrays, which both copy as one block (see the chart for each case) |
+| Deserialize | **<BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" /> faster** where Nino leads; the two are close on raw struct arrays, and `Vector4[10000]` can favor MemoryPack (see below) |
 | Deserialize into existing / pooled instances | **0 B** allocated, up to **<BenchValue k="reuse.max" /> faster** than MemoryPack's overwrite mode |
 | Allocations when serializing | 0 B for both |
 | Payload size | About the same: `SimpleClass` is <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack |
@@ -80,7 +80,7 @@ Full tables: [Benchmarks](/en/docs/v4/perf).
 | Deserialize into an existing instance | ✅ reuses elements by index, merges dictionaries | ⚠️ arrays reused only at the same length; collections cleared and refilled |
 | Object pools | ✅ `[NinoPooled]`, factories, recycler for dropped instances | ⚠️ `MemoryPoolFormatter<T>` rents arrays from `ArrayPool` |
 | **Tooling** | | |
-| Analyzer | ✅ NINO001–NINO024, most with code fixes | ✅ MEMPACK001–MEMPACK035 |
+| Analyzer | ✅ NINO001–NINO024, many with code fixes | ✅ MEMPACK001–MEMPACK035 |
 | Compile-time call interception | ✅ Roslyn 4.8+ (.NET 8 SDK) | — not documented |
 | **I/O and integrations** | | |
 | `IBufferWriter<byte>` / `PipeWriter` | ✅ | ✅ |
@@ -97,30 +97,30 @@ Full tables: [Benchmarks](/en/docs/v4/perf).
 
 ## Where MemoryPack Is Ahead
 
-Plainly, these are things MemoryPack does and Nino v4 does not:
+To put it plainly, MemoryPack does these things and Nino v4 does not:
 
 - **More built-in types.** MemoryPack serializes `BigInteger`, `Uri`, `Version`, `StringBuilder`, `Type`, `BitArray`, `CultureInfo`, `TimeZoneInfo`, `Lazy<T>`, `Memory<T>`, `ReadOnlyMemory<T>`, `ReadOnlySequence<T>`, `ReadOnlyCollection<T>`, `ReadOnlyObservableCollection<T>`, `ILookup<,>`, `IGrouping<,>`, `BlockingCollection<T>` and every immutable collection. Nino has none of these (it has `ImmutableArray<T>` and `ImmutableList<T>` through `Nino.Immutable`). *Workaround:* a [custom formatter](/en/docs/v4/custom-formatters), or a serializable member that converts (`string` for `Uri`, `byte[]` for `BigInteger`).
 - **Unity class types.** `MemoryPack.Unity` serializes `AnimationCurve`, `Gradient` and `RectOffset`. Nino handles Unity's unmanaged structs (`Vector3`, `Quaternion`, `Color32`...) but no Unity classes. *Workaround:* a custom formatter.
 - **TypeScript and ASP.NET Core.** MemoryPack generates TypeScript readers and writers and provides MVC input/output formatters. Nino has neither.
-- **Dependency injection and options.** MemoryPack passes `MemoryPackSerializerOptions` (string encoding, an `IServiceProvider`) through every call. Nino has no per-call options; its settings are process-wide (`NinoSettings`) and per-type attributes.
+- **Dependency injection and options.** MemoryPack passes `MemoryPackSerializerOptions` (string encoding, an `IServiceProvider`) through every call. Nino has no per-call options: its settings are either process-wide (`NinoSettings`) or per-type attributes.
 
-Streams, async I/O, `ReadOnlySequence<byte>` input, serialization callbacks and compression are not on this list: each is a few lines over Nino's `IBufferWriter<byte>` and `ReadOnlySpan<byte>` APIs. See [Streams, Async, Callbacks and Compression](/en/docs/v4/advanced/streams) for ready-to-copy helpers.
+Streams, async I/O, `ReadOnlySequence<byte>` input, serialization callbacks and compression are not on this list: each takes a few lines on top of Nino's `IBufferWriter<byte>` and `ReadOnlySpan<byte>` APIs. See [Streams, Async, Callbacks and Compression](/en/docs/v4/advanced/streams) for ready-to-copy helpers.
 
 ## Type Ids and Union Tags
 
-MemoryPack writes a 1-byte union tag (3 bytes above 249) where Nino writes a 4-byte type id, and that is a deliberate trade:
+MemoryPack writes a 1-byte union tag (3 bytes above 249) where Nino writes a 4-byte type id. This is a deliberate trade-off:
 
-- Nino's id is derived from the type, an FNV-1a hash of its name, so subtypes need no tags. They can live in any assembly (a plugin, a HybridCLR hot update, a library that extends your base class), and ids never renumber when subtypes are added or removed.
-- MemoryPack lists every subtype on the base with `[MemoryPackUnion(tag, type)]`, or registers them by hand with a union formatter, and the tags must be kept stable by hand.
+- Nino derives the id from the type itself (an FNV-1a hash of its name), so subtypes need no tags. They can live in any assembly (a plugin, a HybridCLR hot update, a library that extends your base class), and ids never renumber when subtypes are added or removed.
+- MemoryPack lists every subtype on the base with `[MemoryPackUnion(tag, type)]`, or registers them by hand with a union formatter, and you have to keep the tags stable yourself.
 
 The cost is 3 more bytes per polymorphic value. See [Polymorphism](/en/docs/v4/polymorphism).
 
 ## Where Nino Is Ahead
 
 - **Speed**: up to <BenchValue k="serialize.max" /> faster serialization and up to <BenchValue k="deserialize.max" /> faster deserialization of classes and polymorphic graphs, with the numbers above.
-- **Zero-allocation reuse**: reuse deserialization that reuses nested objects, lists and dictionaries, `[NinoPooled]` pools, and a recycler for every instance that is dropped.
+- **Zero-allocation reuse**: reuse deserialization that fills nested objects, lists and dictionaries in place, `[NinoPooled]` pools, and a recycler for every dropped instance.
 - **Data that changes**: keyed members can be reordered, removed and inserted, in any class of a hierarchy; old code reads new data in both keyed and version-tolerant types.
-- **Polymorphism without bookkeeping**: no tags, any non-sealed class, subtypes in other assemblies and hot-update DLLs found automatically.
+- **Polymorphism without bookkeeping**: no tags, any non-sealed class can be a base, and subtypes in other assemblies and hot-update DLLs are found automatically.
 - **Portable, deterministic bytes**: identical on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, with padding zeroed.
 - **Wider reach**: `netstandard2.0`, OpenUPM for Unity, HybridCLR without init calls.
 - **Build time**: one generated file per type and a truly incremental generator.

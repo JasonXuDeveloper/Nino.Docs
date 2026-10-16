@@ -4,20 +4,20 @@ description: "Every diagnostic Nino reports while you type, NINO001 to NINO024, 
 icon: ShieldCheck
 ---
 
-Nino's analyzer ships with the source generator (the `Nino.Generator` package, and the Unity package) and reports mistakes as you type, in Visual Studio, Rider and VS Code, and in Unity's console when scripts compile. The generator itself reports nothing, so every problem shows up on your code rather than in generated files. Fixes marked ✅ are offered as code fixes in the IDE and can be applied to a whole document, project or solution at once.
+Nino's analyzer ships with the source generator (in the `Nino.Generator` package and the Unity package). It reports mistakes as you type in Visual Studio, Rider and VS Code, and in Unity's console when scripts compile. The generator itself reports nothing, so every problem shows up on your code rather than in generated files. Diagnostics marked ✅ come with a code fix in the IDE, which you can apply to a whole document, project or solution at once.
 
 ## Diagnostics
 
 | Id | Severity | Meaning | What to do | Code fix |
 | --- | --- | --- | --- | :---: |
-| [NINO001](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino001) | Error | The type cannot be named by generated code (not `public`/`internal`, `static`, or a `ref struct`) | Make the type and its containers `public` or `internal` | ✅ |
+| [NINO001](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino001) | Error | Generated code cannot name the type (it is not `public`/`internal`, or it is `static` or a `ref struct`) | Make the type and its containers `public` or `internal` | ✅ |
 | [NINO002](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino002) | Error | The type must be `partial`: it serializes non-public members (before .NET 8, or in a generic type), or it is `[NinoPooled]` | Make the type and its containers `partial` | ✅ |
 | [NINO003](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino003) | Warning | A subtype of a NinoType with `allowInheritance: false` is not serialized as itself | Add `[NinoType]` to the subtype | ✅ |
 | [NINO004](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino004) | Error | No usable constructor | Add a parameterless constructor, one whose parameters match members, or `[NinoConstructor]` |  |
 | [NINO005](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino005) | Error | A `[NinoConstructor]` parameter matches no serialized member | Rename the parameter or list the member names in the attribute |  |
 | [NINO006](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino006) | Warning | A read-only member is not a constructor parameter, so its value is read and dropped | Add it to the constructor, make it settable, or `[NinoIgnore]` it | ✅ |
 | [NINO007](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino007) | Warning | Member type cannot be serialized; the member is skipped | `[NinoIgnore]` it, or give it a custom formatter | ✅ |
-| [NINO008](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino008) | Error | `[NinoCustomFormatter]` is not a struct implementing `INinoFormatter<T>` for exactly the member type | Fix the formatter's type |  |
+| [NINO008](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino008) | Error | The `[NinoCustomFormatter]` type is not a struct that implements `INinoFormatter<T>` for exactly the member type | Fix the formatter's type |  |
 | [NINO009](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino009) | Error | Non-public `[NinoMember]` in a type without `containNonPublicMembers` | Remove `[NinoMember]` or set `containNonPublicMembers: true` | ✅ |
 | [NINO010](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino010) | Warning | Redundant `[NinoMember]` with `autoCollect: true` | Remove it | ✅ |
 | [NINO011](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino011) | Warning | Redundant `[NinoIgnore]` with `autoCollect: false` | Remove it | ✅ |
@@ -29,19 +29,19 @@ Nino's analyzer ships with the source generator (the `Nino.Generator` package, a
 | [NINO017](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino017) | Error | Invalid `[NinoFactory]` method | Make it `public static`, callable without arguments, returning the declaring type |  |
 | [NINO018](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino018) | Error | `[NinoPooled]` on a type that cannot be pooled (not a sealed class filled in place) | Seal the class and make its members assignable | ✅ |
 | [NINO019](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino019) | Error | `[NinoPooled]` class does not implement `OnNinoPoolWarmup` / `OnNinoPoolReturn` | Implement both partial methods (empty bodies are fine) | ✅ |
-| [NINO020](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino020) | Error | Invalid `[assembly: NinoFormatter]` registration; it is ignored | Register a struct implementing `INinoFormatter<P>` once, as an open generic definition, with inferable type parameters |  |
+| [NINO020](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino020) | Error | Invalid `[assembly: NinoFormatter]` registration; it is ignored | Register a struct that implements `INinoFormatter<P>` exactly once, as an open generic definition whose type parameters can be inferred |  |
 | [NINO021](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino021) | Error | `[NinoConstructor]` is `private` or `protected` | Make it `public` or `internal` |  |
 | [NINO022](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino022) | Warning | A non-public base member hidden with `new` cannot be reached; it is skipped | Rename one of the members, or make it public |  |
-| [NINO023](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino023) | Error | A struct serializes no member, so it would be written as zero bytes and a collection of it could not be read back | Serialize a member, or mark the struct `versionTolerant` or `keyed` |  |
-| [NINO024](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino024) | Warning | `[NinoFormerName]` on a member of a type that is not keyed has no effect: positional and version-tolerant types write no member names | Remove it, or make the type `keyed` |  |
+| [NINO023](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino023) | Error | A struct serializes no members, so it would be written as zero bytes and a collection of it could not be read back | Serialize a member, or mark the struct `versionTolerant` or `keyed` |  |
+| [NINO024](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino024) | Warning | `[NinoFormerName]` has no effect outside a keyed type: positional and version-tolerant types write no member names | Remove it, or make the type `keyed` |  |
 
-See the [diagnostics reference](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md) in the Nino repository for the full explanation of each id.
+The [diagnostics reference](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md) in the Nino repository explains each id in full.
 
-A member's `[NinoFormerName]`s are keys too, so a former name that is another member's name (or hashes like one) is NINO014. A former name equal to the member's own name is ignored. See [Renaming Keyed Members](/en/docs/v4/evolving-data#renaming-keyed-members).
+A member's `[NinoFormerName]`s are keys too, so a former name that equals another member's name (or has the same hash) triggers NINO014. A former name equal to the member's own name is ignored. See [Renaming Keyed Members](/en/docs/v4/evolving-data#renaming-keyed-members).
 
 ## Changing Severities
 
-Severities can be changed per project in `.editorconfig`:
+You can change severities per project in `.editorconfig`:
 
 ```ini title=".editorconfig"
 [*.cs]
@@ -50,4 +50,4 @@ dotnet_diagnostic.NINO006.severity = none
 
 ## Suppressed Compiler Warnings
 
-On .NET 8 and later, generated code reaches private members through `[UnsafeAccessor]`, which the compiler cannot see. Nino therefore suppresses these warnings on private members it serializes: CS0169, CS0414 and CS0649 ("never used / never assigned"), and IDE0044, IDE0051 and IDE0052 ("make readonly", "remove unused member").
+On .NET 8 and later, generated code reaches private members through `[UnsafeAccessor]`, and the compiler cannot see that access. Nino therefore suppresses these warnings on the private members it serializes: CS0169, CS0414 and CS0649 ("never used / never assigned"), and IDE0044, IDE0051 and IDE0052 ("make readonly", "remove unused member").
