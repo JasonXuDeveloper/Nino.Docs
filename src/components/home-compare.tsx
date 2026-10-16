@@ -135,7 +135,7 @@ function Pair({
   );
 }
 
-/** Allocation as a container: Nino's stays empty, MemoryPack's is full */
+/** Allocation as a grid of blocks: Nino's are all empty, MemoryPack's all filled */
 function Allocation({
   label,
   bytes,
@@ -149,13 +149,21 @@ function Allocation({
     <span className="flex items-center gap-2.5 text-xs">
       <span
         aria-hidden="true"
-        className={cn(
-          'size-7 shrink-0 rounded-[3px] border',
-          full
-            ? 'border-transparent bg-[var(--nino-chart-other)]'
-            : 'border-dashed border-fd-muted-foreground/60',
-        )}
-      />
+        className="grid size-8 shrink-0 grid-cols-4 grid-rows-4 gap-px"
+      >
+        {Array.from({ length: 16 }, (_, i) => (
+          <span
+            // biome-ignore lint/suspicious/noArrayIndexKey: fixed cells
+            key={i}
+            className={cn(
+              'rounded-[1px]',
+              full
+                ? 'bg-[var(--nino-chart-other)]'
+                : 'border border-fd-muted-foreground/30',
+            )}
+          />
+        ))}
+      </span>
       <span className="flex flex-col leading-tight">
         <span
           className={cn(
