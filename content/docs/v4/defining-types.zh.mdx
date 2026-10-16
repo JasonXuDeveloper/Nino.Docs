@@ -115,7 +115,7 @@ public NinoTypeAttribute(
       default: 'true',
     },
     versionTolerant: {
-      description: <>以后可以向此类型或任意基类追加成员。参见<a href="/zh/docs/v4/evolving-data#version-tolerance">版本兼容</a>。</>,
+      description: <>以后可以向最末端的派生类型追加成员；追加到基类的成员会让子类的成员错位。参见<a href="/zh/docs/v4/evolving-data#version-tolerance">版本容错</a>。</>,
       type: 'bool',
       default: 'false',
     },
@@ -238,7 +238,7 @@ public class Ordered
 
 <Callout type="warn">
 
-调整顺序、插入或删除成员（或修改索引）都会让之前写出的数据无法读取。如果数据需要长期保存，请提前规划[版本兼容或键控成员](/zh/docs/v4/evolving-data)。
+调整顺序、插入或删除成员（或修改索引）都会让之前写出的数据无法读取。如果数据需要长期保存，请提前规划[版本容错或键控成员](/zh/docs/v4/evolving-data)。
 
 </Callout>
 
@@ -256,7 +256,7 @@ public class ChatMessage
 }
 ```
 
-该特性作用于这个成员的格式化器直接写出的所有字符串：成员本身，以及集合或元组成员中的 `string` 元素、键、值和元组项（`List<string>`、`string[]`、`Dictionary<string, int>`、`(string, int)`）。嵌套的 `[NinoType]` 内部的字符串仍按那个类型自己的设置编码；成员中不含字符串时，该特性不起作用。读写双方必须一致：以 UTF-8 写出的数据，不能由一个没有给该成员标 `[NinoUtf8]` 的类型读取。两种编码写入的长度都是字符数而不是字节数，因此 UTF-8 字符串只需一次解码，直接写进按最终长度分配的字符串（参见[二进制格式](/zh/docs/v4/platforms#binary-format)）。
+该特性作用于这个成员的格式化器直接写出的所有字符串：成员本身，以及集合或元组成员中的 `string` 元素、键、值和元组项（`List<string>`、`string[]`、`Dictionary<string, int>`、`(string, int)`）。嵌套的 `[NinoType]` 内部的字符串仍按那个类型自己的设置编码；成员中不含字符串时，该特性不起作用。读写双方必须一致：以 UTF-8 写出的数据，不能由一个没有给该成员标 `[NinoUtf8]` 的类型读取。UTF-8 字符串会同时写入字符数和字节数，因此读取时可以按最终长度分配字符串，再把它的字节一遍转码进去（参见[二进制格式](/zh/docs/v4/platforms#binary-format)）。
 
 ## 曾用名 [#former-name]
 
@@ -273,11 +273,11 @@ public class ItemRenamed
 
 曾用名使用全名的**运行时形式**：`Namespace.Type`，嵌套类型与外层类型之间用 `+` 连接（`Namespace.Outer+Inner`），不带 `global::`。类型 ID 由曾用名计算，所以改名后的类型仍写出旧读取方认识的 ID，而读取方用新旧两个名字都能找到它。`NinoTypeId.Of(typeof(T))` 可以查看某个类型写出的 ID。
 
-在 `keyed` 类型的字段或属性上，`[NinoFormerName("OldName")]`（可重复使用）可以继续读取以成员旧名称写出的数据，参见[重命名键控成员](/zh/docs/v4/evolving-data#renaming-keyed-members)。按位置和版本兼容的类型不写成员名，重命名成员时什么都不用做。
+在 `keyed` 类型的字段或属性上，`[NinoFormerName("OldName")]`（可重复使用）可以继续读取以成员旧名称写出的数据，参见[重命名键控成员](/zh/docs/v4/evolving-data#renaming-keyed-members)。按位置和版本容错的类型不写成员名，重命名成员时什么都不用做。
 
 ## 结构体 [#structs]
 
-`[NinoType]` 结构体没有任何头部。当它是非托管类型、未启用 `versionTolerant` 或 `keyed`、使用默认的顺序布局、没有自定义成员格式化器，并且每个实例字段都参与序列化时，会按**原始内存**写入：单个值一次拷贝，它的数组和列表也是整块拷贝。否则逐个成员写入。
+`[NinoType]` 结构体没有任何头部。当它是非托管类型、未启用 `versionTolerant` 或 `keyed`、使用默认的顺序布局、没有自定义成员格式化器，并且每个实例字段都参与序列化时，会按**原始内存**写入：单个值一次拷贝，它的数组和列表也是整块拷贝。否则逐个成员写入。无论哪种情况，只要所有成员都是非托管值或这样的结构体，它就是[固定大小的](/zh/docs/v4/performance#fixed-size-types)：`NinoSerializer.Serialize(value)` 会把它直接写进大小正好的 `byte[]`。
 
 ```csharp
 [NinoType]
@@ -334,7 +334,7 @@ public record struct Pair<TKey, TValue>(TKey Key, TValue Value);
 
 ## 继承 [#inheritance]
 
-子类型会从最近的 `[NinoType]` 基类或接口继承 `[NinoType]` 及其选项；如果想给子类型单独设置选项，在子类型上再加一个 `[NinoType]` 即可。子类型自己的 `[NinoType]` 会取代继承来的选项，所以需要保留的选项要重新写上：例如版本兼容基类的子类型应写成 `[NinoType(versionTolerant: true)]`。唯一的例外是 `trackReferences`：只要类本身或任意一个 `[NinoType]` 基类、接口要求追踪，这个类就会被追踪，与它自己的特性怎么写无关，因此启用了追踪的继承体系始终保持追踪。参见[多态](/zh/docs/v4/polymorphism)。
+子类型会从最近的 `[NinoType]` 基类或接口继承 `[NinoType]` 及其选项；如果想给子类型单独设置选项，在子类型上再加一个 `[NinoType]` 即可。子类型自己的 `[NinoType]` 会取代继承来的选项，所以需要保留的选项要重新写上：例如版本容错基类的子类型应写成 `[NinoType(versionTolerant: true)]`。唯一的例外是 `trackReferences`：只要类本身或任意一个 `[NinoType]` 基类、接口要求追踪，这个类就会被追踪，与它自己的特性怎么写无关，因此启用了追踪的继承体系始终保持追踪。参见[多态](/zh/docs/v4/polymorphism)。
 
 ## 下一步 [#next]
 

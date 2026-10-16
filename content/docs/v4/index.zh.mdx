@@ -31,7 +31,7 @@ GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
 - **热路径零 GC。** 序列化到复用的缓冲区不分配内存；[反序列化到已有对象或池化实例](/zh/docs/v4/pooling)同样零分配。
 - **一切在编译期完成。** 源生成器为每个类型生成一个格式化器，因此 IL2CPP、NativeAOT 和 HybridCLR 都能直接使用。使用 .NET 8 SDK 及以上版本编译时，调用会被[拦截器](/zh/docs/v4/performance#interceptors)直接导向对应的格式化器。生成器是增量的：修改一个类型只会重新生成这个类型，生成代码的编译也远快于 v3（参见[构建时间](/zh/docs/v4/v3-vs-v4#build-time-and-generated-code)）。
 - **多态无需标签。** 声明为基类或接口的值，读回来仍是它的实际类型。类型 ID 由类型名哈希得到，不用维护标签表，其他程序集里的子类型也能自动找到。详见[多态](/zh/docs/v4/polymorphism)。
-- **数据可以演进。** 每个类型可以单独选择[版本兼容](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）、[键控成员](/zh/docs/v4/evolving-data#keyed-members)（增删、重排成员）或[引用追踪](/zh/docs/v4/reference-tracking)（共享引用和循环引用）。不启用的类型没有任何额外开销。
+- **数据可以演进。** 每个类型可以单独选择[版本容错](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）、[键控成员](/zh/docs/v4/evolving-data#keyed-members)（增删、重排成员）或[引用追踪](/zh/docs/v4/reference-tracking)（共享引用和循环引用）。不启用的类型没有任何额外开销。
 - **各平台字节一致。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出的字节完全相同，CoreCLR、Mono、IL2CPP 以及 32 位和 64 位平台之间都能互读。Unity 客户端和 .NET 服务端可以直接交换数据。详见[平台与二进制格式](/zh/docs/v4/platforms)。
 - **线程安全。** `NinoSerializer` 和 `NinoDeserializer` 的所有方法都可以在任意多个线程上同时调用，热路径上没有锁。
 - **写代码时就发现错误。** 共 24 条[分析器诊断](/zh/docs/v4/analyzers)（NINO001–NINO024），多数提供一键修复。
@@ -43,7 +43,7 @@ GameData copy = NinoDeserializer.Deserialize<GameData>(bytes);
 | **Unity**（Mono、IL2CPP、HybridCLR） | 支持 Unity 2022.3 及以上版本，从 OpenUPM 安装，自带源生成器。`Vector3`、`Quaternion`、`Color32` 等非托管结构体按原始内存拷贝。热更新程序集无需初始化调用。详见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)。 |
 | **Godot 4（.NET）** | 普通的 NuGet 包。Godot 的数学结构体都是非托管类型，按原始内存拷贝。详见 [Godot](/zh/docs/v4/platforms#godot)。 |
 | **游戏服务器与网络** | 直接序列化到 `PipeWriter` 等 `IBufferWriter<byte>`，从 `ReadOnlySpan<byte>` 反序列化，消息对象可以池化复用。详见[网络层](/zh/docs/v4/advanced/networking)。 |
-| **存档与持久化** | 键控和版本兼容类型能跨版本读取；引用追踪保留完整的对象图。详见[存档与持久化](/zh/docs/v4/advanced/persistence)。 |
+| **存档与持久化** | 键控和版本容错类型能跨版本读取；引用追踪保留完整的对象图。详见[存档与持久化](/zh/docs/v4/advanced/persistence)。 |
 | **服务、缓存与进程间通信** | 数据紧凑，每次调用不分配内存，可在 ASP.NET Core、后台任务和 Actor 中并发使用。详见[高性能序列化](/zh/docs/v4/advanced/high-performance)。 |
 
 ## 什么时候不适合 [#when-not-to-use-it]

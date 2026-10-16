@@ -62,8 +62,8 @@ v4 新增：复用反序列化，把数据填充到已有的对象中，需要�
   <Card icon={<Zap />} title="拦截器" href="/zh/docs/v4/performance#interceptors">
     在 Roslyn 4.8+（.NET 8 SDK 及以上）下，类型已知的调用会直达生成的格式化器。始终开启；Unity（使用 Roslyn 4.3 版本）和更旧的编译器走常规路径，写出的字节相同。
   </Card>
-  <Card icon={<KeyRound />} title="键控成员与版本兼容" href="/zh/docs/v4/evolving-data">
-    `keyed: true` 允许调整顺序、删除和插入成员；`versionTolerant: true` 允许追加成员，基类也可以追加。
+  <Card icon={<KeyRound />} title="键控成员与版本容错" href="/zh/docs/v4/evolving-data">
+    `keyed: true` 允许调整顺序、删除和插入成员；`versionTolerant: true` 允许追加成员，每个对象只多 4 字节。
   </Card>
   <Card icon={<Share2 />} title="trackReferences" href="/zh/docs/v4/reference-tracking">
     共享引用和循环引用都能原样读回，每个被追踪的对象只多 4 字节。
@@ -93,7 +93,7 @@ v4 新增：复用反序列化，把数据填充到已有的对象中，需要�
 - **分析器与代码修复**：写代码时就报告错误（NINO001–NINO024），许多附带一键修复。参见[诊断列表](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)。
 
 ### 运行更快 [#faster-to-run]
-- **结构体格式化器可被 JIT/AOT 编译器内联**；非托管 `[NinoType]` 结构体及其数组和列表直接拷贝原始内存；除结果对象外不产生任何分配。
+- **结构体格式化器可被 JIT/AOT 编译器内联**；非托管 `[NinoType]` 结构体及其数组和列表直接拷贝原始内存；除结果对象外不产生任何分配。[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)直接写进大小正好的 `byte[]`。
 - **新版编译器上的拦截器**：在 Roslyn 4.8+（.NET 8 SDK 及以上）下，类型已知的 `NinoSerializer`/`NinoDeserializer` 调用会在编译期直接改为调用生成的格式化器（没有虚调用）。始终开启，无需配置；旧版编译器走常规路径，写出的字节相同。参见[拦截器](/zh/docs/v4/performance#interceptors)。
 - **线程安全、缓存友好**：注册表无锁，采用写时复制；热路径上没有共享的可变状态。
 
@@ -105,7 +105,7 @@ v4 新增：复用反序列化，把数据填充到已有的对象中，需要�
 参见 [复用反序列化与对象池](/zh/docs/v4/pooling)。
 
 ### 数据演进 [#evolve-your-data]
-- **按需开启的版本兼容**：`[NinoType(versionTolerant: true)]` 允许在该类型或任意一层基类的末尾追加成员。
+- **按需开启的版本容错**：`[NinoType(versionTolerant: true)]` 允许向最末端的派生类型追加成员，在任意嵌套深度都成立，旧代码会跳过它不认识的成员。
 - **键控成员**：`[NinoType(keyed: true)]` 按成员名的哈希写入成员，因此可以调整顺序、删除和插入。
 - **引用追踪**：`[NinoType(trackReferences: true)]` 保留共享引用和循环引用。
 - **深层对象图**：嵌套超过 128 层的对象会延后，从较浅的位置写入和读取，所以任意深度的递归类型以及恶意数据都不会导致栈溢出。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
