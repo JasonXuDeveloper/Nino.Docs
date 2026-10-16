@@ -12,6 +12,7 @@ import { Link, redirect } from 'react-router';
 import { LLMCopyButton, ViewOptions } from '@/components/ai/page-actions';
 import { handlePageFeedback } from '@/components/feedback/actions';
 import { Feedback } from '@/components/feedback/client';
+import { LastUpdated } from '@/components/last-updated';
 import { getLocale, type Locale } from '@/lib/i18n';
 import { baseOptions } from '@/lib/layout.shared';
 import { source } from '@/lib/source';
@@ -78,7 +79,10 @@ interface ContentProps {
 }
 
 const clientLoader = browserCollections.docs.createClientLoader<ContentProps>({
-  component({ default: Mdx, frontmatter, toc }, { lang, path, url }) {
+  component(
+    { default: Mdx, frontmatter, toc, lastModified },
+    { lang, path, url },
+  ) {
     const title = `${frontmatter.title} | Nino`;
 
     return (
@@ -103,6 +107,7 @@ const clientLoader = browserCollections.docs.createClientLoader<ContentProps>({
         <DocsBody>
           <Mdx components={getMDXComponents()} />
         </DocsBody>
+        <LastUpdated date={lastModified} lang={lang} />
         <Feedback onSendAction={handlePageFeedback} />
       </DocsPage>
     );
