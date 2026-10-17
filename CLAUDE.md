@@ -20,7 +20,7 @@ bun run deploy         # build + wrangler pages deploy
 bun run format         # Biome format
 ```
 
-Cloudflare Pages builds with the Node version in `.node-version` and the Bun version in the Pages environment variable `BUN_VERSION` (set it to the Bun version used locally; there is no Wrangler file on purpose, since with one Pages ignores the dashboard's variables; the build image's default, 1.2.15, cannot read the version 2 `bun.lock` that Bun 1.3+ writes, and `bun install --frozen-lockfile` then fails the deploy).
+Cloudflare Pages builds with the Node version in `.node-version` and the Bun version in `BUN_VERSION` under `vars` in `wrangler.jsonc` (keep it at the Bun version used locally; with a Wrangler file Pages ignores the dashboard's text variables, and the file is needed for `nodejs_compat`, which `src/lib/github.ts` uses through `node:crypto`; the build image's default, 1.2.15, cannot read the version 2 `bun.lock` that Bun 1.3+ writes, and `bun install --frozen-lockfile` then fails the deploy).
 
 ## Repository Structure
 
@@ -49,7 +49,8 @@ Cloudflare Pages builds with the Node version in `.node-version` and the Bun ver
 ├── functions/                 # Pages Functions: [[path]].ts (locale redirect, Markdown), api/feedback.ts
 ├── public/                    # favicons, og image, _redirects, _headers, _routes.json
 ├── app/entry.server.tsx       # prerender: wait for everything, no outlined Suspense chunks
-└── react-router.config.ts     # prerenders every .mdx page
+├── react-router.config.ts     # prerenders every .mdx page
+└── wrangler.jsonc             # Cloudflare Pages (pages_build_output_dir, nodejs_compat, BUN_VERSION)
 ```
 
 ## Content Conventions
