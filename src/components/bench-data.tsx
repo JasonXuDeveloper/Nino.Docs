@@ -27,12 +27,7 @@ function caseName(row: RuntimeCase, zh: boolean) {
   return row.code ? <code>{name}</code> : name;
 }
 
-function ratioCell(
-  ratio: number | undefined,
-  zh: boolean,
-  against: string,
-  tooFast?: boolean,
-) {
+function ratioCell(ratio: number | undefined, zh: boolean, tooFast?: boolean) {
   if (tooFast)
     return (
       <>
@@ -43,7 +38,8 @@ function ratioCell(
   if (ratio === undefined) return zh ? '持平' : 'on par';
   const r = ratio.toFixed(2);
   if (ratio > 1) return <strong>{zh ? `快 ${r} 倍` : `${r}× faster`}</strong>;
-  return zh ? `${r} 倍（${against} 更快）` : `${r}× (${against} faster)`;
+  // v4 not ahead: a dash, as in Nino's README and docs/v4-benchmarks.md (the times show it).
+  return '—';
 }
 
 /** Where the numbers come from, with a link to the release or the local report */
@@ -110,19 +106,15 @@ export function RuntimeTable({
               <td className="text-right tabular-nums">{row.v4.text}</td>
               <td className="text-right tabular-nums">{row.memorypack.text}</td>
               <td className="text-right tabular-nums">
-                {ratioCell(row.ratio, zh, 'MemoryPack', row.tooFast)}
+                {ratioCell(row.ratio, zh, row.tooFast)}
               </td>
               {withV3 && (
                 <td className="text-right tabular-nums">
                   {row.v3TooFast
-                    ? ratioCell(undefined, zh, 'v3', true)
+                    ? ratioCell(undefined, zh, true)
                     : row.vsV3 === undefined
                       ? '—'
-                      : ratioCell(
-                          isOnPar(row.vsV3) ? undefined : row.vsV3,
-                          zh,
-                          'v3',
-                        )}
+                      : ratioCell(isOnPar(row.vsV3) ? undefined : row.vsV3, zh)}
                 </td>
               )}
             </tr>

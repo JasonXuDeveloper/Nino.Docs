@@ -92,10 +92,8 @@ function mpBadge(row: RuntimeCase, zh: boolean) {
   const r = ratioText(row.ratio);
   if (row.ratio >= 1)
     return { text: zh ? `快 ${r} 倍` : `${r}× faster`, tone: 'win' as const };
-  return {
-    text: zh ? `${r} 倍：MemoryPack 更快` : `${r}×: MemoryPack faster`,
-    tone: 'loss' as const,
-  };
+  // v4 not ahead: no badge, as in Nino's README and docs/v4-benchmarks.md (the times show it).
+  return undefined;
 }
 
 function memoryPackChart(
@@ -135,7 +133,7 @@ function memoryPackChart(
         caseLabel(row, zh),
         row.v4.text,
         row.memorypack.text,
-        mpBadge(row, zh).text,
+        mpBadge(row, zh)?.text ?? '—',
       ]),
     },
   };
@@ -223,10 +221,7 @@ function v3Badge(v3Ns: number, v4Ns: number, zh: boolean) {
       text: zh ? `比 v3 快 ${r} 倍` : `${r}× faster than v3`,
       tone: 'win' as const,
     };
-  return {
-    text: zh ? `${r} 倍：v3 更快` : `${r}×: v3 faster`,
-    tone: 'loss' as const,
-  };
+  return undefined;
 }
 
 /** Nino v4 vs v3 3.3.13 from V3_RUNTIME; null until it has been measured */
@@ -268,7 +263,7 @@ function v3Chart(
         caseLabel(e.row, zh),
         formatTime(e.v4Ns),
         formatTime(e.v3Ns),
-        v3Badge(e.v3Ns, e.v4Ns, zh).text,
+        v3Badge(e.v3Ns, e.v4Ns, zh)?.text ?? '—',
       ]),
     },
   };
