@@ -266,7 +266,7 @@ namespace MyApp.Protocol
 
 `[NinoType]` 结构体没有任何头部。满足以下条件时，它按**原始内存**写入（单个值一次拷贝，数组和列表整块拷贝）：
 
-- 是非托管类型，并使用默认的顺序布局；
+- 是非托管类型，并使用顺序布局（默认就是顺序布局，设不设 `Pack` 和 `Size` 都可以；`LayoutKind.Explicit` 和 `LayoutKind.Auto` 的结构体不按原始内存写入）；
 - 格式不是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，也没有自定义成员格式化器；
 - 每个实例字段都参与序列化，而且这些字段本身也按原始字节写入（不是 `Nullable<T>`、元组、`nint`、`DateTimeOffset`，也不是非原始内存的 `[NinoType]` 结构体）。
 

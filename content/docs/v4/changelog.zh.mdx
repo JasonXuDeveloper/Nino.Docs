@@ -7,6 +7,24 @@ icon: RotateCcwClock
 
 这里按从新到旧的顺序，列出 v4 各版本之间的变化。v4 相对 v3 的全部变化见 [v4 新特性](/zh/docs/v4/whats-new)。每个 GitHub Release 也会列出它包含的全部提交。
 
+## 4.0.0-rc.3
+
+尚未发布。
+
+### 二进制格式 [#wire-format-1]
+
+只有下面这种类型写出的字节和 rc.2 不同。
+
+- **另一个程序集里带 `[StructLayout(LayoutKind.Explicit)]` 的 `[NinoType]` 结构体**，现在无论怎么构建都逐个成员写出。IDE 或项目引用把它当作源码时本来就是这样；通过 NuGet 包引用或在命令行构建时，rc.2 会把它按原始内存整体拷贝（[#202](https://github.com/JasonXuDeveloper/Nino/issues/202)）。
+
+### 新功能 [#new-1]
+
+- **布局元数据里写出原始字节**：`[assembly: NinoTypeLayout]` 现在会写出每个按原始内存拷贝的值的大小和字段偏移，不是 `[NinoType]` 的结构体也一样，所以改了字段、`Pack`、`Size` 或 `[FieldOffset]`，布局都会跟着变。原始成员原来写作 `raw(n)` 或 `raw`，现在写作 `raw(n){name:type@offset:encoding,...}`；原始内存结构体的成员部分就是它的原始布局。参见[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)（[#202](https://github.com/JasonXuDeveloper/Nino/issues/202)）。
+
+### 修复 [#fixes-1]
+
+- **会读取另一个程序集里结构体的 `[StructLayout]` 和 `[FieldOffset]`。** 对于来自 NuGet 包的类型，Roslyn 不会把它们当作特性给出，所以生成器以前把这类结构体都当成顺序布局。带显式字段偏移的结构体因此可能被按原始内存拷贝，而它的大小在 64 位和 32 位运行时上不一样（[#202](https://github.com/JasonXuDeveloper/Nino/issues/202)）。
+
 ## 4.0.0-rc.2
 
 ### 二进制格式 [#wire-format]
