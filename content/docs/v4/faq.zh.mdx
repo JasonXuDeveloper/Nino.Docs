@@ -24,6 +24,8 @@ Nino 是通用的高性能 C# / .NET 二进制序列化库。给类型加上 `[N
 
 不使用反射：源生成器在编译期为每个类型生成一个格式化器，因此 Nino 可以在不支持运行时代码生成的 IL2CPP、NativeAOT 和 HybridCLR 环境中使用。参见[性能指南](/zh/docs/v4/performance)。
 
+Nino.Core 还带有裁剪和 Native AOT 标注：用 `PublishTrimmed` 或 `PublishAot` 发布时，Nino 不会产生任何警告。在 Native AOT 下，Nino 只使用生成器写好的格式化器，所以要序列化的每个类型都必须出现在生成器看得到的代码里（作为成员类型，或作为 `Serialize`、`Deserialize` 调用的类型参数）。只在运行时才出现的类型会抛出一个指明该类型的错误，不会读写出错误的数据。
+
 ## Nino 和 MemoryPack 相比有多快？ [#how-fast-is-nino-compared-with-memorypack]
 
 在同一次基准测试中，Nino v4 的序列化最高比 MemoryPack 快 <BenchValue k="serialize.max" />，类与多态对象图的反序列化最高快 <BenchValue k="deserialize.max" />；原始结构体数组上两者持平。序列化到复用的缓冲区时零分配。参见[基准测试](/zh/docs/v4/perf)和 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)。

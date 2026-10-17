@@ -24,6 +24,8 @@ The runtime targets `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0`. 
 
 No reflection: the generator writes one formatter per type at compile time, so Nino works under IL2CPP, NativeAOT and HybridCLR, where runtime code generation is unavailable. See [Performance Guide](/en/docs/v4/performance).
 
+Nino.Core is also annotated for trimming and Native AOT: publishing with `PublishTrimmed` or `PublishAot` gives no warnings from Nino. Under Native AOT, Nino uses only the formatters the generator wrote, so every type you serialize must appear in code the generator sees (as a member type, or as the type argument of a `Serialize` or `Deserialize` call). A type that only exists at run time fails with an error that names it, never with wrong data.
+
 ## How fast is Nino compared with MemoryPack?
 
 In the same benchmark run, Nino v4 serializes up to <BenchValue k="serialize.max" /> faster than MemoryPack and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; on raw struct arrays the two are on par. Serializing into a reused buffer allocates nothing. See [Benchmarks](/en/docs/v4/perf) and [Nino vs MemoryPack](/en/docs/v4/vs-memorypack).
