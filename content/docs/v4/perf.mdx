@@ -108,7 +108,7 @@ Three more benchmark classes compare features that change how a type is written,
 
 - **Reference tracking** ([`ReferenceTest`](#referencetest)): a graph of 200 nodes with shared objects and cycles. Nino uses `[NinoType(trackReferences: true)]`, MemoryPack `GenerateType.CircularReference`.
 - **Version tolerance** ([`VersionTolerantTest`](#versiontoleranttest)): `SimpleClass`'s members in a type that can gain members later, alone and as an array of 100. Nino uses `format: NinoFormat.VersionTolerant` (one length per object), MemoryPack `GenerateType.VersionTolerant` (a length per member).
-- **Fixed-size types** ([`FixedSizeTest`](#fixedsizetest)): a 40-byte struct, the same members in a sealed class, and an array of 100 of the classes, through the `byte[]` APIs of both libraries, so allocating the result is part of every call. Deserializing the struct is a single copy, too short to measure reliably, and is not shown. MemoryPack is slightly ahead when serializing the struct: it takes the value by reference (`in T`) and copies it into the new array, while Nino takes it by value (`T`) and first copies the 40 bytes to the stack, where they survive the call that allocates the array.
+- **Fixed-size types** ([`FixedSizeTest`](#fixedsizetest)): a 40-byte struct, the same members in a sealed class, and an array of 100 of the classes, through the `byte[]` APIs of both libraries, so allocating the result is part of every call. Deserializing the struct is a single copy, too short to measure reliably, and is not shown.
 
 <ExtraRuntimeTables lang="en" />
 

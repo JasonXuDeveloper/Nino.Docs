@@ -26,14 +26,14 @@ icon: Swords
 | | Nino v4 对比 MemoryPack |
 | --- | --- |
 | 序列化 | Nino 领先的用例中**快 <BenchValue k="serialize.min" />–<BenchValue k="serialize.max" />**；差距最小的是非托管结构体数组，两者都是整块拷贝（各用例见图表） |
-| 反序列化 | Nino 领先的用例中**快 <BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" />**；非托管结构体数组两者相差不大，`Vector4[10000]` 可能是 MemoryPack 更快（见下文） |
+| 反序列化 | Nino 领先的用例中**快 <BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" />**；非托管结构体数组两者持平，都是整块拷贝（见下文） |
 | 反序列化到已有 / 池化实例 | 分配 **0 B**，最高比 MemoryPack 的覆盖模式**快 <BenchValue k="reuse.max" />** |
 | 序列化时的内存分配 | 两者都是 0 B |
 | 数据大小 | 基本相同：`SimpleClass` 在 Nino 中为 <BenchValue k="payload.v4" /> 字节，在 MemoryPack 中为 <BenchValue k="payload.memorypack" /> 字节 |
 
-<Callout type="info" title="MemoryPack 更快的情况">
+<Callout type="info" title="非托管结构体数组">
 
-反序列化 `Vector4[10000]` 时，MemoryPack 可能更快。每次调用都要在大对象堆上分配一个 160 KB 的数组，所以这一项测到的主要是第 2 代垃圾回收，结果每次运行都有波动。拷贝本身在两个库中都只是一次 `memcpy`。
+两个库都把这类数组整块拷贝，所以两者持平。反序列化 `Vector4[10000]` 时每次调用都要在大对象堆上分配一个 160 KB 的数组，这一项测到的主要是第 2 代垃圾回收，结果每次运行都有波动；拷贝本身在两个库中都只是一次 `memcpy`。
 
 </Callout>
 

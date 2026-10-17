@@ -26,14 +26,14 @@ Measured with BenchmarkDotNet, both libraries in the same run. Bars show time re
 | | Nino v4 vs MemoryPack |
 | --- | --- |
 | Serialize | **<BenchValue k="serialize.min" />–<BenchValue k="serialize.max" /> faster** where Nino leads; the gap is smallest on arrays of unmanaged structs, which both copy as one block (see the chart for each case) |
-| Deserialize | **<BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" /> faster** where Nino leads; the two are close on arrays of unmanaged structs, and `Vector4[10000]` can favor MemoryPack (see below) |
+| Deserialize | **<BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" /> faster** where Nino leads; on par on arrays of unmanaged structs, which both copy as one block (see below) |
 | Deserialize into existing / pooled instances | **0 B** allocated, up to **<BenchValue k="reuse.max" /> faster** than MemoryPack's overwrite mode |
 | Allocations when serializing | 0 B for both |
 | Payload size | About the same: `SimpleClass` is <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack |
 
-<Callout type="info" title="Where MemoryPack is faster">
+<Callout type="info" title="Arrays of unmanaged structs">
 
-Deserializing `Vector4[10000]` can favor MemoryPack. Each call allocates a 160 KB array on the large object heap, so the case mostly measures gen-2 garbage collections and varies between runs. The copy itself is one `memcpy` in both libraries.
+Both libraries copy these as one block, so they are on par. Deserializing `Vector4[10000]` allocates a 160 KB array on the large object heap per call, so that case mostly measures gen-2 garbage collections and varies between runs; the copy itself is one `memcpy` in both.
 
 </Callout>
 

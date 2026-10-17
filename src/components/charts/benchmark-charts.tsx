@@ -8,6 +8,7 @@ import {
   build,
   formatBytes,
   formatTime,
+  isOnPar,
   payload,
   type RuntimeCase,
   reuse,
@@ -199,7 +200,7 @@ function reuseChart(zh: boolean): BarChartProps {
 }
 
 function v3Badge(vsV3: number, zh: boolean) {
-  if (Math.abs(vsV3 - 1) < 0.05)
+  if (isOnPar(vsV3))
     return { text: zh ? '与 v3 持平' : 'on par with v3', tone: 'par' as const };
   const r = ratioText(vsV3);
   if (vsV3 > 1)

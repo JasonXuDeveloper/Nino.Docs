@@ -93,10 +93,15 @@ function measure(method: string): Measure | undefined {
 
 const bytes = (method: string) => rows.get(method)?.allocatedBytes ?? null;
 
-/** Two decimals; within 5% counts as on par */
+/** A ratio within 5% of 1 (0.95–1.05 at two decimals) is on par: below the run-to-run noise */
+export function isOnPar(ratio: number) {
+  return Math.round(Math.abs(ratio - 1) * 100) <= 5;
+}
+
+/** Two decimals; undefined when on par */
 function ratioOf(slower: number, faster: number) {
   const ratio = Math.round((slower / faster) * 100) / 100;
-  return Math.abs(ratio - 1) < 0.05 ? undefined : ratio;
+  return isOnPar(ratio) ? undefined : ratio;
 }
 
 /* ------------------------------------------------------------------ */

@@ -9,6 +9,7 @@ import {
   formatBytes,
   formatRatio,
   formatTime,
+  isOnPar,
   payload,
   type RuntimeCase,
   ratioRange,
@@ -104,7 +105,7 @@ export function RuntimeTable({
                   {row.vsV3 === undefined
                     ? '—'
                     : ratioCell(
-                        Math.abs(row.vsV3 - 1) < 0.05 ? undefined : row.vsV3,
+                        isOnPar(row.vsV3) ? undefined : row.vsV3,
                         zh,
                         'v3',
                       )}

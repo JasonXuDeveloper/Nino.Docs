@@ -108,7 +108,7 @@ Nino 把数据反序列化到已有的对象图中（[复用反序列化](/zh/do
 
 - **引用追踪**（[`ReferenceTest`](#referencetest)）：一张 200 个节点的对象图，带共享对象和环。Nino 使用 `[NinoType(trackReferences: true)]`，MemoryPack 使用 `GenerateType.CircularReference`。
 - **版本容错**（[`VersionTolerantTest`](#versiontoleranttest)）：把 `SimpleClass` 的成员放进一个以后还能添加成员的类型，单个对象和 100 个的数组各测一次。Nino 使用 `format: NinoFormat.VersionTolerant`（每个对象一个长度），MemoryPack 使用 `GenerateType.VersionTolerant`（每个成员一个长度）。
-- **固定大小的类型**（[`FixedSizeTest`](#fixedsizetest)）：一个 40 字节的结构体、成员相同的密封类，以及这种类的 100 个元素的数组，都通过两个库返回 `byte[]` 的 API 测量，所以每次调用都包含分配结果数组的开销。反序列化这个结构体只是一次拷贝，耗时太短，无法可靠测量，因此不列出。序列化这个结构体时 MemoryPack 略快：它按引用接收值（`in T`），直接拷进新数组；Nino 按值接收（`T`），这 40 字节要先拷到栈上，才能跨过分配数组的那次调用。
+- **固定大小的类型**（[`FixedSizeTest`](#fixedsizetest)）：一个 40 字节的结构体、成员相同的密封类，以及这种类的 100 个元素的数组，都通过两个库返回 `byte[]` 的 API 测量，所以每次调用都包含分配结果数组的开销。反序列化这个结构体只是一次拷贝，耗时太短，无法可靠测量，因此不列出。
 
 <ExtraRuntimeTables lang="zh" />
 
