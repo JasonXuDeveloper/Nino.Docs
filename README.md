@@ -25,7 +25,7 @@ The site is a Cloudflare Pages project, set up like JEngine's docs: every page i
 | Project name | `nino` |
 | Build command | `bun run build` |
 | Build output directory | `build/client` |
-| Compatibility flags | `nodejs_compat` (from `wrangler.jsonc`) |
+| Environment variable | `BUN_VERSION` = the Bun version used locally (the build image's default, 1.2.15, cannot read the version 2 `bun.lock`) |
 
 Each docs page shows a "last updated" date: the date of the last commit that touched its `.mdx` file (fumadocs-mdx `lastModified`, from `git log`). Pages may build from a shallow clone, so `bun run build` first runs `scripts/git-history.ts`, which fetches the full history (`git fetch --unshallow`). If that fails, or there is no git, the build still succeeds and pages show no date rather than a wrong one; look for `[git-history]` in the build log.
 
