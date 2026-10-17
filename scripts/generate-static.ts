@@ -262,7 +262,7 @@ const llmsCopy: Record<
 > = {
   en: {
     facts: [
-      'Install: `dotnet add package Nino` (NuGet: https://www.nuget.org/packages/Nino); Unity: `openupm add com.jasonxudeveloper.nino`',
+      'Install: `dotnet add package Nino --prerelease` (NuGet: https://www.nuget.org/packages/Nino); Unity: `openupm add com.jasonxudeveloper.nino`',
       'Usage: mark a class, struct, record or interface with `[NinoType]`, then call `NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)`',
       `Source code and issues: ${githubUrl} (MIT license)`,
       `These docs describe Nino ${latestVersion}, the current version. Its binary format is not compatible with v3.`,
@@ -277,7 +277,7 @@ const llmsCopy: Record<
     facts: [
       // URLs are Markdown links: bare URLs followed by full-width punctuation
       // (。）：) are misread by link extractors.
-      '安装：`dotnet add package Nino`（[NuGet](https://www.nuget.org/packages/Nino)）；Unity：`openupm add com.jasonxudeveloper.nino`',
+      '安装：`dotnet add package Nino --prerelease`（[NuGet](https://www.nuget.org/packages/Nino)）；Unity：`openupm add com.jasonxudeveloper.nino`',
       '用法：用 `[NinoType]` 标记类、结构体、记录或接口，然后调用 `NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)`',
       `源码与问题反馈：[GitHub](${githubUrl})（MIT 协议）`,
       `本文档对应当前版本 Nino ${latestVersion}，其二进制格式与 v3 不兼容。`,

@@ -217,7 +217,7 @@ export default function HomePage({ params }: Route.ComponentProps) {
             </div>
 
             <code className="mt-4 rounded-md border bg-fd-secondary/50 px-3 py-1.5 font-mono text-sm text-fd-muted-foreground">
-              dotnet add package Nino
+              dotnet add package Nino --prerelease
             </code>
           </div>
         </section>

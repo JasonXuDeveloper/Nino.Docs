@@ -82,7 +82,11 @@ const text: Record<
     about:
       'Nino is a general-purpose, high-performance binary serializer for C# and .NET. A Roslyn source generator writes the serialization code at compile time, so there is no reflection, it runs under IL2CPP and NativeAOT, and serializing into a reused buffer allocates nothing.',
     facts: [
-      { label: 'Install', value: 'dotnet add package Nino', code: true },
+      {
+        label: 'Install',
+        value: 'dotnet add package Nino --prerelease',
+        code: true,
+      },
       {
         label: 'Unity',
         value: 'openupm add com.jasonxudeveloper.nino',
@@ -193,7 +197,7 @@ const text: Record<
       {
         question: 'How do I install Nino?',
         answer:
-          'Run dotnet add package Nino in a .NET project, or openupm add com.jasonxudeveloper.nino in a Unity project. Nino is free and MIT licensed.',
+          'Run dotnet add package Nino --prerelease in a .NET project, or openupm add com.jasonxudeveloper.nino in a Unity project. Nino is free and MIT licensed.',
         href: 'start',
       },
     ],
@@ -205,7 +209,11 @@ const text: Record<
     about:
       'Nino 是通用的高性能 C# / .NET 二进制序列化库。Roslyn 源生成器在编译期生成序列化代码，没有反射，可在 IL2CPP 和 NativeAOT 下运行，序列化到复用的缓冲区时零分配。',
     facts: [
-      { label: '安装', value: 'dotnet add package Nino', code: true },
+      {
+        label: '安装',
+        value: 'dotnet add package Nino --prerelease',
+        code: true,
+      },
       {
         label: 'Unity',
         value: 'openupm add com.jasonxudeveloper.nino',
@@ -313,7 +321,7 @@ const text: Record<
       {
         question: '如何安装 Nino？',
         answer:
-          '在 .NET 项目中运行 dotnet add package Nino；Unity 项目中运行 openupm add com.jasonxudeveloper.nino。Nino 免费，采用 MIT 协议。',
+          '在 .NET 项目中运行 dotnet add package Nino --prerelease；Unity 项目中运行 openupm add com.jasonxudeveloper.nino。Nino 免费，采用 MIT 协议。',
         href: 'start',
       },
     ],
