@@ -6,6 +6,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type * as PageTree from 'fumadocs-core/page-tree';
+import { headlineSerialize } from '../src/lib/benchmarks';
 import type { Locale } from '../src/lib/i18n';
 import { pageBodyMarkdown } from '../src/lib/markdown';
 import { docDescription, markdownPath } from '../src/lib/seo';
@@ -263,7 +264,13 @@ const llmsCopy: Record<
   en: {
     facts: [
       'Install: `dotnet add package Nino --prerelease` (NuGet: https://www.nuget.org/packages/Nino); Unity: `openupm add com.jasonxudeveloper.nino`',
+      'v4 is still a prerelease on NuGet: without `--prerelease`, NuGet installs the stable 3.9.x, a test build of v4 features that is not compatible with v4.',
       'Usage: mark a class, struct, record or interface with `[NinoType]`, then call `NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)`',
+      ...(headlineSerialize
+        ? [
+            `Performance: up to ${headlineSerialize}× faster serialization than MemoryPack in the same benchmark run; see [Nino vs MemoryPack](${siteUrl}/en/docs/${latestVersion}/vs-memorypack)`,
+          ]
+        : []),
       `Source code and issues: ${githubUrl} (MIT license)`,
       `These docs describe Nino ${latestVersion}, the current version. Its binary format is not compatible with v3.`,
       `Full text of the ${latestVersion} docs: [llms-full.txt](${siteUrl}/llms-full.txt); Chinese: [llms.zh.txt](${siteUrl}/llms.zh.txt)`,
@@ -278,7 +285,13 @@ const llmsCopy: Record<
       // URLs are Markdown links: bare URLs followed by full-width punctuation
       // (。）：) are misread by link extractors.
       '安装：`dotnet add package Nino --prerelease`（[NuGet](https://www.nuget.org/packages/Nino)）；Unity：`openupm add com.jasonxudeveloper.nino`',
+      'v4 在 NuGet 上仍是预发行版：不加 `--prerelease` 时 NuGet 会安装稳定版 3.9.x，它是测试 v4 功能的过渡版本，与 v4 不兼容。',
       '用法：用 `[NinoType]` 标记类、结构体、记录或接口，然后调用 `NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)`',
+      ...(headlineSerialize
+        ? [
+            `性能：在同一次基准测试中，序列化最高比 MemoryPack 快 ${headlineSerialize} 倍；参见 [Nino 对比 MemoryPack](${siteUrl}/zh/docs/${latestVersion}/vs-memorypack)`,
+          ]
+        : []),
       `源码与问题反馈：[GitHub](${githubUrl})（MIT 协议）`,
       `本文档对应当前版本 Nino ${latestVersion}，其二进制格式与 v3 不兼容。`,
       `${latestVersion} 文档全文：[llms-full.zh.txt](${siteUrl}/llms-full.zh.txt)。英文版：[llms.txt](${siteUrl}/llms.txt)`,

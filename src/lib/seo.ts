@@ -196,7 +196,7 @@ export function homeMeta({
           downloadUrl: nugetUrl,
           installUrl: nugetUrl,
           softwareRequirements:
-            '.NET Standard 2.0 or later; Unity 2022.3 or later; Roslyn 4.3 or later for the source generator',
+            '.NET Standard 2.0 or later; Unity 2022.3 or later; Roslyn 4.3 or later and C# 9 or later for the source generator',
           offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
         },
       },
