@@ -44,7 +44,7 @@ The baseline is v3 **3.3.13**, the last v3 release, on a synthetic project of 33
 
 <BenchmarkChart chart="compile" lang="en" table={false} />
 
-v3 inlined the body of every subtype into each polymorphic base and re-generated every type on every edit. v4 emits each body once and grows linearly: about 3.5 KB of source and 2 ms of compile time per type. Editing a type in the IDE re-generates that type only.
+v3 inlined the body of every subtype into each polymorphic base and re-generated every type on every edit. v4 emits each body once and grows linearly: about 4 KB of source and 2 to 3 ms of compile time per type. Editing a type in the IDE re-generates that type only.
 
 Each stage, for 330 and 1,100 types, with the harness and how the times were taken: [Build Time and Generated Code](/en/docs/v4/perf#build-time-and-generated-code).
 
@@ -54,4 +54,4 @@ Nino v4 is measured against v3 3.3.13 from NuGet, back to back on the same machi
 
 <BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="en" />
 
-Serializing classes is clearly faster. Deserializing is on par with v3. Its cost is dominated by allocating the result objects, and v4 also handles reference tracking, reuse deserialization and payload validation on top of that. Arrays of structs with padding serialize a few nanoseconds slower, because v4 zeroes the padding to keep the output deterministic; a struct without padding (see [Struct Layout](/en/docs/v4/performance#struct-layout)) copies as fast as in v3. v4 also does something v3 could not: it deserializes into existing and pooled instances, allocating **0 B** per call. See [What's New in v4](/en/docs/v4/whats-new).
+Serializing classes is clearly faster. Deserializing classes is a little faster than v3, by less than the run-to-run noise. Its cost is dominated by allocating the result objects, and v4 also handles reference tracking, reuse deserialization and payload validation on top of that. Arrays of structs with padding serialize a few nanoseconds slower, because v4 zeroes the padding to keep the output deterministic; a struct without padding (see [Struct Layout](/en/docs/v4/performance#struct-layout)) copies as fast as in v3. v4 also does something v3 could not: it deserializes into existing and pooled instances, allocating **0 B** per call. See [What's New in v4](/en/docs/v4/whats-new).

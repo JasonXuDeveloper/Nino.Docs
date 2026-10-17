@@ -211,9 +211,10 @@ export function v3SourceNote(zh: boolean): string | null {
   const env = V3_RUNTIME.environment
     ? environmentLabel(V3_RUNTIME.environment)
     : '';
+  const local = V3_RUNTIME.origin === 'local';
   if (zh)
-    return `Nino 3.3.13（NuGet）在 Nino ${tag} 的基准测试${runs > 1 ? '之前和之后各运行一次' : '之前运行'}，同一个 CI 任务、同一台机器、相同设置${runs > 1 ? '；v3 取两次的平均值' : ''}。${env ? `${env}。` : ''}`;
-  return `Nino 3.3.13 (NuGet) ran ${runs > 1 ? 'before and after' : 'before'} the Nino ${tag} benchmark in the same CI job, on the same machine with the same settings${runs > 1 ? '; v3 is the mean of the two runs' : ''}.${env ? ` ${env}.` : ''}`;
+    return `Nino 3.3.13（NuGet）在 Nino ${tag} 的基准测试${runs > 1 ? '之前和之后各运行一次' : '之前运行'}，${local ? '' : '同一个 CI 任务、'}同一台机器、相同设置${runs > 1 ? '；v3 取两次的平均值' : ''}。${env ? `${env}。` : ''}`;
+  return `Nino 3.3.13 (NuGet) ran ${runs > 1 ? 'before and after' : 'before'} the Nino ${tag} benchmark${local ? '' : ' in the same CI job'}, on the same machine with the same settings${runs > 1 ? '; v3 is the mean of the two runs' : ''}.${env ? ` ${env}.` : ''}`;
 }
 
 function buildCase(op: 'serialize' | 'deserialize', info: CaseInfo) {
@@ -415,7 +416,7 @@ export const payload = {
 /**
  * The one way to print a ratio. Runtime ratios (computed from the raw means)
  * always show two decimals ("4.33×"); build-time ratios are whole numbers or
- * as published ("289×", "7.9×").
+ * as published ("289×", "4.2×").
  */
 export const formatRatio = (value: number) => `${value.toFixed(2)}×`;
 export const formatBuildRatio = (value: number) => `${value}×`;
@@ -443,26 +444,26 @@ export const build: BuildMeasure[] = [
     zh: '生成的源码',
     short: { en: 'smaller generated source', zh: '生成的源码更小' },
     v3: '18.7 MB',
-    v4: '1.15 MB',
-    ratio: 16,
+    v4: '1.31 MB',
+    ratio: 14,
     better: 'smaller',
   },
   {
     en: 'Compiling the generated code (emit)',
     zh: '编译生成的代码（emit）',
     short: { en: 'faster to compile (emit)', zh: '编译（emit）更快' },
-    v3: '56.0 s',
-    v4: '1.27 s',
-    ratio: 44,
+    v3: '43.9 s',
+    v4: '1.10 s',
+    ratio: 40,
     better: 'faster',
   },
   {
     en: 'Running the generator',
     zh: '运行生成器',
     short: { en: 'faster generator run', zh: '生成器运行更快' },
-    v3: '1.11 s',
-    v4: '0.14 s',
-    ratio: 7.9,
+    v3: '1.34 s',
+    v4: '0.32 s',
+    ratio: 4.2,
     better: 'faster',
   },
   {
@@ -472,9 +473,9 @@ export const build: BuildMeasure[] = [
       en: 'faster re-generation after editing a member',
       zh: '修改成员后重新生成更快',
     },
-    v3: '1.31 s',
-    v4: '0.19 s',
-    ratio: 6.9,
+    v3: '1.11 s',
+    v4: '0.09 s',
+    ratio: 12,
     better: 'faster',
   },
   {
@@ -484,18 +485,18 @@ export const build: BuildMeasure[] = [
       en: 'faster re-generation after editing a comment',
       zh: '修改注释后重新生成更快',
     },
-    v3: '1.11 s',
-    v4: '0.19 s',
-    ratio: 5.8,
+    v3: '1.06 s',
+    v4: '0.10 s',
+    ratio: 11,
     better: 'faster',
   },
   {
     en: 'IL of the generated code',
     zh: '生成代码的 IL',
     short: { en: 'smaller IL', zh: 'IL 更小' },
-    v3: '2.2 MB',
-    v4: '0.37 MB',
-    ratio: 6,
+    v3: '2.21 MB',
+    v4: '0.41 MB',
+    ratio: 5.3,
     better: 'smaller',
   },
 ];
@@ -510,7 +511,7 @@ export const vsV3Build = build.map((row) => ({
 /** Build cost at 1,100 types (N = 100), v3.3.13 vs v4 (docs/v4-benchmarks.md) */
 export const buildLarge = {
   types: 1100,
-  source: { v3: '62.0 MB', v4: '3.9 MB', v3n: 62, v4n: 3.9, ratio: 16 },
+  source: { v3: '62.0 MB', v4: '4.37 MB', v3n: 62, v4n: 4.37, ratio: 14 },
   emit: { v3: '636 s', v4: '2.2 s', v3n: 636, v4n: 2.2, ratio: 289 },
 };
 

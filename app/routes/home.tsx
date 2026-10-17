@@ -70,7 +70,7 @@ const copy: Record<
       {
         icon: Hammer,
         label: 'Incremental generator',
-        text: 'One file per type and 16× less code than v3; editing a type re-generates only that type.',
+        text: 'One file per type and 14× less code than v3; editing a type re-generates only that type.',
       },
       {
         icon: Globe,
@@ -121,7 +121,7 @@ const copy: Record<
       {
         icon: Hammer,
         label: '增量生成器',
-        text: '每个类型一个文件，生成的代码只有 v3 的 1/16；修改一个类型只重新生成这个类型。',
+        text: '每个类型一个文件，生成的代码只有 v3 的 1/14；修改一个类型只重新生成这个类型。',
       },
       {
         icon: Globe,
