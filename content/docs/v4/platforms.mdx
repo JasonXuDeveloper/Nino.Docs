@@ -141,4 +141,6 @@ var logic = context.LoadFromAssemblyPath(path);
 context.Unload(); // Nino clears what it cached for the assembly here
 ```
 
-`NinoRegistry.Remove(assembly)` does the same cleanup by hand, for other runtimes or to make sure it has happened before you unload. Call it only once nothing serializes or deserializes the assembly's types any more; Nino cannot handle them afterwards. A formatter that the unloaded assembly declares for a type of **another** assembly (an `[assembly: NinoFormatter]` for a type in a shared library) stays registered once Nino has used it, so put such formatters in the shared library.
+The net8.0 and net10.0 builds of Nino.Core do this, and a project targeting .NET 8 or later gets one of them. The netstandard builds (Unity, .NET Core 3.x to .NET 7) cannot reach `AssemblyLoadContext`, so they don't clean up on their own.
+
+`NinoRegistry.Remove(assembly)` does the same cleanup by hand, on those builds or to make sure it has happened before you unload. Call it only once nothing serializes or deserializes the assembly's types any more; Nino cannot handle them afterwards. A formatter that the unloaded assembly declares for a type of **another** assembly (an `[assembly: NinoFormatter]` for a type in a shared library) stays registered once Nino has used it, so put such formatters in the shared library.

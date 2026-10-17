@@ -141,4 +141,6 @@ var logic = context.LoadFromAssemblyPath(path);
 context.Unload(); // Nino clears what it cached for the assembly here
 ```
 
-也可以手动调用 `NinoRegistry.Remove(assembly)` 做同样的清理，适用于其他运行时，或者想在卸载前确认已经清理干净的情况。调用前要确保已经没有代码在序列化或反序列化这个程序集的类型，调用之后 Nino 就不能再处理这些类型了。另外，被卸载的程序集如果为**其他**程序集的类型声明了格式化器（例如为共享库里的类型写的 `[assembly: NinoFormatter]`），只要 Nino 用过，它就会一直保留，所以这类格式化器应该放在共享库里。
+这个自动清理由 Nino.Core 的 net8.0 / net10.0 版本完成，面向 .NET 8 及以上的项目会自动用到这两个版本。netstandard 版本（Unity，以及 .NET Core 3.x 到 .NET 7）没法使用 `AssemblyLoadContext`，所以不会自动清理。
+
+这种情况下，可以手动调用 `NinoRegistry.Remove(assembly)` 做同样的清理；想在卸载前确认已经清理干净时，也可以这样调用。调用前要确保已经没有代码在序列化或反序列化这个程序集的类型，调用之后 Nino 就不能再处理这些类型了。另外，被卸载的程序集如果为**其他**程序集的类型声明了格式化器（例如为共享库里的类型写的 `[assembly: NinoFormatter]`），只要 Nino 用过，它就会一直保留，所以这类格式化器应该放在共享库里。
