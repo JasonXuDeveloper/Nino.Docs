@@ -131,7 +131,7 @@ Generated code avoids forwarding facades on purpose: interpreters such as Hybrid
 
 ## Unloading Assemblies
 
-A server that hot-reloads its logic loads it into a collectible `AssemblyLoadContext` and unloads the old context on each reload. On .NET 8 and later, when the context of an assembly with generated Nino code starts unloading, Nino clears everything it cached for that assembly: its registry, the formatters, type ids and layouts of its types, its polymorphic subtypes and its `[assembly: NinoFormatter]` registrations. The old context can then be collected, and the new version of the same types loads without type id collisions.
+A server that hot-reloads its logic loads it into a collectible `AssemblyLoadContext` and unloads the old context on each reload. On .NET 8 and later, when the context of an assembly with generated Nino code starts unloading, Nino clears everything it cached for that assembly: its registry, the formatters, type ids and raw memory layouts of its types, its polymorphic subtypes and its `[assembly: NinoFormatter]` registrations. The old context can then be collected, and the new version of the same types loads without type id collisions.
 
 ```csharp
 var context = new AssemblyLoadContext("logic", isCollectible: true);
@@ -141,6 +141,13 @@ var logic = context.LoadFromAssemblyPath(path);
 context.Unload(); // Nino clears what it cached for the assembly here
 ```
 
-The net8.0 and net10.0 builds of Nino.Core do this, and a project targeting .NET 8 or later gets one of them. The netstandard builds (Unity, .NET Core 3.x to .NET 7) cannot reach `AssemblyLoadContext`, so they don't clean up on their own.
+The net8.0 and net10.0 builds of Nino.Core do this, and a project targeting .NET 8 or later gets one of them. A project on .NET Core 3.0 to .NET 7 gets the netstandard2.1 build, which cannot reach `AssemblyLoadContext`: there, call `NinoRegistry.Remove(assembly)` yourself before unloading, and the context is collected just the same.
 
-`NinoRegistry.Remove(assembly)` does the same cleanup by hand, on those builds or to make sure it has happened before you unload. Call it only once nothing serializes or deserializes the assembly's types any more; Nino cannot handle them afterwards. A formatter that the unloaded assembly declares for a type of **another** assembly (an `[assembly: NinoFormatter]` for a type in a shared library) stays registered once Nino has used it, so put such formatters in the shared library.
+```csharp
+NinoRegistry.Remove(logic); // .NET Core 3.0 to .NET 7
+context.Unload();
+```
+
+On .NET 8 and later, `Remove` does nothing more than the automatic cleanup; call it only to be sure the cleanup has happened before you unload. Unity (Mono and IL2CPP), HybridCLR and .NET Framework cannot unload a single assembly at all, so `Remove` does not make one unloadable there.
+
+Call `Remove` only once nothing serializes or deserializes the assembly's types any more; Nino cannot handle them afterwards. A formatter that the unloaded assembly declares for a type of **another** assembly (an `[assembly: NinoFormatter]` for a type in a shared library) stays registered once Nino has used it, so put such formatters in the shared library.

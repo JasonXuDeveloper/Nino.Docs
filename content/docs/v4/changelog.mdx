@@ -1,0 +1,27 @@
+---
+title: Changelog
+seoTitle: "Changelog – Nino v4 Release by Release"
+description: "What changed in each Nino v4 release: new APIs, fixes, and every change to the bytes Nino writes, newest first."
+icon: History
+---
+
+What changed from one v4 release to the next, newest first. For everything v4 changed since v3, see [What's New in v4](/en/docs/v4/whats-new). Each GitHub release also lists every commit it contains.
+
+## 4.0.0-rc.2
+
+### Wire Format [#wire-format]
+
+Only the types described below write different bytes than with rc.1.
+
+- **A `[NinoType]` struct from another assembly whose members are auto-properties** (a positional `record struct`, for example) is now copied as raw memory in every build. rc.1 did so when the IDE or a project reference saw the struct as source, but not when it came from a package or a command-line build, which wrote it member by member. A struct, array or list that contains such a struct can therefore write different bytes than an rc.1 package or command-line build: where the struct has padding, the raw copy includes it, zeroed ([#200](https://github.com/JasonXuDeveloper/Nino/issues/200)).
+- **`nint` and `nuint` members are serialized on netstandard** (Unity included). rc.1 skipped them there with NINO007; they are now written as 8 bytes, as on .NET 7 and later.
+
+### New [#new]
+
+- **Layout metadata**: the generator records how each `[NinoType]` is written as an `[assembly: NinoTypeLayout]`, so tools can compare layouts between builds. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata) ([#197](https://github.com/JasonXuDeveloper/Nino/issues/197)).
+- **Unloading assemblies**: `NinoRegistry.Remove(assembly)` clears everything Nino cached for an assembly, so a collectible `AssemblyLoadContext` can unload it. On .NET 8 and later this happens on its own when the context unloads. See [Unloading Assemblies](/en/docs/v4/platforms#unloading-assemblies) ([#199](https://github.com/JasonXuDeveloper/Nino/issues/199)).
+- **Your own buffer pool**: `new NinoArrayBufferWriter(initialCapacity, pool)` rents its arrays from the `ArrayPool<byte>` you pass in. See [Reusing a Buffer](/en/docs/v4/basic#reusing-a-buffer) ([#198](https://github.com/JasonXuDeveloper/Nino/issues/198)).
+
+## 4.0.0-rc.1
+
+The first release candidate. Data written by the v4 betas and previews cannot be read by it; see [Behavior Changes since the v4 Betas](/en/docs/v4/migration#behavior-changes-since-the-v4-betas) for everything that changed since them.

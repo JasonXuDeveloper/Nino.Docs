@@ -344,6 +344,6 @@ When clients and servers are not always on the same build, choose the format wit
 - A reused or pooled message is filled in place, so there a missing field keeps the value of the **previous** message: reset such fields in `OnNinoPoolReturn`, or do not reuse instances while old peers are connected.
 - A peer that receives a **message type it does not know** cannot deserialize it: the call throws an `InvalidOperationException` (unknown type id). Negotiate a protocol version in your handshake and only send new message types to peers that announced support; `NinoTypeId.Of(typeof(T))` gives the id of each message type if you want to exchange the list.
 - If both sides always ship together (two services deployed as one unit, a game client and its dedicated server), stay positional: it is the smallest and fastest format.
-- To catch a change that old peers would misread before it ships, compare your message types' [layout metadata](/en/docs/v4/evolving-data#layout-metadata) with the last release's in CI.
+- To see every change to what your messages write before it ships, record the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) of each message type and of every type it contains in CI, compare it with the last release's, and check each difference against the table above.
 
 See [Evolving Your Data](/en/docs/v4/evolving-data) for the exact rules.

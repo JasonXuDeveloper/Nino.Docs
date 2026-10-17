@@ -141,6 +141,13 @@ var logic = context.LoadFromAssemblyPath(path);
 context.Unload(); // Nino clears what it cached for the assembly here
 ```
 
-这个自动清理由 Nino.Core 的 net8.0 / net10.0 版本完成，面向 .NET 8 及以上的项目会自动用到这两个版本。netstandard 版本（Unity，以及 .NET Core 3.x 到 .NET 7）没法使用 `AssemblyLoadContext`，所以不会自动清理。
+这个自动清理由 Nino.Core 的 net8.0 / net10.0 版本完成，面向 .NET 8 及以上的项目会自动用到这两个版本。.NET Core 3.0 到 .NET 7 的项目用的是 netstandard2.1 版本，它没法使用 `AssemblyLoadContext`，所以要在卸载前自己调用 `NinoRegistry.Remove(assembly)`，之后上下文一样能被回收。
 
-这种情况下，可以手动调用 `NinoRegistry.Remove(assembly)` 做同样的清理；想在卸载前确认已经清理干净时，也可以这样调用。调用前要确保已经没有代码在序列化或反序列化这个程序集的类型，调用之后 Nino 就不能再处理这些类型了。另外，被卸载的程序集如果为**其他**程序集的类型声明了格式化器（例如为共享库里的类型写的 `[assembly: NinoFormatter]`），只要 Nino 用过，它就会一直保留，所以这类格式化器应该放在共享库里。
+```csharp
+NinoRegistry.Remove(logic); // .NET Core 3.0 to .NET 7
+context.Unload();
+```
+
+在 .NET 8 及以上版本，`Remove` 做的事和自动清理一样，只在想确认卸载前已经清理干净时才需要调用。Unity（Mono 和 IL2CPP）、HybridCLR 和 .NET Framework 本身就不能单独卸载某个程序集，调用 `Remove` 也不会让程序集变得可以卸载。
+
+调用 `Remove` 前要确保已经没有代码在序列化或反序列化这个程序集的类型，调用之后 Nino 就不能再处理这些类型了。另外，被卸载的程序集如果为**其他**程序集的类型声明了格式化器（例如为共享库里的类型写的 `[assembly: NinoFormatter]`），只要 Nino 用过，它就会一直保留，所以这类格式化器应该放在共享库里。

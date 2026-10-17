@@ -42,7 +42,7 @@ icon: ChartColumn
 - **序列化**测试写入一个只创建一次、每次调用前重置的缓冲区写入器（Nino 用 `NinoArrayBufferWriter`，其他库用 `ArrayBufferWriter<byte>`），因此测的是序列化本身，而不是数组分配。
 - **反序列化**测试读取各个库在启动时写好的字节，每次调用都创建新对象。
 - **复用**测试反序列化到已经存在的对象中：Nino 通过 `ref` 和 `[NinoPooled]` 对象池，MemoryPack 用它的覆盖模式。
-- **v3** 运行的是同一个 `SimpleTest`，但编译时引用的是 NuGet 上的 Nino 3.3.13，在同一台机器上紧挨着 v4 的运行之前跑一次。两次运行都包含 MemoryPack，它前后两次耗时的差别就是机器本身的波动。每张 v3 图表下方都注明了数据来自哪次运行。
+- **v3** 运行的是同一个 `SimpleTest`，但编译时引用的是 NuGet 上的 Nino 3.3.13，在同一台机器上、紧接在 v4 之前运行一次。两次运行都包含 MemoryPack，它前后两次耗时的差别就是机器本身的波动。每张 v3 图表下方都注明了数据来自哪次运行。
 
 每个基准测试的代码见[基准测试代码](#benchmark-code)。
 
@@ -882,7 +882,7 @@ public FixedClass MemoryPackDeserializeFixedClass() =>
 克隆 [Nino 仓库](https://github.com/JasonXuDeveloper/Nino)，准备好 .NET 10 SDK 和 Python 3：
 
 ```shell
-# runtime, as published: v3 3.3.13, then the full v4 suite, then v3 again (about 40 minutes)
+# runtime, as published: v3 3.3.13, then the full v4 suite (about 40 minutes)
 benchmarks/run.sh
 
 # runtime, v4 only, a subset
