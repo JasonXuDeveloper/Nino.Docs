@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Segmented } from '@/components/showcase';
 import {
   build,
+  FLOOR_NS,
   formatBytes,
   formatTime,
   isOnPar,
@@ -76,7 +77,16 @@ const gcNote = {
   zh: '† Vector4[10000] 每次调用都在大对象堆上分配 160 KB 的数组，因此主要测量的是第 2 代垃圾回收，结果随运行波动。拷贝本身在两个库中都是一次 memcpy。',
 };
 
+/** v4 under FLOOR_NS against a measurable time; `than` names the other side where the badges do */
+const tooFastBadge = (zh: boolean, than?: string) => ({
+  text: zh
+    ? `${than ? `比 ${than} ` : ''}更快（快到测不出）`
+    : `faster${than ? ` than ${than}` : ''} (too fast to measure)`,
+  tone: 'win' as const,
+});
+
 function mpBadge(row: RuntimeCase, zh: boolean) {
+  if (row.tooFast) return tooFastBadge(zh);
   if (row.ratio === undefined)
     return { text: zh ? '持平' : 'on par', tone: 'par' as const };
   const r = ratioText(row.ratio);
@@ -199,7 +209,12 @@ function reuseChart(zh: boolean): BarChartProps {
   };
 }
 
-function v3Badge(vsV3: number, zh: boolean) {
+function v3Badge(v3Ns: number, v4Ns: number, zh: boolean) {
+  if (v4Ns < FLOOR_NS)
+    return v3Ns < FLOOR_NS
+      ? { text: zh ? '与 v3 持平' : 'on par with v3', tone: 'par' as const }
+      : tooFastBadge(zh, 'v3');
+  const vsV3 = v3Ns / v4Ns;
   if (isOnPar(vsV3))
     return { text: zh ? '与 v3 持平' : 'on par with v3', tone: 'par' as const };
   const r = ratioText(vsV3);
@@ -225,7 +240,6 @@ function v3Chart(
     return measured ? [{ row, ...measured }] : [];
   });
   if (entries.length === 0) return null;
-  const vs = (e: (typeof entries)[number]) => e.v3Ns / e.v4Ns;
   const v3Note = v3SourceNote(zh);
   return {
     title: zh
@@ -240,7 +254,7 @@ function v3Chart(
       code: e.row.code,
       values: { v4: e.v4Ns / e.v3Ns, v3: 1 },
       text: { v4: formatTime(e.v4Ns), v3: formatTime(e.v3Ns) },
-      badge: v3Badge(vs(e), zh),
+      badge: v3Badge(e.v3Ns, e.v4Ns, zh),
     })),
     axisLabel: zh ? '相对耗时（v3 = 1.0）' : 'Relative time (v3 = 1.0)',
     tickFormat: rel,
@@ -254,7 +268,7 @@ function v3Chart(
         caseLabel(e.row, zh),
         formatTime(e.v4Ns),
         formatTime(e.v3Ns),
-        v3Badge(vs(e), zh).text,
+        v3Badge(e.v3Ns, e.v4Ns, zh).text,
       ]),
     },
   };

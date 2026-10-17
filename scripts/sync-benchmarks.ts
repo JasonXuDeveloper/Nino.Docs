@@ -250,7 +250,8 @@ export function parseV3Section(body: string) {
       const match = /^(Serialize|Deserialize)(\w+)$/.exec(row[name] ?? '');
       const v3Ns = parseTime(row[v3Col] ?? '');
       const v4Ns = parseTime(row[v4Col] ?? '');
-      if (!match || v3Ns === null || v4Ns === null || v3Ns <= 0 || v4Ns <= 0)
+      // v4 may read 0.00 ns: too fast to measure (src/lib/benchmarks.ts, FLOOR_NS)
+      if (!match || v3Ns === null || v4Ns === null || v3Ns <= 0 || v4Ns < 0)
         continue;
       const key = `${match[1].toLowerCase()}:${match[2]}`;
       v3[key] = [...(v3[key] ?? []), v3Ns];

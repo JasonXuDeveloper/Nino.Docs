@@ -69,6 +69,15 @@ export const benchRows: readonly BenchRow[] = (bench.rows as BenchRow[]).filter(
   (row) => !hiddenMethods.has(row.method),
 );
 
+/**
+ * Below a third of a clock cycle, a time cannot be told apart from
+ * BenchmarkDotNet's empty-method overhead. v4 under it against a measurable
+ * time is faster, too fast to measure: no ratio, which would only reflect the
+ * floor. Both under it is on par. Nino's benchmarks/readme.py and
+ * benchmarks/v3/compare.py use the same floor.
+ */
+export const FLOOR_NS = 0.1;
+
 function digits(value: number) {
   if (value >= 100) return Math.round(value).toLocaleString('en-US');
   if (value >= 10) return value.toFixed(1);
@@ -77,6 +86,7 @@ function digits(value: number) {
 
 /** 151 -> "151 ns", 17040 -> "17.0 µs", 1.234e6 -> "1.23 ms" */
 export function formatTime(ns: number) {
+  if (ns < FLOOR_NS) return `< ${FLOOR_NS} ns`;
   if (ns < 1e3) return `${digits(ns)} ns`;
   if (ns < 1e6) return `${digits(ns / 1e3)} µs`;
   if (ns < 1e9) return `${digits(ns / 1e6)} ms`;
@@ -117,10 +127,14 @@ export interface RuntimeCase {
   key: string;
   v4: Measure;
   memorypack: Measure;
-  /** MemoryPack time / v4 time; undefined = on par; < 1 = MemoryPack faster */
+  /** MemoryPack time / v4 time; undefined = on par (or tooFast); < 1 = MemoryPack faster */
   ratio?: number;
-  /** v3 3.3.13 time / v4 time, both from V3_RUNTIME; undefined = not measured */
+  /** v4 under FLOOR_NS, MemoryPack above it: faster, too fast to measure */
+  tooFast?: boolean;
+  /** v3 3.3.13 time / v4 time, both from V3_RUNTIME; undefined = not measured (or v3TooFast) */
   vsV3?: number;
+  /** v4 under FLOOR_NS in V3_RUNTIME, v3 above it: faster than v3, too fast to measure */
+  v3TooFast?: boolean;
   v3?: Measure;
   /** Marked * in the tables: re-run with more iterations (local snapshot only) */
   rerun?: boolean;
@@ -161,6 +175,7 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
       key: 'PolymorphicClassArray',
     },
     { name: 'Polymorphic Foo[]', zh: '多态 Foo[]', key: 'PolymorphicFooArray' },
+    { name: 'SimpleStruct', code: true, key: 'SimpleStruct' },
     { name: 'SimpleStruct[100]', code: true, key: 'SimpleStructs' },
     { name: 'Vector4[10000]', code: true, key: 'Vectors', gcBound: true },
   ],
@@ -229,16 +244,21 @@ function buildCase(op: 'serialize' | 'deserialize', info: CaseInfo) {
   const memorypack = measure(`MemoryPack${verb}${info.key}`);
   if (!v4 || !memorypack || !nino) return [];
   const v3Row = V3_RUNTIME.rows[`${op}:${info.key}`];
+  const unmeasured = v4.ns < FLOOR_NS;
   const result: RuntimeCase = {
     ...info,
     v4,
     memorypack,
-    ratio: ratioOf(memorypack.ns, v4.ns),
+    ratio: unmeasured ? undefined : ratioOf(memorypack.ns, v4.ns),
+    tooFast: unmeasured && memorypack.ns >= FLOOR_NS,
     rerun: nino.rerun,
   };
   if (v3Row) {
     result.v3 = { text: formatTime(v3Row.v3Ns), ns: v3Row.v3Ns };
-    result.vsV3 = Math.round((v3Row.v3Ns / v3Row.v4Ns) * 100) / 100;
+    if (v3Row.v4Ns >= FLOOR_NS)
+      result.vsV3 = Math.round((v3Row.v3Ns / v3Row.v4Ns) * 100) / 100;
+    else if (v3Row.v3Ns >= FLOOR_NS) result.v3TooFast = true;
+    else result.vsV3 = 1;
   }
   return [result];
 }
