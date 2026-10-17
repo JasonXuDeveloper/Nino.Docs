@@ -79,7 +79,6 @@ Cloudflare Pages builds with the Node version in `.node-version` and the Bun ver
 
 - Old site URLs: `public/_redirects` (Cloudflare `_redirects` syntax).
 - Old anchors that moved to another page: `<AnchorRedirect map={{ ... }} />` on the old page.
-- `v2.` / `v3.nino.xgamedev.net`: Cloudflare Single Redirect rules, documented in README.md.
 
 ## Adding a New Version (e.g. v5)
 

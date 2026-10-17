@@ -98,16 +98,8 @@ Old URLs keep working:
 
 - **Old site paths** (`/en/doc/start`, `/zh/perf/micro`, ...) are redirected by [`public/_redirects`](public/_redirects).
 - **Old anchors** that moved to their own page (for example `/en/docs/v4/advanced#ninopooled`) are redirected client-side by `<AnchorRedirect>` in the target page.
-- **Old version subdomains** (`v3.nino.xgamedev.net`, `v2.nino.xgamedev.net`) must be redirected in the Cloudflare dashboard, because they are separate hostnames. Make sure each subdomain has a **proxied** DNS record (for example `AAAA 100::`), then add **Rules → Redirect Rules → Single Redirect** rules, in this order, for each of `v3` and `v2`:
 
-  | When incoming requests match | Type | URL | Status |
-  | --- | --- | --- | --- |
-  | Wildcard `https://v3.nino.xgamedev.net/*/doc/*` | Dynamic | `https://nino.xgamedev.net/${1}/docs/v3/${2}` | 301 |
-  | Wildcard `https://v3.nino.xgamedev.net/*/perf/micro` | Dynamic | `https://nino.xgamedev.net/${1}/docs/v3/perf` | 301 |
-  | Wildcard `https://v3.nino.xgamedev.net/zh*` | Static | `https://nino.xgamedev.net/zh/docs/v3` | 301 |
-  | Wildcard `https://v3.nino.xgamedev.net/*` | Static | `https://nino.xgamedev.net/en/docs/v3` | 301 |
-
-  For v2, replace `v3` with `v2` in both the hostname and the target path. Turn on "Preserve query string" for the dynamic rules.
+The old version subdomains (`v3.nino.xgamedev.net`, `v2.nino.xgamedev.net`) are not redirected; their docs are at `/{lang}/docs/v3` and `/{lang}/docs/v2`.
 
 ## Content
 
