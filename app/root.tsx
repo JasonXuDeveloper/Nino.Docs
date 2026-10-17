@@ -1,5 +1,5 @@
 import { RootProvider } from 'fumadocs-ui/provider/react-router';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import {
   isRouteErrorResponse,
   Links,
@@ -96,7 +96,40 @@ export default function App() {
   return <Outlet />;
 }
 
+/**
+ * A page loaded before a deploy still has the old build's file names: after a
+ * client-side navigation, the chunks a changed page needs are gone (404), and
+ * so is the data of a page that moved. Loading the URL as a document fetches
+ * it from the current deploy; once per URL a minute, so a page that is really
+ * missing still shows its error.
+ */
+function isStaleBuild(error: unknown) {
+  if (isRouteErrorResponse(error)) return error.status === 404;
+  return (
+    error instanceof Error &&
+    /dynamically imported module|Importing a module script failed|Unable to preload|error loading dynamically/i.test(
+      error.message,
+    )
+  );
+}
+
+function useReloadOnce(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled) return;
+    const key = `nino-reload:${window.location.pathname}`;
+    try {
+      const last = Number(sessionStorage.getItem(key));
+      if (last && Date.now() - last < 60_000) return;
+      sessionStorage.setItem(key, String(Date.now()));
+    } catch {
+      return; // no storage: no way to stop a loop, so no reload
+    }
+    window.location.reload();
+  }, [enabled]);
+}
+
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  useReloadOnce(isStaleBuild(error));
   if (isRouteErrorResponse(error) && error.status === 404) return <NotFound />;
 
   const message =
