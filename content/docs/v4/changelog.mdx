@@ -20,6 +20,7 @@ Only the type described below writes different bytes than with rc.2.
 ### New [#new-1]
 
 - **Raw bytes in the layout metadata**: `[assembly: NinoTypeLayout]` now shows the size and field offsets of every value copied as raw memory, including structs that are not `[NinoType]`s, so changing a field, `Pack`, `Size` or `[FieldOffset]` changes the layout. Raw members read `raw(n){name:type@offset:encoding,...}` instead of `raw(n)` or `raw`, and a raw struct's members are its raw layout. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata) ([#202](https://github.com/JasonXuDeveloper/Nino/issues/202)).
+- **`NinoSerializer.Serialize<T>(in T value)`** takes the value by reference, as MemoryPack does, so serializing a struct copied as raw memory, read from a field, is an allocation and one copy straight into the array; rc.2 first copied it to the stack. Existing calls compile unchanged; a method group converted to `Func<T, byte[]>` needs a lambda. See [Serializing](/en/docs/v4/basic#serializing).
 
 ### Fixes [#fixes-1]
 
