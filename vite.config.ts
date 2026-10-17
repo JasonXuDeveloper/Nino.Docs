@@ -7,12 +7,18 @@ import { defineConfig } from 'vite';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 
-export default defineConfig({
-  plugins: [fumadocsMdx(), tailwindcss(), reactRouter()],
+// `--mode scripts`: the scripts in scripts/ (run with vite-node) only load the content.
+export default defineConfig(({ mode }) => ({
+  plugins:
+    mode === 'scripts'
+      ? [fumadocsMdx()]
+      : [fumadocsMdx(), tailwindcss(), reactRouter()],
+  optimizeDeps:
+    mode === 'scripts' ? { noDiscovery: true, include: [] } : undefined,
   resolve: {
     alias: {
       '@': path.resolve(root, 'src'),
       collections: path.resolve(root, '.source'),
     },
   },
-});
+}));

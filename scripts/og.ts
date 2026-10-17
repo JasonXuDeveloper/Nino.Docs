@@ -10,7 +10,7 @@
  * with missing glyphs. Run with Node (vite-node), not Bun: sharp's text
  * rendering hangs under Bun.
  *
- * `vite-node --config vite.scripts.config.ts scripts/og.ts --default`
+ * `vite-node --mode scripts scripts/og.ts --default`
  * redraws public/og.png.
  */
 import { execFileSync } from 'node:child_process';
