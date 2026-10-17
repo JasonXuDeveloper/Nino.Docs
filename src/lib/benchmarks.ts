@@ -54,20 +54,8 @@ export function sourceNote(zh: boolean) {
   return zh ? `${parts.join('，')}。` : `${parts.join(', ')}.`;
 }
 
-/**
- * Rows the site never shows: deserializing FixedStruct (one 40-byte copy) takes
- * well under a nanosecond in both libraries, below what BenchmarkDotNet can
- * measure reliably.
- */
-const hiddenMethods = new Set([
-  'NinoDeserializeFixedStruct',
-  'MemoryPackDeserializeFixedStruct',
-]);
-
 /** All rows of the report, in report order (for the full results table) */
-export const benchRows: readonly BenchRow[] = (bench.rows as BenchRow[]).filter(
-  (row) => !hiddenMethods.has(row.method),
-);
+export const benchRows: readonly BenchRow[] = bench.rows as BenchRow[];
 
 /**
  * Below a third of a clock cycle, a time cannot be told apart from
@@ -276,8 +264,9 @@ export const runtime: Record<'serialize' | 'deserialize', RuntimeCase[]> = {
  * and VersionTolerant modes and its byte[] API. Kept apart from `runtime`, so
  * the headline ratios stay those of the main cases. A case shows only when the
  * synced report has both of its rows; a report without these benchmarks shows
- * none (the page then says the results are still to come).
- * Deserializing FixedStruct is left out (see hiddenMethods).
+ * none (the page then says the results are still to come). Only the
+ * Benchmarks page shows them; deserializing FixedStruct (one 40-byte copy,
+ * about a clock cycle) is detail for that page, not for headlines.
  */
 const extraCases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
   serialize: [
@@ -300,6 +289,7 @@ const extraCases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
     },
     { name: 'TolerantClass', code: true, key: 'TolerantClass' },
     { name: 'TolerantClass[100]', code: true, key: 'TolerantClasses' },
+    { name: 'FixedStruct', code: true, key: 'FixedStruct' },
     { name: 'FixedClass', code: true, key: 'FixedClass' },
     { name: 'FixedClass[100]', code: true, key: 'FixedClasses' },
   ],
