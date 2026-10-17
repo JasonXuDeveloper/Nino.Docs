@@ -8,14 +8,31 @@ Nino's analyzer ships with the source generator (in the `Nino.Generator` package
 
 ## Diagnostics
 
-| Id | Severity | Meaning | What to do | Code fix |
+The [diagnostics reference](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md) in the Nino repository explains each id in full.
+
+### The Type
+
+| Id | Severity | Problem | What to do | Code fix |
 | --- | --- | --- | --- | :---: |
 | [NINO001](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino001) | Error | Generated code cannot name the type (it is not `public`/`internal`, or it is `static` or a `ref struct`) | Make the type and its containers `public` or `internal` | ✅ |
 | [NINO002](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino002) | Error | The type must be `partial`: it serializes non-public members (before .NET 8, or in a generic type), or it is `[NinoPooled]` | Make the type and its containers `partial` | ✅ |
 | [NINO003](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino003) | Warning | A subtype of a NinoType with `allowInheritance: false` is not serialized as itself | Add `[NinoType]` to the subtype | ✅ |
+
+### Construction
+
+| Id | Severity | Problem | What to do | Code fix |
+| --- | --- | --- | --- | :---: |
 | [NINO004](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino004) | Error | No usable constructor | Add a parameterless constructor, one whose parameters match members, or `[NinoConstructor]` |  |
 | [NINO005](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino005) | Error | A `[NinoConstructor]` parameter matches no serialized member | Rename the parameter or list the member names in the attribute |  |
 | [NINO006](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino006) | Warning | A read-only member is not a constructor parameter, so its value is read and dropped | Add it to the constructor, make it settable, or `[NinoIgnore]` it | ✅ |
+| [NINO017](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino017) | Error | Invalid `[NinoFactory]` method | Make it `public static`, callable without arguments, returning the declaring type |  |
+| [NINO021](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino021) | Error | `[NinoConstructor]` is `private` or `protected` | Make it `public` or `internal` |  |
+| [NINO025](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino025) | Warning | `[NinoFactory]` next to a `[NinoConstructor]` is never called: the type is always re-created through the constructor | Remove `[NinoFactory]` to keep re-creating, or `[NinoConstructor]` to fill factory instances in place |  |
+
+### Members
+
+| Id | Severity | Problem | What to do | Code fix |
+| --- | --- | --- | --- | :---: |
 | [NINO007](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino007) | Warning | Member type cannot be serialized; the member is skipped | `[NinoIgnore]` it, or give it a custom formatter | ✅ |
 | [NINO008](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino008) | Error | The `[NinoCustomFormatter]` type is not a struct that implements `INinoFormatter<T>` for exactly the member type | Fix the formatter's type |  |
 | [NINO009](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino009) | Error | Non-public `[NinoMember]` in a type without `containNonPublicMembers` | Remove `[NinoMember]` or set `containNonPublicMembers: true` | ✅ |
@@ -23,22 +40,32 @@ Nino's analyzer ships with the source generator (in the `Nino.Generator` package
 | [NINO011](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino011) | Warning | Redundant `[NinoIgnore]` with `autoCollect: false` | Remove it | ✅ |
 | [NINO012](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino012) | Error | Member has both `[NinoMember]` and `[NinoIgnore]` | Remove one or both | ✅ |
 | [NINO013](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino013) | Error | Duplicate `[NinoMember]` index | Use the next free index | ✅ |
+| [NINO022](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino022) | Warning | A non-public base member hidden with `new` cannot be reached; it is skipped | Rename one of the members, or make it public |  |
+| [NINO023](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino023) | Error | A struct serializes no members: it would be zero bytes, and a collection of it could not be read back | Serialize a member, or make the struct `VersionTolerant` or `Keyed` |  |
+
+### Formats and References
+
+| Id | Severity | Problem | What to do | Code fix |
+| --- | --- | --- | --- | :---: |
 | [NINO014](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino014) | Error | Two keyed members (or a member's `[NinoFormerName]`) hash to the same key | Rename one of them, or drop the former name |  |
+| [NINO024](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino024) | Warning | `[NinoFormerName]` has no effect outside a keyed type: positional and version-tolerant types write no member names | Remove it, or give the type `format: NinoFormat.Keyed` |  |
 | [NINO015](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino015) | Warning | `trackReferences` on a struct is ignored | Remove `trackReferences` | ✅ |
 | [NINO016](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino016) | Error | `trackReferences` on a type re-created from its constructor (e.g. a positional record) | Make the members assignable |  |
-| [NINO017](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino017) | Error | Invalid `[NinoFactory]` method | Make it `public static`, callable without arguments, returning the declaring type |  |
-| [NINO018](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino018) | Error | `[NinoPooled]` on a type that cannot be pooled (not a sealed class filled in place) | Seal the class and make its members assignable | ✅ |
-| [NINO019](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino019) | Error | `[NinoPooled]` class does not implement `OnNinoPoolWarmup` / `OnNinoPoolReturn` | Implement both partial methods (empty bodies are fine) | ✅ |
-| [NINO020](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino020) | Error | Invalid `[assembly: NinoFormatter]` registration; it is ignored | Register a struct that implements `INinoFormatter<P>` exactly once, as an open generic definition whose type parameters can be inferred |  |
-| [NINO021](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino021) | Error | `[NinoConstructor]` is `private` or `protected` | Make it `public` or `internal` |  |
-| [NINO022](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino022) | Warning | A non-public base member hidden with `new` cannot be reached; it is skipped | Rename one of the members, or make it public |  |
-| [NINO023](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino023) | Error | A struct serializes no members, so it would be written as zero bytes and a collection of it could not be read back | Serialize a member, or give the struct `format: NinoFormat.VersionTolerant` or `NinoFormat.Keyed` |  |
-| [NINO024](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino024) | Warning | `[NinoFormerName]` has no effect outside a keyed type: positional and version-tolerant types write no member names | Remove it, or give the type `format: NinoFormat.Keyed` |  |
-| [NINO025](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino025) | Warning | `[NinoFactory]` on a type that has a `[NinoConstructor]`: instances are always re-created through the constructor, so the factory is never called | Remove one of the two: `[NinoFactory]` to keep re-creating instances, or `[NinoConstructor]` to create them with the factory and fill them in place |  |
-
-The [diagnostics reference](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md) in the Nino repository explains each id in full.
 
 A member's `[NinoFormerName]`s are keys too, so a former name that equals another member's name (or has the same hash) triggers NINO014. A former name equal to the member's own name is ignored. See [Renaming Keyed Members](/en/docs/v4/evolving-data#renaming-keyed-members).
+
+### Pooling
+
+| Id | Severity | Problem | What to do | Code fix |
+| --- | --- | --- | --- | :---: |
+| [NINO018](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino018) | Error | `[NinoPooled]` on a type that cannot be pooled (not a sealed class filled in place) | Seal the class and make its members assignable | ✅ |
+| [NINO019](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino019) | Error | `[NinoPooled]` class does not implement `OnNinoPoolWarmup` / `OnNinoPoolReturn` | Implement both partial methods (empty bodies are fine) | ✅ |
+
+### Formatter Registrations
+
+| Id | Severity | Problem | What to do | Code fix |
+| --- | --- | --- | --- | :---: |
+| [NINO020](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino020) | Error | Invalid `[assembly: NinoFormatter]` registration; it is ignored | Register a struct, not nested in a generic type, that implements `INinoFormatter<P>` once: a generic one as its open definition (`typeof(F<,>)`), with type parameters that can be inferred, a non-generic one as itself (`typeof(F)`) |  |
 
 ## Changing Severities
 

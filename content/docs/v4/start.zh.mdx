@@ -48,13 +48,13 @@ dotnet add package Nino
 
 ### .NET 项目 [#net-project]
 
-<Callout type="info">
+环境要求：
 
-运行时（`Nino.Core`）的目标框架是 `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0`，凡是能引用 .NET Standard 2.0 库的项目都能用。所有目标框架写出的字节完全相同。
+- **运行时**：`Nino.Core` 的目标框架是 `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0`，凡是能引用 .NET Standard 2.0 库的项目都能用。所有目标框架写出的字节完全相同。
+- **编译器**：源生成器需要 Roslyn 4.3 及以上（Visual Studio 2022 17.3+、Rider，或 .NET 6.0.400 及以上的 SDK）。
+- **语言版本**：生成的代码用到了 C# 9，所以项目的 `LangVersion` 至少要是 9。较老的 .NET Framework 项目默认是 C# 7.3，需要设置 `<LangVersion>9</LangVersion>` 或更高。
 
-源生成器需要 Roslyn 4.3 及以上的编译器（Visual Studio 2022 17.3+、Rider，或 .NET 6.0.400 及以上的 SDK）。生成的代码用到了 C# 9 特性，所以项目的 `LangVersion` 至少要是 9。较老的 .NET Framework 项目默认是 C# 7.3，需要设置 `<LangVersion>9</LangVersion>` 或更高。
-
-</Callout>
+安装方式：
 
 - 在 Visual Studio 或 Rider 的 NuGet 包管理器中搜索 `Nino` 并安装；
 - 或者使用 `dotnet` 命令行：
@@ -74,23 +74,11 @@ dotnet add package Nino
 
 </Callout>
 
-<Callout type="idea">
-
-使用 .NET 8 SDK 及以上版本编译时，类型已知的 `NinoSerializer`/`NinoDeserializer` 调用会在编译期直接改为调用生成的格式化器（拦截器）。这是自动完成的，参见[拦截器](/zh/docs/v4/performance#interceptors)。
-
-</Callout>
+使用 .NET 8 SDK 及以上版本编译时，编译期就能确定类型的 `NinoSerializer`/`NinoDeserializer` 调用会直接转给生成的格式化器（[拦截器](/zh/docs/v4/performance#interceptors)）。这一切自动完成，写出的字节也完全相同。
 
 ### Unity 项目 [#unity-project]
 
-<Callout type="info">
-
-Nino 支持 Unity 2022.3 及以上版本，支持所有 Player 平台（Mono 和 IL2CPP）。
-
-GitHub 上的 `Nino.Unity` 示例项目演示了 Nino 在 Unity 中的用法，并附带一套可在 `TestRunner` 中运行的单元测试。
-
-</Callout>
-
-用 Unity Package Manager 从 [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation) 安装，例如：
+Nino 支持 Unity 2022.3 及以上版本，支持所有 Player 平台（Mono 和 IL2CPP）。用 Unity Package Manager 从 [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation) 安装，例如：
 
 ```shell
 openupm add com.jasonxudeveloper.nino
@@ -98,23 +86,15 @@ openupm add com.jasonxudeveloper.nino
 
 包里同时带有 `Nino.Core.dll` 和源生成器（`Nino.Generator.dll`，已标记为 `RoslynAnalyzer`），不需要再装别的东西。这是源生成器的 Roslyn 4.3 版本，对应 Unity 支持的最低编译器版本，所以 Unity 中的调用不会被[拦截](/zh/docs/v4/performance#interceptors)，而是走常规路径，写出的字节完全相同。
 
+Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`。因此，序列化非公开成员（或使用 `[NinoPooled]`）的类型必须声明为 `partial`，包含它的外层类型也一样。分析器会报告 NINO002 并提供修复。
+
 <Callout type="warn">
 
 如果用了 `asmdef`，请确认勾选了 `Auto Referenced`；如果开启了 `Override References`，则要手动添加对 `Nino.Core.dll` 的引用。
 
 </Callout>
 
-<Callout type="info">
-
-Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`。因此，序列化非公开成员（或使用 `[NinoPooled]`）的类型必须声明为 `partial`，包含它的外层类型也一样。分析器会报告 NINO002 并提供修复。
-
-</Callout>
-
-<Callout type="idea">
-
-遇到问题时，先确认 `Nino.Unity` 示例项目能正常运行。如果问题依旧，请到 GitHub 提交 issue。
-
-</Callout>
+GitHub 上的 `Nino.Unity` 示例项目演示了 Nino 在 Unity 中的用法，并附带可在 Test Runner 中运行的单元测试。遇到问题时，先确认这个示例项目能正常运行；如果问题依旧，请到 GitHub 提交 issue。
 
 #### 热更新代码 [#hot-update-code]
 - Nino 支持 **HybridCLR**。生成的注册表会在其中某个类型第一次用到时才加载，所以用 `Assembly.Load` 加载的热更新程序集**不需要任何初始化调用**。详见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity#hybridclr-hot-update)。
@@ -140,7 +120,7 @@ dotnet add package Nino
 
 ## 第一次序列化 [#first-serialization]
 
-源生成器会在编译期为每个 `[NinoType]` 生成格式化器，你只需要调用 `NinoSerializer` 和 `NinoDeserializer`（命名空间 `Nino.Core`）：
+源生成器会在编译期为每个 `[NinoType]` 生成**格式化器**，也就是读写这个类型的代码。你只需要调用 `NinoSerializer` 和 `NinoDeserializer`（命名空间 `Nino.Core`）：
 
 <Steps>
 <Step>
@@ -169,6 +149,8 @@ var data = new UserProfile { Id = 42, Name = "Ada", LastLogin = DateTime.UtcNow 
 byte[] bytes = NinoSerializer.Serialize(data);
 ```
 
+这会分配返回的数组。在热路径上，改为序列化到一个你保留下来的缓冲区，就不会分配内存，参见[复用缓冲区](/zh/docs/v4/basic#reusing-a-buffer)。
+
 </Step>
 <Step>
 
@@ -177,6 +159,8 @@ byte[] bytes = NinoSerializer.Serialize(data);
 ```csharp
 UserProfile restored = NinoDeserializer.Deserialize<UserProfile>(bytes);
 ```
+
+数据的类型是 `ReadOnlySpan<byte>`，所以也可以直接传入池化数组或网络缓冲区的一个切片，无需拷贝。
 
 </Step>
 <Step>
@@ -199,7 +183,7 @@ NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
 Nino 不需要任何初始化调用：生成的代码会自行注册，之后加载的程序集在第一次用到时也会被找到。以下三项调用是可选的：
 
 - `NinoSettings`（池大小、回收器），在第一次序列化调用之前设置。
-- `NinoPolymorphic.Register<T>()`：用于这样的封闭泛型 `[NinoType]`：进程只通过基类型读取它，代码里从来没写过它的名字。
+- `NinoPolymorphic.Register<T>()`：某个封闭泛型 `[NinoType]` 只会通过基类型读取、代码里从没写出过它的名字时，用它来注册。
 - `NinoRegistry.EnsureInitialized(assembly)`：立即加载某个插件的注册表，而不是等到第一次用到时。
 
 自定义格式化器也不需要调用任何方法：它们用特性声明（参见[自定义格式化器](/zh/docs/v4/custom-formatters)）。Unity 和 HybridCLR 项目请参见[启动检查清单](/zh/docs/v4/advanced/unity#startup-checklist)。

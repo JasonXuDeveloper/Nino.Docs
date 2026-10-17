@@ -55,7 +55,7 @@ function caseName(row: RuntimeCase, zh: boolean) {
 const action = (verb: string, row: RuntimeCase, zh: boolean) =>
   `${verb}${zh && !row.code ? '' : ' '}${caseName(row, zh)}`;
 
-/** 636 -> "10 min 36 s" / "10 分 36 秒" */
+/** 462 -> "7 min 42 s" / "7 分 42 秒" */
 function minutes(seconds: number, zh: boolean) {
   const [min, sec] = zh ? ['分', '秒'] : ['min', 's'];
   if (seconds < 60) return `${seconds} ${sec}`;
@@ -64,7 +64,7 @@ function minutes(seconds: number, zh: boolean) {
   return s ? `${m} ${min} ${s} ${sec}` : `${m} ${min}`;
 }
 
-/** "2.2 s" -> "2.2 秒" in Chinese, as the zh docs write it */
+/** "2.1 s" -> "2.1 秒" in Chinese, as the zh docs write it */
 const seconds = (text: string, zh: boolean) =>
   zh ? text.replace(/ s$/, ' 秒') : text;
 

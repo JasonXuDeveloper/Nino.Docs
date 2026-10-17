@@ -10,6 +10,12 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { HomeCompare } from '@/components/home-compare';
+import {
+  HomeAbout,
+  HomeFaq,
+  HomeUseCases,
+  homeFaq,
+} from '@/components/home-sections';
 import { headlineSerialize } from '@/lib/benchmarks';
 import { cn } from '@/lib/cn';
 import { getLocale, type Locale } from '@/lib/i18n';
@@ -33,19 +39,19 @@ const copy: Record<
     sub: string;
     start: string;
     github: string;
+    why: string;
     highlights: Highlight[];
-    guides: string;
-    useCases: { label: string; href: string }[];
     older: string;
   }
 > = {
   en: {
-    description: `Nino is a general-purpose, high-performance binary serializer for C# and .NET: source-generated, ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack, ` : ''}zero GC. For services, messaging, caching, storage and Unity.`,
-    pill: 'C# binary serializer · v4',
+    description: `Nino is a general-purpose, high-performance binary serializer for C# and .NET: source-generated, ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack, ` : ''}zero GC on hot paths. For RPC, microservices, message queues, caching, storage and IPC, with Unity and Godot support.`,
+    pill: 'Nino v4 · C# binary serializer',
     headline: ['The fastest binary serializer', 'for C#.'],
-    sub: 'Source-generated, with zero GC on hot paths. For services, networking and RPC, message queues, caching, storage and IPC, on .NET, Unity and Godot alike.',
+    sub: 'Nino is source-generated, with zero GC on hot paths. For services, networking and RPC, message queues, caching, storage and IPC, on .NET, Unity and Godot alike.',
     start: 'Get Started',
     github: 'View on GitHub',
+    why: 'Why Nino',
     highlights: [
       {
         icon: Cpu,
@@ -55,7 +61,7 @@ const copy: Record<
       {
         icon: Recycle,
         label: 'Zero allocation',
-        text: 'Serialize without garbage; deserialize into existing objects and pooled instances.',
+        text: 'Serialize into a reused buffer without garbage; deserialize into existing objects and pooled instances.',
       },
       {
         icon: Boxes,
@@ -78,25 +84,16 @@ const copy: Record<
         text: 'CoreCLR, Mono and IL2CPP, 64-bit and 32-bit all read and write the same format.',
       },
     ],
-    guides: 'Guides:',
-    useCases: [
-      { label: 'Networking and RPC', href: 'advanced/networking' },
-      { label: 'Message queues', href: 'advanced/message-queues' },
-      { label: 'Caching', href: 'advanced/caching' },
-      { label: 'Persistence', href: 'advanced/persistence' },
-      { label: 'Zero allocation', href: 'advanced/zero-allocation' },
-      { label: 'Unity', href: 'advanced/unity' },
-      { label: 'Godot', href: 'platforms#godot' },
-    ],
     older: 'Older versions:',
   },
   zh: {
     description: `Nino 是通用的高性能 C# / .NET 二进制序列化库：基于源生成器，${headlineSerialize ? `最高比 MemoryPack 快 ${headlineSerialize} 倍，` : ''}热路径零 GC 分配。适用于 RPC、微服务、消息队列、缓存、存储与进程间通信，同时支持 Unity 和 Godot。`,
-    pill: 'C# 二进制序列化库 · v4',
+    pill: 'Nino v4 · C# 二进制序列化库',
     headline: ['最快的二进制序列化库', '为 C# 而生。'],
-    sub: '基于源生成器，热路径零 GC 分配。适用于服务端、网络与 RPC、消息队列、缓存、存储和进程间通信，.NET、Unity 与 Godot 均可使用。',
+    sub: 'Nino 基于源生成器，热路径零 GC 分配。适用于服务端、网络与 RPC、消息队列、缓存、存储和进程间通信，.NET、Unity 与 Godot 均可使用。',
     start: '快速开始',
     github: '在 GitHub 上查看',
+    why: '为什么选择 Nino',
     highlights: [
       {
         icon: Cpu,
@@ -106,7 +103,7 @@ const copy: Record<
       {
         icon: Recycle,
         label: '零分配',
-        text: '序列化不产生垃圾；反序列化可以直接填充已有对象和池化实例。',
+        text: '序列化到复用的缓冲区不产生垃圾；反序列化可以直接填充已有对象和池化实例。',
       },
       {
         icon: Boxes,
@@ -129,16 +126,6 @@ const copy: Record<
         text: 'CoreCLR、Mono 与 IL2CPP，64 位与 32 位，读写的都是同一种格式。',
       },
     ],
-    guides: '使用指南：',
-    useCases: [
-      { label: '网络与 RPC', href: 'advanced/networking' },
-      { label: '消息队列', href: 'advanced/message-queues' },
-      { label: '缓存', href: 'advanced/caching' },
-      { label: '持久化', href: 'advanced/persistence' },
-      { label: '零分配', href: 'advanced/zero-allocation' },
-      { label: 'Unity', href: 'advanced/unity' },
-      { label: 'Godot', href: 'platforms#godot' },
-    ],
     older: '旧版本：',
   },
 };
@@ -155,6 +142,7 @@ export function meta({ params }: Route.MetaArgs) {
     lang,
     title: seoTitle[lang],
     description: copy[lang].description,
+    faq: homeFaq(lang),
   });
 }
 
@@ -227,6 +215,10 @@ export default function HomePage({ params }: Route.ComponentProps) {
                 {t.github}
               </a>
             </div>
+
+            <code className="mt-4 rounded-md border bg-fd-secondary/50 px-3 py-1.5 font-mono text-sm text-fd-muted-foreground">
+              dotnet add package Nino
+            </code>
           </div>
         </section>
 
@@ -236,7 +228,22 @@ export default function HomePage({ params }: Route.ComponentProps) {
           </div>
         </section>
 
-        <section className="w-full border-t px-6 py-8">
+        <section className="w-full border-t px-6 py-12 md:py-16">
+          <div className="mx-auto max-w-5xl">
+            <HomeAbout lang={lang} />
+          </div>
+        </section>
+
+        <section className="w-full border-t px-6 py-12 md:py-16">
+          <div className="mx-auto max-w-5xl">
+            <HomeUseCases lang={lang} docs={docs} />
+          </div>
+        </section>
+
+        <section className="w-full border-t px-6 py-12">
+          <h2 className="mx-auto mb-6 max-w-5xl text-2xl font-bold tracking-tight">
+            {t.why}
+          </h2>
           <div className="mx-auto grid max-w-5xl gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
             {t.highlights.map((h) => (
               <div key={h.label} className="flex items-start gap-3">
@@ -252,23 +259,14 @@ export default function HomePage({ params }: Route.ComponentProps) {
           </div>
         </section>
 
+        <section className="w-full border-t px-6 py-12 md:py-16">
+          <div className="mx-auto max-w-5xl">
+            <HomeFaq lang={lang} docs={docs} />
+          </div>
+        </section>
+
         <section className="w-full border-t px-6 py-6">
           <p className="mx-auto max-w-5xl text-center text-sm text-fd-muted-foreground">
-            {t.guides}{' '}
-            {t.useCases.map((u, i) => (
-              <span key={u.href}>
-                {i > 0 && sep}
-                <Link
-                  to={`${docs}/${u.href}`}
-                  className="underline underline-offset-4 hover:text-fd-foreground"
-                >
-                  {u.label}
-                </Link>
-              </span>
-            ))}
-            <span className="mx-3 text-fd-border" aria-hidden="true">
-              |
-            </span>
             {t.older}{' '}
             <Link
               to={`/${lang}/docs/v3`}

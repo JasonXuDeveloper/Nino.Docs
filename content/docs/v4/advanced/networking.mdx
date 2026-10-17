@@ -5,7 +5,7 @@ description: "Build a message protocol on Nino: framing, polymorphic messages, S
 icon: Network
 ---
 
-Service-to-service messaging, real-time servers (games, trading, collaboration) and device links all need a message format. This guide builds the serialization half of a TCP protocol: a message hierarchy, length-prefixed frames written straight into a `PipeWriter`, frames read from a `PipeReader` without copying, and messages reused per connection. The transport (sockets, Kestrel connections, your engine's networking) is up to you; anything that gives you a `PipeReader`/`PipeWriter`, a `Stream` or raw buffers works the same way.
+Service-to-service messaging, real-time servers (games, trading, collaboration) and device links all need a message format. This guide builds the serialization half of a TCP protocol: a message hierarchy, length-prefixed frames written to a `PipeWriter`, frames read from a `PipeReader` without copying, and messages reused per connection. The transport (sockets, Kestrel connections, your engine's networking) is up to you; anything that gives you a `PipeReader`/`PipeWriter`, a `Stream` or raw buffers works the same way.
 
 ## Define the Messages
 
@@ -26,10 +26,11 @@ public sealed class Login : Message
     public byte[] Token;
 }
 
-public sealed class Move : Message
+public sealed class PriceUpdate : Message
 {
-    public int EntityId;
-    public Vector3 Target;
+    public int InstrumentId;
+    public long Timestamp;
+    public double Bid, Ask;
 }
 
 public sealed class Chat : Message
@@ -38,7 +39,7 @@ public sealed class Chat : Message
 }
 ```
 
-- Declare the messages in the same assembly as `Message`: Nino then dispatches on them with generated code (a type check chain when writing, a `switch` on the id when reading) instead of a registry lookup. Seal them, so that a member declared as `Move` costs a 1-byte header instead of a 4-byte id.
+- Declare the messages in the same assembly as `Message`: Nino then dispatches on them with generated code (a type check chain when writing, a `switch` on the id when reading) instead of a registry lookup. Seal them, so that a member declared as `PriceUpdate` costs a 1-byte header instead of a 4-byte id.
 - Type ids come from names, so renaming or moving a message class breaks old peers. Use [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name) when you rename one.
 - `NinoFormat.VersionTolerant` lets you add fields to each message later (not to `Message` itself); see [Rolling Upgrades](#rolling-upgrades). Subtypes inherit it with `[NinoType]`; if you give a message its own `[NinoType]`, repeat `format: NinoFormat.VersionTolerant` there.
 
@@ -49,16 +50,16 @@ void Handle(Message message)
 {
     switch (message)
     {
-        case Login login: OnLogin(login); break;
-        case Move move:   OnMove(move);   break;
-        case Chat chat:   OnChat(chat);   break;
+        case Login login:       OnLogin(login); break;
+        case PriceUpdate price: OnPrice(price); break;
+        case Chat chat:         OnChat(chat);   break;
     }
 }
 ```
 
 ## Frame the Stream
 
-TCP is a byte stream, so each message needs a frame. A 4-byte little-endian length prefix is the simplest. Nino's `Writer` can reserve the 4 bytes, serialize the message after them, and then patch in the length, all in one buffer:
+TCP is a byte stream, so each message needs a frame. A 4-byte little-endian length prefix is the simplest. Nino's `Writer` can reserve the 4 bytes, serialize the message after them, and then patch in the length, all in one reused buffer, which is then copied into the `PipeWriter` once. Once the buffer has grown to the largest message, writing a frame allocates nothing:
 
 ```csharp title="FrameWriter.cs"
 using System.IO.Pipelines;
@@ -73,28 +74,29 @@ public sealed class FrameWriter
         _buffer.ResetWrittenCount();
         var writer = new Writer(_buffer);
         int lengthPosition = writer.ReserveInt32();   // 4 bytes for the length
-        NinoSerializer.Serialize(message, ref writer);
+        NinoSerializer.Serialize(message, ref writer); // [!code highlight]
         writer.PatchLength(lengthPosition);           // bytes written after the slot
         writer.Flush();
+        writer.ReleaseReferences();                   // end the call, as NinoSerializer does
 
         output.Write(_buffer.WrittenSpan);            // PipeWriter is an IBufferWriter<byte>
     }
 }
 
-// sending
-frameWriter.Write(pipe.Output, new Move { EntityId = 7, Target = target });
+// sending: one FrameWriter per connection; update is a PriceUpdate you fill in and reuse
+frameWriter.Write(pipe.Output, update);
 await pipe.Output.FlushAsync();
 ```
 
 <Callout type="info">
 
-If your transport already frames messages (WebSocket messages, UDP datagrams, a message queue), skip the prefix and serialize straight into the transport's `IBufferWriter<byte>` (`NinoSerializer.Serialize(message, pipeWriter)`) or a reused buffer; see [WebSocket and UDP](#websocket-and-udp) and [Message Queues and Event Streams](/en/docs/v4/advanced/message-queues).
+If your transport already frames messages (WebSocket messages, UDP datagrams, a message queue), skip the prefix and serialize into a reused `NinoArrayBufferWriter`, or straight into the transport's `IBufferWriter<byte>` (`NinoSerializer.Serialize(message, pipeWriter)`, which writes into a per-thread scratch buffer and copies the result in once); see [WebSocket and UDP](#websocket-and-udp) and [Message Queues and Event Streams](/en/docs/v4/advanced/message-queues).
 
 </Callout>
 
 ## Reading Frames
 
-Read frames out of the `ReadOnlySequence<byte>` the pipe gives you, and deserialize each one from the pipe's own memory:
+Read frames out of the `ReadOnlySequence<byte>` the pipe gives you. A frame that lies in one segment (the common case) is deserialized from the pipe's own memory; one that spans two segments is copied once, to the stack or to a pooled array. A read may end in the middle of a frame or hold several frames: the loop takes every complete frame and leaves the rest in the pipe for the next read.
 
 ```csharp title="FrameReader.cs"
 using System.Buffers;
@@ -113,7 +115,7 @@ public static class FrameReader
             ReadOnlySequence<byte> buffer = result.Buffer;
 
             while (TryReadFrame(ref buffer, out ReadOnlySequence<byte> frame))
-                handle(Decode(frame));
+                handle(Decode<Message>(frame));
 
             input.AdvanceTo(buffer.Start, buffer.End);
             if (result.IsCompleted) break;
@@ -137,23 +139,23 @@ public static class FrameReader
         return true;
     }
 
-    public static Message Decode(ReadOnlySequence<byte> frame)
+    public static T Decode<T>(in ReadOnlySequence<byte> frame)
     {
         if (frame.IsSingleSegment)                       // the common case: no copy
-            return NinoDeserializer.Deserialize<Message>(frame.First.Span);
+            return NinoDeserializer.Deserialize<T>(frame.First.Span); // [!code highlight]
 
-        int length = (int)frame.Length;                  // spans two segments: copy once
+        int length = checked((int)frame.Length);         // spans segments: copy once
         if (length <= 512)
         {
             Span<byte> stack = stackalloc byte[length];
             frame.CopyTo(stack);
-            return NinoDeserializer.Deserialize<Message>(stack);
+            return NinoDeserializer.Deserialize<T>(stack);
         }
         byte[] rented = ArrayPool<byte>.Shared.Rent(length);
         try
         {
             frame.CopyTo(rented);
-            return NinoDeserializer.Deserialize<Message>(rented.AsSpan(0, length));
+            return NinoDeserializer.Deserialize<T>(rented.AsSpan(0, length));
         }
         finally { ArrayPool<byte>.Shared.Return(rented); }
     }
@@ -178,22 +180,27 @@ using Nino.Core;
 
 public static class MessageTransports
 {
-    // WebSocket: one Nino payload per WebSocket message
-    public static async Task SendAsync<T>(WebSocket socket, T message, NinoArrayBufferWriter buffer,
+    public const int MaxMessageSize = 1 << 20;
+
+    // WebSocket: one Nino payload per WebSocket message.
+    // Returns the socket's task: do not reuse buffer until it has completed.
+    public static ValueTask SendAsync<T>(WebSocket socket, T message, NinoArrayBufferWriter buffer,
         CancellationToken ct)
     {
         buffer.ResetWrittenCount();
         NinoSerializer.Serialize(message, buffer);
-        await socket.SendAsync(buffer.WrittenMemory, WebSocketMessageType.Binary, endOfMessage: true, ct);
+        return socket.SendAsync(buffer.WrittenMemory, WebSocketMessageType.Binary, endOfMessage: true, ct);
     }
 
-    public static async Task<T> ReceiveAsync<T>(WebSocket socket, NinoArrayBufferWriter buffer,
+    public static async ValueTask<T> ReceiveAsync<T>(WebSocket socket, NinoArrayBufferWriter buffer,
         CancellationToken ct)
     {
         buffer.ResetWrittenCount();
         ValueWebSocketReceiveResult result;
         do                                                  // a message may arrive in several parts
         {
+            if (buffer.WrittenCount >= MaxMessageSize)
+                throw new InvalidDataException("WebSocket message too large");
             Memory<byte> free = buffer.GetMemory(4096);
             result = await socket.ReceiveAsync(free, ct);
             if (result.MessageType == WebSocketMessageType.Close)
@@ -205,7 +212,7 @@ public static class MessageTransports
     }
 
     // UDP: one Nino payload per datagram
-    public static void SendDatagram<T>(Socket socket, EndPoint remote, T message, NinoArrayBufferWriter buffer)
+    public static void SendDatagram<T>(Socket socket, SocketAddress remote, T message, NinoArrayBufferWriter buffer)
     {
         buffer.ResetWrittenCount();
         NinoSerializer.Serialize(message, buffer);
@@ -214,7 +221,7 @@ public static class MessageTransports
 
     public static void ReceiveLoop<T>(Socket socket, Action<T> handle) where T : class
     {
-        byte[] datagram = new byte[65527];   // allocated once
+        byte[] datagram = new byte[65_527];  // the largest UDP payload, allocated once
         T message = null;                    // reused for every datagram
         while (true)
         {
@@ -226,9 +233,11 @@ public static class MessageTransports
 }
 ```
 
-- A WebSocket message can arrive in several `ReceiveAsync` parts; the loop collects them into the buffer, which grows as needed and is then reused. Cap the message size if peers are untrusted.
-- A UDP datagram is at most 65,507 bytes of payload over IPv4. Keep messages well below the path MTU (about 1,200 bytes is a common budget) to avoid IP fragmentation, and add your own sequence numbers if order or loss matters.
-- In the UDP loop, the receive array and the message instance are reused, so a steady stream of datagrams of the same shape allocates nothing.
+- A WebSocket message can arrive in several `ReceiveAsync` parts; the loop collects them into the buffer, which grows as needed and is then reused. `MaxMessageSize` stops an untrusted peer from making it grow without bound.
+- Neither method allocates a task when the socket completes synchronously: both return a `ValueTask`, and `SendAsync` is not `async` at all.
+- A UDP datagram carries at most 65,507 bytes of payload over IPv4 (65,527 over IPv6). Keep messages well below the path MTU (about 1,200 bytes is a common budget) to avoid IP fragmentation, and add your own sequence numbers if order or loss matters.
+- Pass the destination as a `SocketAddress`, made once with `remoteEndPoint.Serialize()`: `SendTo` with an `EndPoint` converts it into a new `SocketAddress` on every call. The `SocketAddress` overload needs .NET 8 or later.
+- In the UDP loop, the receive array and the message instance are reused: after the first datagram, a stream of messages of the same type allocates nothing but the strings whose text changed and the arrays they contain.
 
 ## Reuse Messages per Connection
 
@@ -237,21 +246,22 @@ A busy connection deserializes the same few message types over and over. There a
 <Tabs items={["Pooled messages", "One instance per type"]}>
 <Tab value="Pooled messages">
 
-Make the hot messages `[NinoPooled]`. Nino takes an instance from the pool whenever it creates one, including when it reads a `Move` through the `Message` base type. Return it once it has been handled:
+Make the hot messages `[NinoPooled]`. Nino takes an instance from the pool whenever it creates one, including when it reads a `PriceUpdate` through the `Message` base type. Return it once it has been handled; decoding, handling and returning a pooled message then allocates nothing:
 
 ```csharp
 [NinoPooled] // [NinoType] and its format are inherited from Message
-public sealed partial class Move : Message
+public sealed partial class PriceUpdate : Message
 {
-    public int EntityId;
-    public Vector3 Target;
+    public int InstrumentId;
+    public long Timestamp;
+    public double Bid, Ask;
 
-    private static partial IEnumerable<Move> OnNinoPoolWarmup() => null; // start empty
+    private static partial IEnumerable<PriceUpdate> OnNinoPoolWarmup() => null; // start empty
     private partial void OnNinoPoolReturn() { }
 }
 
 // in the read loop
-Message message = FrameReader.Decode(frame);
+Message message = FrameReader.Decode<Message>(frame);
 Handle(message);
 if (message is INinoPooled pooled)
     pooled.ReturnToPool();
@@ -279,10 +289,9 @@ void OnFrame(ReadOnlySpan<byte> frame)
 
 ## gRPC [#grpc]
 
-gRPC for .NET does not require Protocol Buffers: a method is described by a `Method<TRequest, TResponse>` with a marshaller per message type. A Nino marshaller writes into the buffer writer gRPC provides and reads from the payload sequence it receives:
+gRPC for .NET does not require Protocol Buffers: a method is described by a `Method<TRequest, TResponse>` with a marshaller per message type. A Nino marshaller writes into the buffer writer gRPC provides (through Nino's scratch buffer, one copy) and reads the payload sequence it receives with `FrameReader.Decode` from [Reading Frames](#reading-frames), with no per-message `byte[]` on either side:
 
 ```csharp title="NinoMarshaller.cs"
-using System.Buffers;
 using Grpc.Core;
 using Nino.Core;
 
@@ -294,13 +303,8 @@ public static class NinoMarshaller
             NinoSerializer.Serialize(value, context.GetBufferWriter());
             context.Complete();
         },
-        deserializer: context =>
-        {
-            ReadOnlySequence<byte> payload = context.PayloadAsReadOnlySequence();
-            if (payload.IsSingleSegment)
-                return NinoDeserializer.Deserialize<T>(payload.First.Span);
-            return NinoDeserializer.Deserialize<T>(payload.ToArray()); // rare: copy once
-        });
+        // the payload as it arrived: one segment is read in place, several are copied once
+        deserializer: context => FrameReader.Decode<T>(context.PayloadAsReadOnlySequence()));
 }
 
 [NinoType] public sealed class GetPriceRequest { public int InstrumentId; }
@@ -320,7 +324,7 @@ Use these `Method` definitions with a `CallInvoker` on the client and `ServerSer
 
 - `NinoSerializer` and `NinoDeserializer` are safe to call from any number of threads at once, with no locks.
 - Your buffers and reused messages are not: keep one `FrameWriter` per connection (or per sending thread), and never let two threads deserialize into the same instance.
-- A message you hand to another thread (a game loop, a job queue) must not be reused or returned to its pool until that thread is done with it.
+- A message you hand to another thread (a processing loop, a job queue) must not be reused or returned to its pool until that thread is done with it.
 
 ## Rolling Upgrades
 
@@ -333,8 +337,10 @@ When clients and servers are not always on the same build, choose the format wit
 | Remove or reorder fields | ✗ | ✗ | ✓ |
 | New message type | old peers cannot read it | old peers cannot read it | old peers cannot read it |
 
-- With `NinoFormat.VersionTolerant` on the base class (inherited by every message), an old peer skips the fields it does not know, and on a new peer a missing field keeps the value the message's constructor gave it (a field initializer such as `public int Priority = 1;` works as the default for old senders). Add fields to the sealed message classes only: `Message`'s members are written before each message's own, so a field appended to `Message` makes old and new peers read each other's fields in the wrong places ([Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class)). To add a field every message carries, make the hierarchy `NinoFormat.Keyed`, or add it to each message. A reused or pooled message is filled in place, so there a missing field keeps the value of the **previous** message: reset such fields in `OnNinoPoolReturn`, or do not reuse instances while old peers are connected.
+- With `NinoFormat.VersionTolerant` on the base class (inherited by every message), an old peer skips the fields it does not know, and on a new peer a missing field keeps the value the message's constructor gave it (a field initializer such as `public int Priority = 1;` works as the default for old senders).
+- Add fields to the sealed message classes only: `Message`'s members are written before each message's own, so a field appended to `Message` makes old and new peers read each other's fields in the wrong places ([Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class)). To add a field every message carries, make the hierarchy `NinoFormat.Keyed`, or add it to each message.
+- A reused or pooled message is filled in place, so there a missing field keeps the value of the **previous** message: reset such fields in `OnNinoPoolReturn`, or do not reuse instances while old peers are connected.
 - A peer that receives a **message type it does not know** cannot deserialize it: the call throws an `InvalidOperationException` (unknown type id). Negotiate a protocol version in your handshake and only send new message types to peers that announced support; `NinoTypeId.Of(typeof(T))` gives the id of each message type if you want to exchange the list.
-- If both sides always ship together (a game client and its dedicated server), stay positional: it is the smallest and fastest format.
+- If both sides always ship together (two services deployed as one unit, a game client and its dedicated server), stay positional: it is the smallest and fastest format.
 
 See [Evolving Your Data](/en/docs/v4/evolving-data) for the exact rules.

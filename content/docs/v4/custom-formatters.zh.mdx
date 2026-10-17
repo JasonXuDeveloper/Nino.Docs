@@ -4,7 +4,7 @@ description: "为某个成员（[NinoCustomFormatter]）或 Nino 不支持的类
 icon: Puzzle
 ---
 
-Nino 为[内置类型](/zh/docs/v4/types)提供了格式化器，并为每个 `[NinoType]` 生成一个。想换一种方式编码某个成员（变长整数、定点数），或者要序列化 Nino 不认识的类型（第三方集合、引擎里的类）时，就自己写一个格式化器。
+Nino 为[内置类型](/zh/docs/v4/types)提供了格式化器，并为每个 `[NinoType]` 生成一个。想换一种方式编码某个成员（变长整数、定点数），或者要序列化 Nino 不认识的类型（第三方集合、其他库里的类型）时，就自己写一个格式化器。
 
 格式化器是实现了 `INinoFormatter<T>` 的**结构体**：
 
@@ -19,9 +19,10 @@ public interface INinoFormatter<T>
 `Deserialize` 通过 `ref` 接收当前值：`default` 表示要创建新值，已有实例则可以复用。格式化器以 `default(TFormatter)` 的形式调用，所以没有实例状态；需要保存的状态请放在静态字段里。
 
 ## 用于单个成员 [#for-one-member]
+
 用 `[NinoCustomFormatter]` 让某个成员使用你自己的格式化器。格式化器实现的 `INinoFormatter<T>` 中，`T` 必须**正好**是成员类型（NINO008）。
 
-典型的例子是回放文件或状态同步流：每个 tick 记录各个数值的变化量。变化量通常很小，而 `long` 总是占 8 字节。改用 zig-zag 变长整数后，-64 到 63 之间的值只占 1 字节，±8191 以内只占 2 字节：
+典型的例子是账本或指标流：每条记录保存各个数值的变化量。变化量通常很小，而 `long` 总是占 8 字节。改用 zig-zag 变长整数后，-64 到 63 之间的值只占 1 字节，±8191 以内只占 2 字节：
 
 ```csharp
 /// Writes a long as a zig-zag varint.
@@ -54,23 +55,26 @@ public struct ZigZagLongFormatter : INinoFormatter<long>
 }
 
 [NinoType]
-public sealed class TickDelta
+public sealed class BalanceChange
 {
-    public int Tick;
+    public int AccountId;
     [NinoCustomFormatter(typeof(ZigZagLongFormatter))] // [!code highlight]
-    public long GoldChange;
+    public long DeltaCents;
 }
 ```
 
 这个特性作用于单个字段或属性，无论外层类型在哪里序列化都会生效。使用自定义格式化器的成员，不会作为[原始内存](/zh/docs/v4/defining-types#structs)的一部分被整块拷贝。格式化器不是结构体，或者针对的类型不对时，分析器会报告 NINO008。
 
 ## 用于整个类型：`[assembly: NinoFormatter]` [#for-a-type-assembly-ninoformatter]
+
 要让 Nino 支持它不认识的类型（你自己的或第三方的），就在程序集上注册一个格式化器。类型参数和元素格式化器都会自动推断：约束为 `INinoFormatter<E>` 的类型参数会得到 Nino 为 `E` 解析出的格式化器，因此元素的序列化和反序列化都能内联。生成代码直接调用这个格式化器，运行时也使用同一份注册信息。
 
 ```csharp
 [assembly: NinoFormatter(typeof(RingFormatter<,>))]
 
-public sealed class Ring<T> : IEnumerable<T> { /* a third-party fixed-capacity buffer */ }
+// a third-party fixed-capacity buffer: Ring(int capacity), Count, Capacity, Push, Clear,
+// and a struct enumerator, so foreach does not allocate
+public sealed class Ring<T> : IEnumerable<T> { /* ... */ }
 
 public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
     where TFormatter : struct, INinoFormatter<T>
@@ -85,7 +89,7 @@ public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
 
         writer.WriteLength(value.Count);
         writer.Write(value.Capacity);
-        foreach (var item in value)
+        foreach (var item in value)            // Ring's struct enumerator: no allocation
             default(TFormatter).Serialize(item, ref writer); // inlined element formatter
     }
 
@@ -94,12 +98,15 @@ public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
         int count = reader.ReadLength();       // validated against the bytes left
         if (count < 0)
         {
-            value = null;
+            NinoRecycler.Discard(ref value);   // the data holds null: recycle the old ring
             return;
         }
 
         reader.Read(out int capacity);
-        value = new Ring<T>(capacity);
+        if (value != null && value.Capacity == capacity)
+            value.Clear();                     // reuse the existing ring // [!code highlight]
+        else
+            NinoRecycler.Replace(ref value, new Ring<T>(capacity)); // recycles the old one, if any
         for (int i = 0; i < count; i++)
         {
             T item = default;
@@ -118,6 +125,7 @@ public sealed class RingHolder
 ```
 
 - 格式化器必须是结构体，不能嵌套在泛型类型中，并且只实现一次 `INinoFormatter<P>`。泛型格式化器以开放定义注册（`typeof(F<,>)`），非泛型格式化器直接注册（`typeof(F)`）。每个类型参数都必须能推断出来：要么出现在 `P` 中，要么出现在类型约束中（`where TList : List<T>`），要么受 `INinoFormatter<E>` 约束。无法使用的注册会被忽略，并报告 NINO020。
+- `Deserialize` 丢弃实例时（数据为 `null`，或旧实例无法复用），请交给 `NinoRecycler.Discard(ref value)` 或 `NinoRecycler.Replace(ref value, replacement)`，不要直接覆盖，这样[回收处理器和对象池](/zh/docs/v4/pooling)才能拿到它。
 - 如果格式化的目标是一个裸类型参数（`INinoFormatter<TCollection>`），可以列出适用的类型定义：`[assembly: NinoFormatter(typeof(F<,,>), typeof(IList<>))]`。不列出时，它适用于约束允许的所有类型。
 - 查找顺序：先找为该类型自身定义（以及数组）注册的格式化器，然后是原始非托管值，然后是 `[NinoType]`，最后是裸类型参数的格式化器。多个注册同时匹配时，`Priority` 高的优先（例如 `Priority = 10`）；优先级相同时，取完整名称按序数排序靠前的那个。
 
@@ -160,6 +168,49 @@ Nino 遇到一个格式化器能处理的类型时，会这样绑定格式化器
 
 其他约束保持 C# 原有的含义（`class`、`struct`、`unmanaged`、`new()`）。
 
+### 示例：`Memory<T>` [#example-memory]
+
+Nino 没有内置 `Memory<T>` 的格式化器。下面这个格式化器支持元素为任意原始类型的 `Memory<T>`：写入长度和一整块数据，字节与 `T[]` 完全相同；读取时如果长度不变，就直接读进现有的内存，所以[复用反序列化](/zh/docs/v4/pooling)不会分配内存：
+
+```csharp title="MemoryFormatter.cs"
+using System.Runtime.CompilerServices;
+
+[assembly: NinoFormatter(typeof(MemoryFormatter<>))]
+
+/// Memory<T> of raw elements: a length, then one block (the same bytes as a T[]).
+public struct MemoryFormatter<[NinoRaw] T> : INinoFormatter<Memory<T>>
+    where T : unmanaged
+{
+    public void Serialize(Memory<T> value, ref Writer writer) =>
+        writer.Write<T>(value.Span);                         // length, then one block copy
+
+    public void Deserialize(ref Memory<T> value, ref Reader reader)
+    {
+        int length = reader.ReadLength(Unsafe.SizeOf<T>()); // checked against the bytes left; -1 for null
+        if (length <= 0)
+        {
+            value = default;
+            return;
+        }
+
+        if (value.Length != length)
+            value = new T[length];                           // reuse the current memory when the length matches
+        reader.ReadUnmanagedRaw(value.Span);                 // one block copy // [!code highlight]
+    }
+}
+
+[NinoType]
+public sealed class AudioChunk
+{
+    public long Position;
+    public Memory<float> Samples;   // uses MemoryFormatter<float>
+}
+```
+
+- `[NinoRaw]` 只把 `T` 绑定到 Nino 按原始字节拷贝的类型：`Memory<float>`、`Memory<Vector3>` 会用这个格式化器，而 `Memory<string>` 成员仍然没有格式化器（NINO007）。
+- `Writer.Write<T>(ReadOnlySpan<T>)` 和 `Reader.ReadUnmanagedRaw<T>(Span<T>)` 把元素作为一整块拷贝；如果运行时的内存布局与规范布局不同，会逐字段转换。
+- 写出的字节与 `T[]` 相同，所以成员在 `float[]` 和 `Memory<float>` 之间切换不会改变格式；`null` 数组读回来是空的 `Memory<T>`。
+
 ## Writer 与 Reader [#writer-and-reader]
 
 格式化器用 `Writer` 写入、用 `Reader` 读取，两者都是 `ref struct`。最常用的方法：
@@ -169,8 +220,10 @@ Nino 遇到一个格式化器能处理的类型时，会这样绑定格式化器
 | `Write<T>(T value)` | `Read(out T value)`、`Read<T>()` | 非托管值（`int`、`float`、非托管结构体等），按原始字节 |
 | `Write<T>(T? value)` | `Read(out T? value)` | 可空的非托管值 |
 | `Write<T>(T[] values)`、`Write<T>(ReadOnlySpan<T>)` | `Read(out T[] values)` | 非托管数组：长度加一整块数据 |
+| `WriteUnmanagedRaw<T>(ReadOnlySpan<T>)` | `ReadUnmanagedRaw<T>(Span<T>)` | 不带长度的一整块非托管值，可以读进你已有的内存 |
 | `Write(string)`、`WriteUtf8(string)` | `Read(out string)`、`ReadUtf8(out string)` | 字符串，UTF-16 或 UTF-8 |
-| `WriteLength(int)`、`WriteNullLength()` | `ReadLength()` | 集合长度，`-1` 表示 null；如果剩余数据不可能容纳这么多元素，`ReadLength` 会抛出异常 |
+| | `ReadString(string current)`、`ReadUtf8(string current)` | 字符串；数据中的文本与 `current` 相同时直接返回 `current`，生成代码读入已有实例时就是这样做的 |
+| `WriteLength(int)`、`WriteNullLength()` | `ReadLength(minElementSize = 1)` | 集合长度，`-1` 表示 null；如果剩余字节装不下这么多个至少 `minElementSize` 字节的元素，`ReadLength` 会抛出异常 |
 | `ReserveInt32()`、`PatchInt32(...)`、`PatchLength(...)` | | 预留 4 字节稍后回填，例如字节长度 |
 | `WriteRaw(ReadOnlySpan<byte>)` | `ReadRaw(int)`、`Advance(int)` | 原始字节，或跳过若干字节 |
 | `Position` | `Position`、`Remaining`、`Eof` | 当前位置：`Position` 是绝对偏移，`Remaining` 是剩余字节数 |
@@ -201,3 +254,10 @@ NinoDeserializer.Deserialize(ref owner, ref reader);
 ```
 
 读取时必须按写入的顺序，读回完全相同的内容：字节里不带 schema。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="分析器诊断" href="/zh/docs/v4/analyzers">NINO001 到 NINO025 每条诊断的含义和修复方法。</Card>
+  <Card title="性能指南" href="/zh/docs/v4/performance">Nino 为什么快，以及怎样让你的代码留在快速路径上。</Card>
+</Cards>

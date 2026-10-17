@@ -4,7 +4,7 @@ description: "Nino v4 的速度从何而来，怎样保持：拦截器、原始�
 icon: Zap
 ---
 
-Nino 不用任何调优就很快。本页介绍它的内部机制，帮你让类型和调用始终留在快速路径上。实测数据见[基准测试](/zh/docs/v4/perf)，完整的实践方案见[高性能序列化](/zh/docs/v4/advanced/high-performance)。
+Nino 不用任何调优就很快。本页介绍它的内部机制，帮你让类型和调用始终留在快速路径上。实测数据见[基准测试](/zh/docs/v4/perf)，如何在自己的代码中用好这些路径，见[高性能序列化](/zh/docs/v4/advanced/high-performance)和[零分配模式](/zh/docs/v4/advanced/zero-allocation)中的做法。
 
 ## 拦截器 [#interceptors]
 
@@ -12,8 +12,8 @@ Nino 不用任何调优就很快。本页介绍它的内部机制，帮你让类
 
 ```csharp
 // Intercepted: the type is known here
-byte[] bytes = NinoSerializer.Serialize(player);
-Player copy = NinoDeserializer.Deserialize<Player>(bytes);
+byte[] bytes = NinoSerializer.Serialize(order);
+Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 
 // Not intercepted: T is a type parameter, so the regular call runs
 static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
@@ -36,7 +36,7 @@ static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 
 ## 内联的结构体格式化器 [#struct-formatters-inlined]
 
-所有格式化器都是结构体，元素格式化器作为类型参数传入（`ListFormatter<TList, T, TFormatter>`）。成员通过 `default(TFormatter).Serialize(...)` 调用格式化器，这是 JIT 或 AOT 编译器能内联的直接调用。所以序列化一个 `List<Player>`，编译出来就是一个循环，循环体里直接写 Player 的各个成员。每个元素都没有虚分派，任何地方都没有反射。
+所有格式化器都是结构体，元素格式化器作为类型参数传入（`ListFormatter<TList, T, TFormatter>`）。成员通过 `default(TFormatter).Serialize(...)` 调用格式化器，这是 JIT 或 AOT 编译器能内联的直接调用。所以序列化一个 `List<Order>`，编译出来就是一个循环，循环体里直接写 Order 的各个成员。每个元素都没有虚分派，任何地方都没有反射。
 
 唯一剩下的间接调用是你自己发起的调用，比如 `NinoSerializer.Serialize(value)`：没有被拦截时，它要通过 `NinoFormatterCache<T>`（一个泛型静态字段，即格式化器缓存）找到 `T` 的格式化器。
 
@@ -87,7 +87,7 @@ public partial struct PackedSample // 12 bytes, no padding
 
 要留在这条路径上：
 
-- 批量数据（坐标、采样、瓦片）优先使用非托管 `T` 的 `T[]` 和 `List<T>`；
+- 批量数据（坐标、采样、时间序列）优先使用非托管 `T` 的 `T[]` 和 `List<T>`；
 - 热点结构体中不要放引用类型（`string`、数组），这样它们才能按原始内存写入；
 - 注意 `NinoFormat.VersionTolerant`、`NinoFormat.Keyed` 和自定义成员格式化器都会让该结构体不再按原始内存拷贝。
 
@@ -101,25 +101,25 @@ public partial struct PackedSample // 12 bytes, no padding
 
 有些类型无论取什么值，写出的字节数都相同。对这类类型，`NinoSerializer.Serialize(value)` 会按最终大小分配 `byte[]`，再把值直接写进去：不用暂存缓冲区，不用 writer，没有扩容检查，也没有最后的拷贝。写出的字节与通用路径相同。
 
-```csharp title="PlayerInput.cs"
+```csharp title="SensorReading.cs"
 [NinoType]
-public struct Aim                    // raw: 8 bytes
+public struct GeoPoint               // raw: 8 bytes
 {
-    public float Yaw;
-    public float Pitch;
+    public float Latitude;
+    public float Longitude;
 }
 
 [NinoType]
-public sealed class PlayerInput      // fixed size: 1 (null flag) + 4 + 8 + 8 + 1 = 22 bytes
+public sealed class SensorReading    // fixed size: 1 (null flag) + 4 + 8 + 8 + 1 = 22 bytes
 {
-    public int Tick;
-    public long PlayerId;
-    public Aim Aim;
-    public bool Fire;
+    public int SensorId;
+    public long Timestamp;
+    public GeoPoint Location;
+    public bool Alarm;
 }
 
-byte[] bytes = NinoSerializer.Serialize(input);         // a new byte[22], written in place
-int size = NinoSerializer.GetFixedSize<PlayerInput>();  // 22
+byte[] bytes = NinoSerializer.Serialize(reading);         // a new byte[22], written in place
+int size = NinoSerializer.GetFixedSize<SensorReading>();  // 22
 ```
 
 满足以下条件的类型是固定大小的：
@@ -138,7 +138,7 @@ int size = NinoSerializer.GetFixedSize<PlayerInput>();  // 22
 ## 内存分配 [#allocation]
 
 - **序列化不分配内存**，唯一的例外是你要的那个 `byte[]`。序列化到复用的 `NinoArrayBufferWriter`（或任意 `IBufferWriter<byte>`）时，每次调用分配 0 B。
-- **反序列化只分配结果对象**，而这些对象也可以复用：用 `ref` 反序列化到已有实例，新实例从 `[NinoPooled]` 对象池中取。复用实例时分配 0 B。参见[复用反序列化与对象池](/zh/docs/v4/pooling)。
+- **反序列化只分配结果对象**，而这些对象也可以复用：用 `ref` 反序列化到已有实例，新实例从 `[NinoPooled]` 对象池中取。复用实例时分配 0 B，只有内容变化的字符串例外：内容不变的字符串会直接保留，变化的文本才读成新实例（非 ASCII 的 `[NinoUtf8]` 文本总是读成新实例）。参见[复用反序列化与对象池](/zh/docs/v4/pooling)。
 - 字符串默认使用 UTF-16（一次整块拷贝）。`[NinoUtf8]` 对以 ASCII 为主的文本写出的数据更小，但要做转码；非空字符串在字符数之后还要多写 4 字节的字节数（参见[二进制格式](/zh/docs/v4/platforms#binary-format)）。
 
 ## 缓冲区 [#buffers]
@@ -177,3 +177,10 @@ int size = NinoSerializer.GetFixedSize<PlayerInput>();  // 22
 
 - 请用 BenchmarkDotNet 或其他长时间运行的方式测量。在分层编译下，短时间运行测到的是未优化的 Tier-0 代码，此时 Nino 中 `static readonly` 的布局检查还没有被折叠成常量。
 - 反序列化大型集合时，耗时往往主要花在分配和清零结果上，而不在 Nino 本身。用复用实例的方式测量，才能看出序列化器自身的开销。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="高性能序列化" href="/zh/docs/v4/advanced/high-performance">复用缓冲区、Span、复用反序列化、对象池和原始结构体如何工作，各自开销如何。</Card>
+  <Card title="基准测试" href="/zh/docs/v4/perf">与 v3 和 MemoryPack 对比构建时间和运行时性能，附完整数据表。</Card>
+</Cards>

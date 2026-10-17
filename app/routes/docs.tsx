@@ -8,6 +8,7 @@ import {
   DocsDescription,
   DocsPage,
   DocsTitle,
+  EditOnGitHub,
 } from 'fumadocs-ui/layouts/docs/page';
 import { Link, redirect } from 'react-router';
 import { LLMCopyButton, ViewOptions } from '@/components/ai/page-actions';
@@ -143,7 +144,10 @@ const clientLoader = browserCollections.docs.createClientLoader<ContentProps>({
         <DocsBody>
           <Mdx components={getMDXComponents()} />
         </DocsBody>
-        <LastUpdated date={lastModified} lang={lang} />
+        <div className="flex flex-row flex-wrap items-center justify-between gap-4">
+          <EditOnGitHub href={`${repoUrl}/edit/main/content/docs/${path}`} />
+          <LastUpdated date={lastModified} lang={lang} />
+        </div>
         <Feedback onSendAction={handlePageFeedback} />
       </DocsPage>
     );

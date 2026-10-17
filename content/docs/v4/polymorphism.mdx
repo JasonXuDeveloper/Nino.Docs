@@ -11,37 +11,38 @@ icon: GitFork
   }}
 />
 
-Nino serializes the runtime type of a value, so a value declared as a base class or interface is read back as the type it really is. This is what you need for a skill's list of effects in a config table, the events of a replay, or the messages of a network protocol: one declared type, many concrete ones.
+Nino serializes the runtime type of a value, so a value declared as a base class or interface is read back as the type it really is. This is what you need for the event history of an event-sourced order, the shapes of a drawing, or the messages of a network protocol: one declared type, many concrete ones.
 
-```csharp title="Effects.cs"
+```csharp title="OrderEvents.cs"
 [NinoType] // [!code highlight]
-public abstract class Effect
+public abstract class OrderEvent
 {
-    public float Duration;
+    public long OrderId;
+    public DateTime At;
 }
 
-public sealed class Damage : Effect   // inherits [NinoType]
+public sealed class OrderPlaced : OrderEvent   // inherits [NinoType]
 {
-    public int Amount;
+    public decimal Total;
 }
 
-public sealed class Heal : Effect
+public sealed class OrderShipped : OrderEvent
 {
-    public int Amount;
+    public string Carrier;
 }
 
-public sealed class Stun : Effect { }
+public sealed class OrderCancelled : OrderEvent { }
 ```
 
 ```csharp
-var fireball = new List<Effect>
+var history = new List<OrderEvent>
 {
-    new Damage { Amount = 40 },
-    new Stun { Duration = 1.5f },
+    new OrderPlaced { OrderId = 7, Total = 40m },
+    new OrderCancelled { OrderId = 7 },
 };
-byte[] bytes = NinoSerializer.Serialize(fireball);
-List<Effect> effects = NinoDeserializer.Deserialize<List<Effect>>(bytes);
-// effects[0] is a Damage, effects[1] is a Stun
+byte[] bytes = NinoSerializer.Serialize(history);
+List<OrderEvent> events = NinoDeserializer.Deserialize<List<OrderEvent>>(bytes);
+// events[0] is an OrderPlaced, events[1] is an OrderCancelled
 ```
 
 <Callout type="info">
@@ -122,8 +123,10 @@ Seal classes that have no subtypes. A sealed class costs 1 byte and no dispatch;
 `NinoTypeId` computes the same ids at run time, for logging, protocol checks or a handshake that compares message sets between peers:
 
 ```csharp
-int id = NinoTypeId.Of(typeof(Move));          // the id Move is written with ([NinoFormerName] honored)
-string name = NinoTypeId.GetName(typeof(Move)); // its runtime-form name, e.g. "MyGame.Net.Move"
+int id = NinoTypeId.Of(typeof(OrderShipped));               // the id OrderShipped is written with ([NinoFormerName] honored)
+string name = NinoTypeId.GetName(typeof(OrderShipped));     // its runtime-form name, e.g. "MyApp.Events.OrderShipped"
+string hashed = NinoTypeId.GetIdName(typeof(OrderShipped)); // the name the id is computed from: its [NinoFormerName], if any
+int same = NinoTypeId.Compute(hashed);                      // == id: the hash of a runtime-form name
 ```
 
 Ids are never `0`, which encodes `null`.
@@ -145,11 +148,27 @@ For RPC or message dispatch, plugin systems and editor tooling, give the types a
 [NinoType]
 public interface ICommand { }
 
-public sealed class SpawnUnit : ICommand { public int UnitId; }   // implementations inherit [NinoType]
-public sealed class DeleteUnit : ICommand { public int UnitId; }
+public sealed class CreateUser : ICommand { public string Name; }   // implementations inherit [NinoType]
+public sealed class DeleteUser : ICommand { public int UserId; }
 
-byte[] bytes = NinoSerializer.Serialize<ICommand>(command);
-ICommand read = NinoDeserializer.Deserialize<ICommand>(bytes);
+public sealed class CommandChannel
+{
+    private readonly Socket _socket;
+    private readonly NinoArrayBufferWriter _buffer = new(); // reused for every message
+
+    public CommandChannel(Socket socket) => _socket = socket;
+
+    public void Send(ICommand command)
+    {
+        _buffer.ResetWrittenCount();
+        NinoSerializer.Serialize<ICommand>(command, _buffer); // the type id, then the command
+        _socket.Send(_buffer.WrittenSpan);
+    }
+
+    // Fills `command` in place when the data holds the same type, else replaces (and recycles) it
+    public void Receive(ReadOnlySpan<byte> message, ref ICommand command) =>
+        NinoDeserializer.Deserialize(message, ref command); // [!code highlight]
+}
 ```
 
 Two alternatives exist, and both are slower:
@@ -159,13 +178,15 @@ Two alternatives exist, and both are slower:
 
 ## Subtypes in Other Assemblies
 
-Subtypes are found automatically wherever they are declared, including assemblies loaded later (plugins, HybridCLR hot-update DLLs): when a type id is unknown, Nino looks in the registries of newly loaded assemblies before it fails. There is no registration call. For example, a hot update adds `public sealed class Freeze : Effect` in its own DLL. Once the DLL is loaded, the battle code in the AOT assembly reads a `List<Effect>` that contains a `Freeze`, with no change to that code. The generator must run in the subtype's assembly too (install the `Nino` package in that project; in Unity, its assembly must reference `Nino.Core`); an id whose type is in no loaded assembly throws `InvalidOperationException`.
+Subtypes are found automatically wherever they are declared, including assemblies loaded later (plugins, HybridCLR hot-update DLLs): when a type id is unknown, Nino looks in the registries of newly loaded assemblies before it fails. There is no registration call. For example, a plugin or hot-update DLL adds `public sealed class OrderRefunded : OrderEvent`. Once the DLL is loaded, the code in the main (AOT) assembly reads a `List<OrderEvent>` that contains an `OrderRefunded`, with no change to that code. The generator must run in the subtype's assembly too (install the `Nino` package in that project; in Unity, its assembly must reference `Nino.Core`); an id whose type is in no loaded assembly throws `InvalidOperationException`.
 
 The one exception is a closed generic subtype (`Box<int>`) that the process only **reads**, and never names in code or writes. Register it at startup:
 
 ```csharp
 NinoPolymorphic.Register<Box<int>>();
 ```
+
+`NinoPolymorphic.Register(Type)` does the same for a type you only have as a `Type` (one built with `MakeGenericType`, for example). Both return `false` for a type that cannot be written polymorphically: an abstract or open generic type, or a type that is not a `[NinoType]`.
 
 ## Opting Out
 
@@ -174,3 +195,10 @@ NinoPolymorphic.Register<Box<int>>();
 ## Reuse Deserialization
 
 When you deserialize into an existing value whose runtime type differs from the type in the data, the old instance is dropped (and recycled, see [pooling](/en/docs/v4/pooling)) and a new one of the right type is created. When the types match, the instance is filled in place.
+
+## Next Steps
+
+<Cards>
+  <Card title="Evolving Your Data" href="/en/docs/v4/evolving-data">Positional, version-tolerant and keyed formats, and what each lets you change.</Card>
+  <Card title="Reference Tracking" href="/en/docs/v4/reference-tracking">Shared references and cycles, opted in per type.</Card>
+</Cards>

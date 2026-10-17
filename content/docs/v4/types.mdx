@@ -64,13 +64,24 @@ Nino supports the following collections, as long as their elements are serializa
 - `ConcurrentDictionary<TKey, TValue>`, `ConcurrentQueue<T>`, `ConcurrentStack<T>`, `ConcurrentBag<T>`
 - `PriorityQueue<TElement, TPriority>` (.NET 6 and later; not on .NET Standard or Unity)
 - `ImmutableArray<T>` and `ImmutableList<T>` with the [`Nino.Immutable`](#immutable-collections) package
-- Interfaces: `IEnumerable<T>`, `ICollection<T>`, `IList<T>`, `IReadOnlyCollection<T>`, `IReadOnlyList<T>` (read back as `List<T>`), `ISet<T>` and `IReadOnlySet<T>` (.NET 8+) (read back as `HashSet<T>`), `IDictionary<TKey, TValue>` and `IReadOnlyDictionary<TKey, TValue>` (read back as `Dictionary<TKey, TValue>`), `ReadOnlyDictionary<TKey, TValue>` (read back as a new `ReadOnlyDictionary<TKey, TValue>` over a `Dictionary<TKey, TValue>`)
+- Collection interfaces and `ReadOnlyDictionary<TKey, TValue>` (see the table below)
 - Any other class implementing `ICollection<T>`, `IDictionary<TKey, TValue>` or `IProducerConsumerCollection<T>`
+
+A member declared as one of these types is read back as a concrete collection:
+
+| Declared as | Read back as |
+| --- | --- |
+| `IEnumerable<T>`, `ICollection<T>`, `IList<T>`, `IReadOnlyCollection<T>`, `IReadOnlyList<T>` | `List<T>` |
+| `ISet<T>`, `IReadOnlySet<T>` (.NET 8+) | `HashSet<T>` |
+| `IDictionary<TKey, TValue>`, `IReadOnlyDictionary<TKey, TValue>` | `Dictionary<TKey, TValue>` |
+| `ReadOnlyDictionary<TKey, TValue>` | a new `ReadOnlyDictionary<TKey, TValue>` over a `Dictionary<TKey, TValue>` |
+
+A collection interface writes its elements one by one, which for most element types gives the same bytes as a `List<T>`. Nullable raw elements are the exception: an `int?[]` or `List<int?>` writes every element in a fixed stride (the has-value flag, padding, then the value, 8 bytes for `int?`), while a member declared as `IList<int?>`, `ICollection<int?>` or `IEnumerable<int?>` writes each element as a single `int?` (1 byte for `null`, 5 bytes otherwise). Changing a member between the two kinds changes the format.
 
 <Callout type="info">
 
 Collections can be nested freely, for example:
-- `List<Dictionary<int, SampleStruct>>[]`
+- `List<Dictionary<int, OrderLine>>[]`
 - `Dictionary<int[], List<bool>[]>`
 - `IDictionary<string, IList<List<bool>[]>[]>[]`
 
@@ -88,9 +99,9 @@ Reference it and use the types as members or pass them to `NinoSerializer`/`Nino
 
 ```csharp
 [NinoType]
-public sealed class Deck
+public sealed class Article
 {
-    public ImmutableArray<int> CardIds;      // default(ImmutableArray<T>) round-trips as default
+    public ImmutableArray<long> AuthorIds;   // default(ImmutableArray<T>) round-trips as default
     public ImmutableList<string> Tags;
 }
 ```
@@ -102,7 +113,7 @@ Other immutable collections (`ImmutableDictionary`, `ImmutableHashSet`...) are n
 Your own collection types work without any attribute: a class derived from `List<T>`, `HashSet<T>`, `Queue<T>`, `Stack<T>` or `Dictionary<TKey, TValue>`, or implementing `IDictionary<TKey, TValue>`, `IProducerConsumerCollection<T>` or `ICollection<T>`, is written exactly like the collection it extends.
 
 ```csharp
-public class Inventory : List<Item> { }
+public class OrderLines : List<OrderLine> { }
 
 public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 ```
@@ -110,7 +121,7 @@ public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 - Nino creates a collection only when the member or element that holds it is `null`: through a public static [`[NinoFactory]`](/en/docs/v4/pooling#creating-instances-with-ninofactory) factory method if the type declares one (for example to take it from a pool), otherwise through a public constructor callable without arguments.
 - Collections are filled through the public collection API (`Add`/`Clear`, the dictionary indexer, `Enqueue`, `Push`, `TryAdd`). Subclasses of `List<T>`, `HashSet<T>` and `Dictionary<TKey, TValue>` are filled through the base type, so members hidden with `new` are not called.
 - If the collection type is also a `[NinoType]`, its elements are written first and then its own serialized members.
-- The declared type decides what is created: a `List<int>` member holding an `Inventory` is read back as a `List<int>`.
+- The declared type decides what is created: a `List<OrderLine>` member holding an `OrderLines` is read back as a `List<OrderLine>`.
 - Collections are values: the same collection instance in two members is written twice and read back as two instances.
 - A pooled collection (such as ET's `ListComponent<T>`) can implement `INinoPooled`: when reuse deserialization drops it, Nino calls its `ReturnToPool()`. See [Reuse Deserialization and Pooling](/en/docs/v4/pooling#deserializing-into-existing-instances).
 
@@ -127,7 +138,7 @@ Deserializing into a collection whose `IsReadOnly` is `true` throws an `InvalidO
 These have no formatter; a member of such a type is skipped with warning NINO007 (mark it `[NinoIgnore]`, or give it a [custom formatter](/en/docs/v4/custom-formatters)):
 
 - delegates, `Task`, pointers and other runtime-only types;
-- `Memory<T>`, `ReadOnlyMemory<T>` (use `T[]` or `ArraySegment<T>`), and `Span<T>`, which cannot be a member of a class anyway;
+- `Memory<T>`, `ReadOnlyMemory<T>` (use `T[]` or `ArraySegment<T>`, or register a formatter like the [`Memory<T>` example](/en/docs/v4/custom-formatters#example-memory)), and `Span<T>`, which cannot be a member of a class anyway;
 - non-generic collections (`ArrayList`, `Hashtable`) and `ReadOnlyCollection<T>`;
 - collections Nino cannot create or fill: an abstract collection class (`abstract class Bag : ICollection<int>`), a collection without a public constructor callable without arguments or a [`[NinoFactory]`](/en/docs/v4/pooling#creating-instances-with-ninofactory) method, a struct collection (`struct Ring : IList<int>`), and a type implementing `ICollection<T>` for two different `T`;
 - other BCL classes such as `BigInteger`, `Uri`, `Version`, `StringBuilder`, `Type` and `Lazy<T>`, and immutable collections other than `ImmutableArray<T>` and `ImmutableList<T>`;

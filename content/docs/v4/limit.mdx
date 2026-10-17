@@ -10,6 +10,7 @@ What to know before choosing Nino v4, and the limitations of earlier versions th
 - **Source generator required.** Nino needs its source generator (Roslyn 4.3 or later) and C# 9 or later in the project that declares `[NinoType]`s.
 - **Not compatible with v3 data.** v4 cannot read data written by v3 or by the v4 betas and previews. See [Migrating from v3](/en/docs/v4/migration#converting-v3-data).
 - **Positional by default.** A bare `[NinoType]` is the fastest format but does not survive member changes. For data you store or exchange across versions, choose `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` before writing any: see [Evolving Your Data](/en/docs/v4/evolving-data).
+- **Contiguous memory only.** Nino reads from a `ReadOnlySpan<byte>` and writes to an `IBufferWriter<byte>`; there are no `Stream` or `ReadOnlySequence<byte>` overloads. See [Multi-Segment Data](/en/docs/v4/basic#multi-segment-data).
 - **Some types have no built-in formatter.** See [Supported Types](/en/docs/v4/types#not-supported); a [custom formatter](/en/docs/v4/custom-formatters) can add any of them.
 
 ## Platform Notes

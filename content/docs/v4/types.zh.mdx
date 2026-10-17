@@ -69,13 +69,24 @@ Nino 支持所有[非托管类型](https://learn.microsoft.com/zh-cn/dotnet/csha
 - `ConcurrentDictionary<TKey, TValue>`、`ConcurrentQueue<T>`、`ConcurrentStack<T>`、`ConcurrentBag<T>`
 - `PriorityQueue<TElement, TPriority>`（.NET 6 及以上；.NET Standard 和 Unity 中没有）
 - 安装 [`Nino.Immutable`](#immutable-collections) 后支持 `ImmutableArray<T>` 和 `ImmutableList<T>`
-- 接口：`IEnumerable<T>`、`ICollection<T>`、`IList<T>`、`IReadOnlyCollection<T>`、`IReadOnlyList<T>`（读回为 `List<T>`），`ISet<T>` 和 `IReadOnlySet<T>`（.NET 8+）（读回为 `HashSet<T>`），`IDictionary<TKey, TValue>` 和 `IReadOnlyDictionary<TKey, TValue>`（读回为 `Dictionary<TKey, TValue>`），`ReadOnlyDictionary<TKey, TValue>`（读回为包装一个 `Dictionary<TKey, TValue>` 的新 `ReadOnlyDictionary<TKey, TValue>`）
+- 集合接口和 `ReadOnlyDictionary<TKey, TValue>`（见下表）
 - 其他实现了 `ICollection<T>`、`IDictionary<TKey, TValue>` 或 `IProducerConsumerCollection<T>` 的类
+
+声明为以下类型的成员，读回时得到的是具体的集合类型：
+
+| 声明类型 | 读回为 |
+| --- | --- |
+| `IEnumerable<T>`、`ICollection<T>`、`IList<T>`、`IReadOnlyCollection<T>`、`IReadOnlyList<T>` | `List<T>` |
+| `ISet<T>`、`IReadOnlySet<T>`（.NET 8+） | `HashSet<T>` |
+| `IDictionary<TKey, TValue>`、`IReadOnlyDictionary<TKey, TValue>` | `Dictionary<TKey, TValue>` |
+| `ReadOnlyDictionary<TKey, TValue>` | 包装一个 `Dictionary<TKey, TValue>` 的新 `ReadOnlyDictionary<TKey, TValue>` |
+
+声明为集合接口的成员逐个写入元素，对大多数元素类型来说，字节与 `List<T>` 相同。可空的原始类型元素是个例外：`int?[]` 或 `List<int?>` 的每个元素占固定的跨度（先是有值标志，然后是填充，再是值，`int?` 共 8 字节）；而声明为 `IList<int?>`、`ICollection<int?>` 或 `IEnumerable<int?>` 的成员把每个元素当作单独的 `int?` 写入（`null` 占 1 字节，否则占 5 字节）。成员在这两类声明之间切换，格式就会改变。
 
 <Callout type="info">
 
 集合可以任意嵌套，例如：
-- `List<Dictionary<int, SampleStruct>>[]`
+- `List<Dictionary<int, OrderLine>>[]`
 - `Dictionary<int[], List<bool>[]>`
 - `IDictionary<string, IList<List<bool>[]>[]>[]`
 
@@ -93,9 +104,9 @@ dotnet add package Nino.Immutable
 
 ```csharp
 [NinoType]
-public sealed class Deck
+public sealed class Article
 {
-    public ImmutableArray<int> CardIds;      // default(ImmutableArray<T>) round-trips as default
+    public ImmutableArray<long> AuthorIds;   // default(ImmutableArray<T>) round-trips as default
     public ImmutableList<string> Tags;
 }
 ```
@@ -107,7 +118,7 @@ public sealed class Deck
 你自己的集合类型无需任何特性即可使用：派生自 `List<T>`、`HashSet<T>`、`Queue<T>`、`Stack<T>` 或 `Dictionary<TKey, TValue>` 的类，或者实现了 `IDictionary<TKey, TValue>`、`IProducerConsumerCollection<T>` 或 `ICollection<T>` 的类，写入方式和它所扩展的集合完全相同。
 
 ```csharp
-public class Inventory : List<Item> { }
+public class OrderLines : List<OrderLine> { }
 
 public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 ```
@@ -115,7 +126,7 @@ public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 - Nino 只在存放集合的成员或元素为 `null` 时才创建集合：如果类型声明了公共静态的 [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) 工厂方法（比如从池中取实例），就调用它，否则调用能无参调用的公共构造函数。
 - 集合通过公开的集合 API 填充（`Add`/`Clear`、字典索引器、`Enqueue`、`Push`、`TryAdd`）。`List<T>`、`HashSet<T>` 和 `Dictionary<TKey, TValue>` 的子类通过基类型填充，所以用 `new` 隐藏的成员不会被调用。
 - 如果集合类型本身也是 `[NinoType]`，先写元素，再写它自己的序列化成员。
-- 创建什么由声明类型决定：一个声明为 `List<int>` 的成员即使存放的是 `Inventory`，读回来也是 `List<int>`。
+- 创建什么由声明类型决定：一个声明为 `List<OrderLine>` 的成员即使存放的是 `OrderLines`，读回来也是 `List<OrderLine>`。
 - 集合按值处理：同一个集合实例出现在两个成员中，会写入两次，读回来是两个实例。
 - 池化的集合（例如 ET 的 `ListComponent<T>`）可以实现 `INinoPooled`：复用反序列化丢弃它时，Nino 会调用它的 `ReturnToPool()`。参见[复用反序列化与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
 
@@ -132,7 +143,7 @@ public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 下列类型没有格式化器，这类成员会被跳过并报告警告 NINO007（可以用 `[NinoIgnore]` 忽略，或为它写[自定义格式化器](/zh/docs/v4/custom-formatters)）：
 
 - 委托、`Task`、指针等只在运行时有意义的类型；
-- `Memory<T>`、`ReadOnlyMemory<T>`（请改用 `T[]` 或 `ArraySegment<T>`），以及本来就不能作为类成员的 `Span<T>`；
+- `Memory<T>`、`ReadOnlyMemory<T>`（请改用 `T[]` 或 `ArraySegment<T>`，或者参照 [`Memory<T>` 示例](/zh/docs/v4/custom-formatters#example-memory)注册一个格式化器），以及本来就不能作为类成员的 `Span<T>`；
 - 非泛型集合（`ArrayList`、`Hashtable`）和 `ReadOnlyCollection<T>`；
 - Nino 无法创建或填充的集合：抽象集合类（`abstract class Bag : ICollection<int>`）、既没有可无参调用的公共构造函数也没有 [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) 方法的集合、结构体集合（`struct Ring : IList<int>`），以及对两个不同的 `T` 实现了 `ICollection<T>` 的类型；
 - 其他 BCL 类，如 `BigInteger`、`Uri`、`Version`、`StringBuilder`、`Type`、`Lazy<T>`，以及除 `ImmutableArray<T>` 和 `ImmutableList<T>` 之外的不可变集合；

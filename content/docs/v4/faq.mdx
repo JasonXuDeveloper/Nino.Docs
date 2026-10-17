@@ -52,6 +52,10 @@ Yes. `NinoSerializer` and `NinoDeserializer` are static and can be called from a
 
 No. v4 has a new binary format and cannot read data written by v3 or by the v4 betas and previews, so stored v3 data has to be converted once. See [Migrating from v3](/en/docs/v4/migration).
 
+## Can I use Nino from JavaScript or TypeScript?
+
+Yes, in the browser, through .NET WebAssembly rather than generated TypeScript. Build the client-side serialization as a .NET `browser-wasm` app that references Nino and your `[NinoType]` types, and expose functions to JavaScript with `[JSExport]`. Server and browser then share one set of C# types and produce identical bytes; the cost is downloading the .NET runtime. Nino generates no TypeScript or JavaScript code. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
+
 ## When should I not use Nino?
 
 When people need to read or edit the data (use JSON, YAML or TOML), or when a program in another language must read it: the format is defined by your C# types, with no schema file and no generator for other languages, so use Protocol Buffers, FlatBuffers or MessagePack for that. See [Limitations](/en/docs/v4/limit).

@@ -19,7 +19,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Nino.Core;
 
-public static class NinoStream
+public static partial class NinoStream
 {
     public const int MaxFrameSize = 16 << 20; // reject absurd lengths before renting a buffer
 
@@ -29,9 +29,10 @@ public static class NinoStream
         buffer.ResetWrittenCount();
         var writer = new Writer(buffer);
         int slot = writer.ReserveInt32();
-        NinoSerializer.Serialize(value, ref writer);
+        NinoSerializer.Serialize(value, ref writer); // [!code highlight]
         writer.PatchLength(slot);   // bytes written after the slot
         writer.Flush();
+        writer.ReleaseReferences(); // end the call, as NinoSerializer does
     }
 
     public static void Write<T>(Stream stream, T value, NinoArrayBufferWriter buffer)
@@ -39,34 +40,65 @@ public static class NinoStream
         Frame(value, buffer);
         stream.Write(buffer.WrittenSpan);
     }
+}
+```
 
-    public static T Read<T>(Stream stream)
+Reading is the mirror image: read the 4-byte prefix, check the length, read exactly that many bytes, then deserialize. A stream may return fewer bytes than asked, so `Fill` loops until it has them all:
+
+```csharp title="NinoStream.cs"
+public static partial class NinoStream
+{
+    /// <summary>Reads the next frame into value (default: a new one). False at the end of the stream.</summary>
+    public static bool TryRead<T>(Stream stream, ref T value)
     {
-        byte[] prefix = new byte[4];
-        Fill(stream, prefix, 4);
-        int length = ReadLength(prefix);
-
-        byte[] payload = ArrayPool<byte>.Shared.Rent(length);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(4096); // the prefix, then the payload
         try
         {
-            Fill(stream, payload, length);
-            return NinoDeserializer.Deserialize<T>(payload.AsSpan(0, length));
+            if (!Fill(stream, buffer, 4, endAllowed: true))
+                return false;                              // clean end between frames
+            int length = ReadLength(buffer);
+            if (length > buffer.Length)
+                Grow(ref buffer, length);
+            Fill(stream, buffer, length, endAllowed: false);
+            NinoDeserializer.Deserialize(buffer.AsSpan(0, length), ref value); // [!code highlight]
+            return true;
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(payload);
+            ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 
-    // Stream.ReadExactly does the same on .NET 7+; this loop runs everywhere, including Unity
-    private static void Fill(Stream stream, byte[] buffer, int count)
+    public static T Read<T>(Stream stream)
+    {
+        T value = default;
+        if (!TryRead(stream, ref value))
+            throw new EndOfStreamException();
+        return value;
+    }
+
+    // Stream.ReadAtLeast does the same on .NET 7+; this loop runs everywhere, including Unity
+    private static bool Fill(Stream stream, byte[] buffer, int count, bool endAllowed)
     {
         for (int read = 0; read < count; )
         {
             int n = stream.Read(buffer, read, count - read);
-            if (n == 0) throw new EndOfStreamException();
+            if (n == 0)
+            {
+                if (read == 0 && endAllowed)
+                    return false;
+                throw new EndOfStreamException();
+            }
             read += n;
         }
+        return true;
+    }
+
+    private static void Grow(ref byte[] buffer, int length)
+    {
+        byte[] larger = ArrayPool<byte>.Shared.Rent(length);
+        ArrayPool<byte>.Shared.Return(buffer);
+        buffer = larger;
     }
 
     private static int ReadLength(ReadOnlySpan<byte> prefix)
@@ -82,41 +114,52 @@ public static class NinoStream
 ```csharp
 using var buffer = new NinoArrayBufferWriter(); // one per thread or connection
 using (var file = File.Create(path))
-    NinoStream.Write(file, save, buffer);
+    NinoStream.Write(file, checkpoint, buffer);
 
 using (var file = File.OpenRead(path))
-    save = NinoStream.Read<SaveGame>(file);
+    checkpoint = NinoStream.Read<Checkpoint>(file);
 ```
 
-A sequence of values (what `IAsyncEnumerable<T>` streaming gives you elsewhere) is just consecutive frames: write one frame per element and read until the stream ends. The frame format is the same as in the [network guide](/en/docs/v4/advanced/networking#frame-the-stream), so both ends can mix the two.
+`TryRead` rents one pooled array per frame for the prefix and the payload, and deserializes into `value` in place: once `value` has the right shape, writing and reading a frame allocates nothing but the strings whose text changed. `Read` returns a new value each time.
+
+A sequence of values (what `IAsyncEnumerable<T>` streaming gives you elsewhere) is just consecutive frames: write one frame per element and read until the stream ends, into one instance:
+
+```csharp
+AuditEvent auditEvent = null;                   // filled in place by every frame
+while (NinoStream.TryRead(stream, ref auditEvent))
+    Index(auditEvent);
+```
+
+The frame format is the same as in the [network guide](/en/docs/v4/advanced/networking#frame-the-stream), so both ends can mix the two.
 
 ## Async
 
-`Writer` is a `ref struct` and cannot live in an `async` method, so build the frame synchronously with `Frame`, then await the I/O. Add these to `NinoStream`:
+`Writer` is a `ref struct` and cannot live in an `async` method, so build the frame synchronously with `Frame`, then await the I/O. `WriteAsync` needs no `async` of its own: it returns the stream's task, so do not reuse the buffer until that has completed. Add these to `NinoStream`:
 
 ```csharp
-public static async ValueTask WriteAsync<T>(Stream stream, T value, NinoArrayBufferWriter buffer,
+/// <summary>Do not reuse buffer until the returned task has completed.</summary>
+public static ValueTask WriteAsync<T>(Stream stream, T value, NinoArrayBufferWriter buffer,
     CancellationToken ct = default)
 {
     Frame(value, buffer);
-    await stream.WriteAsync(buffer.WrittenMemory, ct);
+    return stream.WriteAsync(buffer.WrittenMemory, ct);
 }
 
 public static async ValueTask<T> ReadAsync<T>(Stream stream, CancellationToken ct = default)
 {
-    byte[] prefix = new byte[4];
-    await FillAsync(stream, prefix, 4, ct);
-    int length = ReadLength(prefix);
-
-    byte[] payload = ArrayPool<byte>.Shared.Rent(length);
+    byte[] buffer = ArrayPool<byte>.Shared.Rent(4096);
     try
     {
-        await FillAsync(stream, payload, length, ct);
-        return NinoDeserializer.Deserialize<T>(payload.AsSpan(0, length));
+        await FillAsync(stream, buffer, 4, ct);
+        int length = ReadLength(buffer);
+        if (length > buffer.Length)
+            Grow(ref buffer, length);
+        await FillAsync(stream, buffer, length, ct);
+        return NinoDeserializer.Deserialize<T>(buffer.AsSpan(0, length));
     }
     finally
     {
-        ArrayPool<byte>.Shared.Return(payload);
+        ArrayPool<byte>.Shared.Return(buffer);
     }
 }
 
@@ -124,33 +167,45 @@ private static async ValueTask FillAsync(Stream stream, byte[] buffer, int count
 {
     for (int read = 0; read < count; )
     {
-        int n = await stream.ReadAsync(buffer, read, count - read, ct);
+        int n = await stream.ReadAsync(buffer.AsMemory(read, count - read), ct);
         if (n == 0) throw new EndOfStreamException();
         read += n;
     }
 }
 ```
 
-`Fill` and `FillAsync` run on every target; on .NET 7 and later, `Stream.ReadExactly` and `ReadExactlyAsync` do the same. `stream.Write(span)` and `WriteAsync(memory)` need .NET Standard 2.1 (Unity 2022.3 has it); on .NET Standard 2.0 only, get the array with `MemoryMarshal.TryGetArray(buffer.WrittenMemory, out var segment)` and call `Write(segment.Array, segment.Offset, segment.Count)`.
+An `async` method allocates its state machine only when it actually waits for I/O, and `ReadAsync` returns a new value per frame (an `async` method cannot take a `ref` parameter); for a loop that must not allocate, use the synchronous `TryRead` or a [`PipeReader`](/en/docs/v4/advanced/networking#reading-frames).
+
+`Fill` and `FillAsync` run on every target; on .NET 7 and later, `Stream.ReadAtLeast` and `ReadExactlyAsync` do the same. `stream.Write(span)`, `WriteAsync(memory)` and `ReadAsync(memory)` need .NET Standard 2.1 (Unity 2021.2 and later have it); on .NET Standard 2.0 only, use the `byte[]` overloads, getting the written array with `MemoryMarshal.TryGetArray(buffer.WrittenMemory, out var segment)`.
 
 With `System.IO.Pipelines`, serialize straight into the `PipeWriter` (it is an `IBufferWriter<byte>`) and read frames from the `PipeReader`; see [Reading Frames](/en/docs/v4/advanced/networking#reading-frames) for the complete loop, which decodes each frame the same way as the helper below.
 
 ## Multi-Segment Input (`ReadOnlySequence`) [#readonlysequence-input]
 
-A `PipeReader` or a `SequenceReader` hands you a `ReadOnlySequence<byte>`. A single segment is deserialized in place; a multi-segment sequence is copied once into a pooled buffer:
+A `PipeReader` or a `SequenceReader` hands you a `ReadOnlySequence<byte>`. A single segment is deserialized in place; a multi-segment sequence is copied once into a pooled buffer. The `ref` overload fills an instance you keep:
 
 ```csharp
 public static T Deserialize<T>(in ReadOnlySequence<byte> data)
 {
+    T value = default;
+    Deserialize(data, ref value);
+    return value;
+}
+
+public static void Deserialize<T>(in ReadOnlySequence<byte> data, ref T value)
+{
     if (data.IsSingleSegment)
-        return NinoDeserializer.Deserialize<T>(data.First.Span); // data.FirstSpan on .NET 5+
+    {
+        NinoDeserializer.Deserialize(data.First.Span, ref value); // data.FirstSpan on .NET 5+
+        return;
+    }
 
     int length = checked((int)data.Length);
     byte[] rented = ArrayPool<byte>.Shared.Rent(length);
     try
     {
         data.CopyTo(rented);
-        return NinoDeserializer.Deserialize<T>(rented.AsSpan(0, length));
+        NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
     }
     finally
     {
@@ -159,11 +214,11 @@ public static T Deserialize<T>(in ReadOnlySequence<byte> data)
 }
 ```
 
-Pipes usually return one segment per read, so most frames take the first branch and copy nothing.
+Add both to `NinoStream`. Pipes usually return one segment per read, so most frames take the first branch and copy nothing.
 
 ## Callbacks
 
-Nino calls no hooks of its own. Put the before and after logic in an interface, and call it around Nino in one small helper:
+Nino calls no hooks of its own. Put the before and after logic in an interface, and call it around Nino in one small helper. Constrained to the interface, the calls do not box a struct:
 
 ```csharp
 public interface ISerializationCallbacks
@@ -176,15 +231,14 @@ public static class CallbackSerializer
 {
     public static void Serialize<T>(T value, IBufferWriter<byte> output) where T : ISerializationCallbacks
     {
-        value.OnBeforeSerialize();
+        value?.OnBeforeSerialize();
         NinoSerializer.Serialize(value, output);
     }
 
-    public static T Deserialize<T>(ReadOnlySpan<byte> data) where T : ISerializationCallbacks
+    public static void Deserialize<T>(ReadOnlySpan<byte> data, ref T value) where T : ISerializationCallbacks
     {
-        T value = NinoDeserializer.Deserialize<T>(data);
-        value.OnAfterDeserialize();
-        return value;
+        NinoDeserializer.Deserialize(data, ref value);
+        value?.OnAfterDeserialize();
     }
 }
 ```
@@ -195,7 +249,7 @@ public static class CallbackSerializer
 
 ## Compression
 
-Compress the bytes Nino writes, and decompress into a pooled buffer before reading. With spans, store the uncompressed length first so the reader knows how much to rent:
+Compress the bytes Nino writes, and decompress into a pooled buffer before reading. With spans, store the uncompressed length first so the reader knows how much to rent. `Compress` writes into any `IBufferWriter<byte>` (a second `NinoArrayBufferWriter` you keep, a `PipeWriter`), and `Decompress` fills an instance you keep, so neither allocates once the buffers have grown:
 
 ```csharp title="NinoBrotli.cs"
 using System;
@@ -209,21 +263,22 @@ public static class NinoBrotli
 {
     public const int MaxSize = 64 << 20;
 
-    public static byte[] Compress<T>(T value, NinoArrayBufferWriter buffer)
+    /// <summary>Writes [int32 length][Brotli data] to output. scratch holds the uncompressed bytes.</summary>
+    public static void Compress<T>(T value, NinoArrayBufferWriter scratch, IBufferWriter<byte> output)
     {
-        buffer.ResetWrittenCount();
-        NinoSerializer.Serialize(value, buffer);
+        scratch.ResetWrittenCount();
+        NinoSerializer.Serialize(value, scratch);
 
-        int length = buffer.WrittenCount;
-        var output = new byte[4 + BrotliEncoder.GetMaxCompressedLength(length)];
-        BinaryPrimitives.WriteInt32LittleEndian(output, length);
-        if (!BrotliEncoder.TryCompress(buffer.WrittenSpan, output.AsSpan(4), out int written))
+        int length = scratch.WrittenCount;
+        Span<byte> target = output.GetSpan(4 + BrotliEncoder.GetMaxCompressedLength(length));
+        BinaryPrimitives.WriteInt32LittleEndian(target, length);
+        // quality 1 of 0-11: fast, still compact; window 22 is the default
+        if (!BrotliEncoder.TryCompress(scratch.WrittenSpan, target.Slice(4), out int written, 1, 22))
             throw new InvalidOperationException("Compression failed");
-        Array.Resize(ref output, 4 + written);
-        return output;
+        output.Advance(4 + written);
     }
 
-    public static T Decompress<T>(ReadOnlySpan<byte> data)
+    public static void Decompress<T>(ReadOnlySpan<byte> data, ref T value)
     {
         int length = BinaryPrimitives.ReadInt32LittleEndian(data);
         if ((uint)length > MaxSize)
@@ -235,7 +290,7 @@ public static class NinoBrotli
             if (!BrotliDecoder.TryDecompress(data.Slice(4), rented.AsSpan(0, length), out int written)
                 || written != length)
                 throw new InvalidDataException("Corrupt data");
-            return NinoDeserializer.Deserialize<T>(rented.AsSpan(0, length));
+            NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
         }
         finally
         {
@@ -249,10 +304,10 @@ With streams, wrap the stream and reuse the frame helpers from above. `GZipStrea
 
 ```csharp
 using (var gzip = new GZipStream(File.Create(path), CompressionLevel.Fastest))
-    NinoStream.Write(gzip, save, buffer);
+    NinoStream.Write(gzip, checkpoint, buffer);
 
 using (var gzip = new GZipStream(File.OpenRead(path), CompressionMode.Decompress))
-    save = NinoStream.Read<SaveGame>(gzip);
+    checkpoint = NinoStream.Read<Checkpoint>(gzip);
 ```
 
 `BrotliEncoder`, `BrotliDecoder` and `BrotliStream` need .NET Core 2.1 or later, and are not in .NET Standard. If you want more speed and can accept less compression, LZ4 libraries offer the same span-in, span-out shape as `BrotliEncoder.TryCompress`.

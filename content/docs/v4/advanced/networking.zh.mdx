@@ -5,7 +5,7 @@ description: "基于 Nino 搭建消息协议：分帧、多态消息、System.IO
 icon: Network
 ---
 
-服务间通信、实时服务器（游戏、交易、协作）以及设备之间的连接，都需要一种消息格式。本指南实现一个 TCP 协议中与序列化相关的部分：消息继承体系、直接写入 `PipeWriter` 的长度前缀帧、从 `PipeReader` 无拷贝地读取帧，以及按连接复用消息对象。传输层（socket、Kestrel 连接、引擎自带的网络模块）由你决定；只要能提供 `PipeReader`/`PipeWriter`、`Stream` 或原始缓冲区，做法都一样。
+服务间通信、实时服务器（游戏、交易、协作）以及设备之间的连接，都需要一种消息格式。本指南实现一个 TCP 协议中与序列化相关的部分：消息继承体系、写入 `PipeWriter` 的长度前缀帧、从 `PipeReader` 无拷贝地读取帧，以及按连接复用消息对象。传输层（socket、Kestrel 连接、引擎自带的网络模块）由你决定；只要能提供 `PipeReader`/`PipeWriter`、`Stream` 或原始缓冲区，做法都一样。
 
 ## 定义消息 [#define-the-messages]
 
@@ -26,10 +26,11 @@ public sealed class Login : Message
     public byte[] Token;
 }
 
-public sealed class Move : Message
+public sealed class PriceUpdate : Message
 {
-    public int EntityId;
-    public Vector3 Target;
+    public int InstrumentId;
+    public long Timestamp;
+    public double Bid, Ask;
 }
 
 public sealed class Chat : Message
@@ -38,7 +39,7 @@ public sealed class Chat : Message
 }
 ```
 
-- 把消息和 `Message` 声明在同一个程序集中：这样 Nino 会用生成的代码分派（写入时是一串类型判断，读取时是对 ID 的 `switch`），而不是查注册表。把它们声明为 `sealed`，这样声明为 `Move` 的成员只需 1 字节头部，而不是 4 字节 ID。
+- 把消息和 `Message` 声明在同一个程序集中：这样 Nino 会用生成的代码分派（写入时是一串类型判断，读取时是对 ID 的 `switch`），而不是查注册表。把它们声明为 `sealed`，这样声明为 `PriceUpdate` 的成员只需 1 字节头部，而不是 4 字节 ID。
 - 类型 ID 来自类型名，所以给消息类改名或换命名空间会导致旧版本的对端无法识别。改名时请使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
 - `NinoFormat.VersionTolerant` 让你以后可以给各个消息添加字段（不能加到 `Message` 本身），参见[滚动升级](#rolling-upgrades)。子类型会随 `[NinoType]` 一起继承它；如果给某个消息单独加了 `[NinoType]`，记得在那里也写上 `format: NinoFormat.VersionTolerant`。
 
@@ -49,16 +50,16 @@ void Handle(Message message)
 {
     switch (message)
     {
-        case Login login: OnLogin(login); break;
-        case Move move:   OnMove(move);   break;
-        case Chat chat:   OnChat(chat);   break;
+        case Login login:       OnLogin(login); break;
+        case PriceUpdate price: OnPrice(price); break;
+        case Chat chat:         OnChat(chat);   break;
     }
 }
 ```
 
 ## 分帧 [#frame-the-stream]
 
-TCP 是字节流，每条消息都需要分帧。最简单的做法是加 4 字节小端序的长度前缀。Nino 的 `Writer` 可以先预留 4 字节，接着序列化消息，最后回填长度，全部在同一个缓冲区里完成：
+TCP 是字节流，每条消息都需要分帧。最简单的做法是加 4 字节小端序的长度前缀。Nino 的 `Writer` 可以先预留 4 字节，接着序列化消息，最后回填长度，全部在同一个复用的缓冲区里完成，然后整帧一次性拷贝进 `PipeWriter`。缓冲区增长到最大消息的大小之后，写一帧不再分配内存：
 
 ```csharp title="FrameWriter.cs"
 using System.IO.Pipelines;
@@ -73,28 +74,29 @@ public sealed class FrameWriter
         _buffer.ResetWrittenCount();
         var writer = new Writer(_buffer);
         int lengthPosition = writer.ReserveInt32();   // 4 bytes for the length
-        NinoSerializer.Serialize(message, ref writer);
+        NinoSerializer.Serialize(message, ref writer); // [!code highlight]
         writer.PatchLength(lengthPosition);           // bytes written after the slot
         writer.Flush();
+        writer.ReleaseReferences();                   // end the call, as NinoSerializer does
 
         output.Write(_buffer.WrittenSpan);            // PipeWriter is an IBufferWriter<byte>
     }
 }
 
-// sending
-frameWriter.Write(pipe.Output, new Move { EntityId = 7, Target = target });
+// sending: one FrameWriter per connection; update is a PriceUpdate you fill in and reuse
+frameWriter.Write(pipe.Output, update);
 await pipe.Output.FlushAsync();
 ```
 
 <Callout type="info">
 
-如果传输层本身已经分帧（WebSocket 消息、UDP 数据报、消息队列），就不需要长度前缀，直接序列化到传输层的 `IBufferWriter<byte>`（`NinoSerializer.Serialize(message, pipeWriter)`）或复用的缓冲区即可；参见 [WebSocket 与 UDP](#websocket-and-udp) 和[消息队列与事件流](/zh/docs/v4/advanced/message-queues)。
+如果传输层本身已经分帧（WebSocket 消息、UDP 数据报、消息队列），就不需要长度前缀，序列化到复用的 `NinoArrayBufferWriter`，或直接序列化到传输层的 `IBufferWriter<byte>`（`NinoSerializer.Serialize(message, pipeWriter)`，它先写入每个线程一份的暂存缓冲区，再一次性拷贝过去）即可；参见 [WebSocket 与 UDP](#websocket-and-udp) 和[消息队列与事件流](/zh/docs/v4/advanced/message-queues)。
 
 </Callout>
 
 ## 读取帧 [#reading-frames]
 
-从管道给出的 `ReadOnlySequence<byte>` 中切出每一帧，直接在管道自己的内存上反序列化：
+从管道给出的 `ReadOnlySequence<byte>` 中切出每一帧。位于单个分段中的帧（最常见的情况）直接在管道自己的内存上反序列化；跨两个分段的帧拷贝一次，拷到栈上或池化的数组中。一次读取可能停在某帧的中间，也可能包含好几帧：循环取出所有完整的帧，剩下的留在管道里等下一次读取。
 
 ```csharp title="FrameReader.cs"
 using System.Buffers;
@@ -113,7 +115,7 @@ public static class FrameReader
             ReadOnlySequence<byte> buffer = result.Buffer;
 
             while (TryReadFrame(ref buffer, out ReadOnlySequence<byte> frame))
-                handle(Decode(frame));
+                handle(Decode<Message>(frame));
 
             input.AdvanceTo(buffer.Start, buffer.End);
             if (result.IsCompleted) break;
@@ -137,23 +139,23 @@ public static class FrameReader
         return true;
     }
 
-    public static Message Decode(ReadOnlySequence<byte> frame)
+    public static T Decode<T>(in ReadOnlySequence<byte> frame)
     {
         if (frame.IsSingleSegment)                       // the common case: no copy
-            return NinoDeserializer.Deserialize<Message>(frame.First.Span);
+            return NinoDeserializer.Deserialize<T>(frame.First.Span); // [!code highlight]
 
-        int length = (int)frame.Length;                  // spans two segments: copy once
+        int length = checked((int)frame.Length);         // spans segments: copy once
         if (length <= 512)
         {
             Span<byte> stack = stackalloc byte[length];
             frame.CopyTo(stack);
-            return NinoDeserializer.Deserialize<Message>(stack);
+            return NinoDeserializer.Deserialize<T>(stack);
         }
         byte[] rented = ArrayPool<byte>.Shared.Rent(length);
         try
         {
             frame.CopyTo(rented);
-            return NinoDeserializer.Deserialize<Message>(rented.AsSpan(0, length));
+            return NinoDeserializer.Deserialize<T>(rented.AsSpan(0, length));
         }
         finally { ArrayPool<byte>.Shared.Return(rented); }
     }
@@ -178,22 +180,27 @@ using Nino.Core;
 
 public static class MessageTransports
 {
-    // WebSocket: one Nino payload per WebSocket message
-    public static async Task SendAsync<T>(WebSocket socket, T message, NinoArrayBufferWriter buffer,
+    public const int MaxMessageSize = 1 << 20;
+
+    // WebSocket: one Nino payload per WebSocket message.
+    // Returns the socket's task: do not reuse buffer until it has completed.
+    public static ValueTask SendAsync<T>(WebSocket socket, T message, NinoArrayBufferWriter buffer,
         CancellationToken ct)
     {
         buffer.ResetWrittenCount();
         NinoSerializer.Serialize(message, buffer);
-        await socket.SendAsync(buffer.WrittenMemory, WebSocketMessageType.Binary, endOfMessage: true, ct);
+        return socket.SendAsync(buffer.WrittenMemory, WebSocketMessageType.Binary, endOfMessage: true, ct);
     }
 
-    public static async Task<T> ReceiveAsync<T>(WebSocket socket, NinoArrayBufferWriter buffer,
+    public static async ValueTask<T> ReceiveAsync<T>(WebSocket socket, NinoArrayBufferWriter buffer,
         CancellationToken ct)
     {
         buffer.ResetWrittenCount();
         ValueWebSocketReceiveResult result;
         do                                                  // a message may arrive in several parts
         {
+            if (buffer.WrittenCount >= MaxMessageSize)
+                throw new InvalidDataException("WebSocket message too large");
             Memory<byte> free = buffer.GetMemory(4096);
             result = await socket.ReceiveAsync(free, ct);
             if (result.MessageType == WebSocketMessageType.Close)
@@ -205,7 +212,7 @@ public static class MessageTransports
     }
 
     // UDP: one Nino payload per datagram
-    public static void SendDatagram<T>(Socket socket, EndPoint remote, T message, NinoArrayBufferWriter buffer)
+    public static void SendDatagram<T>(Socket socket, SocketAddress remote, T message, NinoArrayBufferWriter buffer)
     {
         buffer.ResetWrittenCount();
         NinoSerializer.Serialize(message, buffer);
@@ -214,7 +221,7 @@ public static class MessageTransports
 
     public static void ReceiveLoop<T>(Socket socket, Action<T> handle) where T : class
     {
-        byte[] datagram = new byte[65527];   // allocated once
+        byte[] datagram = new byte[65_527];  // the largest UDP payload, allocated once
         T message = null;                    // reused for every datagram
         while (true)
         {
@@ -226,9 +233,11 @@ public static class MessageTransports
 }
 ```
 
-- 一条 WebSocket 消息可能分几次 `ReceiveAsync` 才收完；循环把它们收集到缓冲区里，缓冲区按需增长，之后一直复用。如果对端不可信，请限制消息大小。
-- 在 IPv4 上，一个 UDP 数据报的负载最多 65,507 字节。消息要远小于路径 MTU（常见的预算是 1,200 字节左右），以免 IP 分片；如果在意顺序或丢包，请自己加序号。
-- UDP 循环复用了接收数组和消息实例，所以持续接收结构相同的数据报不会分配内存。
+- 一条 WebSocket 消息可能分几次 `ReceiveAsync` 才收完；循环把它们收集到缓冲区里，缓冲区按需增长，之后一直复用。`MaxMessageSize` 防止不可信的对端让缓冲区无限增长。
+- 套接字同步完成时，两个方法都不会分配任务对象：它们都返回 `ValueTask`，而 `SendAsync` 本身根本不是 `async` 方法。
+- 一个 UDP 数据报的负载在 IPv4 上最多 65,507 字节（IPv6 上 65,527 字节）。消息要远小于路径 MTU（常见的预算是 1,200 字节左右），以免 IP 分片；如果在意顺序或丢包，请自己加序号。
+- 用 `SocketAddress` 指定目标地址，用 `remoteEndPoint.Serialize()` 生成一次即可：传 `EndPoint` 的 `SendTo` 每次调用都会把它转换成一个新的 `SocketAddress`。`SocketAddress` 重载需要 .NET 8 或更高版本。
+- UDP 循环复用了接收数组和消息实例：收到第一个数据报之后，持续接收同一类型的消息，除了内容有变化的字符串和消息里包含的数组之外不再分配内存。
 
 ## 按连接复用消息 [#reuse-messages-per-connection]
 
@@ -237,21 +246,22 @@ public static class MessageTransports
 <Tabs items={["池化消息", "每种类型一个实例"]}>
 <Tab value="池化消息">
 
-给高频消息加上 `[NinoPooled]`。Nino 每次创建实例时都会先从池中取，通过 `Message` 基类型读取 `Move` 时也一样。处理完之后把它还回去：
+给高频消息加上 `[NinoPooled]`。Nino 每次创建实例时都会先从池中取，通过 `Message` 基类型读取 `PriceUpdate` 时也一样。处理完之后把它还回去；这样解码、处理、归还一条池化消息都不会分配内存：
 
 ```csharp
 [NinoPooled] // [NinoType] and its format are inherited from Message
-public sealed partial class Move : Message
+public sealed partial class PriceUpdate : Message
 {
-    public int EntityId;
-    public Vector3 Target;
+    public int InstrumentId;
+    public long Timestamp;
+    public double Bid, Ask;
 
-    private static partial IEnumerable<Move> OnNinoPoolWarmup() => null; // start empty
+    private static partial IEnumerable<PriceUpdate> OnNinoPoolWarmup() => null; // start empty
     private partial void OnNinoPoolReturn() { }
 }
 
 // in the read loop
-Message message = FrameReader.Decode(frame);
+Message message = FrameReader.Decode<Message>(frame);
 Handle(message);
 if (message is INinoPooled pooled)
     pooled.ReturnToPool();
@@ -279,10 +289,9 @@ void OnFrame(ReadOnlySpan<byte> frame)
 
 ## gRPC [#grpc]
 
-.NET 的 gRPC 并不要求使用 Protocol Buffers：一个方法由 `Method<TRequest, TResponse>` 描述，每种消息类型配一个编组器（marshaller）。Nino 编组器写入 gRPC 提供的缓冲区写入器，并从收到的负载序列中读取：
+.NET 的 gRPC 并不要求使用 Protocol Buffers：一个方法由 `Method<TRequest, TResponse>` 描述，每种消息类型配一个编组器（marshaller）。Nino 编组器写入 gRPC 提供的缓冲区写入器（经由 Nino 的暂存缓冲区，拷贝一次），收到的负载序列则交给[读取帧](#reading-frames)中的 `FrameReader.Decode` 读取，两端都不会为每条消息分配 `byte[]`：
 
 ```csharp title="NinoMarshaller.cs"
-using System.Buffers;
 using Grpc.Core;
 using Nino.Core;
 
@@ -294,13 +303,8 @@ public static class NinoMarshaller
             NinoSerializer.Serialize(value, context.GetBufferWriter());
             context.Complete();
         },
-        deserializer: context =>
-        {
-            ReadOnlySequence<byte> payload = context.PayloadAsReadOnlySequence();
-            if (payload.IsSingleSegment)
-                return NinoDeserializer.Deserialize<T>(payload.First.Span);
-            return NinoDeserializer.Deserialize<T>(payload.ToArray()); // rare: copy once
-        });
+        // the payload as it arrived: one segment is read in place, several are copied once
+        deserializer: context => FrameReader.Decode<T>(context.PayloadAsReadOnlySequence()));
 }
 
 [NinoType] public sealed class GetPriceRequest { public int InstrumentId; }
@@ -320,7 +324,7 @@ public static class PricingMethods
 
 - `NinoSerializer` 和 `NinoDeserializer` 可以在任意多个线程上同时调用，无需加锁。
 - 但你的缓冲区和复用的消息对象不行：每个连接（或每个发送线程）用一个 `FrameWriter`，并且绝不能让两个线程反序列化到同一个实例。
-- 交给其他线程（游戏主循环、任务队列）的消息，在那个线程用完之前，不能复用，也不能归还到池中。
+- 交给其他线程（处理循环、任务队列）的消息，在那个线程用完之前，不能复用，也不能归还到池中。
 
 ## 滚动升级 [#rolling-upgrades]
 
@@ -333,8 +337,10 @@ public static class PricingMethods
 | 删除或重排字段 | ✗ | ✗ | ✓ |
 | 新增消息类型 | 旧对端无法读取 | 旧对端无法读取 | 旧对端无法读取 |
 
-- 在基类上设置 `NinoFormat.VersionTolerant`（所有消息都会继承），旧对端会跳过它不认识的字段，新对端上缺失的字段则保留消息构造函数赋予的值（可以用 `public int Priority = 1;` 这样的字段初始化器为旧版发送方指定默认值）。只向密封的消息类添加字段：`Message` 的成员写在每个消息自己的成员之前，向 `Message` 追加字段会让新旧对端在错误的位置读取彼此的字段（参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)）。如果要添加每条消息都带的字段，就把整个继承体系改为 `NinoFormat.Keyed`，或者分别加到每个消息类中。复用或池化的消息是原地填充的，这时缺失的字段保留的是**上一条**消息的值：请在 `OnNinoPoolReturn` 中重置这些字段，或者在还有旧版对端连接时不要复用实例。
+- 在基类上设置 `NinoFormat.VersionTolerant`（所有消息都会继承），旧对端会跳过它不认识的字段，新对端上缺失的字段则保留消息构造函数赋予的值（可以用 `public int Priority = 1;` 这样的字段初始化器为旧版发送方指定默认值）。
+- 只向密封的消息类添加字段：`Message` 的成员写在每个消息自己的成员之前，向 `Message` 追加字段会让新旧对端在错误的位置读取彼此的字段（参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)）。如果要添加每条消息都带的字段，就把整个继承体系改为 `NinoFormat.Keyed`，或者分别加到每个消息类中。
+- 复用或池化的消息是原地填充的，这时缺失的字段保留的是**上一条**消息的值：请在 `OnNinoPoolReturn` 中重置这些字段，或者在还有旧版对端连接时不要复用实例。
 - 对端收到**它不认识的消息类型**时无法反序列化，调用会抛出 `InvalidOperationException`（未知的类型 ID）。请在握手时协商协议版本，只向声明支持的对端发送新的消息类型；如果想交换消息类型列表，`NinoTypeId.Of(typeof(T))` 可以给出每种消息的 ID。
-- 如果两端总是一起发布（游戏客户端和它的专用服务器），就保持按位置格式：它最小也最快。
+- 如果两端总是一起发布（作为一个整体部署的两个服务、游戏客户端和它的专用服务器），就保持按位置格式：它最小也最快。
 
 具体规则参见[数据演进](/zh/docs/v4/evolving-data)。

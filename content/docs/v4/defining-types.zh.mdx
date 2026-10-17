@@ -10,12 +10,12 @@ icon: Braces
 using Nino.Core;
 
 [NinoType]
-public class Player
+public class Order
 {
-    public int Id;                       // public fields
-    public string Name { get; set; }     // public properties with a getter and a setter
-    public List<Item> Inventory { get; init; } // init setters work too
-    public Vector3? LastCheckpoint;      // Nullable<T> of any serializable T
+    public long Id;                              // public fields
+    public string CustomerName { get; set; }     // public properties with a getter and a setter
+    public List<OrderLine> Lines { get; init; }  // init setters work too
+    public DateTime? ShippedAt;                  // Nullable<T> of any serializable T
 }
 ```
 
@@ -24,10 +24,10 @@ public class Player
 
 ```csharp
 [NinoType]
-public class SampleClass
+public class Customer
 {
     public int Id;
-    public string Name { get; set; }
+    public string Email { get; set; }
 }
 ```
 
@@ -36,10 +36,10 @@ public class SampleClass
 
 ```csharp
 [NinoType]
-public struct SampleStruct
+public struct Money
 {
-    public int Id;
-    public string Name { get; set; }
+    public long MinorUnits;
+    public string Currency { get; set; }
 }
 ```
 
@@ -48,7 +48,7 @@ public struct SampleStruct
 
 ```csharp
 [NinoType]
-public record SampleRecord(int Id, string Name);
+public record Address(string Street, string City, string PostalCode);
 ```
 
 </Tab>
@@ -56,7 +56,7 @@ public record SampleRecord(int Id, string Name);
 
 ```csharp
 [NinoType]
-public record struct SampleRecordStruct(int Id, string Name);
+public record struct GeoPoint(double Latitude, double Longitude);
 ```
 
 </Tab>
@@ -64,15 +64,15 @@ public record struct SampleRecordStruct(int Id, string Name);
 
 ```csharp
 [NinoType]
-public interface IShape
+public interface IEvent
 {
-    float Area { get; set; }
+    long Timestamp { get; set; }
 }
 
-public class Square : IShape // inherits [NinoType]
+public class OrderShipped : IEvent // inherits [NinoType]
 {
-    public float Area { get; set; }
-    public float Side;
+    public long Timestamp { get; set; }
+    public long OrderId;
 }
 ```
 
@@ -164,11 +164,11 @@ public class Session
 
 ```csharp
 [NinoType(false)] // [!code highlight]
-public class SampleClass
+public class Invoice
 {
-    public int Id;                       // not serialized
-    [NinoMember(1)] public string Name { get; set; } // [!code highlight]
-    [NinoMember(0)] public int Level;    // written first
+    public decimal CachedTotal;                         // not serialized
+    [NinoMember(1)] public string Number { get; set; } // [!code highlight]
+    [NinoMember(0)] public long CustomerId;            // written first
 }
 ```
 
@@ -177,9 +177,9 @@ public class SampleClass
 
 ```csharp
 [NinoType(false)] // [!code highlight]
-public record SampleRecord(
-    [property: NinoMember(2)] int Id, // [!code highlight]
-    [property: NinoMember(1)] string Name); // [!code highlight]
+public record Shipment(
+    [property: NinoMember(2)] string Carrier,         // [!code highlight]
+    [property: NinoMember(1)] string TrackingNumber); // [!code highlight]
 ```
 
 </Tab>
@@ -214,17 +214,7 @@ public partial class Account
 
 ## 成员顺序 [#member-order]
 
-不使用 `format: NinoFormat.Keyed` 时，成员顺序**就是**数据格式。默认先写基类成员，再按声明顺序写类型自身的成员。如果想换一种顺序，就使用 `[NinoType(false)]`，并给每个成员加上 `[NinoMember(index)]`：成员按索引升序写入。
-
-```csharp
-[NinoType(false)] // [!code highlight]
-public class Ordered
-{
-    [NinoMember(1)] public int Id;
-    [NinoMember(0)] public string Name; // written first
-    [NinoMember(2)] public bool Flag;
-}
-```
+不使用 `format: NinoFormat.Keyed` 时，成员顺序**就是**数据格式。默认先写基类成员，再按声明顺序写类型自身的成员。如果想换一种顺序，就使用 `[NinoType(false)]`，并给每个成员加上 `[NinoMember(index)]`：成员按索引升序写入，示例见[显式指定成员](#choosing-members-explicitly)。
 
 <Callout type="warn">
 
@@ -234,7 +224,7 @@ public class Ordered
 
 ## 字符串编码 [#string-encoding]
 
-字符串默认以 UTF-16 写入：一个长度加一次整块拷贝，速度最快。给成员加上 `[NinoUtf8]` 则改为 UTF-8，以 ASCII 为主的文本体积可减半，代价是需要转码（运行时已做向量化）。适合字节比 CPU 更贵的场景：要广播给大量客户端的聊天内容和玩家昵称，或者落盘的大型文本表。以中日韩文字为主的文本请保持 UTF-16：这类字符在 UTF-8 下每个占 3 字节，在 UTF-16 下只占 2 字节。
+字符串默认以 UTF-16 写入：一个长度加一次整块拷贝，速度最快。给成员加上 `[NinoUtf8]` 则改为 UTF-8，以 ASCII 为主的文本体积可减半，代价是需要转码（运行时已做向量化）。适合字节比 CPU 更贵的场景：要广播给大量客户端的聊天内容和用户名，或者落盘的大型文本表。以中日韩文字为主的文本请保持 UTF-16：这类字符在 UTF-8 下每个占 3 字节，在 UTF-16 下只占 2 字节。
 
 ```csharp
 [NinoType]
@@ -246,18 +236,25 @@ public class ChatMessage
 }
 ```
 
-该特性作用于这个成员的格式化器直接写出的所有字符串：成员本身，以及集合或元组成员中的 `string` 元素、键、值和元组项（`List<string>`、`string[]`、`Dictionary<string, int>`、`(string, int)`）。嵌套的 `[NinoType]` 里的字符串仍按那个类型自己的设置编码；成员中不含字符串时，该特性不起作用。读写双方必须一致：以 UTF-8 写出的数据，不能由一个没有给该成员标 `[NinoUtf8]` 的类型读取。UTF-8 字符串会同时写入字符数和字节数，所以读取时可以按最终长度分配字符串，再一次性把这些字节转码进去（参见[二进制格式](/zh/docs/v4/platforms#binary-format)）。
+该特性作用于这个成员的格式化器直接写出的所有字符串：成员本身，以及集合或元组成员中的 `string` 元素、键、值和元组项（`List<string>`、`string[]`、`Dictionary<string, int>`、`(string, int)`）。嵌套的 `[NinoType]` 里的字符串仍按那个类型自己的设置编码；成员中不含字符串时，该特性不起作用。
+
+读写双方必须一致：以 UTF-8 写出的数据，不能由一个没有给该成员标 `[NinoUtf8]` 的类型读取。UTF-8 字符串会同时写入字符数和字节数，所以读取时可以按最终长度分配字符串，再一次性把这些字节转码进去（参见[二进制格式](/zh/docs/v4/platforms#binary-format)）。
 
 ## 旧名称 [#former-name]
 
-如果成员、元素或变量的声明类型是非密封类、抽象类、接口或 `object`，值会连同它运行时类型的**类型 ID** 一起写入。类型 ID 是类型全名的 32 位哈希，读取时靠它还原成正确的类型。类型改名或换命名空间后，ID 也会变，密封的子类型也一样，例如通过 `Message` 基类发送的各个消息类。典型场景：你把协议类从 `Game.Net` 挪到了 `Game.Protocol`，而上个版本的存档或客户端用的还是旧 ID。用 `[NinoFormerName]` 可以继续读取旧数据：
+如果成员、元素或变量的声明类型是非密封类、抽象类、接口或 `object`，值会连同它运行时类型的**类型 ID** 一起写入。类型 ID 是类型全名的 32 位哈希，读取时靠它还原成正确的类型。类型改名或换命名空间后，ID 也会变，密封的子类型也一样（例如通过 `Message` 基类发送的各个消息类）。
+
+典型场景：你把协议类从 `MyApp.Net` 挪到了 `MyApp.Protocol`，而上个版本存下的文件或客户端用的还是旧 ID。用 `[NinoFormerName]` 可以继续读取旧数据：
 
 ```csharp
-[NinoType]
-[NinoFormerName("Old.Namespace.Outer+Item")] // [!code highlight]
-public class ItemRenamed
+namespace MyApp.Protocol
 {
-    public int Id;
+    [NinoType]
+    [NinoFormerName("MyApp.Net.OrderPlaced")] // [!code highlight]
+    public class OrderPlaced
+    {
+        public long OrderId;
+    }
 }
 ```
 
@@ -267,15 +264,21 @@ public class ItemRenamed
 
 ## 结构体 [#structs]
 
-`[NinoType]` 结构体没有任何头部。满足以下条件时，它按**原始内存**写入：是非托管类型，格式不是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，使用默认的顺序布局，没有自定义成员格式化器，并且每个实例字段都参与序列化，而且这些字段本身也按原始字节写入（不是 `Nullable<T>`、元组、`nint`、`DateTimeOffset`，也不是非原始内存的 `[NinoType]` 结构体）。这时单个值只需一次拷贝，它的数组和列表也是整块拷贝。否则逐个成员写入。无论哪种情况，只要所有成员都是非托管值或这样的结构体，它就是[固定大小的](/zh/docs/v4/performance#fixed-size-types)：`NinoSerializer.Serialize(value)` 会把它直接写进大小正好的 `byte[]`。
+`[NinoType]` 结构体没有任何头部。满足以下条件时，它按**原始内存**写入（单个值一次拷贝，数组和列表整块拷贝）：
+
+- 是非托管类型，并使用默认的顺序布局；
+- 格式不是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，也没有自定义成员格式化器；
+- 每个实例字段都参与序列化，而且这些字段本身也按原始字节写入（不是 `Nullable<T>`、元组、`nint`、`DateTimeOffset`，也不是非原始内存的 `[NinoType]` 结构体）。
+
+否则逐个成员写入。无论哪种情况，只要所有成员都是非托管值或这样的结构体，它就是[固定大小的](/zh/docs/v4/performance#fixed-size-types)：`NinoSerializer.Serialize(value)` 会把它直接写进大小正好的 `byte[]`。
 
 ```csharp
 [NinoType]
-public struct Hit          // raw: one 16-byte copy, no padding
+public struct SensorReading // raw: one 16-byte copy, no padding
 {
-    public int TargetId;
-    public float Damage;
-    public long Tick;
+    public int SensorId;
+    public float Value;
+    public long Timestamp;
 }
 ```
 
@@ -293,10 +296,10 @@ public struct Hit          // raw: one 16-byte copy, no padding
 
 ```csharp
 [NinoType]
-public record Point(int X, int Y);
+public record Price(decimal Amount, string Currency);
 
 [NinoType]
-public record struct Range(int Start, int Length);
+public record struct DateRange(DateTime Start, DateTime End);
 ```
 
 由于这些属性只有 `init` 访问器，位置记录每次反序列化都会重新创建，即使是反序列化到已有实例也一样，因此不能使用 [`trackReferences`](/zh/docs/v4/reference-tracking) 或 [`[NinoPooled]`](/zh/docs/v4/pooling)。需要这些功能时，请使用属性可写的记录。实例的创建方式参见[构造函数](/zh/docs/v4/constructors)。
@@ -314,7 +317,7 @@ public class Box<T>
 public record struct Pair<TKey, TValue>(TKey Key, TValue Value);
 ```
 
-每个泛型 `[NinoType]` 定义只生成一个格式化器，而不是每个封闭类型各一个。类型参数必须是可序列化的类型（`Box<int>`、`Box<List<string>>`、`Box<Player>`）。生成器会注册 Compilation 中出现过的所有封闭类型（成员类型、基类型、`NinoSerializer`/`NinoDeserializer` 调用的类型参数），确保 AOT 平台有需要的实例化；其余的由运行时在第一次用到时构造。
+每个泛型 `[NinoType]` 定义只生成一个格式化器，而不是每个封闭类型各一个。类型参数必须是可序列化的类型（`Box<int>`、`Box<List<string>>`、`Box<Order>`）。生成器会注册当前编译中用到的所有封闭类型（成员类型、基类型、`NinoSerializer`/`NinoDeserializer` 调用的类型参数），确保 AOT 平台有需要的实例化；其余的由运行时在第一次用到时构造。
 
 <Callout type="warn">
 

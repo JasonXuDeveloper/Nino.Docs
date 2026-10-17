@@ -36,7 +36,7 @@ void NinoSerializer.SerializeBoxed(object value, ref Writer writer, Type type);
 `T` can be any [supported type](/en/docs/v4/types): a `[NinoType]`, a primitive, a string, a collection, and so on.
 
 ```csharp
-byte[] bytes = NinoSerializer.Serialize(player);
+byte[] bytes = NinoSerializer.Serialize(order);
 ```
 
 ### Reusing a Buffer
@@ -48,13 +48,15 @@ byte[] bytes = NinoSerializer.Serialize(player);
 ```csharp
 var buffer = new NinoArrayBufferWriter();      // or new NinoArrayBufferWriter(initialCapacity)
 
-NinoSerializer.Serialize(player, buffer);
+NinoSerializer.Serialize(order, buffer);
 ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // also WrittenMemory, WrittenCount, ToArray()
 // ... send or store the bytes ...
 
-buffer.ResetWrittenCount();                    // reuse the same array
-NinoSerializer.Serialize(player, buffer);      // no allocation this time
+buffer.ResetWrittenCount();                    // reuse the same array // [!code highlight]
+NinoSerializer.Serialize(order, buffer);       // no allocation this time
 ```
+
+The buffer grows by renting a larger array from the pool. If you know roughly how large your messages are, size it up front with `new NinoArrayBufferWriter(initialCapacity)` or `EnsureCapacity(sizeHint)`; `Capacity` and `FreeCapacity` report the array's size and the room left.
 
 <Callout type="warn">
 
@@ -103,20 +105,20 @@ void NinoDeserializer.DeserializeBoxed(ref object value, ref Reader reader, Type
 The data is a `ReadOnlySpan<byte>`: pass a `byte[]`, an `ArraySegment<byte>`, a `Span<byte>`, `Memory<byte>.Span` or a slice of any buffer you already have, without copying it.
 
 ```csharp
-Player player = NinoDeserializer.Deserialize<Player>(bytes);
-Player fromSlice = NinoDeserializer.Deserialize<Player>(rented.AsSpan(0, received));
+Order order = NinoDeserializer.Deserialize<Order>(bytes);
+Order fromSlice = NinoDeserializer.Deserialize<Order>(rented.AsSpan(0, received));
 ```
 
 ### Into an Existing Value
 
-Pass an existing value by `ref` and Nino fills it in place, reusing the instance and its nested objects, lists, arrays and dictionaries where it can. Pass `null` (or `default`) and a new value is created.
+Pass an existing value by `ref` and Nino fills it in place, reusing the instance and its nested objects, lists, arrays and dictionaries where it can. Pass `null` (or `default`) and a new value is created. Strings are compared with what the value already holds: a string with the same text is kept, and only a string whose text changed (or that was `null`) is read into a new instance. A `[NinoUtf8]` string is kept this way when its text is ASCII; non-ASCII UTF-8 text is always decoded into a new string.
 
 ```csharp
-Player player = null;
+Order order = null;
 foreach (var message in messages)
 {
-    NinoDeserializer.Deserialize(message, ref player); // the first call creates player, later calls reuse it
-    Handle(player);
+    NinoDeserializer.Deserialize(message, ref order); // the first call creates order, later calls reuse it
+    Handle(order);
 }
 ```
 
@@ -138,17 +140,17 @@ reader.ReleaseReferences();
 There is no `ReadOnlySequence<byte>` overload. A sequence from `System.IO.Pipelines` is usually a single segment, which you can pass directly; otherwise, copy it into one contiguous block first:
 
 ```csharp
-static Player Read(ReadOnlySequence<byte> data)
+static Order Read(ReadOnlySequence<byte> data)
 {
     if (data.IsSingleSegment)
-        return NinoDeserializer.Deserialize<Player>(data.First.Span);
+        return NinoDeserializer.Deserialize<Order>(data.First.Span);
 
     int length = (int)data.Length;
     byte[] rented = ArrayPool<byte>.Shared.Rent(length);
     try
     {
         data.CopyTo(rented);
-        return NinoDeserializer.Deserialize<Player>(rented.AsSpan(0, length));
+        return NinoDeserializer.Deserialize<Order>(rented.AsSpan(0, length));
     }
     finally
     {
@@ -159,17 +161,20 @@ static Player Read(ReadOnlySequence<byte> data)
 
 ## Runtime Types
 
-Code that handles many types at once (RPC or message dispatch, a plugin system, editor tooling) rarely needs runtime types. Give the types a common `[NinoType]` base class or interface and serialize through it: `Serialize<TBase>` writes a type id, and `Deserialize<TBase>` reads it and creates the right type in generated code. This is the fastest way to handle many types, and it works with [reuse deserialization and pooling](/en/docs/v4/pooling), so a receive loop allocates 0 B:
+Code that handles many types at once (RPC or message dispatch, a plugin system, editor tooling) rarely needs runtime types. Give the types a common `[NinoType]` base class or interface and serialize through it: `Serialize<TBase>` writes a type id, and `Deserialize<TBase>` reads it and creates the right type in generated code. This is the fastest way to handle many types, and it works with [reuse deserialization and pooling](/en/docs/v4/pooling), so a receive loop allocates nothing but the strings in the data:
 
 ```csharp
 [NinoType]
 public abstract class Message { }
 
-public sealed class Move : Message { public int X, Y; }    // inherits [NinoType]
+public sealed class Ping : Message { public long SentAt; } // inherits [NinoType]
 public sealed class Chat : Message { public string Text; }
 
-byte[] bytes = NinoSerializer.Serialize<Message>(new Move { X = 1, Y = 2 });
-Message message = NinoDeserializer.Deserialize<Message>(bytes); // a Move
+var buffer = new NinoArrayBufferWriter();                  // one per connection, reused
+NinoSerializer.Serialize<Message>(new Ping { SentAt = 1 }, buffer); // declared as the base: a type id is written
+
+Message message = null;
+NinoDeserializer.Deserialize(buffer.WrittenSpan, ref message); // a Ping, reused by later calls while the type matches
 ```
 
 See [Polymorphism](/en/docs/v4/polymorphism#dispatching-through-a-common-base).
@@ -199,7 +204,11 @@ field.SetValue(target, current);
 
 ## Deep Object Graphs
 
-Recursive types (a linked list, a tree, a node that holds another node) can nest to any depth. Nino writes the first 128 levels of nested objects in place; an object nested deeper is deferred and written later from a shallower level, and it is read back the same way. Writing and reading use a bounded amount of stack, however deep the graph is: a 100,000-node linked list round-trips on a 512 KB thread stack, and data cannot be crafted to overflow the reader's stack, so recursive types are safe in messages from untrusted sources. Data nested less than 128 levels deep is not affected: its bytes do not change.
+Recursive types (a linked list, a tree, a node that holds another node) can nest to any depth. Nino writes the first 128 levels of nested objects in place; an object nested deeper is **deferred**: written later from a shallower level, and read back the same way. As a result:
+
+- Writing and reading use a bounded amount of stack, however deep the graph is: a 100,000-node linked list round-trips on a 512 KB thread stack.
+- Data cannot be crafted to overflow the reader's stack, so recursive types are safe in messages from untrusted sources.
+- Data nested less than 128 levels deep is not affected: its bytes do not change.
 
 ```csharp
 [NinoType]
@@ -225,11 +234,16 @@ A graph of such classes throws an `InvalidOperationException` once it is nested 
 
 ## Invalid Data
 
-Every length read from a payload is checked against the remaining bytes before anything is allocated, so malformed or hostile input cannot trigger huge allocations. Invalid data throws an `InvalidOperationException` whose message starts with `Nino:`: truncated data ("unexpected end of data"), an impossible length, an unknown type id, a type id that is not a subtype of the declared type, or a `[NinoUtf8]` string whose bytes are not valid UTF-8 or do not match its char and byte counts. Nothing reads past the end of the span.
+Every length read from a payload is checked against the remaining bytes before anything is allocated, so malformed or hostile input cannot trigger huge allocations, and nothing reads past the end of the span. Invalid data throws an `InvalidOperationException` whose message starts with `Nino:`, for example:
+
+- truncated data ("unexpected end of data");
+- an impossible length;
+- an unknown type id, or one that is not a subtype of the declared type;
+- a `[NinoUtf8]` string whose bytes are not valid UTF-8 or do not match its char and byte counts.
 
 Deeply nested data cannot overflow the stack either: see [Deep Object Graphs](#deep-object-graphs).
 
-Nino does not detect data written for a **different** type with a compatible layout: the bytes carry no schema. Version your payloads yourself (see [Evolving Your Data](/en/docs/v4/evolving-data) and the [save file header](/en/docs/v4/advanced/persistence#add-a-file-header) pattern).
+Nino does not detect data written for a **different** type with a compatible layout: the bytes carry no schema. Version your payloads yourself (see [Evolving Your Data](/en/docs/v4/evolving-data) and the [file header](/en/docs/v4/advanced/persistence#add-a-file-header) pattern).
 
 ## Terms [#terms]
 
@@ -243,7 +257,18 @@ Words these docs use with a specific meaning:
 - **Raw** (raw value, raw struct): an unmanaged value that Nino writes as its memory, in one copy, with padding bytes zeroed: primitives, enums, `DateTime`, `Guid`, and unmanaged structs that qualify (see [Structs](/en/docs/v4/defining-types#structs)). Arrays and lists of raw values are one block copy.
 - **Fixed-size type**: a struct or sealed class whose values always take the same number of bytes, returned by `NinoSerializer.GetFixedSize<T>()`; see [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
 - **Positional**: the default format of a `[NinoType]`: members in declaration order, with no names or lengths. Smallest and fastest, but any change to the members changes the format; see [Evolving Your Data](/en/docs/v4/evolving-data#positional).
+- **Version-tolerant** and **keyed**: the two other formats (`NinoFormat.VersionTolerant` and `NinoFormat.Keyed`). A version-tolerant object writes its length in bytes first, so members can be appended later; a keyed object writes each member with a key (a hash of its name) and a length, so members can be added, removed, reordered or renamed. See [Evolving Your Data](/en/docs/v4/evolving-data).
 - **Slot**: a place that holds a value: a member, a collection element, a dictionary value, or the variable you pass by `ref`. What Nino writes for a value depends on the slot's declared type.
 - **Header**: the bytes Nino writes before a class value: a 1-byte null flag for a sealed class, a 4-byte type id for a type that can have subtypes; a struct has none. See [How a Polymorphic Value Is Written](/en/docs/v4/polymorphism#how-a-polymorphic-value-is-written).
+- **Reuse deserialization**: `Deserialize(data, ref value)`, which fills the value you pass, and the objects, lists and dictionaries it holds, in place instead of creating new ones; see [Into an Existing Value](#into-an-existing-value).
+- **Pooled class**: a `[NinoType]` class marked `[NinoPooled]`: Nino takes new instances of it from a built-in pool and returns dropped ones to it; see [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled).
 - **Recycler**: what receives an instance that [reuse deserialization](/en/docs/v4/pooling) drops from a slot: a handler registered with `NinoSettings.SetRecycler<T>`, otherwise the instance's own pool (`ReturnToPool()`), otherwise nobody. See [Where Dropped Instances Go](/en/docs/v4/pooling#where-dropped-instances-go).
+- **Registry**: the code the generator emits into each assembly to list its `[NinoType]`s, their formatters and their type ids. Nino loads it the first time it meets a type of that assembly, or a type id it does not know, so no initialization call is needed; `NinoRegistry.EnsureInitialized(assembly)` loads it ahead of time. The **global registry** is the table of every `[NinoType]` through which values declared as `object` are dispatched; see [Dispatch](/en/docs/v4/polymorphism#dispatch).
 - **Deferred object**: an object nested more than 128 levels deep, written and read later from a shallower level so that the stack stays bounded; see [Deep Object Graphs](#deep-object-graphs).
+
+## Next Steps
+
+<Cards>
+  <Card title="Defining Types" href="/en/docs/v4/defining-types">Which members are written, in what order, and the options that change the format.</Card>
+  <Card title="Supported Types" href="/en/docs/v4/types">Primitives, strings, tuples, collections and your own collection types.</Card>
+</Cards>

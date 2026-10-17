@@ -7,11 +7,11 @@ icon: Hammer
 Nino 反序列化每个类型时，都要知道怎样创建它的实例。生成器在编译期按以下顺序选定创建方式：
 
 1. 标记了 `[NinoConstructor]` 的构造函数或静态工厂方法（如果有）。
-2. 否则，如果所有序列化成员在构造之后都能赋值：使用可以不传参数调用的构造函数（无参，或所有参数都有默认值）。实例创建后逐个成员填充，[复用反序列化](/zh/docs/v4/pooling)时则直接原地填充已有实例。结构体使用 `new T()`。即使类型还有参数能对上成员的构造函数，这里也优先用无参构造函数。
+2. 否则，如果所有序列化成员在构造之后都能赋值：使用可以不传参数调用的构造函数（无参，或所有参数都有默认值），或者用 [`[NinoFactory]`](#from-a-pool) 方法代替它。实例创建后逐个成员填充，[复用反序列化](/zh/docs/v4/pooling)时则直接原地填充已有实例。结构体使用 `new T()`。即使类型还有参数能对上成员的构造函数，这一步也优先。
 3. 否则（有成员只有 getter、只有 `init` 或是 `readonly`）：在可访问（`public` 或 `internal`）的构造函数中，挑出参数都能按名称（不区分大小写）对应到序列化成员、且参数最多的那个。位置记录选中的就是主构造函数。不是参数的成员在调用之后立即赋值。
 4. 结构体最后退回到 `new T()`；类如果以上都不满足，会报错（NINO004）。
 
-所以大多数类什么都不用写：无参构造函数加可写成员就是最快的路径。当类型需要**不可变**，或者需要**校验**读到的数据时，再为 Nino 写构造函数。例如从配置表加载的道具定义：某一行数据有问题，应该在加载时就报错，而不是等到对局打到一半才出问题。
+所以大多数类什么都不用写：无参构造函数加可写成员就是最快的路径。当类型需要**不可变**，或者需要**校验**读到的数据时，再为 Nino 写构造函数。例如从商品目录文件加载的商品：某一行数据有问题，应该在加载时就报错，而不是等到用户下单时才出问题。
 
 `[NinoConstructor]` 的参数是按顺序传给构造函数的成员名称，所以构造函数的参数名不必和成员同名。不写名称时，按参数名匹配成员：
 
@@ -19,36 +19,36 @@ Nino 反序列化每个类型时，都要知道怎样创建它的实例。生成
 
 <Tab value="构造函数">
 
-```csharp title="ItemDef.cs"
+```csharp title="Product.cs"
 [NinoType]
-public sealed class ItemDef
+public sealed class Product
 {
     public int Id { get; }
     public string Name { get; }
-    public int MaxStack { get; }
+    public decimal Price { get; }
 
-    // no attribute needed: the parameters match Id, Name and MaxStack by name
-    public ItemDef(int id, string name, int maxStack)
+    // no attribute needed: the parameters match Id, Name and Price by name
+    public Product(int id, string name, decimal price)
     {
-        if (maxStack <= 0)
-            throw new ArgumentOutOfRangeException(nameof(maxStack)); // a bad config row fails at load time
+        if (price < 0)
+            throw new ArgumentOutOfRangeException(nameof(price)); // a bad catalog row fails at load time
         Id = id;
         Name = name;
-        MaxStack = maxStack;
+        Price = price;
     }
 }
 
 [NinoType]
-public sealed class Weapon
+public sealed class Customer
 {
     public int Id { get; }
     public string Name { get; }
-    public int Damage;                // not a parameter: assigned after the call
+    public string Email;              // not a parameter: assigned after the call
 
     [NinoConstructor(nameof(Id), nameof(Name))] // [!code highlight]
-    public Weapon(int weaponId, string displayName) // names differ, so list the members
+    public Customer(int customerId, string displayName) // names differ, so list the members
     {
-        Id = weaponId;
+        Id = customerId;
         Name = displayName;
     }
 }
@@ -92,7 +92,7 @@ public sealed class Currency
 
 ```csharp
 [NinoType]
-public record SimpleRecord2(int Id, string Name, DateTime CreateTime); // [!code highlight]
+public record PriceChanged(long ProductId, decimal OldPrice, decimal NewPrice); // [!code highlight]
 ```
 
 </Tab>
@@ -100,19 +100,17 @@ public record SimpleRecord2(int Id, string Name, DateTime CreateTime); // [!code
 
 ```csharp
 [NinoType]
-public struct SimpleStruct
+public struct Money
 {
-    public int Id;
-    public string Name;
-    public DateTime CreateTime;
+    public long MinorUnits; // cents for USD
+    public string Currency;
 
     // used instead of the implicit parameterless constructor
-    [NinoConstructor(nameof(Id), nameof(Name), nameof(CreateTime))] // [!code highlight]
-    public SimpleStruct(int a, string b, DateTime c)
+    [NinoConstructor(nameof(MinorUnits), nameof(Currency))] // [!code highlight]
+    public Money(long amount, string currencyCode)
     {
-        Id = a;
-        Name = b;
-        CreateTime = c;
+        MinorUnits = amount;
+        Currency = currencyCode?.ToUpperInvariant(); // normalize on read
     }
 }
 ```
@@ -192,3 +190,10 @@ foreach (byte[] data in messages)
 ## 重新创建的类型 [#re-created-types]
 
 如果类型标记了 `[NinoConstructor]`，或者成员在构造之后无法再赋值（构造函数参数、`init` 属性、只读属性或 `readonly` 字段），那么每次反序列化都会**重新创建**它，即使是[复用反序列化](/zh/docs/v4/pooling)也不例外，旧实例会交给[回收器](/zh/docs/v4/pooling#where-dropped-instances-go)。这类类型不能使用 [`trackReferences`](/zh/docs/v4/reference-tracking)（NINO016）或 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)（NINO018）。这类类型上的 `[NinoFactory]` 方法也不会被调用（与 `[NinoConstructor]` 同时出现时，分析器会报告 NINO025）。需要这些功能时（例如要做到 0 GC 反序列化），请让成员可写，改为[从对象池取实例](#from-a-pool)。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="支持的类型" href="/zh/docs/v4/types">所有内置类型和集合，以及自定义集合的工作方式。</Card>
+  <Card title="复用反序列化与对象池" href="/zh/docs/v4/pooling">原地填充已有实例，新实例从对象池中取。</Card>
+</Cards>

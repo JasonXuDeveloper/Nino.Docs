@@ -44,7 +44,7 @@ public sealed class RedisProfileCache
     {
         var buffer = t_buffer ??= new NinoArrayBufferWriter(1024);
         buffer.ResetWrittenCount();
-        NinoSerializer.Serialize(profile, buffer);
+        NinoSerializer.Serialize(profile, buffer); // [!code highlight]
         _db.StringSet(Key(profile.Id), buffer.WrittenMemory, ttl); // synchronous: done before the buffer is reused
     }
 
@@ -87,7 +87,7 @@ The interface takes and returns arrays, so each call allocates one `byte[]`: tha
 
 ## HybridCache [#hybridcache]
 
-`HybridCache` (`Microsoft.Extensions.Caching.Hybrid`, .NET 9 and later) writes values into an `IBufferWriter<byte>` and reads them from a `ReadOnlySequence<byte>`, which matches Nino's API directly:
+`HybridCache` (the `Microsoft.Extensions.Caching.Hybrid` package) hands a serializer an `IBufferWriter<byte>` to write into and a `ReadOnlySequence<byte>` to read from, which matches Nino's API directly:
 
 ```csharp title="NinoHybridSerializer.cs"
 using System.Buffers;
@@ -122,7 +122,9 @@ services.AddHybridCache()
     .AddSerializer<UserProfile, NinoHybridSerializer<UserProfile>>();
 ```
 
-Register one serializer per cached type. Calls inside the generic serializer are not [intercepted](/en/docs/v4/performance#interceptors), because `T` is a type parameter there; they take the regular path, a few nanoseconds slower per call.
+- Register one serializer per cached type.
+- `HybridCache`'s buffer writer is not a `NinoArrayBufferWriter`, so Nino serializes into its per-thread scratch buffer and copies the result in once. Nothing is allocated per call.
+- Calls inside the generic serializer are not [intercepted](/en/docs/v4/performance#interceptors), because `T` is a type parameter there; they take the regular path, a few nanoseconds slower per call.
 
 ## In-Process Blob Caches [#in-process-blob-caches]
 
@@ -130,7 +132,7 @@ An in-process cache usually holds live objects. Holding the serialized bytes ins
 
 - **Isolation.** Every read deserializes a fresh copy, so a caller that modifies its value cannot corrupt the cached one or race with another thread.
 - **Footprint.** A `byte[]` is one object for the garbage collector to track, instead of a graph of objects, lists and strings.
-- **Reuse.** A caller that keeps an instance can deserialize into it with `ref` and allocate nothing.
+- **Reuse.** A caller that keeps an instance can deserialize into it with `ref`, allocating nothing but the strings whose text changed.
 
 ```csharp title="BlobCache.cs"
 using System.Collections.Concurrent;
@@ -141,6 +143,7 @@ public sealed class BlobCache<TKey, TValue>
 {
     private readonly ConcurrentDictionary<TKey, byte[]> _entries = new();
 
+    // the entry is the array: Serialize(value) allocates it at its exact size
     public void Set(TKey key, TValue value) => _entries[key] = NinoSerializer.Serialize(value);
 
     public bool TryGet(TKey key, out TValue value)
@@ -154,7 +157,7 @@ public sealed class BlobCache<TKey, TValue>
         return false;
     }
 
-    /// <summary>Reads into an instance the caller keeps: no allocation once it has the right shape.</summary>
+    /// <summary>Reads into an instance the caller keeps: once it has the right shape, only changed strings allocate.</summary>
     public bool TryGetInto(TKey key, ref TValue value)
     {
         if (!_entries.TryGetValue(key, out byte[] bytes))
@@ -169,13 +172,15 @@ The trade-off is a deserialization per read. For values read far more often than
 
 ## Schema Changes Across Deployments [#schema-changes]
 
-A shared cache outlives the process that wrote it: during a rolling deployment, old and new instances read each other's entries. Pick one of these for every cached type:
+A shared cache outlives the process that wrote it: during a rolling deployment, old and new instances read each other's entries. Pick one of the first two approaches for every cached type, and add the third:
 
 | Approach | How | When |
 | --- | --- | --- |
 | Tolerant types | [`format: NinoFormat.VersionTolerant`](/en/docs/v4/evolving-data#version-tolerance) (append members) or [`format: NinoFormat.Keyed`](/en/docs/v4/evolving-data#keyed-members) (any change) | Entries should survive the deployment. |
 | Versioned keys | Put a schema version in the key (`profile:v2:42`) and bump it when the type changes | The type changes in ways the options above do not cover, or the cache is cheap to refill. |
-| Treat failures as misses | Catch the `InvalidOperationException` that invalid data throws, delete the entry and load from the source | A safety net on top of either approach, not a replacement: bytes written for a different type with a compatible layout can deserialize without an error. |
+| Treat failures as misses | Catch the `InvalidOperationException` that invalid data throws, delete the entry and load from the source | Always, as a safety net on top of either approach. |
+
+The safety net does not replace the other two: bytes written for a different type with a compatible layout can deserialize without an error.
 
 A [positional](/en/docs/v4/evolving-data#positional) type (bare `[NinoType]`) is the smallest and fastest, but any change to its members makes old entries unreadable. Use it for cached values only together with versioned keys.
 

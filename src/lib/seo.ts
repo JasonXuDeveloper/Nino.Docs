@@ -149,10 +149,13 @@ export function homeMeta({
   lang,
   title,
   description,
+  faq = [],
 }: {
   lang: Locale;
   title: string;
   description: string;
+  /** The home page's visible FAQ, as FAQPage JSON-LD */
+  faq?: { question: string; answer: string }[];
 }): MetaDescriptor[] {
   const url = `/${lang}`;
   const softwareDescription = productSummary[lang];
@@ -197,6 +200,22 @@ export function homeMeta({
           offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
         },
       },
+      ...(faq.length
+        ? [
+            {
+              '@type': 'FAQPage',
+              '@id': `${siteUrl}${url}#faq`,
+              url: `${siteUrl}${url}`,
+              inLanguage: languageTag[lang],
+              isPartOf: { '@id': ids.website },
+              mainEntity: faq.map(({ question, answer }) => ({
+                '@type': 'Question',
+                name: question,
+                acceptedAnswer: { '@type': 'Answer', text: answer },
+              })),
+            },
+          ]
+        : []),
     ],
   };
 

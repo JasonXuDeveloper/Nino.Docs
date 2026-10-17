@@ -22,22 +22,27 @@ var copy = NinoDeserializer.Deserialize<Node>(bytes);
 // copy.Next.Next == copy
 ```
 
-共享引用和循环引用同样重要。比如在一个 RPG 存档里，两名队员属于同一个公会：
+共享引用和循环引用同样重要。比如在一张组织架构图里，两名员工属于同一个部门：
 
 ```csharp
 [NinoType(trackReferences: true)]
-public class Guild { public string Name; }
+public class Department { public string Name; }
 
 [NinoType]
-public class Hero { public string Name; public Guild Guild; }
+public class Employee { public string Name; public Department Department; }
 
-var guild = new Guild { Name = "Dawn" };
-var party = new List<Hero> { new() { Name = "Ayla", Guild = guild }, new() { Name = "Bran", Guild = guild } };
-var loaded = NinoDeserializer.Deserialize<List<Hero>>(NinoSerializer.Serialize(party));
-// loaded[0].Guild == loaded[1].Guild: renaming the guild after loading changes it for both heroes
+var sales = new Department { Name = "Sales" };
+var staff = new List<Employee>
+{
+    new() { Name = "Ana", Department = sales },
+    new() { Name = "Ben", Department = sales },
+};
+byte[] bytes = NinoSerializer.Serialize(staff);
+var loaded = NinoDeserializer.Deserialize<List<Employee>>(bytes);
+// loaded[0].Department == loaded[1].Department: one object, so a rename shows on both employees // [!code highlight]
 ```
 
-如果不追踪，读档后会得到两个独立的 `Guild` 对象，之后给公会改名只会反映在其中一名队员身上。只有被共享的类型需要这个选项，`Hero` 本身不需要追踪。
+如果不追踪，读取后会得到两个独立的 `Department` 对象，之后给部门改名只会反映在其中一名员工身上。只有被共享的类型需要这个选项，`Employee` 本身不需要追踪。
 
 - 每个被追踪的对象前面都有 4 字节的引用头部；同一次调用中已经写过的对象，只写它的序号。
 - 无论槽位的声明类型是什么（包括 `object` 和接口），共享引用都能保持对象身份。
@@ -55,7 +60,7 @@ var loaded = NinoDeserializer.Deserialize<List<Hero>>(NinoSerializer.Serialize(p
 <Accordions type="single">
 <Accordion title="用于对象图">
 
-场景图、实体关系、编辑器的撤销栈、多个对象指向同一对象的存档、带父节点引用的树：凡是对象身份有意义或存在循环的地方都适用。一个列表把同一个被追踪的对象重复 100 次时，写出的字节数和耗时都只是不追踪时的一小部分。
+带关联关系的领域模型（多个订单指向同一个客户）、撤销栈、多个对象指向同一对象的文档、带父节点引用的树：凡是对象身份有意义或存在循环的地方都适用。一个列表把同一个被追踪的对象重复 100 次时，写出的字节数和耗时都只是不追踪时的一小部分。
 
 </Accordion>
 <Accordion title="消息和普通数据不需要">
@@ -70,4 +75,11 @@ var loaded = NinoDeserializer.Deserialize<List<Hero>>(NinoSerializer.Serialize(p
 </Accordion>
 </Accordions>
 
-复用反序列化对新对象照常工作；遇到回指引用时，会直接替换当前值，而不会回收旧值，因为旧值可能仍被对象图中的其他地方引用。
+复用反序列化对新对象照常工作；遇到指向已读对象的反向引用时，会直接替换当前值，而不会回收旧值，因为旧值可能仍被对象图中的其他地方引用。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="复用反序列化与对象池" href="/zh/docs/v4/pooling">原地填充已有实例，新实例从对象池中取。</Card>
+  <Card title="自定义格式化器" href="/zh/docs/v4/custom-formatters">用另一种方式编码某个成员，或让 Nino 支持新的类型。</Card>
+</Cards>

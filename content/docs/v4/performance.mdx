@@ -4,7 +4,7 @@ description: "How Nino v4 gets its speed, and what you can do to keep it: interc
 icon: Zap
 ---
 
-Nino is fast with no tuning at all. This page explains what happens under the hood, so you can keep your types and calls on the fast paths. For measurements, see [Benchmarks](/en/docs/v4/perf); for complete patterns, see [High-Performance Serialization](/en/docs/v4/advanced/high-performance).
+Nino is fast with no tuning at all. This page explains what happens under the hood, so you can keep your types and calls on the fast paths. For measurements, see [Benchmarks](/en/docs/v4/perf); for how to use these paths in your own code, see [High-Performance Serialization](/en/docs/v4/advanced/high-performance) and the recipes in [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation).
 
 ## Interceptors
 
@@ -12,8 +12,8 @@ When your project is compiled by **Roslyn 4.8 or later** (the .NET 8 SDK and lat
 
 ```csharp
 // Intercepted: the type is known here
-byte[] bytes = NinoSerializer.Serialize(player);
-Player copy = NinoDeserializer.Deserialize<Player>(bytes);
+byte[] bytes = NinoSerializer.Serialize(order);
+Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 
 // Not intercepted: T is a type parameter, so the regular call runs
 static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
@@ -36,7 +36,7 @@ If your project sets `InterceptorsNamespaces` or `InterceptorsPreviewNamespaces`
 
 ## Struct Formatters, Inlined
 
-Every formatter is a struct, and element formatters are type parameters (`ListFormatter<TList, T, TFormatter>`). Members call `default(TFormatter).Serialize(...)`: a direct call the JIT or AOT compiler inlines, so serializing a `List<Player>` compiles to one loop with the player's members written inside it. There is no virtual dispatch per element and no reflection anywhere.
+Every formatter is a struct, and element formatters are type parameters (`ListFormatter<TList, T, TFormatter>`). Members call `default(TFormatter).Serialize(...)`: a direct call the JIT or AOT compiler inlines, so serializing a `List<Order>` compiles to one loop with the order's members written inside it. There is no virtual dispatch per element and no reflection anywhere.
 
 The one indirection left is your own call, such as `NinoSerializer.Serialize(value)`: unless it is intercepted, it finds the formatter of `T` through `NinoFormatterCache<T>` (a static generic field, the formatter cache).
 
@@ -87,7 +87,7 @@ Where the padding comes from: by default (`LayoutKind.Sequential`) every field i
 
 To stay on this path:
 
-- prefer `T[]` and `List<T>` of unmanaged `T` for bulk data (positions, samples, tiles);
+- prefer `T[]` and `List<T>` of unmanaged `T` for bulk data (positions, samples, time series);
 - keep hot structs free of references (`string`, arrays) so they qualify as raw;
 - remember that `NinoFormat.VersionTolerant`, `NinoFormat.Keyed` and custom member formatters turn raw copying off for that struct.
 
@@ -101,25 +101,25 @@ The raw layout is the canonical 64-bit layout. Where a runtime lays a struct out
 
 Some types take the same number of bytes whatever their values. For those, `NinoSerializer.Serialize(value)` allocates the `byte[]` at its final size and writes the value straight into it: no scratch buffer, no writer, no growth checks and no final copy. The bytes are the same as on the general path.
 
-```csharp title="PlayerInput.cs"
+```csharp title="SensorReading.cs"
 [NinoType]
-public struct Aim                    // raw: 8 bytes
+public struct GeoPoint               // raw: 8 bytes
 {
-    public float Yaw;
-    public float Pitch;
+    public float Latitude;
+    public float Longitude;
 }
 
 [NinoType]
-public sealed class PlayerInput      // fixed size: 1 (null flag) + 4 + 8 + 8 + 1 = 22 bytes
+public sealed class SensorReading    // fixed size: 1 (null flag) + 4 + 8 + 8 + 1 = 22 bytes
 {
-    public int Tick;
-    public long PlayerId;
-    public Aim Aim;
-    public bool Fire;
+    public int SensorId;
+    public long Timestamp;
+    public GeoPoint Location;
+    public bool Alarm;
 }
 
-byte[] bytes = NinoSerializer.Serialize(input);         // a new byte[22], written in place
-int size = NinoSerializer.GetFixedSize<PlayerInput>();  // 22
+byte[] bytes = NinoSerializer.Serialize(reading);         // a new byte[22], written in place
+int size = NinoSerializer.GetFixedSize<SensorReading>();  // 22
 ```
 
 A type is fixed-size when it is:
@@ -138,7 +138,7 @@ A `string`, an array or collection, a class, a `T?`, a tuple, `DateTimeOffset` o
 ## Allocation
 
 - **Serializing allocates nothing** except the `byte[]` you ask for. Serialize into a reused `NinoArrayBufferWriter` (or any `IBufferWriter<byte>`) and a call allocates 0 B.
-- **Deserializing allocates only the result objects**, and even those can be reused: deserialize into an existing instance with `ref`, and take new instances from `[NinoPooled]` pools. Reusing instances allocates 0 B. See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
+- **Deserializing allocates only the result objects**, and even those can be reused: deserialize into an existing instance with `ref`, and take new instances from `[NinoPooled]` pools. Reusing instances allocates 0 B, apart from strings whose text changed: an unchanged string is kept, and only changed text is read into a new instance (non-ASCII `[NinoUtf8]` text always is). See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 - Strings are UTF-16 by default (one block copy). `[NinoUtf8]` is smaller on the wire for mostly-ASCII text but has to transcode, and a non-empty string carries a 4-byte byte count after its char count ([Binary Format](/en/docs/v4/platforms#binary-format)).
 
 ## Buffers
@@ -177,3 +177,10 @@ A polymorphic value costs a 4-byte type id. For subtypes declared in the same as
 
 - Measure with BenchmarkDotNet or other long runs. With tiered compilation, short runs measure unoptimized Tier-0 code, where Nino's `static readonly` layout checks are not yet folded into constants.
 - Deserializing large collections is often dominated by allocating and zeroing the result, not by Nino. Measure with reused instances to see the serializer's share.
+
+## Next Steps
+
+<Cards>
+  <Card title="High-Performance Serialization" href="/en/docs/v4/advanced/high-performance">How reused buffers, spans, reuse deserialization, pools and raw structs work, and what each costs.</Card>
+  <Card title="Benchmarks" href="/en/docs/v4/perf">Build time and runtime against v3 and MemoryPack, with the full tables.</Card>
+</Cards>

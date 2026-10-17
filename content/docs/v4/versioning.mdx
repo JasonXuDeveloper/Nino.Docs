@@ -63,14 +63,28 @@ A rewrite that replaces the v2 implementation. The generated code differs from v
 
 Keep the old deserializer, read the old data with it, and write it again with the new version:
 
-1. **Keep the old deserializer.** Between v3 releases, copy the old generated code (the deserializer and what it depends on) into the project and give it its own namespace. For v3 data read by v4, the v3 generated code depends on v3's `Nino.Core`, so it has to live in a separate converter; see [Converting v3 data](/en/docs/v4/migration#converting-v3-data).
-2. **Upgrade** Nino, so the new serializer and deserializer are generated.
-3. **Convert.** Read the old data with the old deserializer and serialize it again with the new serializer.
+<Steps>
+<Step>
 
-Data you store, such as save games, should start with your own header (a magic number and a format version) written by the new version. When loading, a file with the header is read with the new deserializer; a file without it is old data, read with the old one and converted. See [Add a File Header](/en/docs/v4/advanced/persistence#add-a-file-header).
+**Keep the old deserializer.** Between v3 releases, copy the old generated code (the deserializer and what it depends on) into the project and give it its own namespace. For v3 data read by v4, the v3 generated code depends on v3's `Nino.Core`, so it has to live in a separate converter; see [Converting v3 data](/en/docs/v4/migration#converting-v3-data).
+
+</Step>
+<Step>
+
+**Upgrade** Nino, so the new serializer and deserializer are generated.
+
+</Step>
+<Step>
+
+**Convert.** Read the old data with the old deserializer and serialize it again with the new serializer.
+
+</Step>
+</Steps>
+
+Data you store, such as user documents or archived records, should start with your own header (a magic number and a format version) written by the new version. When loading, a file with the header is read with the new deserializer; a file without it is old data, read with the old one and converted. See [Add a File Header](/en/docs/v4/advanced/persistence#add-a-file-header).
 
 <Callout type="idea">
 
-From v4 on, mark long-lived data such as save games `[NinoType(format: NinoFormat.VersionTolerant)]` or `[NinoType(format: NinoFormat.Keyed)]`, so that later changes to your own types need no conversion step. See [Evolving Your Data](/en/docs/v4/evolving-data).
+From v4 on, mark long-lived data such as stored documents `[NinoType(format: NinoFormat.VersionTolerant)]` or `[NinoType(format: NinoFormat.Keyed)]`, so that later changes to your own types need no conversion step. See [Evolving Your Data](/en/docs/v4/evolving-data).
 
 </Callout>

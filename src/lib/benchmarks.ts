@@ -303,6 +303,21 @@ export function ratioRange(op: 'serialize' | 'deserialize') {
   return { min: Math.min(...wins), max: Math.max(...wins) };
 }
 
+/** Unmanaged-struct cases, which both libraries copy as one block */
+const structKeys = new Set(['SimpleStruct', 'SimpleStructs', 'Vectors']);
+
+/**
+ * Fastest / slowest win against MemoryPack on classes and polymorphic types
+ * (the cases that are not unmanaged structs)
+ */
+export function classRatioRange(op: 'serialize' | 'deserialize') {
+  const wins = runtime[op]
+    .filter((row) => !structKeys.has(row.key))
+    .map((row) => row.ratio)
+    .filter((ratio): ratio is number => ratio !== undefined && ratio > 1);
+  return { min: Math.min(...wins), max: Math.max(...wins) };
+}
+
 /* ------------------------------------------------------------------ */
 /* Deserializing into existing objects                                 */
 /* ------------------------------------------------------------------ */
@@ -421,7 +436,7 @@ export const payload = {
 /**
  * The one way to print a ratio. Runtime ratios (computed from the raw means)
  * always show two decimals ("4.33×"); build-time ratios are whole numbers or
- * as published ("289×", "4.2×").
+ * as published ("221×", "3.1×").
  */
 export const formatRatio = (value: number) => `${value.toFixed(2)}×`;
 export const formatBuildRatio = (value: number) => `${value}×`;
@@ -457,18 +472,18 @@ export const build: BuildMeasure[] = [
     en: 'Compiling the generated code (emit)',
     zh: '编译生成的代码（emit）',
     short: { en: 'faster to compile (emit)', zh: '编译（emit）更快' },
-    v3: '43.9 s',
-    v4: '1.10 s',
-    ratio: 40,
+    v3: '42.9 s',
+    v4: '0.84 s',
+    ratio: 51,
     better: 'faster',
   },
   {
     en: 'Running the generator',
     zh: '运行生成器',
     short: { en: 'faster generator run', zh: '生成器运行更快' },
-    v3: '1.34 s',
+    v3: '1.01 s',
     v4: '0.32 s',
-    ratio: 4.2,
+    ratio: 3.1,
     better: 'faster',
   },
   {
@@ -478,9 +493,9 @@ export const build: BuildMeasure[] = [
       en: 'faster re-generation after editing a member',
       zh: '修改成员后重新生成更快',
     },
-    v3: '1.11 s',
-    v4: '0.09 s',
-    ratio: 12,
+    v3: '1.03 s',
+    v4: '0.12 s',
+    ratio: 8.3,
     better: 'faster',
   },
   {
@@ -490,9 +505,9 @@ export const build: BuildMeasure[] = [
       en: 'faster re-generation after editing a comment',
       zh: '修改注释后重新生成更快',
     },
-    v3: '1.06 s',
-    v4: '0.10 s',
-    ratio: 11,
+    v3: '1.01 s',
+    v4: '0.13 s',
+    ratio: 7.8,
     better: 'faster',
   },
   {
@@ -500,7 +515,7 @@ export const build: BuildMeasure[] = [
     zh: '生成代码的 IL',
     short: { en: 'smaller IL', zh: 'IL 更小' },
     v3: '2.21 MB',
-    v4: '0.41 MB',
+    v4: '0.42 MB',
     ratio: 5.3,
     better: 'smaller',
   },
@@ -516,8 +531,8 @@ export const vsV3Build = build.map((row) => ({
 /** Build cost at 1,100 types (N = 100), v3.3.13 vs v4 (docs/v4-benchmarks.md) */
 export const buildLarge = {
   types: 1100,
-  source: { v3: '62.0 MB', v4: '4.37 MB', v3n: 62, v4n: 4.37, ratio: 14 },
-  emit: { v3: '636 s', v4: '2.2 s', v3n: 636, v4n: 2.2, ratio: 289 },
+  source: { v3: '62.0 MB', v4: '4.38 MB', v3n: 62, v4n: 4.38, ratio: 14 },
+  emit: { v3: '462 s', v4: '2.1 s', v3n: 462, v4n: 2.1, ratio: 221 },
 };
 
 /* ------------------------------------------------------------------ */

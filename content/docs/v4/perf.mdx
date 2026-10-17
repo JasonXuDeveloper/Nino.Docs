@@ -33,7 +33,7 @@ Absolute times depend on the machine; compare the ratios. For features rather th
 
 | | |
 | --- | --- |
-| CPU | Runtime: Intel Xeon 2.10 GHz, 4 cores, AVX-512; build time: Intel Xeon 2.80 GHz, 4 cores |
+| CPU | Intel Xeon 2.10 GHz, 4 cores, AVX-512 (runtime and build time) |
 | OS | Ubuntu 24.04 |
 | Runtime | .NET 10.0.13 (SDK 10.0.402), server GC |
 | Harness | BenchmarkDotNet 0.15.2, 5 warm-up and 15 measured iterations, every benchmark class in one run |
@@ -130,7 +130,7 @@ Every row of the report, MessagePack included, with the exact environment.
 
 ## Build Time and Generated Code [#build-time-and-generated-code]
 
-The test project is a synthetic assembly of `N` abstract root classes, each with a chain of 8 derived classes, a sealed leaf and a struct (`N × 11` types), with primitives, strings, `List<T>`, `Dictionary<int, string>`, references to other `[NinoType]`s and private fields. The harness runs the generator on the compilation (Roslyn 4.3 in-process), emits the assembly, and re-runs the generator after an edit. Times are the median of the last three of five runs; the baseline is v3 3.3.13.
+The test project is a synthetic assembly of `N` abstract root classes, each with a chain of 8 derived classes, a sealed leaf and a struct (`N × 11` types), with primitives, strings, `List<T>`, `Dictionary<int, string>`, references to other `[NinoType]`s and private fields. The harness runs the generator on the compilation (Roslyn 4.3 in-process), emits the assembly, and re-runs the generator after an edit. Each time is the median of the last three of five runs, except v3 at 1,100 types: the median of three runs, which took 7.6 to 7.8 minutes each. The baseline is v3 3.3.13, run on the same machine.
 
 <BenchmarkChart chart="compile" lang="en" table={false} />
 
@@ -141,32 +141,30 @@ The test project is a synthetic assembly of `N` abstract root classes, each with
 | | v3 (3.3.13) | v4 | v4 vs v3 |
 | --- | ---: | ---: | ---: |
 | Generated source | 18.7 MB (363,233 lines) | 1.31 MB (23,215 lines) | **14× smaller** |
-| Compiling the generated code (emit) | 43.9 s | 1.10 s | **40× faster** |
-| Running the generator | 1.34 s | 0.32 s | **4.2× faster** |
-| Re-generating after editing a member | 1.11 s | 0.09 s | **12× faster** |
-| Re-generating after editing a comment | 1.06 s | 0.10 s | **11× faster** |
-| IL of the generated code | 2.21 MB | 0.41 MB | **5.3× smaller** |
+| Compiling the generated code (emit) | 42.9 s | 0.84 s | **51× faster** |
+| Running the generator | 1.01 s | 0.32 s | **3.1× faster** |
+| Re-generating after editing a member | 1.03 s | 0.12 s | **8.3× faster** |
+| Re-generating after editing a comment | 1.01 s | 0.13 s | **7.8× faster** |
+| IL of the generated code | 2.21 MB | 0.42 MB | **5.3× smaller** |
 
-Measured on an Intel Xeon 2.10 GHz (4 cores). Generator times on this machine moved by up to 3× between sessions, so read the generator rows as "several times faster" rather than as exact ratios.
+The generator times here are tenths of a second and vary from session to session: read those rows as "several times faster", not as exact ratios.
 
 </Tab>
 <Tab value="1,100 types (N = 100)">
 
 | | v3 (3.3.13) | v4 | v4 vs v3 |
 | --- | ---: | ---: | ---: |
-| Generated source | 62.0 MB (1,204,143 lines) | 4.37 MB (77,535 lines) | **14× smaller** |
-| Compiling the generated code (emit) | 636 s | 2.2 s | **289× faster** |
-| Running the generator | 5.5 s | 0.68 s | **8.1× faster** |
-| Re-generating after editing a member | 4.1 s | 0.57 s | **7.2× faster** |
-| Re-generating after editing a comment | 4.1 s | 0.45 s | **9.0× faster** |
-| IL of the generated code | 7.3 MB | 1.49 MB | **4.9× smaller** |
-
-Sizes are those of the current version. The times come from an earlier run on an Intel Xeon 2.80 GHz (v3 at the median of three runs); the current version, on the 2.10 GHz machine, emits in 2.2 s and runs the generator in 0.48 s.
+| Generated source | 62.0 MB (1,204,143 lines) | 4.38 MB (77,535 lines) | **14× smaller** |
+| Compiling the generated code (emit) | 462 s | 2.1 s | **221× faster** |
+| Running the generator | 4.6 s | 0.42 s | **11× faster** |
+| Re-generating after editing a member | 3.5 s | 0.48 s | **7.4× faster** |
+| Re-generating after editing a comment | 4.0 s | 0.44 s | **9.1× faster** |
+| IL of the generated code | 7.3 MB | 1.50 MB | **4.9× smaller** |
 
 </Tab>
 </Tabs>
 
-v3's compile time grows much faster than the number of types: in the earlier run, 3.3× the types took 11× the compile time. v4 grows linearly: about 4 KB of source and 2 to 3 ms of compile time per type.
+v3's compile time grows much faster than the number of types: 3.3× the types took 11× the compile time. v4 grows roughly linearly, at about 4 KB of source and 2 to 3 ms of compile time per type.
 
 ## Benchmark Code [#benchmark-code]
 

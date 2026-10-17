@@ -10,12 +10,12 @@ Any `class`, `struct`, `record`, `record struct` or `interface` marked `[NinoTyp
 using Nino.Core;
 
 [NinoType]
-public class Player
+public class Order
 {
-    public int Id;                       // public fields
-    public string Name { get; set; }     // public properties with a getter and a setter
-    public List<Item> Inventory { get; init; } // init setters work too
-    public Vector3? LastCheckpoint;      // Nullable<T> of any serializable T
+    public long Id;                              // public fields
+    public string CustomerName { get; set; }     // public properties with a getter and a setter
+    public List<OrderLine> Lines { get; init; }  // init setters work too
+    public DateTime? ShippedAt;                  // Nullable<T> of any serializable T
 }
 ```
 
@@ -24,10 +24,10 @@ public class Player
 
 ```csharp
 [NinoType]
-public class SampleClass
+public class Customer
 {
     public int Id;
-    public string Name { get; set; }
+    public string Email { get; set; }
 }
 ```
 
@@ -36,10 +36,10 @@ public class SampleClass
 
 ```csharp
 [NinoType]
-public struct SampleStruct
+public struct Money
 {
-    public int Id;
-    public string Name { get; set; }
+    public long MinorUnits;
+    public string Currency { get; set; }
 }
 ```
 
@@ -48,7 +48,7 @@ public struct SampleStruct
 
 ```csharp
 [NinoType]
-public record SampleRecord(int Id, string Name);
+public record Address(string Street, string City, string PostalCode);
 ```
 
 </Tab>
@@ -56,7 +56,7 @@ public record SampleRecord(int Id, string Name);
 
 ```csharp
 [NinoType]
-public record struct SampleRecordStruct(int Id, string Name);
+public record struct GeoPoint(double Latitude, double Longitude);
 ```
 
 </Tab>
@@ -64,15 +64,15 @@ public record struct SampleRecordStruct(int Id, string Name);
 
 ```csharp
 [NinoType]
-public interface IShape
+public interface IEvent
 {
-    float Area { get; set; }
+    long Timestamp { get; set; }
 }
 
-public class Square : IShape // inherits [NinoType]
+public class OrderShipped : IEvent // inherits [NinoType]
 {
-    public float Area { get; set; }
-    public float Side;
+    public long Timestamp { get; set; }
+    public long OrderId;
 }
 ```
 
@@ -164,11 +164,11 @@ With `[NinoType(false)]` (`autoCollect: false`) only members marked `[NinoMember
 
 ```csharp
 [NinoType(false)] // [!code highlight]
-public class SampleClass
+public class Invoice
 {
-    public int Id;                       // not serialized
-    [NinoMember(1)] public string Name { get; set; } // [!code highlight]
-    [NinoMember(0)] public int Level;    // written first
+    public decimal CachedTotal;                         // not serialized
+    [NinoMember(1)] public string Number { get; set; } // [!code highlight]
+    [NinoMember(0)] public long CustomerId;            // written first
 }
 ```
 
@@ -177,9 +177,9 @@ public class SampleClass
 
 ```csharp
 [NinoType(false)] // [!code highlight]
-public record SampleRecord(
-    [property: NinoMember(2)] int Id, // [!code highlight]
-    [property: NinoMember(1)] string Name); // [!code highlight]
+public record Shipment(
+    [property: NinoMember(2)] string Carrier,         // [!code highlight]
+    [property: NinoMember(1)] string TrackingNumber); // [!code highlight]
 ```
 
 </Tab>
@@ -214,17 +214,7 @@ Nino also suppresses the compiler's "field is never used / never assigned" warni
 
 ## Member Order
 
-Without `format: NinoFormat.Keyed`, the order of members **is** the format. By default, base-class members come first, then the type's own members in declaration order. To choose another order, use `[NinoType(false)]` and give each member a `[NinoMember(index)]`: members are written by index, ascending.
-
-```csharp
-[NinoType(false)] // [!code highlight]
-public class Ordered
-{
-    [NinoMember(1)] public int Id;
-    [NinoMember(0)] public string Name; // written first
-    [NinoMember(2)] public bool Flag;
-}
-```
+Without `format: NinoFormat.Keyed`, the order of members **is** the format. By default, base-class members come first, then the type's own members in declaration order. To choose another order, use `[NinoType(false)]` and give each member a `[NinoMember(index)]`: members are written by index, ascending, as shown in [Choosing Members Explicitly](#choosing-members-explicitly).
 
 <Callout type="warn">
 
@@ -234,7 +224,7 @@ Reordering, inserting or removing members (or changing their indices) breaks pre
 
 ## String Encoding
 
-Strings are written as UTF-16 by default: a length and one block copy, the fastest option. Mark a member with `[NinoUtf8]` to write UTF-8 instead, which halves the size of mostly-ASCII text at the cost of transcoding (vectorized by the runtime). Use it where bytes cost more than CPU: chat and player names sent to many clients, or large text tables on disk. Keep UTF-16 for text that is mostly CJK, which takes 3 bytes per character in UTF-8 instead of 2.
+Strings are written as UTF-16 by default: a length and one block copy, the fastest option. Mark a member with `[NinoUtf8]` to write UTF-8 instead, which halves the size of mostly-ASCII text at the cost of transcoding (vectorized by the runtime). Use it where bytes cost more than CPU: chat messages and user names sent to many clients, or large text tables on disk. Keep UTF-16 for text that is mostly CJK, which takes 3 bytes per character in UTF-8 instead of 2.
 
 ```csharp
 [NinoType]
@@ -246,18 +236,25 @@ public class ChatMessage
 }
 ```
 
-The attribute applies to every string the member's own formatter writes: the member itself, and the `string` elements, keys, values and tuple items of a collection or tuple member (`List<string>`, `string[]`, `Dictionary<string, int>`, `(string, int)`). Strings inside a nested `[NinoType]` keep that type's own encoding, and on a member that holds no strings the attribute does nothing. Writer and reader must agree: data written as UTF-8 cannot be read by a type that declares the member without `[NinoUtf8]`. A UTF-8 string is written with its length in chars and its length in bytes, so the reader allocates the string at its final size and transcodes exactly its bytes into it in one pass (see [Binary Format](/en/docs/v4/platforms#binary-format)).
+The attribute applies to every string the member's own formatter writes: the member itself, and the `string` elements, keys, values and tuple items of a collection or tuple member (`List<string>`, `string[]`, `Dictionary<string, int>`, `(string, int)`). Strings inside a nested `[NinoType]` keep that type's own encoding, and on a member that holds no strings the attribute does nothing.
+
+Writer and reader must agree: data written as UTF-8 cannot be read by a type that declares the member without `[NinoUtf8]`. A UTF-8 string is written with its length in chars and its length in bytes, so the reader allocates the string at its final size and transcodes exactly its bytes into it in one pass (see [Binary Format](/en/docs/v4/platforms#binary-format)).
 
 ## Former Name
 
-A value stored in a member, element or variable declared as a non-sealed class, an abstract class, an interface or `object` is written with the **type id** of its runtime type, a 32-bit hash of that type's full name, so it can be read back as the right type. Renaming the type or moving it to another namespace changes the id. This applies to sealed subtypes too, such as the message classes sent through a `Message` base. A typical case: you move your protocol classes from `Game.Net` to `Game.Protocol`, while save files or clients from the previous release still use the old ids. Keep reading old data with `[NinoFormerName]`:
+A value stored in a member, element or variable declared as a non-sealed class, an abstract class, an interface or `object` is written with the **type id** of its runtime type: a 32-bit hash of that type's full name, so it can be read back as the right type. Renaming the type or moving it to another namespace changes the id, for sealed subtypes too (such as the message classes sent through a `Message` base).
+
+A typical case: you move your protocol classes from `MyApp.Net` to `MyApp.Protocol`, while stored files or clients from the previous release still use the old ids. Keep reading old data with `[NinoFormerName]`:
 
 ```csharp
-[NinoType]
-[NinoFormerName("Old.Namespace.Outer+Item")] // [!code highlight]
-public class ItemRenamed
+namespace MyApp.Protocol
 {
-    public int Id;
+    [NinoType]
+    [NinoFormerName("MyApp.Net.OrderPlaced")] // [!code highlight]
+    public class OrderPlaced
+    {
+        public long OrderId;
+    }
 }
 ```
 
@@ -267,15 +264,21 @@ On a field or property of a `NinoFormat.Keyed` type, `[NinoFormerName("OldName")
 
 ## Structs
 
-A `[NinoType]` struct has no header at all. It is written as its **raw memory** when it is unmanaged, has neither `NinoFormat.VersionTolerant` nor `NinoFormat.Keyed`, uses the default sequential layout, has no custom member formatters, and serializes every instance field, each of which is itself written as raw bytes (not a `Nullable<T>`, tuple, `nint`, `DateTimeOffset` or non-raw `[NinoType]` struct). A single value is then one copy, and arrays and lists of it are one block. Otherwise it is written member by member. Either way, a struct whose members are all unmanaged values or such structs is [fixed-size](/en/docs/v4/performance#fixed-size-types): `NinoSerializer.Serialize(value)` writes it straight into a `byte[]` of its size.
+A `[NinoType]` struct has no header at all. It is written as its **raw memory** (one copy per value, one block per array or list) when it:
+
+- is unmanaged and uses the default sequential layout;
+- is neither `NinoFormat.VersionTolerant` nor `NinoFormat.Keyed`, and has no custom member formatters;
+- serializes every instance field, and each field is itself written as raw bytes (not a `Nullable<T>`, tuple, `nint`, `DateTimeOffset` or non-raw `[NinoType]` struct).
+
+Otherwise it is written member by member. Either way, a struct whose members are all unmanaged values or such structs is [fixed-size](/en/docs/v4/performance#fixed-size-types): `NinoSerializer.Serialize(value)` writes it straight into a `byte[]` of its size.
 
 ```csharp
 [NinoType]
-public struct Hit          // raw: one 16-byte copy, no padding
+public struct SensorReading // raw: one 16-byte copy, no padding
 {
-    public int TargetId;
-    public float Damage;
-    public long Tick;
+    public int SensorId;
+    public float Value;
+    public long Timestamp;
 }
 ```
 
@@ -293,10 +296,10 @@ Positional records are created through their primary constructor; their paramete
 
 ```csharp
 [NinoType]
-public record Point(int X, int Y);
+public record Price(decimal Amount, string Currency);
 
 [NinoType]
-public record struct Range(int Start, int Length);
+public record struct DateRange(DateTime Start, DateTime End);
 ```
 
 Because their properties are `init`-only, positional records are re-created on every deserialization, even into an existing instance, and cannot use [`trackReferences`](/en/docs/v4/reference-tracking) or [`[NinoPooled]`](/en/docs/v4/pooling). Use a record with settable properties when you need those. See [Constructors](/en/docs/v4/constructors) for how instances are created.
@@ -314,7 +317,7 @@ public class Box<T>
 public record struct Pair<TKey, TValue>(TKey Key, TValue Value);
 ```
 
-A generic `[NinoType]` gets one formatter per definition, not one per closed type. Type arguments must be serializable (`Box<int>`, `Box<List<string>>`, `Box<Player>`). The generator registers every closed type the compilation names (member types, base types, type arguments of `NinoSerializer`/`NinoDeserializer` calls), so AOT platforms have the instantiations they need; the runtime closes the rest on first use.
+A generic `[NinoType]` gets one formatter per definition, not one per closed type. Type arguments must be serializable (`Box<int>`, `Box<List<string>>`, `Box<Order>`). The generator registers every closed type the compilation names (member types, base types, type arguments of `NinoSerializer`/`NinoDeserializer` calls), so AOT platforms have the instantiations they need; the runtime closes the rest on first use.
 
 <Callout type="warn">
 

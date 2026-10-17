@@ -14,7 +14,7 @@ Nino 支持 Unity 2022.3 及以上版本的 Mono 和 IL2CPP、所有 Player 平�
 
 ### 安装包 [#install-the-package]
 
-Nino 支持 Unity 2022.3 及以上版本，支持所有 Player 平台，Mono 和 IL2CPP 均可。从 [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/) 安装：
+从 [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/) 安装：
 
 ```shell
 openupm add com.jasonxudeveloper.nino
@@ -53,13 +53,9 @@ public class PlayerState
 
 ## 与 .NET 的区别 [#what-differs-from-net]
 
-<Callout type="info">
-
 - **私有成员需要 `partial`。** Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员（或标记了 `[NinoPooled]`）的类型必须声明为 `partial`，包含它的外层类型也一样。分析器会报告 NINO002 并帮你修复。
 - **没有拦截器。** Unity 包附带的是源生成器的 Roslyn 4.3 版本（Unity 支持的最低编译器版本），所以调用走常规路径。写出的字节完全相同，每次调用只差几纳秒。
 - **字节与 .NET 一致。** .NET 服务器写出的数据，Unity 客户端可以直接读取，反过来也一样，32 位的 IL2CPP Player 和旧版 Mono 运行时也不例外。参见[平台与二进制格式](/zh/docs/v4/platforms)。
-
-</Callout>
 
 ## IL2CPP [#il2cpp]
 
@@ -141,10 +137,9 @@ ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
 
 ## 降低帧耗时的技巧 [#frame-time-tips]
 
-- **网络或回放数据不引起 GC 峰值：** 每个 tick 都用 `ref` 反序列化到上一个 tick 的对象中，并给批量创建的类（子弹、事件）加上 `[NinoPooled]`。参见[高性能序列化](/zh/docs/v4/advanced/high-performance)。
+- **网络或回放数据不引起 GC 峰值：** 每个 tick 都用 `ref` 反序列化到上一个 tick 的对象中，并给批量创建的类（子弹、事件）加上 `[NinoPooled]`。参见[零分配模式](/zh/docs/v4/advanced/zero-allocation)。
 - **每个发送方复用一个 `NinoArrayBufferWriter`** 来写出数据，而不是每帧调用 `Serialize(value)` 分配一个 `byte[]`。
 - **批量数据保持非托管：** `Vector3`、`Color32` 或你自己的非托管 `[NinoType]` 结构体组成的数组，只需一次内存拷贝。
-- **在编辑器中编辑的配置**经常变动：使用 [`format: NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)，策划增加或调整字段时，已有资源也不会损坏。
 
 <Callout type="warn">
 

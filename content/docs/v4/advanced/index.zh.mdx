@@ -1,11 +1,11 @@
 ---
 title: 概览
 seoTitle: "进阶指南：在真实项目中使用 Nino – Nino v4 文档"
-description: "在真实项目中使用 Nino：热路径、网络与 RPC、消息队列、缓存、持久化与存储，以及 Unity 与 HybridCLR。"
+description: "在真实项目中使用 Nino：热路径、网络与 RPC、浏览器客户端、消息队列、缓存、持久化与存储，以及 Unity 与 HybridCLR。"
 icon: Map
 ---
 
-import { ArrowDownUp, DatabaseZap, Gamepad2, Gauge, Leaf, MessagesSquare, Network, Save } from 'lucide-react';
+import { ArrowDownUp, DatabaseZap, Gamepad2, Gauge, Globe, Leaf, MessagesSquare, Network, Save } from 'lucide-react';
 
 <AnchorRedirect
   map={{
@@ -47,10 +47,10 @@ import { ArrowDownUp, DatabaseZap, Gamepad2, Gauge, Leaf, MessagesSquare, Networ
 
 <Cards>
   <Card icon={<Gauge />} title="高性能序列化" href="/zh/docs/v4/advanced/high-performance">
-    Nino 如何避免分配：复用缓冲区、span、复用反序列化、对象池、原始结构体。
+    背后的机制与开销：缓冲区写入器、Writer 与 Reader、复用反序列化、对象池、原始结构体、拦截器、线程安全与测量。
   </Card>
   <Card icon={<Leaf />} title="零分配模式" href="/zh/docs/v4/advanced/zero-allocation">
-    0 B 热路径的速查做法：调用方提供的缓冲区、批量写入、固定大小的记录、分帧的流。
+    可直接复制的 0 B 热路径做法：缓冲区、批量写入、接收循环、分帧的流、固定大小的记录，以及检查清单。
   </Card>
   <Card icon={<ArrowDownUp />} title="流、异步、回调与压缩" href="/zh/docs/v4/advanced/streams">
     可以直接复制的工具方法：分帧的 `Stream` 读写、异步读写、`ReadOnlySequence` 输入、前后钩子、Brotli 和 GZip。
@@ -62,6 +62,9 @@ import { ArrowDownUp, DatabaseZap, Gamepad2, Gauge, Leaf, MessagesSquare, Networ
 <Cards>
   <Card icon={<Network />} title="网络层" href="/zh/docs/v4/advanced/networking">
     服务间与实时通信协议：TCP 分帧、WebSocket 与 UDP、gRPC 编组器、多态消息、滚动升级。
+  </Card>
+  <Card icon={<Globe />} title="浏览器与 JavaScript 客户端" href="/zh/docs/v4/advanced/browser">
+    在浏览器中使用同一套 `[NinoType]` 类型：一个带 `[JSExport]` 函数的 .NET WebAssembly 模块，供 JavaScript 或 TypeScript 调用。
   </Card>
   <Card icon={<MessagesSquare />} title="消息队列与事件流" href="/zh/docs/v4/advanced/message-queues">
     Kafka 等消息中间件、事件继承体系、批量发送、遥测与行情数据流、长期保留的主题。
@@ -83,6 +86,7 @@ import { ArrowDownUp, DatabaseZap, Gamepad2, Gauge, Leaf, MessagesSquare, Networ
 | --- | --- |
 | 服务协议、实时服务器（交易、协作、游戏）、WebSocket 或 UDP 连接 | [网络层](/zh/docs/v4/advanced/networking) |
 | .NET 之间不用 `.proto` 文件的 gRPC 服务 | [gRPC](/zh/docs/v4/advanced/networking#grpc) |
+| 与 Nino 服务端通信的网页前端（JavaScript 或 TypeScript） | [浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser) |
 | Kafka、RabbitMQ 等消息中间件上的生产者和消费者 | [消息队列与事件流](/zh/docs/v4/advanced/message-queues) |
 | 遥测、指标或行情数据流 | [遥测与行情数据流](/zh/docs/v4/advanced/message-queues#telemetry-and-tick-streams) |
 | Redis 或 `IDistributedCache` 缓存层，或进程内的序列化数据缓存 | [缓存](/zh/docs/v4/advanced/caching) |

@@ -36,7 +36,7 @@ void NinoSerializer.SerializeBoxed(object value, ref Writer writer, Type type);
 `T` 可以是任何[受支持的类型](/zh/docs/v4/types)：`[NinoType]`、基元类型、字符串、集合等。
 
 ```csharp
-byte[] bytes = NinoSerializer.Serialize(player);
+byte[] bytes = NinoSerializer.Serialize(order);
 ```
 
 ### 复用缓冲区 [#reusing-a-buffer]
@@ -48,13 +48,15 @@ byte[] bytes = NinoSerializer.Serialize(player);
 ```csharp
 var buffer = new NinoArrayBufferWriter();      // or new NinoArrayBufferWriter(initialCapacity)
 
-NinoSerializer.Serialize(player, buffer);
+NinoSerializer.Serialize(order, buffer);
 ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // also WrittenMemory, WrittenCount, ToArray()
 // ... send or store the bytes ...
 
-buffer.ResetWrittenCount();                    // reuse the same array
-NinoSerializer.Serialize(player, buffer);      // no allocation this time
+buffer.ResetWrittenCount();                    // reuse the same array // [!code highlight]
+NinoSerializer.Serialize(order, buffer);       // no allocation this time
 ```
+
+缓冲区不够用时，会从池里租一个更大的数组。如果大致知道消息有多大，可以用 `new NinoArrayBufferWriter(initialCapacity)` 或 `EnsureCapacity(sizeHint)` 预先分配好；`Capacity` 和 `FreeCapacity` 分别是数组的大小和剩余空间。
 
 <Callout type="warn">
 
@@ -103,20 +105,20 @@ void NinoDeserializer.DeserializeBoxed(ref object value, ref Reader reader, Type
 输入数据是 `ReadOnlySpan<byte>`：`byte[]`、`ArraySegment<byte>`、`Span<byte>`、`Memory<byte>.Span`，或者现有缓冲区的任意切片，都可以直接传入，不用拷贝。
 
 ```csharp
-Player player = NinoDeserializer.Deserialize<Player>(bytes);
-Player fromSlice = NinoDeserializer.Deserialize<Player>(rented.AsSpan(0, received));
+Order order = NinoDeserializer.Deserialize<Order>(bytes);
+Order fromSlice = NinoDeserializer.Deserialize<Order>(rented.AsSpan(0, received));
 ```
 
 ### 反序列化到已有值 [#into-an-existing-value]
 
-用 `ref` 传入已有的值，Nino 会原地填充它，尽量复用这个实例以及其中的嵌套对象、列表、数组和字典。传入 `null`（或 `default`）则创建新值。
+用 `ref` 传入已有的值，Nino 会原地填充它，尽量复用这个实例以及其中的嵌套对象、列表、数组和字典。传入 `null`（或 `default`）则创建新值。字符串会和已有值里的字符串比较：内容相同就直接保留，只有内容变化（或原来为 `null`）的字符串才读成新实例。`[NinoUtf8]` 字符串在文本为 ASCII 时同样会保留；非 ASCII 的 UTF-8 文本总是解码成新字符串。
 
 ```csharp
-Player player = null;
+Order order = null;
 foreach (var message in messages)
 {
-    NinoDeserializer.Deserialize(message, ref player); // the first call creates player, later calls reuse it
-    Handle(player);
+    NinoDeserializer.Deserialize(message, ref order); // the first call creates order, later calls reuse it
+    Handle(order);
 }
 ```
 
@@ -138,17 +140,17 @@ reader.ReleaseReferences();
 Nino 没有 `ReadOnlySequence<byte>` 重载。`System.IO.Pipelines` 给出的序列通常只有一段，直接传入即可；如果有多段，就先拷贝到一块连续内存里：
 
 ```csharp
-static Player Read(ReadOnlySequence<byte> data)
+static Order Read(ReadOnlySequence<byte> data)
 {
     if (data.IsSingleSegment)
-        return NinoDeserializer.Deserialize<Player>(data.First.Span);
+        return NinoDeserializer.Deserialize<Order>(data.First.Span);
 
     int length = (int)data.Length;
     byte[] rented = ArrayPool<byte>.Shared.Rent(length);
     try
     {
         data.CopyTo(rented);
-        return NinoDeserializer.Deserialize<Player>(rented.AsSpan(0, length));
+        return NinoDeserializer.Deserialize<Order>(rented.AsSpan(0, length));
     }
     finally
     {
@@ -159,17 +161,20 @@ static Player Read(ReadOnlySequence<byte> data)
 
 ## 运行时类型 [#runtime-types]
 
-需要同时处理很多类型的代码（RPC 或消息分派、插件系统、编辑器工具），其实很少真的需要运行时类型。给这些类型一个共同的 `[NinoType]` 基类或接口，通过它来序列化即可：`Serialize<TBase>` 会写入类型 ID，`Deserialize<TBase>` 读出类型 ID 后，在生成代码里创建对应的类型。这是处理多种类型最快的方式，而且能配合[复用反序列化和对象池](/zh/docs/v4/pooling)使用，接收循环可以做到 0 B 分配：
+需要同时处理很多类型的代码（RPC 或消息分派、插件系统、编辑器工具），其实很少真的需要运行时类型。给这些类型一个共同的 `[NinoType]` 基类或接口，通过它来序列化即可：`Serialize<TBase>` 会写入类型 ID，`Deserialize<TBase>` 读出类型 ID 后，在生成代码里创建对应的类型。这是处理多种类型最快的方式，而且能配合[复用反序列化和对象池](/zh/docs/v4/pooling)使用，接收循环除了数据里的字符串之外不分配内存：
 
 ```csharp
 [NinoType]
 public abstract class Message { }
 
-public sealed class Move : Message { public int X, Y; }    // inherits [NinoType]
+public sealed class Ping : Message { public long SentAt; } // inherits [NinoType]
 public sealed class Chat : Message { public string Text; }
 
-byte[] bytes = NinoSerializer.Serialize<Message>(new Move { X = 1, Y = 2 });
-Message message = NinoDeserializer.Deserialize<Message>(bytes); // a Move
+var buffer = new NinoArrayBufferWriter();                  // one per connection, reused
+NinoSerializer.Serialize<Message>(new Ping { SentAt = 1 }, buffer); // declared as the base: a type id is written
+
+Message message = null;
+NinoDeserializer.Deserialize(buffer.WrittenSpan, ref message); // a Ping, reused by later calls while the type matches
 ```
 
 参见[多态](/zh/docs/v4/polymorphism#dispatching-through-a-common-base)。
@@ -199,7 +204,11 @@ field.SetValue(target, current);
 
 ## 深层对象图 [#deep-object-graphs]
 
-递归类型（链表、树、节点里又包含节点）可以嵌套任意深。前 128 层嵌套的对象，Nino 在原处直接写入；更深的对象会推迟，之后从较浅的层级写入，读取时也一样。因此无论对象图有多深，写入和读取占用的栈都有上限：10 万个节点的链表在 512 KB 栈的线程上也能正常往返，而且无法构造出让读取方栈溢出的数据，所以递归类型可以放心用在来自不可信来源的消息里。嵌套不到 128 层的数据不受影响，写出的字节完全不变。
+递归类型（链表、树、节点里又包含节点）可以嵌套任意深。前 128 层嵌套的对象，Nino 在原处直接写入；更深的对象会被**推迟**：之后从较浅的层级写入，读取时也一样。因此：
+
+- 无论对象图有多深，写入和读取占用的栈都有上限：10 万个节点的链表在 512 KB 栈的线程上也能正常往返。
+- 无法构造出让读取方栈溢出的数据，所以递归类型可以放心用在来自不可信来源的消息里。
+- 嵌套不到 128 层的数据不受影响，写出的字节完全不变。
 
 ```csharp
 [NinoType]
@@ -225,11 +234,16 @@ var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
 
 ## 无效数据 [#invalid-data]
 
-从数据中读出的每个长度，都会先和剩余字节数比对，然后才分配内存，因此格式错误或恶意构造的数据不会引发超大内存分配。无效数据会抛出 `InvalidOperationException`，消息以 `Nino:` 开头，例如数据被截断（"unexpected end of data"）、长度不合法、类型 ID 未知、类型 ID 不是声明类型的子类型，或 `[NinoUtf8]` 字符串的字节不是合法的 UTF-8、与它记录的字符数和字节数对不上。读取永远不会越过 span 的末尾。
+从数据中读出的每个长度，都会先和剩余字节数比对，然后才分配内存，因此格式错误或恶意构造的数据不会引发超大内存分配，读取也永远不会越过 span 的末尾。无效数据会抛出 `InvalidOperationException`，消息以 `Nino:` 开头，例如：
+
+- 数据被截断（"unexpected end of data"）；
+- 长度不合法；
+- 类型 ID 未知，或不是声明类型的子类型；
+- `[NinoUtf8]` 字符串的字节不是合法的 UTF-8，或与它记录的字符数和字节数对不上。
 
 嵌套很深的数据也不会导致栈溢出：参见[深层对象图](#deep-object-graphs)。
 
-但如果数据是按**另一个**布局兼容的类型写出的，Nino 察觉不到：字节里不带 schema。请自己给数据加上版本信息（参见[数据演进](/zh/docs/v4/evolving-data)和[存档文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）。
+但如果数据是按**另一个**布局兼容的类型写出的，Nino 察觉不到：字节里不带 schema。请自己给数据加上版本信息（参见[数据演进](/zh/docs/v4/evolving-data)和[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）。
 
 ## 术语 [#terms]
 
@@ -243,7 +257,18 @@ var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
 - **原始值**（原始结构体）：Nino 按内存原样写入的非托管值，只需一次拷贝，填充字节清零：基元类型、枚举、`DateTime`、`Guid`，以及符合条件的非托管结构体（参见[结构体](/zh/docs/v4/defining-types#structs)）。原始值的数组和列表是一次整块拷贝。
 - **固定大小的类型**：每个值都占用相同字节数的结构体或密封类，字节数由 `NinoSerializer.GetFixedSize<T>()` 返回；参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
 - **按位置**：`[NinoType]` 的默认格式：成员按声明顺序写入，不带名称和长度。最小、最快，但成员的任何改动都会改变格式；参见[数据演进](/zh/docs/v4/evolving-data#positional)。
+- **版本容错**与**键控**：另外两种格式（`NinoFormat.VersionTolerant` 和 `NinoFormat.Keyed`）。版本容错的对象先写入自己的字节长度，以后可以追加成员；键控的对象为每个成员写入一个键（成员名的哈希）和长度，成员可以增删、重排和改名。参见[数据演进](/zh/docs/v4/evolving-data)。
 - **槽位**：存放一个值的地方：一个成员、一个集合元素、一个字典值，或者你按 `ref` 传入的变量。Nino 为一个值写出什么，取决于槽位的声明类型。
-- **头部**：Nino 在类的值之前写入的字节：密封类是 1 字节的 null 标志，可能有子类型的类型是 4 字节的类型 id；结构体没有头部。参见[多态值的写入方式](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)。
+- **头部**：Nino 在类的值之前写入的字节：密封类是 1 字节的 null 标志，可能有子类型的类型是 4 字节的类型 ID；结构体没有头部。参见[多态值的写入方式](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)。
+- **复用反序列化**：`Deserialize(data, ref value)`，原地填充你传入的值以及其中的对象、列表和字典，而不是新建它们；参见[反序列化到已有值](#into-an-existing-value)。
+- **池化类**：标记了 `[NinoPooled]` 的 `[NinoType]` 类：Nino 需要新实例时从内置的对象池中取，丢弃的实例还回池中；参见 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)。
 - **回收器**：接收[复用反序列化](/zh/docs/v4/pooling)从槽位中丢弃的实例的地方：用 `NinoSettings.SetRecycler<T>` 注册的处理函数；没有的话，交给实例自己的对象池（`ReturnToPool()`）；再没有就不处理。参见[被丢弃的实例去哪里](/zh/docs/v4/pooling#where-dropped-instances-go)。
+- **注册表**：生成器在每个程序集中生成的代码，列出这个程序集的 `[NinoType]`、它们的格式化器和类型 ID。Nino 第一次遇到这个程序集里的类型，或者遇到不认识的类型 ID 时才加载它，所以不需要初始化调用；`NinoRegistry.EnsureInitialized(assembly)` 可以提前加载。**全局注册表**是包含所有 `[NinoType]` 的那张表，声明为 `object` 的值通过它分派；参见[分派](/zh/docs/v4/polymorphism#dispatch)。
 - **推迟的对象**：嵌套超过 128 层的对象，会在较浅的层级稍后写入和读取，让栈的用量保持有界；参见[深层对象图](#deep-object-graphs)。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="定义类型" href="/zh/docs/v4/defining-types">哪些成员会被写入、按什么顺序写入，以及改变格式的选项。</Card>
+  <Card title="支持的类型" href="/zh/docs/v4/types">基元类型、字符串、元组、集合，以及你自己的集合类型。</Card>
+</Cards>

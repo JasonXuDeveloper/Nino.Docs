@@ -14,7 +14,7 @@ Nino supports Unity 2022.3 and later on Mono and IL2CPP, every player platform, 
 
 ### Install the package
 
-Nino supports Unity 2022.3 and later, on every player platform, with Mono and IL2CPP. Install it from [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/):
+Install Nino from [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/):
 
 ```shell
 openupm add com.jasonxudeveloper.nino
@@ -53,13 +53,9 @@ public class PlayerState
 
 ## What Differs from .NET
 
-<Callout type="info">
-
 - **`partial` is required for private members.** Unity compiles against .NET Standard, which has no `[UnsafeAccessor]`, so a type that serializes non-public members (or is `[NinoPooled]`) must be `partial`, and so must every type that contains it. The analyzer reports this as NINO002 and fixes it for you.
 - **No interceptors.** The Unity package ships the generator's Roslyn 4.3 build, the oldest compiler Unity supports, so calls use the regular path. The bytes are identical, and the difference is a few nanoseconds per call.
 - **Same bytes as .NET.** Data written by a .NET server can be read by a Unity client and the other way round, including 32-bit IL2CPP players and old Mono runtimes. See [Platforms and Binary Format](/en/docs/v4/platforms).
-
-</Callout>
 
 ## IL2CPP
 
@@ -141,10 +137,9 @@ ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
 
 ## Frame-Time Tips
 
-- **No GC spikes from network or replay data:** deserialize each tick into the previous tick's object with `ref`, and mark the classes you create in bulk (bullets, events) `[NinoPooled]`. See [High-Performance Serialization](/en/docs/v4/advanced/high-performance).
+- **No GC spikes from network or replay data:** deserialize each tick into the previous tick's object with `ref`, and mark the classes you create in bulk (bullets, events) `[NinoPooled]`. See [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation).
 - **Reuse one `NinoArrayBufferWriter`** per sender for outgoing data instead of calling `Serialize(value)` and allocating a `byte[]` each frame.
 - **Keep bulk data unmanaged:** arrays of `Vector3`, `Color32` or your own unmanaged `[NinoType]` structs are one memory copy.
-- **Configuration authored in the editor** changes all the time: use [`format: NinoFormat.Keyed`](/en/docs/v4/evolving-data#keyed-members) so designers can add and reorder fields without breaking existing assets.
 
 <Callout type="warn">
 

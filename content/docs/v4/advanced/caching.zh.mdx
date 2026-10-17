@@ -44,7 +44,7 @@ public sealed class RedisProfileCache
     {
         var buffer = t_buffer ??= new NinoArrayBufferWriter(1024);
         buffer.ResetWrittenCount();
-        NinoSerializer.Serialize(profile, buffer);
+        NinoSerializer.Serialize(profile, buffer); // [!code highlight]
         _db.StringSet(Key(profile.Id), buffer.WrittenMemory, ttl); // synchronous: done before the buffer is reused
     }
 
@@ -87,7 +87,7 @@ public static class DistributedCacheExtensions
 
 ## HybridCache [#hybridcache]
 
-`HybridCache`（`Microsoft.Extensions.Caching.Hybrid`，.NET 9 及以上）把值写入 `IBufferWriter<byte>`，从 `ReadOnlySequence<byte>` 读出，和 Nino 的 API 正好对应：
+`HybridCache`（`Microsoft.Extensions.Caching.Hybrid` 包）交给序列化器一个用于写入的 `IBufferWriter<byte>` 和一个用于读取的 `ReadOnlySequence<byte>`，和 Nino 的 API 正好对应：
 
 ```csharp title="NinoHybridSerializer.cs"
 using System.Buffers;
@@ -122,7 +122,9 @@ services.AddHybridCache()
     .AddSerializer<UserProfile, NinoHybridSerializer<UserProfile>>();
 ```
 
-每个缓存的类型注册一个序列化器。泛型序列化器内部的调用不会被[拦截](/zh/docs/v4/performance#interceptors)，因为那里的 `T` 是类型参数；它们走常规路径，每次调用慢几纳秒。
+- 每个缓存的类型注册一个序列化器。
+- `HybridCache` 提供的缓冲区写入器不是 `NinoArrayBufferWriter`，所以 Nino 先序列化到每个线程的暂存缓冲区，再一次性复制进去。每次调用都不分配内存。
+- 泛型序列化器内部的调用不会被[拦截](/zh/docs/v4/performance#interceptors)，因为那里的 `T` 是类型参数；它们走常规路径，每次调用慢几纳秒。
 
 ## 进程内的序列化数据缓存 [#in-process-blob-caches]
 
@@ -130,7 +132,7 @@ services.AddHybridCache()
 
 - **隔离。** 每次读取都反序列化出一份新的副本，调用方修改自己拿到的值，不会破坏缓存里的数据，也不会和其他线程产生竞争。
 - **占用。** 一个 `byte[]` 对垃圾回收器来说只是一个对象，而不是一整张由对象、列表和字符串组成的图。
-- **复用。** 调用方如果保留了实例，可以用 `ref` 反序列化到其中，不分配内存。
+- **复用。** 调用方如果保留了实例，可以用 `ref` 反序列化到其中，除了内容有变化的字符串之外不分配内存。
 
 ```csharp title="BlobCache.cs"
 using System.Collections.Concurrent;
@@ -141,6 +143,7 @@ public sealed class BlobCache<TKey, TValue>
 {
     private readonly ConcurrentDictionary<TKey, byte[]> _entries = new();
 
+    // the entry is the array: Serialize(value) allocates it at its exact size
     public void Set(TKey key, TValue value) => _entries[key] = NinoSerializer.Serialize(value);
 
     public bool TryGet(TKey key, out TValue value)
@@ -154,7 +157,7 @@ public sealed class BlobCache<TKey, TValue>
         return false;
     }
 
-    /// <summary>Reads into an instance the caller keeps: no allocation once it has the right shape.</summary>
+    /// <summary>Reads into an instance the caller keeps: once it has the right shape, only changed strings allocate.</summary>
     public bool TryGetInto(TKey key, ref TValue value)
     {
         if (!_entries.TryGetValue(key, out byte[] bytes))
@@ -169,13 +172,15 @@ public sealed class BlobCache<TKey, TValue>
 
 ## 跨部署的结构变化 [#schema-changes]
 
-共享缓存比写入它的进程活得更久：滚动部署期间，新旧实例会读取彼此写入的条目。每个缓存的类型都要选定下面的一种做法：
+共享缓存比写入它的进程活得更久：滚动部署期间，新旧实例会读取彼此写入的条目。每个缓存的类型都要在前两种做法中选定一种，再加上第三种：
 
 | 做法 | 方式 | 适用场景 |
 | --- | --- | --- |
 | 容错类型 | [`format: NinoFormat.VersionTolerant`](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）或 [`format: NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)（任意修改） | 条目需要在部署后继续可用。 |
 | 带版本的键 | 在键里加上结构版本（`profile:v2:42`），类型变化时递增 | 类型的变化超出了上面两个选项的范围，或者缓存重新填充的代价很低。 |
-| 失败即未命中 | 捕获无效数据抛出的 `InvalidOperationException`，删除该条目，再从数据源加载 | 作为前两种做法之上的兜底，而不是替代：按布局兼容的另一个类型写入的字节，可能不报错就被反序列化出来。 |
+| 失败即未命中 | 捕获无效数据抛出的 `InvalidOperationException`，删除该条目，再从数据源加载 | 始终启用，作为前两种做法之上的兜底。 |
+
+兜底不能替代前两种做法：按布局兼容的另一个类型写入的字节，可能不报错就被反序列化出来。
 
 [按位置](/zh/docs/v4/evolving-data#positional)的类型（不带参数的 `[NinoType]`）最小、最快，但成员的任何改动都会让旧条目无法读取。缓存值只有在配合带版本的键时才适合用它。
 

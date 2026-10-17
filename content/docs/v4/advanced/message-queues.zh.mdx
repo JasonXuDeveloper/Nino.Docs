@@ -58,7 +58,7 @@ switch (NinoDeserializer.Deserialize<OrderEvent>(payload))
 }
 ```
 
-类型 id 是类型全名的哈希：给事件改名时要加上 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)，否则主题里的旧消息就读不出来了。详见[多态](/zh/docs/v4/polymorphism)。
+类型 ID 是类型全名的哈希：给事件改名时要加上 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)，否则主题里的旧消息就读不出来了。详见[多态](/zh/docs/v4/polymorphism)。
 
 ## Kafka [#kafka]
 
@@ -92,21 +92,52 @@ using var consumer = new ConsumerBuilder<Guid, OrderEvent>(consumerConfig)
     .Build();
 ```
 
-Kafka 的 `ISerializer<T>` 返回 `byte[]`，所以每生产一条消息都会分配一个数组。`Guid` 键是原始值：16 字节，一次拷贝完成读写。
+Kafka 的 `ISerializer<T>` 必须返回 `byte[]`，所以每生产一条消息都会分配一个数组：`NinoSerializer.Serialize(data)` 先写入每个线程一份的暂存缓冲区，再只把写入的字节拷贝出来，所以这个数组就是唯一的分配。消费时不需要拷贝：反序列化器直接读取客户端交给它的 span。`Guid` 键是原始值：16 字节，一次拷贝完成读写。
 
 ## 其他消息中间件 [#other-brokers]
 
-其他客户端大多接受 `byte[]` 或 `ReadOnlyMemory<byte>` 形式的消息体：
+其他客户端大多以 `ReadOnlyMemory<byte>` 接收消息体。序列化到复用的 `NinoArrayBufferWriter`，传入 `WrittenMemory`：你这一侧每条消息都不分配内存。以 RabbitMQ.Client 7 为例：
 
-- 消息体是 `ReadOnlyMemory<byte>` 时，序列化到复用的 `NinoArrayBufferWriter`，传入 `WrittenMemory`。等发布调用完成后（`await` 之后）再重置缓冲区，因为客户端可能还在读取它。
-- 消息体是 `byte[]` 时，直接传 `NinoSerializer.Serialize(evt)`。
-- 消费端把收到的消息体（`ReadOnlyMemory<byte>.Span` 或数组）交给 `NinoDeserializer.Deserialize<T>`，不需要先拷贝一份。
+```csharp title="OrderPublisher.cs"
+using Nino.Core;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 
-如果中间件在处理函数返回后会复用消息体的内存，就在处理函数内部完成反序列化；反序列化的结果不会引用输入的字节。
+public sealed class OrderPublisher
+{
+    private readonly IChannel _channel;
+    private readonly NinoArrayBufferWriter _buffer = new(1024); // one per publisher
+
+    public OrderPublisher(IChannel channel) => _channel = channel;
+
+    // Await each call before the next one: the buffer is reused
+    public async ValueTask PublishAsync(OrderEvent evt)
+    {
+        _buffer.ResetWrittenCount();
+        NinoSerializer.Serialize(evt, _buffer); // [!code highlight]
+        await _channel.BasicPublishAsync(exchange: "orders", routingKey: "", body: _buffer.WrittenMemory);
+    }
+}
+
+// consuming
+var consumer = new AsyncEventingBasicConsumer(channel);
+consumer.ReceivedAsync += (_, delivery) =>
+{
+    // the body's memory is only valid inside the handler: deserialize here
+    Handle(NinoDeserializer.Deserialize<OrderEvent>(delivery.Body.Span));
+    return Task.CompletedTask;
+};
+await channel.BasicConsumeAsync("orders", autoAck: true, consumer);
+```
+
+- 等发布调用完成后（`await` 之后）再重置缓冲区，因为客户端可能还在读取它。在多个线程上使用的发布者，每个线程需要一个缓冲区，或者加锁。
+- Azure Service Bus 的做法相同：`new ServiceBusMessage(buffer.WrittenMemory)` 直接包装这段内存，不做拷贝；收到的消息用 `NinoDeserializer.Deserialize<OrderEvent>(message.Body.ToMemory().Span)` 读取。
+- 只接受 `byte[]` 消息体的客户端，传 `NinoSerializer.Serialize(evt)`：和 Kafka 一样，是一个大小正好等于负载的数组。
+- 消费端把收到的消息体（`ReadOnlyMemory<byte>.Span` 或数组）交给 `NinoDeserializer.Deserialize<T>`，不需要先拷贝一份。如果中间件在处理函数返回后会复用消息体的内存，就在处理函数内部完成反序列化；反序列化的结果不会引用输入的字节。
 
 ## 批量发送 [#batching]
 
-小事件（一次点击、一次价格变动、一个指标）往往批量发送更划算：一条中间件消息、一次网络往返、一个消息头。先写入数量，再依次写入各个事件：
+小事件（一次点击、一次价格变动、一个指标）往往批量发送更划算：一条中间件消息、一次网络往返、一个消息头。先写入数量，再把各个事件依次写入复用的缓冲区（写一批不分配内存），然后像上面那样发送 `buffer.WrittenMemory`：
 
 ```csharp title="EventBatch.cs"
 using Nino.Core;
@@ -117,23 +148,29 @@ public static class EventBatch
     {
         buffer.ResetWrittenCount();
         var writer = new Writer(buffer);
-        writer.Write(events.Count);
+        writer.WriteLength(events.Count);
         for (int i = 0; i < events.Count; i++)
-            NinoSerializer.Serialize(events[i], ref writer);
+            NinoSerializer.Serialize(events[i], ref writer); // [!code highlight]
         writer.Flush();
+        writer.ReleaseReferences(); // end the call, as NinoSerializer does
     }
 
     public static void Read(ReadOnlySpan<byte> payload, Action<OrderEvent> handle)
     {
         var reader = new Reader(payload);
-        int count = reader.Read<int>();
+        int count = reader.ReadLength(minElementSize: 4); // each event starts with a 4-byte type id
         for (int i = 0; i < count; i++)
             handle(NinoDeserializer.Deserialize<OrderEvent>(ref reader));
+        reader.ReleaseReferences();
     }
 }
 ```
 
-每个事件保留各自的类型，所以同一批里可以混合 `OrderPlaced` 和 `OrderShipped`。在 `[NinoType]` 类里用一个 `List<OrderEvent>` 成员也能达到同样效果，还多了存放批次级字段（生产者 id、序号）的地方。
+- 每个事件保留各自的类型，所以同一批里可以混合 `OrderPlaced` 和 `OrderShipped`。
+- `ReadLength(minElementSize: 4)` 会拒绝负载不可能容纳的数量，所以损坏的批次在进入循环之前就会抛出异常。
+- 写入器和读取器最后都要调用 `ReleaseReferences`，和 `NinoSerializer` 的做法一样；详见[连续写入多个值](/zh/docs/v4/advanced/high-performance#several-values-back-to-back)。
+
+在 `[NinoType]` 类里用一个 `List<OrderEvent>` 成员也能达到同样效果，还多了存放批次级字段（生产者 id、序号）的地方。
 
 ## 遥测与行情数据流 [#telemetry-and-tick-streams]
 
@@ -164,7 +201,7 @@ public sealed class SampleConsumer
 
     public void OnMessage(ReadOnlySpan<byte> payload)
     {
-        NinoDeserializer.Deserialize(payload, ref _batch);
+        NinoDeserializer.Deserialize(payload, ref _batch); // [!code highlight]
         foreach (Sample sample in _batch.Samples)
             Record(sample);
     }
@@ -172,7 +209,7 @@ public sealed class SampleConsumer
 ```
 
 - 无论多长，样本列表的读写都只是**一次整块拷贝**。
-- 反序列化到同一个 `SampleBatch` 会复用对象本身和列表的底层数组。每条消息唯一的分配是 `Host` 字符串，它本身就是数据；如果连这都在意，就发送 id 而不是名称。
+- 反序列化到同一个 `SampleBatch` 会复用对象本身、列表的底层数组和 `Host` 字符串（内容不变时直接保留）：同一台主机持续发来的消息不分配内存，只有来自另一台主机的批次才会把主机名读成新字符串。
 - 需要按位置查找的记录（一个文件里一整天的 tick），见[固定大小的记录](/zh/docs/v4/advanced/zero-allocation#fixed-size-records)。
 
 ## 跨越多次部署的主题 [#topics-that-outlive-a-deployment]
@@ -181,7 +218,7 @@ public sealed class SampleConsumer
 
 - 每个事件类型都设为 [`NinoFormat.VersionTolerant`](/zh/docs/v4/evolving-data#version-tolerance)（追加字段）或 [`NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)（任意修改）。这样消费者会跳过不认识的字段，旧消息中缺少的字段保留构造函数或字段初始化器给出的值。
 - 在 `NinoFormat.VersionTolerant` 的继承体系中，只向具体的事件类（`OrderPlaced` 等）追加成员，不要加到 `OrderEvent` 上：追加到基类的成员会把每个子类的成员往后挤。如果基类需要新成员，请改用 `NinoFormat.Keyed`。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
-- 消费者收到不认识的事件**类型**时无法读取：反序列化会抛出 `InvalidOperationException`（未知的类型 id）。先部署消费者，再部署会产生新事件类型的生产者；或者把新类型放到新的主题里。
+- 消费者收到不认识的事件**类型**时无法读取：反序列化会抛出 `InvalidOperationException`（未知的类型 ID）。先部署消费者，再部署会产生新事件类型的生产者；或者把新类型放到新的主题里。
 - 在同一次部署内就会被消费掉的消息（几秒内清空的任务队列）用[按位置](/zh/docs/v4/evolving-data#positional)的类型（不带参数的 `[NinoType]`）即可。它们的字节会随成员的每次改动而变化。
 
 文件中的追加日志（基于本地存储的事件溯源）见[追加日志](/zh/docs/v4/advanced/persistence#append-only-logs)。

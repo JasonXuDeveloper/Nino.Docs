@@ -9,7 +9,9 @@ import { ArrowRightLeft, ChartColumn, Compass, Rocket, Sparkles, Swords } from '
 
 ## What Is Nino?
 
-Nino is a general-purpose, high-performance binary serializer for C# and .NET. Use it wherever .NET code turns objects into bytes and back: service messages and RPC, message queues, caches, files and local stores, inter-process communication, data pipelines and telemetry. It runs on .NET servers and desktop apps, NativeAOT, Unity (including HybridCLR) and Godot. Mark a type with `[NinoType]` and a Roslyn source generator writes its serialization code at compile time; at run time you call `NinoSerializer.Serialize` and `NinoDeserializer.Deserialize`. There is no reflection, no runtime code generation, no schema file and no registration step.
+Nino is a general-purpose, high-performance binary serializer for C# and .NET. Use it wherever .NET code turns objects into bytes and back: service messages and RPC, message queues, caches, files and local stores, inter-process communication, data pipelines and telemetry. It runs on .NET servers and desktop apps, NativeAOT, Unity (including HybridCLR) and Godot.
+
+Mark a type with `[NinoType]` and a Roslyn source generator writes its serialization code at compile time; at run time you call `NinoSerializer.Serialize` and `NinoDeserializer.Deserialize`. There is no reflection, no runtime code generation, no schema file and no registration step.
 
 ```csharp
 using Nino.Core;
@@ -29,7 +31,7 @@ Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 ## Why Nino
 
 - **Fast.** Against MemoryPack in the same run, Nino serializes up to <BenchValue k="serialize.max" /> faster and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; on arrays of unmanaged structs, which both copy as one block, the two are on par. See [Benchmarks](/en/docs/v4/perf).
-- **Zero GC on hot paths.** Serializing into a reused buffer allocates nothing. Deserializing [into existing objects and pooled instances](/en/docs/v4/pooling) allocates nothing either.
+- **Zero GC on hot paths.** Serializing [into a reused buffer](/en/docs/v4/basic#reusing-a-buffer) allocates nothing. Deserializing [into existing objects and pooled instances](/en/docs/v4/pooling) allocates nothing either: a string whose text is unchanged is kept, and only changed text is read into a new string.
 - **Everything at compile time.** The generator writes one formatter per type, so Nino works on IL2CPP, NativeAOT and HybridCLR. On the .NET 8 SDK and later, [interceptors](/en/docs/v4/performance#interceptors) route each call straight to the right formatter. The generator is incremental: editing a type regenerates that type only, and the generated code compiles far faster than v3's ([build times](/en/docs/v4/v3-vs-v4#build-time-and-generated-code)).
 - **Polymorphism without tags.** Values declared as a base class or interface are read back as their runtime type. Type ids are hashes of type names, so there is no tag table to maintain, and Nino finds subtypes in other assemblies on its own. See [Polymorphism](/en/docs/v4/polymorphism).
 - **Data that evolves.** Per type, choose [version tolerance](/en/docs/v4/evolving-data#version-tolerance) (append members), [keyed members](/en/docs/v4/evolving-data#keyed-members) (add, remove and reorder members) or [reference tracking](/en/docs/v4/reference-tracking) (shared references and cycles). Types that don't opt in pay nothing.
@@ -41,19 +43,25 @@ Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 
 | Use case | What Nino gives you |
 | --- | --- |
-| **Networking and RPC** (microservices, real-time servers, TCP, WebSocket, UDP, gRPC) | Serialize into an `IBufferWriter<byte>` such as a `PipeWriter`, deserialize from a `ReadOnlySpan<byte>`, reuse pooled messages; polymorphic messages without opcode tables. See [Network Layer](/en/docs/v4/advanced/networking). |
-| **Message queues and event streams** (Kafka and other brokers, data pipelines, telemetry, market data) | Compact payloads, event hierarchies read back as their real type, batches of unmanaged records copied as one block. See [Message Queues and Event Streams](/en/docs/v4/advanced/message-queues). |
-| **Caching** (Redis, `IDistributedCache`, `HybridCache`, in-process blobs) | Small values, no per-call allocations of its own, and types that stay readable across deployments. See [Caching](/en/docs/v4/advanced/caching). |
-| **Persistence** (files and documents, key-value stores, append-only logs, snapshots) | Keyed and version-tolerant types survive updates; reference tracking keeps object graphs intact. See [Persistence](/en/docs/v4/advanced/persistence). |
-| **IPC and hot paths** (pipes, shared memory, ASP.NET Core, workers, actors) | Framed streams and fixed-size records at 0 B per call, safe concurrent use from any thread. See [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation). |
-| **Unity** (Mono, IL2CPP, HybridCLR) | Unity 2022.3+, installed from OpenUPM with the generator included. `Vector3`, `Quaternion`, `Color32` and other unmanaged structs are copied as raw memory. Hot-update assemblies need no init call. See [Unity and HybridCLR](/en/docs/v4/advanced/unity). |
-| **Godot 4 (.NET)** | A regular NuGet package. Godot's math structs are unmanaged and copied as raw memory. See [Godot](/en/docs/v4/platforms#godot). |
+| [Networking and RPC](/en/docs/v4/advanced/networking) | Serialize into a `PipeWriter` or any `IBufferWriter<byte>`, read from a `ReadOnlySpan<byte>`, reuse pooled messages; polymorphic messages without opcode tables. |
+| [Message queues and event streams](/en/docs/v4/advanced/message-queues) | Compact payloads, event hierarchies read back as their real type, batches of unmanaged records copied as one block. |
+| [Caching](/en/docs/v4/advanced/caching) | Small values for Redis or `IDistributedCache`, no allocations of its own per call, types that stay readable across deployments. |
+| [Persistence](/en/docs/v4/advanced/persistence) | Files, key-value stores and logs: keyed and version-tolerant types survive updates, reference tracking keeps object graphs intact. |
+| [IPC and hot paths](/en/docs/v4/advanced/zero-allocation) | Framed streams and fixed-size records at 0 B per call, from any thread. |
+| [Unity and HybridCLR](/en/docs/v4/advanced/unity) | Unity 2022.3+ from OpenUPM, generator included; `Vector3` and other unmanaged structs copied as raw memory; no init call for hot-update assemblies. |
+| [Godot 4 (.NET)](/en/docs/v4/platforms#godot) | A regular NuGet package; Godot's math structs are copied as raw memory. |
+
+## What Nino Serializes
+
+- **Your types**: classes, structs, records, interfaces and generic types marked `[NinoType]`, including [private members](/en/docs/v4/defining-types#private-members), [custom constructors](/en/docs/v4/constructors) and [renamed types](/en/docs/v4/defining-types#former-name). See [Defining Types](/en/docs/v4/defining-types).
+- **Built-in types**: primitives, enums, strings, `Nullable<T>`, tuples, arrays, the BCL collections, your own collection types and, with `Nino.Immutable`, `ImmutableArray<T>` and `ImmutableList<T>`. See [Supported Types](/en/docs/v4/types).
+- **Anything else** through a [custom formatter](/en/docs/v4/custom-formatters), for one member or a whole type.
 
 ## When Not to Use It
 
 - **You need a human-readable format.** Nino writes binary. Use JSON, YAML or TOML for files that people read or edit.
 - **Another language reads the data.** The format is defined by your C# types; there is no schema file and no code generator for other languages. To talk to non-.NET peers, use Protocol Buffers, FlatBuffers or MessagePack.
-- **You need a TypeScript client or ASP.NET Core MVC formatters generated for you.** See [Limitations](/en/docs/v4/limit) and [where MemoryPack is ahead](/en/docs/v4/vs-memorypack#where-memorypack-is-ahead).
+- **You need TypeScript code or ASP.NET Core MVC formatters generated for you.** Nino generates neither. A browser client can still use your Nino types by running them on .NET WebAssembly: see [Browser and JavaScript Clients](/en/docs/v4/advanced/browser) and [where MemoryPack is ahead](/en/docs/v4/vs-memorypack#where-memorypack-is-ahead).
 - **You must read Nino v3 data directly.** v4 has a new binary format, so old data has to be converted once. See [Migrating from v3](/en/docs/v4/migration#converting-v3-data).
 
 ## Start Here
@@ -78,12 +86,6 @@ Order copy = NinoDeserializer.Deserialize<Order>(bytes);
     Complete patterns for hot paths, networking and RPC, message queues, caching, persistence and Unity.
   </Card>
 </Cards>
-
-## What Nino Serializes
-
-- **Your types**: classes, structs, records, interfaces and generic types marked `[NinoType]`, including [private members](/en/docs/v4/defining-types#private-members), [custom constructors](/en/docs/v4/constructors) and [renamed types](/en/docs/v4/defining-types#former-name). See [Defining Types](/en/docs/v4/defining-types).
-- **Built-in types**: primitives, enums, strings, `Nullable<T>`, tuples, arrays, the BCL collections, your own collection types and, with `Nino.Immutable`, `ImmutableArray<T>` and `ImmutableList<T>`. See [Supported Types](/en/docs/v4/types).
-- **Anything else** through a [custom formatter](/en/docs/v4/custom-formatters), for one member or a whole type.
 
 ## Older Versions
 

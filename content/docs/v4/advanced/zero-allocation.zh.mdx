@@ -1,11 +1,11 @@
 ---
 title: 零分配模式
 seoTitle: "C# 零分配（零 GC）序列化 – Nino v4 文档"
-description: "稳定运行时 0 B 的序列化与反序列化做法：复用缓冲区与调用方提供的内存、批量写入、固定大小的记录、分帧的流、复用实例与对象池。"
+description: "可直接复制的做法，让稳定运行时保持 0 B：按归属方复用缓冲区与调用方提供的内存、批量写入、接收循环、复用实例、分帧的流、内存映射的记录、分配测试与检查清单。"
 icon: Leaf
 ---
 
-这是一份面向热路径的速查手册，适用于不允许分配内存的场景：消息循环、行情与遥测数据流、游戏 tick、缓存层。每种做法在**预热之后每次调用都是 0 B**（缓冲区已经增长到位、对象池已经填满）。背后的机制详见[高性能序列化](/zh/docs/v4/advanced/high-performance)；复用的具体规则见[复用反序列化与对象池](/zh/docs/v4/pooling)。
+这是一份面向热路径的做法手册，适用于不允许分配内存的场景：消息循环、行情与遥测数据流、游戏 tick、缓存层。每种做法都是可以直接复制的代码，在**预热之后每次调用都是 0 B**（缓冲区已经增长到位、对象池已经填满）。每种做法为什么有效、开销在哪里，请顺着它的链接去看[高性能序列化](/zh/docs/v4/advanced/high-performance)；复用的具体规则见[复用反序列化与对象池](/zh/docs/v4/pooling)。页面最后有一份[检查清单](#checklist)，可用来逐项检查热路径。
 
 ## 哪些调用会分配内存 [#what-allocates]
 
@@ -15,27 +15,54 @@ icon: Leaf
 | `NinoSerializer.Serialize(value, bufferWriter)` | 不分配；`NinoArrayBufferWriter` 直接写入，其他 `IBufferWriter<byte>` 从线程级暂存缓冲区拷贝一次 |
 | `NinoSerializer.Serialize(value, ref writer)` | 不分配 |
 | `NinoDeserializer.Deserialize<T>(span)` | 返回的对象：数据里的类实例、集合和字符串；只含非托管成员的结构体不分配 |
-| `NinoDeserializer.Deserialize(span, ref value)` | 现有对象图容纳不下的部分（新增的列表元素、长度变化的数组），以及每个非空字符串（字符串总是读成新实例） |
+| `NinoDeserializer.Deserialize(span, ref value)` | 现有对象图容纳不下的部分（新增的列表元素、长度变化的数组），以及内容有变化的字符串（内容不变的字符串会保留；非 ASCII 的 `[NinoUtf8]` 文本总是读成新字符串） |
 | Nino 需要创建的 `[NinoPooled]` 类 | 对象池里有实例时不分配 |
 
 序列化用的缓冲区在最初几次调用时增长，之后一直复用；`NinoArrayBufferWriter` 的数组租自 `ArrayPool<byte>.Shared`。Nino 不会为每次调用在堆上保留任何状态。
 
 ## 每个归属方复用一个缓冲区 [#reuse-one-buffer]
 
-最基本的做法：每个线程、连接或编码器持有一个 `NinoArrayBufferWriter`，每次使用前重置。
+最基本的做法：每个线程、连接或编码器持有一个 `NinoArrayBufferWriter`，每次使用前重置（[原因](/zh/docs/v4/advanced/high-performance#serialize-into-a-reused-buffer)）。
 
-```csharp
-private readonly NinoArrayBufferWriter _buffer = new(64 * 1024);
+```csharp title="MessageEncoder.cs"
+using Nino.Core;
 
-public ReadOnlySpan<byte> Encode(Quote quote)
+public sealed class MessageEncoder : IDisposable
 {
-    _buffer.ResetWrittenCount();
-    NinoSerializer.Serialize(quote, _buffer);
-    return _buffer.WrittenSpan;   // valid until the next Encode
+    private readonly NinoArrayBufferWriter _buffer = new(64 * 1024);
+
+    public ReadOnlySpan<byte> Encode(Message message)
+    {
+        _buffer.ResetWrittenCount();          // reuse the same array
+        NinoSerializer.Serialize(message, _buffer);
+        return _buffer.WrittenSpan;           // valid until the next Encode
+    }
+
+    public void Dispose() => _buffer.Dispose(); // returns the array to the pool
 }
 ```
 
-如果异步 API 需要这些字节，就用 `WrittenMemory` 代替 `WrittenSpan`，并且等这次调用完成后再重置缓冲区。没有合适位置存放缓冲区的代码，可以用[线程静态缓冲区](/zh/docs/v4/advanced/high-performance#serialize-into-a-reused-buffer)。
+如果异步 API 需要这些字节，就用 `WrittenMemory` 代替 `WrittenSpan`，并且等这次调用完成后再重置缓冲区。如果代码没有明确的归属对象，可以用线程静态的缓冲区：
+
+```csharp title="ScratchBuffer.cs"
+static class ScratchBuffer
+{
+    [ThreadStatic] private static NinoArrayBufferWriter t_buffer;
+
+    public static NinoArrayBufferWriter Get()
+    {
+        var buffer = t_buffer ??= new NinoArrayBufferWriter();
+        buffer.ResetWrittenCount();
+        return buffer;
+    }
+}
+```
+
+<Callout type="warn">
+
+在缓冲区被再次使用之前，先拷贝或发送 `WrittenSpan`；也不要把线程静态缓冲区交给可能在用完之前再次调用 `Get()` 的代码（重入问题）。
+
+</Callout>
 
 ## 写入你自己的内存 [#write-into-memory-you-own]
 
@@ -81,7 +108,7 @@ NinoSerializer.Serialize(order, output);   // one copy into slot, 0 B
 Send(output.WrittenSpan);
 ```
 
-Nino 先序列化到线程级暂存缓冲区，再往 `GetSpan` 拷贝一次。原始值（非托管结构体、基元类型）不经过暂存缓冲区，直接写进 span。如果事先知道大小，写入前先检查：固定大小的类型可以用 [`GetFixedSize<T>()`](/zh/docs/v4/performance#fixed-size-types) 得到。
+Nino 只往 `GetSpan` 拷贝一次结果（[原因](/zh/docs/v4/advanced/high-performance#serialize-into-any-ibufferwriter)）。如果事先知道大小，写入前先检查：固定大小的类型可以用 [`GetFixedSize<T>()`](/zh/docs/v4/performance#fixed-size-types) 得到。
 
 ## 把多条记录批量写进一个缓冲区 [#batches]
 
@@ -105,7 +132,8 @@ buffer.ResetWrittenCount();
 var writer = new Writer(buffer);
 foreach (var tick in ticks)
     NinoSerializer.Serialize(tick, ref writer);
-writer.Flush();
+writer.Flush(); // [!code highlight]
+writer.ReleaseReferences(); // [!code highlight]
 
 // read: 0 B, one bounds check and one copy per tick
 var reader = new Reader(buffer.WrittenSpan);
@@ -114,50 +142,50 @@ while (!reader.Eof)
     Tick tick = NinoDeserializer.Deserialize<Tick>(ref reader);
     Apply(tick);
 }
+reader.ReleaseReferences(); // [!code highlight]
 ```
 
-类记录和多种类型混写也一样，只要按写入顺序读取即可。多态事件的批量写入见[消息队列与事件流](/zh/docs/v4/advanced/message-queues#batching)。
+类记录和多种类型混写也一样，只要按写入顺序读取即可。两处 `ReleaseReferences` 都要保留：缺了它们，含 `trackReferences` 类型的批次每次调用都会分配内存（[原因](/zh/docs/v4/advanced/high-performance#several-values-back-to-back)）。多态事件的批量写入见[消息队列与事件流](/zh/docs/v4/advanced/message-queues#batching)。
 
-## 固定大小的记录 [#fixed-size-records]
+## 接收到租来的缓冲区 [#receive-loop]
 
-只由非托管成员组成的结构体，每个值占用的字节数都相同。`NinoSerializer.GetFixedSize<T>()` 返回这个大小（大小不固定的类型返回 `-1`），所以由这类记录组成的文件或缓冲区可以按下标直接定位，不需要偏移表：
+直接从接收缓冲区反序列化：每个 socket 只租一次缓冲区，按收到的长度切片，并在 `finally` 中归还（[原因](/zh/docs/v4/advanced/high-performance#deserialize-from-the-memory-you-have)）：
 
 ```csharp
-int size = NinoSerializer.GetFixedSize<Tick>();   // check once at startup: -1 means not fixed
-
-Tick ReadAt(ReadOnlySpan<byte> records, int index) =>
-    NinoDeserializer.Deserialize<Tick>(records.Slice(index * size, size));
-```
-
-这样的文件还可以映射到内存中原地读取，而不必整个加载。在映射视图上构造 `ReadOnlySpan<byte>` 需要 `unsafe` 代码块（`<AllowUnsafeBlocks>true</AllowUnsafeBlocks>`）：
-
-```csharp title="TickFile.cs"
-using System.IO.MemoryMappedFiles;
-
-long fileLength = new FileInfo(path).Length;
-using var file = MemoryMappedFile.CreateFromFile(path, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
-using var view = file.CreateViewAccessor(0, fileLength, MemoryMappedFileAccess.Read);
-unsafe
+byte[] datagram = ArrayPool<byte>.Shared.Rent(65536); // once per socket, not per datagram
+try
 {
-    byte* start = null;
-    view.SafeMemoryMappedViewHandle.AcquirePointer(ref start);
-    try
+    while (!ct.IsCancellationRequested)
     {
-        var records = new ReadOnlySpan<byte>(start + view.PointerOffset, checked((int)fileLength));
-        Tick tick = ReadAt(records, 1_000);   // only the pages touched are read from disk
+        int received = socket.Receive(datagram);
+        var message = NinoDeserializer.Deserialize<Message>(datagram.AsSpan(0, received)); // [!code highlight]
+        Handle(message);
     }
-    finally
-    {
-        view.SafeMemoryMappedViewHandle.ReleasePointer();
-    }
+}
+finally
+{
+    ArrayPool<byte>.Shared.Return(datagram);
 }
 ```
 
-另一个进程可以按[写入你自己的内存](#write-into-memory-you-own)的做法写入同一个文件（或用 `MemoryMappedFile.CreateNew` 创建的共享内存映射）；读写双方需要自行协调，Nino 不提供任何锁。
+## 复用反序列化的结果 [#reuse-what-you-deserialize]
 
-- 需要按下标访问的记录用**结构体**：密封类也是固定大小的，但 `null` 实例只写 1 个字节。
-- 把类型改为 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，或者加上 `string` 成员后，它就不再是固定大小的。按下标访问的记录要固定布局，并在文件头里写上格式版本（见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）。
-- 对固定大小的类型调用 `NinoSerializer.Serialize(tick)`，会按正好的大小分配 `byte[]` 并直接写入，不经过暂存缓冲区，也没有拷贝。需要数组时用它；不需要时用上面的做法。
+保留上一次的结果，按 `ref` 传入，Nino 会原地填充（[机制](/zh/docs/v4/advanced/high-performance#deserialize-into-existing-objects)）：
+
+```csharp
+OrderBook book = null;                   // created on the first call
+while (TryReceive(out ReadOnlySpan<byte> frame))
+{
+    NinoDeserializer.Deserialize(frame, ref book); // [!code highlight]
+    Publish(book);
+}
+```
+
+- 条数会变化时用 `List<T>`：列表保留原有容量，而数组只在新数据长度相同时复用。
+- 每条消息都会变化的文本，每次都要分配新字符串，所以必须保持 0 B 的数据里，会变化的值应使用数字或 id，而不是文本。
+- Nino 需要新建的类（列表变长、`null` 成员有了值）标记为 [`[NinoPooled]`](/zh/docs/v4/advanced/high-performance#pool-what-you-create)，这样新实例从对象池里取，被丢弃的实例也会回到池中。
+
+[零 GC 状态同步示例](/zh/docs/v4/pooling#example)把这些做法组合在了一起。
 
 ## 分帧读写流，不按消息分配 [#framed-streams]
 
@@ -189,6 +217,7 @@ public sealed class FrameStream : IDisposable
         NinoSerializer.Serialize(value, ref writer);
         writer.PatchLength(slot);                           // bytes written after the slot
         writer.Flush();
+        writer.ReleaseReferences();                         // end the call, as NinoSerializer does
         _stream.Write(_out.WrittenSpan);
     }
 
@@ -207,8 +236,9 @@ public sealed class FrameStream : IDisposable
 
         if (_in.Length < length)                            // grow once, then keep it
         {
+            byte[] larger = ArrayPool<byte>.Shared.Rent(length);
             ArrayPool<byte>.Shared.Return(_in);
-            _in = ArrayPool<byte>.Shared.Rent(length);
+            _in = larger;
         }
 
         _stream.ReadExactly(_in, 0, length);
@@ -219,7 +249,11 @@ public sealed class FrameStream : IDisposable
     public void Dispose()
     {
         _out.Dispose();
-        ArrayPool<byte>.Shared.Return(_in);
+        if (_in != null)
+        {
+            ArrayPool<byte>.Shared.Return(_in);
+            _in = null;                                     // a second Dispose returns nothing
+        }
     }
 }
 ```
@@ -233,28 +267,52 @@ while (frames.TryRead(ref batch))
 
 流被截断时（不足一个前缀，或有前缀但缺少负载）会抛出 `EndOfStreamException`。使用 `System.IO.Pipelines` 时，请改用[帧读取器](/zh/docs/v4/advanced/networking#reading-frames)：它直接从管道的内存中反序列化。
 
-## 复用反序列化的结果 [#reuse-what-you-deserialize]
+## 固定大小的记录 [#fixed-size-records]
 
-把上一次的结果按 `ref` 传入，Nino 会原地填充：
+只由非托管成员组成的结构体，每个值占用的字节数都相同。`NinoSerializer.GetFixedSize<T>()` 返回这个大小（大小不固定的类型返回 `-1`），所以由这类记录组成的文件或缓冲区可以按下标直接定位，不需要偏移表：
 
 ```csharp
-MetricsBatch batch = null;
-NinoDeserializer.Deserialize(payload, ref batch);   // first call builds the graph
-NinoDeserializer.Deserialize(payload, ref batch);   // later calls fill it: 0 B
+int size = NinoSerializer.GetFixedSize<Tick>();   // check once at startup: -1 means not fixed
+
+Tick ReadAt(ReadOnlySpan<byte> records, int index) =>
+    NinoDeserializer.Deserialize<Tick>(records.Slice(index * size, size)); // [!code highlight]
 ```
 
-- `List<T>` 保留原有容量：条数不同的批次也读进同一个列表。
-- 数组只在新数据**长度相同**时复用，否则会分配新数组。条数会变化时用 `List<T>`。
-- 非托管结构体的数组和列表，读写都是一次整块拷贝。
-- Nino 需要新建的类实例（列表变长、`null` 成员有了值）如果是 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled) 的，就从对象池里取，被丢弃的实例也会回到池中。
+这样的文件还可以映射到内存中原地读取，而不必整个加载。在映射视图上构造 `ReadOnlySpan<byte>` 需要 `unsafe` 代码块（`<AllowUnsafeBlocks>true</AllowUnsafeBlocks>`）：
 
-[零 GC 状态同步示例](/zh/docs/v4/pooling#example)把这些做法组合在了一起。
+```csharp
+using System.IO.MemoryMappedFiles;
+
+long fileLength = new FileInfo(path).Length;
+using var file = MemoryMappedFile.CreateFromFile(path, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
+using var view = file.CreateViewAccessor(0, fileLength, MemoryMappedFileAccess.Read);
+unsafe
+{
+    byte* start = null;
+    view.SafeMemoryMappedViewHandle.AcquirePointer(ref start);
+    try
+    {
+        var records = new ReadOnlySpan<byte>(start + view.PointerOffset, checked((int)fileLength));
+        Tick tick = ReadAt(records, 1_000);   // only the pages touched are read from disk
+    }
+    finally
+    {
+        view.SafeMemoryMappedViewHandle.ReleasePointer();
+    }
+}
+```
+
+另一个进程可以按[写入你自己的内存](#write-into-memory-you-own)的做法写入同一个文件（或用 `MemoryMappedFile.CreateNew` 创建的共享内存映射）；读写双方需要自行协调，Nino 不提供任何锁。
+
+- 需要按下标访问的记录用**结构体**：密封类也是固定大小的，但 `null` 实例只写 1 个字节。
+- 把类型改为 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，或者加上 `string` 成员后，它就不再是固定大小的。按下标访问的记录要固定布局，并在文件头里写上格式版本（见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）。
+- 需要 `byte[]` 时，`NinoSerializer.Serialize(tick)` 会按记录的大小正好分配一个并直接写入（[原因](/zh/docs/v4/advanced/high-performance#keep-bulk-data-raw)）；不需要数组时用上面的做法。
 
 ## 验证 [#verify-it]
 
-要测量，不要假设。`GC.GetAllocatedBytesForCurrentThread()` 统计当前线程分配的每一个字节，单元测试可以把热路径的分配钉死在 0：
+要测量，不要假设：单元测试可以把热路径的分配钉死在 0（[如何测量](/zh/docs/v4/advanced/high-performance#measure)）：
 
-```csharp
+```csharp title="AllocationTests.cs"
 [TestMethod]
 public void EncodeAllocatesNothing()
 {
@@ -266,7 +324,7 @@ public void EncodeAllocatesNothing()
     long before = GC.GetAllocatedBytesForCurrentThread();
     for (int i = 0; i < 10_000; i++)
         Encode(buffer, quote);
-    Assert.AreEqual(0, GC.GetAllocatedBytesForCurrentThread() - before);
+    Assert.AreEqual(0, GC.GetAllocatedBytesForCurrentThread() - before); // [!code highlight]
 }
 
 static void Encode(NinoArrayBufferWriter buffer, Quote quote)
@@ -276,14 +334,15 @@ static void Encode(NinoArrayBufferWriter buffer, Quote quote)
 }
 ```
 
-对整个服务而言，BenchmarkDotNet 的 `[MemoryDiagnoser]` 会按每次操作报告同样的数字。
-
 ## 检查清单 [#checklist]
 
 - [ ] 每个线程或归属方一个 `NinoArrayBufferWriter`，每次使用前重置。
 - [ ] 已有的内存用可复用的 `IBufferWriter<byte>` 包装。
 - [ ] 小记录批量写进同一个缓冲区。
-- [ ] 按下标访问的记录是非托管结构体，大小用 `GetFixedSize<T>()` 确定。
+- [ ] 直接从字节所在内存的 span 反序列化，不拷贝到新的 `byte[]`。
 - [ ] 热点消息用 `ref` 反序列化到已有实例；条数会变化的用 `List<T>`。
 - [ ] 高频创建和丢弃的类标记为 `[NinoPooled]`。
+- [ ] 批量数据放在非托管结构体的数组或列表中；按下标访问的记录是非托管结构体，大小用 `GetFixedSize<T>()` 确定。
+- [ ] 没有子类型的类声明为 `sealed`（1 字节头部，无需分派）。
+- [ ] 项目用 .NET 8 SDK 或更高版本编译，以启用[拦截器](/zh/docs/v4/performance#interceptors)。
 - [ ] 有一个测试把热路径钉在 0 B。

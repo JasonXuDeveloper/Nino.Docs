@@ -7,89 +7,89 @@
 
 | case                             | v3 3.3.13 | v4        | v4 vs v3 | MemoryPack (v4 run) | MemoryPack (v3 run) |
 |----------------------------------|----------:|----------:|---------:|--------------------:|--------------------:|
-| SerializeFixedClass              |         - |  12.70 ns |        - |            25.24 ns |                   - |
-| SerializeFixedClasses            |         - | 896.85 ns |        - |             1.78 μs |                   - |
-| SerializeFixedStruct             |         - |  12.12 ns |        - |            11.53 ns |                   - |
-| SerializeGraph                   |         - |   5.32 μs |        - |            24.87 μs |                   - |
-| SerializePolymorphicClassArray   |         - |  58.94 μs |        - |           278.45 μs |                   - |
-| SerializePolymorphicClass        |         - |   6.82 μs |        - |            24.43 μs |                   - |
-| SerializePolymorphicFooArray     |         - |   6.16 μs |        - |            23.53 μs |                   - |
-| SerializeSimpleClass             | 144.03 ns |  94.22 ns |    0.65x |           320.69 ns |           316.38 ns |
-| SerializeSimpleClasses           |  23.88 μs |  10.40 μs |    0.44x |            33.05 μs |            34.64 μs |
-| SerializeSimpleStruct            |   1.52 ns |   1.57 ns |    1.03x |             2.75 ns |             2.92 ns |
-| SerializeSimpleStructs           |  14.68 ns |  14.13 ns |    0.96x |            15.71 ns |            17.44 ns |
-| SerializeTolerantClass           |         - |  92.51 ns |        - |           415.44 ns |                   - |
-| SerializeTolerantClasses         |         - |  10.67 μs |        - |            41.07 μs |                   - |
-| SerializeVectors                 |   4.24 μs |   4.27 μs |    1.01x |             4.21 μs |             4.25 μs |
-| DeserializeFixedClass            |         - |  11.63 ns |        - |            25.04 ns |                   - |
-| DeserializeFixedClasses          |         - |   1.35 μs |        - |             1.40 μs |                   - |
-| DeserializeFixedStruct           |         - |   0.13 ns |        - |             0.46 ns |                   - |
-| DeserializeGraph                 |         - |   6.49 μs |        - |            19.31 μs |                   - |
-| LeavesNew                        |         - |   3.99 μs |        - |             4.09 μs |                   - |
-| LeavesPooledElements             |         - |   2.69 μs |        - |                   - |                   - |
-| LeavesInPlace                    |         - | 510.80 ns |        - |                   - |                   - |
-| NodeNew                          |         - | 635.60 ns |        - |           650.38 ns |                   - |
-| NodePooled                       |         - | 219.11 ns |        - |                   - |                   - |
-| PlainNew                         |         - |   2.99 μs |        - |             3.94 μs |                   - |
-| DeserializePolymorphicClassArray |         - | 305.81 μs |        - |           412.13 μs |                   - |
-| DeserializePolymorphicClass      |         - |  22.62 μs |        - |            37.59 μs |                   - |
-| DeserializePolymorphicFooArray   |         - |  22.02 μs |        - |            29.74 μs |                   - |
-| DeserializeNew                   |         - | 531.47 ns |        - |           709.77 ns |                   - |
-| DeserializePooled                |         - | 461.87 ns |        - |                   - |                   - |
-| DeserializeSimpleClass           | 623.83 ns | 538.50 ns |    0.86x |           706.84 ns |           733.43 ns |
-| DeserializeSimpleClasses         |  61.75 μs |  56.69 μs |    0.92x |            67.83 μs |            69.45 μs |
-| DeserializeSimpleStruct          |   0.50 ns |   0.33 ns |    0.65x |             0.49 ns |             0.34 ns |
-| DeserializeSimpleStructs         | 122.40 ns | 125.06 ns |    1.02x |           134.50 ns |           129.21 ns |
-| DeserializeTolerantClass         |         - | 538.09 ns |        - |           783.63 ns |                   - |
-| DeserializeTolerantClasses       |         - |  55.56 μs |        - |            77.21 μs |                   - |
-| DeserializeVectors               | 110.19 μs | 117.92 μs |    1.07x |           112.47 μs |           116.97 μs |
+| SerializeFixedClass              |         - |  12.01 ns |        - |            21.89 ns |                   - |
+| SerializeFixedClasses            |         - |   1.01 μs |        - |             1.74 μs |                   - |
+| SerializeFixedStruct             |         - |  11.50 ns |        - |            11.68 ns |                   - |
+| SerializeGraph                   |         - |   4.56 μs |        - |            24.07 μs |                   - |
+| SerializePolymorphicClassArray   |         - |  54.99 μs |        - |           280.90 μs |                   - |
+| SerializePolymorphicClass        |         - |   6.39 μs |        - |            23.69 μs |                   - |
+| SerializePolymorphicFooArray     |         - |   6.23 μs |        - |            23.33 μs |                   - |
+| SerializeSimpleClass             | 138.52 ns |  89.61 ns |    0.65x |           382.12 ns |           309.61 ns |
+| SerializeSimpleClasses           |  21.18 μs |  10.28 μs |    0.49x |            33.29 μs |            33.69 μs |
+| SerializeSimpleStruct            |   1.70 ns |   1.34 ns |    0.79x |             3.03 ns |             3.10 ns |
+| SerializeSimpleStructs           |  19.11 ns |  15.06 ns |    0.79x |            15.48 ns |            16.92 ns |
+| SerializeTolerantClass           |         - |  94.36 ns |        - |           418.45 ns |                   - |
+| SerializeTolerantClasses         |         - |  10.27 μs |        - |            40.56 μs |                   - |
+| SerializeVectors                 |   4.11 μs |   4.19 μs |    1.02x |             4.33 μs |             4.14 μs |
+| DeserializeFixedClass            |         - |  11.09 ns |        - |            22.06 ns |                   - |
+| DeserializeFixedClasses          |         - |   1.37 μs |        - |             2.22 μs |                   - |
+| DeserializeFixedStruct           |         - |   0.03 ns |        - |             0.54 ns |                   - |
+| DeserializeGraph                 |         - |   5.71 μs |        - |            17.24 μs |                   - |
+| LeavesNew                        |         - |   3.88 μs |        - |             4.13 μs |                   - |
+| LeavesPooledElements             |         - |   2.45 μs |        - |                   - |                   - |
+| LeavesInPlace                    |         - | 505.01 ns |        - |                   - |                   - |
+| NodeNew                          |         - | 637.69 ns |        - |           654.55 ns |                   - |
+| NodePooled                       |         - | 211.69 ns |        - |                   - |                   - |
+| PlainNew                         |         - |   3.16 μs |        - |             3.77 μs |                   - |
+| DeserializePolymorphicClassArray |         - | 284.54 μs |        - |           409.23 μs |                   - |
+| DeserializePolymorphicClass      |         - |  20.30 μs |        - |            30.33 μs |                   - |
+| DeserializePolymorphicFooArray   |         - |  19.62 μs |        - |            28.08 μs |                   - |
+| DeserializeNew                   |         - | 548.65 ns |        - |           655.12 ns |                   - |
+| DeserializePooled                |         - | 222.15 ns |        - |                   - |                   - |
+| DeserializeSimpleClass           | 571.08 ns | 492.84 ns |    0.86x |           722.15 ns |           682.13 ns |
+| DeserializeSimpleClasses         |  58.93 μs |  52.93 μs |    0.90x |            66.72 μs |            68.88 μs |
+| DeserializeSimpleStruct          |   0.33 ns |   0.31 ns |    0.95x |             0.34 ns |             0.39 ns |
+| DeserializeSimpleStructs         | 126.83 ns | 131.30 ns |    1.04x |           133.35 ns |           159.57 ns |
+| DeserializeTolerantClass         |         - | 521.07 ns |        - |           764.33 ns |                   - |
+| DeserializeTolerantClasses       |         - |  57.68 μs |        - |            79.99 μs |                   - |
+| DeserializeVectors               | 111.47 μs | 104.55 μs |    0.94x |           111.23 μs |           112.57 μs |
 
 v4 vs v3 = mean(v4) / mean(v3); below 1.00x means v4 is faster.
-MemoryPack drift (v4 run / v3 run): min 0.90x, max 1.44x (same code in both runs; the spread is the noise floor of this comparison).
+MemoryPack drift (v4 run / v3 run): min 0.84x, max 1.23x (same code in both runs; the spread is the noise floor of this comparison).
 
 ### v4 vs v3 (v3 run after v4)
 
 | case                             | v3 3.3.13 | v4        | v4 vs v3 | MemoryPack (v4 run) | MemoryPack (v3 run) |
 |----------------------------------|----------:|----------:|---------:|--------------------:|--------------------:|
-| SerializeFixedClass              |         - |  12.70 ns |        - |            25.24 ns |                   - |
-| SerializeFixedClasses            |         - | 896.85 ns |        - |             1.78 μs |                   - |
-| SerializeFixedStruct             |         - |  12.12 ns |        - |            11.53 ns |                   - |
-| SerializeGraph                   |         - |   5.32 μs |        - |            24.87 μs |                   - |
-| SerializePolymorphicClassArray   |         - |  58.94 μs |        - |           278.45 μs |                   - |
-| SerializePolymorphicClass        |         - |   6.82 μs |        - |            24.43 μs |                   - |
-| SerializePolymorphicFooArray     |         - |   6.16 μs |        - |            23.53 μs |                   - |
-| SerializeSimpleClass             | 139.57 ns |  94.22 ns |    0.68x |           320.69 ns |           307.89 ns |
-| SerializeSimpleClasses           |  20.70 μs |  10.40 μs |    0.50x |            33.05 μs |            34.03 μs |
-| SerializeSimpleStruct            |   1.64 ns |   1.57 ns |    0.96x |             2.75 ns |             2.94 ns |
-| SerializeSimpleStructs           |  14.99 ns |  14.13 ns |    0.94x |            15.71 ns |            18.59 ns |
-| SerializeTolerantClass           |         - |  92.51 ns |        - |           415.44 ns |                   - |
-| SerializeTolerantClasses         |         - |  10.67 μs |        - |            41.07 μs |                   - |
-| SerializeVectors                 |   4.39 μs |   4.27 μs |    0.97x |             4.21 μs |             4.37 μs |
-| DeserializeFixedClass            |         - |  11.63 ns |        - |            25.04 ns |                   - |
-| DeserializeFixedClasses          |         - |   1.35 μs |        - |             1.40 μs |                   - |
-| DeserializeFixedStruct           |         - |   0.13 ns |        - |             0.46 ns |                   - |
-| DeserializeGraph                 |         - |   6.49 μs |        - |            19.31 μs |                   - |
-| LeavesNew                        |         - |   3.99 μs |        - |             4.09 μs |                   - |
-| LeavesPooledElements             |         - |   2.69 μs |        - |                   - |                   - |
-| LeavesInPlace                    |         - | 510.80 ns |        - |                   - |                   - |
-| NodeNew                          |         - | 635.60 ns |        - |           650.38 ns |                   - |
-| NodePooled                       |         - | 219.11 ns |        - |                   - |                   - |
-| PlainNew                         |         - |   2.99 μs |        - |             3.94 μs |                   - |
-| DeserializePolymorphicClassArray |         - | 305.81 μs |        - |           412.13 μs |                   - |
-| DeserializePolymorphicClass      |         - |  22.62 μs |        - |            37.59 μs |                   - |
-| DeserializePolymorphicFooArray   |         - |  22.02 μs |        - |            29.74 μs |                   - |
-| DeserializeNew                   |         - | 531.47 ns |        - |           709.77 ns |                   - |
-| DeserializePooled                |         - | 461.87 ns |        - |                   - |                   - |
-| DeserializeSimpleClass           | 537.65 ns | 538.50 ns |    1.00x |           706.84 ns |           713.53 ns |
-| DeserializeSimpleClasses         |  61.93 μs |  56.69 μs |    0.92x |            67.83 μs |            67.26 μs |
-| DeserializeSimpleStruct          |   0.30 ns |   0.33 ns |    1.11x |             0.49 ns |             0.39 ns |
-| DeserializeSimpleStructs         | 120.53 ns | 125.06 ns |    1.04x |           134.50 ns |           135.77 ns |
-| DeserializeTolerantClass         |         - | 538.09 ns |        - |           783.63 ns |                   - |
-| DeserializeTolerantClasses       |         - |  55.56 μs |        - |            77.21 μs |                   - |
-| DeserializeVectors               | 116.28 μs | 117.92 μs |    1.01x |           112.47 μs |           114.40 μs |
+| SerializeFixedClass              |         - |  12.01 ns |        - |            21.89 ns |                   - |
+| SerializeFixedClasses            |         - |   1.01 μs |        - |             1.74 μs |                   - |
+| SerializeFixedStruct             |         - |  11.50 ns |        - |            11.68 ns |                   - |
+| SerializeGraph                   |         - |   4.56 μs |        - |            24.07 μs |                   - |
+| SerializePolymorphicClassArray   |         - |  54.99 μs |        - |           280.90 μs |                   - |
+| SerializePolymorphicClass        |         - |   6.39 μs |        - |            23.69 μs |                   - |
+| SerializePolymorphicFooArray     |         - |   6.23 μs |        - |            23.33 μs |                   - |
+| SerializeSimpleClass             | 137.04 ns |  89.61 ns |    0.65x |           382.12 ns |           322.89 ns |
+| SerializeSimpleClasses           |  20.90 μs |  10.28 μs |    0.49x |            33.29 μs |            36.55 μs |
+| SerializeSimpleStruct            |   1.73 ns |   1.34 ns |    0.78x |             3.03 ns |             2.90 ns |
+| SerializeSimpleStructs           |  19.82 ns |  15.06 ns |    0.76x |            15.48 ns |            31.91 ns |
+| SerializeTolerantClass           |         - |  94.36 ns |        - |           418.45 ns |                   - |
+| SerializeTolerantClasses         |         - |  10.27 μs |        - |            40.56 μs |                   - |
+| SerializeVectors                 |   4.20 μs |   4.19 μs |    1.00x |             4.33 μs |             4.07 μs |
+| DeserializeFixedClass            |         - |  11.09 ns |        - |            22.06 ns |                   - |
+| DeserializeFixedClasses          |         - |   1.37 μs |        - |             2.22 μs |                   - |
+| DeserializeFixedStruct           |         - |   0.03 ns |        - |             0.54 ns |                   - |
+| DeserializeGraph                 |         - |   5.71 μs |        - |            17.24 μs |                   - |
+| LeavesNew                        |         - |   3.88 μs |        - |             4.13 μs |                   - |
+| LeavesPooledElements             |         - |   2.45 μs |        - |                   - |                   - |
+| LeavesInPlace                    |         - | 505.01 ns |        - |                   - |                   - |
+| NodeNew                          |         - | 637.69 ns |        - |           654.55 ns |                   - |
+| NodePooled                       |         - | 211.69 ns |        - |                   - |                   - |
+| PlainNew                         |         - |   3.16 μs |        - |             3.77 μs |                   - |
+| DeserializePolymorphicClassArray |         - | 284.54 μs |        - |           409.23 μs |                   - |
+| DeserializePolymorphicClass      |         - |  20.30 μs |        - |            30.33 μs |                   - |
+| DeserializePolymorphicFooArray   |         - |  19.62 μs |        - |            28.08 μs |                   - |
+| DeserializeNew                   |         - | 548.65 ns |        - |           655.12 ns |                   - |
+| DeserializePooled                |         - | 222.15 ns |        - |                   - |                   - |
+| DeserializeSimpleClass           | 558.24 ns | 492.84 ns |    0.88x |           722.15 ns |           681.59 ns |
+| DeserializeSimpleClasses         |  59.97 μs |  52.93 μs |    0.88x |            66.72 μs |            69.47 μs |
+| DeserializeSimpleStruct          |   0.37 ns |   0.31 ns |    0.86x |             0.34 ns |             0.26 ns |
+| DeserializeSimpleStructs         | 120.92 ns | 131.30 ns |    1.09x |           133.35 ns |           133.71 ns |
+| DeserializeTolerantClass         |         - | 521.07 ns |        - |           764.33 ns |                   - |
+| DeserializeTolerantClasses       |         - |  57.68 μs |        - |            79.99 μs |                   - |
+| DeserializeVectors               | 106.06 μs | 104.55 μs |    0.99x |           111.23 μs |           112.74 μs |
 
 v4 vs v3 = mean(v4) / mean(v3); below 1.00x means v4 is faster.
-MemoryPack drift (v4 run / v3 run): min 0.84x, max 1.27x (same code in both runs; the spread is the noise floor of this comparison).
+MemoryPack drift (v4 run / v3 run): min 0.49x, max 1.31x (same code in both runs; the spread is the noise floor of this comparison).
 
 ### v3 3.3.13 report (run before v4)
 
@@ -107,45 +107,45 @@ IterationCount=15  LaunchCount=1  WarmupCount=5
 ```
 | Method                              | Mean            | Min             | Max             | Ratio  | Payload  | Gen0    | Gen1    | Gen2    | Allocated | Alloc Ratio |
 |------------------------------------ |----------------:|----------------:|----------------:|-------:|---------:|--------:|--------:|--------:|----------:|------------:|
-| NinoDeserializeSimpleClass          |     623.8258 ns |     563.7145 ns |     691.8123 ns |   1.00 |        - |  0.2480 |       - |       - |    2552 B |        1.00 |
-| MemoryPackDeserializeSimpleClass    |     733.4327 ns |     665.4472 ns |     771.1478 ns |   1.18 |        - |  0.2460 |       - |       - |    2528 B |        0.99 |
-| MessagePackDeserializeSimpleClass   |   1,858.9630 ns |   1,762.0070 ns |   1,917.2005 ns |   2.99 |        - |  0.2480 |       - |       - |    2528 B |        0.99 |
+| NinoDeserializeSimpleClass          |     571.0833 ns |     528.7242 ns |     639.0541 ns |   1.00 |        - |  0.2489 |       - |       - |    2552 B |        1.00 |
+| MemoryPackDeserializeSimpleClass    |     682.1343 ns |     656.8223 ns |     721.7187 ns |   1.20 |        - |  0.2422 |       - |       - |    2528 B |        0.99 |
+| MessagePackDeserializeSimpleClass   |   1,697.8934 ns |   1,563.6769 ns |   1,829.6066 ns |   2.98 |        - |  0.2480 |       - |       - |    2528 B |        0.99 |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoSerializeSimpleClass            |     144.0323 ns |     136.0405 ns |     154.5899 ns |   1.00 |   1.13KB |       - |       - |       - |         - |          NA |
-| MemoryPackSerializeSimpleClass      |     316.3754 ns |     296.8986 ns |     329.4886 ns |   2.20 |   1.12KB |       - |       - |       - |         - |          NA |
-| MessagePackSerializeSimpleClass     |     831.5861 ns |     786.5530 ns |     876.1716 ns |   5.78 |   1.09KB |       - |       - |       - |         - |          NA |
+| NinoSerializeSimpleClass            |     138.5202 ns |     124.5299 ns |     149.8588 ns |   1.00 |   1.13KB |       - |       - |       - |         - |          NA |
+| MemoryPackSerializeSimpleClass      |     309.6127 ns |     296.4908 ns |     327.2534 ns |   2.24 |   1.12KB |       - |       - |       - |         - |          NA |
+| MessagePackSerializeSimpleClass     |     795.3000 ns |     725.0295 ns |     882.5692 ns |   5.76 |   1.09KB |       - |       - |       - |         - |          NA |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoDeserializeSimpleClasses        |  61,753.2121 ns |  58,146.3444 ns |  65,253.4581 ns |   1.00 |        - | 19.0430 |  5.8594 |       - |  262424 B |        1.00 |
-| MemoryPackDeserializeSimpleClasses  |  69,448.0015 ns |  66,865.1617 ns |  72,734.1884 ns |   1.13 |        - | 18.1885 |  5.3711 |       - |  253624 B |        0.97 |
-| MessagePackDeserializeSimpleClasses | 202,014.2584 ns | 185,865.7937 ns | 213,256.6033 ns |   3.27 |        - | 17.5781 |  5.1270 |       - |  253624 B |        0.97 |
+| NinoDeserializeSimpleClasses        |  58,933.3048 ns |  53,469.1906 ns |  61,346.6753 ns |   1.00 |        - | 19.0430 |  6.1035 |       - |  262424 B |        1.00 |
+| MemoryPackDeserializeSimpleClasses  |  68,875.9038 ns |  63,451.6199 ns |  74,406.4429 ns |   1.17 |        - | 18.0664 |  5.6152 |       - |  253624 B |        0.97 |
+| MessagePackDeserializeSimpleClasses | 187,078.5929 ns | 177,186.4778 ns | 198,846.7566 ns |   3.18 |        - | 17.8223 |  5.6152 |       - |  253624 B |        0.97 |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoSerializeSimpleClasses          |  23,876.6486 ns |  22,388.3750 ns |  25,315.4643 ns |   1.00 |  112.5KB |       - |       - |       - |         - |          NA |
-| MemoryPackSerializeSimpleClasses    |  34,637.7065 ns |  32,451.7314 ns |  37,471.9060 ns |   1.45 | 112.11KB |       - |       - |       - |         - |          NA |
-| MessagePackSerializeSimpleClasses   |  84,193.9517 ns |  79,971.7628 ns |  89,865.6663 ns |   3.53 |  108.6KB |       - |       - |       - |         - |          NA |
+| NinoSerializeSimpleClasses          |  21,177.5329 ns |  19,922.8075 ns |  22,430.1648 ns |   1.00 |  112.5KB |       - |       - |       - |         - |          NA |
+| MemoryPackSerializeSimpleClasses    |  33,692.1875 ns |  31,457.9792 ns |  34,754.4207 ns |   1.59 | 112.11KB |       - |       - |       - |         - |          NA |
+| MessagePackSerializeSimpleClasses   |  81,231.3851 ns |  74,282.6899 ns |  86,658.4599 ns |   3.84 |  108.6KB |       - |       - |       - |         - |          NA |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoDeserializeSimpleStruct         |       0.5043 ns |       0.3410 ns |       0.6541 ns |   1.04 |        - |       - |       - |       - |         - |          NA |
-| MemoryPackDeserializeSimpleStruct   |       0.3437 ns |       0.1961 ns |       0.5900 ns |   0.71 |        - |       - |       - |       - |         - |          NA |
-| MessagePackDeserializeSimpleStruct  |      52.5945 ns |      50.4693 ns |      57.1095 ns | 108.84 |        - |       - |       - |       - |         - |          NA |
+| NinoDeserializeSimpleStruct         |       0.3295 ns |       0.1558 ns |       0.4935 ns |   1.10 |        - |       - |       - |       - |         - |          NA |
+| MemoryPackDeserializeSimpleStruct   |       0.3912 ns |       0.2174 ns |       0.5642 ns |   1.31 |        - |       - |       - |       - |         - |          NA |
+| MessagePackDeserializeSimpleStruct  |      51.3539 ns |      47.1513 ns |      56.8545 ns | 171.47 |        - |       - |       - |       - |         - |          NA |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoSerializeSimpleStruct           |       1.5227 ns |       1.2451 ns |       1.8026 ns |   1.01 |      12B |       - |       - |       - |         - |          NA |
-| MemoryPackSerializeSimpleStruct     |       2.9249 ns |       2.5874 ns |       3.4037 ns |   1.94 |      12B |       - |       - |       - |         - |          NA |
-| MessagePackSerializeSimpleStruct    |      44.4973 ns |      41.7543 ns |      48.8862 ns |  29.54 |      16B |       - |       - |       - |         - |          NA |
+| NinoSerializeSimpleStruct           |       1.6990 ns |       1.3918 ns |       2.1138 ns |   1.02 |      12B |       - |       - |       - |         - |          NA |
+| MemoryPackSerializeSimpleStruct     |       3.0985 ns |       2.7164 ns |       3.5480 ns |   1.85 |      12B |       - |       - |       - |         - |          NA |
+| MessagePackSerializeSimpleStruct    |      42.6600 ns |      39.7481 ns |      45.3052 ns |  25.52 |      16B |       - |       - |       - |         - |          NA |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoDeserializeSimpleStructs        |     122.4018 ns |     115.3743 ns |     133.2145 ns |   1.00 |        - |  0.1214 |       - |       - |    1224 B |        1.00 |
-| MemoryPackDeserializeSimpleStructs  |     129.2089 ns |     117.4257 ns |     138.1985 ns |   1.06 |        - |  0.1214 |       - |       - |    1224 B |        1.00 |
-| MessagePackDeserializeSimpleStructs |   2,916.9733 ns |   2,639.4108 ns |   3,298.7381 ns |  23.89 |        - |  0.1526 |  0.0038 |  0.0038 |         - |        0.00 |
+| NinoDeserializeSimpleStructs        |     126.8295 ns |     113.1236 ns |     150.8622 ns |   1.01 |        - |  0.1214 |       - |       - |    1224 B |        1.00 |
+| MemoryPackDeserializeSimpleStructs  |     159.5702 ns |     136.8833 ns |     204.9815 ns |   1.27 |        - |  0.1214 |       - |       - |    1224 B |        1.00 |
+| MessagePackDeserializeSimpleStructs |   2,721.5494 ns |   2,627.3882 ns |   2,780.3873 ns |  21.63 |        - |  0.1183 |       - |       - |    1224 B |        1.00 |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoSerializeSimpleStructs          |      14.6833 ns |      14.0823 ns |      15.4585 ns |   1.00 |   1.18KB |       - |       - |       - |         - |          NA |
-| MemoryPackSerializeSimpleStructs    |      17.4369 ns |      16.1642 ns |      19.4110 ns |   1.19 |   1.18KB |       - |       - |       - |         - |          NA |
-| MessagePackSerializeSimpleStructs   |   2,863.9808 ns |   2,727.3154 ns |   3,090.1933 ns | 195.18 |   1.57KB |       - |       - |       - |         - |          NA |
+| NinoSerializeSimpleStructs          |      19.1061 ns |      18.0030 ns |      20.5751 ns |   1.00 |   1.18KB |       - |       - |       - |         - |          NA |
+| MemoryPackSerializeSimpleStructs    |      16.9229 ns |      15.9895 ns |      18.4739 ns |   0.89 |   1.18KB |       - |       - |       - |         - |          NA |
+| MessagePackSerializeSimpleStructs   |   2,913.9379 ns |   2,719.8361 ns |   3,179.9725 ns | 152.73 |   1.57KB |       - |       - |       - |         - |          NA |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoDeserializeVectors              | 110,190.9838 ns | 105,674.7727 ns | 116,960.1980 ns |   1.00 |        - |  7.8125 |  7.8125 |  7.8125 |  160015 B |        1.00 |
-| MemoryPackDeserializeVectors        | 116,965.2658 ns | 106,737.3722 ns | 130,798.1564 ns |   1.06 |        - |  7.2021 |  7.2021 |  7.2021 |  160014 B |        1.00 |
-| MessagePackDeserializeVectors       | 321,380.9371 ns | 309,260.8989 ns | 335,900.7632 ns |   2.92 |        - | 13.6719 | 13.6719 | 13.6719 |  160027 B |        1.00 |
+| NinoDeserializeVectors              | 111,468.0959 ns |  99,428.5867 ns | 120,630.5127 ns |   1.00 |        - |  8.3008 |  8.3008 |  8.3008 |  160017 B |        1.00 |
+| MemoryPackDeserializeVectors        | 112,573.5266 ns | 103,659.3510 ns | 123,953.0888 ns |   1.01 |        - |  9.7656 |  9.7656 |  9.7656 |  160020 B |        1.00 |
+| MessagePackDeserializeVectors       | 325,860.5296 ns | 297,912.0718 ns | 370,716.4028 ns |   2.93 |        - | 12.6953 | 12.6953 | 12.6953 |  160025 B |        1.00 |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoSerializeVectors                |   4,240.8273 ns |   3,972.8491 ns |   4,434.0318 ns |   1.00 | 156.25KB |       - |       - |       - |         - |          NA |
-| MemoryPackSerializeVectors          |   4,248.5429 ns |   4,109.9878 ns |   4,464.7574 ns |   1.00 | 156.25KB |       - |       - |       - |         - |          NA |
-| MessagePackSerializeVectors         | 125,001.1926 ns | 117,799.2224 ns | 132,891.1753 ns |  29.51 | 205.08KB |       - |       - |       - |         - |          NA |
+| NinoSerializeVectors                |   4,111.7408 ns |   3,912.6667 ns |   4,218.2367 ns |   1.00 | 156.25KB |       - |       - |       - |         - |          NA |
+| MemoryPackSerializeVectors          |   4,135.7887 ns |   3,932.4142 ns |   4,354.1231 ns |   1.01 | 156.25KB |       - |       - |       - |         - |          NA |
+| MessagePackSerializeVectors         | 126,967.1170 ns | 120,760.4580 ns | 135,527.0576 ns |  30.89 | 205.08KB |       - |       - |       - |         - |          NA |
 
 ### v3 3.3.13 report (run after v4)
 
@@ -163,45 +163,45 @@ IterationCount=15  LaunchCount=1  WarmupCount=5
 ```
 | Method                              | Mean            | Min             | Max             | Ratio  | Payload  | Gen0    | Gen1    | Gen2    | Allocated | Alloc Ratio |
 |------------------------------------ |----------------:|----------------:|----------------:|-------:|---------:|--------:|--------:|--------:|----------:|------------:|
-| NinoDeserializeSimpleClass          |     537.6490 ns |     510.5665 ns |     555.2713 ns |   1.00 |        - |  0.2480 |       - |       - |    2552 B |        1.00 |
-| MemoryPackDeserializeSimpleClass    |     713.5309 ns |     663.4472 ns |     768.5889 ns |   1.33 |        - |  0.2470 |       - |       - |    2528 B |        0.99 |
-| MessagePackDeserializeSimpleClass   |   1,708.9157 ns |   1,622.0895 ns |   1,837.0526 ns |   3.18 |        - |  0.2460 |       - |       - |    2528 B |        0.99 |
+| NinoDeserializeSimpleClass          |     558.2425 ns |     509.6893 ns |     615.2968 ns |   1.00 |        - |  0.2470 |       - |       - |    2552 B |        1.00 |
+| MemoryPackDeserializeSimpleClass    |     681.5921 ns |     635.0277 ns |     752.5796 ns |   1.22 |        - |  0.2460 |       - |       - |    2528 B |        0.99 |
+| MessagePackDeserializeSimpleClass   |   1,682.9841 ns |   1,569.3490 ns |   1,803.9393 ns |   3.02 |        - |  0.2480 |       - |       - |    2528 B |        0.99 |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoSerializeSimpleClass            |     139.5690 ns |     133.4130 ns |     150.0023 ns |   1.00 |   1.13KB |       - |       - |       - |         - |          NA |
-| MemoryPackSerializeSimpleClass      |     307.8906 ns |     288.7817 ns |     316.8094 ns |   2.21 |   1.12KB |       - |       - |       - |         - |          NA |
-| MessagePackSerializeSimpleClass     |     849.0402 ns |     794.8641 ns |     871.6676 ns |   6.09 |   1.09KB |       - |       - |       - |         - |          NA |
+| NinoSerializeSimpleClass            |     137.0419 ns |     133.1727 ns |     140.6796 ns |   1.00 |   1.13KB |       - |       - |       - |         - |          NA |
+| MemoryPackSerializeSimpleClass      |     322.8855 ns |     294.5821 ns |     373.1254 ns |   2.36 |   1.12KB |       - |       - |       - |         - |          NA |
+| MessagePackSerializeSimpleClass     |     772.3140 ns |     718.5175 ns |     826.8752 ns |   5.64 |   1.09KB |       - |       - |       - |         - |          NA |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoDeserializeSimpleClasses        |  61,929.5478 ns |  55,234.3980 ns |  65,787.3618 ns |   1.00 |        - | 18.7988 |  5.7373 |       - |  262424 B |        1.00 |
-| MemoryPackDeserializeSimpleClasses  |  67,263.2314 ns |  64,189.5303 ns |  70,468.1399 ns |   1.09 |        - | 18.1885 |  5.7373 |       - |  253624 B |        0.97 |
-| MessagePackDeserializeSimpleClasses | 201,554.0294 ns | 187,054.4751 ns | 218,889.5046 ns |   3.26 |        - | 17.5781 |  5.6152 |       - |  253624 B |        0.97 |
+| NinoDeserializeSimpleClasses        |  59,972.6360 ns |  56,808.8087 ns |  64,542.8955 ns |   1.00 |        - | 18.8599 |  5.9204 |       - |  262424 B |        1.00 |
+| MemoryPackDeserializeSimpleClasses  |  69,466.4945 ns |  63,608.1096 ns |  74,497.0220 ns |   1.16 |        - | 18.3105 |  5.7373 |       - |  253624 B |        0.97 |
+| MessagePackDeserializeSimpleClasses | 187,293.8906 ns | 179,719.8300 ns | 195,557.1622 ns |   3.13 |        - | 17.8223 |  5.3711 |       - |  253624 B |        0.97 |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoSerializeSimpleClasses          |  20,701.1615 ns |  19,673.3570 ns |  21,735.7594 ns |   1.00 |  112.5KB |       - |       - |       - |         - |          NA |
-| MemoryPackSerializeSimpleClasses    |  34,034.2314 ns |  31,725.7449 ns |  36,737.7551 ns |   1.65 | 112.11KB |       - |       - |       - |         - |          NA |
-| MessagePackSerializeSimpleClasses   |  80,247.5472 ns |  76,462.7527 ns |  83,586.3593 ns |   3.88 | 108.59KB |       - |       - |       - |         - |          NA |
+| NinoSerializeSimpleClasses          |  20,903.5786 ns |  19,102.4445 ns |  23,421.4193 ns |   1.00 |  112.5KB |       - |       - |       - |         - |          NA |
+| MemoryPackSerializeSimpleClasses    |  36,547.4007 ns |  33,524.0962 ns |  39,663.8004 ns |   1.75 | 112.11KB |       - |       - |       - |         - |          NA |
+| MessagePackSerializeSimpleClasses   |  83,779.5211 ns |  77,655.8854 ns |  88,233.0813 ns |   4.02 |  108.6KB |       - |       - |       - |         - |          NA |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoDeserializeSimpleStruct         |       0.2976 ns |       0.1922 ns |       0.4642 ns |   1.05 |        - |       - |       - |       - |         - |          NA |
-| MemoryPackDeserializeSimpleStruct   |       0.3904 ns |       0.2117 ns |       0.6289 ns |   1.37 |        - |       - |       - |       - |         - |          NA |
-| MessagePackDeserializeSimpleStruct  |      50.4652 ns |      48.6042 ns |      54.1270 ns | 177.30 |        - |       - |       - |       - |         - |          NA |
+| NinoDeserializeSimpleStruct         |       0.3651 ns |       0.2233 ns |       0.5337 ns |   1.08 |        - |       - |       - |       - |         - |          NA |
+| MemoryPackDeserializeSimpleStruct   |       0.2610 ns |       0.1299 ns |       0.3328 ns |   0.77 |        - |       - |       - |       - |         - |          NA |
+| MessagePackDeserializeSimpleStruct  |      54.4384 ns |      51.7210 ns |      57.6973 ns | 160.78 |        - |       - |       - |       - |         - |          NA |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoSerializeSimpleStruct           |       1.6387 ns |       1.3370 ns |       1.9408 ns |   1.01 |      12B |       - |       - |       - |         - |          NA |
-| MemoryPackSerializeSimpleStruct     |       2.9422 ns |       2.6886 ns |       3.2228 ns |   1.82 |      12B |       - |       - |       - |         - |          NA |
-| MessagePackSerializeSimpleStruct    |      45.6264 ns |      43.0023 ns |      48.4565 ns |  28.19 |      16B |       - |       - |       - |         - |          NA |
+| NinoSerializeSimpleStruct           |       1.7253 ns |       1.4587 ns |       2.0685 ns |   1.01 |      12B |       - |       - |       - |         - |          NA |
+| MemoryPackSerializeSimpleStruct     |       2.9007 ns |       2.6331 ns |       3.1909 ns |   1.70 |      12B |       - |       - |       - |         - |          NA |
+| MessagePackSerializeSimpleStruct    |      43.9219 ns |      41.2561 ns |      47.5018 ns |  25.81 |      16B |       - |       - |       - |         - |          NA |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoDeserializeSimpleStructs        |     120.5344 ns |     108.6345 ns |     128.3060 ns |   1.00 |        - |  0.1214 |       - |       - |    1224 B |        1.00 |
-| MemoryPackDeserializeSimpleStructs  |     135.7712 ns |     126.2825 ns |     147.7902 ns |   1.13 |        - |  0.1214 |       - |       - |    1224 B |        1.00 |
-| MessagePackDeserializeSimpleStructs |   3,024.8043 ns |   2,840.6185 ns |   3,338.8020 ns |  25.14 |        - |  0.1183 |       - |       - |    1224 B |        1.00 |
+| NinoDeserializeSimpleStructs        |     120.9160 ns |     112.2146 ns |     132.6397 ns |   1.00 |        - |  0.1214 |       - |       - |    1224 B |        1.00 |
+| MemoryPackDeserializeSimpleStructs  |     133.7103 ns |     127.0011 ns |     142.3521 ns |   1.11 |        - |  0.1214 |       - |       - |    1224 B |        1.00 |
+| MessagePackDeserializeSimpleStructs |   3,009.6576 ns |   2,847.0600 ns |   3,242.3042 ns |  24.95 |        - |  0.1678 |  0.0076 |  0.0076 |    1224 B |        1.00 |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoSerializeSimpleStructs          |      14.9874 ns |      14.0133 ns |      15.9515 ns |   1.00 |   1.18KB |       - |       - |       - |         - |          NA |
-| MemoryPackSerializeSimpleStructs    |      18.5929 ns |      17.1540 ns |      20.3159 ns |   1.24 |   1.18KB |       - |       - |       - |         - |          NA |
-| MessagePackSerializeSimpleStructs   |   2,868.5865 ns |   2,803.8702 ns |   3,024.0357 ns | 191.79 |   1.57KB |       - |       - |       - |         - |          NA |
+| NinoSerializeSimpleStructs          |      19.8163 ns |      18.6648 ns |      21.1379 ns |   1.00 |   1.18KB |       - |       - |       - |         - |          NA |
+| MemoryPackSerializeSimpleStructs    |      31.9100 ns |      30.1089 ns |      34.0257 ns |   1.61 |   1.18KB |       - |       - |       - |         - |          NA |
+| MessagePackSerializeSimpleStructs   |   2,908.4390 ns |   2,681.7356 ns |   3,216.0609 ns | 146.95 |   1.57KB |       - |       - |       - |         - |          NA |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoDeserializeVectors              | 116,277.0635 ns | 105,526.0914 ns | 131,515.8057 ns |   1.00 |        - |  7.4463 |  7.4463 |  7.4463 |  160015 B |        1.00 |
-| MemoryPackDeserializeVectors        | 114,402.0616 ns | 104,338.4339 ns | 125,248.2640 ns |   0.99 |        - |  7.5684 |  7.5684 |  7.5684 |  160015 B |        1.00 |
-| MessagePackDeserializeVectors       | 323,684.6110 ns | 301,156.0166 ns | 351,463.7285 ns |   2.80 |        - | 13.6719 | 13.6719 | 13.6719 | 1045473 B |        6.53 |
+| NinoDeserializeVectors              | 106,058.5402 ns | 100,978.6194 ns | 114,861.7852 ns |   1.00 |        - |  7.8125 |  7.8125 |  7.8125 |  160015 B |        1.00 |
+| MemoryPackDeserializeVectors        | 112,740.7484 ns | 101,507.4133 ns | 129,556.3084 ns |   1.06 |        - |  7.8125 |  7.8125 |  7.8125 |  160015 B |        1.00 |
+| MessagePackDeserializeVectors       | 323,916.2269 ns | 293,780.4688 ns | 346,317.0430 ns |   3.06 |        - | 13.1836 | 13.1836 | 13.1836 |  160026 B |        1.00 |
 |                                     |                 |                 |                 |        |          |         |         |         |           |             |
-| NinoSerializeVectors                |   4,387.7155 ns |   4,030.3440 ns |   4,870.8260 ns |   1.00 | 156.25KB |       - |       - |       - |         - |          NA |
-| MemoryPackSerializeVectors          |   4,373.1603 ns |   4,116.5292 ns |   4,679.3866 ns |   1.00 | 156.25KB |       - |       - |       - |         - |          NA |
-| MessagePackSerializeVectors         | 125,419.1550 ns | 120,706.4946 ns | 132,509.7061 ns |  28.68 | 205.08KB |       - |       - |       - |         - |          NA |
+| NinoSerializeVectors                |   4,201.1885 ns |   4,020.9395 ns |   4,339.8090 ns |   1.00 | 156.25KB |       - |       - |       - |         - |          NA |
+| MemoryPackSerializeVectors          |   4,074.8037 ns |   3,769.0611 ns |   4,673.7787 ns |   0.97 | 156.25KB |       - |       - |       - |         - |          NA |
+| MessagePackSerializeVectors         | 124,837.5960 ns | 120,224.1102 ns | 129,299.5498 ns |  29.73 | 205.08KB |       - |       - |       - |         - |          NA |
 
 </details>
 
@@ -222,125 +222,125 @@ Job=ShortRun-.NET 10.0  Runtime=.NET 10.0  Server=True
 IterationCount=15  LaunchCount=1  WarmupCount=5  
 
 ```
-| Type                | Method                                      | Mean              | Min               | Max               | Ratio  | Payload  | Gen0    | Gen1    | Gen2    | Allocated | Alloc Ratio |
-|-------------------- |-------------------------------------------- |------------------:|------------------:|------------------:|-------:|---------:|--------:|--------:|--------:|----------:|------------:|
-| FixedSizeTest       | NinoDeserializeFixedClass                   |        11.6258 ns |        10.1242 ns |        13.6588 ns |   1.01 |        - |  0.0055 |       - |       - |      56 B |        1.00 |
-| FixedSizeTest       | MemoryPackDeserializeFixedClass             |        25.0354 ns |        22.3595 ns |        27.0725 ns |   2.17 |        - |  0.0055 |       - |       - |      56 B |        1.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| FixedSizeTest       | NinoSerializeFixedClass                     |        12.7017 ns |        11.7480 ns |        13.7622 ns |   1.00 |     41 B |  0.0069 |       - |       - |      72 B |        1.00 |
-| FixedSizeTest       | MemoryPackSerializeFixedClass               |        25.2360 ns |        21.9000 ns |        27.9797 ns |   1.99 |     41 B |  0.0070 |       - |       - |      72 B |        1.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| FixedSizeTest       | NinoDeserializeFixedClasses                 |     1,351.9277 ns |     1,241.8546 ns |     1,447.8704 ns |   1.00 |        - |  0.6237 |  0.0076 |       - |    6424 B |        1.00 |
-| FixedSizeTest       | MemoryPackDeserializeFixedClasses           |     1,399.1898 ns |     1,348.2810 ns |     1,472.8270 ns |   1.04 |        - |  0.6256 |  0.0038 |       - |    6424 B |        1.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| FixedSizeTest       | NinoSerializeFixedClasses                   |       896.8502 ns |       849.8845 ns |       966.4216 ns |   1.00 |  4,104 B |  0.4110 |       - |       - |    4128 B |        1.00 |
-| FixedSizeTest       | MemoryPackSerializeFixedClasses             |     1,782.1867 ns |     1,639.5223 ns |     1,909.6682 ns |   1.99 |  4,104 B |  0.3967 |       - |       - |    4128 B |        1.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| FixedSizeTest       | NinoDeserializeFixedStruct                  |         0.1342 ns |         0.0000 ns |         0.2979 ns |      ? |        - |       - |       - |       - |         - |           ? |
-| FixedSizeTest       | MemoryPackDeserializeFixedStruct            |         0.4585 ns |         0.3495 ns |         0.6970 ns |      ? |        - |       - |       - |       - |         - |           ? |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| FixedSizeTest       | NinoSerializeFixedStruct                    |        12.1180 ns |        10.9267 ns |        13.0685 ns |   1.00 |     40 B |  0.0062 |       - |       - |      64 B |        1.00 |
-| FixedSizeTest       | MemoryPackSerializeFixedStruct              |        11.5259 ns |        10.0191 ns |        13.2124 ns |   0.95 |     40 B |  0.0062 |       - |       - |      64 B |        1.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| ReferenceTest       | NinoDeserializeGraph                        |     6,493.5338 ns |     6,041.4956 ns |     6,918.5482 ns |   1.00 |        - |  1.3657 |  0.0305 |       - |   14104 B |        1.00 |
-| ReferenceTest       | MemoryPackDeserializeGraph                  |    19,313.9950 ns |    17,895.4335 ns |    20,909.8186 ns |   2.98 |        - |  1.8311 |  0.0610 |       - |   14104 B |        1.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| ReferenceTest       | NinoSerializeGraph                          |     5,320.0897 ns |     5,037.5267 ns |     5,831.9236 ns |   1.00 |  5,948 B |       - |       - |       - |         - |          NA |
-| ReferenceTest       | MemoryPackSerializeGraph                    |    24,869.7771 ns |    23,918.7864 ns |    26,039.6305 ns |   4.68 |  5,584 B |       - |       - |       - |         - |          NA |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| PooledGraphTest     | NinoLeavesNew                               |     3,993.7473 ns |     3,694.8367 ns |     4,261.4628 ns |   1.00 |        - |  1.3199 |  0.0305 |       - |   13656 B |        1.00 |
-| PooledGraphTest     | NinoLeavesPooledElements                    |     2,685.6146 ns |     2,515.7773 ns |     3,014.6315 ns |   0.67 |        - |  0.1106 |       - |       - |     856 B |        0.06 |
-| PooledGraphTest     | NinoLeavesInPlace                           |       510.7954 ns |       470.9533 ns |       574.9528 ns |   0.13 |        - |       - |       - |       - |         - |        0.00 |
-| PooledGraphTest     | MemoryPackLeavesNew                         |     4,093.8430 ns |     3,810.7303 ns |     4,316.2828 ns |   1.03 |        - |  1.3199 |  0.0305 |       - |   13656 B |        1.00 |
-| PooledGraphTest     | MemoryPackLeavesOverwrite                   |     4,605.1599 ns |     4,155.0468 ns |     5,160.5884 ns |   1.15 |        - |  1.2360 |  0.0153 |       - |   12800 B |        0.94 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| PooledGraphTest     | NinoNodeNew                                 |       635.6012 ns |       602.9634 ns |       664.3266 ns |   1.00 |        - |  0.2127 |       - |       - |    2192 B |        1.00 |
-| PooledGraphTest     | NinoNodePooled                              |       219.1075 ns |       206.0806 ns |       239.2981 ns |   0.35 |        - |       - |       - |       - |         - |        0.00 |
-| PooledGraphTest     | MemoryPackNodeNew                           |       650.3838 ns |       608.6313 ns |       705.2185 ns |   1.02 |        - |  0.2108 |       - |       - |    2192 B |        1.00 |
-| PooledGraphTest     | MemoryPackNodeOverwrite                     |       494.5699 ns |       455.2651 ns |       523.9723 ns |   0.78 |        - |  0.0992 |       - |       - |    1024 B |        0.47 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| PooledGraphTest     | NinoPlainNew                                |     2,987.5262 ns |     2,730.5469 ns |     3,389.1456 ns |   1.00 |        - |  1.2550 |  0.0267 |       - |   12856 B |        1.00 |
-| PooledGraphTest     | MemoryPackPlainNew                          |     3,942.5045 ns |     3,718.4865 ns |     4,280.5060 ns |   1.32 |        - |  1.2436 |  0.0305 |       - |   12856 B |        1.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| PolymorphicTest     | NinoDeserializePolymorphicClassArray        |   305,805.0375 ns |   285,587.2158 ns |   329,967.0396 ns |   1.00 |        - | 32.2266 | 13.6719 |       - |  745624 B |        1.00 |
-| PolymorphicTest     | MemoryPackDeserializePolymorphicClassArray  |   412,132.4945 ns |   394,320.6270 ns |   425,870.9351 ns |   1.35 |        - | 31.2500 | 14.6484 |       - |  745624 B |        1.00 |
-| PolymorphicTest     | MessagePackDeserializePolymorphicClassArray | 1,677,983.3520 ns | 1,598,917.1035 ns | 1,774,075.9277 ns |   5.50 |        - | 48.8281 | 23.4375 |       - | 1162424 B |        1.56 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| PolymorphicTest     | NinoSerializePolymorphicClassArray          |    58,939.8916 ns |    56,128.0459 ns |    61,791.5639 ns |   1.00 |397,304 B |       - |       - |       - |         - |          NA |
-| PolymorphicTest     | MemoryPackSerializePolymorphicClassArray    |   278,448.8347 ns |   258,628.0063 ns |   296,793.5498 ns |   4.73 |384,404 B |       - |       - |       - |         - |          NA |
-| PolymorphicTest     | MessagePackSerializePolymorphicClassArray   |   811,618.8816 ns |   772,685.6250 ns |   854,568.3955 ns |  13.78 |487,103 B |       - |       - |       - |         - |          NA |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| PolymorphicTest     | NinoDeserializePolymorphicClass             |    22,623.0717 ns |    21,416.0262 ns |    23,807.7134 ns |   1.00 |        - |  7.4463 |  1.0986 |       - |   79688 B |        1.00 |
-| PolymorphicTest     | MemoryPackDeserializePolymorphicClass       |    37,592.6555 ns |    36,164.0236 ns |    39,974.8661 ns |   1.66 |        - |  7.3853 |  1.0376 |       - |   79688 B |        1.00 |
-| PolymorphicTest     | MessagePackDeserializePolymorphicClass      |   206,795.7596 ns |   195,552.6948 ns |   218,218.6001 ns |   9.15 |        - |  7.8125 |  0.7324 |       - |   83856 B |        1.05 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| PolymorphicTest     | NinoSerializePolymorphicClass               |     6,823.1230 ns |     6,537.1305 ns |     7,289.7694 ns |   1.00 | 53,789 B |       - |       - |       - |         - |          NA |
-| PolymorphicTest     | MemoryPackSerializePolymorphicClass         |    24,431.7678 ns |    23,342.0516 ns |    25,642.6310 ns |   3.58 | 51,760 B |       - |       - |       - |         - |          NA |
-| PolymorphicTest     | MessagePackSerializePolymorphicClass        |   115,230.0237 ns |   110,871.9188 ns |   120,784.1611 ns |  16.91 | 66,859 B |       - |       - |       - |         - |          NA |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| PolymorphicTest     | NinoDeserializePolymorphicFooArray          |    22,017.0761 ns |    20,525.3840 ns |    23,420.1695 ns |   1.00 |        - |  7.2021 |  1.0071 |       - |   76024 B |        1.00 |
-| PolymorphicTest     | MemoryPackDeserializePolymorphicFooArray    |    29,737.3775 ns |    28,591.2295 ns |    30,791.8300 ns |   1.35 |        - |  7.0801 |  1.0681 |       - |   76024 B |        1.00 |
-| PolymorphicTest     | MessagePackDeserializePolymorphicFooArray   |   192,893.9829 ns |   188,890.1321 ns |   196,402.4702 ns |   8.77 |        - |  7.0801 |  0.7324 |       - |   76024 B |        1.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| PolymorphicTest     | NinoSerializePolymorphicFooArray            |     6,163.8003 ns |     5,845.0228 ns |     6,553.7242 ns |   1.00 | 52,404 B |       - |       - |       - |         - |          NA |
-| PolymorphicTest     | MemoryPackSerializePolymorphicFooArray      |    23,527.5631 ns |    21,960.4257 ns |    24,881.9714 ns |   3.82 | 50,404 B |       - |       - |       - |         - |          NA |
-| PolymorphicTest     | MessagePackSerializePolymorphicFooArray     |   104,598.0566 ns |    99,811.0422 ns |   107,545.1891 ns |  16.99 | 65,203 B |       - |       - |       - |         - |          NA |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| PooledTest          | NinoDeserializeNew                          |       531.4666 ns |       513.5100 ns |       550.5622 ns |   1.00 |        - |  0.2451 |  0.0010 |       - |    2536 B |        1.00 |
-| PooledTest          | NinoDeserializePooled                       |       461.8679 ns |       439.4161 ns |       492.6606 ns |   0.87 |        - |  0.1049 |       - |       - |    1080 B |        0.43 |
-| PooledTest          | MemoryPackDeserializeNew                    |       709.7680 ns |       649.9120 ns |       770.1529 ns |   1.34 |        - |  0.2480 |       - |       - |    2536 B |        1.00 |
-| PooledTest          | MemoryPackDeserializeOverwrite              |       573.1106 ns |       532.6091 ns |       626.2235 ns |   1.08 |        - |  0.1040 |       - |       - |    1080 B |        0.43 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| SimpleTest          | NinoDeserializeSimpleClass                  |       538.5045 ns |       514.2469 ns |       572.2063 ns |   1.00 |        - |  0.2460 |       - |       - |    2528 B |        1.00 |
-| SimpleTest          | MemoryPackDeserializeSimpleClass            |       706.8350 ns |       675.3687 ns |       763.3140 ns |   1.31 |        - |  0.2451 |       - |       - |    2528 B |        1.00 |
-| SimpleTest          | MessagePackDeserializeSimpleClass           |     1,739.1356 ns |     1,672.0905 ns |     1,865.6628 ns |   3.23 |        - |  0.2460 |       - |       - |    2528 B |        1.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| SimpleTest          | NinoSerializeSimpleClass                    |        94.2163 ns |        89.7516 ns |        99.0466 ns |   1.00 |  1,150 B |       - |       - |       - |         - |          NA |
-| SimpleTest          | MemoryPackSerializeSimpleClass              |       320.6945 ns |       312.2436 ns |       331.1163 ns |   3.41 |  1,148 B |       - |       - |       - |         - |          NA |
-| SimpleTest          | MessagePackSerializeSimpleClass             |       812.5622 ns |       761.7930 ns |       860.9030 ns |   8.63 |  1,112 B |       - |       - |       - |         - |          NA |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| SimpleTest          | NinoDeserializeSimpleClasses                |    56,691.7134 ns |    53,862.3762 ns |    60,212.9005 ns |   1.00 |        - | 18.1885 |  5.4321 |       - |  253624 B |        1.00 |
-| SimpleTest          | MemoryPackDeserializeSimpleClasses          |    67,829.4244 ns |    60,682.5389 ns |    74,139.6514 ns |   1.20 |        - | 18.0664 |  5.2490 |       - |  253624 B |        1.00 |
-| SimpleTest          | MessagePackDeserializeSimpleClasses         |   196,271.3554 ns |   184,465.0706 ns |   214,233.1777 ns |   3.47 |        - | 18.0664 |  5.3711 |       - |  253624 B |        1.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| SimpleTest          | NinoSerializeSimpleClasses                  |    10,400.0120 ns |     9,721.1468 ns |    10,951.9347 ns |   1.00 |115,004 B |       - |       - |       - |         - |          NA |
-| SimpleTest          | MemoryPackSerializeSimpleClasses            |    33,052.4687 ns |    31,100.6632 ns |    36,243.9572 ns |   3.18 |114,804 B |       - |       - |       - |         - |          NA |
-| SimpleTest          | MessagePackSerializeSimpleClasses           |    78,339.1272 ns |    73,804.0513 ns |    83,459.1353 ns |   7.54 |111,203 B |       - |       - |       - |         - |          NA |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| SimpleTest          | NinoDeserializeSimpleStruct                 |         0.3298 ns |         0.1544 ns |         0.5294 ns |   1.14 |        - |       - |       - |       - |         - |          NA |
-| SimpleTest          | MemoryPackDeserializeSimpleStruct           |         0.4949 ns |         0.2237 ns |         0.8405 ns |   1.71 |        - |       - |       - |       - |         - |          NA |
-| SimpleTest          | MessagePackDeserializeSimpleStruct          |        50.6639 ns |        49.0971 ns |        52.6515 ns | 175.41 |        - |       - |       - |       - |         - |          NA |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| SimpleTest          | NinoSerializeSimpleStruct                   |         1.5665 ns |         1.3037 ns |         1.7698 ns |   1.01 |     12 B |       - |       - |       - |         - |          NA |
-| SimpleTest          | MemoryPackSerializeSimpleStruct             |         2.7541 ns |         2.4821 ns |         3.1323 ns |   1.77 |     12 B |       - |       - |       - |         - |          NA |
-| SimpleTest          | MessagePackSerializeSimpleStruct            |        45.3075 ns |        43.9793 ns |        46.5730 ns |  29.13 |     16 B |       - |       - |       - |         - |          NA |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| SimpleTest          | NinoDeserializeSimpleStructs                |       125.0581 ns |       114.2414 ns |       134.5615 ns |   1.00 |        - |  0.1214 |       - |       - |    1224 B |        1.00 |
-| SimpleTest          | MemoryPackDeserializeSimpleStructs          |       134.4987 ns |       126.8457 ns |       142.7001 ns |   1.08 |        - |  0.1214 |       - |       - |    1224 B |        1.00 |
-| SimpleTest          | MessagePackDeserializeSimpleStructs         |     2,869.6046 ns |     2,726.1429 ns |     2,999.8212 ns |  22.98 |        - |  0.1907 |  0.0038 |  0.0038 |         - |        0.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| SimpleTest          | NinoSerializeSimpleStructs                  |        14.1342 ns |        13.4730 ns |        15.0427 ns |   1.00 |  1,204 B |       - |       - |       - |         - |          NA |
-| SimpleTest          | MemoryPackSerializeSimpleStructs            |        15.7109 ns |        14.8129 ns |        17.4521 ns |   1.11 |  1,204 B |       - |       - |       - |         - |          NA |
-| SimpleTest          | MessagePackSerializeSimpleStructs           |     2,925.4516 ns |     2,810.9572 ns |     3,154.8717 ns | 207.17 |  1,603 B |       - |       - |       - |         - |          NA |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| VersionTolerantTest | NinoDeserializeTolerantClass                |       538.0925 ns |       501.1757 ns |       573.6375 ns |   1.00 |        - |  0.2432 |  0.0010 |       - |    2528 B |        1.00 |
-| VersionTolerantTest | MemoryPackDeserializeTolerantClass          |       783.6259 ns |       697.3741 ns |       859.2125 ns |   1.46 |        - |  0.2451 |       - |       - |    2528 B |        1.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| VersionTolerantTest | NinoSerializeTolerantClass                  |        92.5121 ns |        88.8891 ns |        98.4079 ns |   1.00 |  1,154 B |       - |       - |       - |         - |          NA |
-| VersionTolerantTest | MemoryPackSerializeTolerantClass            |       415.4443 ns |       391.0891 ns |       445.3449 ns |   4.49 |  1,164 B |       - |       - |       - |         - |          NA |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| VersionTolerantTest | NinoDeserializeTolerantClasses              |    55,562.4505 ns |    52,338.6850 ns |    59,576.6766 ns |   1.00 |        - | 18.4326 |  5.5542 |       - |  253624 B |        1.00 |
-| VersionTolerantTest | MemoryPackDeserializeTolerantClasses        |    77,210.1807 ns |    70,724.9575 ns |    83,200.6188 ns |   1.39 |        - | 18.0664 |  5.4932 |       - |  253624 B |        1.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| VersionTolerantTest | NinoSerializeTolerantClasses                |    10,666.4478 ns |     9,983.8269 ns |    11,650.6033 ns |   1.00 |115,404 B |       - |       - |       - |         - |          NA |
-| VersionTolerantTest | MemoryPackSerializeTolerantClasses          |    41,074.9874 ns |    39,113.0743 ns |    43,965.6166 ns |   3.86 |116,404 B |       - |       - |       - |         - |          NA |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| SimpleTest          | NinoDeserializeVectors                      |   117,919.5926 ns |   108,761.5326 ns |   126,467.6118 ns |   1.00 |        - |  8.0566 |  8.0566 |  8.0566 |  160016 B |        1.00 |
-| SimpleTest          | MemoryPackDeserializeVectors                |   112,469.4955 ns |   104,982.8882 ns |   121,587.6262 ns |   0.96 |        - |  8.1787 |  8.1787 |  8.1787 |  160016 B |        1.00 |
-| SimpleTest          | MessagePackDeserializeVectors               |   329,691.6750 ns |   306,397.6907 ns |   359,921.5803 ns |   2.80 |        - | 11.7188 | 11.7188 | 11.7188 |  160023 B |        1.00 |
-|                     |                                             |                   |                   |                   |        |          |         |         |         |           |             |
-| SimpleTest          | NinoSerializeVectors                        |     4,266.7289 ns |     3,975.4954 ns |     4,546.1557 ns |   1.00 |160,004 B |       - |       - |       - |         - |          NA |
-| SimpleTest          | MemoryPackSerializeVectors                  |     4,205.2902 ns |     4,060.5174 ns |     4,377.7341 ns |   0.99 |160,004 B |       - |       - |       - |         - |          NA |
-| SimpleTest          | MessagePackSerializeVectors                 |   124,213.3332 ns |   119,105.4303 ns |   129,732.8820 ns |  29.17 |210,003 B |       - |       - |       - |         - |          NA |
+| Type                | Method                                      | Mean              | Median            | Min               | Max               | Ratio  | Payload   | Gen0    | Gen1    | Gen2    | Allocated | Alloc Ratio |
+|-------------------- |-------------------------------------------- |------------------:|------------------:|------------------:|------------------:|-------:|----------:|--------:|--------:|--------:|----------:|------------:|
+| FixedSizeTest       | NinoDeserializeFixedClass                   |        11.0860 ns |        11.1748 ns |        10.0276 ns |        11.8051 ns |   1.00 |         - |  0.0054 |       - |       - |      56 B |        1.00 |
+| FixedSizeTest       | MemoryPackDeserializeFixedClass             |        22.0626 ns |        22.0762 ns |        20.0715 ns |        24.6171 ns |   1.99 |         - |  0.0055 |  0.0001 |  0.0001 |      56 B |        1.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| FixedSizeTest       | NinoSerializeFixedClass                     |        12.0111 ns |        11.8445 ns |        11.2881 ns |        13.2462 ns |   1.00 |      41 B |  0.0069 |       - |       - |      72 B |        1.00 |
+| FixedSizeTest       | MemoryPackSerializeFixedClass               |        21.8931 ns |        21.8365 ns |        20.0607 ns |        24.3061 ns |   1.83 |      41 B |  0.0070 |       - |       - |      72 B |        1.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| FixedSizeTest       | NinoDeserializeFixedClasses                 |     1,369.5749 ns |     1,376.4601 ns |     1,246.1121 ns |     1,599.6303 ns |   1.00 |         - |  0.6256 |  0.0076 |       - |    6424 B |        1.00 |
+| FixedSizeTest       | MemoryPackDeserializeFixedClasses           |     2,221.0162 ns |     2,447.2413 ns |     1,308.8883 ns |     2,836.0838 ns |   1.63 |         - |  0.6256 |  0.0038 |       - |    6424 B |        1.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| FixedSizeTest       | NinoSerializeFixedClasses                   |     1,012.0662 ns |       897.1137 ns |       813.5906 ns |     1,271.8286 ns |   1.03 |   4,104 B |  0.4110 |       - |       - |    4128 B |        1.00 |
+| FixedSizeTest       | MemoryPackSerializeFixedClasses             |     1,742.8963 ns |     1,738.1253 ns |     1,658.9868 ns |     1,857.5017 ns |   1.77 |   4,104 B |  0.3967 |       - |       - |    4128 B |        1.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| FixedSizeTest       | NinoDeserializeFixedStruct                  |         0.0330 ns |         0.0000 ns |         0.0000 ns |         0.1479 ns |      ? |         - |       - |       - |       - |         - |           ? |
+| FixedSizeTest       | MemoryPackDeserializeFixedStruct            |         0.5361 ns |         0.5568 ns |         0.2877 ns |         0.8564 ns |      ? |         - |       - |       - |       - |         - |           ? |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| FixedSizeTest       | NinoSerializeFixedStruct                    |        11.5048 ns |        11.3409 ns |        11.0178 ns |        12.2607 ns |   1.00 |      40 B |  0.0062 |       - |       - |      64 B |        1.00 |
+| FixedSizeTest       | MemoryPackSerializeFixedStruct              |        11.6760 ns |        11.5850 ns |        10.7735 ns |        12.7479 ns |   1.02 |      40 B |  0.0062 |       - |       - |      64 B |        1.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| ReferenceTest       | NinoDeserializeGraph                        |     5,708.5715 ns |     5,747.2174 ns |     5,489.3158 ns |     5,864.1501 ns |   1.00 |         - |  1.3657 |  0.0305 |       - |   14104 B |        1.00 |
+| ReferenceTest       | MemoryPackDeserializeGraph                  |    17,241.1692 ns |    17,045.5469 ns |    16,306.2630 ns |    18,759.5018 ns |   3.02 |         - |  1.3733 |  0.0305 |       - |   14104 B |        1.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| ReferenceTest       | NinoSerializeGraph                          |     4,558.5943 ns |     4,537.5344 ns |     4,387.9276 ns |     4,840.6198 ns |   1.00 |   5,948 B |       - |       - |       - |         - |          NA |
+| ReferenceTest       | MemoryPackSerializeGraph                    |    24,065.6332 ns |    23,980.4084 ns |    22,975.4215 ns |    25,947.5957 ns |   5.28 |   5,584 B |       - |       - |       - |         - |          NA |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| PooledGraphTest     | NinoLeavesNew                               |     3,876.7935 ns |     3,889.5247 ns |     3,619.7647 ns |     4,062.7215 ns |   1.00 |         - |  1.3275 |  0.0305 |       - |   13656 B |        1.00 |
+| PooledGraphTest     | NinoLeavesPooledElements                    |     2,448.3189 ns |     2,463.4706 ns |     2,313.7609 ns |     2,593.9444 ns |   0.63 |         - |  0.0839 |       - |       - |     856 B |        0.06 |
+| PooledGraphTest     | NinoLeavesInPlace                           |       505.0119 ns |       504.4580 ns |       470.3849 ns |       544.3157 ns |   0.13 |         - |       - |       - |       - |         - |        0.00 |
+| PooledGraphTest     | MemoryPackLeavesNew                         |     4,128.5899 ns |     4,134.1907 ns |     3,812.1796 ns |     4,294.3501 ns |   1.07 |         - |  1.3275 |  0.0229 |       - |   13656 B |        1.00 |
+| PooledGraphTest     | MemoryPackLeavesOverwrite                   |     4,388.1175 ns |     4,406.4875 ns |     4,056.5629 ns |     4,780.3392 ns |   1.13 |         - |  1.2360 |  0.0076 |       - |   12800 B |        0.94 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| PooledGraphTest     | NinoNodeNew                                 |       637.6911 ns |       631.5708 ns |       611.9775 ns |       682.2081 ns |   1.00 |         - |  0.2136 |       - |       - |    2192 B |        1.00 |
+| PooledGraphTest     | NinoNodePooled                              |       211.6913 ns |       210.3109 ns |       203.9490 ns |       222.2315 ns |   0.33 |         - |       - |       - |       - |         - |        0.00 |
+| PooledGraphTest     | MemoryPackNodeNew                           |       654.5474 ns |       656.0013 ns |       609.5359 ns |       702.3794 ns |   1.03 |         - |  0.2117 |       - |       - |    2192 B |        1.00 |
+| PooledGraphTest     | MemoryPackNodeOverwrite                     |       510.6307 ns |       510.1689 ns |       478.4672 ns |       547.9164 ns |   0.80 |         - |  0.0982 |       - |       - |    1024 B |        0.47 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| PooledGraphTest     | NinoPlainNew                                |     3,160.7732 ns |     3,172.2773 ns |     2,935.4816 ns |     3,421.1302 ns |   1.00 |         - |  1.2550 |  0.0305 |       - |   12856 B |        1.00 |
+| PooledGraphTest     | MemoryPackPlainNew                          |     3,774.2958 ns |     3,737.7184 ns |     3,540.4649 ns |     4,097.0168 ns |   1.20 |         - |  1.2512 |  0.0229 |       - |   12856 B |        1.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| PolymorphicTest     | NinoDeserializePolymorphicClassArray        |   284,544.0570 ns |   278,595.1274 ns |   259,762.4878 ns |   327,473.9668 ns |   1.00 |         - | 31.7383 | 13.6719 |       - |  745624 B |        1.00 |
+| PolymorphicTest     | MemoryPackDeserializePolymorphicClassArray  |   409,225.6877 ns |   405,800.2476 ns |   354,880.1650 ns |   459,854.7686 ns |   1.44 |         - | 30.2734 | 14.1602 |       - |  745624 B |        1.00 |
+| PolymorphicTest     | MessagePackDeserializePolymorphicClassArray | 1,610,212.7331 ns | 1,566,666.2852 ns | 1,455,321.4512 ns | 1,794,850.4629 ns |   5.68 |         - | 46.8750 | 19.5313 |       - | 1162424 B |        1.56 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| PolymorphicTest     | NinoSerializePolymorphicClassArray          |    54,994.8444 ns |    54,631.0397 ns |    51,168.9285 ns |    58,656.5017 ns |   1.00 | 397,304 B |       - |       - |       - |         - |          NA |
+| PolymorphicTest     | MemoryPackSerializePolymorphicClassArray    |   280,897.4215 ns |   275,357.4402 ns |   255,944.9763 ns |   309,417.4329 ns |   5.11 | 384,404 B |       - |       - |       - |         - |          NA |
+| PolymorphicTest     | MessagePackSerializePolymorphicClassArray   |   775,118.1399 ns |   764,609.5889 ns |   731,123.6758 ns |   863,211.1631 ns |  14.11 | 487,103 B |       - |       - |       - |         - |          NA |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| PolymorphicTest     | NinoDeserializePolymorphicClass             |    20,296.9095 ns |    20,234.8878 ns |    18,711.7913 ns |    21,862.8668 ns |   1.00 |         - |  7.3853 |  1.2817 |       - |   79688 B |        1.00 |
+| PolymorphicTest     | MemoryPackDeserializePolymorphicClass       |    30,326.7067 ns |    29,909.0238 ns |    27,614.4732 ns |    33,737.2495 ns |   1.50 |         - |  7.4158 |  1.0071 |       - |   79688 B |        1.00 |
+| PolymorphicTest     | MessagePackDeserializePolymorphicClass      |   185,669.9667 ns |   186,862.6548 ns |   166,402.2502 ns |   195,842.5698 ns |   9.16 |         - |  7.5684 |  0.9766 |       - |   83856 B |        1.05 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| PolymorphicTest     | NinoSerializePolymorphicClass               |     6,390.4397 ns |     6,393.2117 ns |     5,930.3433 ns |     6,901.1617 ns |   1.00 |  53,789 B |       - |       - |       - |         - |          NA |
+| PolymorphicTest     | MemoryPackSerializePolymorphicClass         |    23,694.2597 ns |    23,657.7426 ns |    21,984.8369 ns |    25,531.2838 ns |   3.72 |  51,760 B |       - |       - |       - |         - |          NA |
+| PolymorphicTest     | MessagePackSerializePolymorphicClass        |   106,403.4284 ns |   105,942.4332 ns |   101,983.6055 ns |   111,803.6821 ns |  16.68 |  66,859 B |       - |       - |       - |         - |          NA |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| PolymorphicTest     | NinoDeserializePolymorphicFooArray          |    19,620.2259 ns |    19,397.0100 ns |    18,294.4601 ns |    21,277.4992 ns |   1.00 |         - |  7.1716 |  1.0681 |       - |   76024 B |        1.00 |
+| PolymorphicTest     | MemoryPackDeserializePolymorphicFooArray    |    28,076.1534 ns |    27,777.7130 ns |    26,883.9058 ns |    29,895.6654 ns |   1.43 |         - |  7.1106 |  1.0681 |       - |   76024 B |        1.00 |
+| PolymorphicTest     | MessagePackDeserializePolymorphicFooArray   |   175,498.7009 ns |   176,374.0947 ns |   166,641.6965 ns |   181,510.7920 ns |   8.96 |         - |  7.0801 |  0.7324 |       - |   76024 B |        1.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| PolymorphicTest     | NinoSerializePolymorphicFooArray            |     6,231.7819 ns |     6,278.8842 ns |     5,912.0486 ns |     6,508.2156 ns |   1.00 |  52,404 B |       - |       - |       - |         - |          NA |
+| PolymorphicTest     | MemoryPackSerializePolymorphicFooArray      |    23,330.3214 ns |    22,961.6185 ns |    20,959.0387 ns |    25,944.3397 ns |   3.75 |  50,404 B |       - |       - |       - |         - |          NA |
+| PolymorphicTest     | MessagePackSerializePolymorphicFooArray     |   105,334.9285 ns |   105,199.2419 ns |    99,884.6250 ns |   111,919.3000 ns |  16.91 |  65,203 B |       - |       - |       - |         - |          NA |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| PooledTest          | NinoDeserializeNew                          |       548.6471 ns |       550.9600 ns |       526.5837 ns |       581.2650 ns |   1.00 |         - |  0.2451 |  0.0010 |       - |    2536 B |        1.00 |
+| PooledTest          | NinoDeserializePooled                       |       222.1494 ns |       220.8111 ns |       206.6481 ns |       240.5492 ns |   0.41 |         - |       - |       - |       - |         - |        0.00 |
+| PooledTest          | MemoryPackDeserializeNew                    |       655.1230 ns |       652.9136 ns |       625.4202 ns |       701.2852 ns |   1.20 |         - |  0.2460 |       - |       - |    2536 B |        1.00 |
+| PooledTest          | MemoryPackDeserializeOverwrite              |       553.0911 ns |       551.9693 ns |       532.1793 ns |       585.0788 ns |   1.01 |         - |  0.1049 |       - |       - |    1080 B |        0.43 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| SimpleTest          | NinoDeserializeSimpleClass                  |       492.8397 ns |       501.3566 ns |       458.2103 ns |       555.4371 ns |   1.00 |         - |  0.2460 |       - |       - |    2528 B |        1.00 |
+| SimpleTest          | MemoryPackDeserializeSimpleClass            |       722.1478 ns |       725.1683 ns |       626.6078 ns |       832.9610 ns |   1.47 |         - |  0.2460 |       - |       - |    2528 B |        1.00 |
+| SimpleTest          | MessagePackDeserializeSimpleClass           |     1,651.7574 ns |     1,647.1260 ns |     1,575.7463 ns |     1,761.2207 ns |   3.36 |         - |  0.2480 |       - |       - |    2528 B |        1.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| SimpleTest          | NinoSerializeSimpleClass                    |        89.6077 ns |        90.1009 ns |        86.2565 ns |        91.9253 ns |   1.00 |   1,150 B |       - |       - |       - |         - |          NA |
+| SimpleTest          | MemoryPackSerializeSimpleClass              |       382.1221 ns |       380.0247 ns |       354.0909 ns |       404.3215 ns |   4.27 |   1,148 B |       - |       - |       - |         - |          NA |
+| SimpleTest          | MessagePackSerializeSimpleClass             |       763.8358 ns |       767.9242 ns |       699.0044 ns |       796.7140 ns |   8.53 |   1,112 B |       - |       - |       - |         - |          NA |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| SimpleTest          | NinoDeserializeSimpleClasses                |    52,930.1909 ns |    53,011.7750 ns |    50,106.9024 ns |    54,465.7044 ns |   1.00 |         - | 18.3105 |  5.4932 |       - |  253624 B |        1.00 |
+| SimpleTest          | MemoryPackDeserializeSimpleClasses          |    66,724.9567 ns |    66,840.7021 ns |    62,312.6951 ns |    70,738.7496 ns |   1.26 |         - | 18.1885 |  5.1270 |       - |  253624 B |        1.00 |
+| SimpleTest          | MessagePackDeserializeSimpleClasses         |   182,620.4460 ns |   180,712.2681 ns |   172,319.0024 ns |   196,167.8262 ns |   3.45 |         - | 17.5781 |  4.8828 |       - |  253624 B |        1.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| SimpleTest          | NinoSerializeSimpleClasses                  |    10,280.8855 ns |    10,015.0644 ns |     9,578.6866 ns |    11,789.0480 ns |   1.00 | 115,004 B |       - |       - |       - |         - |          NA |
+| SimpleTest          | MemoryPackSerializeSimpleClasses            |    33,288.3297 ns |    32,725.7112 ns |    30,751.6458 ns |    35,792.7002 ns |   3.25 | 114,804 B |       - |       - |       - |         - |          NA |
+| SimpleTest          | MessagePackSerializeSimpleClasses           |    79,774.6829 ns |    80,758.9073 ns |    72,051.3616 ns |    84,804.9857 ns |   7.79 | 111,203 B |       - |       - |       - |         - |          NA |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| SimpleTest          | NinoDeserializeSimpleStruct                 |         0.3125 ns |         0.3112 ns |         0.1847 ns |         0.4509 ns |   1.06 |         - |       - |       - |       - |         - |          NA |
+| SimpleTest          | MemoryPackDeserializeSimpleStruct           |         0.3410 ns |         0.3505 ns |         0.2098 ns |         0.4615 ns |   1.16 |         - |       - |       - |       - |         - |          NA |
+| SimpleTest          | MessagePackDeserializeSimpleStruct          |        52.8118 ns |        52.7863 ns |        49.3811 ns |        56.3096 ns | 179.31 |         - |       - |       - |       - |         - |          NA |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| SimpleTest          | NinoSerializeSimpleStruct                   |         1.3382 ns |         1.3356 ns |         1.0962 ns |         1.6809 ns |   1.01 |      12 B |       - |       - |       - |         - |          NA |
+| SimpleTest          | MemoryPackSerializeSimpleStruct             |         3.0274 ns |         3.0656 ns |         2.6133 ns |         3.3026 ns |   2.29 |      12 B |       - |       - |       - |         - |          NA |
+| SimpleTest          | MessagePackSerializeSimpleStruct            |        42.7727 ns |        42.7392 ns |        40.7685 ns |        45.1772 ns |  32.42 |      16 B |       - |       - |       - |         - |          NA |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| SimpleTest          | NinoDeserializeSimpleStructs                |       131.3033 ns |       132.5233 ns |       120.2692 ns |       138.7890 ns |   1.00 |         - |  0.1214 |       - |       - |    1224 B |        1.00 |
+| SimpleTest          | MemoryPackDeserializeSimpleStructs          |       133.3527 ns |       131.4184 ns |       127.2872 ns |       147.4623 ns |   1.02 |         - |  0.1214 |       - |       - |    1224 B |        1.00 |
+| SimpleTest          | MessagePackDeserializeSimpleStructs         |     2,919.9335 ns |     2,892.0609 ns |     2,651.3150 ns |     3,327.5507 ns |  22.29 |         - |  0.1297 |  0.0076 |  0.0076 |         - |        0.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| SimpleTest          | NinoSerializeSimpleStructs                  |        15.0572 ns |        15.0926 ns |        13.4741 ns |        16.2973 ns |   1.00 |   1,204 B |       - |       - |       - |         - |          NA |
+| SimpleTest          | MemoryPackSerializeSimpleStructs            |        15.4777 ns |        15.4198 ns |        14.7406 ns |        16.4751 ns |   1.03 |   1,204 B |       - |       - |       - |         - |          NA |
+| SimpleTest          | MessagePackSerializeSimpleStructs           |     2,965.7871 ns |     2,978.7563 ns |     2,677.0252 ns |     3,249.8076 ns | 197.39 |   1,603 B |       - |       - |       - |         - |          NA |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| VersionTolerantTest | NinoDeserializeTolerantClass                |       521.0727 ns |       524.8786 ns |       496.3595 ns |       574.3951 ns |   1.00 |         - |  0.2460 |       - |       - |    2528 B |        1.00 |
+| VersionTolerantTest | MemoryPackDeserializeTolerantClass          |       764.3313 ns |       757.7421 ns |       736.4055 ns |       798.7311 ns |   1.47 |         - |  0.2451 |       - |       - |    2528 B |        1.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| VersionTolerantTest | NinoSerializeTolerantClass                  |        94.3630 ns |        94.7205 ns |        87.3816 ns |       101.7905 ns |   1.00 |   1,154 B |       - |       - |       - |         - |          NA |
+| VersionTolerantTest | MemoryPackSerializeTolerantClass            |       418.4511 ns |       418.8876 ns |       393.4790 ns |       468.7534 ns |   4.44 |   1,164 B |       - |       - |       - |         - |          NA |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| VersionTolerantTest | NinoDeserializeTolerantClasses              |    57,682.0058 ns |    56,736.4726 ns |    55,517.0137 ns |    61,734.9037 ns |   1.00 |         - | 18.4326 |  5.7373 |       - |  253624 B |        1.00 |
+| VersionTolerantTest | MemoryPackDeserializeTolerantClasses        |    79,990.9113 ns |    81,528.4921 ns |    74,885.6201 ns |    85,180.2208 ns |   1.39 |         - | 17.9443 |  5.6152 |       - |  253624 B |        1.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| VersionTolerantTest | NinoSerializeTolerantClasses                |    10,267.5625 ns |    10,323.3566 ns |     9,426.2225 ns |    10,776.4607 ns |   1.00 | 115,404 B |       - |       - |       - |         - |          NA |
+| VersionTolerantTest | MemoryPackSerializeTolerantClasses          |    40,558.8009 ns |    40,232.5351 ns |    37,961.6306 ns |    43,179.2206 ns |   3.96 | 116,404 B |       - |       - |       - |         - |          NA |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| SimpleTest          | NinoDeserializeVectors                      |   104,548.2808 ns |   105,034.5450 ns |    90,615.1733 ns |   113,076.9202 ns |   1.00 |         - |  8.1787 |  8.1787 |  8.1787 |  160016 B |        1.00 |
+| SimpleTest          | MemoryPackDeserializeVectors                |   111,234.7055 ns |   111,837.7678 ns |   101,650.6357 ns |   118,846.8276 ns |   1.07 |         - |  8.3008 |  8.3008 |  8.3008 |  160016 B |        1.00 |
+| SimpleTest          | MessagePackDeserializeVectors               |   312,742.9745 ns |   308,517.1653 ns |   289,028.3967 ns |   343,698.4690 ns |   3.00 |         - | 12.2070 | 12.2070 | 12.2070 |  160024 B |        1.00 |
+|                     |                                             |                   |                   |                   |                   |        |           |         |         |         |           |             |
+| SimpleTest          | NinoSerializeVectors                        |     4,185.7958 ns |     4,210.3811 ns |     3,919.2227 ns |     4,510.8003 ns |   1.00 | 160,004 B |       - |       - |       - |         - |          NA |
+| SimpleTest          | MemoryPackSerializeVectors                  |     4,326.0336 ns |     4,331.5631 ns |     4,101.5232 ns |     4,553.1488 ns |   1.03 | 160,004 B |       - |       - |       - |         - |          NA |
+| SimpleTest          | MessagePackSerializeVectors                 |   126,388.6037 ns |   126,359.8853 ns |   118,694.3779 ns |   134,574.5696 ns |  30.23 | 210,003 B |       - |       - |       - |         - |          NA |
 
 </details>

@@ -66,7 +66,7 @@ Every case with its numbers, the polymorphic and pooled runs, and the benchmark 
 | Append members | ✅ `NinoFormat.VersionTolerant` (most derived type), `NinoFormat.Keyed` (any class) | ✅ default mode (new code reads old data only) |
 | Old code reads new data | ✅ `NinoFormat.VersionTolerant`, `NinoFormat.Keyed` | ✅ `GenerateType.VersionTolerant` |
 | Remove members | ✅ `NinoFormat.Keyed` | ✅ `VersionTolerant` with explicit orders |
-| Reorder or insert members | ✅ `NinoFormat.Keyed` | ❌ |
+| Reorder or insert members | ✅ `NinoFormat.Keyed` | ⚠️ `VersionTolerant`: declarations can move, the `[MemoryPackOrder]` numbers fix the wire order |
 | Rename members | ✅ positional, `NinoFormat.VersionTolerant`; `NinoFormat.Keyed` with `[NinoFormerName]` | ✅ |
 | Rename or move types | ✅ `[NinoFormerName]` | ✅ union tags do not depend on names |
 | **Object graphs** | | |
@@ -75,7 +75,7 @@ Every case with its numbers, the polymorphic and pooled runs, and the benchmark 
 | Deserialize into an existing instance | ✅ reuses elements by index, merges dictionaries | ⚠️ arrays reused only at the same length; collections cleared and refilled |
 | Object pools | ✅ `[NinoPooled]`, factories, recycler for dropped instances | ⚠️ `MemoryPoolFormatter<T>` rents arrays from `ArrayPool` |
 | **Tooling** | | |
-| Analyzer | ✅ NINO001–NINO025, many with code fixes | ✅ MEMPACK001–MEMPACK035 |
+| Analyzer | ✅ NINO001–NINO025, many with code fixes | ✅ 35 rules, `MEMPACK001`–`MEMPACK035` |
 | Compile-time call interception | ✅ Roslyn 4.8+ (.NET 8 SDK) | — not documented |
 | **I/O and integrations** | | |
 | `IBufferWriter<byte>` / `PipeWriter` | ✅ | ✅ |
@@ -86,7 +86,7 @@ Every case with its numbers, the polymorphic and pooled runs, and the benchmark 
 | Serialization callbacks | ✅ your own hooks around the call ([example](/en/docs/v4/advanced/streams#callbacks)) | ✅ `[MemoryPackOnSerializing]` and three more |
 | Custom formatters | ✅ struct formatters, inlined; `[assembly: NinoFormatter]` binds generic types | ✅ `MemoryPackFormatter<T>`, provider registration |
 | Compression | ✅ `System.IO.Compression` over the output ([example](/en/docs/v4/advanced/streams#compression)) | ✅ `BrotliCompressor`, `[BrotliFormatter]` |
-| TypeScript code generation | ❌ | ✅ `[GenerateTypeScript]` |
+| TypeScript code generation | ❌ browser clients run the same C# types on .NET WebAssembly ([guide](/en/docs/v4/advanced/browser)) | ✅ `[GenerateTypeScript]` |
 | ASP.NET Core MVC formatters | ❌ | ✅ `MemoryPack.AspNetCoreMvcFormatter` |
 | Default string encoding | UTF-16, `[NinoUtf8]` per member | UTF-8, option for UTF-16 |
 
@@ -96,7 +96,7 @@ To put it plainly, MemoryPack does these things and Nino v4 does not:
 
 - **More built-in types.** MemoryPack serializes `BigInteger`, `Uri`, `Version`, `StringBuilder`, `Type`, `BitArray`, `CultureInfo`, `TimeZoneInfo`, `Lazy<T>`, `Memory<T>`, `ReadOnlyMemory<T>`, `ReadOnlySequence<T>`, `ReadOnlyCollection<T>`, `ReadOnlyObservableCollection<T>`, `ILookup<,>`, `IGrouping<,>`, `BlockingCollection<T>` and every immutable collection. Nino has none of these (it has `ImmutableArray<T>` and `ImmutableList<T>` through `Nino.Immutable`). *Workaround:* a [custom formatter](/en/docs/v4/custom-formatters), or a serializable member that converts (`string` for `Uri`, `byte[]` for `BigInteger`).
 - **Unity class types.** `MemoryPack.Unity` serializes `AnimationCurve`, `Gradient` and `RectOffset`. Nino handles Unity's unmanaged structs (`Vector3`, `Quaternion`, `Color32`...) but no Unity classes. *Workaround:* a custom formatter.
-- **TypeScript and ASP.NET Core.** MemoryPack generates TypeScript readers and writers and provides MVC input/output formatters. Nino has neither.
+- **TypeScript and ASP.NET Core.** MemoryPack generates TypeScript readers and writers and provides MVC input/output formatters. Nino has neither. *Workaround:* for browser clients, build the client-side serialization as a .NET `browser-wasm` app and call it from JavaScript through `[JSExport]`; it shares your C# types and writes the same bytes, but ships the .NET runtime to the browser. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
 - **Dependency injection and options.** MemoryPack passes `MemoryPackSerializerOptions` (string encoding, an `IServiceProvider`) through every call. Nino has no per-call options: its settings are either process-wide (`NinoSettings`) or per-type attributes.
 
 Streams, async I/O, `ReadOnlySequence<byte>` input, serialization callbacks and compression are not on this list: each takes a few lines on top of Nino's `IBufferWriter<byte>` and `ReadOnlySpan<byte>` APIs. See [Streams, Async, Callbacks and Compression](/en/docs/v4/advanced/streams) for ready-to-copy helpers.
@@ -114,7 +114,7 @@ The cost is 3 more bytes per polymorphic value. See [Polymorphism](/en/docs/v4/p
 
 - **Speed**: up to <BenchValue k="serialize.max" /> faster serialization and up to <BenchValue k="deserialize.max" /> faster deserialization of classes and polymorphic graphs, with the numbers above.
 - **Zero-allocation reuse**: reuse deserialization that fills nested objects, lists and dictionaries in place, `[NinoPooled]` pools, and a recycler for every dropped instance.
-- **Data that changes**: keyed members can be reordered, removed and inserted, in any class of a hierarchy; old code reads new data in both keyed and version-tolerant types.
+- **Data that changes**: keyed members can be reordered, removed and inserted in any class of a hierarchy, with no order numbers to maintain; old code reads new data in both keyed and version-tolerant types.
 - **Polymorphism without bookkeeping**: no tags, any non-sealed class can be a base, and subtypes in other assemblies and hot-update DLLs are found automatically.
 - **Portable, deterministic bytes**: identical on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, with padding zeroed.
 - **Wider reach**: `netstandard2.0`, OpenUPM for Unity, HybridCLR without init calls.
@@ -123,11 +123,11 @@ The cost is 3 more bytes per polymorphic value. See [Polymorphism](/en/docs/v4/p
 ## When to Choose Which
 
 <Cards>
-  <Card title="Choose Nino when" >
+  <Card title="Choose Nino when">
     You serialize messages, cached values, stored records or application state at a high rate, on .NET servers, Unity or Godot; you need polymorphism without tag tables, data that evolves, shared references, or zero GC through pooling; or you need identical bytes across Unity, IL2CPP and servers.
   </Card>
   <Card title="Choose MemoryPack when">
-    You need TypeScript clients, ASP.NET Core MVC formatters, per-call options, or the BCL and Unity class types listed above out of the box.
+    You need generated TypeScript readers and writers (a browser client without the .NET runtime), ASP.NET Core MVC formatters, per-call options, or the BCL and Unity class types listed above out of the box.
   </Card>
 </Cards>
 

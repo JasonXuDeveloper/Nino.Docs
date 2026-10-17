@@ -4,7 +4,7 @@ description: "Positional, version-tolerant and keyed formats: what each one lets
 icon: GitBranch
 ---
 
-Data outlives code. A save file, a cached asset or a message from an older client is read by a newer build of your types, and sometimes the other way round. Nino gives every type one of three formats, the values of the `NinoFormat` enum, chosen with `[NinoType(format: ...)]`:
+Data outlives code. A saved document, a cached asset or a message from an older client is read by a newer build of your types, and sometimes the other way round. Nino gives every type one of three formats, the values of the `NinoFormat` enum, chosen with `[NinoType(format: ...)]`:
 
 | | `NinoFormat.Positional` (default) | `format: NinoFormat.VersionTolerant` | `format: NinoFormat.Keyed` |
 | --- | :---: | :---: | :---: |
@@ -35,21 +35,21 @@ An unmanaged `[NinoType]` struct is copied as raw memory, so its bytes also depe
 
 ## Version Tolerance
 
-Version 1.1 of a game adds a music volume to its settings file. Players still have files written by 1.0:
+Version 1.1 of an app adds a font size to its settings file. Users still have files written by 1.0:
 
 ```csharp
 [NinoType(format: NinoFormat.VersionTolerant)] // [!code highlight]
 public class Settings
 {
-    public float SfxVolume = 1f;
-    public bool Subtitles;
-    public float MusicVolume = 0.8f; // [!code ++]
+    public string Theme = "light";
+    public bool Notifications;
+    public int FontSize = 14; // [!code ++]
 }
 ```
 
 An object's members (those of its `[NinoType]` base classes first) are written after a single 4-byte length, however deep the hierarchy is:
 
-- **Old data, new code:** members missing from the data keep the value they already have: the existing instance's value when you deserialize into it, otherwise whatever the constructor set, field initializers included. A 1.0 file loaded by 1.1 gets `MusicVolume = 0.8f`, not `0`. Types re-created through a constructor (positional records, get-only members) get `default` for a missing constructor argument, not the parameter's default value.
+- **Old data, new code:** members missing from the data keep the value they already have: the existing instance's value when you deserialize into it, otherwise whatever the constructor set, field initializers included. A 1.0 file loaded by 1.1 gets `FontSize = 14`, not `0`. Types re-created through a constructor (positional records, get-only members) get `default` for a missing constructor argument, not the parameter's default value.
 - **New data, old code:** bytes the old code does not know are skipped.
 - Members can be appended to the **most derived type**, which is the end of the object's data. This works at any nesting depth: each tolerant object carries its own length, inside collections, dictionaries and polymorphic members too.
 
@@ -72,39 +72,39 @@ In a version-tolerant hierarchy, append members only to the classes that have no
 All levels of the hierarchy share the object's single length, and their members are written root first. A member appended to a base class therefore lands **before** the members of its subclasses and shifts them:
 
 ```csharp
-// Version 2 appends Armor to the base class
+// Version 2 appends Revision to the base class
 [NinoType(format: NinoFormat.VersionTolerant)]
-public class Unit
+public class Document
 {
-    public int Hp;
-    public int Armor; // [!code ++]
+    public int Id;
+    public int Revision; // [!code ++]
 }
 
-public sealed class Archer : Unit
+public sealed class Invoice : Document
 {
-    public int Arrows;
+    public int CustomerId;
 }
 
-// after its header, version 1 writes an Archer as  length | Hp | Arrows
-// and version 2 writes it as                        length | Hp | Armor | Arrows
+// after its header, version 1 writes an Invoice as  length | Id | CustomerId
+// and version 2 writes it as                        length | Id | Revision | CustomerId
 ```
 
-- **Version 2 reads version 1 data:** `Armor` gets the bytes of `Arrows`, and the data ends before `Arrows`, which keeps its value like any missing member (`0` in a new `Archer`).
-- **Version 1 reads version 2 data:** `Arrows` gets the bytes of `Armor`, and the real `Arrows` is skipped as an unknown trailing member.
+- **Version 2 reads version 1 data:** `Revision` gets the bytes of `CustomerId`, and the data ends before `CustomerId`, which keeps its value like any missing member (`0` in a new `Invoice`).
+- **Version 1 reads version 2 data:** `CustomerId` gets the bytes of `Revision`, and the real `CustomerId` is skipped as an unknown trailing member.
 
 Here the two members have the same type, so the values are merely wrong. When the types differ, the bytes are misread as another type, and the result is wrong values or an `InvalidOperationException`. Nothing reports the mistake at compile time, because the generator only ever sees one version of your code.
 
-Instances of `Unit` itself are not affected (`Armor` is their last member); the data of every subclass is. So append members only to the classes at the bottom of a hierarchy, such as sealed message classes. Put a member that every subclass needs into each subclass, or make the hierarchy [`NinoFormat.Keyed`](#keyed-members), where members can be added to any class.
+Instances of `Document` itself are not affected (`Revision` is their last member); the data of every subclass is. So append members only to the classes at the bottom of a hierarchy, such as sealed message classes. Put a member that every subclass needs into each subclass, or make the hierarchy [`NinoFormat.Keyed`](#keyed-members), where members can be added to any class.
 
 ## Keyed Members
 
 ```csharp
 [NinoType(format: NinoFormat.Keyed)] // [!code highlight]
-public class EnemyConfig
+public class ConnectionConfig
 {
-    public string Name;
-    public int Health;    // reorder, remove or insert members freely
-    public float Speed;
+    public string Host;
+    public int Port;      // reorder, remove or insert members freely
+    public float TimeoutSeconds;
 }
 ```
 
@@ -115,7 +115,7 @@ Each member is written with a **key** (the 32-bit FNV-1a hash of its name, compu
 - If two member names in a type (inherited ones included) hash to the same key, that is a compile-time error (NINO014), so a collision cannot corrupt data.
 - Keyed structs are never written as raw memory. Polymorphism works as usual: the type id comes before the body.
 
-This is the format for data kept for a long time and edited by many releases: configuration, documents, settings files, game or level data.
+This is the format for data kept for a long time and edited by many releases: configuration, documents, settings files, content authored in tools.
 
 ### Renaming Keyed Members
 
@@ -123,12 +123,12 @@ Put `[NinoFormerName("OldName")]` on the renamed field or property, once per ear
 
 ```csharp
 [NinoType(format: NinoFormat.Keyed)]
-public class PlayerSave
+public class UserProfile
 {
-    [NinoFormerName("Hp")]                   // [!code highlight]
-    [NinoFormerName("Health")]               // [!code highlight]
-    public int HitPoints;                    // reads data written as Hp, Health or HitPoints
-    public string Name;
+    [NinoFormerName("Nick")]                 // [!code highlight]
+    [NinoFormerName("Nickname")]             // [!code highlight]
+    public string DisplayName;               // reads data written as Nick, Nickname or DisplayName
+    public string Email;
 }
 ```
 
@@ -144,14 +144,14 @@ public class PlayerSave
 Positional, when both sides always run the same build. If clients and servers are upgraded at different times (rolling upgrades, old app versions in the wild), use `NinoFormat.VersionTolerant` and only ever **append** fields to the message classes themselves (not to their shared base class), or `NinoFormat.Keyed` if you also need to retire fields or add them to the base. See [Network Layer](/en/docs/v4/advanced/networking).
 
 </Accordion>
-<Accordion title="Save games and user files">
+<Accordion title="Saved documents and user files">
 
 `NinoFormat.VersionTolerant` if you only add fields over time, to classes without subclasses; `NinoFormat.Keyed` if you want the freedom to remove and reorder them. Add [`trackReferences`](/en/docs/v4/reference-tracking) when the saved graph shares objects or has cycles. See [Persistence and Storage](/en/docs/v4/advanced/persistence).
 
 </Accordion>
-<Accordion title="Configuration authored in the Unity editor">
+<Accordion title="Configuration edited by people">
 
-`NinoFormat.Keyed`: designers add, remove and reorder fields all the time, and the cost (8 bytes per member) rarely matters for configuration.
+`NinoFormat.Keyed`: the people who maintain it add, remove and reorder fields all the time, and the cost (8 bytes per member) rarely matters for configuration.
 
 </Accordion>
 <Accordion title="Caches and in-memory snapshots">
@@ -163,6 +163,13 @@ Positional. If the schema changes, throw the cache away and rebuild it.
 
 <Callout type="idea">
 
-The options can be mixed: a keyed save file can hold positional raw structs (such as `Vector3` or your own `[NinoType]` structs) inside it. Each type has its own format.
+The options can be mixed: a keyed settings file can hold positional raw structs (such as `Guid` or your own `[NinoType]` structs) inside it. Each type has its own format.
 
 </Callout>
+
+## Next Steps
+
+<Cards>
+  <Card title="Reference Tracking" href="/en/docs/v4/reference-tracking">Shared references and cycles, opted in per type.</Card>
+  <Card title="Persistence and Storage" href="/en/docs/v4/advanced/persistence">Files that survive updates, file headers, safe writes and append-only logs.</Card>
+</Cards>

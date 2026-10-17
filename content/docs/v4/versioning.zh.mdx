@@ -64,14 +64,28 @@ Nino 至今的每个大版本都使用新的二进制格式。本页列出改变
 
 做法是保留旧的反序列化器，用它读出旧数据，再用新版本重新写入：
 
-1. **保留旧的反序列化器。** 在 v3 的各个版本之间升级时，把旧的生成代码（反序列化器及其依赖）复制到项目中，放进单独的命名空间。如果是用 v4 读取 v3 数据，由于 v3 的生成代码依赖 v3 的 `Nino.Core`，只能放在单独的转换程序里，参见[转换 v3 数据](/zh/docs/v4/migration#converting-v3-data)。
-2. **升级** Nino，生成新的序列化器和反序列化器。
-3. **转换。** 用旧的反序列化器读出旧数据，再用新的序列化器重新序列化。
+<Steps>
+<Step>
 
-存档这类需要保存的数据，应当由新版本在开头写入你自己的文件头（魔数加格式版本）。加载时，带文件头的文件用新的反序列化器读取；没有文件头的就是旧数据，用旧的反序列化器读出后再转换。参见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)。
+**保留旧的反序列化器。** 在 v3 的各个版本之间升级时，把旧的生成代码（反序列化器及其依赖）复制到项目中，放进单独的命名空间。如果是用 v4 读取 v3 数据，由于 v3 的生成代码依赖 v3 的 `Nino.Core`，只能放在单独的转换程序里，参见[转换 v3 数据](/zh/docs/v4/migration#converting-v3-data)。
+
+</Step>
+<Step>
+
+**升级** Nino，生成新的序列化器和反序列化器。
+
+</Step>
+<Step>
+
+**转换。** 用旧的反序列化器读出旧数据，再用新的序列化器重新序列化。
+
+</Step>
+</Steps>
+
+用户文档、归档记录这类需要保存的数据，应当由新版本在开头写入你自己的文件头（魔数加格式版本）。加载时，带文件头的文件用新的反序列化器读取；没有文件头的就是旧数据，用旧的反序列化器读出后再转换。参见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)。
 
 <Callout type="idea">
 
-从 v4 开始，存档这类长期保存的数据请标记 `[NinoType(format: NinoFormat.VersionTolerant)]` 或 `[NinoType(format: NinoFormat.Keyed)]`，以后修改自己的类型时就不再需要转换。参见[数据演进](/zh/docs/v4/evolving-data)。
+从 v4 开始，已保存的文档这类长期保存的数据请标记 `[NinoType(format: NinoFormat.VersionTolerant)]` 或 `[NinoType(format: NinoFormat.Keyed)]`，以后修改自己的类型时就不再需要转换。参见[数据演进](/zh/docs/v4/evolving-data)。
 
 </Callout>

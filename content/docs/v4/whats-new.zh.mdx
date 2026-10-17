@@ -75,45 +75,82 @@ v4 新增：通过 `ref` 反序列化到你已有的对象中，需要新实例�
 
 ## 亮点 [#highlights]
 
-### 构建更快 [#faster-to-build-1]
-- **真正的增量源生成器**：每个 `[NinoType]` 一个文件，模型可判等（equatable），不再扫描整个 Compilation。改一个类型只重新生成这个类型；不改变模型的修改（例如注释、方法体）不会触发任何重新生成。
-- **生成的代码大幅减少**：集合、字符串、可空类型、元组等内置类型，都在 `Nino.Core` 里以泛型格式化器的形式统一实现；生成器只为你的 `[NinoType]` 生成代码。
-- **分析器与代码修复**：写代码时就报告错误（NINO001–NINO025），许多都带一键修复。参见[诊断列表](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)。
+先逐项展开上面每张卡片的细节，再列出其他较小的变化。
 
-### 运行更快 [#faster-to-run]
-- **JIT/AOT 编译器能内联结构体格式化器**；非托管 `[NinoType]` 结构体及其数组和列表直接拷贝原始内存；除了结果对象本身，不产生任何分配。[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)直接写进大小正好的 `byte[]`。
-- **新版编译器上的拦截器**：在 Roslyn 4.8+（.NET 8 SDK 及以上）下，类型已知的 `NinoSerializer`/`NinoDeserializer` 调用会在编译期直接改写为调用生成的格式化器（没有虚调用）。始终开启，无需配置；旧版编译器走常规路径，写出的字节相同。参见[拦截器](/zh/docs/v4/performance#interceptors)。
-- **线程安全、缓存友好**：注册表无锁，采用写时复制；热路径上没有共享的可变状态。
+<Accordions type="multiple">
+<Accordion title="拦截器" id="interceptors">
 
-### 复用而非分配 [#reuse-instead-of-allocate]
+在 Roslyn 4.8+（.NET 8 SDK 及以上）下，类型已知的 `NinoSerializer`/`NinoDeserializer` 调用会在编译期直接改写为调用生成的格式化器（没有虚调用）。始终开启，无需配置；旧版编译器走常规路径，写出的字节相同。参见[拦截器](/zh/docs/v4/performance#interceptors)。
+
+</Accordion>
+<Accordion title="键控成员与版本容错" id="evolve-your-data">
+
+- **按需开启的版本容错**：`[NinoType(format: NinoFormat.VersionTolerant)]` 允许向最末端的派生类型追加成员，嵌套多深都可以；旧代码会跳过它不认识的成员。
+- **键控成员**：`[NinoType(format: NinoFormat.Keyed)]` 按成员名的哈希写入成员，因此可以调整顺序、删除和插入。
+
+参见[数据演进](/zh/docs/v4/evolving-data)。
+
+</Accordion>
+<Accordion title="引用追踪" id="reference-tracking">
+
+`[NinoType(trackReferences: true)]` 保留共享引用和循环引用：同一个对象被引用多次时只写一次，读回后仍是同一个实例，每个被追踪的对象只多 4 字节。参见[引用追踪](/zh/docs/v4/reference-tracking)。
+
+</Accordion>
+<Accordion title="分析器 NINO001–NINO025" id="analyzers">
+
+写代码时就报告错误（NINO001–NINO025），许多都带一键修复。参见[诊断列表](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)。
+
+</Accordion>
+<Accordion title="低 GC 与对象池" id="reuse-instead-of-allocate">
+
 - **复用反序列化**：`NinoDeserializer.Deserialize(data, ref value)` 原地填充已有的对象、列表、数组和字典。
 - **池化反序列化**：给类加上 `[NinoPooled]`，Nino 就会把数据反序列化到你用 `ReturnToPool()` 归还的实例中，并复用实例里的列表、数组和字典。被丢弃的实例（数据为 `null`、列表变短、类型改变）会交给用 `NinoSettings.SetRecycler<T>` 注册的处理器；没有注册时，回到各自的池。
 - **`[NinoFactory]` 工厂方法**让 Nino 从你自己的对象池中获取新实例。
 
 参见[复用反序列化与对象池](/zh/docs/v4/pooling)。
 
-### 数据演进 [#evolve-your-data]
-- **按需开启的版本容错**：`[NinoType(format: NinoFormat.VersionTolerant)]` 允许向最末端的派生类型追加成员，嵌套多深都可以；旧代码会跳过它不认识的成员。
-- **键控成员**：`[NinoType(format: NinoFormat.Keyed)]` 按成员名的哈希写入成员，因此可以调整顺序、删除和插入。
-- **引用追踪**：`[NinoType(trackReferences: true)]` 保留共享引用和循环引用。
+</Accordion>
+<Accordion title="线程安全" id="thread-safe">
+
+`NinoSerializer` 和 `NinoDeserializer` 的所有方法都可以并发调用，不需要加锁。注册表无锁、采用写时复制，暂存缓冲区每个线程各一份，热路径从不写共享内存，因此线程之间不会争抢缓存行。参见[线程安全](/zh/docs/v4/performance#thread-safety)。
+
+</Accordion>
+<Accordion title="各平台字节一致" id="runs-everywhere">
+
+- **处处同一格式**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出完全相同的字节，数据在 CoreCLR、Mono、IL2CPP 之间以及 64 位和 32 位平台之间通用。
+- **无需初始化调用**：生成的注册表在用到时才查找，所以热更新程序集（HybridCLR）直接可用。
+- **Unity**：源生成器随包附带，无需另外安装。
+
+</Accordion>
+<Accordion title="真正的增量生成" id="incremental-generator">
+
+- **真正的增量源生成器**：每个 `[NinoType]` 一个文件，模型可判等（equatable），不再扫描整个 Compilation。改一个类型只重新生成这个类型；不改变模型的修改（例如注释、方法体）不会触发任何重新生成。
+- **生成的代码大幅减少**：集合、字符串、可空类型、元组等内置类型，都在 `Nino.Core` 里以泛型格式化器的形式统一实现；生成器只为你的 `[NinoType]` 生成代码。
+
+</Accordion>
+<Accordion title="运行时代码更快" id="faster-to-run">
+
+- **JIT/AOT 编译器能内联结构体格式化器**；非托管 `[NinoType]` 结构体及其数组和列表直接拷贝原始内存；除了结果对象本身，不产生任何分配。[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)直接写进大小正好的 `byte[]`。
 - **深层对象图**：嵌套超过 128 层的对象会推迟到较浅的层级再写入和读取，因此无论递归类型嵌套多深，还是遇到恶意数据，都不会栈溢出。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
 
-### 更多类型，自由扩展 [#more-types-your-way]
+</Accordion>
+<Accordion title="更多类型，自由扩展" id="more-types-your-way">
+
 - **自定义集合**：派生自 `List<T>`、`HashSet<T>`、`Dictionary<TKey, TValue>` 等的类型，无需任何特性。
 - **更多内置类型**：.NET 6+ 上的 `PriorityQueue<TElement, TPriority>`，以及通过 `Nino.Immutable` 包支持的 `ImmutableArray<T>` / `ImmutableList<T>`。
 - **可扩展的格式化器**：用 `[assembly: NinoFormatter(typeof(MyFormatter<,>))]` 教 Nino 处理一个新类型（你自己的或第三方的）。类型参数和元素格式化器会自动推断，生成的代码直接调用它，运行时也使用同一份注册。Nino 自带的 BCL 格式化器也是这样声明的。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
 - **子类型继承 `[NinoType]`**：子类型自动从基类或接口继承该特性。
 
-### 随处运行 [#runs-everywhere]
-- **处处同一格式**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出完全相同的字节，数据在 CoreCLR、Mono、IL2CPP 之间以及 64 位和 32 位平台之间通用。
-- **无需初始化调用**：生成的注册表在用到时才查找，所以热更新程序集（HybridCLR）直接可用。
-- **Unity**：源生成器随包附带，无需另外安装。
+</Accordion>
+<Accordion title="精简而明确的 API" id="a-small-explicit-api">
 
-### 精简而明确的 API [#a-small-explicit-api]
 - **用一个选项决定格式**：`[NinoType(format: ...)]` 接收一个 `NinoFormat`（`Positional`，即默认值；`VersionTolerant`；`Keyed`）。在项目中定义 `WEAK_VERSION_TOLERANCE`，会把该项目中 `Positional` 的类型变为 `VersionTolerant`。参见[数据演进](/zh/docs/v4/evolving-data)。
 - **固定大小的类型**：如果一个类型的每个值都占用相同的字节数，`NinoSerializer.Serialize(value)` 会直接按最终大小分配结果，`NinoSerializer.GetFixedSize<T>()` 返回这个大小。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
 - **用于运行时类型的装箱 API**：`SerializeBoxed(value, type)` 和 `DeserializeBoxed(data, type)` 用于只能以 `Type` 形式得知、并且没有共同 `[NinoType]` 基类型的类型，写出的内容与 `Serialize<T>` 完全相同。消息分派、插件和工具则应给类型一个共同的 `[NinoType]` 基类型，调用 `Serialize<TBase>`/`Deserialize<TBase>`，更快，也不分配内存；参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
 - **已移除**：`[NinoExplicitOrder]`（改用 `[NinoType(false)]` 配合 `[NinoMember(index)]`）、beta 中的 `Serialize(object)`（现为 `SerializeBoxed`），以及用 `NinoFormatterCache<T>.Register<TFormatter>()` 在运行时注册格式化器（请用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明）。参见[从 v3 迁移](/zh/docs/v4/migration)。
+
+</Accordion>
+</Accordions>
 
 ## 快速示例 [#quick-example]
 
@@ -129,11 +166,12 @@ public sealed partial class Packet
     private partial void OnNinoPoolReturn() { /* clear state Nino does not deserialize */ }
 }
 
-byte[] bytes = NinoSerializer.Serialize(new Packet { Id = 1, Values = new List<int> { 1, 2, 3 } });
+var buffer = new NinoArrayBufferWriter(); // keep it and reuse it: serializing into it allocates nothing
+NinoSerializer.Serialize(new Packet { Id = 1, Values = new List<int> { 1, 2, 3 } }, buffer);
 
-var packet = NinoDeserializer.Deserialize<Packet>(bytes); // reuses a pooled instance (and its list) if there is one
+var packet = NinoDeserializer.Deserialize<Packet>(buffer.WrittenSpan); // reuses a pooled instance (and its list) if there is one
 // ... use it ...
-packet.ReturnToPool();                                    // returning it twice throws
+packet.ReturnToPool();                                                 // returning it twice throws
 ```
 
 ## 了解更多 [#learn-more]

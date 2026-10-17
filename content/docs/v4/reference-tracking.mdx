@@ -22,22 +22,27 @@ var copy = NinoDeserializer.Deserialize<Node>(bytes);
 // copy.Next.Next == copy
 ```
 
-Shared references matter as much as cycles. In an RPG save, two party members belong to the same guild:
+Shared references matter as much as cycles. In an organization chart, two employees belong to the same department:
 
 ```csharp
 [NinoType(trackReferences: true)]
-public class Guild { public string Name; }
+public class Department { public string Name; }
 
 [NinoType]
-public class Hero { public string Name; public Guild Guild; }
+public class Employee { public string Name; public Department Department; }
 
-var guild = new Guild { Name = "Dawn" };
-var party = new List<Hero> { new() { Name = "Ayla", Guild = guild }, new() { Name = "Bran", Guild = guild } };
-var loaded = NinoDeserializer.Deserialize<List<Hero>>(NinoSerializer.Serialize(party));
-// loaded[0].Guild == loaded[1].Guild: renaming the guild after loading changes it for both heroes
+var sales = new Department { Name = "Sales" };
+var staff = new List<Employee>
+{
+    new() { Name = "Ana", Department = sales },
+    new() { Name = "Ben", Department = sales },
+};
+byte[] bytes = NinoSerializer.Serialize(staff);
+var loaded = NinoDeserializer.Deserialize<List<Employee>>(bytes);
+// loaded[0].Department == loaded[1].Department: one object, so a rename shows on both employees // [!code highlight]
 ```
 
-Without tracking, the save would load two separate `Guild` objects, and a rename after loading would show on one hero only. Only the shared type needs the option: `Hero` itself is not tracked.
+Without tracking, the chart would load two separate `Department` objects, and a rename after loading would show on one employee only. Only the shared type needs the option: `Employee` itself is not tracked.
 
 - Each tracked object is written after a 4-byte reference header; an object already written in the same call is written as just its index.
 - Shared references keep their identity across members of any declared type, including `object` and interfaces.
@@ -55,7 +60,7 @@ Types that must be re-created from constructor arguments or read-only members (f
 <Accordions type="single">
 <Accordion title="Use it for object graphs">
 
-Scene graphs, entity relationships, editors' undo stacks, save games where several objects point to the same one, trees with parent links: anything where identity matters or cycles exist. A list that repeats one tracked object 100 times takes a fraction of the bytes and time of the same list untracked.
+Domain models with relationships (orders pointing at a shared customer), undo stacks, documents where several objects point to the same one, trees with parent links: anything where identity matters or cycles exist. A list that repeats one tracked object 100 times takes a fraction of the bytes and time of the same list untracked.
 
 </Accordion>
 <Accordion title="Skip it for messages and plain data">
@@ -71,3 +76,10 @@ A call that takes your value and returns bytes (or writes into a buffer writer),
 </Accordions>
 
 Reuse deserialization works as usual for new objects; a back reference replaces the current value without recycling it, since the old value may still be referenced elsewhere in the graph.
+
+## Next Steps
+
+<Cards>
+  <Card title="Reuse Deserialization and Pooling" href="/en/docs/v4/pooling">Fill existing instances in place and take new ones from pools.</Card>
+  <Card title="Custom Formatters" href="/en/docs/v4/custom-formatters">Encode one member differently, or teach Nino a new type.</Card>
+</Cards>

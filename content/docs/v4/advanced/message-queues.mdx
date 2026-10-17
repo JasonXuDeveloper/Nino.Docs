@@ -92,21 +92,52 @@ using var consumer = new ConsumerBuilder<Guid, OrderEvent>(consumerConfig)
     .Build();
 ```
 
-Kafka's `ISerializer<T>` returns a `byte[]`, so producing allocates one array per message. A `Guid` key is a raw value: 16 bytes, written and read as one copy.
+Kafka's `ISerializer<T>` must return a `byte[]`, so producing allocates one array per message: `NinoSerializer.Serialize(data)` writes into a per-thread scratch buffer and copies out exactly the bytes written, so that array is the only allocation. Consuming needs no copy: the deserializer reads the span the client hands it. A `Guid` key is a raw value: 16 bytes, written and read as one copy.
 
 ## Other Brokers [#other-brokers]
 
-Most other clients accept a body as `byte[]` or `ReadOnlyMemory<byte>`:
+Most other clients take a body as `ReadOnlyMemory<byte>`. Serialize into a reused `NinoArrayBufferWriter` and pass `WrittenMemory`: nothing is allocated per message on your side. With RabbitMQ.Client 7:
 
-- For a `ReadOnlyMemory<byte>` body, serialize into a reused `NinoArrayBufferWriter` and pass `WrittenMemory`. Reset the buffer only after the publish call has completed (after the `await`), since the client may still be reading it.
-- For a `byte[]` body, pass `NinoSerializer.Serialize(evt)`.
-- On the consumer side, pass the delivered body (`ReadOnlyMemory<byte>.Span`, or the array) to `NinoDeserializer.Deserialize<T>`. There is no need to copy it first.
+```csharp title="OrderPublisher.cs"
+using Nino.Core;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 
-If the broker hands out bodies whose memory is reused after your handler returns, deserialize inside the handler; the result does not reference the input bytes.
+public sealed class OrderPublisher
+{
+    private readonly IChannel _channel;
+    private readonly NinoArrayBufferWriter _buffer = new(1024); // one per publisher
+
+    public OrderPublisher(IChannel channel) => _channel = channel;
+
+    // Await each call before the next one: the buffer is reused
+    public async ValueTask PublishAsync(OrderEvent evt)
+    {
+        _buffer.ResetWrittenCount();
+        NinoSerializer.Serialize(evt, _buffer); // [!code highlight]
+        await _channel.BasicPublishAsync(exchange: "orders", routingKey: "", body: _buffer.WrittenMemory);
+    }
+}
+
+// consuming
+var consumer = new AsyncEventingBasicConsumer(channel);
+consumer.ReceivedAsync += (_, delivery) =>
+{
+    // the body's memory is only valid inside the handler: deserialize here
+    Handle(NinoDeserializer.Deserialize<OrderEvent>(delivery.Body.Span));
+    return Task.CompletedTask;
+};
+await channel.BasicConsumeAsync("orders", autoAck: true, consumer);
+```
+
+- Reset the buffer only after the publish call has completed (after the `await`), since the client may still be reading it. A publisher used from several threads needs a buffer per thread or a lock.
+- Azure Service Bus works the same way: `new ServiceBusMessage(buffer.WrittenMemory)` wraps the memory without copying it, and a received message is read with `NinoDeserializer.Deserialize<OrderEvent>(message.Body.ToMemory().Span)`.
+- A client that only accepts a `byte[]` body gets `NinoSerializer.Serialize(evt)`: one array of exactly the payload's size, as with Kafka.
+- On the consumer side, pass the delivered body (`ReadOnlyMemory<byte>.Span`, or the array) to `NinoDeserializer.Deserialize<T>`. There is no need to copy it first. If the broker reuses a body's memory after your handler returns, deserialize inside the handler; the result does not reference the input bytes.
 
 ## Batching [#batching]
 
-Small events (a click, a price change, a metric) are often cheaper to send in batches: one broker message, one network round trip, one header. Write a count and then the events back to back:
+Small events (a click, a price change, a metric) are often cheaper to send in batches: one broker message, one network round trip, one header. Write a count and then the events back to back into a reused buffer (writing a batch allocates nothing), and send `buffer.WrittenMemory` as above:
 
 ```csharp title="EventBatch.cs"
 using Nino.Core;
@@ -117,23 +148,29 @@ public static class EventBatch
     {
         buffer.ResetWrittenCount();
         var writer = new Writer(buffer);
-        writer.Write(events.Count);
+        writer.WriteLength(events.Count);
         for (int i = 0; i < events.Count; i++)
-            NinoSerializer.Serialize(events[i], ref writer);
+            NinoSerializer.Serialize(events[i], ref writer); // [!code highlight]
         writer.Flush();
+        writer.ReleaseReferences(); // end the call, as NinoSerializer does
     }
 
     public static void Read(ReadOnlySpan<byte> payload, Action<OrderEvent> handle)
     {
         var reader = new Reader(payload);
-        int count = reader.Read<int>();
+        int count = reader.ReadLength(minElementSize: 4); // each event starts with a 4-byte type id
         for (int i = 0; i < count; i++)
             handle(NinoDeserializer.Deserialize<OrderEvent>(ref reader));
+        reader.ReleaseReferences();
     }
 }
 ```
 
-Each event keeps its own type, so one batch can mix `OrderPlaced` and `OrderShipped`. A `List<OrderEvent>` member in a `[NinoType]` class does the same and adds a place for batch-level fields (a producer id, a sequence number).
+- Each event keeps its own type, so one batch can mix `OrderPlaced` and `OrderShipped`.
+- `ReadLength(minElementSize: 4)` rejects a count that the payload cannot hold, so a corrupt batch throws before the loop starts.
+- End the writer and the reader with `ReleaseReferences`, as `NinoSerializer` does; see [Several Values Back to Back](/en/docs/v4/advanced/high-performance#several-values-back-to-back).
+
+A `List<OrderEvent>` member in a `[NinoType]` class does the same and adds a place for batch-level fields (a producer id, a sequence number).
 
 ## Telemetry and Tick Streams [#telemetry-and-tick-streams]
 
@@ -164,7 +201,7 @@ public sealed class SampleConsumer
 
     public void OnMessage(ReadOnlySpan<byte> payload)
     {
-        NinoDeserializer.Deserialize(payload, ref _batch);
+        NinoDeserializer.Deserialize(payload, ref _batch); // [!code highlight]
         foreach (Sample sample in _batch.Samples)
             Record(sample);
     }
@@ -172,7 +209,7 @@ public sealed class SampleConsumer
 ```
 
 - The list of samples is written and read as **one block copy**, whatever its length.
-- Deserializing into the same `SampleBatch` reuses the object and the list's backing array. The only allocation per message is the `Host` string, which is part of the data; send an id instead of a name if even that matters.
+- Deserializing into the same `SampleBatch` reuses the object, the list's backing array and the `Host` string, which is kept while its text stays the same: a steady stream from one host allocates nothing, and only a batch from another host reads its name into a new string.
 - For records you look up by position (a day of ticks in a file), see [Fixed-Size Records](/en/docs/v4/advanced/zero-allocation#fixed-size-records).
 
 ## Topics That Outlive a Deployment [#topics-that-outlive-a-deployment]

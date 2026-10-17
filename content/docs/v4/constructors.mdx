@@ -7,11 +7,11 @@ icon: Hammer
 Nino needs a way to create each type it deserializes. The generator picks one at compile time, in this order:
 
 1. A constructor or static factory method marked `[NinoConstructor]`, if there is one.
-2. Otherwise, if every serialized member can be assigned after construction: a constructor callable without arguments (parameterless, or every parameter optional). The instance is then filled member by member, and [reuse deserialization](/en/docs/v4/pooling) fills an existing instance in place. Structs use `new T()`. A parameterless constructor wins here even when the type also has a constructor whose parameters match members.
+2. Otherwise, if every serialized member can be assigned after construction: a constructor callable without arguments (parameterless, or every parameter optional), or a [`[NinoFactory]`](#from-a-pool) method, which takes its place. The instance is then filled member by member, and [reuse deserialization](/en/docs/v4/pooling) fills an existing instance in place. Structs use `new T()`. This step wins even when the type also has a constructor whose parameters match members.
 3. Otherwise (some members are get-only, `init`-only or `readonly`): the accessible (`public` or `internal`) constructor with the most parameters that all match serialized members by name, ignoring case. For a positional record this is the primary constructor. Members that are not parameters are set right after the call.
 4. Structs fall back to `new T()`; a class with none of the above is an error (NINO004).
 
-So most classes need nothing: a parameterless constructor and settable members are the fastest path. Write a constructor for Nino when the type should be **immutable** or should **validate** what it reads, for example item definitions loaded from a config table, where a broken row should fail at load time instead of in the middle of a match.
+So most classes need nothing: a parameterless constructor and settable members are the fastest path. Write a constructor for Nino when the type should be **immutable** or should **validate** what it reads, for example products loaded from a catalog file, where a broken row should fail at load time instead of in the middle of a checkout.
 
 `[NinoConstructor]` takes, in order, the names of the serialized members passed as arguments, so the parameter names do not have to match. Without names, parameters are matched to members by name:
 
@@ -19,36 +19,36 @@ So most classes need nothing: a parameterless constructor and settable members a
 
 <Tab value="Constructor">
 
-```csharp title="ItemDef.cs"
+```csharp title="Product.cs"
 [NinoType]
-public sealed class ItemDef
+public sealed class Product
 {
     public int Id { get; }
     public string Name { get; }
-    public int MaxStack { get; }
+    public decimal Price { get; }
 
-    // no attribute needed: the parameters match Id, Name and MaxStack by name
-    public ItemDef(int id, string name, int maxStack)
+    // no attribute needed: the parameters match Id, Name and Price by name
+    public Product(int id, string name, decimal price)
     {
-        if (maxStack <= 0)
-            throw new ArgumentOutOfRangeException(nameof(maxStack)); // a bad config row fails at load time
+        if (price < 0)
+            throw new ArgumentOutOfRangeException(nameof(price)); // a bad catalog row fails at load time
         Id = id;
         Name = name;
-        MaxStack = maxStack;
+        Price = price;
     }
 }
 
 [NinoType]
-public sealed class Weapon
+public sealed class Customer
 {
     public int Id { get; }
     public string Name { get; }
-    public int Damage;                // not a parameter: assigned after the call
+    public string Email;              // not a parameter: assigned after the call
 
     [NinoConstructor(nameof(Id), nameof(Name))] // [!code highlight]
-    public Weapon(int weaponId, string displayName) // names differ, so list the members
+    public Customer(int customerId, string displayName) // names differ, so list the members
     {
-        Id = weaponId;
+        Id = customerId;
         Name = displayName;
     }
 }
@@ -92,7 +92,7 @@ public sealed class Currency
 
 ```csharp
 [NinoType]
-public record SimpleRecord2(int Id, string Name, DateTime CreateTime); // [!code highlight]
+public record PriceChanged(long ProductId, decimal OldPrice, decimal NewPrice); // [!code highlight]
 ```
 
 </Tab>
@@ -100,19 +100,17 @@ public record SimpleRecord2(int Id, string Name, DateTime CreateTime); // [!code
 
 ```csharp
 [NinoType]
-public struct SimpleStruct
+public struct Money
 {
-    public int Id;
-    public string Name;
-    public DateTime CreateTime;
+    public long MinorUnits; // cents for USD
+    public string Currency;
 
     // used instead of the implicit parameterless constructor
-    [NinoConstructor(nameof(Id), nameof(Name), nameof(CreateTime))] // [!code highlight]
-    public SimpleStruct(int a, string b, DateTime c)
+    [NinoConstructor(nameof(MinorUnits), nameof(Currency))] // [!code highlight]
+    public Money(long amount, string currencyCode)
     {
-        Id = a;
-        Name = b;
-        CreateTime = c;
+        MinorUnits = amount;
+        Currency = currencyCode?.ToUpperInvariant(); // normalize on read
     }
 }
 ```
@@ -192,3 +190,10 @@ foreach (byte[] data in messages)
 ## Re-created Types
 
 A type with a `[NinoConstructor]`, or whose members cannot be assigned after construction (constructor parameters, `init`-only, get-only or `readonly` members), is always **re-created** when deserialized, even by [reuse deserialization](/en/docs/v4/pooling); the old instance is passed to the [recycler](/en/docs/v4/pooling#where-dropped-instances-go). Such types cannot use [`trackReferences`](/en/docs/v4/reference-tracking) (NINO016) or [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled) (NINO018). A `[NinoFactory]` method on such a type is not used (next to a `[NinoConstructor]`, the analyzer reports it as NINO025). When you need any of these, for example to deserialize with 0 GC, give the type settable members and [take instances from a pool](#from-a-pool) instead.
+
+## Next Steps
+
+<Cards>
+  <Card title="Supported Types" href="/en/docs/v4/types">Every built-in type and collection, and how your own collections work.</Card>
+  <Card title="Reuse Deserialization and Pooling" href="/en/docs/v4/pooling">Fill existing instances in place and take new ones from pools.</Card>
+</Cards>

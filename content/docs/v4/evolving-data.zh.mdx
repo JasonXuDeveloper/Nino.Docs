@@ -4,7 +4,7 @@ description: "按位置、版本容错和键控三种格式：数据写出之后
 icon: GitBranch
 ---
 
-数据往往比代码活得更久。存档、缓存的资源、旧版客户端发来的消息，都会被新版本的类型读取，有时反过来也一样。Nino 为每个类型提供三种格式，也就是 `NinoFormat` 枚举的三个值，用 `[NinoType(format: ...)]` 选定：
+数据往往比代码活得更久。保存的文档、缓存的资源、旧版客户端发来的消息，都会被新版本的类型读取，有时反过来也一样。Nino 为每个类型提供三种格式，也就是 `NinoFormat` 枚举的三个值，用 `[NinoType(format: ...)]` 选定：
 
 | | `NinoFormat.Positional`（默认） | `format: NinoFormat.VersionTolerant` | `format: NinoFormat.Keyed` |
 | --- | :---: | :---: | :---: |
@@ -27,7 +27,7 @@ icon: GitBranch
 
 <Callout type="warn">
 
-只要成员列表有任何变化（新增、删除、重排、修改索引），旧数据就无法读取：读取时要么抛出异常，要么更糟：读出错误的值。
+只要成员列表有任何变化（新增、删除、重排、修改索引），旧数据就无法读取：读取时要么抛出异常，要么（更糟）读出错误的值。
 
 </Callout>
 
@@ -35,21 +35,21 @@ icon: GitBranch
 
 ## 版本容错 [#version-tolerance]
 
-游戏的 1.1 版在设置文件里加了音乐音量，而玩家手里还是 1.0 写出的文件：
+应用的 1.1 版在设置文件里加了字号，而用户手里还是 1.0 写出的文件：
 
 ```csharp
 [NinoType(format: NinoFormat.VersionTolerant)] // [!code highlight]
 public class Settings
 {
-    public float SfxVolume = 1f;
-    public bool Subtitles;
-    public float MusicVolume = 0.8f; // [!code ++]
+    public string Theme = "light";
+    public bool Notifications;
+    public int FontSize = 14; // [!code ++]
 }
 ```
 
 无论继承体系有多深，对象的成员（`[NinoType]` 基类的成员在前）都写在同一个 4 字节长度之后：
 
-- **新代码读旧数据：** 数据中缺少的成员保留原有的值：反序列化到已有实例时是该实例当前的值，否则是构造函数设置的值（包括字段初始化器）。1.1 读取 1.0 的文件时，`MusicVolume` 是 `0.8f`，而不是 `0`。对于通过构造函数重新创建的类型（位置记录、只读成员），缺少的构造函数参数传入 `default`，而不是参数声明的默认值。
+- **新代码读旧数据：** 数据中缺少的成员保留原有的值：反序列化到已有实例时是该实例当前的值，否则是构造函数设置的值（包括字段初始化器）。1.1 读取 1.0 的文件时，`FontSize` 是 `14`，而不是 `0`。对于通过构造函数重新创建的类型（带主构造函数的记录、只读成员），缺少的构造函数参数传入 `default`，而不是参数声明的默认值。
 - **旧代码读新数据：** 旧代码不认识的字节会被跳过。
 - 成员可以追加到**最末端的派生类型**，也就是对象数据的末尾。嵌套多深都可以：每个版本容错对象都带有自己的长度，在集合、字典和多态成员里也一样。
 
@@ -72,39 +72,39 @@ public class Settings
 继承体系的各层共用对象的这一个长度，成员从根类开始依次写出。因此追加到基类的成员会落在子类成员**之前**，把它们往后挤：
 
 ```csharp
-// Version 2 appends Armor to the base class
+// Version 2 appends Revision to the base class
 [NinoType(format: NinoFormat.VersionTolerant)]
-public class Unit
+public class Document
 {
-    public int Hp;
-    public int Armor; // [!code ++]
+    public int Id;
+    public int Revision; // [!code ++]
 }
 
-public sealed class Archer : Unit
+public sealed class Invoice : Document
 {
-    public int Arrows;
+    public int CustomerId;
 }
 
-// after its header, version 1 writes an Archer as  length | Hp | Arrows
-// and version 2 writes it as                        length | Hp | Armor | Arrows
+// after its header, version 1 writes an Invoice as  length | Id | CustomerId
+// and version 2 writes it as                        length | Id | Revision | CustomerId
 ```
 
-- **版本 2 读取版本 1 的数据：** `Armor` 读到的是 `Arrows` 的字节；数据在 `Arrows` 之前就结束了，`Arrows` 像其他缺少的成员一样保留原有的值（新建的 `Archer` 中为 `0`）。
-- **版本 1 读取版本 2 的数据：** `Arrows` 读到的是 `Armor` 的字节，真正的 `Arrows` 被当作未知的尾部成员跳过。
+- **版本 2 读取版本 1 的数据：** `Revision` 读到的是 `CustomerId` 的字节；数据在 `CustomerId` 之前就结束了，`CustomerId` 像其他缺少的成员一样保留原有的值（新建的 `Invoice` 中为 `0`）。
+- **版本 1 读取版本 2 的数据：** `CustomerId` 读到的是 `Revision` 的字节，真正的 `CustomerId` 被当作未知的尾部成员跳过。
 
 这里两个成员类型相同，所以只是值错了。类型不同时，字节会被当作另一种类型来读：结果是错误的值，或抛出 `InvalidOperationException`。编译期不会报告这种错误，因为生成器只能看到代码的一个版本。
 
-`Unit` 自身的实例不受影响（`Armor` 是它们的最后一个成员），受影响的是所有子类的数据。因此只向继承体系最底层的类追加成员，例如密封的消息类。所有子类都需要的成员，就分别加到每个子类里；或者把整个继承体系改成 [`NinoFormat.Keyed`](#keyed-members)，这样任何一层的类都可以添加成员。
+`Document` 自身的实例不受影响（`Revision` 是它们的最后一个成员），受影响的是所有子类的数据。因此只向继承体系最底层的类追加成员，例如密封的消息类。所有子类都需要的成员，就分别加到每个子类里；或者把整个继承体系改成 [`NinoFormat.Keyed`](#keyed-members)，这样任何一层的类都可以添加成员。
 
 ## 键控成员 [#keyed-members]
 
 ```csharp
 [NinoType(format: NinoFormat.Keyed)] // [!code highlight]
-public class EnemyConfig
+public class ConnectionConfig
 {
-    public string Name;
-    public int Health;    // reorder, remove or insert members freely
-    public float Speed;
+    public string Host;
+    public int Port;      // reorder, remove or insert members freely
+    public float TimeoutSeconds;
 }
 ```
 
@@ -115,7 +115,7 @@ public class EnemyConfig
 - 同一类型中（包括继承来的成员）如果两个成员名哈希到同一个键，会在编译期报错（NINO014），所以哈希冲突不会损坏数据。
 - 键控结构体永远不会按原始内存写入。多态照常工作：类型 ID 写在成员数据之前。
 
-这种格式适合需要长期保存、会经历多个版本修改的数据：配置、文档、设置文件、游戏或关卡数据。
+这种格式适合需要长期保存、会经历多个版本修改的数据：配置、文档、设置文件、用工具编辑的内容数据。
 
 ### 重命名键控成员 [#renaming-keyed-members]
 
@@ -123,12 +123,12 @@ public class EnemyConfig
 
 ```csharp
 [NinoType(format: NinoFormat.Keyed)]
-public class PlayerSave
+public class UserProfile
 {
-    [NinoFormerName("Hp")]                   // [!code highlight]
-    [NinoFormerName("Health")]               // [!code highlight]
-    public int HitPoints;                    // reads data written as Hp, Health or HitPoints
-    public string Name;
+    [NinoFormerName("Nick")]                 // [!code highlight]
+    [NinoFormerName("Nickname")]             // [!code highlight]
+    public string DisplayName;               // reads data written as Nick, Nickname or DisplayName
+    public string Email;
 }
 ```
 
@@ -141,17 +141,17 @@ public class PlayerSave
 <Accordions type="single">
 <Accordion title="客户端与服务器之间的消息">
 
-两端始终运行同一构建版本时，用按位置格式。如果客户端和服务器的升级时间不一致（滚动升级、玩家手里还有旧版本），用 `NinoFormat.VersionTolerant`，并且只向各个消息类本身**追加**字段（不要加到它们共同的基类上）；如果还需要删除字段，或要向基类添加字段，就用 `NinoFormat.Keyed`。参见[网络层](/zh/docs/v4/advanced/networking)。
+两端始终运行同一构建版本时，用按位置格式。如果客户端和服务器的升级时间不一致（滚动升级、用户手里还有旧版本），用 `NinoFormat.VersionTolerant`，并且只向各个消息类本身**追加**字段（不要加到它们共同的基类上）；如果还需要删除字段，或要向基类添加字段，就用 `NinoFormat.Keyed`。参见[网络层](/zh/docs/v4/advanced/networking)。
 
 </Accordion>
-<Accordion title="游戏存档与用户文件">
+<Accordion title="保存的文档与用户文件">
 
-如果只会陆续向没有子类的类添加字段，用 `NinoFormat.VersionTolerant`；想自由地删除和重排字段，用 `NinoFormat.Keyed`。如果存档中的对象图有共享对象或循环，再加上 [`trackReferences`](/zh/docs/v4/reference-tracking)。参见[持久化与存储](/zh/docs/v4/advanced/persistence)。
+如果只会陆续向没有子类的类添加字段，用 `NinoFormat.VersionTolerant`；想自由地删除和重排字段，用 `NinoFormat.Keyed`。如果保存的对象图有共享对象或循环，再加上 [`trackReferences`](/zh/docs/v4/reference-tracking)。参见[持久化与存储](/zh/docs/v4/advanced/persistence)。
 
 </Accordion>
-<Accordion title="在 Unity 编辑器中编辑的配置">
+<Accordion title="由人手工维护的配置">
 
-用 `NinoFormat.Keyed`：策划会频繁增删、调整字段，而每个成员 8 字节的开销对配置来说几乎可以忽略。
+用 `NinoFormat.Keyed`：维护配置的人会频繁增删、调整字段，而每个成员 8 字节的开销对配置来说几乎可以忽略。
 
 </Accordion>
 <Accordion title="缓存与内存快照">
@@ -163,6 +163,13 @@ public class PlayerSave
 
 <Callout type="idea">
 
-这些选项可以混用：键控的存档里可以包含按位置写入的原始结构体（如 `Vector3` 或你自己的 `[NinoType]` 结构体）。每个类型使用自己的格式。
+这些选项可以混用：键控的设置文件里可以包含按位置写入的原始结构体（如 `Guid` 或你自己的 `[NinoType]` 结构体）。每个类型使用自己的格式。
 
 </Callout>
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="引用追踪" href="/zh/docs/v4/reference-tracking">按类型开启，保留共享引用和循环引用。</Card>
+  <Card title="持久化与存储" href="/zh/docs/v4/advanced/persistence">能跨版本读取的文件、文件头、安全写入和追加日志。</Card>
+</Cards>
