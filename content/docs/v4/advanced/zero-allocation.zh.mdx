@@ -15,7 +15,7 @@ icon: Leaf
 | `NinoSerializer.Serialize(value, bufferWriter)` | 不分配；`NinoArrayBufferWriter` 直接写入，其他 `IBufferWriter<byte>` 从线程级暂存缓冲区拷贝一次 |
 | `NinoSerializer.Serialize(value, ref writer)` | 不分配 |
 | `NinoDeserializer.Deserialize<T>(span)` | 返回的对象：数据里的类实例、集合和字符串；只含非托管成员的结构体不分配 |
-| `NinoDeserializer.Deserialize(span, ref value)` | 只分配现有对象图容纳不下的部分：新增的列表元素、长度变化的数组、新的字符串 |
+| `NinoDeserializer.Deserialize(span, ref value)` | 现有对象图容纳不下的部分（新增的列表元素、长度变化的数组），以及每个非空字符串（字符串总是读成新实例） |
 | Nino 需要创建的 `[NinoPooled]` 类 | 对象池里有实例时不分配 |
 
 序列化用的缓冲区在最初几次调用时增长，之后一直复用；`NinoArrayBufferWriter` 的数组租自 `ArrayPool<byte>.Shared`。Nino 不会为每次调用在堆上保留任何状态。

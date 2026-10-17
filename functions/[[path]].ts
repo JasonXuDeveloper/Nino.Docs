@@ -176,7 +176,8 @@ function getLocale(request: Request) {
 }
 
 function localizePath(pathname: string, locale: 'en' | 'zh') {
-  if (pathname === '/') return `/${locale}`;
+  // `/index.html` is the root page, not a page under /en (which would 404)
+  if (pathname === '/' || pathname === '/index.html') return `/${locale}`;
   return `/${locale}${pathname}`;
 }
 

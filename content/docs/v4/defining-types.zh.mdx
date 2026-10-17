@@ -133,7 +133,7 @@ public NinoTypeAttribute(
 在默认的 `autoCollect: true` 下，Nino 会收集：
 
 - 所有**公共字段**，以及所有**同时具有 getter 和 setter 的公共属性**（`set` 或 `init` 均可）；
-- 先收集 `[NinoType]` 基类的成员，再按声明顺序收集类型自身的成员；
+- 先收集 `[NinoType]` 基类的成员（从最上层的基类开始），再按声明顺序收集类型自身的成员；`[NinoType]` 接口的成员排在继承链中第一个实现它的类的成员之前；
 - 记录类型的主构造函数参数（它们本身就是公共属性）。
 
 以下成员会被跳过：
@@ -261,13 +261,13 @@ public class ItemRenamed
 }
 ```
 
-旧名称使用全名的**运行时形式**：`Namespace.Type`，嵌套类型与外层类型之间用 `+` 连接（`Namespace.Outer+Inner`），不带 `global::`。类型 ID 由旧名称计算，所以改名后的类型仍然写出旧读取方认识的 ID，读取方用新旧两个名字都能找到它。`NinoTypeId.Of(typeof(T))` 可以查看某个类型写出的 ID。
+旧名称使用全名的**运行时形式**：`Namespace.Type`，嵌套类型与外层类型之间用 `+` 连接（`Namespace.Outer+Inner`），不带 `global::`。类型 ID 由旧名称计算，所以改名后的类型写出和读取的仍是已有数据和旧版读取方使用的那个 ID。`NinoTypeId.Of(typeof(T))` 可以查看某个类型写出的 ID。
 
 在 `NinoFormat.Keyed` 类型的字段或属性上，`[NinoFormerName("OldName")]`（可重复使用）可以继续读取以成员旧名称写出的数据，参见[重命名键控成员](/zh/docs/v4/evolving-data#renaming-keyed-members)。按位置和版本容错的类型不写成员名，重命名成员时什么都不用做。
 
 ## 结构体 [#structs]
 
-`[NinoType]` 结构体没有任何头部。满足以下条件时，它按**原始内存**写入：是非托管类型，格式不是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，使用默认的顺序布局，没有自定义成员格式化器，并且每个实例字段都参与序列化。这时单个值只需一次拷贝，它的数组和列表也是整块拷贝。否则逐个成员写入。无论哪种情况，只要所有成员都是非托管值或这样的结构体，它就是[固定大小的](/zh/docs/v4/performance#fixed-size-types)：`NinoSerializer.Serialize(value)` 会把它直接写进大小正好的 `byte[]`。
+`[NinoType]` 结构体没有任何头部。满足以下条件时，它按**原始内存**写入：是非托管类型，格式不是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，使用默认的顺序布局，没有自定义成员格式化器，并且每个实例字段都参与序列化，而且这些字段本身也按原始字节写入（不是 `Nullable<T>`、元组、`nint`、`DateTimeOffset`，也不是非原始内存的 `[NinoType]` 结构体）。这时单个值只需一次拷贝，它的数组和列表也是整块拷贝。否则逐个成员写入。无论哪种情况，只要所有成员都是非托管值或这样的结构体，它就是[固定大小的](/zh/docs/v4/performance#fixed-size-types)：`NinoSerializer.Serialize(value)` 会把它直接写进大小正好的 `byte[]`。
 
 ```csharp
 [NinoType]

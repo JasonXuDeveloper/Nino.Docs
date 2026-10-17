@@ -122,7 +122,7 @@ Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`。因此，序列�
 
 ### Godot 项目 [#godot-project]
 
-Godot 4 的 C# 项目（Godot 的 .NET 版）就是普通的 .NET 项目，用 `Godot.NET.Sdk` 构建，目标框架是 .NET 8，所以像其他 NuGet 包一样安装即可：
+Godot 4 的 C# 项目（Godot 的 .NET 版）就是普通的 .NET 项目，用 `Godot.NET.Sdk` 构建（Godot 4.4 起目标框架为 .NET 8，4.0–4.3 为 .NET 6），所以像其他 NuGet 包一样安装即可：
 
 ```shell
 # in the folder with your Godot project's .csproj
@@ -131,8 +131,8 @@ dotnet add package Nino
 
 然后构建项目（Godot 的 **Build** 按钮、IDE 或 `dotnet build` 均可）。
 
-- 项目由 .NET 8+ SDK 编译，源生成器、分析器和[拦截器](/zh/docs/v4/performance#interceptors)都会生效。
-- .NET 8 有 `[UnsafeAccessor]`，所以序列化私有成员时类型不必声明为 `partial`（泛型类型除外）。
+- 源生成器和分析器始终生效；用 .NET 8 及以上的 SDK 构建时，[拦截器](/zh/docs/v4/performance#interceptors)也会生效。
+- 在 .NET 8 上，`[UnsafeAccessor]` 可以访问私有成员，所以类型不必声明为 `partial`（泛型类型除外）。在 .NET 6 上（Godot 4.0–4.3），含有需序列化私有成员的类型必须声明为 `partial`。`[NinoPooled]` 类则始终要声明为 `partial`。
 - Godot 的数学结构体（`Vector2`、`Vector3`、`Quaternion`、`Transform3D`、`Color` 等）都是非托管类型，和其他非托管结构体一样按原始内存拷贝。
 - 要序列化的是你自己的数据类和结构体。`Node`、`Resource` 等 Godot 对象是引擎对象而不是数据，Nino 不会序列化它们。
 

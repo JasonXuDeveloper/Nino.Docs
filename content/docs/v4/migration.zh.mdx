@@ -1,6 +1,6 @@
 ---
 title: 从 v3 迁移
-description: 逐步把 v3 项目升级到 v4，附修改前后的代码。
+description: "把 Nino v3 项目逐步升级到 v4：包的变化、改名的特性与 API、修改前后的代码，以及如何转换 v3 写出的数据。"
 icon: ArrowRightLeft
 ---
 
@@ -142,7 +142,7 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 | `NinoFactory<T>` | `NinoActivator<T>` |
 | `NinoDeserializer.DeserializeRef(ref value, data)` | `NinoDeserializer.Deserialize(data, ref value)` |
 | `NinoDeserializer.DeserializeRef(ref value, ref reader)` | `NinoDeserializer.Deserialize(ref value, ref reader)` |
-| `NinoSerializer.Serialize(object value)` | `NinoSerializer.SerializeBoxed(value, type)`，或者借助共同的 `[NinoType]` 基类型调用 `Serialize<TBase>`（见下文） |
+| `NinoSerializer.Serialize(object value)` | 借助共同的 `[NinoType]` 基类型调用 `Serialize<TBase>`；只有运行时才知道、且没有共同基类型的类型才用 `NinoSerializer.SerializeBoxed(value, type)`（见下文） |
 | `NinoDeserializer.Deserialize(data, type)` | `NinoDeserializer.DeserializeBoxed(data, type)` |
 | `NinoDeserializer.Deserialize(data, type, ref value)` | `NinoDeserializer.DeserializeBoxed(data, ref value, type)` |
 | `[NinoExplicitOrder(...)]` | `[NinoType(false)]` 配合 `[NinoMember(index)]`（见上文） |
@@ -154,7 +154,7 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 
 <Callout type="warn">
 
-**任何 v4 beta 或 preview 写出的数据，4.0.0-rc.1 都无法读取**：数据格式在很多地方都变了（例如版本容错的类型，包括定义了 `WEAK_VERSION_TOLERANCE` 的项目中的所有类型，以及 `[NinoUtf8]` 字符串）。 请用 beta 读出，再用 rc.1 重新写入（参见[读取旧版本写出的数据](/zh/docs/v4/versioning#reading-data-from-an-older-version)），或者丢弃这些数据。
+**任何 v4 beta 或 preview 写出的数据，4.0.0-rc.1 都无法读取**：数据格式在很多地方都变了（例如版本容错的类型，包括定义了 `WEAK_VERSION_TOLERANCE` 的项目中的所有类型，以及 `[NinoUtf8]` 字符串）。请用 beta 读出，再用 rc.1 重新写入（参见[读取旧版本写出的数据](/zh/docs/v4/versioning#reading-data-from-an-older-version)），或者丢弃这些数据。
 
 </Callout>
 
@@ -293,7 +293,7 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 </Step>
 <Step>
 
-如果无法离线转换（例如存档在玩家设备上），就把转换逻辑随游戏一起发布，并给新数据加上**文件头**（魔数或版本字节）。有文件头的数据用 v4 读取；没有的就转换一次，再用 v4 重新保存。
+如果无法离线转换（例如数据保存在用户设备上，像游戏存档），就把转换逻辑随应用一起发布，并给新数据加上**文件头**（魔数或版本字节）。有文件头的数据用 v4 读取；没有的就转换一次，再用 v4 重新保存。
 
 </Step>
 </Steps>

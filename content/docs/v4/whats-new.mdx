@@ -1,6 +1,6 @@
 ---
 title: "What's New in v4"
-description: A rewrite of the runtime and the source generator, faster to run and to build.
+description: "What changed in Nino v4: a rewritten runtime and incremental source generator, keyed members, reference tracking, object pools, 25 analyzer rules and much faster builds."
 icon: Sparkles
 ---
 
@@ -20,7 +20,7 @@ The baseline is v3 **3.3.13**, the last v3 release, run back to back with v4 on 
 
 <BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="en" />
 
-Serializing classes is clearly faster; deserializing is as fast as v3 or a little faster. Why, and the one case where v4 is a few nanoseconds slower: [v3 vs v4](/en/docs/v4/v3-vs-v4#runtime).
+Serializing classes is clearly faster, deserializing is as fast as v3 or a little faster, and arrays of unmanaged structs are on par. Why: [v3 vs v4](/en/docs/v4/v3-vs-v4#runtime).
 
 ## Faster to Build
 
@@ -87,7 +87,7 @@ Neither library allocates when serializing, and payloads are about the same size
 
 ### Reuse instead of allocate
 - **Reuse deserialization**: `NinoDeserializer.Deserialize(data, ref value)` populates existing objects, lists, arrays and dictionaries in place.
-- **Pooled deserialization**: mark a class `[NinoPooled]` and Nino deserializes into instances you hand back with `ReturnToPool()`, reusing their lists, arrays and dictionaries. Dropped instances (the payload is `null`, a list shrinks, the type changes) go back to their pool or to a handler registered with `NinoSettings.SetRecycler<T>`.
+- **Pooled deserialization**: mark a class `[NinoPooled]` and Nino deserializes into instances you hand back with `ReturnToPool()`, reusing their lists, arrays and dictionaries. Dropped instances (the payload is `null`, a list shrinks, the type changes) go to a handler registered with `NinoSettings.SetRecycler<T>`, or else back to their pool.
 - **`[NinoFactory]` factories** let Nino take new instances from your own pools.
 
 See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
@@ -112,7 +112,7 @@ See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 ### A small, explicit API
 - **One option for the format**: `[NinoType(format: ...)]` takes a `NinoFormat` (`Positional`, the default, `VersionTolerant` or `Keyed`). Defining `WEAK_VERSION_TOLERANCE` in a project turns its `Positional` types into `VersionTolerant` ones. See [Evolving Your Data](/en/docs/v4/evolving-data).
 - **Fixed-size types**: `NinoSerializer.Serialize(value)` of a type whose values always take the same number of bytes allocates the result at its final size, and `NinoSerializer.GetFixedSize<T>()` returns that size. See [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
-- **A boxed API for runtime types**: `SerializeBoxed(value, type)` and `DeserializeBoxed(data, type)` serialize a type known only as a `Type`, writing exactly what `Serialize<T>` writes. For message dispatch, plugins and tools, a common `[NinoType]` base with `Serialize<TBase>` is faster and allocation-free; see [Runtime Types](/en/docs/v4/basic#runtime-types).
+- **A boxed API for runtime types**: `SerializeBoxed(value, type)` and `DeserializeBoxed(data, type)` serialize a type known only as a `Type` when the types share no common `[NinoType]` base, writing exactly what `Serialize<T>` writes. For message dispatch, plugins and tools, give the types a common `[NinoType]` base and call `Serialize<TBase>`/`Deserialize<TBase>`, which is faster and allocation-free; see [Runtime Types](/en/docs/v4/basic#runtime-types).
 - **Removed**: `[NinoExplicitOrder]` (use `[NinoType(false)]` with `[NinoMember(index)]`), the betas' `Serialize(object)` (now `SerializeBoxed`) and run-time formatter registration with `NinoFormatterCache<T>.Register<TFormatter>()` (declare formatters with `[assembly: NinoFormatter]` or `[NinoCustomFormatter]`). See [Migrating from v3](/en/docs/v4/migration).
 
 ## Quick Example

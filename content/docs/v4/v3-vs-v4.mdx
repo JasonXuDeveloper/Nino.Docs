@@ -1,6 +1,6 @@
 ---
 title: v3 vs v4
-description: Features, build time, generated code and runtime performance compared.
+description: "Nino v3 and v4 side by side: features, build time, generated code size and runtime performance, measured on the same machine."
 icon: Scale
 ---
 
@@ -30,7 +30,7 @@ This page compares Nino v3 with Nino v4 in three areas: features, build time and
 | Custom formatters | no | `[NinoCustomFormatter]` per member, `[assembly: NinoFormatter]` per type |
 | Member order | declaration order, `[NinoMember(index)]` or `[NinoExplicitOrder]` | declaration order or `[NinoMember(index)]`; `[NinoExplicitOrder]` is removed |
 | Fixed-size types | no | `Serialize(value)` writes straight into an array of the exact size; `NinoSerializer.GetFixedSize<T>()` |
-| Boxed / runtime-typed API | no | `SerializeBoxed(value, type)`, `DeserializeBoxed(data, type)`, for types known only at run time |
+| Boxed / runtime-typed API | no | `SerializeBoxed(value, type)`, `DeserializeBoxed(data, type)`, for types known only at run time that share no common `[NinoType]` base |
 | Diagnostics | compile errors in generated code | 25 analyzer diagnostics (NINO001–NINO025), many with code fixes |
 | Incremental generator | no: scans the whole compilation and re-generates every type on every edit | one file per type, only edited types re-generated |
 | Interceptors | no | always on with Roslyn 4.8+ (the .NET 8 SDK and later) |
@@ -54,4 +54,4 @@ Nino v4 is measured against v3 3.3.13 from NuGet, back to back on the same machi
 
 <BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="en" />
 
-Serializing classes is clearly faster. Deserializing classes is a little faster than v3, by less than the run-to-run noise. Its cost is dominated by allocating the result objects, and v4 also handles reference tracking, reuse deserialization and payload validation on top of that. Arrays of structs with padding serialize a few nanoseconds slower, because v4 zeroes the padding to keep the output deterministic; a struct without padding (see [Struct Layout](/en/docs/v4/performance#struct-layout)) copies as fast as in v3. v4 also does something v3 could not: it deserializes into existing and pooled instances, allocating **0 B** per call. See [What's New in v4](/en/docs/v4/whats-new).
+Serializing classes is clearly faster. Deserializing classes is as fast as v3 or a little faster: its cost is dominated by allocating the result objects, and v4 also handles reference tracking, reuse deserialization and payload validation on top of that. Arrays of unmanaged structs are on par: both versions copy them as one block, and v4 also zeroes padding bytes to keep the output deterministic (a struct without padding skips that step; see [Struct Layout](/en/docs/v4/performance#struct-layout)). v4 also does something v3 could not: it deserializes into existing and pooled instances, allocating **0 B** per call. See [What's New in v4](/en/docs/v4/whats-new).

@@ -122,7 +122,7 @@ If you run into problems, first check that the `Nino.Unity` sample project runs.
 
 ### Godot Project
 
-Godot 4 C# projects (the .NET build of Godot) are regular .NET projects built with `Godot.NET.Sdk` and targeting .NET 8, so Nino installs like any NuGet package:
+Godot 4 C# projects (the .NET build of Godot) are regular .NET projects built with `Godot.NET.Sdk` (targeting .NET 8 from Godot 4.4, .NET 6 in 4.0–4.3), so Nino installs like any NuGet package:
 
 ```shell
 # in the folder with your Godot project's .csproj
@@ -131,8 +131,8 @@ dotnet add package Nino
 
 Then build the project (from Godot's **Build** button, your IDE or `dotnet build`).
 
-- The source generator, the analyzers and the [interceptors](/en/docs/v4/performance#interceptors) all run, since the project is compiled by the .NET 8+ SDK.
-- .NET 8 has `[UnsafeAccessor]`, so serializing private members does not require `partial` types (except generic types).
+- The source generator and the analyzers always run; the [interceptors](/en/docs/v4/performance#interceptors) run when the .NET 8 SDK or later builds the project.
+- On .NET 8, `[UnsafeAccessor]` reaches private members, so their types need not be `partial` (except generic types). On .NET 6 (Godot 4.0–4.3), a type with serialized private members must be `partial`. `[NinoPooled]` classes are always `partial`.
 - Godot's math structs (`Vector2`, `Vector3`, `Quaternion`, `Transform3D`, `Color`, ...) are unmanaged, so they are copied as raw memory like any other unmanaged struct.
 - Serialize your own data classes and structs. Godot objects such as `Node` and `Resource` are engine objects, not data, and Nino does not serialize them.
 

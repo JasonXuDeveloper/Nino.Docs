@@ -216,7 +216,8 @@ export function ResultsTable({ lang = 'en' }: { lang?: Locale }) {
         : `${(value / 1024).toFixed(2)} KB`;
   return (
     <>
-      <BenchSource lang={lang} />
+      {/* Called, not rendered as an element, so the Markdown copy (src/lib/markdown.tsx) gets its text instead of a JSX tag */}
+      {BenchSource({ lang })}
       {benchSource.environment && (
         <pre className="overflow-x-auto rounded-lg border bg-fd-secondary/50 p-4 text-xs">
           <code>{benchSource.environment}</code>

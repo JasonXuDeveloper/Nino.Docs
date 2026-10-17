@@ -266,7 +266,7 @@ const llmsCopy: Record<
       'Usage: mark a class, struct, record or interface with `[NinoType]`, then call `NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)`',
       `Source code and issues: ${githubUrl} (MIT license)`,
       `These docs describe Nino ${latestVersion}, the current version. Its binary format is not compatible with v3.`,
-      `Full text of the ${latestVersion} docs: ${siteUrl}/llms-full.txt. Chinese: ${siteUrl}/llms.zh.txt`,
+      `Full text of the ${latestVersion} docs: [llms-full.txt](${siteUrl}/llms-full.txt); Chinese: [llms.zh.txt](${siteUrl}/llms.zh.txt)`,
       'Each page below is also served as HTML at the same URL without `.md`.',
     ],
     optional: 'Optional',
@@ -275,11 +275,13 @@ const llmsCopy: Record<
   },
   zh: {
     facts: [
-      '安装：`dotnet add package Nino`（NuGet：https://www.nuget.org/packages/Nino）；Unity：`openupm add com.jasonxudeveloper.nino`',
+      // URLs are Markdown links: bare URLs followed by full-width punctuation
+      // (。）：) are misread by link extractors.
+      '安装：`dotnet add package Nino`（[NuGet](https://www.nuget.org/packages/Nino)）；Unity：`openupm add com.jasonxudeveloper.nino`',
       '用法：用 `[NinoType]` 标记类、结构体、记录或接口，然后调用 `NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)`',
-      `源码与问题反馈：${githubUrl}（MIT 协议）`,
+      `源码与问题反馈：[GitHub](${githubUrl})（MIT 协议）`,
       `本文档对应当前版本 Nino ${latestVersion}，其二进制格式与 v3 不兼容。`,
-      `${latestVersion} 文档全文：${siteUrl}/llms-full.zh.txt。英文版：${siteUrl}/llms.txt`,
+      `${latestVersion} 文档全文：[llms-full.zh.txt](${siteUrl}/llms-full.zh.txt)。英文版：[llms.txt](${siteUrl}/llms.txt)`,
       '下列每个页面去掉 `.md` 即为对应的 HTML 页面。',
     ],
     optional: 'Optional',
@@ -292,6 +294,12 @@ interface Section {
   name: string;
   pages: Page[];
 }
+
+/**
+ * Sidebar names of folder index pages ("Advanced Guides" rather than the
+ * page's own title, "Overview"), so llms.txt links read well out of context.
+ */
+const folderLabels = new Map<string, string>();
 
 /** The latest version's pages, grouped and ordered like the sidebar. */
 function sidebarSections(locale: Locale): Section[] {
@@ -331,6 +339,16 @@ function sidebarSections(locale: Locale): Section[] {
       } else if (node.type === 'page') {
         add(node.url);
       } else if (node.type === 'folder') {
+        // The index page is either the folder's own index or, when meta.json
+        // lists "index" among its pages, the child page every sibling nests under.
+        const pages = node.children.filter((c) => c.type === 'page');
+        const indexUrl =
+          node.index?.url ??
+          pages.find((p) =>
+            pages.every((o) => o === p || o.url.startsWith(`${p.url}/`)),
+          )?.url;
+        if (indexUrl && typeof node.name === 'string')
+          folderLabels.set(indexUrl, node.name);
         add(node.index?.url);
         walk(node.children);
       }
@@ -366,7 +384,7 @@ function llmsList(locale: Locale) {
         ? `: ${page.data.description}`
         : '';
       lines.push(
-        `- [${page.data.title}](${siteUrl}${markdownPath(page.url)})${description}`,
+        `- [${folderLabels.get(page.url) ?? page.data.title}](${siteUrl}${markdownPath(page.url)})${description}`,
       );
     }
     lines.push('');

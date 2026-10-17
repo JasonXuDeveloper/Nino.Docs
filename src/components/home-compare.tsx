@@ -207,9 +207,9 @@ function Panel({
         'lg:row-span-5 lg:grid lg:grid-rows-subgrid lg:gap-0',
       )}
     >
-      <h3 className="px-5 pt-5 pb-1 font-semibold tracking-tight sm:px-6">
+      <h2 className="px-5 pt-5 pb-1 font-semibold tracking-tight sm:px-6">
         {title}
-      </h3>
+      </h2>
       {rows.map((row, i) => (
         <div
           key={row.label}

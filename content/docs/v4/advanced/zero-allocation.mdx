@@ -15,7 +15,7 @@ A short recipe book for hot paths that must not allocate: message loops, market 
 | `NinoSerializer.Serialize(value, bufferWriter)` | nothing; a `NinoArrayBufferWriter` is written in place, any other `IBufferWriter<byte>` gets one copy from a per-thread scratch buffer |
 | `NinoSerializer.Serialize(value, ref writer)` | nothing |
 | `NinoDeserializer.Deserialize<T>(span)` | the objects it returns: the class instances, collections and strings in the data; nothing for a struct made of unmanaged members |
-| `NinoDeserializer.Deserialize(span, ref value)` | only what does not fit the existing graph: a new list element, an array of a different length, a new string |
+| `NinoDeserializer.Deserialize(span, ref value)` | what does not fit the existing graph (a new list element, an array of a different length) and every non-empty string, which is always read into a new instance |
 | a `[NinoPooled]` class Nino has to create | nothing while its pool has instances |
 
 The buffer you serialize into grows on the first calls and is then reused, and a `NinoArrayBufferWriter` rents its array from `ArrayPool<byte>.Shared`. Nino keeps no per-call state on the heap.

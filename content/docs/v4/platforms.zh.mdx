@@ -4,6 +4,8 @@ description: "Nino 能在哪些平台运行，为什么各平台写出的字节�
 icon: Cpu
 ---
 
+Nino 支持 .NET Standard 2.0 及以上、Unity 2022.3+（Mono 和 IL2CPP）以及 Godot 4，在任何运行时、CPU 和指针宽度下写出的字节都相同。本页列出支持的目标平台，并说明二进制格式。
+
 ## 支持的平台 [#supported-platforms]
 
 | 组件 | 支持的目标 |
@@ -12,7 +14,7 @@ icon: Cpu
 | `Nino.Generator`（源生成器、分析器） | Roslyn 4.3 及以上；同一个包内含 Roslyn 4.3、4.8 和 4.12 三个版本 |
 | 生成的代码 | C# 9 及以上 |
 | Unity | 2022.3 及以上，Mono 和 IL2CPP，所有 Player 平台 |
-| Godot | Godot 4 .NET 项目（.NET 8） |
+| Godot | Godot 4 .NET 项目（4.4 起为 .NET 8，之前为 .NET 6） |
 | 热更新 | HybridCLR，无需初始化调用 |
 
 **所有目标写出的字节完全相同。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 各自使用该平台上最好的底层实现（向量化拷贝，.NET 8+ 上的 `[UnsafeAccessor]`），测试套件会用同一组标准样本数据校验每个版本。.NET 10 服务器写出的数据，32 位 Android 手机上的 Unity IL2CPP 客户端可以直接读取，反过来也一样。
@@ -109,7 +111,7 @@ CoreCLR 和 Unity 2021.3+ 的布局是 `bool hasValue; T value;`，而旧版 Mon
 
 ## Godot [#godot]
 
-- Godot 4 的 C# 项目就是普通的 .NET 项目（`Godot.NET.Sdk`，目标框架 .NET 8）。用 `dotnet add package Nino` 安装，参见 [Godot 项目](/zh/docs/v4/start#godot-project)。
+- Godot 4 的 C# 项目就是普通的 .NET 项目（`Godot.NET.Sdk`，Godot 4.4 起目标框架为 .NET 8，之前为 .NET 6）。用 `dotnet add package Nino` 安装，参见 [Godot 项目](/zh/docs/v4/start#godot-project)。
 - 项目由 .NET 8+ SDK 编译，所以源生成器、分析器和拦截器都会运行，私有成员通过 `[UnsafeAccessor]` 访问，无需 `partial`（泛型类型除外）。
 - Godot 的数学结构体（`Vector2`、`Vector3`、`Quaternion`、`Transform3D`、`Color` 等）是非托管类型，按原始内存拷贝。
 - 在双精度版本的 Godot 中（`real_t` 为 `double`），这些结构体的字段是 `double`，布局与默认的单精度版本不同。含有 Godot 数学类型的数据，一个版本写出的，另一个版本读不了；需要在两者之间共享的数据，请改用自己的结构体或基元字段。

@@ -1,7 +1,7 @@
 ---
 title: Introduction
 seoTitle: "Nino: High-Performance Binary Serializer for C# and .NET – v4 Docs"
-description: "Nino is a general-purpose, high-performance binary serializer for C# and .NET: source-generated and zero-GC on hot paths, for RPC, microservices, message queues, caches, storage and IPC, with Unity, Godot and HybridCLR support."
+description: "Nino is a general-purpose, high-performance binary serializer for C# and .NET: source-generated and zero-GC, for services, messaging, caching and storage, plus Unity."
 icon: BookOpen
 ---
 
@@ -28,7 +28,7 @@ Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 
 ## Why Nino
 
-- **Fast.** Against MemoryPack in the same run, Nino serializes up to <BenchValue k="serialize.max" /> faster and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; on arrays of unmanaged structs, which both copy as one block, the two are close. See [Benchmarks](/en/docs/v4/perf).
+- **Fast.** Against MemoryPack in the same run, Nino serializes up to <BenchValue k="serialize.max" /> faster and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; on arrays of unmanaged structs, which both copy as one block, the two are on par. See [Benchmarks](/en/docs/v4/perf).
 - **Zero GC on hot paths.** Serializing into a reused buffer allocates nothing. Deserializing [into existing objects and pooled instances](/en/docs/v4/pooling) allocates nothing either.
 - **Everything at compile time.** The generator writes one formatter per type, so Nino works on IL2CPP, NativeAOT and HybridCLR. On the .NET 8 SDK and later, [interceptors](/en/docs/v4/performance#interceptors) route each call straight to the right formatter. The generator is incremental: editing a type regenerates that type only, and the generated code compiles far faster than v3's ([build times](/en/docs/v4/v3-vs-v4#build-time-and-generated-code)).
 - **Polymorphism without tags.** Values declared as a base class or interface are read back as their runtime type. Type ids are hashes of type names, so there is no tag table to maintain, and Nino finds subtypes in other assemblies on its own. See [Polymorphism](/en/docs/v4/polymorphism).

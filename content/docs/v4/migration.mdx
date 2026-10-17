@@ -1,6 +1,6 @@
 ---
 title: Migrating from v3
-description: Upgrade a v3 project to v4, step by step, with before/after code.
+description: "Upgrade a Nino v3 project to v4 step by step: package changes, renamed attributes and APIs, before/after code, and converting data written by v3."
 icon: ArrowRightLeft
 ---
 
@@ -142,7 +142,7 @@ Code written against an early v4 beta uses names that changed before the release
 | `NinoFactory<T>` | `NinoActivator<T>` |
 | `NinoDeserializer.DeserializeRef(ref value, data)` | `NinoDeserializer.Deserialize(data, ref value)` |
 | `NinoDeserializer.DeserializeRef(ref value, ref reader)` | `NinoDeserializer.Deserialize(ref value, ref reader)` |
-| `NinoSerializer.Serialize(object value)` | `NinoSerializer.SerializeBoxed(value, type)`, or `Serialize<TBase>` with a common `[NinoType]` base (see below) |
+| `NinoSerializer.Serialize(object value)` | `Serialize<TBase>` with a common `[NinoType]` base; `NinoSerializer.SerializeBoxed(value, type)` only for a type known only at run time with no common base (see below) |
 | `NinoDeserializer.Deserialize(data, type)` | `NinoDeserializer.DeserializeBoxed(data, type)` |
 | `NinoDeserializer.Deserialize(data, type, ref value)` | `NinoDeserializer.DeserializeBoxed(data, ref value, type)` |
 | `[NinoExplicitOrder(...)]` | `[NinoType(false)]` with `[NinoMember(index)]` (see above) |
@@ -293,7 +293,7 @@ In the v4 application, import the neutral data and write it with `NinoSerializer
 </Step>
 <Step>
 
-If you cannot convert offline (for example, save games on players' devices), ship the converter logic with the game and mark new data with a **header** (a magic number or version byte). Data with the header is read with v4; data without it is converted once and saved again with v4.
+If you cannot convert offline (for example, data stored on users' devices, such as save games), ship the converter logic with the application and mark new data with a **header** (a magic number or version byte). Data with the header is read with v4; data without it is converted once and saved again with v4.
 
 </Step>
 </Steps>

@@ -1,6 +1,6 @@
 ---
 title: v3 与 v4 对比
-description: 对比功能、构建时间、生成代码和运行时性能。
+description: "Nino v3 与 v4 对比：功能、构建时间、生成代码大小，以及在同一台机器上测得的运行时性能。"
 icon: Scale
 ---
 
@@ -30,7 +30,7 @@ icon: Scale
 | 自定义格式化器 | 不支持 | 针对成员用 `[NinoCustomFormatter]`，针对类型用 `[assembly: NinoFormatter]` |
 | 成员顺序 | 声明顺序、`[NinoMember(index)]` 或 `[NinoExplicitOrder]` | 声明顺序或 `[NinoMember(index)]`；`[NinoExplicitOrder]` 已移除 |
 | 固定大小的类型 | 不支持 | `Serialize(value)` 直接写入大小正好的数组；`NinoSerializer.GetFixedSize<T>()` |
-| 装箱 / 运行时类型 API | 不支持 | `SerializeBoxed(value, type)`、`DeserializeBoxed(data, type)`，用于运行时才知道的类型 |
+| 装箱 / 运行时类型 API | 不支持 | `SerializeBoxed(value, type)`、`DeserializeBoxed(data, type)`，用于运行时才知道、且没有共同 `[NinoType]` 基类型的类型 |
 | 诊断 | 生成代码中的编译错误 | 25 条分析器诊断（NINO001–NINO025），许多带代码修复 |
 | 增量生成 | 否：每次都扫描整个 Compilation，任何修改都会重新生成全部类型 | 每个类型一个文件，只重新生成改动过的类型 |
 | 拦截器 | 不支持 | Roslyn 4.8+（.NET 8 SDK 及以上）下始终开启 |
@@ -54,4 +54,4 @@ Nino v4 与 NuGet 上的 v3 3.3.13 在同一台机器上先后运行。绝对耗
 
 <BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="zh" />
 
-类的序列化明显更快。类的反序列化比 v3 略快，差距小于多次运行之间的波动。反序列化的耗时主要花在分配结果对象上，而 v4 在此之外还要处理引用追踪、复用反序列化和数据校验。带填充字节的结构体数组序列化时慢几纳秒，因为 v4 会把填充字节清零，保证输出是确定的；没有填充的结构体（参见[结构体布局](/zh/docs/v4/performance#struct-layout)）与 v3 一样快。v4 还能做到 v3 做不到的事：反序列化到已有实例或池化实例，每次调用分配 **0 B**。参见 [v4 新特性](/zh/docs/v4/whats-new)。
+类的序列化明显更快。类的反序列化与 v3 一样快或略快：它的耗时主要花在分配结果对象上，而 v4 在此之外还要处理引用追踪、复用反序列化和数据校验。非托管结构体数组两者持平：两个版本都整块拷贝，v4 还会把填充字节清零，保证输出是确定的（没有填充的结构体会跳过这一步，参见[结构体布局](/zh/docs/v4/performance#struct-layout)）。v4 还能做到 v3 做不到的事：反序列化到已有实例或池化实例，每次调用分配 **0 B**。参见 [v4 新特性](/zh/docs/v4/whats-new)。

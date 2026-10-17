@@ -133,7 +133,7 @@ public NinoTypeAttribute(
 With the default `autoCollect: true`, Nino collects:
 
 - every **public field**, and every **public property with a getter and a setter** (`set` or `init`);
-- the members of `[NinoType]` base classes first, then the type's own members in declaration order;
+- the members of `[NinoType]` base classes first (root first), then the type's own members in declaration order; the members of a `[NinoType]` interface come just before those of the first class in the hierarchy that implements it;
 - for records, the primary constructor parameters (they are public properties).
 
 And it skips:
@@ -261,13 +261,13 @@ public class ItemRenamed
 }
 ```
 
-The former name is the **runtime form** of the full name: `Namespace.Type`, `+` between a nested type and its container (`Namespace.Outer+Inner`), no `global::`. The type id is computed from the former name, so the renamed type keeps writing the id old readers expect, and readers find the type under both names. `NinoTypeId.Of(typeof(T))` returns the id a type writes.
+The former name is the **runtime form** of the full name: `Namespace.Type`, `+` between a nested type and its container (`Namespace.Outer+Inner`), no `global::`. The type id is computed from the former name, so the renamed type keeps writing and reading the id that existing data and older readers use. `NinoTypeId.Of(typeof(T))` returns the id a type writes.
 
 On a field or property of a `NinoFormat.Keyed` type, `[NinoFormerName("OldName")]` (repeatable) keeps reading data written under the member's old names; see [Renaming Keyed Members](/en/docs/v4/evolving-data#renaming-keyed-members). Positional and version-tolerant types write no member names, so renaming a member needs nothing there.
 
 ## Structs
 
-A `[NinoType]` struct has no header at all. It is written as its **raw memory** when it is unmanaged, has neither `NinoFormat.VersionTolerant` nor `NinoFormat.Keyed`, uses the default sequential layout, has no custom member formatters, and serializes every instance field. A single value is then one copy, and arrays and lists of it are one block. Otherwise it is written member by member. Either way, a struct whose members are all unmanaged values or such structs is [fixed-size](/en/docs/v4/performance#fixed-size-types): `NinoSerializer.Serialize(value)` writes it straight into a `byte[]` of its size.
+A `[NinoType]` struct has no header at all. It is written as its **raw memory** when it is unmanaged, has neither `NinoFormat.VersionTolerant` nor `NinoFormat.Keyed`, uses the default sequential layout, has no custom member formatters, and serializes every instance field, each of which is itself written as raw bytes (not a `Nullable<T>`, tuple, `nint`, `DateTimeOffset` or non-raw `[NinoType]` struct). A single value is then one copy, and arrays and lists of it are one block. Otherwise it is written member by member. Either way, a struct whose members are all unmanaged values or such structs is [fixed-size](/en/docs/v4/performance#fixed-size-types): `NinoSerializer.Serialize(value)` writes it straight into a `byte[]` of its size.
 
 ```csharp
 [NinoType]

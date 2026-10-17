@@ -40,7 +40,7 @@ const copy: Record<
   }
 > = {
   en: {
-    description: `Nino is a general-purpose, high-performance binary serializer for C# and .NET: source-generated, ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack, ` : ''}zero GC on hot paths. For RPC, microservices, message queues, caching, storage and IPC, with Unity and Godot support.`,
+    description: `Nino is a general-purpose, high-performance binary serializer for C# and .NET: source-generated, ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack, ` : ''}zero GC. For services, messaging, caching, storage and Unity.`,
     pill: 'C# binary serializer · v4',
     headline: ['The fastest binary serializer', 'for C#.'],
     sub: 'Source-generated, with zero GC on hot paths. For services, networking and RPC, message queues, caching, storage and IPC, on .NET, Unity and Godot alike.',

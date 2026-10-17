@@ -1,6 +1,6 @@
 ---
 title: Reuse Deserialization and Pooling
-description: Deserialize into existing instances and pooled objects with zero allocations.
+description: "Reuse deserialization in Nino: fill existing objects, lists and dictionaries in place, rent from [NinoPooled] pools and recycle dropped instances, with zero allocations."
 icon: Recycle
 ---
 
@@ -17,7 +17,7 @@ Deserializing a class normally allocates a new object graph on every call. With 
 
 - **`null` target:** a new instance is created; see [Where Instances Come From](#where-instances-come-from).
 - **Existing instance of the right type:** populated in place. Lists and arrays reuse their elements by index; dictionaries are merged by key (each value is read into the value its key already maps to, and keys missing from the data are removed).
-- **Types whose members cannot be assigned after construction** (only `init` setters or constructor parameters) are re-created, and the old instance is dropped.
+- **Re-created types** (a `[NinoConstructor]`, or members that cannot be assigned after construction: constructor parameters, `init`-only, get-only or `readonly` members) get a new instance, and the old one is dropped. See [Re-created Types](/en/docs/v4/constructors#re-created-types).
 
 ```csharp
 Frame frame = null;

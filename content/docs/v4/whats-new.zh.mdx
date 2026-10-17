@@ -1,6 +1,6 @@
 ---
 title: v4 新特性
-description: "运行时和源生成器全部重写，运行更快，构建也更快。"
+description: "Nino v4 的变化：重写的运行时与增量源生成器，新增 keyed 成员、引用追踪、对象池和 25 条分析器规则，构建也快得多。"
 icon: Sparkles
 ---
 
@@ -20,7 +20,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 
 <BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="zh" />
 
-类的序列化明显更快，反序列化与 v3 一样快或略快。原因分析，以及 v4 慢几纳秒的那一种情况，见 [v3 与 v4 对比](/zh/docs/v4/v3-vs-v4#runtime)。
+类的序列化明显更快，反序列化与 v3 一样快或略快，非托管结构体数组两者持平。原因分析见 [v3 与 v4 对比](/zh/docs/v4/v3-vs-v4#runtime)。
 
 ## 构建更快 [#faster-to-build]
 
@@ -87,7 +87,7 @@ v4 新增：通过 `ref` 反序列化到你已有的对象中，需要新实例�
 
 ### 复用而非分配 [#reuse-instead-of-allocate]
 - **复用反序列化**：`NinoDeserializer.Deserialize(data, ref value)` 原地填充已有的对象、列表、数组和字典。
-- **池化反序列化**：给类加上 `[NinoPooled]`，Nino 就会把数据反序列化到你用 `ReturnToPool()` 归还的实例中，并复用实例里的列表、数组和字典。被丢弃的实例（数据为 `null`、列表变短、类型改变）会回到各自的池，或交给用 `NinoSettings.SetRecycler<T>` 注册的处理器。
+- **池化反序列化**：给类加上 `[NinoPooled]`，Nino 就会把数据反序列化到你用 `ReturnToPool()` 归还的实例中，并复用实例里的列表、数组和字典。被丢弃的实例（数据为 `null`、列表变短、类型改变）会交给用 `NinoSettings.SetRecycler<T>` 注册的处理器；没有注册时，回到各自的池。
 - **`[NinoFactory]` 工厂方法**让 Nino 从你自己的对象池中获取新实例。
 
 参见[复用反序列化与对象池](/zh/docs/v4/pooling)。
@@ -112,7 +112,7 @@ v4 新增：通过 `ref` 反序列化到你已有的对象中，需要新实例�
 ### 精简而明确的 API [#a-small-explicit-api]
 - **用一个选项决定格式**：`[NinoType(format: ...)]` 接收一个 `NinoFormat`（`Positional`，即默认值；`VersionTolerant`；`Keyed`）。在项目中定义 `WEAK_VERSION_TOLERANCE`，会把该项目中 `Positional` 的类型变为 `VersionTolerant`。参见[数据演进](/zh/docs/v4/evolving-data)。
 - **固定大小的类型**：如果一个类型的每个值都占用相同的字节数，`NinoSerializer.Serialize(value)` 会直接按最终大小分配结果，`NinoSerializer.GetFixedSize<T>()` 返回这个大小。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
-- **用于运行时类型的装箱 API**：`SerializeBoxed(value, type)` 和 `DeserializeBoxed(data, type)` 用来序列化只能以 `Type` 形式得知的类型，写出的内容与 `Serialize<T>` 完全相同。消息分派、插件和工具则应使用共同的 `[NinoType]` 基类型配合 `Serialize<TBase>`，更快，也不分配内存；参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
+- **用于运行时类型的装箱 API**：`SerializeBoxed(value, type)` 和 `DeserializeBoxed(data, type)` 用于只能以 `Type` 形式得知、并且没有共同 `[NinoType]` 基类型的类型，写出的内容与 `Serialize<T>` 完全相同。消息分派、插件和工具则应给类型一个共同的 `[NinoType]` 基类型，调用 `Serialize<TBase>`/`Deserialize<TBase>`，更快，也不分配内存；参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
 - **已移除**：`[NinoExplicitOrder]`（改用 `[NinoType(false)]` 配合 `[NinoMember(index)]`）、beta 中的 `Serialize(object)`（现为 `SerializeBoxed`），以及用 `NinoFormatterCache<T>.Register<TFormatter>()` 在运行时注册格式化器（请用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明）。参见[从 v3 迁移](/zh/docs/v4/migration)。
 
 ## 快速示例 [#quick-example]
