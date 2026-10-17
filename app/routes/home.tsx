@@ -19,8 +19,9 @@ import {
 import { headlineSerialize } from '@/lib/benchmarks';
 import { cn } from '@/lib/cn';
 import { getLocale, type Locale } from '@/lib/i18n';
-import { baseOptions, githubUrl } from '@/lib/layout.shared';
+import { baseOptions } from '@/lib/layout.shared';
 import { homeMeta } from '@/lib/seo';
+import { githubUrl } from '@/lib/site';
 import { latestVersion } from '@/lib/versions';
 import type { Route } from './+types/home';
 

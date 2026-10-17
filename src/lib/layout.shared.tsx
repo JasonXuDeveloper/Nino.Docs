@@ -1,9 +1,8 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
 import { BookOpen, Gauge } from 'lucide-react';
 import type { Locale } from './i18n';
+import { githubUrl } from './site';
 import { latestVersion } from './versions';
-
-export const githubUrl = 'https://github.com/JasonXuDeveloper/Nino';
 
 export function baseOptions(lang: Locale): BaseLayoutProps {
   const zh = lang === 'zh';

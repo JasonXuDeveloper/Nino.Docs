@@ -39,7 +39,7 @@ Cloudflare Pages builds with the Node version in `.node-version` and the Bun ver
 │   ├── v3/, v2/               # archived versions, EN + ZH
 │   └── <version>/meta.json, meta.zh.json   # sidebars
 ├── src/
-│   ├── components/            # charts/ (visx bar charts), feedback/ (GitHub Discussions), ai/page-actions, showcase (stat row, tabs), search
+│   ├── components/            # charts/ (visx bar charts), feedback/ (GitHub Discussions), ai/page-actions, showcase (reveal, CountUp, Segmented), search
 │   ├── data/                  # bench-v4.json, bench-v3-runtime.json (synced), v2/v3 benchmark JSON
 │   ├── lib/benchmarks.ts      # every benchmark number the site shows (runtime from data/bench-v4.json, bench-v3-runtime.json)
 │   ├── lib/versions.ts        # version list and latestVersion
@@ -61,7 +61,7 @@ Cloudflare Pages builds with the Node version in `.node-version` and the Bun ver
 - **Chinese headings carry an English id**: `## 键控成员 [#keyed-members]`. Links in both languages use the same English anchors, so `/zh/...#keyed-members` works. The link checker validates anchors.
 - Internal links are absolute with locale and version: `/en/docs/v4/pooling#settings`.
 - Code blocks are C# with Shiki notation (`// [!code highlight]`, `title="File.cs"`).
-- MDX components: `Callout`, `Cards`/`Card`, `Tabs`/`Tab`, `Steps`/`Step`, `Accordions`/`Accordion`, `TypeTable`, `Files`, plus site components `BenchmarkChart`, `ShowcaseHero`/`Stats` (headline stat row), `StatCards`, `CountUp`, `BenchChart` (archived versions), `AnchorRedirect`.
+- MDX components: `Callout`, `Cards`/`Card`, `Tabs`/`Tab`, `Steps`/`Step`, `Accordions`/`Accordion`, `TypeTable`, `Files`, plus site components `BenchmarkChart`, `CountUp`, `BenchChart` (archived versions), `AnchorRedirect` and the benchmark tables below.
 - Versions are listed newest first everywhere: `src/lib/versions.ts` and `content/docs/meta.json` / `meta.zh.json` (`["v4", "v3", "v2"]`).
 - v4 runtime numbers (v4 and MemoryPack) come only from `src/data/bench-v4.json`. `bun run build` first runs `scripts/sync-benchmarks.ts`, which refreshes it from the "Performance Report" of the newest `v4.*` release (prereleases included) when that report covers every method the site shows; on any failure it keeps the committed file. From that same release it also reads the "📊 v3 3.3.13 vs v4 (same machine)" section (Nino's `report.yml` runs `benchmarks/v3` before and after the v4 run in the same job) into `src/data/bench-v3-runtime.json`; a release without that section keeps the committed file. Test the parser with `bun scripts/sync-benchmarks.ts --fixture scripts/fixtures/release-body.md` `--fixture scripts/fixtures/release-body-v3.md` and `--fixture scripts/fixtures/release-body-new.md` (every benchmark class and the v3 section, from the local run the committed data comes from) (add `--out <v4.json> --out-v3 <v3.json>` to write files). `GITHUB_TOKEN` raises the API limit.
 - Never type a runtime number or ratio into MDX: use `<RuntimeTable op="serialize" />`, `<ReuseTable />`, `<ExtraRuntimeTables />` (reference tracking, version tolerance, fixed-size types; renders only when the synced report has those rows), `<ResultsTable />`, `<BenchSource />` and `<BenchValue k="serialize.max" />` (keys in `src/components/bench-data.tsx`). Ratios are computed in `src/lib/benchmarks.ts`.

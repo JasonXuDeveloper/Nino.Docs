@@ -521,13 +521,6 @@ export const build: BuildMeasure[] = [
   },
 ];
 
-/** Stat cards for the build benchmark */
-export const vsV3Build = build.map((row) => ({
-  value: `${row.ratio}×`,
-  en: row.short.en,
-  zh: row.short.zh,
-}));
-
 /** Build cost at 1,100 types (N = 100), v3.3.13 vs v4 (docs/v4-benchmarks.md) */
 export const buildLarge = {
   types: 1100,

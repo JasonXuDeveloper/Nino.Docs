@@ -30,9 +30,6 @@ export const ogLocale: Record<Locale, string> = {
   zh: 'zh_CN',
 };
 
-/** Social card used when a page has no card of its own (1200×630). */
-export const defaultOgImage = '/og.png';
-
 /**
  * Search engine verification codes, read at build time from Vite env
  * variables (set them on the Cloudflare Pages project). Empty ones are not
