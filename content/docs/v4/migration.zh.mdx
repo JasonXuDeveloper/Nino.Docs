@@ -213,7 +213,7 @@ public class Invoice { ... }
 [NinoType]
 public abstract class Payment { public long Id; }
 
-[NinoType] // no longer required: inherited from Payment
+[NinoType] // required in v3; v4 inherits it from Payment
 public sealed class CardPayment : Payment { public string Last4; }
 ```
 
@@ -313,7 +313,7 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 - **`[NinoUtf8]` 字符串同时记录字符数和字节数。** 先写 UTF-16 字符数，和 UTF-16 字符串一样；字符串既不是 `null` 也不是空串时，再写字节数和 UTF-8 字节。beta 在字节之前只写一个长度。参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
 - **版本容错的对象整个继承体系只写一个长度**，不再每层继承各写一个。因此成员只能追加到最末端的派生类型：向有子类的基类追加成员，现在会让子类的成员错位。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
 - **固定大小的类型直接序列化到大小正好的数组中。** 对所有成员都是固定大小的结构体或密封类调用 `NinoSerializer.Serialize(value)`，会直接按最终大小分配结果再写入，不经过暂存缓冲区，也没有拷贝；写出的字节不变。新增了 `NinoSerializer.GetFixedSize<T>()`。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
-- **对声明为 `object` 的变量调用 `NinoSerializer.Serialize(obj)`，会写入类型 ID。** beta 有一个 `Serialize(object)` 重载，按值的运行时类型写入。这个重载已经移除，同样的调用现在会编译成 `Serialize<object>`：它只接受 `[NinoType]` 的值，并且先写 4 字节的类型 ID。写出的字节因此不同，也只有 `Deserialize<object>` 能读取。请给这些类型一个共同的 `[NinoType]` 基类型并调用 `Serialize<TBase>`；如果类型要到运行时才知道，就调用 `SerializeBoxed(obj, type)`；`SerializeBoxed(obj, obj.GetType())` 写出的内容与旧重载相同（采用 rc.1 的格式）。参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
+- **对声明为 `object` 的变量调用 `NinoSerializer.Serialize(obj)`，会写入类型 ID。** beta 有一个 `Serialize(object)` 重载，按值的运行时类型写入。这个重载已经移除，同样的调用现在会编译成 `Serialize<object>`：它只接受 `[NinoType]` 的值，并且先写 4 字节的类型 ID。写出的字节因此不同，也只有 `Deserialize<object>`（或以该值的非密封 `[NinoType]` 基类或接口调用的 `Deserialize<TBase>`）能读取。请给这些类型一个共同的 `[NinoType]` 基类型并调用 `Serialize<TBase>`；如果类型要到运行时才知道，就调用 `SerializeBoxed(obj, type)`；`SerializeBoxed(obj, obj.GetType())` 写出的内容与旧重载相同（采用 rc.1 的格式）。参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
 - **不能再在运行时注册格式化器。** `NinoFormatterCache<T>.Register<TFormatter>()` 已移除，请改用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明格式化器。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
 - **`[NinoFactory]` 与 `[NinoConstructor]` 同时出现时会报告。** 这样的工厂方法本来就不会被调用，现在分析器会给出警告（NINO025）。参见[构造函数还是工厂方法？](/zh/docs/v4/constructors#constructor-or-factory)。
 - **在 `ReadSlice()` 返回的 reader 上，`Reader.Position` 是相对整个输入的偏移**，而不是相对切片起点。如果自定义格式化器拿它和切片长度比较，应当在切片开始处记下位置，再把它减掉。参见[切片中的位置](/zh/docs/v4/custom-formatters#positions-in-a-slice)。

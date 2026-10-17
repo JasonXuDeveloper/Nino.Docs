@@ -44,7 +44,7 @@ Yes. A value declared as a base class or interface is read back as its runtime t
 
 ## How do I serialize many message types, or a type known only at run time?
 
-Give the types a common `[NinoType]` base class or interface and call `Serialize<TBase>` / `Deserialize<TBase>`: generated code writes the type id and dispatches on it, it is the fastest option, and it works with reuse deserialization and pooling for 0 B per message. This covers RPC and message dispatch, plugin systems and editor tooling. Only when the type is known only as a `Type` and the types share no common base (reflection-driven tooling over arbitrary types), use `SerializeBoxed(value, type)` and `DeserializeBoxed(data, type)`. Avoid `object` as the type argument: it accepts only `[NinoType]` values and dispatches through a slower global registry. See [Runtime Types](/en/docs/v4/basic#runtime-types).
+Give the types a common `[NinoType]` base class or interface and call `Serialize<TBase>` / `Deserialize<TBase>`: generated code writes the type id and dispatches on it, it is the fastest option, and it works with reuse deserialization and pooling so a message allocates nothing but strings whose text changed. This covers RPC and message dispatch, plugin systems and editor tooling. Only when the type is known only as a `Type` and the types share no common base (reflection-driven tooling over arbitrary types), use `SerializeBoxed(value, type)` and `DeserializeBoxed(data, type)`. Avoid `object` as the type argument: it accepts only `[NinoType]` values and dispatches through a slower global registry. See [Runtime Types](/en/docs/v4/basic#runtime-types).
 
 ## Is Nino thread safe?
 

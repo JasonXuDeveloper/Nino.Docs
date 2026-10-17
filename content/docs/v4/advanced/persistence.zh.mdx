@@ -336,7 +336,7 @@ public sealed class EventLog : IDisposable
 
 ## 快照与检查点 [#snapshots-and-checkpoints]
 
-每次启动都重放一份很长的日志会很慢。把状态的快照连同它所覆盖到的位置一起保存，之后只重放快照之后的部分：
+每次启动都重放一份很长的日志会很慢。把状态的快照连同它所覆盖到的位置一起保存，之后只应用快照之后的事件（或在每次快照时截断日志，让重放保持简短）：
 
 ```csharp title="Snapshots.cs"
 using Nino.Core;
@@ -376,7 +376,7 @@ public static class Snapshots
             ? NinoDeserializer.Deserialize<AccountSnapshot>(SafeFile.Read(snapshotPath, buffer))
             : new AccountSnapshot();
         if (File.Exists(logPath))
-            EventLog.Replay(logPath, state.Apply);   // replays only what came after the snapshot
+            EventLog.Replay(logPath, state.Apply);   // reads the whole log; Apply skips what the snapshot covers
         return state;
     }
 }

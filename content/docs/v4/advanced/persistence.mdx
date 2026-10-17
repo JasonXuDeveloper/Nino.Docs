@@ -336,7 +336,7 @@ public sealed class EventLog : IDisposable
 
 ## Snapshots and Checkpoints [#snapshots-and-checkpoints]
 
-Replaying a long log on every start is slow. Store a snapshot of the state together with the position it covers, and replay only what came after it:
+Replaying a long log on every start is slow. Store a snapshot of the state together with the position it covers, and apply only the events after it (or truncate the log at each snapshot, so replay stays short):
 
 ```csharp title="Snapshots.cs"
 using Nino.Core;
@@ -376,7 +376,7 @@ public static class Snapshots
             ? NinoDeserializer.Deserialize<AccountSnapshot>(SafeFile.Read(snapshotPath, buffer))
             : new AccountSnapshot();
         if (File.Exists(logPath))
-            EventLog.Replay(logPath, state.Apply);   // replays only what came after the snapshot
+            EventLog.Replay(logPath, state.Apply);   // reads the whole log; Apply skips what the snapshot covers
         return state;
     }
 }

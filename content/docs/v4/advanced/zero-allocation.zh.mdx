@@ -153,12 +153,13 @@ reader.ReleaseReferences(); // [!code highlight]
 
 ```csharp
 byte[] datagram = ArrayPool<byte>.Shared.Rent(65536); // once per socket, not per datagram
+Message message = null;
 try
 {
     while (!ct.IsCancellationRequested)
     {
         int received = socket.Receive(datagram);
-        var message = NinoDeserializer.Deserialize<Message>(datagram.AsSpan(0, received)); // [!code highlight]
+        NinoDeserializer.Deserialize(datagram.AsSpan(0, received), ref message); // [!code highlight]
         Handle(message);
     }
 }
