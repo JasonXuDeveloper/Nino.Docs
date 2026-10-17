@@ -1,0 +1,319 @@
+---
+title: Migrating from v3
+description: "Upgrade a Nino v3 project to v4 step by step: package changes, renamed attributes and APIs, before/after code, and converting data written by v3."
+icon: ArrowRightLeft
+---
+
+Nino v4 is a breaking release. This page lists every API, attribute and option that changed, with before/after code, and explains what to do with data written by v3. Upgrading from a v4 beta or preview instead? See [Upgrading from a v4 Beta](#upgrading-from-a-v4-beta).
+
+<Callout type="warn">
+
+The v4 binary format is **not compatible** with v3 or with the earlier v4 betas/previews. v4 cannot read data written by v3, and v3 cannot read data written by v4. If you have persisted v3 data (files, databases, caches), read [Converting v3 data](#converting-v3-data) before upgrading.
+
+</Callout>
+
+## Checklist
+
+<Steps>
+<Step>
+
+Update the `Nino` NuGet package to v4 (`dotnet add package Nino --prerelease`, or tick **Include prerelease** in the IDE), or the OpenUPM package in Unity. On a 3.9.x release, which already uses `NinoSerializer`/`NinoDeserializer`, the next step does not apply, but v4 cannot read its data either.
+
+</Step>
+<Step>
+
+Replace `Serializer`/`Deserializer` calls with `NinoSerializer`/`NinoDeserializer`, and remove `using <YourAssembly>.NinoGen;`.
+
+</Step>
+<Step>
+
+Replace `WEAK_VERSION_TOLERANCE` with `[NinoType(format: NinoFormat.VersionTolerant)]` on the types that need it (optional, see below).
+
+</Step>
+<Step>
+
+Update `[NinoFormerName]` arguments to the runtime type name form.
+
+</Step>
+<Step>
+
+Build, and fix what the analyzer reports (`NINO001`–`NINO025`); many diagnostics come with a code fix.
+
+</Step>
+<Step>
+
+Convert or discard persisted v3 data.
+
+</Step>
+</Steps>
+
+## Serialization API
+
+In v3, the generator emitted static `Serializer` and `Deserializer` classes (and extension methods) into each assembly's `<AssemblyName>.NinoGen` namespace. v4 has a single API in `Nino.Core`, shared by every assembly.
+
+| v3 | v4 |
+| --- | --- |
+| `using MyApp.NinoGen;` | `using Nino.Core;` |
+| `Serializer.Serialize(obj)` / `obj.Serialize()` | `NinoSerializer.Serialize(obj)` |
+| `Serializer.Serialize(obj, bufferWriter)` / `obj.Serialize(bufferWriter)` | `NinoSerializer.Serialize(obj, bufferWriter)` |
+| `obj.Serialize(ref writer)` | `NinoSerializer.Serialize(obj, ref writer)` |
+| `Deserializer.Deserialize(data, out T value)` | `T value = NinoDeserializer.Deserialize<T>(data)` |
+| `Deserializer.Deserialize(out T value, ref reader)` | `T value = NinoDeserializer.Deserialize<T>(ref reader)` |
+| `Serializer.GetBufferWriter()` / `ReturnBufferWriter(...)` | a reused `NinoArrayBufferWriter` (see [Serialize and Deserialize](/en/docs/v4/basic#reusing-a-buffer)) |
+| (none) | `NinoDeserializer.Deserialize(data, ref value)`: deserialize into an existing instance |
+| (none) | `NinoSerializer.SerializeBoxed(value, type)`, `NinoDeserializer.DeserializeBoxed(data, type)`: only for a type known only at run time that shares no common `[NinoType]` base with the others (see [Runtime Types](/en/docs/v4/basic#runtime-types)) |
+
+<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
+
+<Tab value="v3">
+
+```csharp
+using MyApp.NinoGen;
+
+byte[] bytes = obj.Serialize();
+
+Deserializer.Deserialize(bytes, out ObjClass result);
+```
+
+</Tab>
+<Tab value="v4">
+
+```csharp
+using Nino.Core;
+
+byte[] bytes = NinoSerializer.Serialize(obj);
+
+ObjClass result = NinoDeserializer.Deserialize<ObjClass>(bytes);
+```
+
+</Tab>
+</Tabs>
+
+Buffer reuse:
+
+<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
+
+<Tab value="v3">
+
+```csharp
+var bufferWriter = Serializer.GetBufferWriter();
+obj.Serialize(bufferWriter);
+Serializer.ReturnBufferWriter(bufferWriter);
+```
+
+</Tab>
+<Tab value="v4">
+
+```csharp
+// create once and keep it (one per thread)
+var buffer = new NinoArrayBufferWriter();
+
+// for each message
+buffer.ResetWrittenCount();
+NinoSerializer.Serialize(obj, buffer); // [!code highlight]
+ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // valid until the next write
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+
+v3's generated `Serialize` accepted `Span<T>` values. In v4, `T` is a generic type argument and cannot be a `ref struct`, so serialize an array, a `List<T>` or an `ArraySegment<T>` instead.
+
+</Callout>
+
+## Attributes and Options
+
+| v3 | v4 |
+| --- | --- |
+| `[NinoType]`, `[NinoType(autoCollect, containNonPublicMembers)]` | unchanged; new optional parameters `allowInheritance`, `format` (`NinoFormat.Positional`, `NinoFormat.VersionTolerant` or `NinoFormat.Keyed`), `trackReferences` |
+| every subtype needs its own `[NinoType]` | subtypes **inherit** `[NinoType]` from their base class or interface (unless it sets `allowInheritance: false`) |
+| `WEAK_VERSION_TOLERANCE` (whole project) | `[NinoType(format: NinoFormat.VersionTolerant)]` per type; the symbol still exists and makes every `NinoFormat.Positional` type of the project version-tolerant |
+| `[NinoFormerName("global::Old.Namespace.Type")]` (name copied from `NinoTypeConst.g.cs`) | `[NinoFormerName("Old.Namespace.Type")]`: runtime form, no `global::`, `+` for nested types |
+| `[NinoMember(index)]`, `[NinoIgnore]`, `[NinoUtf8]`, `[NinoConstructor(...)]` | unchanged; `[NinoConstructor]` can also mark a static factory method |
+| `[NinoExplicitOrder(...)]` | removed; use `[NinoType(false)]` and give each member a `[NinoMember(index)]`, numbered in the order the members were written (see [Member Order](/en/docs/v4/defining-types#member-order)) |
+| `[NinoPrivateProxy]` (emitted by the generator) | removed; private members are reached through `[UnsafeAccessor]` (.NET 8+) or a generated accessor in the `partial` type |
+| (none) | `[NinoPooled]`, `[NinoFactory]`, `[NinoCustomFormatter]`, `[assembly: NinoFormatter]` |
+
+### Version Tolerance [#version-tolerance]
+
+<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
+
+<Tab value="v3">
+
+```csharp
+// v3: #define WEAK_VERSION_TOLERANCE in the project settings
+[NinoType]
+public class Customer
+{
+    public int Id;
+    public string Name;
+    public bool Verified; // appended later
+}
+```
+
+</Tab>
+<Tab value="v4">
+
+```csharp
+[NinoType(format: NinoFormat.VersionTolerant)]
+public class Customer
+{
+    public int Id;
+    public string Name;
+    public bool Verified; // appended later
+}
+```
+
+</Tab>
+</Tabs>
+
+In v4, you choose version tolerance per type. Members can be appended to the **most derived type** (a class without `[NinoType]` subclasses), at any nesting depth, and old code skips the members it does not know. Members appended to a base class shift its subclasses' members, so they are not tolerated. To reorder, remove or insert members, or to add them to a base class, use `[NinoType(format: NinoFormat.Keyed)]`. See [Version Tolerance](/en/docs/v4/evolving-data#version-tolerance) and [Keyed Members](/en/docs/v4/evolving-data#keyed-members).
+
+<Callout type="warn">
+
+In v3, `WEAK_VERSION_TOLERANCE` also allowed changing a member to an unmanaged type of the same size (`int` → `float`). Do not rely on that in v4: changing a member's type is not a tolerated change.
+
+</Callout>
+
+### Former Names [#former-names]
+
+<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
+
+<Tab value="v3">
+
+```csharp
+[NinoType]
+[NinoFormerName("global::MyApp.Billing.Bill")]
+public class Invoice { ... }
+```
+
+</Tab>
+<Tab value="v4">
+
+```csharp
+[NinoType]
+[NinoFormerName("MyApp.Billing.Bill")]
+public class Invoice { ... }
+```
+
+</Tab>
+</Tabs>
+
+Former names only matter for data written by v4 itself (v3 data cannot be read anyway), so you only need them for types renamed after you adopted v4.
+
+### Polymorphism
+
+<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
+
+<Tab value="v3">
+
+```csharp
+[NinoType]
+public abstract class Payment { public long Id; }
+
+[NinoType] // required in v3; v4 inherits it from Payment
+public sealed class CardPayment : Payment { public string Last4; }
+```
+
+</Tab>
+<Tab value="v4">
+
+```csharp
+[NinoType]
+public abstract class Payment { public long Id; }
+
+public sealed class CardPayment : Payment { public string Last4; }
+```
+
+</Tab>
+</Tabs>
+
+Keeping `[NinoType]` on a subtype does no harm and lets the subtype set its own options. Those options replace the inherited ones, so repeat any you want to keep, such as `format: NinoFormat.VersionTolerant`. The one exception is `trackReferences`, which stays on for every subtype of a tracked type.
+
+## Generated Code
+
+- Generated formatters live in the `<AssemblyName>.NinoGen` namespace, but they are not meant to be called directly. Remove any code that referenced the v3 generated classes (`Serializer`, `Deserializer`, `NinoTypeConst`, ...).
+- There is one generated file per `[NinoType]`, and editing a type re-generates only that type.
+- Problems that v3 reported as compile errors in generated code are now analyzer diagnostics on your code. A member whose type cannot be serialized now gets a warning (NINO007) and is skipped, instead of breaking the build. See the [diagnostics list](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md).
+
+## Unity
+
+- Unity 2022.3 or later is still required.
+- The OpenUPM package ships the source generator. You no longer need to install the `Microsoft.CodeAnalysis` NuGet packages into your Unity project manually; remove them if you only added them for Nino.
+- Calls are not intercepted in Unity: the package ships the generator's Roslyn 4.3 build, and interceptors need Roslyn 4.8. Calls take the regular path and write the same bytes.
+- `asmdef` files still need to reference `Nino.Core.dll` when `Override References` is used.
+
+## HybridCLR
+
+- Hot-update assemblies need **no initialization call**: Nino finds the generated registry of an assembly the first time one of its types is used, even when the assembly is loaded with `Assembly.Load`.
+- v4's documentation and tests cover HybridCLR; ILRuntime is no longer listed as supported.
+
+## Converting v3 Data
+
+v4 cannot read v3 data, and the two versions cannot both be referenced by one project (both use the `Nino.Core` assembly and namespace). To keep persisted data:
+
+<Steps>
+<Step>
+
+Build a small **converter** that still references Nino v3 and your v3 types. It reads the old data with v3's `Deserializer` and exports it in a neutral form (for example JSON), or hands the objects to a second assembly that references v4 (for example by loading it in a separate `AssemblyLoadContext`).
+
+</Step>
+<Step>
+
+In the v4 application, import the neutral data and write it with `NinoSerializer`.
+
+</Step>
+<Step>
+
+If you cannot convert offline (for example, data stored on users' devices, such as local documents or app state), ship the converter logic with the application and mark new data with a **header** (a magic number or version byte). Data with the header is read with v4; data without it is converted once and saved again with v4.
+
+</Step>
+</Steps>
+
+See also [Versioning](/en/docs/v4/versioning#reading-data-from-an-older-version).
+
+<Callout type="idea">
+
+Data that lives only in memory, or on the wire between processes you deploy together (network messages, caches), does not need converting: upgrade every end to v4 at the same time.
+
+</Callout>
+
+## Upgrading from a v4 Beta [#upgrading-from-a-v4-beta]
+
+Skip this section if you are upgrading from v3. Code and data written against a v4 beta or preview need the following changes.
+
+### Names from the v4 Betas [#names-from-the-v4-betas]
+
+Code written against an early v4 beta uses names that changed before the release:
+
+| v4 beta | v4 |
+| --- | --- |
+| `[NinoRefDeserialization]` | `[NinoFactory]` |
+| `NinoFactory<T>` | `NinoActivator<T>` |
+| `NinoDeserializer.DeserializeRef(ref value, data)` | `NinoDeserializer.Deserialize(data, ref value)` |
+| `NinoDeserializer.DeserializeRef(ref value, ref reader)` | `NinoDeserializer.Deserialize(ref value, ref reader)` |
+| `NinoSerializer.Serialize(object value)` | `Serialize<TBase>` with a common `[NinoType]` base; `NinoSerializer.SerializeBoxed(value, type)` only for a type known only at run time with no common base (see below) |
+| `NinoDeserializer.Deserialize(data, type)` | `NinoDeserializer.DeserializeBoxed(data, type)` |
+| `NinoDeserializer.Deserialize(data, type, ref value)` | `NinoDeserializer.DeserializeBoxed(data, ref value, type)` |
+| `[NinoExplicitOrder(...)]` | `[NinoType(false)]` with `[NinoMember(index)]` (see above) |
+| "ref deserialization" | reuse deserialization |
+
+### Behavior Changes since the v4 Betas [#behavior-changes-since-the-v4-betas]
+
+4.0.0-rc.1 also changed the following behaviors, which code and data from the betas may depend on:
+
+<Callout type="warn">
+
+**Data written by any v4 beta or preview cannot be read by 4.0.0-rc.1**: the wire format changed throughout (for example version-tolerant types, including every type of a project that defines `WEAK_VERSION_TOLERANCE`, and `[NinoUtf8]` strings). Read it with the beta and write it again with rc.1, as described in [Reading Data from an Older Version](/en/docs/v4/versioning#reading-data-from-an-older-version), or discard it.
+
+</Callout>
+
+- **`[NinoUtf8]` strings carry their length in chars and their length in bytes.** The string's length in UTF-16 chars comes first, like a UTF-16 string's; a string that is not `null` or empty then has its length in bytes and the UTF-8 bytes. The betas wrote a single length before the bytes. See [Binary Format](/en/docs/v4/platforms#binary-format).
+- **A version-tolerant object writes one length for its whole hierarchy**, instead of one length per inheritance level. Members can therefore be appended only to the most derived type: a member appended to a base class that has subclasses now shifts the subclasses' members. See [Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class).
+- **Fixed-size types are serialized into an array of their exact size.** `NinoSerializer.Serialize(value)` of a struct or sealed class whose members are all fixed-size allocates the result at its final size and writes into it, without a scratch buffer or copy; the bytes are the same. `NinoSerializer.GetFixedSize<T>()` is new. See [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
+- **`NinoSerializer.Serialize(obj)` with a variable declared as `object` writes a type id.** The betas had a `Serialize(object)` overload that wrote the value as its runtime type. It is gone, so the same call now compiles to `Serialize<object>`, which accepts only `[NinoType]` values and writes a 4-byte type id first: the bytes differ, and only `Deserialize<object>` (or `Deserialize<TBase>` with a non-sealed `[NinoType]` base or interface of the value) reads them. Give the types a common `[NinoType]` base and call `Serialize<TBase>`, or, for a type known only at run time, call `SerializeBoxed(obj, type)`; `SerializeBoxed(obj, obj.GetType())` writes what the old overload wrote (in rc.1's format). See [Runtime Types](/en/docs/v4/basic#runtime-types).
+- **Formatters cannot be registered at run time.** `NinoFormatterCache<T>.Register<TFormatter>()` is removed; declare the formatter with `[assembly: NinoFormatter]` or `[NinoCustomFormatter]` instead. See [Custom Formatters](/en/docs/v4/custom-formatters).
+- **`[NinoFactory]` next to a `[NinoConstructor]` is reported.** Such a factory was never called; the analyzer now warns about it (NINO025). See [Constructor or Factory?](/en/docs/v4/constructors#constructor-or-factory).
+- **On a reader returned by `ReadSlice()`, `Reader.Position` is an offset into the whole input**, not into the slice. A custom formatter that compared it with the slice's length should record the position where the slice starts and subtract it. See [Positions in a Slice](/en/docs/v4/custom-formatters#positions-in-a-slice).

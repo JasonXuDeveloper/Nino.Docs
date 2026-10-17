@@ -1,0 +1,124 @@
+---
+title: Quick Start
+description: Install Nino v2 in a .NET or Unity project.
+icon: Rocket
+---
+
+Nino v2 is a NuGet package for .NET projects and a `.unitypackage` for Unity. Both bring the runtime library and the source generator.
+
+## Installation [#installation]
+
+<Tabs groupId="platform" persist items={['.NET', 'Unity']}>
+<Tab value=".NET">
+
+```shell
+dotnet add package Nino
+```
+
+Details: [.NET Project](/en/docs/v2/start#net-project).
+
+</Tab>
+<Tab value="Unity">
+
+Download `Nino.unitypackage` from the [GitHub releases](https://github.com/JasonXuDeveloper/Nino/releases) and import it.
+
+Details: [Unity Project](/en/docs/v2/start#unity-project).
+
+</Tab>
+</Tabs>
+
+### .NET Project [#net-project]
+
+<Callout type="info">
+
+Nino supports projects targeting .NET 5.0 or later, or .NET Standard 2.0 or later.
+
+</Callout>
+
+- Search for `Nino` in the NuGet package manager of Visual Studio or Rider and install it
+- Or use the `dotnet` CLI:
+    ```shell
+    dotnet add package Nino
+    ```
+
+<Callout type="info">
+
+Nino needs two NuGet packages, both required: `Nino.Generator` and `Nino.Serialization`. Installing `Nino` brings in both.
+
+</Callout>
+
+<Callout type="warn">
+
+This does not work for .NET Framework projects, or in IDEs that cannot run source generators (such as Visual Studio Code).
+
+</Callout>
+
+### Unity Project [#unity-project]
+
+<Callout type="info">
+
+Nino supports Unity 2022.3 or later, on every player platform.
+
+The `Nino_Unity` sample project on GitHub shows how to use Nino in Unity. Run it first.
+
+</Callout>
+
+<Steps>
+<Step>
+
+### Download the plugin [#download-the-plugin]
+
+Find the Nino version you need on the [Releases](https://github.com/JasonXuDeveloper/Nino/releases) page and download its `Nino.unitypackage`.
+
+</Step>
+<Step>
+
+### Install `Microsoft.CodeAnalysis` [#install-microsoftcodeanalysis]
+
+Source generators in Unity need the `Microsoft.CodeAnalysis` NuGet package (any recent version). You can install it from the Unity project folder (the one that contains `Assets`), for example:
+
+```shell
+dotnet add package Microsoft.CodeAnalysis.CSharp --version 4.10.0
+```
+
+</Step>
+<Step>
+
+### Import the plugin [#import-the-plugin]
+
+Import the downloaded `Nino.unitypackage` into the Unity project.
+
+</Step>
+<Step>
+
+### Move Nino into a folder with an `asmdef` [#move-nino-into-an-asmdef]
+
+Move the imported Nino folder into a folder that has an `asmdef` (such as the `Test` folder of the `Nino_Unity` project). Because of a Unity bug, the Nino source must sit in a folder with an `asmdef` for the code generated for the types in that folder to compile without errors.
+
+If several `asmdef`s need Nino, copy the imported Nino folder into each folder with its own `asmdef`.
+
+</Step>
+</Steps>
+
+<Callout type="info" title="Unity reports a netstandard error">
+
+If Unity reports `Nino.Core references netstandard, Version=2.1.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51. A roslyn analyzer should reference netstandard version 2.0`, ignore it: it is a Unity bug.
+
+</Callout>
+
+<Callout type="idea">
+
+If you run into problems, check that you followed the steps above and that the `Nino_Unity` sample project runs. If the problem persists, please open an issue on GitHub.
+
+</Callout>
+
+#### Hot Update Code [#hot-update-code]
+- Nino supports **HybridCLR** and **ILRuntime**.
+- To write hot-update code in a separate C# project (not an `asmdef` inside Unity), create a .NET Core project, install Nino from NuGet ([see above](/en/docs/v2/start#net-project)), and use the compiled DLL in HybridCLR or ILRuntime.
+
+## Next Steps [#next-steps]
+
+<Cards>
+  <Card title="Serialize and Deserialize" href="/en/docs/v2/basic">Serialize to arrays and buffer writers, deserialize from spans.</Card>
+  <Card title="Supported Types" href="/en/docs/v2/types">Mark your types with `[NinoType]` and see what else Nino serializes.</Card>
+</Cards>

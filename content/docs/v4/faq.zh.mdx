@@ -1,0 +1,63 @@
+---
+title: 常见问题
+seoTitle: "Nino 常见问题：高性能 C# / .NET 二进制序列化库"
+description: "关于 Nino 的简短回答：它是什么、如何安装、支持哪些平台、有多快，以及什么时候该选别的方案。"
+icon: CircleQuestionMark
+faq: true
+---
+
+关于 Nino 最常被问到的问题，每个回答都附有详细页面的链接。
+
+## Nino 是什么？ [#what-is-nino]
+
+Nino 是通用的高性能 C# / .NET 二进制序列化库。给类型加上 `[NinoType]`，Roslyn 源生成器就会在编译期生成它的序列化代码；运行时调用 `NinoSerializer.Serialize` 和 `NinoDeserializer.Deserialize` 即可。没有反射，没有运行时代码生成，没有 schema 文件，也不需要注册。Nino 以 MIT 协议开源：[github.com/JasonXuDeveloper/Nino](https://github.com/JasonXuDeveloper/Nino)。参见[介绍](/zh/docs/v4)。
+
+## 如何安装 Nino？ [#how-do-i-install-nino]
+
+在 .NET 或 Godot 项目中运行 `dotnet add package Nino --prerelease`（v4 仍是预发行版：不加这个参数时 NuGet 会安装稳定版 3.9.x，它是测试 v4 功能的过渡版本，与 v4 不兼容）；`Nino` 包会引入运行时（`Nino.Serialization`）和源生成器（`Nino.Generator`）。在 Unity 中，从 OpenUPM 安装 `com.jasonxudeveloper.nino`（`openupm add com.jasonxudeveloper.nino`），其中已包含源生成器。参见[快速开始](/zh/docs/v4/start)。
+
+## Nino 支持哪些平台和 .NET 版本？ [#which-platforms-and-net-versions-does-nino-support]
+
+运行时面向 `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0`。Nino 可用于 .NET 服务端和桌面程序、Unity 2022.3 及以上版本（Mono 与 IL2CPP，所有 Player 平台）、Godot 4 .NET 项目以及 HybridCLR 热更新，并且所有目标写出的字节完全相同。源生成器需要 Roslyn 4.3 或更高版本，项目需使用 C# 9 或更高版本。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+
+## Nino 使用反射吗？能在 IL2CPP 和 NativeAOT 下使用吗？ [#does-nino-use-reflection-does-it-work-with-il2cpp-and-nativeaot]
+
+不使用反射：源生成器在编译期为每个类型生成一个格式化器，因此 Nino 可以在不支持运行时代码生成的 IL2CPP、NativeAOT 和 HybridCLR 环境中使用。参见[性能指南](/zh/docs/v4/performance)。
+
+Nino.Core 的 net8.0 和 net10.0 版本还带有裁剪和 Native AOT 标注：用 `PublishTrimmed` 或 `PublishAot` 发布时，Nino 不会产生任何警告。在 Native AOT 下，Nino 只使用生成器写好的格式化器，所以要序列化的每个类型都必须出现在生成器看得到的代码里（作为成员类型，或作为 `Serialize`、`Deserialize` 调用的类型参数）。只在运行时才出现的类型会抛出一个指明该类型的错误，不会读写出错误的数据。
+
+## Nino 和 MemoryPack 相比有多快？ [#how-fast-is-nino-compared-with-memorypack]
+
+在同一次基准测试中，Nino v4 的序列化最高比 MemoryPack 快 <BenchValue k="serialize.max" />，类与多态对象图的反序列化最高快 <BenchValue k="deserialize.max" />；原始结构体数组上两者持平。序列化到复用的缓冲区时零分配。参见[基准测试](/zh/docs/v4/perf)和 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)。
+
+## Nino 适合用在哪里？ [#what-can-i-use-nino-for]
+
+凡是需要把 .NET 对象转成紧凑字节、再还原回来的地方：服务之间的网络协议与 RPC、消息队列与事件流、缓存、文件等持久化存储、进程间通信以及数据管道。同样的代码可以运行在 .NET 服务器、桌面应用、Unity 和 Godot 上。参见[进阶指南](/zh/docs/v4/advanced)。
+
+## 数据写出后还能修改类型吗？ [#can-i-change-my-types-after-data-has-been-written]
+
+可以，只要事先选好格式。普通的 `[NinoType]` 按位置写入，速度最快；`[NinoType(format: NinoFormat.VersionTolerant)]` 允许在末尾追加成员；`[NinoType(format: NinoFormat.Keyed)]` 允许添加、删除和重新排序成员。参见[数据演进](/zh/docs/v4/evolving-data)。
+
+## Nino 支持多态和共享引用吗？ [#does-nino-support-polymorphism-and-shared-references]
+
+支持。声明为基类或接口的值读回时仍是它的运行时类型，无需维护 Union 标签。按类型开启的引用追踪可以保留共享引用和循环引用。参见[多态](/zh/docs/v4/polymorphism)和[引用追踪](/zh/docs/v4/reference-tracking)。
+
+## 如何序列化多种消息类型，或者运行时才知道的类型？ [#how-do-i-serialize-many-message-types-or-a-type-known-only-at-run-time]
+
+给这些类型一个共同的 `[NinoType]` 基类或接口，然后调用 `Serialize<TBase>` / `Deserialize<TBase>`：类型 ID 的写入和分派都由生成代码完成，速度最快，还能配合复用反序列化和对象池，每条消息除了内容变化的字符串之外不分配内存。RPC 和消息分派、插件系统、编辑器工具都适用这种做法。只有当类型只能以 `Type` 的形式得知、并且这些类型没有共同的基类型时（例如基于反射、面向任意类型的工具），才使用 `SerializeBoxed(value, type)` 和 `DeserializeBoxed(data, type)`。不要把 `object` 当作类型参数：它只接受 `[NinoType]` 的值，并通过较慢的全局注册表分派。参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
+
+## Nino 是线程安全的吗？ [#is-nino-thread-safe]
+
+是的。`NinoSerializer` 和 `NinoDeserializer` 都是静态的，可以在任意多个线程中调用，无需加锁。你自己创建的 `NinoArrayBufferWriter` 不是线程安全的：每个线程或每个连接使用一个。参见[序列化与反序列化](/zh/docs/v4/basic)。
+
+## Nino v4 能读取 Nino v3 写出的数据吗？ [#can-nino-v4-read-data-written-by-nino-v3]
+
+不能。v4 使用新的二进制格式，无法读取 v3 以及 v4 测试版和预览版写出的数据，已存储的 v3 数据需要转换一次。参见[从 v3 迁移](/zh/docs/v4/migration)。
+
+## 能在 JavaScript 或 TypeScript 中使用 Nino 吗？ [#can-i-use-nino-from-javascript-or-typescript]
+
+可以在浏览器中使用，方式是 .NET WebAssembly，而不是生成 TypeScript。把客户端的序列化部分构建成引用 Nino 和你的 `[NinoType]` 类型的 .NET `browser-wasm` 应用，再用 `[JSExport]` 把函数暴露给 JavaScript。这样服务端和浏览器共用一套 C# 类型，写出的字节完全相同；代价是浏览器要下载 .NET 运行时。Nino 不生成 TypeScript 或 JavaScript 代码。参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)。
+
+## 什么时候不该用 Nino？ [#when-should-i-not-use-nino]
+
+当数据需要人来阅读或编辑时（请用 JSON、YAML 或 TOML），或者需要由其他语言的程序读取时：格式由你的 C# 类型定义，没有 schema 文件，也没有面向其他语言的生成器，这种情况请使用 Protocol Buffers、FlatBuffers 或 MessagePack。参见[局限性](/zh/docs/v4/limit)。

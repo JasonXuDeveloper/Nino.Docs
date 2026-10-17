@@ -1,0 +1,77 @@
+---
+title: Versioning
+description: Which Nino v3 releases changed the binary format, how to migrate from v2, and how to read data written by an older version.
+icon: Milestone
+---
+
+<AnchorRedirect
+  map={{
+    'incompatibility': '/en/docs/v3/versioning#format-changes',
+    'what-if-i-really-want-to-deserialize-the-old-data-with-the-new-version': '/en/docs/v3/versioning#reading-data-from-an-older-version',
+  }}
+/>
+
+## Format Changes [#format-changes]
+
+Each release below is not compatible with the versions before it, and the generated code may need to be regenerated. To read data written before one of them, see [Reading Data from an Older Version](/en/docs/v3/versioning#reading-data-from-an-older-version).
+
+<Accordions type="single" defaultValue="v3.3.4">
+<Accordion title="v3.3.4" value="v3.3.4">
+
+Unmanaged fields are aligned, which makes reading them faster when deserializing. The calls that copy unmanaged fields to memory are inlined, which makes serialization faster. The output is larger, and not compatible with earlier versions.
+
+</Accordion>
+<Accordion title="v3.2.0" value="v3.2.0">
+
+Types can change their members and still deserialize data serialized before the change, including the elements of lists, which may be polymorphic. The generated code differs from v3.0.3.
+
+</Accordion>
+<Accordion title="v3.0.3" value="v3.0.3">
+
+Fixes polymorphic unmanaged structs. The generated code differs from v3.0.0.
+
+</Accordion>
+<Accordion title="v3.0.0" value="v3.0.0">
+
+Replaces the v2 implementation with a rewrite of the whole project. The generated code differs from v2.
+
+</Accordion>
+</Accordions>
+
+## Migrating from Nino v2 [#migrating-from-nino-v2]
+
+Update to the latest version of Nino, then change the namespace of the generated code from `AssemblyName_Nino` to `AssemblyName.NinoGen`. That is all.
+
+## Reading Data from an Older Version [#reading-data-from-an-older-version]
+
+To deserialize data written by an older version with a newer one:
+
+<Steps>
+<Step>
+
+### Keep the old deserializer [#keep-the-old-deserializer]
+
+**Copy** the old generated code, in particular the **old deserializer** and everything it depends on, into the new project, and give it its own namespace so the two are not confused.
+
+</Step>
+<Step>
+
+### Upgrade Nino [#upgrade-nino]
+
+**Upgrade** to the version of Nino you want, so that a **new** serializer and deserializer are generated.
+
+</Step>
+<Step>
+
+### Convert the data [#convert-the-data]
+
+Deserialize the **old data** with the **old deserializer**, then serialize it again with the **new serializer**.
+
+</Step>
+</Steps>
+
+<Callout type="idea" title="Save games">
+
+For save games, tell old and new data apart with a **header**: when saving with the newer Nino, write a header before the data. When loading, a file with the header is read with the **new deserializer**; a file without it is **old data**, read with the copied **old deserializer**.
+
+</Callout>

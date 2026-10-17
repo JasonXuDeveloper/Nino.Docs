@@ -1,0 +1,263 @@
+---
+title: Custom Formatters
+description: "Write a Nino formatter for a member ([NinoCustomFormatter]) or a type Nino does not support ([assembly: NinoFormatter], including generic types), using the Writer and Reader APIs."
+icon: Puzzle
+---
+
+Nino has formatters for the [built-in types](/en/docs/v4/types) and generates one for every `[NinoType]`. Write your own to encode one member differently (a varint, a fixed-point number) or to serialize a type Nino does not know (a third-party collection, a type from another library).
+
+A formatter is a **struct** implementing `INinoFormatter<T>`:
+
+```csharp
+public interface INinoFormatter<T>
+{
+    void Serialize(T value, ref Writer writer);
+    void Deserialize(ref T value, ref Reader reader);
+}
+```
+
+`Deserialize` receives the current value by `ref`: `default` means "create a new value", and an existing instance may be reused. Formatters are called as `default(TFormatter)`, so they have no instance state; keep any state in static fields.
+
+## For One Member
+
+Use `[NinoCustomFormatter]` to serialize a single member with your own formatter. The formatter must implement `INinoFormatter<T>` for **exactly** the member type (NINO008).
+
+A typical case is a ledger or a metrics stream that records how much each value changed. The deltas are usually tiny, yet a `long` always takes 8 bytes. A zig-zag varint writes values from -64 to 63 in 1 byte, and values up to ±8191 in 2:
+
+```csharp
+/// Writes a long as a zig-zag varint.
+public struct ZigZagLongFormatter : INinoFormatter<long>
+{
+    public void Serialize(long value, ref Writer writer)
+    {
+        ulong v = (ulong)((value << 1) ^ (value >> 63));
+        while (v >= 0x80)
+        {
+            writer.Write((byte)(v | 0x80));
+            v >>= 7;
+        }
+        writer.Write((byte)v);
+    }
+
+    public void Deserialize(ref long value, ref Reader reader)
+    {
+        ulong v = 0;
+        int shift = 0;
+        byte b;
+        do
+        {
+            reader.Read(out b);
+            v |= (ulong)(b & 0x7F) << shift;
+            shift += 7;
+        } while ((b & 0x80) != 0);
+        value = (long)(v >> 1) ^ -(long)(v & 1);
+    }
+}
+
+[NinoType]
+public sealed class BalanceChange
+{
+    public int AccountId;
+    [NinoCustomFormatter(typeof(ZigZagLongFormatter))] // [!code highlight]
+    public long DeltaCents;
+}
+```
+
+The attribute applies to one field or property, wherever the containing type is serialized. A member with a custom formatter is never copied as part of a block of [raw memory](/en/docs/v4/defining-types#structs). The analyzer reports a formatter that is not a struct, or is for another type (NINO008).
+
+## For a Type: `[assembly: NinoFormatter]`
+
+To teach Nino a type it does not know (your own or a third-party one), register a formatter on your assembly. Type arguments and element formatters are inferred: a type parameter constrained to `INinoFormatter<E>` receives the formatter Nino resolves for `E`, so element (de)serialization is inlined. Generated code calls the formatter directly, and the runtime uses the same registration.
+
+```csharp
+[assembly: NinoFormatter(typeof(RingFormatter<,>))]
+
+// a third-party fixed-capacity buffer: Ring(int capacity), Count, Capacity, Push, Clear,
+// and a struct enumerator, so foreach does not allocate
+public sealed class Ring<T> : IEnumerable<T> { /* ... */ }
+
+public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
+    where TFormatter : struct, INinoFormatter<T>
+{
+    public void Serialize(Ring<T> value, ref Writer writer)
+    {
+        if (value == null)
+        {
+            writer.WriteNullLength();          // -1
+            return;
+        }
+
+        writer.WriteLength(value.Count);
+        writer.Write(value.Capacity);
+        foreach (var item in value)            // Ring's struct enumerator: no allocation
+            default(TFormatter).Serialize(item, ref writer); // inlined element formatter
+    }
+
+    public void Deserialize(ref Ring<T> value, ref Reader reader)
+    {
+        int count = reader.ReadLength();       // validated against the bytes left
+        if (count < 0)
+        {
+            NinoRecycler.Discard(ref value);   // the data holds null: recycle the old ring
+            return;
+        }
+
+        reader.Read(out int capacity);
+        if (value != null && value.Capacity == capacity)
+            value.Clear();                     // reuse the existing ring // [!code highlight]
+        else
+            NinoRecycler.Replace(ref value, new Ring<T>(capacity)); // recycles the old one, if any
+        for (int i = 0; i < count; i++)
+        {
+            T item = default;
+            default(TFormatter).Deserialize(ref item, ref reader);
+            value.Push(item);
+        }
+    }
+}
+
+[NinoType]
+public sealed class RingHolder
+{
+    public Ring<int> Ints;          // uses RingFormatter<int, ...>
+    public List<Ring<string>> Nested;
+}
+```
+
+- The formatter is a struct, not nested in a generic type, that implements `INinoFormatter<P>` exactly once. Register a generic formatter as an open definition (`typeof(F<,>)`) and a non-generic one as itself (`typeof(F)`). Every type parameter must be inferable from `P`, from a type constraint (`where TList : List<T>`), or from an `INinoFormatter<E>` constraint. An unusable registration is ignored and reported as NINO020.
+- When `Deserialize` drops an instance (the data holds `null`, or the old instance cannot be reused), hand it to `NinoRecycler.Discard(ref value)` or `NinoRecycler.Replace(ref value, replacement)` rather than overwriting it, so [recycler handlers and pools](/en/docs/v4/pooling) see it.
+- To target a bare type parameter (`INinoFormatter<TCollection>`), list the target type definitions: `[assembly: NinoFormatter(typeof(F<,,>), typeof(IList<>))]`. Without targets it applies to every type its constraints admit.
+- Lookup order: formatters registered for the type's own definition (and for arrays), then raw unmanaged values, then `[NinoType]`s, then formatters of a bare type parameter. When several registrations match, the higher `Priority` wins (for example `Priority = 10`); on a tie, the full name that sorts first ordinally wins.
+
+<Callout type="info" title="Declarative, no startup code">
+
+`[assembly: NinoFormatter]` is an attribute, not a call: there is no module initializer and nothing to run at startup. The runtime reads an assembly's registrations when it first meets one of its types (or, when a lookup misses, from every loaded assembly). Formatters declared in a HybridCLR hot-update assembly are therefore picked up as soon as the assembly is loaded, and Nino declares its own BCL formatters the same way.
+
+There is no call that registers or replaces a formatter at run time: every formatter is declared with `[assembly: NinoFormatter]` or, for one member, `[NinoCustomFormatter]`. A type's formatter therefore never changes while the process runs, and generated code and the runtime always agree on it.
+
+</Callout>
+
+### Binding the Formatter's Type Parameters
+
+Nino binds each type parameter of a registered formatter when it meets a type the formatter can format:
+
+<TypeTable
+  type={{
+    'Occurs in P': {
+      description: 'Bound by matching the formatted pattern P against the type, e.g. T in INinoFormatter<Ring<T>>.',
+      type: 'RingFormatter<T, ...>',
+    },
+    'Type constraint': {
+      description: 'A constraint such as where TList : List<T> binds the parameters it mentions, by matching against the bound type, its base types or its interfaces.',
+      type: 'where TList : List<T>',
+    },
+    'INinoFormatter<E> constraint': {
+      description: 'Bound to the formatter Nino resolves for E, so element formatters compose and inline (they are structs).',
+      type: 'where TFormatter : struct, INinoFormatter<T>',
+    },
+    '[NinoRaw]': {
+      description: 'On an unmanaged parameter: the formatter copies its values as raw memory, so only types Nino writes as raw bytes are bound (no Nullable, tuples, nint, DateTimeOffset or non-raw [NinoType] structs).',
+      type: '[NinoRaw] T, where T : unmanaged',
+    },
+    '[NinoCreated]': {
+      description: 'The formatter creates instances with NinoActivator<T>.Create(), so only non-abstract classes with a public static [NinoFactory] factory or a public constructor callable without arguments are bound. Use it instead of new(), which admits only parameterless constructors and compiles to Activator.CreateInstance<T>().',
+      type: '[NinoCreated] TCollection',
+    },
+  }}
+/>
+
+Other constraints keep their C# meaning (`class`, `struct`, `unmanaged`, `new()`).
+
+### Example: `Memory<T>` [#example-memory]
+
+Nino has no built-in formatter for `Memory<T>`. This one handles a `Memory<T>` of any raw element type: it writes a length and one block, the same bytes as a `T[]`, and reads into the current memory when the length matches, so [reuse deserialization](/en/docs/v4/pooling) allocates nothing:
+
+```csharp title="MemoryFormatter.cs"
+using System.Runtime.CompilerServices;
+
+[assembly: NinoFormatter(typeof(MemoryFormatter<>))]
+
+/// Memory<T> of raw elements: a length, then one block (the same bytes as a T[]).
+public struct MemoryFormatter<[NinoRaw] T> : INinoFormatter<Memory<T>>
+    where T : unmanaged
+{
+    public void Serialize(Memory<T> value, ref Writer writer) =>
+        writer.Write<T>(value.Span);                         // length, then one block copy
+
+    public void Deserialize(ref Memory<T> value, ref Reader reader)
+    {
+        int length = reader.ReadLength(Unsafe.SizeOf<T>()); // checked against the bytes left; -1 for null
+        if (length <= 0)
+        {
+            value = default;
+            return;
+        }
+
+        if (value.Length != length)
+            value = new T[length];                           // reuse the current memory when the length matches
+        reader.ReadUnmanagedRaw(value.Span);                 // one block copy // [!code highlight]
+    }
+}
+
+[NinoType]
+public sealed class AudioChunk
+{
+    public long Position;
+    public Memory<float> Samples;   // uses MemoryFormatter<float>
+}
+```
+
+- `[NinoRaw]` binds `T` only to types Nino copies as raw bytes: `Memory<float>` and `Memory<Vector3>` use this formatter, while a `Memory<string>` member still has no formatter (NINO007).
+- `Writer.Write<T>(ReadOnlySpan<T>)` and `Reader.ReadUnmanagedRaw<T>(Span<T>)` copy the elements as one block, and convert them field by field on a runtime whose layout differs from the canonical one.
+- The bytes are those of a `T[]`, so a member can change between `float[]` and `Memory<float>` without changing the format; a `null` array reads back as empty memory.
+
+## Writer and Reader
+
+A formatter writes with `Writer` and reads with `Reader`, both `ref struct`s. The methods you need most:
+
+| Writer | Reader | Data |
+| --- | --- | --- |
+| `Write<T>(T value)` | `Read(out T value)`, `Read<T>()` | an unmanaged value (`int`, `float`, an unmanaged struct...) as raw bytes |
+| `Write<T>(T? value)` | `Read(out T? value)` | a nullable unmanaged value |
+| `Write<T>(T[] values)`, `Write<T>(ReadOnlySpan<T>)` | `Read(out T[] values)` | an unmanaged array: length, then one block |
+| `WriteUnmanagedRaw<T>(ReadOnlySpan<T>)` | `ReadUnmanagedRaw<T>(Span<T>)` | unmanaged values as one block with no length, read into memory you already have |
+| `Write(string)`, `WriteUtf8(string)` | `Read(out string)`, `ReadUtf8(out string)` | a string, UTF-16 or UTF-8 |
+| | `ReadString(string current)`, `ReadUtf8(string current)` | a string, returning `current` itself when the data holds the same text, as generated code does when it reads into an existing instance |
+| `WriteLength(int)`, `WriteNullLength()` | `ReadLength(minElementSize = 1)` | a collection length, `-1` for null; `ReadLength` throws if the bytes left cannot hold that many elements of at least `minElementSize` bytes |
+| `ReserveInt32()`, `PatchInt32(...)`, `PatchLength(...)` | | 4 bytes to fill in later, such as a byte length |
+| `WriteRaw(ReadOnlySpan<byte>)` | `ReadRaw(int)`, `Advance(int)` | raw bytes, or skipping them |
+| `Position` | `Position`, `Remaining`, `Eof` | where you are: `Position` is an absolute offset, `Remaining` the bytes left |
+
+Both encodings of a string start with its `int32` length in chars (UTF-16 code units; `-1` for `null`, `0` for empty, with nothing after either). `WriteUtf8` then writes an `int32` byte count and exactly that many UTF-8 bytes: `"é😀"` is `03 00 00 00` `06 00 00 00` `C3 A9 F0 9F 98 80`. An unpaired surrogate is written as U+FFFD. See [Binary Format](/en/docs/v4/platforms#binary-format).
+
+### Positions in a Slice [#positions-in-a-slice]
+
+`Reader.ReadSlice()` reads an `int32` byte length and returns a reader over the block that follows (the kind of block `ReserveInt32()` and `PatchLength(...)` write). Its `Position` does **not** restart at `0`: like the parent's, it is an offset from the start of the whole input. `Remaining` and `Eof` stop at the end of the slice. To count the bytes read inside a slice, record the position first and subtract:
+
+```csharp
+Reader slice = reader.ReadSlice();     // the parent skips the whole block
+int start = slice.Position;            // an offset in the whole input, not 0
+slice.Read(out int kind);
+// ...
+int consumed = slice.Position - start; // bytes read inside the slice
+bool complete = slice.Eof;             // Remaining == 0: the slice is used up
+reader.EndSlice(in slice);             // objects read in the slice stay visible to back references
+```
+
+`Writer.Position` is likewise the absolute position in the `NinoArrayBufferWriter`.
+
+To write a value that has its own formatter (a `[NinoType]`, a `List<T>`), call the regular API with the writer or reader, so its references and polymorphism are handled as usual:
+
+```csharp
+NinoSerializer.Serialize(value.Owner, ref writer);
+NinoDeserializer.Deserialize(ref owner, ref reader);
+```
+
+Always read exactly what you wrote, in the same order: the bytes carry no schema.
+
+## Next Steps
+
+<Cards>
+  <Card title="Analyzer Diagnostics" href="/en/docs/v4/analyzers">Every diagnostic, NINO001 to NINO025, and how to fix it.</Card>
+  <Card title="Performance Guide" href="/en/docs/v4/performance">How Nino gets its speed, and how to keep your code on the fast paths.</Card>
+</Cards>

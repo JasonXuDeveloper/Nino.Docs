@@ -1,0 +1,349 @@
+---
+title: Zero-Allocation Patterns
+seoTitle: "Zero-Allocation (Zero-GC) Serialization in C# – Nino v4 Docs"
+description: "Copy-paste recipes for a 0 B steady state: per-owner and caller-provided buffers, batches, receive loops, reused instances, framed streams, memory-mapped records, an allocation test and the checklist."
+icon: Leaf
+---
+
+A recipe book for hot paths that must not allocate: message loops, market data and telemetry feeds, game ticks, cache layers. Each recipe is code to copy, and allocates **0 B per call once warmed up** (after the buffers have grown and the pools are filled). For why each one works and what it costs, follow its link to [High-Performance Serialization](/en/docs/v4/advanced/high-performance); [Reuse Deserialization and Pooling](/en/docs/v4/pooling) has the exact rules for reuse. The page ends with a [checklist](#checklist) for reviewing a hot path.
+
+## What Allocates [#what-allocates]
+
+| Call | Allocates |
+| --- | --- |
+| `NinoSerializer.Serialize(value)` | the returned `byte[]` (exactly sized for a [fixed-size type](/en/docs/v4/performance#fixed-size-types)) |
+| `NinoSerializer.Serialize(value, bufferWriter)` | nothing; a `NinoArrayBufferWriter` is written in place, any other `IBufferWriter<byte>` gets one copy from a per-thread scratch buffer |
+| `NinoSerializer.Serialize(value, ref writer)` | nothing |
+| `NinoDeserializer.Deserialize<T>(span)` | the objects it returns: the class instances, collections and strings in the data; nothing for a struct made of unmanaged members |
+| `NinoDeserializer.Deserialize(span, ref value)` | what does not fit the existing graph (a new list element, an array of a different length) and each string whose text changed (an unchanged string is kept; non-ASCII `[NinoUtf8]` text is always read into a new string) |
+| a `[NinoPooled]` class Nino has to create | nothing while its pool has instances |
+
+The buffer you serialize into grows on the first calls and is then reused, and a `NinoArrayBufferWriter` rents its array from `ArrayPool<byte>.Shared`. Nino keeps no per-call state on the heap.
+
+## Reuse One Buffer per Owner [#reuse-one-buffer]
+
+The base recipe: one `NinoArrayBufferWriter` per thread, connection or encoder, reset before each use ([why](/en/docs/v4/advanced/high-performance#serialize-into-a-reused-buffer)).
+
+```csharp title="MessageEncoder.cs"
+using Nino.Core;
+
+public sealed class MessageEncoder : IDisposable
+{
+    private readonly NinoArrayBufferWriter _buffer = new(64 * 1024);
+
+    public ReadOnlySpan<byte> Encode(Message message)
+    {
+        _buffer.ResetWrittenCount();          // reuse the same array
+        NinoSerializer.Serialize(message, _buffer);
+        return _buffer.WrittenSpan;           // valid until the next Encode
+    }
+
+    public void Dispose() => _buffer.Dispose(); // returns the array to the pool
+}
+```
+
+Use `WrittenMemory` instead of `WrittenSpan` when an async API needs the bytes, and do not reset the buffer until that call has completed. For code that has no natural owner, a thread-static buffer works:
+
+```csharp title="ScratchBuffer.cs"
+static class ScratchBuffer
+{
+    [ThreadStatic] private static NinoArrayBufferWriter t_buffer;
+
+    public static NinoArrayBufferWriter Get()
+    {
+        var buffer = t_buffer ??= new NinoArrayBufferWriter();
+        buffer.ResetWrittenCount();
+        return buffer;
+    }
+}
+```
+
+<Callout type="warn">
+
+Copy or send `WrittenSpan` before the buffer is used again, and do not hand a thread-static buffer to code that might call `Get()` again before it is done (re-entrancy).
+
+</Callout>
+
+## Write into Memory You Own [#write-into-memory-you-own]
+
+To serialize into a region you already have (a slot in a ring buffer, a pre-allocated send buffer, a block of a memory-mapped view you copy out of), wrap it in a small `IBufferWriter<byte>`. Create the wrapper once and point it at the next region with `Reset`:
+
+```csharp title="SpanBufferWriter.cs"
+using System;
+using System.Buffers;
+
+/// <summary>An IBufferWriter over memory you own. Allocate it once; Reset() before each use.</summary>
+public sealed class SpanBufferWriter : IBufferWriter<byte>
+{
+    private Memory<byte> _target;
+    private int _written;
+
+    public SpanBufferWriter(Memory<byte> target) => _target = target;
+
+    public int WrittenCount => _written;
+    public ReadOnlySpan<byte> WrittenSpan => _target.Span.Slice(0, _written);
+
+    public void Reset(Memory<byte> target) { _target = target; _written = 0; }
+
+    public void Advance(int count) => _written += count;
+
+    public Memory<byte> GetMemory(int sizeHint = 0)
+    {
+        var free = _target.Slice(_written);
+        if (free.Length < Math.Max(sizeHint, 1))
+            throw new InvalidOperationException("The destination buffer is too small.");
+        return free;
+    }
+
+    public Span<byte> GetSpan(int sizeHint = 0) => GetMemory(sizeHint).Span;
+}
+```
+
+```csharp
+var slot = new byte[4096];                 // or a slice of a larger buffer
+var output = new SpanBufferWriter(slot);
+
+output.Reset(slot);
+NinoSerializer.Serialize(order, output);   // one copy into slot, 0 B
+Send(output.WrittenSpan);
+```
+
+Nino copies the result into `GetSpan` once ([why](/en/docs/v4/advanced/high-performance#serialize-into-any-ibufferwriter)). When the size is known up front, check it before writing: [`GetFixedSize<T>()`](/en/docs/v4/performance#fixed-size-types) gives it for fixed-size types.
+
+## Batch Many Records in One Buffer [#batches]
+
+Small records sent one at a time pay per-message overhead in every transport. Write a batch back to back with one `Writer`, and read it with one `Reader`:
+
+```csharp title="Tick.cs"
+[NinoType]
+public struct Tick                 // unmanaged and sequential: copied as raw memory
+{
+    public long Timestamp;         // Unix time in nanoseconds
+    public double Price;
+    public double Quantity;
+    public int InstrumentId;
+    public byte Side;
+}
+```
+
+```csharp
+// write: 0 B once the buffer has grown to the batch size
+buffer.ResetWrittenCount();
+var writer = new Writer(buffer);
+foreach (var tick in ticks)
+    NinoSerializer.Serialize(tick, ref writer);
+writer.Flush(); // [!code highlight]
+writer.ReleaseReferences(); // [!code highlight]
+
+// read: 0 B, one bounds check and one copy per tick
+var reader = new Reader(buffer.WrittenSpan);
+while (!reader.Eof)
+{
+    Tick tick = NinoDeserializer.Deserialize<Tick>(ref reader);
+    Apply(tick);
+}
+reader.ReleaseReferences(); // [!code highlight]
+```
+
+The same works for class records and mixed types, as long as the reader reads them in the order they were written. Keep both `ReleaseReferences` calls: without them, a batch with a `trackReferences` type allocates on every call ([why](/en/docs/v4/advanced/high-performance#several-values-back-to-back)). A batch of polymorphic events is shown in [Message Queues and Event Streams](/en/docs/v4/advanced/message-queues#batching).
+
+## Receive into a Rented Buffer [#receive-loop]
+
+Deserialize straight from the receive buffer: rent it once per socket, slice it to what arrived, and return it in a `finally` ([why](/en/docs/v4/advanced/high-performance#deserialize-from-the-memory-you-have)):
+
+```csharp
+byte[] datagram = ArrayPool<byte>.Shared.Rent(65536); // once per socket, not per datagram
+Message message = null;
+try
+{
+    while (!ct.IsCancellationRequested)
+    {
+        int received = socket.Receive(datagram);
+        NinoDeserializer.Deserialize(datagram.AsSpan(0, received), ref message); // [!code highlight]
+        Handle(message);
+    }
+}
+finally
+{
+    ArrayPool<byte>.Shared.Return(datagram);
+}
+```
+
+## Reuse What You Deserialize [#reuse-what-you-deserialize]
+
+Keep the previous result and pass it by `ref`; Nino fills it in place ([how](/en/docs/v4/advanced/high-performance#deserialize-into-existing-objects)):
+
+```csharp
+OrderBook book = null;                   // created on the first call
+while (TryReceive(out ReadOnlySpan<byte> frame))
+{
+    NinoDeserializer.Deserialize(frame, ref book); // [!code highlight]
+    Publish(book);
+}
+```
+
+- Use `List<T>` for counts that vary: a list keeps its capacity, while an array is reused only when the new data has the same length.
+- Text that changes with every message allocates the new string each time, so data that must stay at 0 B carries values that change as numbers or ids rather than text.
+- Mark the classes Nino has to create (a list grew, a `null` member got a value) [`[NinoPooled]`](/en/docs/v4/advanced/high-performance#pool-what-you-create), so they come from a pool and dropped ones go back to it.
+
+The [zero-GC state sync example](/en/docs/v4/pooling#example) combines all of these.
+
+## Framed Streams Without Per-Message Allocations [#framed-streams]
+
+[Streams](/en/docs/v4/advanced/streams#streams) shows a portable frame helper. On .NET 7 and later, keep both buffers in a per-connection object and read the length prefix into a `stackalloc` span, and a stream of frames takes no allocations at all:
+
+```csharp title="FrameStream.cs"
+using System;
+using System.Buffers;
+using System.Buffers.Binary;
+using System.IO;
+using Nino.Core;
+
+/// <summary>[int32 length][payload] frames on a Stream. One instance per connection; not thread safe.</summary>
+public sealed class FrameStream : IDisposable
+{
+    public const int MaxFrameSize = 16 << 20;
+
+    private readonly Stream _stream;
+    private readonly NinoArrayBufferWriter _out = new(4096);
+    private byte[] _in = ArrayPool<byte>.Shared.Rent(4096);
+
+    public FrameStream(Stream stream) => _stream = stream;
+
+    public void Write<T>(T value)
+    {
+        _out.ResetWrittenCount();
+        var writer = new Writer(_out);
+        int slot = writer.ReserveInt32();
+        NinoSerializer.Serialize(value, ref writer);
+        writer.PatchLength(slot);                           // bytes written after the slot
+        writer.Flush();
+        writer.ReleaseReferences();                         // end the call, as NinoSerializer does
+        _stream.Write(_out.WrittenSpan);
+    }
+
+    /// <summary>Reads the next frame into value. False at the end of the stream.</summary>
+    public bool TryRead<T>(ref T value)
+    {
+        Span<byte> prefix = stackalloc byte[4];
+        int read = _stream.ReadAtLeast(prefix, 4, throwOnEndOfStream: false);
+        if (read == 0)
+            return false;                                   // clean end between frames
+        if (read < 4)
+            throw new EndOfStreamException();
+        int length = BinaryPrimitives.ReadInt32LittleEndian(prefix);
+        if ((uint)length > MaxFrameSize)
+            throw new InvalidDataException($"Frame of {length} bytes");
+
+        if (_in.Length < length)                            // grow once, then keep it
+        {
+            byte[] larger = ArrayPool<byte>.Shared.Rent(length);
+            ArrayPool<byte>.Shared.Return(_in);
+            _in = larger;
+        }
+
+        _stream.ReadExactly(_in, 0, length);
+        NinoDeserializer.Deserialize(_in.AsSpan(0, length), ref value);
+        return true;
+    }
+
+    public void Dispose()
+    {
+        _out.Dispose();
+        if (_in != null)
+        {
+            ArrayPool<byte>.Shared.Return(_in);
+            _in = null;                                     // a second Dispose returns nothing
+        }
+    }
+}
+```
+
+```csharp
+using var frames = new FrameStream(networkStream);
+MetricsBatch batch = null;                 // filled in place by every frame
+while (frames.TryRead(ref batch))
+    Aggregate(batch);
+```
+
+A truncated stream (fewer bytes than a prefix, or a prefix without its payload) throws `EndOfStreamException`. With `System.IO.Pipelines`, use the [frame reader](/en/docs/v4/advanced/networking#reading-frames) instead: it deserializes straight from the pipe's memory.
+
+## Fixed-Size Records [#fixed-size-records]
+
+A struct made only of unmanaged members takes the same number of bytes for every value. `NinoSerializer.GetFixedSize<T>()` returns that number (and `-1` for types whose size varies), so a file or buffer of such records can be addressed by index, without an offset table:
+
+```csharp
+int size = NinoSerializer.GetFixedSize<Tick>();   // check once at startup: -1 means not fixed
+
+Tick ReadAt(ReadOnlySpan<byte> records, int index) =>
+    NinoDeserializer.Deserialize<Tick>(records.Slice(index * size, size)); // [!code highlight]
+```
+
+A file of such records can also be mapped into memory and read in place, without loading it. `ReadOnlySpan<byte>` over the mapped view needs an `unsafe` block (`<AllowUnsafeBlocks>true</AllowUnsafeBlocks>`):
+
+```csharp
+using System.IO.MemoryMappedFiles;
+
+long fileLength = new FileInfo(path).Length;
+using var file = MemoryMappedFile.CreateFromFile(path, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
+using var view = file.CreateViewAccessor(0, fileLength, MemoryMappedFileAccess.Read);
+unsafe
+{
+    byte* start = null;
+    view.SafeMemoryMappedViewHandle.AcquirePointer(ref start);
+    try
+    {
+        var records = new ReadOnlySpan<byte>(start + view.PointerOffset, checked((int)fileLength));
+        Tick tick = ReadAt(records, 1_000);   // only the pages touched are read from disk
+    }
+    finally
+    {
+        view.SafeMemoryMappedViewHandle.ReleasePointer();
+    }
+}
+```
+
+Another process can write the same file (or a shared-memory map created with `MemoryMappedFile.CreateNew`) through the [memory-you-own](#write-into-memory-you-own) pattern; coordinate readers and writers yourself, Nino adds no locking.
+
+- Use a **struct** for records you index: a sealed class is fixed-size too, but a `null` instance is written as 1 byte.
+- Switching a type to `NinoFormat.VersionTolerant` or `NinoFormat.Keyed`, or adding a `string` member, makes it variable-size. Fix the layout of indexed records, and put a format version in the file header (see [Add a File Header](/en/docs/v4/advanced/persistence#add-a-file-header)).
+- When you need a `byte[]`, `NinoSerializer.Serialize(tick)` allocates one of exactly the record's size and writes straight into it ([why](/en/docs/v4/advanced/high-performance#keep-bulk-data-raw)); use the recipes above when you do not.
+
+## Verify It [#verify-it]
+
+Measure, rather than assume: a unit test can pin a hot path at zero ([how to measure](/en/docs/v4/advanced/high-performance#measure)):
+
+```csharp title="AllocationTests.cs"
+[TestMethod]
+public void EncodeAllocatesNothing()
+{
+    var buffer = new NinoArrayBufferWriter();
+    var quote = new Quote { InstrumentId = 7, Bid = 99.5, Ask = 100.5 };
+    for (int i = 0; i < 100; i++)                    // warm up: tiered JIT, buffer growth
+        Encode(buffer, quote);
+
+    long before = GC.GetAllocatedBytesForCurrentThread();
+    for (int i = 0; i < 10_000; i++)
+        Encode(buffer, quote);
+    Assert.AreEqual(0, GC.GetAllocatedBytesForCurrentThread() - before); // [!code highlight]
+}
+
+static void Encode(NinoArrayBufferWriter buffer, Quote quote)
+{
+    buffer.ResetWrittenCount();
+    NinoSerializer.Serialize(quote, buffer);
+}
+```
+
+## Checklist [#checklist]
+
+- [ ] One `NinoArrayBufferWriter` per thread or owner, reset before each use.
+- [ ] Memory you already own is wrapped in a reusable `IBufferWriter<byte>`.
+- [ ] Small records are batched in one buffer.
+- [ ] Bytes are deserialized from spans of the memory they arrived in, not copied into a new `byte[]`.
+- [ ] Hot messages are deserialized into existing instances with `ref`; varying counts use `List<T>`.
+- [ ] Classes created and dropped at a high rate are `[NinoPooled]`.
+- [ ] Bulk data is kept in arrays or lists of unmanaged structs; indexed records are unmanaged structs, sized with `GetFixedSize<T>()`.
+- [ ] Classes that have no subtypes are sealed (1-byte header, no dispatch).
+- [ ] The project builds with the .NET 8 SDK or later, to get [interceptors](/en/docs/v4/performance#interceptors).
+- [ ] A test pins the hot path at 0 B.

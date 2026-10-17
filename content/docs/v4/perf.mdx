@@ -1,0 +1,900 @@
+---
+title: Benchmarks
+seoTitle: "Benchmarks: Nino vs MemoryPack and v3 – Nino v4 Docs"
+description: "Build-time and runtime benchmarks of Nino v4 against v3 (3.3.13) and MemoryPack 1.21.4, with the setup to reproduce them."
+icon: ChartColumn
+---
+
+<AnchorRedirect
+  map={{
+    'nino-memorypack-and-messagepack': '/en/docs/v4/perf#benchmark-code',
+    'data-structures': '/en/docs/v4/perf#simpletest',
+    'data-generation': '/en/docs/v4/perf#simpletest',
+    'generation-function': '/en/docs/v4/perf#simpletest',
+    'benchmark-data': '/en/docs/v4/perf#simpletest',
+    '330-types-n--30': '/en/docs/v4/perf#build-time-and-generated-code',
+    '1100-types-n--100': '/en/docs/v4/perf#build-time-and-generated-code',
+  }}
+/>
+
+This page has every benchmark number the documentation quotes, the code that produces them, and how to run it yourself. Other pages summarize these results and link here.
+
+## What Is Compared [#what-is-compared]
+
+| Against | Why | What is measured |
+| --- | --- | --- |
+| [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | The fastest widely used binary serializer for .NET, and source-generated like Nino | Runtime, in the same BenchmarkDotNet run: [serialize](#serialize-to-a-reused-buffer-writer), [deserialize](#deserialize-new-instances), [polymorphic graphs](#polymorphism), [reusing instances](#pooling), [reference tracking, version tolerance and fixed-size types](#more-cases) |
+| Nino v3 **3.3.13** | The last release of the v3 API, the version you would upgrade from | Runtime, back to back with v4 on the same machine (the **v4 vs v3** column of the runtime tables), and [build time](#build-time-and-generated-code) |
+| [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) | The most common binary format in .NET | Runtime, in the same run; listed in [All Measurements](#results) |
+
+Absolute times depend on the machine; compare the ratios. For features rather than speed, see [Nino vs MemoryPack](/en/docs/v4/vs-memorypack) and [v3 vs v4](/en/docs/v4/v3-vs-v4).
+
+## How It Is Measured [#setup]
+
+| | |
+| --- | --- |
+| CPU | Intel Xeon 2.10 GHz, 4 cores, AVX-512 (runtime and build time) |
+| OS | Ubuntu 24.04 |
+| Runtime | .NET 10.0.13 (SDK 10.0.402), server GC |
+| Harness | BenchmarkDotNet 0.15.2, 5 warm-up and 15 measured iterations, every benchmark class in one run |
+| Projects | [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.Benchmark) (runtime), [`src/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.GeneratorBenchmark) (build time) |
+
+- **Serialize** benchmarks write into a buffer writer that is created once and reset before each call (`NinoArrayBufferWriter` for Nino, `ArrayBufferWriter<byte>` for the others), so they measure the serializer, not array allocation.
+- **Deserialize** benchmarks read bytes that each serializer wrote at startup, and create new objects on every call.
+- **Reuse** benchmarks deserialize into objects that already exist: Nino by `ref` and from `[NinoPooled]` pools, MemoryPack with its overwrite mode.
+- **v3** runs the same `SimpleTest` built against Nino 3.3.13 from NuGet, directly before and after the v4 run on the same machine; its time is the mean of the two runs.
+
+The code of every benchmark is in [Benchmark Code](#benchmark-code).
+
+<BenchSource lang="en" />
+
+## Runtime Results [#runtime]
+
+Bars show time relative to MemoryPack (1.0); shorter is faster. Hover or focus a bar for the numbers.
+
+### Serialize (to a Reused Buffer Writer) [#serialize-to-a-reused-buffer-writer]
+
+One value or array, written into a reused buffer writer. Data types: [`SimpleTest`](#simpletest) and [`PolymorphicTest`](#polymorphictest).
+
+<RuntimeTable op="serialize" lang="en" />
+
+<BenchmarkChart chart="serialize" lang="en" table={false} />
+
+`SimpleStruct` (`int` + `DateTime`) is declared with `[StructLayout(LayoutKind.Sequential, Pack = 4)]`, so it is 12 bytes with no padding and every serializer copies it as one block. Without `Pack` it would be 16 bytes with 4 bytes of padding, which Nino zeroes on write; see [Struct Layout](/en/docs/v4/performance#struct-layout).
+
+### Deserialize (New Instances) [#deserialize-new-instances]
+
+The same values, read back into new objects on every call. Data types: [`SimpleTest`](#simpletest) and [`PolymorphicTest`](#polymorphictest).
+
+<RuntimeTable op="deserialize" lang="en" />
+
+<BenchmarkChart chart="deserialize" lang="en" table={false} />
+
+<Callout type="info">
+
+`Vector4[10000]` allocates a 160 KB array on the large object heap per call, so it measures gen-2 collections more than either serializer, and it varies between runs. The copy itself is one `memcpy` in both.
+
+</Callout>
+
+### Polymorphic Graphs [#polymorphism]
+
+The polymorphic rows of the two tables above, side by side. Every value is declared as an abstract base class and read back as its runtime type; data types: [`PolymorphicTest`](#polymorphictest).
+
+| Case | What it holds | Serialize vs MemoryPack | Deserialize vs MemoryPack |
+| --- | --- | ---: | ---: |
+| Polymorphic class | one `PolymorphicClass` with 1,000 `Foo` subtypes in a list, 12 in a dictionary | <BenchValue k="serialize:PolymorphicClass" /> | <BenchValue k="deserialize:PolymorphicClass" /> |
+| Polymorphic class array | 100 of them, 50 `Foo`s each | <BenchValue k="serialize:PolymorphicClassArray" /> | <BenchValue k="deserialize:PolymorphicClassArray" /> |
+| Polymorphic `Foo[]` | 1,000 elements of 20 subtypes, up to 9 levels deep | <BenchValue k="serialize:PolymorphicFooArray" /> | <BenchValue k="deserialize:PolymorphicFooArray" /> |
+
+A ratio above 1× means Nino is faster. Nino writes a 4-byte type id per value and dispatches with generated code; MemoryPack uses its `[MemoryPackUnion]` tags. See [Polymorphism](/en/docs/v4/polymorphism).
+
+### Deserialize into Existing Instances (Pooling) [#pooling]
+
+Nino deserializes into an existing object graph ([reuse deserialization](/en/docs/v4/pooling)) and takes new instances from `[NinoPooled]` pools; MemoryPack overwrites existing instances. Data types: [`PooledTest`](#pooledtest) and [`PooledGraphTest`](#pooledgraphtest).
+
+<ReuseTable lang="en" />
+
+<BenchmarkChart chart="reuse" lang="en" table={false} />
+
+### Allocations and Payload Size [#allocations-and-payload-size]
+
+Bytes allocated per call, and the size of one serialized `SimpleClass` (<BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack). No serializer allocates on the serialize paths.
+
+<BenchmarkChart chart={['allocation', 'payload']} lang="en" />
+
+### Reference Tracking, Version Tolerance and Fixed-Size Types [#more-cases]
+
+Three more benchmark classes compare features that change how a type is written, each against the closest MemoryPack mode:
+
+- **Reference tracking** ([`ReferenceTest`](#referencetest)): a graph of 200 nodes with shared objects and cycles. Nino uses `[NinoType(trackReferences: true)]`, MemoryPack `GenerateType.CircularReference`.
+- **Version tolerance** ([`VersionTolerantTest`](#versiontoleranttest)): `SimpleClass`'s members in a type that can gain members later, alone and as an array of 100. Nino uses `format: NinoFormat.VersionTolerant` (one length per object), MemoryPack `GenerateType.VersionTolerant` (a length per member).
+- **Fixed-size types** ([`FixedSizeTest`](#fixedsizetest)): a 40-byte struct, the same members in a sealed class, and an array of 100 of the classes, through the `byte[]` APIs of both libraries, so allocating the result is part of every call. Deserializing the struct is a single copy, too short to measure reliably, and is not shown.
+
+<ExtraRuntimeTables lang="en" />
+
+### Not Measured Yet [#not-measured-yet]
+
+- **Keyed types** have no runtime benchmark. Their cost (a key and a length per member, and a key check per member when reading) is described in [Evolving Your Data](/en/docs/v4/evolving-data).
+
+### All Measurements [#results]
+
+Every row of the report, MessagePack included, with the exact environment.
+
+<Accordions type="single">
+<Accordion title="Show all measurements">
+
+<ResultsTable lang="en" />
+
+</Accordion>
+</Accordions>
+
+## Build Time and Generated Code [#build-time-and-generated-code]
+
+The test project is a synthetic assembly of `N` abstract root classes, each with a chain of 8 derived classes, a sealed leaf and a struct (`N × 11` types), with primitives, strings, `List<T>`, `Dictionary<int, string>`, references to other `[NinoType]`s and private fields. The harness runs the generator on the compilation (Roslyn 4.3 in-process), emits the assembly, and re-runs the generator after an edit. Each time is the median of the last three of five runs, except v3 at 1,100 types: the median of three runs, which took 7.6 to 7.8 minutes each. The baseline is v3 3.3.13, run on the same machine.
+
+<BenchmarkChart chart="compile" lang="en" table={false} />
+
+<Tabs items={["330 types (N = 30)", "1,100 types (N = 100)"]}>
+
+<Tab value="330 types (N = 30)">
+
+| | v3 (3.3.13) | v4 | v4 vs v3 |
+| --- | ---: | ---: | ---: |
+| Generated source | 18.7 MB (363,233 lines) | 1.31 MB (23,215 lines) | **14× smaller** |
+| Compiling the generated code (emit) | 42.9 s | 0.84 s | **51× faster** |
+| Running the generator | 1.01 s | 0.32 s | **3.1× faster** |
+| Re-generating after editing a member | 1.03 s | 0.12 s | **8.3× faster** |
+| Re-generating after editing a comment | 1.01 s | 0.13 s | **7.8× faster** |
+| IL of the generated code | 2.21 MB | 0.42 MB | **5.3× smaller** |
+
+The generator times here are tenths of a second and vary from session to session: read those rows as "several times faster", not as exact ratios.
+
+</Tab>
+<Tab value="1,100 types (N = 100)">
+
+| | v3 (3.3.13) | v4 | v4 vs v3 |
+| --- | ---: | ---: | ---: |
+| Generated source | 62.0 MB (1,204,143 lines) | 4.38 MB (77,535 lines) | **14× smaller** |
+| Compiling the generated code (emit) | 462 s | 2.1 s | **221× faster** |
+| Running the generator | 4.6 s | 0.42 s | **11× faster** |
+| Re-generating after editing a member | 3.5 s | 0.48 s | **7.4× faster** |
+| Re-generating after editing a comment | 4.0 s | 0.44 s | **9.1× faster** |
+| IL of the generated code | 7.3 MB | 1.50 MB | **4.9× smaller** |
+
+</Tab>
+</Tabs>
+
+v3's compile time grows much faster than the number of types: 3.3× the types took 11× the compile time. v4 grows roughly linearly, at about 4 KB of source and 2 to 3 ms of compile time per type.
+
+## Benchmark Code [#benchmark-code]
+
+The types and methods behind each table, from [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.Benchmark), trimmed of `using` lines and repeated cases. Every class runs with `[ShortRunJob(RuntimeMoniker.Net10_0)]`, `[GcServer(true)]` and `[MemoryDiagnoser]`; the types carry the attributes of each serializer they are measured with.
+
+### SimpleTest [#simpletest]
+
+Serialize and deserialize of a class with common member types, a 12-byte struct, arrays of both, and `Vector4[10000]`. Used by the [serialize](#serialize-to-a-reused-buffer-writer) and [deserialize](#deserialize-new-instances) tables.
+
+<Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
+<Tab value="Types">
+
+```csharp title="SimpleBenchmarkData.cs"
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+[MemoryPackUnion(0, typeof(SimpleClass))]
+[Union(0, typeof(SimpleClass))]
+public abstract partial class SimpleClassBase
+{
+    [Key(0)] public int Id;
+    [Key(1)] public bool Tag;
+    [Key(2)] public Guid Guid;
+    [Key(3)] public DateTime CreateTime;
+}
+
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+public sealed partial class SimpleClass : SimpleClassBase
+{
+    [Key(4)] public string Name { get; set; }
+    [Key(5)] [NinoUtf8] public string Desc;
+    [Key(6)] public int[] Numbers { get; set; }
+    [Key(7)] public List<DateTime> Dates { get; set; }
+    [Key(8)] public Dictionary<int, string> Map1;
+    [Key(9)] public Dictionary<int, int> Map2 { get; set; }
+}
+
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+[StructLayout(LayoutKind.Sequential, Pack = 4)] // int + DateTime with no padding: 12 bytes
+public partial struct SimpleStruct
+{
+    [Key(0)] public int Id;
+    [Key(1)] public DateTime CreateTime;
+}
+```
+
+</Tab>
+<Tab value="Data">
+
+```csharp title="SimpleBenchmarkData.cs, SimpleTest.cs"
+public static SimpleClass Create()
+{
+    Random random = new Random();
+    return new SimpleClass
+    {
+        Id = random.Next(),
+        Tag = random.Next() % 2 == 0,
+        Guid = Guid.NewGuid(),
+        CreateTime = DateTime.Now,
+        Name = Guid.NewGuid().ToString(),
+        Desc = Enumerable.Range(0, 10).Select(_ => Guid.NewGuid().ToString()).Aggregate((a, b) => a + b),
+        Numbers = Enumerable.Range(0, 100).Select(_ => random.Next()).ToArray(),
+        Dates = Enumerable.Range(0, 10).Select(_ => DateTime.Now.AddSeconds(random.Next())).ToList(),
+        Map1 = Enumerable.Range(0, 10).ToDictionary(n => n, n => n.ToString()),
+        Map2 = Enumerable.Range(0, 10).ToDictionary(n => n, n => n * 2)
+    };
+}
+
+public static SimpleStruct Create()
+{
+    Random random = new Random();
+    return new SimpleStruct
+    {
+        Id = random.Next(),
+        CreateTime = DateTime.Now.AddSeconds(random.Next())
+    };
+}
+
+// SimpleTest's static constructor
+SimpleClass = SimpleClass.Create();
+SimpleClasses = Enumerable.Range(0, 100).Select(_ => SimpleClass.Create()).ToArray();
+SimpleStruct = SimpleStruct.Create();
+SimpleStructs = Enumerable.Range(0, 100).Select(_ => SimpleStruct.Create()).ToArray();
+var r = Random.Shared;
+Vectors = Enumerable.Range(0, 10000)
+    .Select(_ => new Vector4(r.NextSingle(), r.NextSingle(),
+        r.NextSingle(), r.NextSingle())).ToArray();
+```
+
+</Tab>
+<Tab value="Methods">
+
+```csharp title="SimpleTest.cs"
+[GlobalSetup]
+public void Setup()
+{
+    _ninoBuffer = new NinoArrayBufferWriter(320 * 1024);
+    _memoryPackBuffer = new ArrayBufferWriter<byte>(320 * 1024);
+    _messagePackBuffer = new ArrayBufferWriter<byte>(320 * 1024);
+}
+
+[Benchmark(Baseline = true), BenchmarkCategory("SimpleClassSerialize")]
+public int NinoSerializeSimpleClass()
+{
+    _ninoBuffer.ResetWrittenCount();
+    NinoSerializer.Serialize(SimpleClass, _ninoBuffer);
+    return _ninoBuffer.WrittenCount;
+}
+
+[Benchmark, BenchmarkCategory("SimpleClassSerialize")]
+public int MemoryPackSerializeSimpleClass()
+{
+    _memoryPackBuffer.ResetWrittenCount();
+    MemoryPackSerializer.Serialize(_memoryPackBuffer, SimpleClass);
+    return _memoryPackBuffer.WrittenCount;
+}
+
+// SerializedSimpleClass holds the bytes each serializer wrote in the static constructor
+[Benchmark(Baseline = true), BenchmarkCategory("SimpleClassDeserialize")]
+public SimpleClass NinoDeserializeSimpleClass()
+{
+    return NinoDeserializer.Deserialize<SimpleClass>(SerializedSimpleClass[2]);
+}
+
+[Benchmark, BenchmarkCategory("SimpleClassDeserialize")]
+public SimpleClass MemoryPackDeserializeSimpleClass()
+{
+    return MemoryPackSerializer.Deserialize<SimpleClass>(SerializedSimpleClass[1]);
+}
+
+// MessagePack has the same pair, with its own ArrayBufferWriter<byte>.
+// SimpleStruct, SimpleClasses (SimpleClass[100]), SimpleStructs (SimpleStruct[100])
+// and Vectors (Vector4[10000]) have the same methods.
+```
+
+</Tab>
+</Tabs>
+
+### PolymorphicTest [#polymorphictest]
+
+Values declared as an abstract base and read back as one of 21 subtypes. Used by the [polymorphic graphs](#polymorphism) rows.
+
+<Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
+<Tab value="Types">
+
+```csharp title="PolymorphicBenchmarkData.cs"
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+[MemoryPackUnion(1, typeof(PolymorphicClass))]
+[Union(1, typeof(PolymorphicClass))]
+public abstract partial class PolymorphicClassBase
+{
+    [Key(10)] public int BaseId;
+
+    public abstract void Write();
+}
+
+[MemoryPackable]
+[MessagePackObject]
+[NinoType]
+public sealed partial class PolymorphicClass : PolymorphicClassBase, IPolymorphicWriter
+{
+    [Key(0)] public int Id;
+    [Key(1)] public bool Tag;
+    [Key(2)] public int[] Numbers;
+    [Key(3)] public List<PolymorphicFooBase> Numbers2;
+    [Key(4)] public Dictionary<int, PolymorphicFooBase> Map1;
+    [Key(5)] public FooD Foo;
+    [Key(6)] public HashSet<int> Set;
+}
+
+[NinoType]
+[MemoryPackable]
+[MemoryPackUnion(1, typeof(FooA))]   // ... one [MemoryPackUnion] and one [Union] per subtype,
+[Union(1, typeof(FooA))]             // FooA to FooS and FooZ (20 in all)
+public abstract partial class PolymorphicFooBase
+{
+    [Key(0)] public int Id;
+}
+
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+public partial class FooA : PolymorphicFooBase, IPolymorphicWriter
+{
+    [Key(1)] public PolymorphicTransform Card;
+}
+
+[NinoType] [MemoryPackable] [MessagePackObject]
+public partial class FooB : FooA { [Key(2)] public PolymorphicTransform CardB; }
+
+[NinoType] [MemoryPackable] [MessagePackObject]
+public partial class FooC : FooB { [Key(3)] public PolymorphicTransform CardC; }
+
+[NinoType] [MemoryPackable] [MessagePackObject]
+public partial class FooD : FooC { [Key(4)] public PolymorphicTransform CardD; }
+
+// FooE : FooD, FooF : FooE, FooG : FooF, FooH : FooG add no members (depth 5 to 8).
+// FooI, FooJ, ... FooS and FooZ all derive from FooH (depth 9) and add no members.
+
+[MemoryPackable]
+[MessagePackObject]
+[NinoType]
+public partial struct PolymorphicTransform
+{
+    [Key(0)] public float X;
+    [Key(1)] public float Y;
+    [Key(2)] public float Z;
+}
+```
+
+</Tab>
+<Tab value="Data">
+
+```csharp title="PolymorphicTest.cs"
+// Polymorphic class: one PolymorphicClass. Create() fills Numbers (100 ints),
+// Map1 (12 Foos: FooA to FooD, three times), Foo (a FooD) and Set (100 ints);
+// then 1,000 Foos are added to Numbers2, cycling through the 20 subtypes.
+PolymorphicInstance = PolymorphicClass.Create();
+var polyClass = (PolymorphicClass)PolymorphicInstance;
+for (int i = 0; i < 1000; i++)
+{
+    switch (i % 20)
+    {
+        case 0: polyClass.Numbers2.Add(FooA.Create()); break;
+        case 1: polyClass.Numbers2.Add(FooB.Create()); break;
+        // ... one case per subtype
+        case 19: polyClass.Numbers2.Add(FooZ.Create()); break;
+    }
+}
+
+// Polymorphic Foo[]: 1,000 elements declared as PolymorphicFooBase, the same 20 subtypes in turn
+PolymorphicFooArray = new PolymorphicFooBase[1000];
+
+// Polymorphic class array: 100 PolymorphicClass values declared as PolymorphicClassBase,
+// each with 50 Foos in Numbers2
+PolymorphicClassArray = Enumerable.Range(0, 100).Select(_ => /* as above, 50 Foos */).ToArray();
+```
+
+</Tab>
+<Tab value="Methods">
+
+```csharp title="PolymorphicTest.cs"
+[GlobalSetup]
+public void Setup()
+{
+    _ninoBuffer = new NinoArrayBufferWriter(1024 * 1024);
+    _memoryPackBuffer = new ArrayBufferWriter<byte>(1024 * 1024);
+    _messagePackBuffer = new ArrayBufferWriter<byte>(1024 * 1024);
+}
+
+[Benchmark(Baseline = true), BenchmarkCategory("PolymorphicClassSerialize")]
+public int NinoSerializePolymorphicClass()
+{
+    _ninoBuffer.ResetWrittenCount();
+    NinoSerializer.Serialize(PolymorphicInstance, _ninoBuffer);
+    return _ninoBuffer.WrittenCount;
+}
+
+[Benchmark(Baseline = true), BenchmarkCategory("PolymorphicClassDeserialize")]
+public PolymorphicClassBase NinoDeserializePolymorphicClass()
+{
+    return NinoDeserializer.Deserialize<PolymorphicClassBase>(SerializedPolymorphicClass[2]);
+}
+
+// MemoryPack and MessagePack: the same shape as in SimpleTest.
+// PolymorphicFooArray and PolymorphicClassArray have the same methods.
+```
+
+</Tab>
+</Tabs>
+
+### PooledTest [#pooledtest]
+
+`SimpleClass`'s members in a `[NinoPooled]` class: Nino taking the instance from its pool against MemoryPack's overwrite. The "Pooled class" row of the [reuse table](#pooling).
+
+<Tabs groupId="bench-code" items={["Types", "Methods"]}>
+<Tab value="Types">
+
+```csharp title="PooledTest.cs"
+[NinoType, NinoPooled]
+[MemoryPackable]
+public sealed partial class PooledSimpleClass
+{
+    public int Id;
+    public bool Tag;
+    public Guid Guid;
+    public DateTime CreateTime;
+    public string Name { get; set; }
+    [NinoUtf8] public string Desc;
+    public int[] Numbers { get; set; }
+    public List<DateTime> Dates { get; set; }
+    public Dictionary<int, string> Map1;
+    public Dictionary<int, int> Map2 { get; set; }
+
+    private static partial IEnumerable<PooledSimpleClass> OnNinoPoolWarmup() => null;
+    private partial void OnNinoPoolReturn() { }
+
+    // a copy of SimpleClass.Create()'s data
+    public static PooledSimpleClass From(SimpleClass c) => new() { /* every member of c */ };
+}
+```
+
+</Tab>
+<Tab value="Methods">
+
+```csharp title="PooledTest.cs"
+private static readonly PooledSimpleClass Value = PooledSimpleClass.From(SimpleClass.Create());
+private static readonly byte[] NinoData = NinoSerializer.Serialize(Value);
+private static readonly byte[] MemoryPackData = MemoryPackSerializer.Serialize(Value);
+
+[Benchmark(Baseline = true), BenchmarkCategory("PooledDeserialize")]
+public PooledSimpleClass NinoDeserializeNew()
+{
+    // Nothing is ever returned here, so the pool stays empty and every call creates the graph.
+    return NinoDeserializer.Deserialize<PooledSimpleClass>(NinoData);
+}
+
+[Benchmark, BenchmarkCategory("PooledDeserialize")]
+public int NinoDeserializePooled()
+{
+    var value = NinoDeserializer.Deserialize<PooledSimpleClass>(NinoData);
+    int id = value.Id;
+    value.ReturnToPool();
+    return id;
+}
+
+[Benchmark, BenchmarkCategory("PooledDeserialize")]
+public PooledSimpleClass MemoryPackDeserializeNew() => MemoryPackSerializer.Deserialize<PooledSimpleClass>(MemoryPackData);
+
+[Benchmark, BenchmarkCategory("PooledDeserialize")]
+public PooledSimpleClass MemoryPackDeserializeOverwrite()
+{
+    MemoryPackSerializer.Deserialize(MemoryPackData, ref _memoryPackTarget);
+    return _memoryPackTarget;
+}
+```
+
+</Tab>
+</Tabs>
+
+### PooledGraphTest [#pooledgraphtest]
+
+Pooled graphs without strings, so the steady state can allocate nothing: a node with nested pooled children, and a list of 100 pooled leaves. The "Pooled node" and "Pooled leaves" rows of the [reuse table](#pooling).
+
+<Tabs groupId="bench-code" items={["Types", "Methods"]}>
+<Tab value="Types">
+
+```csharp title="PooledGraphTest.cs"
+[NinoType, NinoPooled]
+[MemoryPackable]
+public sealed partial class PooledLeaf
+{
+    public int A;
+    public float B;
+    public List<int> Items;   // 8 ints
+
+    private static partial IEnumerable<PooledLeaf> OnNinoPoolWarmup() => null;
+    private partial void OnNinoPoolReturn() { }
+}
+
+/// <summary>The same as PooledLeaf, not pooled: the "Plain" baseline.</summary>
+[NinoType]
+[MemoryPackable]
+public sealed partial class PlainLeaf
+{
+    public int A;
+    public float B;
+    public List<int> Items;
+}
+
+[NinoType, NinoPooled]
+[MemoryPackable]
+public sealed partial class PooledNode
+{
+    public int Id;
+    public long Ticks;
+    public double X, Y;
+    public bool Flag;
+    public Guid Guid;
+    public int[] Data;               // 32 ints
+    public List<long> Values;        // 16 longs
+    public Dictionary<int, int> Map; // 16 entries
+    public PooledLeaf Leaf;
+    public List<PooledLeaf> Leaves;  // 8 leaves
+
+    private static partial IEnumerable<PooledNode> OnNinoPoolWarmup() => null;
+    private partial void OnNinoPoolReturn() { }
+}
+```
+
+</Tab>
+<Tab value="Methods">
+
+```csharp title="PooledGraphTest.cs"
+private static readonly PooledNode Node = PooledNode.Create(new Random(1));
+private static readonly List<PooledLeaf> Leaves =
+    Enumerable.Range(0, 100).Select(_ => PooledLeaf.Create(new Random(2))).ToList();
+
+[Benchmark(Baseline = true), BenchmarkCategory("Node")]
+public PooledNode NinoNodeNew() => NinoDeserializer.Deserialize<PooledNode>(NinoNode);
+
+[Benchmark, BenchmarkCategory("Node")]
+public int NinoNodePooled()
+{
+    var node = NinoDeserializer.Deserialize<PooledNode>(NinoNode);
+    int id = node.Id;
+    node.ReturnToPool();
+    return id;
+}
+
+[Benchmark, BenchmarkCategory("Node")]
+public PooledNode MemoryPackNodeOverwrite()
+{
+    MemoryPackSerializer.Deserialize(MemoryPackNode, ref _memoryPackNode);
+    return _memoryPackNode;
+}
+
+/// <summary>A new list each time, its elements taken from the pool and returned after use.</summary>
+[Benchmark, BenchmarkCategory("Leaves")]
+public int NinoLeavesPooledElements()
+{
+    var leaves = NinoDeserializer.Deserialize<List<PooledLeaf>>(NinoLeaves);
+    int count = leaves.Count;
+    foreach (var leaf in leaves)
+        leaf.ReturnToPool();
+    return count;
+}
+
+/// <summary>The same list and elements, deserialized into again.</summary>
+[Benchmark, BenchmarkCategory("Leaves")]
+public List<PooledLeaf> NinoLeavesInPlace()
+{
+    NinoDeserializer.Deserialize(NinoLeaves, ref _ninoLeaves);
+    return _ninoLeaves;
+}
+
+[Benchmark, BenchmarkCategory("Leaves")]
+public List<PooledLeaf> MemoryPackLeavesOverwrite()
+{
+    MemoryPackSerializer.Deserialize(MemoryPackLeaves, ref _memoryPackLeaves);
+    return _memoryPackLeaves;
+}
+
+// Also measured: NinoLeavesNew, MemoryPackNodeNew, MemoryPackLeavesNew (new instances every call)
+// and the Plain category (List<PlainLeaf>, new instances, Nino and MemoryPack).
+```
+
+</Tab>
+</Tabs>
+
+### ReferenceTest [#referencetest]
+
+A graph of 200 nodes with shared tags, shared peers and cycles through the root, written into a reused buffer writer and read back. Nino tracks references with `trackReferences`, MemoryPack with `GenerateType.CircularReference` (which needs a `[MemoryPackOrder]` on each member); both write each object once and read shared references and cycles back as one instance. The "Object graph" rows of the [results above](#more-cases).
+
+<Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
+<Tab value="Types">
+
+```csharp title="ReferenceTest.cs"
+[NinoType(trackReferences: true)]
+[MemoryPackable(GenerateType.CircularReference)]
+public sealed partial class RefNode
+{
+    [MemoryPackOrder(0)] public int Id;
+    [MemoryPackOrder(1)] public double Weight;
+    [MemoryPackOrder(2)] public RefGraph Graph;   // back to the root: a cycle
+    [MemoryPackOrder(3)] public RefTag Tag;       // one of 16 shared tags
+    [MemoryPackOrder(4)] public RefNode Peer;     // an earlier node
+}
+
+[NinoType(trackReferences: true)]
+[MemoryPackable(GenerateType.CircularReference)]
+public sealed partial class RefTag
+{
+    [MemoryPackOrder(0)] public int Id;
+    [MemoryPackOrder(1)] public string Name;
+}
+
+[NinoType(trackReferences: true)]
+[MemoryPackable(GenerateType.CircularReference)]
+public sealed partial class RefGraph
+{
+    [MemoryPackOrder(0)] public int Version;
+    [MemoryPackOrder(1)] public List<RefNode> Nodes;
+    [MemoryPackOrder(2)] public List<RefTag> Tags;
+}
+```
+
+</Tab>
+<Tab value="Data">
+
+```csharp title="ReferenceTest.cs"
+// In RefGraph: count nodes sharing 16 tags; each node's peer is an earlier node
+// (a back reference, so the nesting stays shallow), and every node refers back to the graph.
+public static RefGraph Create(int count)
+{
+    var r = new Random(3);
+    var graph = new RefGraph { Version = 1, Nodes = new List<RefNode>(count) };
+    graph.Tags = Enumerable.Range(0, 16).Select(i => new RefTag { Id = i, Name = "tag" + i }).ToList();
+    for (int i = 0; i < count; i++)
+    {
+        graph.Nodes.Add(new RefNode
+        {
+            Id = i, Weight = r.NextDouble(), Graph = graph, Tag = graph.Tags[r.Next(graph.Tags.Count)],
+            Peer = i == 0 ? null : graph.Nodes[r.Next(i)]
+        });
+    }
+
+    return graph;
+}
+
+// In ReferenceTest:
+private static readonly RefGraph Graph = RefGraph.Create(200);
+private static readonly byte[] NinoGraph = NinoSerializer.Serialize(Graph);
+private static readonly byte[] MemoryPackGraph = MemoryPackSerializer.Serialize(Graph);
+```
+
+</Tab>
+<Tab value="Methods">
+
+```csharp title="ReferenceTest.cs"
+[Benchmark(Baseline = true), BenchmarkCategory("GraphSerialize")]
+public int NinoSerializeGraph()
+{
+    _ninoBuffer.ResetWrittenCount();
+    NinoSerializer.Serialize(Graph, _ninoBuffer);
+    return _ninoBuffer.WrittenCount;
+}
+
+[Benchmark, BenchmarkCategory("GraphSerialize")]
+public int MemoryPackSerializeGraph()
+{
+    _memoryPackBuffer.ResetWrittenCount();
+    MemoryPackSerializer.Serialize(_memoryPackBuffer, Graph);
+    return _memoryPackBuffer.WrittenCount;
+}
+
+[Benchmark(Baseline = true), BenchmarkCategory("GraphDeserialize")]
+public RefGraph NinoDeserializeGraph() => NinoDeserializer.Deserialize<RefGraph>(NinoGraph);
+
+[Benchmark, BenchmarkCategory("GraphDeserialize")]
+public RefGraph MemoryPackDeserializeGraph() => MemoryPackSerializer.Deserialize<RefGraph>(MemoryPackGraph);
+```
+
+</Tab>
+</Tabs>
+
+### VersionTolerantTest [#versiontoleranttest]
+
+The members of `SimpleClass` in a version-tolerant type, alone and as an array of 100, written into a reused buffer writer and read back as [`SimpleTest`](#simpletest) does with `SimpleClass`: the difference between the two is the cost of version tolerance. Nino prefixes the body with its length (`NinoFormat.VersionTolerant`); MemoryPack writes a member count and the length of every member (`GenerateType.VersionTolerant`, which needs a `[MemoryPackOrder]` on each member). The `TolerantClass` rows of the [results above](#more-cases).
+
+<Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
+<Tab value="Types">
+
+```csharp title="VersionTolerantTest.cs"
+[NinoType(format: NinoFormat.VersionTolerant)]
+[MemoryPackable(GenerateType.VersionTolerant)]
+public sealed partial class TolerantClass
+{
+    [MemoryPackOrder(0)] public int Id;
+    [MemoryPackOrder(1)] public bool Tag;
+    [MemoryPackOrder(2)] public Guid Guid;
+    [MemoryPackOrder(3)] public DateTime CreateTime;
+    [MemoryPackOrder(4)] public string Name { get; set; }
+    [MemoryPackOrder(5)] [NinoUtf8] public string Desc;
+    [MemoryPackOrder(6)] public int[] Numbers { get; set; }
+    [MemoryPackOrder(7)] public List<DateTime> Dates { get; set; }
+    [MemoryPackOrder(8)] public Dictionary<int, string> Map1;
+    [MemoryPackOrder(9)] public Dictionary<int, int> Map2 { get; set; }
+}
+```
+
+</Tab>
+<Tab value="Data">
+
+```csharp title="VersionTolerantTest.cs"
+// In TolerantClass: a copy of a SimpleClass from SimpleTest's data.
+public static TolerantClass From(SimpleClass c) => new()
+{
+    Id = c.Id, Tag = c.Tag, Guid = c.Guid, CreateTime = c.CreateTime, Name = c.Name, Desc = c.Desc,
+    Numbers = c.Numbers, Dates = c.Dates, Map1 = c.Map1, Map2 = c.Map2,
+};
+
+// In VersionTolerantTest:
+private static readonly TolerantClass TolerantClass = TolerantClass.From(SimpleClass.Create());
+private static readonly TolerantClass[] TolerantClasses =
+    Enumerable.Range(0, 100).Select(_ => TolerantClass.From(SimpleClass.Create())).ToArray();
+
+private static readonly byte[] NinoTolerantClass = NinoSerializer.Serialize(TolerantClass);
+private static readonly byte[] MemoryPackTolerantClass = MemoryPackSerializer.Serialize(TolerantClass);
+```
+
+</Tab>
+<Tab value="Methods">
+
+```csharp title="VersionTolerantTest.cs"
+[Benchmark(Baseline = true), BenchmarkCategory("TolerantClassSerialize")]
+public int NinoSerializeTolerantClass()
+{
+    _ninoBuffer.ResetWrittenCount();
+    NinoSerializer.Serialize(TolerantClass, _ninoBuffer);
+    return _ninoBuffer.WrittenCount;
+}
+
+[Benchmark, BenchmarkCategory("TolerantClassSerialize")]
+public int MemoryPackSerializeTolerantClass()
+{
+    _memoryPackBuffer.ResetWrittenCount();
+    MemoryPackSerializer.Serialize(_memoryPackBuffer, TolerantClass);
+    return _memoryPackBuffer.WrittenCount;
+}
+
+[Benchmark(Baseline = true), BenchmarkCategory("TolerantClassDeserialize")]
+public TolerantClass NinoDeserializeTolerantClass() =>
+    NinoDeserializer.Deserialize<TolerantClass>(NinoTolerantClass);
+
+[Benchmark, BenchmarkCategory("TolerantClassDeserialize")]
+public TolerantClass MemoryPackDeserializeTolerantClass() =>
+    MemoryPackSerializer.Deserialize<TolerantClass>(MemoryPackTolerantClass);
+
+// TolerantClasses (the array of 100) has the same methods.
+```
+
+</Tab>
+</Tabs>
+
+### FixedSizeTest [#fixedsizetest]
+
+Types whose values always take the same number of bytes ([fixed-size types](/en/docs/v4/performance#fixed-size-types)): `Serialize(value)` returns a new `byte[]` allocated at exactly that size and writes the value straight into it, with no scratch buffer, writer or copy. Measured through the `byte[]` APIs of both serializers, so allocating the result is part of every serialize call, plus an array of 100 of the classes, whose length varies and which takes the regular path. The `FixedStruct` and `FixedClass` rows of the [results above](#more-cases).
+
+<Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
+<Tab value="Types">
+
+```csharp title="FixedSizeTest.cs"
+// Unmanaged members only (40 bytes, no padding): every value serializes to the same number of bytes.
+[NinoType]
+[MemoryPackable]
+public partial struct FixedStruct
+{
+    public int Id;
+    public Vector3 Position;
+    public long Ticks;
+    public Guid Guid;
+}
+
+// The same members in a sealed class: its size is fixed too (a null flag and 40 bytes).
+[NinoType]
+[MemoryPackable]
+public sealed partial class FixedClass
+{
+    public int Id;
+    public Vector3 Position;
+    public long Ticks;
+    public Guid Guid;
+}
+```
+
+</Tab>
+<Tab value="Data">
+
+```csharp title="FixedSizeTest.cs"
+// In FixedStruct (FixedClass has the same Create):
+public static FixedStruct Create(Random r) => new()
+{
+    Id = r.Next(),
+    Position = new Vector3(r.NextSingle(), r.NextSingle(), r.NextSingle()),
+    Ticks = DateTime.Now.AddSeconds(r.Next()).Ticks,
+    Guid = Guid.NewGuid(),
+};
+
+// In FixedSizeTest:
+private static readonly FixedStruct FixedStruct = FixedStruct.Create(new Random(4));
+private static readonly FixedClass FixedClass = FixedClass.Create(new Random(5));
+private static readonly FixedClass[] FixedClasses =
+    Enumerable.Range(0, 100).Select(i => FixedClass.Create(new Random(6 + i))).ToArray();
+
+static FixedSizeTest()
+{
+    // These cases measure the fixed-size path: stop if either type ever stops taking it.
+    if (NinoSerializer.GetFixedSize<FixedStruct>() < 0 || NinoSerializer.GetFixedSize<FixedClass>() < 0)
+        throw new InvalidOperationException("FixedStruct and FixedClass must be of fixed size");
+}
+```
+
+</Tab>
+<Tab value="Methods">
+
+```csharp title="FixedSizeTest.cs"
+[Benchmark(Baseline = true), BenchmarkCategory("FixedClassSerialize")]
+public byte[] NinoSerializeFixedClass() => NinoSerializer.Serialize(FixedClass);
+
+[Benchmark, BenchmarkCategory("FixedClassSerialize")]
+public byte[] MemoryPackSerializeFixedClass() => MemoryPackSerializer.Serialize(FixedClass);
+
+[Benchmark(Baseline = true), BenchmarkCategory("FixedClassDeserialize")]
+public FixedClass NinoDeserializeFixedClass() => NinoDeserializer.Deserialize<FixedClass>(NinoFixedClass);
+
+[Benchmark, BenchmarkCategory("FixedClassDeserialize")]
+public FixedClass MemoryPackDeserializeFixedClass() =>
+    MemoryPackSerializer.Deserialize<FixedClass>(MemoryPackFixedClass);
+
+// FixedStruct and FixedClasses (the array of 100) have the same methods.
+```
+
+</Tab>
+</Tabs>
+
+## Reproducing [#reproducing]
+
+From a clone of the [Nino repository](https://github.com/JasonXuDeveloper/Nino), with the .NET 10 SDK and Python 3:
+
+```shell
+# runtime, as published: v3 3.3.13, then the full v4 suite, then v3 again (about 40 minutes)
+benchmarks/run.sh
+
+# runtime, v4 only, a subset
+dotnet run -c Release --project src/Nino.Benchmark -- --filter '*SimpleTest*' --iterationCount 15 --warmupCount 5
+
+# reference tracking, version tolerance and fixed-size types
+dotnet run -c Release --project src/Nino.Benchmark -- --filter '*ReferenceTest*' '*VersionTolerantTest*' '*FixedSizeTest*'
+
+# build time and generated code (N = 30, 8 derived classes per root)
+dotnet run -c Release --project src/Nino.GeneratorBenchmark -- 30 8
+```
+
+- `benchmarks/run.sh` builds `benchmarks/v3` (the same `SimpleTest` against Nino 3.3.13 from NuGet) and runs it before and after v4, so drift of the machine during the v4 run averages out. It prints **v4 vs v3** for each case and both v3 runs.
+- Every release runs the same protocol in CI, on one runner, and publishes the result in the release notes: the Performance Report, and a **v3 3.3.13 vs v4 (same machine)** section. This site takes its runtime numbers from the newest v4 release that has them.
+- `benchmarks/members` takes `SimpleClass` apart member by member, against v3 and v4, to find which member makes a case slower. See the [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks).

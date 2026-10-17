@@ -1,0 +1,104 @@
+---
+title: 序列化与反序列化
+description: 用生成的 Serializer 序列化到数组或缓冲区写入器，用 Deserializer 从 span 反序列化。
+icon: Play
+---
+
+<AnchorRedirect
+  map={{
+    '序列化': '/zh/docs/v2/basic#serialization',
+    '标准用法': '/zh/docs/v2/basic#standard-usage',
+    '推荐用法': '/zh/docs/v2/basic#recommended-usage',
+    '反序列化': '/zh/docs/v2/basic#deserialization',
+    '标准用法-1': '/zh/docs/v2/basic#standard-usage-1',
+    '推荐用法-1': '/zh/docs/v2/basic#recommended-usage-1',
+  }}
+/>
+
+源生成器会为你的项目生成 `Serializer` 和 `Deserializer` 两个类，并为每个 `[NinoType]` 生成 `Serialize()` 扩展方法。下文的 `NinoSerializableType` 代表任意可被 Nino 序列化的类型，参见[支持的类型](/zh/docs/v2/types)。
+
+## 序列化 [#serialization]
+
+```csharp
+byte[] Serializer.Serialize(NinoSerializableType val);
+void Serializer.Serialize(NinoSerializableType val, IBufferWriter<byte> bufferWriter);
+```
+
+### 序列化为新数组 [#standard-usage]
+
+```csharp
+ObjClass obj = new ObjClass();
+byte[] byteArr = Serializer.Serialize(obj);
+// 或者使用扩展方法
+byteArr = obj.Serialize();
+```
+
+### 写入缓冲区写入器（推荐） [#recommended-usage]
+
+`IBufferWriter<byte>` 重载把数据写进你提供的缓冲区，序列化时就不必分配新的字节数组。你可以按需自己实现 `IBufferWriter<byte>`，例如封装 `MemoryStream` 或 `NetworkStream`，也可以直接用 .NET 自带的 `ArrayBufferWriter<byte>`。
+
+在多次序列化之间复用同一个 `ArrayBufferWriter<byte>`（中间调用 `ResetWrittenCount()`），可以省掉绝大部分内存分配：
+
+```csharp
+ObjClass obj = new ObjClass();
+ArrayBufferWriter<byte> bufferWriter = new ArrayBufferWriter<byte>();
+Serializer.Serialize(obj, bufferWriter);
+
+// 用扩展方法再序列化一次
+bufferWriter.ResetWrittenCount(); // 重置写入计数 // [!code highlight]
+obj.Serialize(bufferWriter);      // 这次不会分配内存
+```
+
+## 反序列化 [#deserialization]
+
+```csharp
+void Deserializer.Deserialize(ReadOnlySpan<byte> data, out NinoSerializableType value);
+```
+
+<Callout type="info">
+
+`data` 可以是 `byte[]`、`ArraySegment<byte>`、`Span<byte>` 或 `Memory<byte>.Span`。
+
+</Callout>
+
+### 从字节数组反序列化 [#standard-usage-1]
+
+```csharp
+// byteArr 是 byte[]
+Deserializer.Deserialize(byteArr, out ObjClass obj);
+```
+
+### 从网络数据反序列化（推荐） [#recommended-usage-1]
+
+数据以 `ReadOnlySequence<byte>` 的形式到达时（例如来自 `System.IO.Pipelines`），如果它是一整块连续内存，直接传它的 span；否则先复制到一块连续内存里：数据小就放在栈上，数据大就用池化数组。
+
+```csharp title="Receive.cs"
+// data 是网络层传来的 ReadOnlySequence<byte>，比如来自 Pipeline
+ReadOnlySequence<byte> data = xxxxx;
+ObjClass obj;
+// 一整块连续内存：直接传入 Span<byte>
+if (data.IsSingleSegment)
+{
+    Span<byte> dataSpan = data.FirstSpan;
+    Deserializer.Deserialize(dataSpan, out obj);
+}
+// 多块内存：先复制到一块连续内存
+else
+{
+    if (data.Length <= 1024)
+    {
+        // 栈上分配
+        Span<byte> stackMemory = stackalloc byte[(int)data.Length];
+        data.CopyTo(stackMemory);
+        Deserializer.Deserialize(stackMemory, out obj);
+    }
+    else
+    {
+        // 堆上分配，使用数组池
+        byte[] arr = ArrayPool<byte>.Shared.Rent((int)data.Length);
+        data.CopyTo(arr);
+        Deserializer.Deserialize(arr, out obj);
+        ArrayPool<byte>.Shared.Return(arr);
+    }
+}
+```

@@ -1,0 +1,154 @@
+---
+title: 支持的类型
+description: "Nino 能序列化的所有类型：基元类型、字符串、元组、集合、不可变集合，以及你自己的集合类型。"
+icon: Shapes
+---
+
+<AnchorRedirect
+  map={{
+    '自定义类型': '/zh/docs/v4/defining-types',
+    'ninotype-选项': '/zh/docs/v4/defining-types#ninotype-options',
+    '哪些成员会被序列化': '/zh/docs/v4/defining-types#which-members-are-serialized',
+    '泛型类型': '/zh/docs/v4/defining-types#generic-types',
+    '多态': '/zh/docs/v4/polymorphism',
+    'custom-types': '/zh/docs/v4/defining-types',
+    'ninotype-options': '/zh/docs/v4/defining-types#ninotype-options',
+    'which-members-are-serialized': '/zh/docs/v4/defining-types#which-members-are-serialized',
+    'unmanaged-ninotype-structs': '/zh/docs/v4/defining-types#structs',
+    'generic-types': '/zh/docs/v4/defining-types#generic-types',
+    'polymorphism': '/zh/docs/v4/polymorphism',
+  }}
+/>
+
+本页列出 Nino 开箱即用支持的类型。它们都可以直接传给 `NinoSerializer.Serialize`，也可以用作 `[NinoType]` 的成员或集合元素，嵌套多少层都可以。
+
+<Callout type="idea">
+
+如果某个成员的类型无法序列化，分析器会在你写代码时报告警告 NINO007，该成员会被跳过。参见[分析器诊断](/zh/docs/v4/analyzers)。
+
+</Callout>
+
+## 可序列化的类型 [#serializable-types]
+
+### 基元类型与非托管类型 [#primitive-and-unmanaged-types]
+
+Nino 支持所有[非托管类型](https://learn.microsoft.com/zh-cn/dotnet/csharp/language-reference/builtin-types/unmanaged-types)，包括自定义的非托管类型。它们按原始字节写入（小端序，填充字节清零），它们的数组和列表只需一次整块拷贝：
+- `bool`、`byte`、`sbyte`、`char`、`short`、`ushort`、`int`、`uint`、`long`、`ulong`、`float`、`double`、`decimal`
+- `enum`
+- `DateTime`、`TimeSpan`、`Guid`
+- `System.Numerics` 以及 Unity 中的 `Vector3`、`Quaternion`、`Matrix4x4` 等类型
+- 非托管结构体、泛型结构体、记录结构体和泛型记录结构体
+
+少数非托管类型有自己的可移植格式，不按原始字节写入：
+- `DateTimeOffset`：UTC 刻度（ticks）加上以分钟为单位的偏移
+- `nint`/`nuint`：固定 8 字节
+- `Nullable<T>`、`ValueTuple<...>`、`KeyValuePair<TKey, TValue>`：逐个成员写入，因为它们在不同运行时上的内存布局不同（参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)）
+
+<Callout type="info">
+
+原始布局以 64 位平台的规范布局为准。在结构体布局不同的运行时上（例如 32 位平台），Nino 会逐个字段转换，保证所有平台读写的字节一致。
+
+</Callout>
+
+### 字符串 [#strings]
+
+支持 `string`。默认以 UTF-16 写入（一次整块拷贝）；给成员加上 [`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 则改为 UTF-8，集合或元组成员里的字符串（`List<string>`、`Dictionary<string, int>`）也一样。
+
+### 其他内置类型 [#other-built-in-types]
+- 任意可序列化类型 `T` 的 `Nullable<T>`（`T?`）
+- 1 到 7 个元素的 `ValueTuple` 和 `Tuple`
+- `KeyValuePair<TKey, TValue>`
+- `object`：声明为 `object` 的成员可以存放任何 `[NinoType]` 实例（类或结构体），写入时带上类型 ID，读回后仍是原来的运行时类型。其他值（如 `int`、`List<T>`）不能通过 `object` 写入，序列化这样的值会抛出异常。
+
+### 集合类型 [#collection-types]
+
+只要元素可以序列化，以下集合都支持：
+- `T[]`、多维数组 `T[,]`、`T[,,]`、`T[,,,]`，以及 `ArraySegment<T>`
+- `List<T>`、`HashSet<T>`、`Queue<T>`、`Stack<T>`、`LinkedList<T>`、`SortedSet<T>`
+- `Dictionary<TKey, TValue>`、`SortedDictionary<TKey, TValue>`、`SortedList<TKey, TValue>`
+- `ConcurrentDictionary<TKey, TValue>`、`ConcurrentQueue<T>`、`ConcurrentStack<T>`、`ConcurrentBag<T>`
+- `PriorityQueue<TElement, TPriority>`（.NET 6 及以上；.NET Standard 和 Unity 中没有）
+- 安装 [`Nino.Immutable`](#immutable-collections) 后支持 `ImmutableArray<T>` 和 `ImmutableList<T>`
+- 集合接口和 `ReadOnlyDictionary<TKey, TValue>`（见下表）
+- 其他实现了 `ICollection<T>`、`IDictionary<TKey, TValue>` 或 `IProducerConsumerCollection<T>` 的类
+
+声明为以下类型的成员，读回时得到的是具体的集合类型：
+
+| 声明类型 | 读回为 |
+| --- | --- |
+| `IEnumerable<T>`、`ICollection<T>`、`IList<T>`、`IReadOnlyCollection<T>`、`IReadOnlyList<T>` | `List<T>` |
+| `ISet<T>`、`IReadOnlySet<T>`（.NET 8+） | `HashSet<T>` |
+| `IDictionary<TKey, TValue>`、`IReadOnlyDictionary<TKey, TValue>` | `Dictionary<TKey, TValue>` |
+| `ReadOnlyDictionary<TKey, TValue>` | 包装一个 `Dictionary<TKey, TValue>` 的新 `ReadOnlyDictionary<TKey, TValue>` |
+
+声明为集合接口的成员逐个写入元素，对大多数元素类型来说，字节与 `List<T>` 相同。可空的原始类型元素是个例外：`int?[]` 或 `List<int?>` 的每个元素占固定的跨度（先是有值标志，然后是填充，再是值，`int?` 共 8 字节）；而声明为 `IList<int?>`、`ICollection<int?>` 或 `IEnumerable<int?>` 的成员把每个元素当作单独的 `int?` 写入（`null` 占 1 字节，否则占 5 字节）。成员在这两类声明之间切换，格式就会改变。
+
+<Callout type="info">
+
+集合可以任意嵌套，例如：
+- `List<Dictionary<int, OrderLine>>[]`
+- `Dictionary<int[], List<bool>[]>`
+- `IDictionary<string, IList<List<bool>[]>[]>[]`
+
+</Callout>
+
+### 不可变集合 [#immutable-collections]
+
+`ImmutableArray<T>` 和 `ImmutableList<T>` 放在单独的包里，不使用 `System.Collections.Immutable` 的项目就不必依赖它：
+
+```shell
+dotnet add package Nino.Immutable --prerelease
+```
+
+引用该包后，直接把这些类型用作成员，或直接传给 `NinoSerializer`/`NinoDeserializer` 即可，无需注册。这个包用 [`[assembly: NinoFormatter]`](/zh/docs/v4/custom-formatters#for-a-type-assembly-ninoformatter) 声明格式化器，做法和 Nino 自带的 BCL 格式化器完全一样：
+
+```csharp
+[NinoType]
+public sealed class Article
+{
+    public ImmutableArray<long> AuthorIds;   // default(ImmutableArray<T>) round-trips as default
+    public ImmutableList<string> Tags;
+}
+```
+
+其他不可变集合（`ImmutableDictionary`、`ImmutableHashSet` 等）没有内置支持，请为它们写[自定义格式化器](/zh/docs/v4/custom-formatters)。
+
+### 自定义集合 [#user-collections]
+
+你自己的集合类型无需任何特性即可使用：派生自 `List<T>`、`HashSet<T>`、`Queue<T>`、`Stack<T>` 或 `Dictionary<TKey, TValue>` 的类，或者实现了 `IDictionary<TKey, TValue>`、`IProducerConsumerCollection<T>` 或 `ICollection<T>` 的类，写入方式和它所扩展的集合完全相同。
+
+```csharp
+public class OrderLines : List<OrderLine> { }
+
+public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
+```
+
+- Nino 只在存放集合的成员或元素为 `null` 时才创建集合：如果类型声明了公共静态的 [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) 工厂方法（比如从池中取实例），就调用它，否则调用能无参调用的公共构造函数。
+- 集合通过公开的集合 API 填充（`Add`/`Clear`、字典索引器、`Enqueue`、`Push`、`TryAdd`）。`List<T>`、`HashSet<T>` 和 `Dictionary<TKey, TValue>` 的子类通过基类型填充，所以用 `new` 隐藏的成员不会被调用。
+- 如果集合类型本身也是 `[NinoType]`，先写元素，再写它自己的序列化成员。
+- 创建什么由声明类型决定：一个声明为 `List<OrderLine>` 的成员即使存放的是 `OrderLines`，读回来也是 `List<OrderLine>`。
+- 集合按值处理：同一个集合实例出现在两个成员中，会写入两次，读回来是两个实例。
+- 池化的集合（例如 ET 的 `ListComponent<T>`）可以实现 `INinoPooled`：复用反序列化丢弃它时，Nino 会调用它的 `ReturnToPool()`。参见[复用反序列化与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
+
+<Callout type="warn">
+
+有些集合形式不支持，参见[不支持的类型](#not-supported)。
+
+反序列化到 `IsReadOnly` 为 `true` 的集合会抛出 `InvalidOperationException`；数据中字典或 `HashSet<T>` 出现重复键时也一样。
+
+</Callout>
+
+## 不支持的类型 [#not-supported]
+
+下列类型没有格式化器，这类成员会被跳过并报告警告 NINO007（可以用 `[NinoIgnore]` 忽略，或为它写[自定义格式化器](/zh/docs/v4/custom-formatters)）：
+
+- 委托、`Task`、指针等只在运行时有意义的类型；
+- `Memory<T>`、`ReadOnlyMemory<T>`（请改用 `T[]` 或 `ArraySegment<T>`，或者参照 [`Memory<T>` 示例](/zh/docs/v4/custom-formatters#example-memory)注册一个格式化器），以及本来就不能作为类成员的 `Span<T>`；
+- 非泛型集合（`ArrayList`、`Hashtable`）和 `ReadOnlyCollection<T>`；
+- Nino 无法创建或填充的集合：抽象集合类（`abstract class Bag : ICollection<int>`）、既没有可无参调用的公共构造函数也没有 [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) 方法的集合、结构体集合（`struct Ring : IList<int>`），以及对两个不同的 `T` 实现了 `ICollection<T>` 的类型；
+- 其他 BCL 类，如 `BigInteger`、`Uri`、`Version`、`StringBuilder`、`Type`、`Lazy<T>`，以及除 `ImmutableArray<T>` 和 `ImmutableList<T>` 之外的不可变集合；
+- Unity 和 Godot 的**类**（`AnimationCurve`、`Gradient`、`Node`、`Resource` 等）；它们的非托管结构体是支持的。
+
+## 你自己的类型 [#your-own-types]
+
+类、结构体、记录和接口加上 `[NinoType]` 即可序列化。参见[定义类型](/zh/docs/v4/defining-types)和[多态](/zh/docs/v4/polymorphism)。

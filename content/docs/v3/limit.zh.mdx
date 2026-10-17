@@ -1,0 +1,65 @@
+---
+title: 局限性
+description: Nino v3 做不到的事，以及后续 v3 版本解决了哪些局限。
+icon: TriangleAlert
+---
+
+<AnchorRedirect
+  map={{
+    '当前限制': '/zh/docs/v3/limit#current-limitations',
+    '已解决的限制': '/zh/docs/v3/limit#resolved-limitations',
+  }}
+/>
+
+Nino v3 不做什么，以及 v3 解决了早期版本的哪些局限。
+
+## 当前局限 [#current-limitations]
+- **必须使用源生成器。** Nino 需要搭配它的源生成器使用。
+- **`WEAK_VERSION_TOLERANCE` 是全局开关。** 定义了 `WEAK_VERSION_TOLERANCE` 的项目无法反序列化未定义该符号的项目序列化的数据，反之亦然。
+- **不支持的类型会导致编译失败。** 序列化不支持的类型（如 `Queue<T>`）会产生编译错误。
+- **`ValueTuple` 在 .NET Core 与 Unity/Mono 中表现不同。** 见下文。
+
+<Callout type="info" title="为什么 ValueTuple 不能跨运行时">
+
+这不是 Nino 的问题。[Mono 的 `ValueTuple` 实现](https://github.com/mono/mono/blob/0f53e9e151d92944cacab3e24ac359410c606df6/mcs/class/corlib/Mono/RuntimeStructs.cs#L83)没有为值元组指定结构布局，所以 Nino 会按顺序序列化和反序列化它的字段。Unity 在编辑器中，以及未选择 IL2CPP 的播放器中使用的都是 Mono。IL2CPP 的行为应与 Mono 一致。
+
+[.NET Core 的实现](https://github.com/dotnet/runtime/blob/37e4d45236e68946db9d264593aa31a9c00534bc/src/libraries/System.Private.CoreLib/src/System/ValueTuple.cs#L425)则用 `LayoutKind.Auto` 布局值元组，结果可能与 Mono 不同。因此 `ValueTuple` 的数据在 .NET Core 与 Unity/Mono 之间不兼容。
+
+</Callout>
+
+## 已解决的局限 [#resolved-limitations]
+
+<Accordions type="multiple">
+<Accordion value="former-name" title="序列化之后不能修改类型名或命名空间">
+
+v3.2.2 已解决：改名后的类型仍能反序列化用旧类型名或旧命名空间序列化的数据。参见[类型改名](/zh/docs/v3/advanced#former-name)。
+
+</Accordion>
+<Accordion value="collections" title="集合没有版本兼容">
+
+v3.2.0 已解决：修改类型的成员之后，仍能反序列化修改前序列化的数据，即使数据位于包含多态元素的集合（列表、字典等）中。
+
+</Accordion>
+<Accordion value="non-public" title="不能序列化或反序列化非 public 的字段和属性">
+
+v3.0.6 已解决，但有几点需要注意：
+- .NET 8.0 以下，包含 private 成员的类型必须是 `partial` 的，如 `partial class MyClass`。
+- .NET 8.0 以下，可序列化的嵌套类型中不能声明 private 成员。
+- .NET 8.0 及以上**没有任何限制**。
+
+参见[选择成员](/zh/docs/v3/types#choosing-members)。
+
+</Accordion>
+<Accordion value="unmanaged-polymorphism" title="多态非托管结构体在转换为接口前后序列化结果不同">
+
+v3.0.3 已解决：所有多态非托管结构体都以同一种方式序列化和反序列化，无论是否转换为接口类型。
+
+</Accordion>
+<Accordion value="big-endian" title="大端平台">
+
+Nino 默认运行在小端平台上（C# 的默认情况），在大端平台上可能会反序列化出错。要在大端平台上使用，请给 `Nino.Core` 项目添加 `BIG_ENDIAN` 定义符号，自行编译后使用编译出的 DLL。
+
+实际上所有运行 .NET 的平台（包括 Unity）都是小端的，一般不需要担心这个问题。只有真的遇到大小端问题时，再添加 `BIG_ENDIAN` 即可。
+
+</Accordion>
+</Accordions>

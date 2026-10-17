@@ -1,0 +1,204 @@
+---
+title: 多态
+seoTitle: "C# 多态序列化 – Nino v4 文档"
+description: "基类、接口与抽象类：值读回时仍是它的运行时类型。"
+icon: GitFork
+---
+
+<AnchorRedirect
+  map={{
+    'ref-deserialization': '/zh/docs/v4/polymorphism#reuse-deserialization',
+  }}
+/>
+
+Nino 会写入值的运行时类型，所以声明为基类或接口的值，读回来仍是它真正的类型。事件溯源中一个订单的事件历史、一张图纸里的各种图形、网络协议里的各种消息，都需要这一点：声明的是一个类型，实际存放的是多种具体类型。
+
+```csharp title="OrderEvents.cs"
+[NinoType] // [!code highlight]
+public abstract class OrderEvent
+{
+    public long OrderId;
+    public DateTime At;
+}
+
+public sealed class OrderPlaced : OrderEvent   // inherits [NinoType]
+{
+    public decimal Total;
+}
+
+public sealed class OrderShipped : OrderEvent
+{
+    public string Carrier;
+}
+
+public sealed class OrderCancelled : OrderEvent { }
+```
+
+```csharp
+var history = new List<OrderEvent>
+{
+    new OrderPlaced { OrderId = 7, Total = 40m },
+    new OrderCancelled { OrderId = 7 },
+};
+byte[] bytes = NinoSerializer.Serialize(history);
+List<OrderEvent> events = NinoDeserializer.Deserialize<List<OrderEvent>>(bytes);
+// events[0] is an OrderPlaced, events[1] is an OrderCancelled
+```
+
+<Callout type="info">
+
+在 v4 中，子类型会从最近的 `[NinoType]` 基类或接口**继承** `[NinoType]`（连同选项），除非基类设置了 `allowInheritance: false`。如果想给子类型单独设置选项，可以在子类型上再加 `[NinoType]`。
+
+</Callout>
+
+## 接口与抽象类 [#interfaces-and-abstract-classes]
+
+接口和抽象类的用法完全一样：给接口或抽象类加上 `[NinoType]`，实现它的类和结构体会自动继承这个特性：
+
+<Tabs items={["接口示例", "抽象类示例"]}>
+
+<Tab value="接口示例">
+
+```csharp
+[NinoType] // [!code highlight]
+public interface IBase
+{
+    int A { get; set; }
+}
+
+public class Impl : IBase
+{
+    public int A { get; set; }
+}
+
+public struct ImplStruct : IBase
+{
+    public int A { get; set; }
+}
+```
+
+</Tab>
+
+<Tab value="抽象类示例">
+
+```csharp
+[NinoType] // [!code highlight]
+public abstract class Base
+{
+    public int A { get; set; }
+}
+
+public class Derived : Base
+{
+    public int B { get; set; }
+}
+```
+
+</Tab>
+</Tabs>
+
+`[NinoType]` 接口的成员通过实现类型中同名的成员来序列化。通过声明为接口或 `object` 的成员读取结构体时，结构体会被装箱。
+
+## 多态值的写入方式 [#how-a-polymorphic-value-is-written]
+
+头部（值之前的 null 标志或类型 ID）取决于槽位（成员、集合元素，或者你调用 `Serialize<T>`/`Deserialize<T>` 时的类型参数）的**声明**类型：
+
+| 声明类型 | 头部 | 是否多态 |
+| --- | --- | :---: |
+| `struct` | 无 | 否 |
+| `sealed class` | 1 字节 null 标志 | 否 |
+| 非密封类、抽象类、接口 | 4 字节类型 ID（`0` 表示 null） | 是 |
+| `object` | 4 字节类型 ID | 是，可以是任意 `[NinoType]` |
+
+类型 ID 是运行时类型全名的 FNV-1a 哈希，由生成器计算，所以不用分配标签，也不用在多个程序集之间保持同步。类型改名或换命名空间时，请使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
+
+<Callout type="idea">
+
+没有子类型的类请声明为 `sealed`。密封类只占 1 字节，也不需要分派；非密封类即使没有任何子类型，也要占 4 字节并做一次类型检查。
+
+</Callout>
+
+### 查看类型 ID [#inspecting-type-ids]
+
+`NinoTypeId` 在运行时算出同样的 ID，可以用于日志、协议校验，或者在握手时比对双方的消息集合：
+
+```csharp
+int id = NinoTypeId.Of(typeof(OrderShipped));               // the id OrderShipped is written with ([NinoFormerName] honored)
+string name = NinoTypeId.GetName(typeof(OrderShipped));     // its runtime-form name, e.g. "MyApp.Events.OrderShipped"
+string hashed = NinoTypeId.GetIdName(typeof(OrderShipped)); // the name the id is computed from: its [NinoFormerName], if any
+int same = NinoTypeId.Compute(hashed);                      // == id: the hash of a runtime-form name
+```
+
+ID 永远不会是 `0`，`0` 表示 null。
+
+## 分派 [#dispatch]
+
+Nino 采用混合分派：
+
+- **生成的分派代码**：用于和基类声明在同一程序集里的子类型。写入时是一串精确的类型判断，读取时是对类型 ID 的 `switch`，两者都直接调用子类型的格式化器。
+- **无锁注册表**：用于其余所有情况，包括其他程序集中的子类型、封闭泛型类型、开启了引用追踪的类型，以及子类型超过 64 个的继承体系中的写入（读取仍使用生成的 `switch`）。
+
+读取时，Nino 会检查数据中的类型确实派生自声明类型；如果数据指向一个无关的类型，会直接抛出异常，而不会把它存进去。
+
+## 通过共同基类型分派 [#dispatching-through-a-common-base]
+
+RPC 或消息分派、插件系统、编辑器工具，都应该给相关类型一个共同的 `[NinoType]` 基类或接口，再用 `Serialize<TBase>` / `Deserialize<TBase>` 通过它来序列化和反序列化。类型 ID 的写入和分派都由生成代码完成，比下面两种做法都快，而且能配合[复用反序列化](#reuse-deserialization)和 `[NinoPooled]` 使用，接收循环除了内容变化的字符串之外不分配内存。完整示例参见[网络层](/zh/docs/v4/advanced/networking)。
+
+```csharp
+[NinoType]
+public interface ICommand { }
+
+public sealed class CreateUser : ICommand { public string Name; }   // implementations inherit [NinoType]
+public sealed class DeleteUser : ICommand { public int UserId; }
+
+public sealed class CommandChannel
+{
+    private readonly Socket _socket;
+    private readonly NinoArrayBufferWriter _buffer = new(); // reused for every message
+
+    public CommandChannel(Socket socket) => _socket = socket;
+
+    public void Send(ICommand command)
+    {
+        _buffer.ResetWrittenCount();
+        NinoSerializer.Serialize<ICommand>(command, _buffer); // the type id, then the command
+        _socket.Send(_buffer.WrittenSpan);
+    }
+
+    // Fills `command` in place when the data holds the same type, else replaces (and recycles) it
+    public void Receive(ReadOnlySpan<byte> message, ref ICommand command) =>
+        NinoDeserializer.Deserialize(message, ref command); // [!code highlight]
+}
+```
+
+另外还有两种做法，但都更慢：
+
+- **把 `object` 作为声明类型**（成员、元素，或 `Serialize<object>` 调用）：只接受 `[NinoType]` 的值，会写入类型 ID，读取时通过包含所有 `[NinoType]` 的全局注册表分派，而不是某个基类型的生成分派。请优先使用共同基类型。
+- **[装箱 API](/zh/docs/v4/basic#the-boxed-api)**（带 `Type` 的 `SerializeBoxed` / `DeserializeBoxed`）：按 `Type` 查找格式化器，值类型会被装箱。只有当类型要到运行时才以 `Type` 的形式得知、并且这些类型没有共同的 `[NinoType]` 基类型时才使用，例如基于反射、面向任意类型的工具。
+
+## 其他程序集中的子类型 [#subtypes-in-other-assemblies]
+
+无论子类型声明在哪里，Nino 都能自动找到，包括之后才加载的程序集（插件、HybridCLR 热更新 DLL）：遇到未知的类型 ID 时，Nino 会先查找新加载程序集的注册表，找不到才报错。不需要任何注册调用。例如，一个插件或热更新 DLL 新增了 `public sealed class OrderRefunded : OrderEvent`。DLL 加载之后，主程序集（AOT 程序集）里的代码不用做任何改动，就能读取包含 `OrderRefunded` 的 `List<OrderEvent>`。源生成器也必须在子类型所在的程序集中运行（在该项目中安装 `Nino` 包；在 Unity 中，该程序集必须引用 `Nino.Core`）；如果类型 ID 对应的类型不在任何已加载的程序集中，会抛出 `InvalidOperationException`。
+
+唯一的例外是封闭泛型子类型（如 `Box<int>`）：如果进程只会**读取**它，代码里既不出现它的名字，也从不写入它，就需要在启动时注册：
+
+```csharp
+NinoPolymorphic.Register<Box<int>>();
+```
+
+只有 `Type` 对象的类型（例如用 `MakeGenericType` 构造出来的），用 `NinoPolymorphic.Register(Type)` 注册，效果相同。对于无法多态写入的类型（抽象类型、开放泛型类型，或者不是 `[NinoType]` 的类型），两者都返回 `false`。
+
+## 关闭继承 [#opting-out]
+
+`[NinoType(allowInheritance: false)]` 会阻止子类型继承该特性：子类型除非自己声明 `[NinoType]`，否则不能通过基类序列化（NINO003，提供代码修复）。
+
+## 复用反序列化 [#reuse-deserialization]
+
+反序列化到已有值时，如果它的运行时类型与数据中的类型不同，旧实例会被丢弃（并回收，参见[对象池](/zh/docs/v4/pooling)），然后创建一个类型正确的新实例。类型一致时则原地填充。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="数据演进" href="/zh/docs/v4/evolving-data">按位置、版本容错和键控三种格式，以及各自允许哪些改动。</Card>
+  <Card title="引用追踪" href="/zh/docs/v4/reference-tracking">按类型开启，保留共享引用和循环引用。</Card>
+</Cards>

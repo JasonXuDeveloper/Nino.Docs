@@ -1,0 +1,60 @@
+---
+title: v3 与 v4 对比
+description: "Nino v3 与 v4 对比：功能、构建时间、生成代码大小，以及在同一台机器上测得的运行时性能。"
+icon: Scale
+---
+
+<AnchorRedirect
+  map={{
+    '330-types-n--30': '/zh/docs/v4/perf#build-time-and-generated-code',
+    '1100-types-n--100': '/zh/docs/v4/perf#build-time-and-generated-code',
+  }}
+/>
+
+本页从功能、构建时间与生成代码、运行时性能三方面对比 Nino v3 和 v4。升级步骤参见[从 v3 迁移](/zh/docs/v4/migration)。
+
+## 功能 [#features]
+
+| | v3 | v4 |
+| --- | --- | --- |
+| API | 每个程序集各自生成 `Serializer` / `Deserializer`，外加扩展方法 | `Nino.Core` 中的 `NinoSerializer` / `NinoDeserializer` |
+| 二进制格式 | 按位置 | 默认按位置，可按类型改为 `VersionTolerant` 或 `Keyed`；所有目标框架写出的字节相同；填充字节清零 |
+| 版本容错 | 用 `WEAK_VERSION_TOLERANCE` 对整个项目统一开启，只能在末尾追加 | 按类型设置 `NinoFormat.VersionTolerant`；可以向最末端的派生类型追加，嵌套多深都可以；旧代码会跳过新成员 |
+| 键控成员（调整顺序 / 删除 / 插入） | 不支持 | `[NinoType(format: NinoFormat.Keyed)]` |
+| 共享引用与循环引用 | 不支持 | `[NinoType(trackReferences: true)]` |
+| 反序列化到已有实例 | 不支持 | `Deserialize(data, ref value)`，并回收被丢弃的实例 |
+| 对象池 | 不支持 | `[NinoPooled]`、`[NinoFactory]` 工厂方法、`NinoSettings.SetRecycler<T>` |
+| `[NinoType]` 的子类型 | 需要各自标记 `[NinoType]` | 自动继承 |
+| 自定义集合（`List<T>`、`Dictionary<,>` 等的子类） | 字典子类需要公共索引器 | 直接支持，无需特性 |
+| `PriorityQueue<,>`、不可变集合 | 不支持 | .NET 6+ 支持 `PriorityQueue<,>`；安装 `Nino.Immutable` 后支持 `ImmutableArray<T>` 和 `ImmutableList<T>` |
+| 自定义格式化器 | 不支持 | 针对成员用 `[NinoCustomFormatter]`，针对类型用 `[assembly: NinoFormatter]` |
+| 成员顺序 | 声明顺序、`[NinoMember(index)]` 或 `[NinoExplicitOrder]` | 声明顺序或 `[NinoMember(index)]`；`[NinoExplicitOrder]` 已移除 |
+| 固定大小的类型 | 不支持 | `Serialize(value)` 直接写入大小正好的数组；`NinoSerializer.GetFixedSize<T>()` |
+| 装箱 / 运行时类型 API | 不支持 | `SerializeBoxed(value, type)`、`DeserializeBoxed(data, type)`，用于运行时才知道、且没有共同 `[NinoType]` 基类型的类型 |
+| 诊断 | 生成代码中的编译错误 | 25 条分析器诊断（NINO001–NINO025），许多带代码修复 |
+| 增量生成 | 否：每次都扫描整个 Compilation，任何修改都会重新生成全部类型 | 每个类型一个文件，只重新生成改动过的类型 |
+| 拦截器 | 不支持 | Roslyn 4.8+（.NET 8 SDK 及以上）下始终开启 |
+| 热更新（HybridCLR） | 支持 | 支持，无需初始化调用 |
+| Unity | 2022.3+，需手动安装 `Microsoft.CodeAnalysis` | 2022.3+，生成器随包附带 |
+| 线程安全 | 内联缓存在高并发下可能出现竞争 | 注册表无锁，采用写时复制 |
+
+## 构建时间与生成代码 [#build-time-and-generated-code]
+
+对比基准是 v3 API 的最后一个版本 **3.3.13**（3.9.x 是测试 v4 功能的过渡版本），测试项目是一个包含 330 个和 1,100 个多态类型的合成项目。请看比例，而不是绝对耗时。
+
+<BenchmarkChart chart="compile" lang="zh" table={false} />
+
+v3 会把每个子类型的代码内联到它的每个多态基类中，每次修改都要重新生成全部类型。v4 每段代码只生成一次，生成代码的规模和编译时间都随类型数线性增长（[测试数据](/zh/docs/v4/perf#build-time-and-generated-code)）。在 IDE 中修改一个类型，只会重新生成这个类型。
+
+330 个和 1,100 个类型在各个阶段的数字，以及测试方法和计时方式，见[构建时间与生成代码](/zh/docs/v4/perf#build-time-and-generated-code)。
+
+## 运行时 [#runtime]
+
+Nino v4 与 NuGet 上的 v3 3.3.13 在同一台机器上先后运行。绝对耗时以及与 MemoryPack 的对比参见[基准测试](/zh/docs/v4/perf)。
+
+<BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="zh" />
+
+- **类的序列化**明显更快。
+- **类的反序列化**与 v3 一样快或略快。耗时主要花在分配结果对象上，而 v4 还要校验数据，并支持引用追踪和复用反序列化。
+- **非托管结构体数组**两者持平：两个版本都整块拷贝。v4 还会把填充字节清零，保证输出是确定的（没有填充的结构体会跳过这一步，参见[结构体布局](/zh/docs/v4/performance#struct-layout)）。
+- **复用反序列化**是 v3 没有的：填充已有实例或池化实例，每次调用分配 **0 B**。参见 [v4 新特性](/zh/docs/v4/whats-new)。

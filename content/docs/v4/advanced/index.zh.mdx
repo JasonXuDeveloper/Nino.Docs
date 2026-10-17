@@ -1,0 +1,115 @@
+---
+title: 概览
+seoTitle: "进阶指南：在真实项目中使用 Nino – Nino v4 文档"
+description: "在真实项目中使用 Nino：热路径、网络与 RPC、浏览器客户端、消息队列、缓存、持久化与存储，以及 Unity 与 HybridCLR。"
+icon: Map
+---
+
+import { ArrowDownUp, DatabaseZap, Gamepad2, Gauge, Globe, Leaf, MessagesSquare, Network, Save } from 'lucide-react';
+
+<AnchorRedirect
+  map={{
+    '曾用名': '/zh/docs/v4/defining-types#former-name',
+    '字符串编码': '/zh/docs/v4/defining-types#string-encoding',
+    '成员顺序': '/zh/docs/v4/defining-types#member-order',
+    '自定义构造函数': '/zh/docs/v4/constructors',
+    '规则': '/zh/docs/v4/constructors#rules',
+    '版本兼容': '/zh/docs/v4/evolving-data#version-tolerance',
+    '键控成员': '/zh/docs/v4/evolving-data#keyed-members',
+    '引用追踪': '/zh/docs/v4/reference-tracking',
+    'ref-反序列化与对象池': '/zh/docs/v4/pooling',
+    '反序列化到已有实例': '/zh/docs/v4/pooling#deserializing-into-existing-instances',
+    '使用-ninorefdeserialization-创建实例': '/zh/docs/v4/pooling#creating-instances-with-ninofactory',
+    'ninopooled': '/zh/docs/v4/pooling#ninopooled',
+    '自定义格式化器': '/zh/docs/v4/custom-formatters',
+    '拦截器': '/zh/docs/v4/performance#interceptors',
+    '分析器与代码修复': '/zh/docs/v4/analyzers',
+    'former-name': '/zh/docs/v4/defining-types#former-name',
+    'string-encoding': '/zh/docs/v4/defining-types#string-encoding',
+    'custom-constructors': '/zh/docs/v4/constructors',
+    'version-tolerance': '/zh/docs/v4/evolving-data#version-tolerance',
+    'member-order': '/zh/docs/v4/defining-types#member-order',
+    'rules': '/zh/docs/v4/constructors#rules',
+    'keyed-members': '/zh/docs/v4/evolving-data#keyed-members',
+    'reference-tracking': '/zh/docs/v4/reference-tracking',
+    'ref-deserialization-and-pooling': '/zh/docs/v4/pooling',
+    'deserializing-into-existing-instances': '/zh/docs/v4/pooling#deserializing-into-existing-instances',
+    'creating-instances-with-ninorefdeserialization': '/zh/docs/v4/pooling#creating-instances-with-ninofactory',
+    'custom-formatters': '/zh/docs/v4/custom-formatters',
+    'interceptors': '/zh/docs/v4/performance#interceptors',
+    'analyzers-and-code-fixes': '/zh/docs/v4/analyzers',
+  }}
+/>
+
+功能页面讲的是每个选项的作用；这些指南则针对你实际要构建的系统，把它们组合起来，给出可以直接复制的完整做法。所有代码片段只用到 Nino 的公开 API 和标准 .NET 类型；涉及第三方客户端（Redis、Kafka、gRPC）的地方只做最简示意。
+
+## 热路径与 I/O [#hot-paths-and-io]
+
+<Cards>
+  <Card icon={<Gauge />} title="高性能序列化" href="/zh/docs/v4/advanced/high-performance">
+    背后的机制与开销：缓冲区写入器、Writer 与 Reader、复用反序列化、对象池、原始结构体、拦截器、线程安全与测量。
+  </Card>
+  <Card icon={<Leaf />} title="零分配模式" href="/zh/docs/v4/advanced/zero-allocation">
+    可直接复制的 0 B 热路径做法：缓冲区、批量写入、接收循环、分帧的流、固定大小的记录，以及检查清单。
+  </Card>
+  <Card icon={<ArrowDownUp />} title="流、异步、回调与压缩" href="/zh/docs/v4/advanced/streams">
+    可以直接复制的工具方法：分帧的 `Stream` 读写、异步读写、`ReadOnlySequence` 输入、前后钩子、Brotli 和 GZip。
+  </Card>
+</Cards>
+
+## 应用场景 [#use-cases]
+
+<Cards>
+  <Card icon={<Network />} title="网络层" href="/zh/docs/v4/advanced/networking">
+    服务间与实时通信协议：TCP 分帧、WebSocket 与 UDP、gRPC 编组器、多态消息、滚动升级。
+  </Card>
+  <Card icon={<Globe />} title="浏览器与 JavaScript 客户端" href="/zh/docs/v4/advanced/browser">
+    在浏览器中使用同一套 `[NinoType]` 类型：一个带 `[JSExport]` 函数的 .NET WebAssembly 模块，供 JavaScript 或 TypeScript 调用。
+  </Card>
+  <Card icon={<MessagesSquare />} title="消息队列与事件流" href="/zh/docs/v4/advanced/message-queues">
+    Kafka 等消息中间件、事件继承体系、批量发送、遥测与行情数据流、长期保留的主题。
+  </Card>
+  <Card icon={<DatabaseZap />} title="缓存" href="/zh/docs/v4/advanced/caching">
+    Redis、`IDistributedCache` 与 `HybridCache`、进程内的序列化数据缓存、跨部署的结构变化。
+  </Card>
+  <Card icon={<Save />} title="持久化" href="/zh/docs/v4/advanced/persistence">
+    经得起版本更新的文件、键值存储、追加日志、快照与检查点。
+  </Card>
+  <Card icon={<Gamepad2 />} title="Unity 与 HybridCLR" href="/zh/docs/v4/advanced/unity">
+    项目配置、IL2CPP、程序集定义、热更新，以及降低帧耗时的技巧。
+  </Card>
+</Cards>
+
+## 我该看哪篇指南？ [#which-guide-do-i-need]
+
+| 你在构建 | 从这里开始 |
+| --- | --- |
+| 服务协议、实时服务器（交易、协作、游戏）、WebSocket 或 UDP 连接 | [网络层](/zh/docs/v4/advanced/networking) |
+| .NET 之间不用 `.proto` 文件的 gRPC 服务 | [gRPC](/zh/docs/v4/advanced/networking#grpc) |
+| 与 Nino 服务端通信的网页前端（JavaScript 或 TypeScript） | [浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser) |
+| Kafka、RabbitMQ 等消息中间件上的生产者和消费者 | [消息队列与事件流](/zh/docs/v4/advanced/message-queues) |
+| 遥测、指标或行情数据流 | [遥测与行情数据流](/zh/docs/v4/advanced/message-queues#telemetry-and-tick-streams) |
+| Redis 或 `IDistributedCache` 缓存层，或进程内的序列化数据缓存 | [缓存](/zh/docs/v4/advanced/caching) |
+| 文件、文档、存档、本地键值存储 | [持久化](/zh/docs/v4/advanced/persistence) |
+| 事件存储、变更日志、快照或检查点 | [追加日志](/zh/docs/v4/advanced/persistence#append-only-logs) |
+| 基于命名管道或 socket 的进程间通信 | [分帧读写流](/zh/docs/v4/advanced/zero-allocation#framed-streams) |
+| 共享内存或内存映射文件中的记录 | [固定大小的记录](/zh/docs/v4/advanced/zero-allocation#fixed-size-records) |
+| Unity、Godot 或 HybridCLR 项目 | [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)、[Godot](/zh/docs/v4/platforms#godot) |
+
+## 我需要哪个功能？ [#which-feature-do-i-need]
+
+| 你想要 | 使用 |
+| --- | --- |
+| 以后给已保存的类型添加成员 | [`format: NinoFormat.VersionTolerant`](/zh/docs/v4/evolving-data#version-tolerance) |
+| 以后重排、删除或插入成员 | [`format: NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members) |
+| 给类型改名或换命名空间 | [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name) |
+| 保留共享引用或循环引用 | [`trackReferences: true`](/zh/docs/v4/reference-tracking) |
+| 不再每次反序列化都分配内存 | [复用反序列化与 `[NinoPooled]`](/zh/docs/v4/pooling) |
+| 序列化 Nino 不认识的类型 | [`[assembly: NinoFormatter]`](/zh/docs/v4/custom-formatters) |
+| 用不同方式编码某个成员 | [`[NinoCustomFormatter]`](/zh/docs/v4/custom-formatters#for-one-member) |
+| 按值的真实类型读回 | [多态](/zh/docs/v4/polymorphism) |
+| 序列化运行时才知道的类型 | [运行时类型](/zh/docs/v4/basic#runtime-types) |
+| 在一个缓冲区里写入多个值 | [`Writer` 与 `Reader`](/zh/docs/v4/basic#several-values-in-one-buffer) |
+| 读写 `Stream`，或异步读写 | [流与异步](/zh/docs/v4/advanced/streams#streams) |
+| 在序列化前或反序列化后执行代码 | [回调](/zh/docs/v4/advanced/streams#callbacks) |
+| 压缩输出 | [压缩](/zh/docs/v4/advanced/streams#compression) |

@@ -1,0 +1,125 @@
+---
+title: 快速开始
+description: 在 .NET 或 Unity 项目中安装 Nino v3。
+icon: Rocket
+---
+
+<AnchorRedirect
+  map={{
+    '下载安装': '/zh/docs/v3/start#installation',
+    'net-项目': '/zh/docs/v3/start#net-project',
+    'unity-项目': '/zh/docs/v3/start#unity-project',
+    '代码热更': '/zh/docs/v3/start#hot-update-code',
+    '注意事项': '/zh/docs/v3/start',
+  }}
+/>
+
+Nino v3 在 .NET 项目中以 NuGet 包安装，在 Unity 中以 UPM 包安装，两者都包含运行时库和源生成器。
+
+<Callout type="warn" title="请勿使用 Nino v3.9.x">
+
+`v3.9.*` 版本主要用来试验 Nino v4.0 的功能，API 与 `3.*` 不兼容。需要这些功能的话，请直接使用 Nino v4.0。
+
+</Callout>
+
+## 安装 [#installation]
+
+<Tabs groupId="platform" persist items={['.NET', 'Unity']}>
+<Tab value=".NET">
+
+```shell
+dotnet add package Nino
+```
+
+详见 [.NET 项目](/zh/docs/v3/start#net-project)。
+
+</Tab>
+<Tab value="Unity">
+
+从 [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation) 安装 `com.jasonxudeveloper.nino`。
+
+详见 [Unity 项目](/zh/docs/v3/start#unity-project)。
+
+</Tab>
+</Tabs>
+
+### .NET 项目 [#net-project]
+
+<Callout type="info">
+
+Nino 支持 .NET 5.0 及以上版本，或 .NET Standard 2.0 及以上版本的项目。
+
+</Callout>
+
+- 在 Visual Studio 或 Rider 的 NuGet 包管理器中搜索 `Nino` 并安装
+- 或者使用 `dotnet` 命令行：
+    ```shell
+    dotnet add package Nino
+    ```
+
+<Callout type="info">
+
+Nino 需要两个 NuGet 包：`Nino.Generator` 和 `Nino.Serialization`，缺一不可。安装 `Nino` 会自动装上这两个包。
+
+</Callout>
+
+<Callout type="warn">
+
+这种方式不支持 .NET Framework 项目，也不支持不能运行源生成器的 IDE（如 Visual Studio Code）。
+
+</Callout>
+
+### Unity 项目 [#unity-project]
+
+<Callout type="info">
+
+Nino 支持 Unity 2022.3 及以上版本，可以发布到任意平台。
+
+GitHub 上的 `Nino.Unity` 示例项目演示了如何在 Unity 中使用 Nino，还附带一套单元测试（通过 `TestRunner` 运行），建议先把它跑起来。
+
+</Callout>
+
+<Steps>
+<Step>
+
+### 安装包 [#install-the-package]
+
+通过 Unity Package Manager（UPM）安装 Nino，具体步骤见 [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation)。
+
+</Step>
+<Step>
+
+### 确认 `Microsoft.CodeAnalysis` [#check-microsoftcodeanalysis]
+
+Unity 中的源生成器需要 `Microsoft.CodeAnalysis` NuGet 包（最新版即可）。Unity 2022.3 及以上版本一般已经自带；如果没有，请手动安装，例如在 Unity 项目目录（`Assets` 所在的目录）下执行：
+
+```shell
+dotnet add package Microsoft.CodeAnalysis.CSharp --version 4.10.0
+```
+
+</Step>
+<Step>
+
+### 在 `asmdef` 中引用 `Nino.Core.dll` [#reference-ninocoredll]
+
+如果使用 `asmdef`，请确保开启了 `Auto Referenced`；如果开启了 `Override References`，需要显式添加对 `Nino.Core.dll` 的引用。
+
+</Step>
+</Steps>
+
+<Callout type="idea">
+
+遇到问题时，请先确认已按上述步骤操作，并且 `Nino.Unity` 示例项目能正常运行。如果问题仍然存在，请在 GitHub 上提交 Issue。
+
+</Callout>
+
+#### 代码热更 [#hot-update-code]
+- Nino 支持 **HybridCLR** 和 **ILRuntime**。
+- 如果要在 Unity 之外单独建一个 C# 工程（而不是 Unity 内的 `asmdef`）来写热更代码，请创建 .NET Core 工程，通过 NuGet 安装 Nino（[见上文](/zh/docs/v3/start#net-project)），再把编译出的 DLL 交给 HybridCLR 或 ILRuntime 使用。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="序列化与反序列化" href="/zh/docs/v3/basic">序列化到数组和缓冲区写入器，从 span 反序列化。</Card>
+  <Card title="支持的类型" href="/zh/docs/v3/types">给你的类型加上 `[NinoType]`，并了解 Nino 还能序列化哪些类型。</Card>
+</Cards>

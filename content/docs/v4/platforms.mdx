@@ -1,0 +1,130 @@
+---
+title: Platforms and Binary Format
+description: "Where Nino runs, why every platform writes the same bytes, and what the format looks like."
+icon: Cpu
+---
+
+Nino runs on .NET Standard 2.0 and later, Unity 2022.3+ (Mono and IL2CPP) and Godot 4, and writes the same bytes on every runtime, CPU and pointer size. This page lists the supported targets and describes the binary format.
+
+## Supported Platforms
+
+| Component | Targets |
+| --- | --- |
+| `Nino.Core` (runtime) | `netstandard2.0`, `netstandard2.1`, `net8.0`, `net10.0` |
+| `Nino.Generator` (generator, analyzer) | Roslyn 4.3 and later; builds for Roslyn 4.3, 4.8 and 4.12 in one package |
+| Generated code | C# 9 or later |
+| Unity | 2022.3 and later, Mono and IL2CPP, every player platform |
+| Godot | Godot 4 .NET projects (.NET 8 from Godot 4.4, .NET 6 before) |
+| Hot update | HybridCLR, with no initialization call |
+
+**Every target writes identical bytes.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` each use the best primitives available to them (vectorized copies, `[UnsafeAccessor]` on .NET 8+), and the test suite checks the same golden payloads against each build. Data written by a .NET 10 server can be read by a Unity IL2CPP client on a 32-bit Android phone, and the other way round.
+
+## Binary Format
+
+All multi-byte values are **little-endian** and written unaligned. Positional types carry no schema and no field names: the generated code knows the layout.
+
+| Value | Encoding |
+| --- | --- |
+| Unmanaged value (`int`, `Guid`, enums, raw structs) | its raw bytes, canonical layout, padding zeroed |
+| `bool` | 1 byte |
+| `T?` | 1 byte has-value flag, then the value if present |
+| Length of a string, array or collection | `int32`; `-1` means `null` |
+| `string` | `int32` length in UTF-16 chars (`-1` = null), then the UTF-16 code units |
+| `string` with `[NinoUtf8]` | `int32` length in UTF-16 chars (`-1` = null, `0` = empty), then `int32` length in bytes, then the UTF-8 bytes |
+| Array or list of unmanaged `T` | length, then one block of elements |
+| Other collections | length, then each element |
+| Dictionary | length, then key/value pairs |
+| `T[,]` and higher ranks | each dimension's length, then elements in row-major order |
+
+Both string encodings start with the string's length in UTF-16 chars (`string.Length`): `-1` for `null`, `0` for an empty string, and nothing follows either. A non-empty `[NinoUtf8]` string then carries its length in bytes, followed by exactly that many UTF-8 bytes. An unpaired surrogate is written as U+FFFD, which is one char as well, so the char count always matches the string that is read back.
+
+The reader allocates the string at its final length and transcodes exactly the given bytes into it in one pass; the next value starts right after them. It throws `InvalidOperationException` when:
+
+- the byte count is larger than the bytes left;
+- the char count does not match the decoded bytes;
+- the bytes are not strict UTF-8 (overlong forms and encoded surrogates included) or end in the middle of a character.
+
+For example, `"é😀"` is 3 chars (U+00E9 and a surrogate pair) and 6 UTF-8 bytes, so it is written as `03 00 00 00` `06 00 00 00` `C3 A9 F0 9F 98 80`; `null` is `FF FF FF FF` and `""` is `00 00 00 00`.
+
+Objects get a header that depends on the **declared** type:
+
+| Declared type | Header |
+| --- | --- |
+| `struct` | none |
+| `sealed class` | 1 byte: `0` = null, `1` = instance |
+| non-sealed class, abstract class, interface | `int32` type id: `0` = null, otherwise the runtime type's id |
+
+The type id is the FNV-1a hash of the type's name in runtime form (`Namespace.Outer+Inner`). The same hash code is compiled into the generator and the runtime, so ids cannot diverge.
+
+The body after the header depends on the type's format:
+
+| Format | Body |
+| --- | --- |
+| positional (default) | the members, those of `[NinoType]` base classes first |
+| `NinoFormat.VersionTolerant` | `int32` byte length, then the members of the whole hierarchy, root first: one length per object, whatever the depth |
+| `NinoFormat.Keyed` | `int32` byte length, then `int32` key, `int32` length and value for each member |
+
+A `trackReferences` type adds an `int32` reference header (`0` = null, `n > 0` = the n-th object already written, `-1` = a new object, followed by its usual encoding). See [Evolving Your Data](/en/docs/v4/evolving-data) and [Reference Tracking](/en/docs/v4/reference-tracking).
+
+Every length read from a payload is validated against the bytes left before anything is allocated, so malformed or hostile input cannot trigger huge allocations, and truncated data throws instead of reading past the end.
+
+## Portable by Design
+
+Nino defines its bytes instead of copying whatever a runtime has in memory. Runtimes do not always agree on memory layout, so these cases are handled explicitly:
+
+<Accordions type="multiple">
+<Accordion title={<><code>Nullable&lt;T&gt;</code></>} value="nullable">
+
+CoreCLR and Unity 2021.3+ store `bool hasValue; T value;`, while old Mono (Unity 2019.4 and earlier) stores the value first. Copying a `T?` as raw memory produces different bytes on each. Nino writes a single `T?` as a has-value byte followed by the value; arrays and lists of `T?` use the canonical layout and are converted element by element where the runtime differs.
+
+</Accordion>
+<Accordion title={<><code>ValueTuple</code> and <code>KeyValuePair</code></>} value="tuple">
+
+`ValueTuple` is `LayoutKind.Auto` on .NET, so CoreCLR may reorder its fields, while Mono lays them out sequentially. Nino always writes tuples and `KeyValuePair` member by member, never as raw memory.
+
+</Accordion>
+<Accordion title={<><code>decimal</code>, <code>DateTimeOffset</code>, <code>nint</code></>} value="bcl">
+
+`decimal` is aligned to 8 bytes on CoreCLR and to 4 on Mono and IL2CPP, so a struct holding one can have a different layout; Nino converts it to the canonical layout. `DateTimeOffset` is written as UTC ticks plus the offset in minutes (10 bytes), never raw. `nint`/`nuint` are always 8 bytes.
+
+</Accordion>
+<Accordion title="32-bit platforms" value="32bit">
+
+`struct { int a; long b; }` is 16 bytes on x64 and 12 bytes on x86 .NET and Mono. Nino's raw layout is the canonical 64-bit one; where a runtime differs, values are converted field by field into the same bytes (at some cost in speed) and bulk raw copies are skipped.
+
+</Accordion>
+<Accordion title="Padding" value="padding">
+
+Code that builds structs in uninitialized memory (`SkipLocalsInit`, `stackalloc`, `GC.AllocateUninitializedArray`) can leave stale bytes in padding. Nino zeroes padding on write, so equal values always serialize to equal bytes and no stale memory leaks into a payload.
+
+</Accordion>
+<Accordion title="Big-endian hosts" value="endian">
+
+Not supported. Constructing a `Writer` or `Reader` on a big-endian host throws `PlatformNotSupportedException`, so Nino never writes or reads bytes in the wrong order. Every platform .NET and Unity run on today is little-endian.
+
+</Accordion>
+</Accordions>
+
+## Unity
+
+- Install from [OpenUPM](/en/docs/v4/start#unity-project). The package ships `Nino.Core.dll` and the generator (`Nino.Generator.dll`, labelled `RoslynAnalyzer`), plus `System.Buffers`, `System.Memory` and `System.Runtime.CompilerServices.Unsafe`.
+- Unity compiles against .NET Standard: there is no `[UnsafeAccessor]`, so a type with serialized non-public members or `[NinoPooled]` must be `partial` (NINO002, with a code fix).
+- The package ships the generator's Roslyn 4.3 build, so calls are not intercepted. They use the regular path and write the same bytes.
+- Generated registries carry `[RuntimeInitializeOnLoadMethod]` (and `[InitializeOnLoadMethod]` in the editor), which runs them at startup and keeps them from being stripped by IL2CPP.
+- Unity types such as `Vector3`, `Quaternion` and `Matrix4x4` are unmanaged and are written as raw memory.
+
+See [Unity and HybridCLR](/en/docs/v4/advanced/unity) for project setup and IL2CPP tips.
+
+## Godot
+
+- Godot 4 C# projects are regular .NET projects (`Godot.NET.Sdk`, targeting .NET 8 from Godot 4.4 and .NET 6 before). Install with `dotnet add package Nino --prerelease`; see [Godot Project](/en/docs/v4/start#godot-project).
+- Built with the .NET 8 SDK or later (required from Godot 4.4), the source generator, the analyzers and the interceptors all run. A project that targets .NET 8 also reaches private members through `[UnsafeAccessor]` without `partial` (except in generic types); on .NET 6 such types must be `partial` (NINO002).
+- Godot's math structs (`Vector2`, `Vector3`, `Quaternion`, `Transform3D`, `Color`, ...) are unmanaged and are copied as raw memory.
+- In a Godot build with double precision (`real_t` = `double`), these structs hold `double` fields, so their layout differs from the default single-precision build. Data containing Godot math types written by one build cannot be read by the other; use your own structs or primitive fields for data shared between the two.
+- Serialize your own data types; Godot objects such as `Node` and `Resource` are engine objects and are not serialized.
+
+## HybridCLR and Hot Update
+
+Generated registries are discovered lazily: the first time Nino meets a type of an assembly, or an unknown type id while reading, it finds that assembly's registry. A hot-update assembly loaded with `Assembly.Load` therefore needs **no initialization call**, and its types (including subtypes of base classes in AOT assemblies) are found on first use.
+
+Generated code avoids forwarding facades on purpose: interpreters such as HybridCLR's and Mono's do not inline, so every extra call layer would cost real time there.

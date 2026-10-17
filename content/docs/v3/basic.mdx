@@ -1,0 +1,93 @@
+---
+title: Serialize and Deserialize
+description: Serialize with the generated Serializer into arrays or buffer writers, and deserialize from spans with Deserializer.
+icon: Play
+---
+
+The source generator writes a `Serializer` and a `Deserializer` class for your project, plus `Serialize()` extension methods on every `[NinoType]`. `NinoSerializableType` below stands for any type Nino can serialize; see [Supported Types](/en/docs/v3/types).
+
+## Serialization [#serialization]
+
+```csharp
+byte[] Serializer.Serialize(NinoSerializableType val);
+void Serializer.Serialize(NinoSerializableType val, IBufferWriter<byte> bufferWriter);
+```
+
+### Into a New Array [#standard-usage]
+
+```csharp
+ObjClass obj = new ObjClass();
+byte[] byteArr = Serializer.Serialize(obj);
+// or use the extension method
+byteArr = obj.Serialize();
+```
+
+### Into a Buffer Writer (Recommended) [#recommended-usage]
+
+The `IBufferWriter<byte>` overload writes into a buffer you provide, so serializing does not have to allocate a new byte array. You can implement your own `IBufferWriter<byte>`, for example one that wraps a `MemoryStream` or a `NetworkStream`, or use .NET's `ArrayBufferWriter<byte>`.
+
+Reusing the same `ArrayBufferWriter<byte>` across serializations (call `ResetWrittenCount()` in between) avoids most of the allocations:
+
+```csharp
+ObjClass obj = new ObjClass();
+ArrayBufferWriter<byte> bufferWriter = new ArrayBufferWriter<byte>();
+Serializer.Serialize(obj, bufferWriter);
+
+// serialize again with the extension method
+bufferWriter.ResetWrittenCount(); // reset the written count // [!code highlight]
+obj.Serialize(bufferWriter);      // no memory is allocated this time
+```
+
+## Deserialization [#deserialization]
+
+```csharp
+void Deserializer.Deserialize(ReadOnlySpan<byte> data, out NinoSerializableType value);
+```
+
+<Callout type="info">
+
+`data` can be a `byte[]`, an `ArraySegment<byte>`, a `Span<byte>` or a `Memory<byte>.Span`.
+
+</Callout>
+
+### From a Byte Array [#standard-usage-1]
+
+```csharp
+// byteArr is a byte[]
+Deserializer.Deserialize(byteArr, out ObjClass obj);
+```
+
+### From Network Data (Recommended) [#recommended-usage-1]
+
+When the data arrives as a `ReadOnlySequence<byte>` (from `System.IO.Pipelines`, for example), pass its span directly if it is one contiguous block. Otherwise copy it into one first: to the stack when it is small, or to a pooled array.
+
+```csharp title="Receive.cs"
+// data is a ReadOnlySequence<byte> from the network, e.g. from a Pipeline
+ReadOnlySequence<byte> data = xxxxx;
+ObjClass obj;
+// One contiguous block: pass its Span<byte> directly
+if (data.IsSingleSegment)
+{
+    Span<byte> dataSpan = data.FirstSpan;
+    Deserializer.Deserialize(dataSpan, out obj);
+}
+// Several blocks: copy them into one contiguous block first
+else
+{
+    if (data.Length <= 1024)
+    {
+        // allocate on the stack
+        Span<byte> stackMemory = stackalloc byte[(int)data.Length];
+        data.CopyTo(stackMemory);
+        Deserializer.Deserialize(stackMemory, out obj);
+    }
+    else
+    {
+        // allocate on the heap, from the array pool
+        byte[] arr = ArrayPool<byte>.Shared.Rent((int)data.Length);
+        data.CopyTo(arr);
+        Deserializer.Deserialize(arr, out obj);
+        ArrayPool<byte>.Shared.Return(arr);
+    }
+}
+```

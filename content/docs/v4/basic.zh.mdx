@@ -1,0 +1,274 @@
+---
+title: 序列化与反序列化
+seoTitle: "C# 序列化与反序列化 – Nino v4 文档"
+description: "用 NinoSerializer 和 NinoDeserializer 序列化与反序列化，复用缓冲区和实例，处理运行时类型。"
+icon: Play
+---
+
+<AnchorRedirect
+  map={{
+    'recommended-usage': '/zh/docs/v4/basic#reusing-a-buffer',
+    'using-a-writer': '/zh/docs/v4/basic#several-values-in-one-buffer',
+    'deserializing-into-an-existing-value': '/zh/docs/v4/basic#into-an-existing-value',
+  }}
+/>
+
+`NinoSerializer` 和 `NinoDeserializer`（命名空间 `Nino.Core`）就是全部的运行时 API。两者都是静态类，并且**线程安全**：可以在任意多个线程上同时调用，无需加锁。每次调用用到的临时状态（暂存缓冲区、引用表）按线程保存，热路径上不会写共享内存。
+
+## 序列化 [#serializing]
+
+```csharp
+// Into a new byte array
+byte[] NinoSerializer.Serialize<T>(T value);
+
+// Into any IBufferWriter<byte>
+void NinoSerializer.Serialize<T>(T value, IBufferWriter<byte> bufferWriter);
+
+// With an existing Writer (several values in one buffer, custom formatters)
+void NinoSerializer.Serialize<T>(T value, ref Writer writer);
+
+// Boxed values, only for a type known only at run time as a Type (see Runtime Types)
+byte[] NinoSerializer.SerializeBoxed(object value, Type type);
+void NinoSerializer.SerializeBoxed(object value, IBufferWriter<byte> bufferWriter, Type type);
+void NinoSerializer.SerializeBoxed(object value, ref Writer writer, Type type);
+```
+
+`T` 可以是任何[受支持的类型](/zh/docs/v4/types)：`[NinoType]`、基元类型、字符串、集合等。
+
+```csharp
+byte[] bytes = NinoSerializer.Serialize(order);
+```
+
+### 复用缓冲区 [#reusing-a-buffer]
+
+`Serialize<T>(value)` 每次都会为结果分配一个 `byte[]`。对于[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)，这个数组按最终大小分配，数据直接写进去；其他值先写入线程独享的暂存缓冲区，再拷贝出来。想做到零分配，就序列化到一个自己长期持有的缓冲区里。
+
+`NinoArrayBufferWriter` 是 Nino 自带的 `IBufferWriter<byte>`，底层数组租自 `ArrayPool<byte>.Shared`，Nino 会**直接写入**其中。换成其他 `IBufferWriter<byte>`（.NET 的 `ArrayBufferWriter<byte>`、`PipeWriter`、包装 `Stream` 的写入器），最后会多一次拷贝。
+
+```csharp
+var buffer = new NinoArrayBufferWriter();      // or new NinoArrayBufferWriter(initialCapacity)
+
+NinoSerializer.Serialize(order, buffer);
+ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // also WrittenMemory, WrittenCount, ToArray()
+// ... send or store the bytes ...
+
+buffer.ResetWrittenCount();                    // reuse the same array // [!code highlight]
+NinoSerializer.Serialize(order, buffer);       // no allocation this time
+```
+
+缓冲区不够用时，会从池里租一个更大的数组。如果大致知道消息有多大，可以用 `new NinoArrayBufferWriter(initialCapacity)` 或 `EnsureCapacity(sizeHint)` 预先分配好；`Capacity` 和 `FreeCapacity` 分别是数组的大小和剩余空间。
+
+<Callout type="warn">
+
+`NinoArrayBufferWriter` **不是**线程安全的：每个线程、每个连接或每次操作各用一个。不再使用时调用 `Dispose()`，把数组还给池。
+
+</Callout>
+
+### 一个缓冲区写多个值 [#several-values-in-one-buffer]
+
+`Writer` 是一个写入 `NinoArrayBufferWriter` 的 `ref struct`。要连续写入多个值，或者在[自定义格式化器](/zh/docs/v4/custom-formatters)里写数据时，就用它：
+
+```csharp
+var buffer = new NinoArrayBufferWriter();
+var writer = new Writer(buffer);
+NinoSerializer.Serialize(header, ref writer);
+NinoSerializer.Serialize(body, ref writer);
+writer.Flush();             // commits the bytes to buffer.WrittenCount (Dispose() does the same)
+writer.ReleaseReferences(); // ends reference tracking, see below
+```
+
+<Callout type="info">
+
+直接传入值、拿回字节（或传入缓冲区写入器）的调用，[引用追踪](/zh/docs/v4/reference-tracking)只覆盖这一次调用。自己创建 `Writer`（或 `Reader`）时，通过它写入的所有内容共用一张引用表，直到调用 `ReleaseReferences()` 为止。请在每条逻辑消息结束时调用它；如果没有写入任何开启追踪的类型，这个调用没有开销。
+
+</Callout>
+
+## 反序列化 [#deserializing]
+
+```csharp
+// A new value
+T NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data);
+
+// Into an existing value, reusing its instances
+void NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data, ref T value);
+
+// With an existing Reader
+T NinoDeserializer.Deserialize<T>(ref Reader reader);
+void NinoDeserializer.Deserialize<T>(ref T value, ref Reader reader);
+
+// Boxed values, only for a type known only at run time as a Type (see Runtime Types)
+object NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, Type type);
+void NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, ref object value, Type type);
+void NinoDeserializer.DeserializeBoxed(ref object value, ref Reader reader, Type type);
+```
+
+输入数据是 `ReadOnlySpan<byte>`：`byte[]`、`ArraySegment<byte>`、`Span<byte>`、`Memory<byte>.Span`，或者现有缓冲区的任意切片，都可以直接传入，不用拷贝。
+
+```csharp
+Order order = NinoDeserializer.Deserialize<Order>(bytes);
+Order fromSlice = NinoDeserializer.Deserialize<Order>(rented.AsSpan(0, received));
+```
+
+### 反序列化到已有值 [#into-an-existing-value]
+
+用 `ref` 传入已有的值，Nino 会原地填充它，尽量复用这个实例以及其中的嵌套对象、列表、数组和字典。传入 `null`（或 `default`）则创建新值。字符串会和已有值里的字符串比较：内容相同就直接保留，只有内容变化（或原来为 `null`）的字符串才读成新实例。`[NinoUtf8]` 字符串在文本为 ASCII 时同样会保留；非 ASCII 的 UTF-8 文本总是解码成新字符串。
+
+```csharp
+Order order = null;
+foreach (var message in messages)
+{
+    NinoDeserializer.Deserialize(message, ref order); // the first call creates order, later calls reuse it
+    Handle(order);
+}
+```
+
+过程中被丢弃的实例（数据中为 `null`、列表变短、字典少了某个键、多态类型变了）可以归还到对象池。Nino 没有 `out` 重载：要新实例就用返回值，要复用就用 `ref`。详见[复用反序列化与对象池](/zh/docs/v4/pooling)。
+
+### 从一个缓冲区读多个值 [#several-values-from-one-buffer]
+
+连续写入的多个值，用 `Reader` 按相同顺序读回：
+
+```csharp
+var reader = new Reader(buffer.WrittenSpan);
+var header = NinoDeserializer.Deserialize<Header>(ref reader);
+var body = NinoDeserializer.Deserialize<Body>(ref reader);
+reader.ReleaseReferences();
+```
+
+### 多段数据 [#multi-segment-data]
+
+Nino 没有 `ReadOnlySequence<byte>` 重载。`System.IO.Pipelines` 给出的序列通常只有一段，直接传入即可；如果有多段，就先拷贝到一块连续内存里：
+
+```csharp
+static Order Read(ReadOnlySequence<byte> data)
+{
+    if (data.IsSingleSegment)
+        return NinoDeserializer.Deserialize<Order>(data.First.Span);
+
+    int length = (int)data.Length;
+    byte[] rented = ArrayPool<byte>.Shared.Rent(length);
+    try
+    {
+        data.CopyTo(rented);
+        return NinoDeserializer.Deserialize<Order>(rented.AsSpan(0, length));
+    }
+    finally
+    {
+        ArrayPool<byte>.Shared.Return(rented);
+    }
+}
+```
+
+## 运行时类型 [#runtime-types]
+
+需要同时处理很多类型的代码（RPC 或消息分派、插件系统、编辑器工具），其实很少真的需要运行时类型。给这些类型一个共同的 `[NinoType]` 基类或接口，通过它来序列化即可：`Serialize<TBase>` 会写入类型 ID，`Deserialize<TBase>` 读出类型 ID 后，在生成代码里创建对应的类型。这是处理多种类型最快的方式，而且能配合[复用反序列化和对象池](/zh/docs/v4/pooling)使用，接收循环除了数据里的字符串之外不分配内存：
+
+```csharp
+[NinoType]
+public abstract class Message { }
+
+public sealed class Ping : Message { public long SentAt; } // inherits [NinoType]
+public sealed class Chat : Message { public string Text; }
+
+var buffer = new NinoArrayBufferWriter();                  // one per connection, reused
+NinoSerializer.Serialize<Message>(new Ping { SentAt = 1 }, buffer); // declared as the base: a type id is written
+
+Message message = null;
+NinoDeserializer.Deserialize(buffer.WrittenSpan, ref message); // a Ping, reused by later calls while the type matches
+```
+
+参见[多态](/zh/docs/v4/polymorphism#dispatching-through-a-common-base)。
+
+### 装箱 API [#the-boxed-api]
+
+**只有**当类型要到运行时才以 `Type` 的形式得知、而且这些类型没有共同的 `[NinoType]` 基类型时，才使用装箱 API：比如基于反射、面向任意类型的工具，像一个指向哪个字段就保存哪个字段的检视器。序列化和反序列化必须用**同一个**类型：
+
+```csharp
+Type type = field.FieldType;                                   // known only at run time
+byte[] bytes = NinoSerializer.SerializeBoxed(field.GetValue(target), type);
+object copy = NinoDeserializer.DeserializeBoxed(bytes, type);
+
+// into an existing instance, reused when it is an instance of type
+object current = field.GetValue(target);
+NinoDeserializer.DeserializeBoxed(bytes, ref current, type);
+field.SetValue(target, current);
+```
+
+`SerializeBoxed(value, type)` 写出的字节与 `T` = `type` 时的 `Serialize<T>(value)` 完全相同（对可以为 null 的类型，`null` 也一样），所以泛型调用和装箱调用可以互相读取对方的数据。装箱 API 按 `Type` 查找格式化器（第一次用到时通过反射，之后查字典），值类型会被装箱。
+
+<Callout type="warn" title="不要把 object 当作 T">
+
+变量声明为 `object` 时，`NinoSerializer.Serialize(value)` 调用的是 `Serialize<object>`，而不是装箱 API。它只接受 `[NinoType]` 的值，会写入类型 ID，并通过包含所有 `[NinoType]` 的全局注册表分派，比共同基类型的生成分派慢。请把变量声明为共同的基类型，或者带上 `Type` 调用 `SerializeBoxed`。
+
+</Callout>
+
+## 深层对象图 [#deep-object-graphs]
+
+递归类型（链表、树、节点里又包含节点）可以嵌套任意深。前 128 层嵌套的对象，Nino 在原处直接写入；更深的对象会被**推迟**：之后从较浅的层级写入，读取时也一样。因此：
+
+- 无论对象图有多深，写入和读取占用的栈都有上限：10 万个节点的链表在 512 KB 栈的线程上也能正常往返。
+- 无法构造出让读取方栈溢出的数据，所以递归类型可以放心用在来自不可信来源的消息里。
+- 嵌套不到 128 层的数据不受影响，写出的字节完全不变。
+
+```csharp
+[NinoType]
+public class TreeNode
+{
+    public int Value;
+    public List<TreeNode> Children;
+}
+
+// As deep as you like: no StackOverflowException on either side.
+byte[] bytes = NinoSerializer.Serialize(deepTree);
+var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
+```
+
+像 `TreeNode` 这样的递归类型，只要数据是一棵树（每个节点只被引用一次），就不需要 `trackReferences`。如果某个节点出现了两次，或者对象图里有环，就给这个类型加上 [`trackReferences: true`](/zh/docs/v4/reference-tracking)。不加的话，共享的节点会被写成多份独立的副本；环（`a.Next = b; b.Next = a;`）会在写入时被检测出来，抛出带类型名并提示 `trackReferences` 的 `InvalidOperationException`，而不会无限循环下去。
+
+被推迟的对象，在 Nino 读到存放它的成员或集合元素时就立即创建并放进去，它的成员则在同一次调用中稍后读取，所以复用反序列化和 `[NinoPooled]` 仍然会复用每一个实例。有两种类不能这样推迟，总是在原处嵌套：
+
+- 由**构造函数**创建的类（位置记录、init-only 或只读成员），因为成员读完之前还没有实例；
+- **按值比较**的类（记录、重写了 `GetHashCode` 或实现了 `IComparable` 的类），因为 `HashSet<T>`、字典的键或有序集合可能会在成员读取之前就持有它。
+
+由这两种类组成的对象图，嵌套到 512 层就会抛出 `InvalidOperationException`。需要深度递归的类型，请给它无参构造函数和可赋值的成员。
+
+## 无效数据 [#invalid-data]
+
+从数据中读出的每个长度，都会先和剩余字节数比对，然后才分配内存，因此格式错误或恶意构造的数据不会引发超大内存分配，读取也永远不会越过 span 的末尾。无效数据会抛出 `InvalidOperationException`，消息以 `Nino:` 开头，例如：
+
+- 数据被截断（"unexpected end of data"）；
+- 长度不合法；
+- 类型 ID 未知，或不是声明类型的子类型；
+- `[NinoUtf8]` 字符串的字节不是合法的 UTF-8，或与它记录的字符数和字节数对不上。
+
+嵌套很深的数据也不会导致栈溢出：参见[深层对象图](#deep-object-graphs)。
+
+但如果数据是按**另一个**布局兼容的类型写出的，Nino 察觉不到：字节里不带 schema。请自己给数据加上版本信息（参见[数据演进](/zh/docs/v4/evolving-data)和[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）。
+
+## 术语 [#terms]
+
+本文档中有特定含义的词：
+
+- **顶层调用**：你直接传入值和 `byte[]`、span 或缓冲区写入器的 `NinoSerializer.Serialize(...)` 或 `NinoDeserializer.Deserialize(...)` 调用；与之相对的是传入你自己创建的 `Writer` 或 `Reader` 的调用，以及 Nino 在一次调用内部读写的那些值。每次顶层调用都自成一体：它自己开始并结束[引用追踪](/zh/docs/v4/reference-tracking)。
+- **装箱 API**：`SerializeBoxed` 和 `DeserializeBoxed`，即接收 `object` 和 `Type` 的那些重载，用于运行时才知道、并且与其他类型没有共同 `[NinoType]` 基类型的类型；参见[装箱 API](#the-boxed-api)。
+- **格式化器**：负责读写某一种类型的代码：每个 `[NinoType]` 都有生成的格式化器，BCL 类型的格式化器内置在 Nino 中，也可以[自己编写](/zh/docs/v4/custom-formatters)。**格式化器缓存**是 `NinoFormatterCache<T>`，调用通过这个静态字段找到 `T` 的格式化器。
+- **拦截的调用**：使用 .NET 8 SDK 及以上版本时，源生成器会把编译期就知道类型的每个调用直接转给该类型的格式化器，跳过格式化器缓存；参见[拦截器](/zh/docs/v4/performance#interceptors)。
+- **暂存缓冲区**：Nino 为每个线程保留的一个 `NinoArrayBufferWriter`。返回 `byte[]` 的调用，以及写入 `NinoArrayBufferWriter` 以外的缓冲区写入器的调用，会先序列化到这里，再把字节拷贝出去。
+- **原始值**（原始结构体）：Nino 按内存原样写入的非托管值，只需一次拷贝，填充字节清零：基元类型、枚举、`DateTime`、`Guid`，以及符合条件的非托管结构体（参见[结构体](/zh/docs/v4/defining-types#structs)）。原始值的数组和列表是一次整块拷贝。
+- **固定大小的类型**：每个值都占用相同字节数的结构体或密封类，字节数由 `NinoSerializer.GetFixedSize<T>()` 返回；参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
+- **按位置**：`[NinoType]` 的默认格式：成员按声明顺序写入，不带名称和长度。最小、最快，但成员的任何改动都会改变格式；参见[数据演进](/zh/docs/v4/evolving-data#positional)。
+- **版本容错**与**键控**：另外两种格式（`NinoFormat.VersionTolerant` 和 `NinoFormat.Keyed`）。版本容错的对象先写入自己的字节长度，以后可以追加成员；键控的对象为每个成员写入一个键（成员名的哈希）和长度，成员可以增删、重排和改名。参见[数据演进](/zh/docs/v4/evolving-data)。
+- **槽位**：存放一个值的地方：一个成员、一个集合元素、一个字典值，或者你按 `ref` 传入的变量。Nino 为一个值写出什么，取决于槽位的声明类型。
+- **头部**：Nino 在类的值之前写入的字节：密封类是 1 字节的 null 标志，可能有子类型的类型是 4 字节的类型 ID；结构体没有头部。参见[多态值的写入方式](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)。
+- **复用反序列化**：`Deserialize(data, ref value)`，原地填充你传入的值以及其中的对象、列表和字典，而不是新建它们；参见[反序列化到已有值](#into-an-existing-value)。
+- **池化类**：标记了 `[NinoPooled]` 的 `[NinoType]` 类：Nino 需要新实例时从内置的对象池中取，丢弃的实例还回池中；参见 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)。
+- **回收器**：接收[复用反序列化](/zh/docs/v4/pooling)从槽位中丢弃的实例的地方：用 `NinoSettings.SetRecycler<T>` 注册的处理函数；没有的话，交给实例自己的对象池（`ReturnToPool()`）；再没有就不处理。参见[被丢弃的实例去哪里](/zh/docs/v4/pooling#where-dropped-instances-go)。
+- **注册表**：生成器在每个程序集中生成的代码，列出这个程序集的 `[NinoType]`、它们的格式化器和类型 ID。Nino 第一次遇到这个程序集里的类型，或者遇到不认识的类型 ID 时才加载它，所以不需要初始化调用；`NinoRegistry.EnsureInitialized(assembly)` 可以提前加载。**全局注册表**是包含所有 `[NinoType]` 的那张表，声明为 `object` 的值通过它分派；参见[分派](/zh/docs/v4/polymorphism#dispatch)。
+- **推迟的对象**：嵌套超过 128 层的对象，会在较浅的层级稍后写入和读取，让栈的用量保持有界；参见[深层对象图](#deep-object-graphs)。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="定义类型" href="/zh/docs/v4/defining-types">哪些成员会被写入、按什么顺序写入，以及改变格式的选项。</Card>
+  <Card title="支持的类型" href="/zh/docs/v4/types">基元类型、字符串、元组、集合，以及你自己的集合类型。</Card>
+</Cards>

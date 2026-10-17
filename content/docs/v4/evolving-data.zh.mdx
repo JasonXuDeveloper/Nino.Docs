@@ -1,0 +1,175 @@
+---
+title: 数据演进
+description: "按位置、版本容错和键控三种格式：数据写出之后，各自还允许你改什么。"
+icon: GitBranch
+---
+
+数据往往比代码活得更久。保存的文档、缓存的资源、旧版客户端发来的消息，都会被新版本的类型读取，有时反过来也一样。Nino 为每个类型提供三种格式，也就是 `NinoFormat` 枚举的三个值，用 `[NinoType(format: ...)]` 选定：
+
+| | `NinoFormat.Positional`（默认） | `format: NinoFormat.VersionTolerant` | `format: NinoFormat.Keyed` |
+| --- | :---: | :---: | :---: |
+| 向没有子类的类型追加成员 | ✗ | ✓ | ✓ |
+| 向基类追加成员 | ✗ | ✗ | ✓ |
+| 插入、删除或重排成员 | ✗ | ✗ | ✓ |
+| 重命名成员 | ✓ | ✓ | ✓（配合 `[NinoFormerName]`） |
+| 新代码读旧数据 | ✗ | ✓ | ✓ |
+| 旧代码读新数据 | ✗ | ✓ | ✓ |
+| 额外开销 | 无 | 每个对象 4 字节 | 每个成员 8 字节，每个对象另加 4 字节 |
+| 速度 | 最快 | 接近按位置：每个对象一个长度 | 较慢：每个成员多写一个键和长度，读取时每个成员要检查一次键 |
+
+格式本身也是数据的一部分：修改某个类型的 `format`，会让之前写出的数据无法读取。请在保存任何数据之前选好。
+
+无论哪种格式，都**不能修改成员的类型**。按位置和版本容错格式不写成员名，所以可以随意**重命名成员**；键控格式的键是成员名的哈希，所以改名的成员要标上旧名称（参见[重命名键控成员](#renaming-keyed-members)），否则改名会被当作“删掉一个、新增一个”。重命名*类型*请在类型上使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
+
+## 按位置 [#positional]
+
+不带参数的 `[NinoType]` 会依次写出各个成员，不带名称、长度或键。这是最快、最小的格式，适合由同一个构建版本写入和读取的数据：版本一致的客户端与服务器之间的网络消息、可以重建的缓存、内存中的快照。
+
+<Callout type="warn">
+
+只要成员列表有任何变化（新增、删除、重排、修改索引），旧数据就无法读取：读取时要么抛出异常，要么（更糟）读出错误的值。
+
+</Callout>
+
+非托管的 `[NinoType]` 结构体按原始内存拷贝，所以它的字节还取决于字段顺序和 `StructLayout`：调整字段顺序或修改布局，都会让已有数据无法读取。`NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed` 的结构体则逐个成员写出。
+
+## 版本容错 [#version-tolerance]
+
+应用的 1.1 版在设置文件里加了字号，而用户手里还是 1.0 写出的文件：
+
+```csharp
+[NinoType(format: NinoFormat.VersionTolerant)] // [!code highlight]
+public class Settings
+{
+    public string Theme = "light";
+    public bool Notifications;
+    public int FontSize = 14; // [!code ++]
+}
+```
+
+无论继承体系有多深，对象的成员（`[NinoType]` 基类的成员在前）都写在同一个 4 字节长度之后：
+
+- **新代码读旧数据：** 数据中缺少的成员保留原有的值：反序列化到已有实例时是该实例当前的值，否则是构造函数设置的值（包括字段初始化器）。1.1 读取 1.0 的文件时，`FontSize` 是 `14`，而不是 `0`。对于通过构造函数重新创建的类型（带主构造函数的记录、只读成员），缺少的构造函数参数传入 `default`，而不是参数声明的默认值。
+- **旧代码读新数据：** 旧代码不认识的字节会被跳过。
+- 成员可以追加到**最末端的派生类型**，也就是对象数据的末尾。嵌套多深都可以：每个版本容错对象都带有自己的长度，在集合、字典和多态成员里也一样。
+
+<Callout type="warn">
+
+以下改动不在容错范围内：向有 `[NinoType]` 子类的基类追加成员（参见[下文](#appending-to-a-base-class)），插入、删除或重排成员，向 `[NinoType]` 接口追加成员，以及在继承体系中增加或移除 `[NinoType]` 类。使用 `[NinoType(false)]` 时，新成员的索引必须大于所有已有成员。
+
+</Callout>
+
+<Callout type="info">
+
+在项目中定义符号 `WEAK_VERSION_TOLERANCE`，会把该项目中声明的所有 `NinoFormat.Positional` 类型变为 `NinoFormat.VersionTolerant`；引用的其他程序集里的类型保持各自的格式。更推荐按类型设置。
+
+</Callout>
+
+### 向基类追加成员 [#appending-to-a-base-class]
+
+在版本容错的继承体系中，只能向没有子类的类追加成员。如果基类需要新成员，请把整个继承体系改成 [`NinoFormat.Keyed`](#keyed-members)。原因如下。
+
+继承体系的各层共用对象的这一个长度，成员从根类开始依次写出。因此追加到基类的成员会落在子类成员**之前**，把它们往后挤：
+
+```csharp
+// Version 2 appends Revision to the base class
+[NinoType(format: NinoFormat.VersionTolerant)]
+public class Document
+{
+    public int Id;
+    public int Revision; // [!code ++]
+}
+
+public sealed class Invoice : Document
+{
+    public int CustomerId;
+}
+
+// after its header, version 1 writes an Invoice as  length | Id | CustomerId
+// and version 2 writes it as                        length | Id | Revision | CustomerId
+```
+
+- **版本 2 读取版本 1 的数据：** `Revision` 读到的是 `CustomerId` 的字节；数据在 `CustomerId` 之前就结束了，`CustomerId` 像其他缺少的成员一样保留原有的值（新建的 `Invoice` 中为 `0`）。
+- **版本 1 读取版本 2 的数据：** `CustomerId` 读到的是 `Revision` 的字节，真正的 `CustomerId` 被当作未知的尾部成员跳过。
+
+这里两个成员类型相同，所以只是值错了。类型不同时，字节会被当作另一种类型来读：结果是错误的值，或抛出 `InvalidOperationException`。编译期不会报告这种错误，因为生成器只能看到代码的一个版本。
+
+`Document` 自身的实例不受影响（`Revision` 是它们的最后一个成员），受影响的是所有子类的数据。因此只向继承体系最底层的类追加成员，例如密封的消息类。所有子类都需要的成员，就分别加到每个子类里；或者把整个继承体系改成 [`NinoFormat.Keyed`](#keyed-members)，这样任何一层的类都可以添加成员。
+
+## 键控成员 [#keyed-members]
+
+```csharp
+[NinoType(format: NinoFormat.Keyed)] // [!code highlight]
+public class ConnectionConfig
+{
+    public string Host;
+    public int Port;      // reorder, remove or insert members freely
+    public float TimeoutSeconds;
+}
+```
+
+每个成员写入时都带上一个**键**和它的长度。键是成员名的 32 位 FNV-1a 哈希，由生成器计算。这和 MessagePack 的 `[Key("name")]` 类似，只是不写入字符串：
+
+- 数据中不认识的键会被跳过；数据中缺少的成员保留原有的值，规则与[版本容错](#version-tolerance)相同（字段初始化器同样生效）。
+- 读取时先假定成员按声明顺序排列，所以同一 schema 写出的数据，每个非托管成员只需一次 8 字节比较；一旦不匹配，就改为逐个按键分派。
+- 同一类型中（包括继承来的成员）如果两个成员名哈希到同一个键，会在编译期报错（NINO014），所以哈希冲突不会损坏数据。
+- 键控结构体永远不会按原始内存写入。多态照常工作：类型 ID 写在成员数据之前。
+
+这种格式适合需要长期保存、会经历多个版本修改的数据：配置、文档、设置文件、用工具编辑的内容数据。
+
+### 重命名键控成员 [#renaming-keyed-members]
+
+在改名的字段或属性上加 `[NinoFormerName("OldName")]`，每个旧名称加一个。读取时，当前名称和所有旧名称都能识别；写入时始终使用当前名称。
+
+```csharp
+[NinoType(format: NinoFormat.Keyed)]
+public class UserProfile
+{
+    [NinoFormerName("Nick")]                 // [!code highlight]
+    [NinoFormerName("Nickname")]             // [!code highlight]
+    public string DisplayName;               // reads data written as Nick, Nickname or DisplayName
+    public string Email;
+}
+```
+
+- 旧名称与该类型的其他成员冲突时，会在编译期报错。
+- 按位置和版本容错的类型不写成员名，这个特性在其中不起作用，分析器会给出警告（NINO024）。
+- 旧代码只认识旧名称，所以改名后写出的数据被旧代码读取时，会丢失这个成员。
+
+## 如何选择 [#choosing]
+
+<Accordions type="single">
+<Accordion title="客户端与服务器之间的消息">
+
+两端始终运行同一构建版本时，用按位置格式。如果客户端和服务器的升级时间不一致（滚动升级、用户手里还有旧版本），用 `NinoFormat.VersionTolerant`，并且只向各个消息类本身**追加**字段（不要加到它们共同的基类上）；如果还需要删除字段，或要向基类添加字段，就用 `NinoFormat.Keyed`。参见[网络层](/zh/docs/v4/advanced/networking)。
+
+</Accordion>
+<Accordion title="保存的文档与用户文件">
+
+如果只会陆续向没有子类的类添加字段，用 `NinoFormat.VersionTolerant`；想自由地删除和重排字段，用 `NinoFormat.Keyed`。如果保存的对象图有共享对象或循环，再加上 [`trackReferences`](/zh/docs/v4/reference-tracking)。参见[持久化与存储](/zh/docs/v4/advanced/persistence)。
+
+</Accordion>
+<Accordion title="由人手工维护的配置">
+
+用 `NinoFormat.Keyed`：维护配置的人会频繁增删、调整字段，而每个成员 8 字节的开销对配置来说几乎可以忽略。
+
+</Accordion>
+<Accordion title="缓存与内存快照">
+
+用按位置格式。schema 变了就丢掉缓存重新生成。
+
+</Accordion>
+</Accordions>
+
+<Callout type="idea">
+
+这些选项可以混用：键控的设置文件里可以包含按位置写入的原始结构体（如 `Guid` 或你自己的 `[NinoType]` 结构体）。每个类型使用自己的格式。
+
+</Callout>
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="引用追踪" href="/zh/docs/v4/reference-tracking">按类型开启，保留共享引用和循环引用。</Card>
+  <Card title="持久化与存储" href="/zh/docs/v4/advanced/persistence">能跨版本读取的文件、文件头、安全写入和追加日志。</Card>
+</Cards>

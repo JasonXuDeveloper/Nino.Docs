@@ -1,0 +1,168 @@
+---
+title: Unity 与 HybridCLR
+seoTitle: "Unity 序列化与 HybridCLR 热更新 – Nino v4 文档"
+description: "在 Unity 中配置 Nino，配合程序集定义、IL2CPP 和 HybridCLR 热更新使用，并让每一帧都不产生 GC。"
+icon: Gamepad2
+---
+
+Nino 支持 Unity 2022.3 及以上版本的 Mono 和 IL2CPP、所有 Player 平台，以及 HybridCLR 热更新程序集，且无需任何初始化调用。本指南介绍安装、程序集定义、IL2CPP 构建、热更新，以及如何让每一帧都不产生 GC。
+
+## 配置 [#setup]
+
+<Steps>
+<Step>
+
+### 安装包 [#install-the-package]
+
+从 [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/) 安装：
+
+```shell
+openupm add com.jasonxudeveloper.nino
+```
+
+包中含有 `Nino.Core.dll`、源生成器 `Nino.Generator.dll`（已标记为 `RoslynAnalyzer`，Unity 会在编译脚本时运行它），以及它依赖的 `System.Buffers`、`System.Memory` 和 `System.Runtime.CompilerServices.Unsafe` 程序集。
+
+</Step>
+<Step>
+
+### 在程序集定义中引用 [#reference-it-from-your-assembly-definitions]
+
+使用 `.asmdef` 的程序集，在勾选 **Auto Referenced** 时能直接看到 `Nino.Core.dll`。如果程序集启用了 **Override References**，需要把 `Nino.Core.dll` 手动加进列表。源生成器会在每个引用了 `Nino.Core` 的程序集上运行。
+
+</Step>
+<Step>
+
+### 标记类型 [#mark-your-types]
+
+```csharp
+using Nino.Core;
+using UnityEngine;
+
+[NinoType]
+public class PlayerState
+{
+    public string Name;
+    public Vector3 Position;      // Unity structs are unmanaged: written as raw memory
+    public Quaternion Rotation;
+    public Color32[] Palette;     // one block copy
+}
+```
+
+</Step>
+</Steps>
+
+## 与 .NET 的区别 [#what-differs-from-net]
+
+- **私有成员需要 `partial`。** Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员（或标记了 `[NinoPooled]`）的类型必须声明为 `partial`，包含它的外层类型也一样。分析器会报告 NINO002 并帮你修复。
+- **没有拦截器。** Unity 包附带的是源生成器的 Roslyn 4.3 版本（Unity 支持的最低编译器版本），所以调用走常规路径。写出的字节完全相同，每次调用只差几纳秒。
+- **字节与 .NET 一致。** .NET 服务器写出的数据，Unity 客户端可以直接读取，反过来也一样，32 位的 IL2CPP Player 和旧版 Mono 运行时也不例外。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+
+## IL2CPP [#il2cpp]
+
+- 生成的代码是普通 C#：序列化时不使用反射，也不使用 `System.Reflection.Emit`。
+- 每个生成的注册表都标记了 `[RuntimeInitializeOnLoadMethod]`（编辑器中还有 `[InitializeOnLoadMethod]`），因此注册表会在启动时运行，也不会被 IL2CPP 链接器裁剪掉。即使没有这一步，注册也会在第一次用到时按需完成。
+- 代码中**写出名字**的泛型 `[NinoType]` 实例化和内置泛型集合（成员类型、`NinoSerializer.Serialize<List<MyStruct>>` 调用）都会由生成器注册，因此 IL2CPP 会提前编译它们。
+- 只通过反射创建、并且只会多态**读取**的实例化，需要在启动时加一行：`NinoPolymorphic.Register<Box<MyStruct>>()`。
+
+## HybridCLR 热更新 [#hybridclr-hot-update]
+
+在热更新代码中，Nino **不需要任何初始化调用**。生成的注册表是按需查找的：Nino 第一次遇到新加载程序集中的类型，或者遇到还不认识的类型 ID 时，就会找到该程序集的注册表。所以：
+
+```csharp
+Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
+// nothing else to do: types in hotUpdate serialize, including subtypes of AOT base classes
+```
+
+常见的划分方式是：AOT 主包（启动器、网络层）声明 `Message` 基类，所有帧都按 `Message` 读取；热更新 DLL 声明玩法消息和配置类型。某次更新新增了 `public sealed class EnterDungeon : Message` 之后，只要加载了新的 DLL，主包中的网络代码就能读到它，既不需要注册调用，也不需要重新打主包。
+
+- 把热更新类型放在引用了 `Nino.Core` 的程序集定义中，或者放在通过 NuGet 安装 Nino 的独立 C# 项目中编译，然后照常加载 DLL。
+- 遵循 HybridCLR 自己的 AOT 泛型规则：热更新代码用到了哪些 AOT 程序集中的泛型，就为这些程序集加载补充元数据。
+- 热更新代码运行在 HybridCLR 的解释器中，解释器不会内联调用。正因如此，Nino 生成的代码直接调用 `Nino.Core`，不经过任何包装层。
+- 注册是按需完成的，所以热更新类型第一次序列化时要承担加载注册表的开销。如果想把这部分开销放到加载界面中，可以在加载程序集后调用 `NinoRegistry.EnsureInitialized(hotUpdate)`（或用 `NinoRegistry.EnsureAllInitialized()` 处理所有已加载的程序集）。两者都是可选的。
+
+## 启动检查清单 [#startup-checklist]
+
+大多数项目一步都不需要。需要的步骤，在第一次序列化调用之前执行一次即可：
+
+| 步骤 | 什么时候需要 | 什么时候不需要 |
+| --- | --- | --- |
+| `NinoSettings`（`DefaultPoolMaxRetained`、`SetPoolMaxRetained<T>`、`SetRecycler<T>`） | 想改变默认的池大小（共享栈 256、每个线程 64），或者想让自己的对象池接收被丢弃的实例。请**最先**设置：这些值的读取不做同步。 | 默认值够用。 |
+| HybridCLR 补充元数据 | 热更新代码用到了 AOT 程序集中定义的泛型。按 HybridCLR 的规则处理即可，Nino 没有额外要求。 | 没有热更新。 |
+| 用 `Assembly.Load` 加载热更新 DLL | 在读取包含其中类型的数据之前。 | |
+| `NinoRegistry.EnsureInitialized(assembly)` 或 `EnsureAllInitialized()` | 想把一次性的注册表加载放到加载界面，而不是第一次用到该程序集的调用。 | 始终是可选的：注册表在首次使用时自动加载。 |
+| `NinoPolymorphic.Register<T>()` | 某个封闭泛型 `[NinoType]`（如 `Box<MyStruct>`）在本进程中只会通过基类型**读取**，代码里从未写出它的名字，也从未写入过它。 | 普通子类型，无论在哪个程序集（包括热更新程序集），都会自动找到。 |
+
+```csharp
+public static class NinoStartup
+{
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void Init()
+    {
+        NinoSettings.SetPoolMaxRetained<Bullet>(1024); // only if the defaults do not fit
+        NinoPolymorphic.Register<Box<MyStruct>>();     // only for read-only closed generics
+    }
+}
+
+// after HybridCLR has loaded its supplementary metadata:
+Assembly hotUpdate = Assembly.Load(dllBytes);
+NinoRegistry.EnsureInitialized(hotUpdate);             // optional: pay the registry load now
+```
+
+## 配置表 [#config-tables]
+
+在表格或编辑器中编辑的游戏数据（道具、关卡、掉落表）很适合用 Nino：导出一次 `.bytes` 文件，运行时直接加载，不需要任何解析。把表的类型设为 `format: NinoFormat.Keyed`，这样新增或调整列不会让之前导出的文件失效：
+
+```csharp title="ItemTable.cs"
+[NinoType(format: NinoFormat.Keyed)]
+public sealed class ItemTable
+{
+    public List<ItemRow> Rows;
+}
+
+[NinoType(format: NinoFormat.Keyed)]
+public sealed class ItemRow
+{
+    public int Id;
+    public string Name;
+    public int Price;
+}
+
+// Editor: export after the table is edited (a menu item, or an import step for your spreadsheets)
+File.WriteAllBytes("Assets/Config/items.bytes", NinoSerializer.Serialize(table));
+
+// Player: .bytes files import as TextAsset
+var asset = Resources.Load<TextAsset>("Config/items");
+ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
+```
+
+## 降低帧耗时的技巧 [#frame-time-tips]
+
+- **网络或回放数据不引起 GC 峰值：** 每个 tick 都用 `ref` 反序列化到上一个 tick 的对象中，并给批量创建的类（子弹、事件）加上 `[NinoPooled]`。参见[零分配模式](/zh/docs/v4/advanced/zero-allocation)。
+- **每个发送方复用一个 `NinoArrayBufferWriter`** 来写出数据，而不是每帧调用 `Serialize(value)` 分配一个 `byte[]`。
+- **批量数据保持非托管：** `Vector3`、`Color32` 或你自己的非托管 `[NinoType]` 结构体组成的数组，只需一次内存拷贝。
+
+<Callout type="warn">
+
+启用 **Enter Play Mode Options** 并关闭域重载后，静态状态会在多次运行之间保留，包括 `[NinoPooled]` 对象池和 `NinoSettings`。如果残留的实例会带来问题，请在进入运行模式时清空用到的池：`NinoPool<Bullet>.Shared.Clear()`。
+
+</Callout>
+
+## 常见问题 [#troubleshooting]
+
+<Accordions type="single">
+<Accordion title="类型没有被序列化 / 源生成器没有运行">
+
+确认程序集引用了 `Nino.Core.dll`（勾选了 Auto Referenced，或在 Override References 中列出），并且 `Nino.Generator.dll` 在导入设置中仍标记为 `RoslynAnalyzer`。然后试试 GitHub 仓库中的 `Nino.Unity` 示例项目，它附带一套可以用 Test Runner 运行的测试。
+
+</Accordion>
+<Accordion title="error NINO002：类型必须是 partial">
+
+该类型序列化了私有成员，或者标记了 `[NinoPooled]`，而 Unity 没有 `[UnsafeAccessor]`。把该类型及其所有外层类型声明为 `partial`（代码修复可以自动完成）。
+
+</Accordion>
+<Accordion title="读取不了旧版本的数据">
+
+Nino 默认按位置写入：修改类型的成员会破坏旧数据。需要保存的数据请使用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，参见[数据演进](/zh/docs/v4/evolving-data)。Nino v3 写出的数据 v4 完全无法读取，参见[从 v3 迁移](/zh/docs/v4/migration)。
+
+</Accordion>
+</Accordions>

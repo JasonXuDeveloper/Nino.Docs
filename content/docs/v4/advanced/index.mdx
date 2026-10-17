@@ -1,0 +1,101 @@
+---
+title: Overview
+seoTitle: "Advanced Guides: Nino in Real Systems – Nino v4 Docs"
+description: "Guides for using Nino in real systems: hot paths, networking and RPC, browser clients, message queues, caching, persistence and storage, plus Unity and HybridCLR."
+icon: Map
+---
+
+import { ArrowDownUp, DatabaseZap, Gamepad2, Gauge, Globe, Leaf, MessagesSquare, Network, Save } from 'lucide-react';
+
+<AnchorRedirect
+  map={{
+    'former-name': '/en/docs/v4/defining-types#former-name',
+    'string-encoding': '/en/docs/v4/defining-types#string-encoding',
+    'member-order': '/en/docs/v4/defining-types#member-order',
+    'custom-constructors': '/en/docs/v4/constructors',
+    'rules': '/en/docs/v4/constructors#rules',
+    'version-tolerance': '/en/docs/v4/evolving-data#version-tolerance',
+    'keyed-members': '/en/docs/v4/evolving-data#keyed-members',
+    'reference-tracking': '/en/docs/v4/reference-tracking',
+    'ref-deserialization-and-pooling': '/en/docs/v4/pooling',
+    'deserializing-into-existing-instances': '/en/docs/v4/pooling#deserializing-into-existing-instances',
+    'creating-instances-with-ninorefdeserialization': '/en/docs/v4/pooling#creating-instances-with-ninofactory',
+    'ninopooled': '/en/docs/v4/pooling#ninopooled',
+    'custom-formatters': '/en/docs/v4/custom-formatters',
+    'interceptors': '/en/docs/v4/performance#interceptors',
+    'analyzers-and-code-fixes': '/en/docs/v4/analyzers',
+  }}
+/>
+
+The feature pages explain what each option does. These guides put them together for the systems you actually build, with complete patterns you can copy. Every snippet uses only Nino's public API and standard .NET types; where a third-party client appears (Redis, Kafka, gRPC), it is shown minimally, as an illustration.
+
+## Hot Paths and I/O [#hot-paths-and-io]
+
+<Cards>
+  <Card icon={<Gauge />} title="High-Performance Serialization" href="/en/docs/v4/advanced/high-performance">
+    The mechanisms and their costs: buffer writers, Writer and Reader, reuse deserialization, pools, raw structs, interceptors, thread safety and measuring.
+  </Card>
+  <Card icon={<Leaf />} title="Zero-Allocation Patterns" href="/en/docs/v4/advanced/zero-allocation">
+    Copy-paste recipes for 0 B hot paths: buffers, batches, receive loops, framed streams, fixed-size records, and the checklist.
+  </Card>
+  <Card icon={<ArrowDownUp />} title="Streams, Async, Callbacks and Compression" href="/en/docs/v4/advanced/streams">
+    Ready-to-copy helpers: framed `Stream` I/O, async reads and writes, `ReadOnlySequence` input, before/after hooks, Brotli and GZip.
+  </Card>
+</Cards>
+
+## Use Cases [#use-cases]
+
+<Cards>
+  <Card icon={<Network />} title="Network Layer" href="/en/docs/v4/advanced/networking">
+    Service-to-service and real-time protocols: TCP framing, WebSocket and UDP, gRPC marshallers, polymorphic messages, rolling upgrades.
+  </Card>
+  <Card icon={<Globe />} title="Browser and JavaScript Clients" href="/en/docs/v4/advanced/browser">
+    The same `[NinoType]` types in the browser: a .NET WebAssembly module with `[JSExport]` functions, called from JavaScript or TypeScript.
+  </Card>
+  <Card icon={<MessagesSquare />} title="Message Queues and Event Streams" href="/en/docs/v4/advanced/message-queues">
+    Kafka and other brokers, event hierarchies, batching, telemetry and tick streams, long-lived topics.
+  </Card>
+  <Card icon={<DatabaseZap />} title="Caching" href="/en/docs/v4/advanced/caching">
+    Redis, `IDistributedCache` and `HybridCache`, in-process blob caches, schema changes across deployments.
+  </Card>
+  <Card icon={<Save />} title="Persistence" href="/en/docs/v4/advanced/persistence">
+    Files that survive updates, key-value stores, append-only logs, snapshots and checkpoints.
+  </Card>
+  <Card icon={<Gamepad2 />} title="Unity and HybridCLR" href="/en/docs/v4/advanced/unity">
+    Project setup, IL2CPP, assembly definitions, hot update and frame-time tips.
+  </Card>
+</Cards>
+
+## Which Guide Do I Need? [#which-guide-do-i-need]
+
+| You are building | Start with |
+| --- | --- |
+| A service protocol, a real-time server (trading, collaboration, games), a WebSocket or UDP link | [Network Layer](/en/docs/v4/advanced/networking) |
+| gRPC services without `.proto` files, between .NET peers | [gRPC](/en/docs/v4/advanced/networking#grpc) |
+| A web front end (JavaScript or TypeScript) that talks to a Nino server | [Browser and JavaScript Clients](/en/docs/v4/advanced/browser) |
+| Producers and consumers on Kafka, RabbitMQ or another broker | [Message Queues and Event Streams](/en/docs/v4/advanced/message-queues) |
+| Telemetry, metrics or market-data feeds | [Telemetry and Tick Streams](/en/docs/v4/advanced/message-queues#telemetry-and-tick-streams) |
+| A Redis or `IDistributedCache` layer, or an in-process cache of blobs | [Caching](/en/docs/v4/advanced/caching) |
+| Files, documents, save data, local key-value stores | [Persistence](/en/docs/v4/advanced/persistence) |
+| An event store, a journal, snapshots or checkpoints | [Append-Only Logs](/en/docs/v4/advanced/persistence#append-only-logs) |
+| IPC over named pipes or sockets | [Framed Streams](/en/docs/v4/advanced/zero-allocation#framed-streams) |
+| Records in shared or memory-mapped files | [Fixed-Size Records](/en/docs/v4/advanced/zero-allocation#fixed-size-records) |
+| A Unity, Godot or HybridCLR project | [Unity and HybridCLR](/en/docs/v4/advanced/unity), [Godot](/en/docs/v4/platforms#godot) |
+
+## Which Feature Do I Need?
+
+| You want to | Use |
+| --- | --- |
+| Add members to a saved type later | [`format: NinoFormat.VersionTolerant`](/en/docs/v4/evolving-data#version-tolerance) |
+| Reorder, remove or insert members later | [`format: NinoFormat.Keyed`](/en/docs/v4/evolving-data#keyed-members) |
+| Rename a type or move it to another namespace | [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name) |
+| Keep shared references or cycles | [`trackReferences: true`](/en/docs/v4/reference-tracking) |
+| Stop allocating on every deserialization | [reuse deserialization and `[NinoPooled]`](/en/docs/v4/pooling) |
+| Serialize a type Nino does not know | [`[assembly: NinoFormatter]`](/en/docs/v4/custom-formatters) |
+| Encode one member differently | [`[NinoCustomFormatter]`](/en/docs/v4/custom-formatters#for-one-member) |
+| Read a value as the type it really is | [Polymorphism](/en/docs/v4/polymorphism) |
+| Serialize a type known only at run time | [Runtime types](/en/docs/v4/basic#runtime-types) |
+| Write several values into one buffer | [`Writer` and `Reader`](/en/docs/v4/basic#several-values-in-one-buffer) |
+| Read from or write to a `Stream`, async | [Streams and async](/en/docs/v4/advanced/streams#streams) |
+| Run code before serializing or after deserializing | [Callbacks](/en/docs/v4/advanced/streams#callbacks) |
+| Compress the output | [Compression](/en/docs/v4/advanced/streams#compression) |

@@ -1,0 +1,304 @@
+---
+title: 浏览器与 JavaScript 客户端
+seoTitle: "在浏览器中使用 Nino：通过 .NET WebAssembly 支持 JavaScript 与 TypeScript 客户端 – Nino v4 文档"
+description: "在浏览器的 JavaScript 或 TypeScript 中使用 Nino：把 [NinoType] 类型编译进 .NET browser-wasm 模块，通过 [JSExport] 调用，与 .NET 服务端交换完全相同的字节。"
+icon: Globe
+---
+
+**能在 JavaScript 或 TypeScript 中使用 Nino 吗？** 可以在浏览器中使用，做法是让 Nino 本身在浏览器里运行。把客户端的序列化部分构建成一个引用 Nino 和你的 `[NinoType]` 类型的小型 .NET `browser-wasm` 应用，用 `[JSExport]` 向 JavaScript 暴露几个函数，再在 JavaScript 或 TypeScript 前端中调用它们。Nino 不生成 TypeScript 或 JavaScript 代码，也不需要生成：浏览器运行的是与服务端相同的 C# 类型和相同的生成格式化器，因此没有第二份 schema 需要同步，字节也完全相同。
+
+本指南完整搭建这一方案：一个共享的订单类型、一组导出函数、一个加载它们的页面，以及通过 `fetch` 和 WebSocket 与 ASP.NET Core 服务端的通信。所有代码片段都来自一个用 .NET 10 SDK 构建、并在无头 Chromium 中实际运行过的项目。
+
+## 为什么在浏览器中运行 Nino [#why-run-nino-in-the-browser]
+
+- **只有一份 schema。** `[NinoType]` 类就是格式的唯一定义。不需要为每个类维护一份 `.ts` 镜像，成员变化时也没有 `.proto` 文件要更新。
+- **字节相同。** 在测试项目中，浏览器序列化出的订单与 .NET 10 控制台程序序列化同一订单得到的字节逐字节相同（62 字节），浏览器也能正确解码控制台程序和 ASP.NET Core 接口返回的字节。Nino 定义了自己的小端格式，而 WebAssembly 本身是小端的，所以没有任何差异。
+- **所有功能都能用。** [版本容错与键控成员](/zh/docs/v4/evolving-data)、[多态](/zh/docs/v4/polymorphism)、[引用跟踪](/zh/docs/v4/reference-tracking)和[复用反序列化](/zh/docs/v4/pooling)在模块中的行为与服务端完全一致。
+- **JavaScript 只接触普通值。** 导出函数接收和返回 `Uint8Array`、数字、字符串和数组；前端代码从不需要了解 Nino 的格式。
+
+## 配置 [#setup]
+
+<Steps>
+<Step>
+
+### 把类型放进共享项目 [#put-the-types-in-a-shared-project]
+
+在一个类库（这里是 `net10.0`）中只声明一次类型，让服务端和浏览器应用都引用它，并为它添加 Nino：
+
+```shell
+dotnet new classlib -n Shop.Contracts -f net10.0
+dotnet add Shop.Contracts package Nino --prerelease
+```
+
+```csharp title="Shop.Contracts/Order.cs"
+using System.Collections.Generic;
+using Nino.Core;
+
+namespace Shop.Contracts;
+
+[NinoType(format: NinoFormat.VersionTolerant)] // browser and server may update at different times
+public class Order
+{
+    public long Id;
+    public string Customer;
+    public List<OrderLine> Lines;
+}
+
+[NinoType]
+public struct OrderLine
+{
+    public int ProductId;
+    public int Quantity;
+    public double UnitPrice;
+}
+```
+
+已经打开的页面在刷新之前会一直运行旧模块，所以与服务端交换的数据请选择能容忍类型变化的格式；参见[数据演进](/zh/docs/v4/evolving-data)。
+
+</Step>
+<Step>
+
+### 创建浏览器项目 [#create-the-browser-project]
+
+`browser-wasm` 应用就是一个使用 `Microsoft.NET.Sdk.WebAssembly` SDK 的普通项目：
+
+```xml title="Shop.Browser/Shop.Browser.csproj"
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks> <!-- [!code highlight] -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Shop.Contracts/Shop.Contracts.csproj" />
+  </ItemGroup>
+</Project>
+```
+
+```csharp title="Shop.Browser/Program.cs"
+// The runtime is started from JavaScript; Main has nothing to do.
+return;
+```
+
+- `AllowUnsafeBlocks` 是 `[JSExport]` 生成器的要求（缺少时报 SYSLIB1075 错误），与 Nino 无关。
+- 不需要安装任何 workload：项目用普通的 .NET SDK 即可构建和发布。只有 AOT 编译或原生重链接才需要 `wasm-tools` workload。
+- `InvariantGlobalization` 是可选的，用来去掉编解码用不到的区域性数据。
+
+</Step>
+<Step>
+
+### 用 `[JSExport]` 导出函数 [#export-functions-with-jsexport]
+
+写一个 `static partial class`，其中的方法供 JavaScript 调用。粒度要粗：每条消息调用一次，具体工作交给 C# 完成。
+
+```csharp title="Shop.Browser/OrderCodec.cs"
+using System.Collections.Generic;
+using System.Runtime.InteropServices.JavaScript;
+using System.Runtime.Versioning;
+using Nino.Core;
+using Shop.Contracts;
+
+namespace Shop.Browser;
+
+[SupportedOSPlatform("browser")] // silences CA1416 on the interop attributes
+public static partial class OrderCodec
+{
+    // JavaScript values in, Nino bytes out
+    [JSExport]
+    public static byte[] EncodeOrder(
+        [JSMarshalAs<JSType.Number>] long id,
+        string customer,
+        int[] productIds,
+        int[] quantities,
+        double[] unitPrices)
+    {
+        var order = new Order { Id = id, Customer = customer, Lines = new List<OrderLine>(productIds.Length) };
+        for (int i = 0; i < productIds.Length; i++)
+            order.Lines.Add(new OrderLine { ProductId = productIds[i], Quantity = quantities[i], UnitPrice = unitPrices[i] });
+        return NinoSerializer.Serialize(order); // [!code highlight]
+    }
+
+    // Nino bytes in, what the UI needs out
+    [JSExport]
+    public static string GetCustomer(byte[] data) => NinoDeserializer.Deserialize<Order>(data).Customer;
+
+    [JSExport]
+    [return: JSMarshalAs<JSType.Number>]
+    public static long GetId(byte[] data) => NinoDeserializer.Deserialize<Order>(data).Id;
+
+    [JSExport]
+    public static double GetTotal(byte[] data)
+    {
+        Order order = NinoDeserializer.Deserialize<Order>(data);
+        double total = 0;
+        foreach (OrderLine line in order.Lines) total += line.Quantity * line.UnitPrice;
+        return total;
+    }
+
+    // Reuse deserialization: one Order and its list, refilled in place on every call
+    private static Order _order = new();
+
+    [JSExport]
+    public static int CountLines(byte[] data)
+    {
+        NinoDeserializer.Deserialize(data, ref _order); // [!code highlight]
+        return _order.Lines.Count;
+    }
+}
+```
+
+本例中 `[JSExport]` 的类型映射：
+
+| C# | JavaScript |
+| --- | --- |
+| `byte[]` | `Uint8Array`（每个方向跨边界时都会复制） |
+| `int[]`、`double[]` | 数字数组 |
+| `string`、`int`、`double` | `string`、`number` |
+| 带 `[JSMarshalAs<JSType.Number>]` 的 `long` | `number`（2^53 以内精确） |
+| 带 `[JSMarshalAs<JSType.BigInt>]` 的 `long` | `bigint` |
+
+`long` 必须声明映射到这两者中的哪一个。标记为 `[JSMarshalAs<JSType.MemoryView>]` 的 `Span<byte>` 参数不接受来自 JavaScript 的 `Uint8Array`（调用会失败，报 `Expected MemoryViewType.Byte`），所以请使用 `byte[]`。
+
+<Callout type="info">
+
+Nino 的[拦截器](/zh/docs/v4/performance#interceptors)可以在 WebAssembly SDK 下工作，规则与平时相同：对声明在其他程序集（例如这里的 `Shop.Contracts`）中的 `[NinoType]` 的调用不会被拦截，而是和服务端一样经过格式化器缓存。如果希望这些调用被拦截，就把类型声明在浏览器项目自身中（或把同一个源文件链接进来）。
+
+</Callout>
+
+</Step>
+<Step>
+
+### 在 JavaScript 中加载模块 [#load-the-module-from-javascript]
+
+在项目的 `wwwroot` 文件夹中添加一个页面和一个模块脚本：
+
+```html title="Shop.Browser/wwwroot/index.html"
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body></body>
+</html>
+```
+
+```js title="Shop.Browser/wwwroot/main.js"
+import { dotnet } from './_framework/dotnet.js';
+
+const runtime = await dotnet.create();
+const exports = await runtime.getAssemblyExports('Shop.Browser.dll');
+const codec = exports.Shop.Browser.OrderCodec; // namespace, then class // [!code highlight]
+
+const bytes = codec.EncodeOrder(42, 'Ada', [7, 9], [2, 1], [9.5, 20]); // a Uint8Array
+codec.GetTotal(bytes); // 39
+```
+
+导出函数按命名空间和类名访问：上例中是 `Shop.Browser.OrderCodec`。
+
+发布后，用任意静态 Web 服务器托管输出目录：
+
+```shell
+dotnet publish Shop.Browser -c Release
+# serve Shop.Browser/bin/Release/net10.0/publish/wwwroot
+```
+
+</Step>
+<Step>
+
+### 在 TypeScript 中为导出函数声明类型 [#type-the-exports-in-typescript]
+
+`getAssemblyExports` 返回 `any`。由于 Nino 不生成 TypeScript，请手写导出函数的类型声明，放在 `OrderCodec.cs` 旁边，C# 签名变化时同步更新：
+
+```ts title="order-codec.d.ts"
+export interface OrderCodec {
+  EncodeOrder(id: number, customer: string, productIds: number[], quantities: number[], unitPrices: number[]): Uint8Array;
+  GetCustomer(data: Uint8Array): string;
+  GetId(data: Uint8Array): number;
+  GetTotal(data: Uint8Array): number;
+  CountLines(data: Uint8Array): number;
+}
+```
+
+```ts title="main.ts"
+import { dotnet } from './_framework/dotnet.js';
+import type { OrderCodec } from './order-codec';
+
+const runtime = await dotnet.create();
+const exports = await runtime.getAssemblyExports('Shop.Browser.dll');
+const codec: OrderCodec = exports.Shop.Browser.OrderCodec;
+```
+
+这里描述的只是几个函数，而不是数据模型：类型本身仍然只在 C# 中定义。
+
+</Step>
+</Steps>
+
+## 发送与接收 [#sending-and-receiving]
+
+字节就是普通的 `Uint8Array`，任何能传输二进制数据的浏览器 API 都可以使用。
+
+使用 `fetch` 时，把字节作为请求体发送，并以 `ArrayBuffer` 读取响应：
+
+```js
+const reply = await fetch('/orders', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/octet-stream' },
+  body: codec.EncodeOrder(42, 'Ada', [7, 9], [2, 1], [9.5, 20]),
+});
+const replyBytes = new Uint8Array(await reply.arrayBuffer());
+codec.GetCustomer(replyBytes);
+```
+
+服务端用同一个 `Order` 类型反序列化并应答：
+
+```csharp title="Program.cs (ASP.NET Core)"
+app.MapPost("/orders", async (HttpRequest request) =>
+{
+    using var body = new MemoryStream();
+    await request.Body.CopyToAsync(body);
+    Order order = NinoDeserializer.Deserialize<Order>(body.GetBuffer().AsSpan(0, (int)body.Length));
+    // ... handle the order ...
+    return Results.Bytes(NinoSerializer.Serialize(order), "application/octet-stream");
+});
+```
+
+使用 WebSocket 时，把 `binaryType` 设为 `'arraybuffer'`；每条 WebSocket 消息就是一个 Nino 负载，无需分帧：
+
+```js
+const socket = new WebSocket(`wss://${location.host}/ws`);
+socket.binaryType = 'arraybuffer';
+socket.onopen = () => socket.send(codec.EncodeOrder(7, 'Grace', [1], [3], [2.5]));
+socket.onmessage = (e) => {
+  const data = new Uint8Array(e.data);
+  console.log(codec.GetCustomer(data), codec.GetTotal(data));
+};
+```
+
+服务端读写 WebSocket 消息的方法见 [WebSocket 与 UDP](/zh/docs/v4/advanced/networking#websocket-and-udp)。
+
+## 权衡 [#trade-offs]
+
+**下载体积。** 浏览器除了你的代码，还要下载 .NET 运行时。上面的项目用 .NET 10.0.13 以 Release 模式裁剪发布后：
+
+| `_framework` 中的文件 | 未压缩 | Brotli | Gzip |
+| --- | --- | --- | --- |
+| 全部（运行时、CoreLib、Nino、应用） | 4.65 MB | 1.49 MB | 1.83 MB |
+| `Nino.Core` | 123 KB | 65 KB | |
+| `dotnet.native.wasm`（运行时） | 3.00 MB | 0.98 MB | |
+
+`dotnet publish` 会在每个文件旁边生成 `.br` 和 `.gz` 副本；请配置服务器直接提供它们，并对 `_framework` 设置长期缓存（文件名中带有内容哈希）。
+
+**启动时间。** 运行时下载并启动完成之前，无法编码或解码任何数据。在测试中（无头 Chromium，从 localhost 加载），页面从开始导航到得到第一批解码结果用时 0.4 到 0.7 秒；在真实网络中，下载时间占大头。请在页面加载时就启动运行时，而不是等到第一条消息。
+
+**跨越边界。** 每次调用都会在 JavaScript 内存和 WebAssembly 内存之间复制 `byte[]` 参数和返回值。导出少量粗粒度的函数（编码一条消息、解码视图需要的字段），而不是为每个成员导出一个 getter。
+
+**裁剪。** Nino.Core 标记为可裁剪、兼容 AOT，生成的代码也带有裁剪器需要的标注，因此裁剪发布时 Nino 不会产生警告。上线前仍请用 Release 发布验证你自己的类型。
+
+### 其他方案更合适的情况 [#when-something-else-fits-better]
+
+- **MemoryPack** 可以生成 TypeScript 类（`[GenerateTypeScript]`），直接在 JavaScript 中读写它的格式，浏览器无需下载 .NET 运行时。如果小体积比统一 schema 和 Nino 的功能更重要，参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)。
+- **JSON API** 更适合公开 API、小负载，或由 .NET 以外的团队维护的前端。Nino 仍可用于你的 .NET 服务之间。
+- **Protocol Buffers 或 MessagePack** 适合需要被多种语言读取的数据；Nino 的格式只由 C# 类型定义。
+- **Blazor WebAssembly** 应用本来就在浏览器中运行 .NET：直接在 Blazor 项目中引用并调用 Nino 即可，不需要 `[JSExport]` 这一层。

@@ -1,0 +1,91 @@
+---
+title: 版本迭代
+seoTitle: "版本与数据兼容性 – Nino v4 文档"
+description: "哪些 Nino 版本改变了二进制格式，以及如何读取旧版本写出的数据。"
+icon: Milestone
+---
+
+<AnchorRedirect
+  map={{
+    '如何用新版本读取旧数据': '/zh/docs/v4/versioning#reading-data-from-an-older-version',
+    'what-if-i-really-want-to-deserialize-the-old-data-with-the-new-version': '/zh/docs/v4/versioning#reading-data-from-an-older-version',
+  }}
+/>
+
+Nino 至今的每个大版本都使用新的二进制格式。本页列出改变了格式的版本，以及如何把旧版本写出的数据迁移到 v4。
+
+## 格式变更 [#format-changes]
+
+下列每个版本写出的二进制格式，更早的版本都读不了；它们也读不了更早版本写出的数据。格式不会自动转换，处理方法参见[读取旧版本的数据](#reading-data-from-an-older-version)。
+
+<Accordions type="single" defaultValue="v4.0.0">
+<Accordion title="v4.0.0" value="v4.0.0">
+
+运行时和源生成器全部重写。**二进制格式与 v3 以及更早的 v4 beta/preview 版本不兼容**，公共 API 也有变化。主要变化：
+- `Nino.Core` 中的 `NinoSerializer` / `NinoDeserializer` 取代了生成的 `Serializer` / `Deserializer` 类及其扩展方法。
+- 新的数据格式：小端序、不对齐、填充字节清零，`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出的字节完全相同；类型 ID 是运行时类型名的 FNV-1a 哈希。字符串无论是 UTF-16 还是 `[NinoUtf8]`，都以字符数作前缀，`[NinoUtf8]` 字符串还会写入字节数；版本容错的对象整个继承体系只写一个长度（这两项都从 4.0.0-rc.1 开始，参见 [v4 beta 之后的行为变化](/zh/docs/v4/migration#behavior-changes-since-the-v4-betas)）。
+- `[NinoType]` 上按类型设置的选项：`format`（`NinoFormat.Positional`、`VersionTolerant` 或 `Keyed`）、`trackReferences`、`allowInheritance`。子类型会继承 `[NinoType]`。
+- 用于运行时才知道的类型的装箱 API（`SerializeBoxed`、`DeserializeBoxed`）；`[NinoExplicitOrder]` 和运行时注册格式化器已移除。
+- 复用反序列化到已有实例（可回收丢弃的实例）、`[NinoPooled]` 对象池、`[NinoFactory]` 工厂方法和 `NinoSettings`。
+- 自定义集合、`PriorityQueue`、`Nino.Immutable`，以及可扩展的格式化器（`[assembly: NinoFormatter]`、`[NinoCustomFormatter]`）。
+- 增量源生成器、带代码修复的分析器，以及 .NET 8 SDK 及以上版本中的拦截器。
+
+参见 [v4 新特性](/zh/docs/v4/whats-new)、[v3 与 v4 对比](/zh/docs/v4/v3-vs-v4)和[从 v3 迁移](/zh/docs/v4/migration)。
+
+</Accordion>
+<Accordion title="v3.3.4" value="v3.3.4">
+
+输出中的非托管字段改为对齐存放，读取更快；写入这些字段的拷贝改为内联，序列化更快。输出体积比之前大。
+
+</Accordion>
+<Accordion title="v3.2.0" value="v3.2.0">
+
+类型修改成员后，仍能读取修改前写出的数据，列表元素（包括多态元素）也一样。生成的代码与 v3.0.3 不同。
+
+</Accordion>
+<Accordion title="v3.0.3" value="v3.0.3">
+
+修复了多态非托管结构体的问题。生成的代码与 v3.0.0 不同。
+
+</Accordion>
+<Accordion title="v3.0.0" value="v3.0.0">
+
+全部重写，取代 v2 的实现。生成的代码与 v2 不同。
+
+</Accordion>
+</Accordions>
+
+## 迁移 [#migrating]
+
+- **从 Nino v3 迁移：** 参见[从 v3 迁移](/zh/docs/v4/migration)。
+- **从 Nino v2 迁移到 v3：** 升级到 v3，然后把生成代码的命名空间从 `AssemblyName_Nino` 改为 `AssemblyName.NinoGen`。如果还要升级到 v4，再按 v3 迁移指南操作。
+
+## 读取旧版本的数据 [#reading-data-from-an-older-version]
+
+做法是保留旧的反序列化器，用它读出旧数据，再用新版本重新写入：
+
+<Steps>
+<Step>
+
+**保留旧的反序列化器。** 在 v3 的各个版本之间升级时，把旧的生成代码（反序列化器及其依赖）复制到项目中，放进单独的命名空间。如果是用 v4 读取 v3 数据，由于 v3 的生成代码依赖 v3 的 `Nino.Core`，只能放在单独的转换程序里，参见[转换 v3 数据](/zh/docs/v4/migration#converting-v3-data)。
+
+</Step>
+<Step>
+
+**升级** Nino，生成新的序列化器和反序列化器。
+
+</Step>
+<Step>
+
+**转换。** 用旧的反序列化器读出旧数据，再用新的序列化器重新序列化。
+
+</Step>
+</Steps>
+
+用户文档、归档记录这类需要保存的数据，应当由新版本在开头写入你自己的文件头（魔数加格式版本）。加载时，带文件头的文件用新的反序列化器读取；没有文件头的就是旧数据，用旧的反序列化器读出后再转换。参见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)。
+
+<Callout type="idea">
+
+从 v4 开始，已保存的文档这类长期保存的数据请标记 `[NinoType(format: NinoFormat.VersionTolerant)]` 或 `[NinoType(format: NinoFormat.Keyed)]`，以后修改自己的类型时就不再需要转换。参见[数据演进](/zh/docs/v4/evolving-data)。
+
+</Callout>

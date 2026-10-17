@@ -1,0 +1,81 @@
+---
+title: 分析器诊断
+description: "Nino 在你写代码时报告的全部诊断（NINO001 至 NINO025）：含义和修复方法。"
+icon: ShieldCheck
+---
+
+Nino 的分析器随源生成器一起发布（`Nino.Generator` 包和 Unity 包里都有），在你写代码时就报告错误：Visual Studio、Rider 和 VS Code 里实时显示，Unity 编译脚本时显示在控制台。源生成器本身不报告诊断，所以问题总是标在你自己的代码上，而不是生成的文件里。标了 ✅ 的诊断在 IDE 中有代码修复，可以一次性应用到整个文档、项目或解决方案。
+
+## 诊断列表 [#diagnostics]
+
+每条诊断的完整说明见 Nino 仓库中的[诊断参考](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)。
+
+### 类型 [#the-type]
+
+| ID | 级别 | 问题 | 处理方式 | 代码修复 |
+| --- | --- | --- | --- | :---: |
+| [NINO001](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino001) | 错误 | 生成代码无法引用该类型（它不是 `public`/`internal`，或者是 `static` 类或 `ref struct`） | 把该类型及其外层类型改为 `public` 或 `internal` | ✅ |
+| [NINO002](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino002) | 错误 | 类型必须是 `partial`：它要序列化非公开成员（.NET 8 之前，或在泛型类型中），或者标了 `[NinoPooled]` | 把该类型及其外层类型声明为 `partial` | ✅ |
+| [NINO003](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino003) | 警告 | 基类设置了 `allowInheritance: false`，子类型不会按自身类型序列化 | 给子类型加上 `[NinoType]` | ✅ |
+
+### 实例创建 [#construction]
+
+| ID | 级别 | 问题 | 处理方式 | 代码修复 |
+| --- | --- | --- | --- | :---: |
+| [NINO004](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino004) | 错误 | 没有可用的构造函数 | 添加无参构造函数、参数与成员对应的构造函数，或使用 `[NinoConstructor]` |  |
+| [NINO005](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino005) | 错误 | `[NinoConstructor]` 的某个参数找不到对应的序列化成员 | 修改参数名，或在特性中列出成员名 |  |
+| [NINO006](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino006) | 警告 | 只读成员不是构造函数参数，读出的值会被直接丢弃 | 把它加入构造函数、改为可写，或用 `[NinoIgnore]` 忽略 | ✅ |
+| [NINO017](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino017) | 错误 | `[NinoFactory]` 方法无效 | 改为可无参调用、返回声明类型的 `public static` 方法 |  |
+| [NINO021](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino021) | 错误 | `[NinoConstructor]` 是 `private` 或 `protected` 的 | 改为 `public` 或 `internal` |  |
+| [NINO025](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino025) | 警告 | 类型有 `[NinoConstructor]`，`[NinoFactory]` 永远不会被调用：实例总是通过构造函数重新创建 | 删掉 `[NinoFactory]` 则继续重建实例，删掉 `[NinoConstructor]` 则用工厂创建实例并原地填充 |  |
+
+### 成员 [#members]
+
+| ID | 级别 | 问题 | 处理方式 | 代码修复 |
+| --- | --- | --- | --- | :---: |
+| [NINO007](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino007) | 警告 | 成员类型无法序列化，该成员会被跳过 | 用 `[NinoIgnore]` 忽略，或为它提供自定义格式化器 | ✅ |
+| [NINO008](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino008) | 错误 | `[NinoCustomFormatter]` 指定的类型不是结构体，或没有正好为该成员类型实现 `INinoFormatter<T>` | 修正格式化器的类型 |  |
+| [NINO009](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino009) | 错误 | 类型没有设置 `containNonPublicMembers`，却有非公开的 `[NinoMember]` | 移除 `[NinoMember]`，或设置 `containNonPublicMembers: true` | ✅ |
+| [NINO010](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino010) | 警告 | `autoCollect: true` 时 `[NinoMember]` 是多余的 | 移除它 | ✅ |
+| [NINO011](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino011) | 警告 | `autoCollect: false` 时 `[NinoIgnore]` 是多余的 | 移除它 | ✅ |
+| [NINO012](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino012) | 错误 | 成员同时标记了 `[NinoMember]` 和 `[NinoIgnore]` | 移除其中一个或两个 | ✅ |
+| [NINO013](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino013) | 错误 | `[NinoMember]` 索引重复 | 改用下一个空闲索引 | ✅ |
+| [NINO022](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino022) | 警告 | 基类中被 `new` 隐藏的非公开成员无法访问，会被跳过 | 重命名其中一个成员，或改为公共成员 |  |
+| [NINO023](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino023) | 错误 | 结构体没有任何成员参与序列化：会被写成 0 字节，由它组成的集合无法读回 | 至少序列化一个成员，或设为 `VersionTolerant` 或 `Keyed` |  |
+
+### 格式与引用 [#formats-and-references]
+
+| ID | 级别 | 问题 | 处理方式 | 代码修复 |
+| --- | --- | --- | --- | :---: |
+| [NINO014](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino014) | 错误 | 两个键控成员（或某个成员的 `[NinoFormerName]`）哈希到同一个键 | 重命名其中一个，或去掉该旧名称 |  |
+| [NINO024](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino024) | 警告 | `[NinoFormerName]` 只在键控类型中起作用：按位置和版本容错的类型都不写成员名 | 删除它，或给类型设置 `format: NinoFormat.Keyed` |  |
+| [NINO015](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino015) | 警告 | `trackReferences` 用在结构体上会被忽略 | 移除 `trackReferences` | ✅ |
+| [NINO016](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino016) | 错误 | `trackReferences` 用在了要通过构造函数重新创建的类型上（例如位置记录） | 让成员可以赋值 |  |
+
+成员的 `[NinoFormerName]` 也是键。旧名称如果等于另一个成员的名称（或哈希相同），同样会报告 NINO014。旧名称与成员当前名称相同时，会被忽略。参见[重命名键控成员](/zh/docs/v4/evolving-data#renaming-keyed-members)。
+
+### 对象池 [#pooling]
+
+| ID | 级别 | 问题 | 处理方式 | 代码修复 |
+| --- | --- | --- | --- | :---: |
+| [NINO018](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino018) | 错误 | `[NinoPooled]` 用在了无法池化的类型上（不是能原地填充的密封类） | 把类声明为 `sealed`，并让成员可以赋值 | ✅ |
+| [NINO019](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino019) | 错误 | `[NinoPooled]` 类没有实现 `OnNinoPoolWarmup` / `OnNinoPoolReturn` | 实现这两个 partial 方法（`OnNinoPoolReturn` 方法体可以为空；`OnNinoPoolWarmup` 可以返回空序列） | ✅ |
+
+### 格式化器注册 [#formatter-registrations]
+
+| ID | 级别 | 问题 | 处理方式 | 代码修复 |
+| --- | --- | --- | --- | :---: |
+| [NINO020](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino020) | 错误 | `[assembly: NinoFormatter]` 注册无效，会被忽略 | 注册一个只实现一次 `INinoFormatter<P>`、且没有嵌套在泛型类型中的结构体：泛型结构体以开放泛型定义（`typeof(F<,>)`）传入，所有类型参数都要能推断；非泛型结构体直接传入（`typeof(F)`） |  |
+
+## 修改严重级别 [#changing-severities]
+
+可以在 `.editorconfig` 中按项目修改严重级别：
+
+```ini title=".editorconfig"
+[*.cs]
+dotnet_diagnostic.NINO006.severity = none
+```
+
+## 被屏蔽的编译器警告 [#suppressed-compiler-warnings]
+
+生成代码会读写 Nino 要序列化的私有成员，而编译器和 IDE 不一定看得到这种访问（在 .NET 8 及以上，访问通过 `[UnsafeAccessor]` 进行）。所以对于 Nino 要序列化的私有成员，以下警告会被屏蔽：CS0169、CS0414 和 CS0649（“从未使用 / 从未赋值”），以及 IDE0044、IDE0051 和 IDE0052（“设为只读”“删除未使用的成员”）。

@@ -1,0 +1,186 @@
+---
+title: 性能指南
+description: "Nino v4 的速度从何而来，怎样保持：拦截器、原始结构体、缓冲区复用、多线程。"
+icon: Zap
+---
+
+Nino 不用任何调优就很快。本页介绍它的内部机制，帮你让类型和调用始终留在快速路径上。实测数据见[基准测试](/zh/docs/v4/perf)，如何在自己的代码中用好这些路径，见[高性能序列化](/zh/docs/v4/advanced/high-performance)和[零分配模式](/zh/docs/v4/advanced/zero-allocation)中的做法。
+
+## 拦截器 [#interceptors]
+
+当项目由 **Roslyn 4.8 及以上版本**编译时（.NET 8 SDK 及以上、Visual Studio 2022 17.8+、新版 Rider），只要调用处知道类型参数，生成器就会拦截这次 `NinoSerializer`/`NinoDeserializer` 调用，在编译期把它直接导向生成的格式化器。这样调用就绕开了格式化器缓存（`NinoFormatterCache<T>`，常规调用在这里查找 `T` 的格式化器）和它的虚调用，写出的字节完全相同。
+
+```csharp
+// Intercepted: the type is known here
+byte[] bytes = NinoSerializer.Serialize(order);
+Order copy = NinoDeserializer.Deserialize<Order>(bytes);
+
+// Not intercepted: T is a type parameter, so the regular call runs
+static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
+```
+
+每次调用能省下几纳秒，在紧密循环中频繁序列化小数据时最有意义。
+
+- **始终开启，无需配置，也不能关闭。** `Nino.Generator` 包中包含面向 Roslyn 4.3、4.8 和 4.12 的三个生成器版本，NuGet 会选择你的编译器能加载的最新版本。4.8 和 4.12 版本会拦截调用，包里的 build props 会自动把 `NinoGen` 加入 `InterceptorsNamespaces` / `InterceptorsPreviewNamespaces`。
+- **取决于编译器，而不是目标框架**：用 .NET 8+ SDK 编译的 `netstandard2.0` 库同样会被拦截。
+- **旧编译器直接走常规路径**，写出的字节相同。Unity 包中附带的是生成器的 Roslyn 4.3 版本，所以 Unity 项目不会拦截。
+- 以下调用不会拦截，因为拦截了也没有收益：原始值和原始元素数组（常规路径本来就直接拷贝；只有原始值的 `Deserialize<T>(data)` 会被拦截，改为一次读取），在其他程序集中声明的 `[NinoType]`（调用方项目只能通过格式化器缓存访问它的格式化器，与常规调用相同），以及泛型代码内部的调用。
+- 对[固定大小的类型](#fixed-size-types)，`Serialize(value)` 会改为调用直接写入大小正好的 `byte[]` 的代码。
+- 拦截后的调用和常规调用用的始终是同一个格式化器：格式化器都用特性声明，运行时无法替换，所以生成器知道运行时会找到哪一个。
+
+<Callout type="warn">
+
+如果项目自己设置了 `InterceptorsNamespaces` 或 `InterceptorsPreviewNamespaces`，请在原值后面**追加**（`$(InterceptorsNamespaces);MyNamespace`），不要直接覆盖。否则 `NinoGen` 会丢失，Nino 不会生成拦截器（常规调用仍然可用）。
+
+</Callout>
+
+## 内联的结构体格式化器 [#struct-formatters-inlined]
+
+所有格式化器都是结构体，元素格式化器作为类型参数传入（`ListFormatter<TList, T, TFormatter>`）。成员通过 `default(TFormatter).Serialize(...)` 调用格式化器，这是 JIT 或 AOT 编译器能内联的直接调用。所以序列化一个 `List<Order>`，编译出来就是一个循环，循环体里直接写 Order 的各个成员。每个元素都没有虚分派，任何地方都没有反射。
+
+唯一剩下的间接调用是你自己发起的调用，比如 `NinoSerializer.Serialize(value)`：没有被拦截时，它要通过 `NinoFormatterCache<T>`（一个泛型静态字段，即格式化器缓存）找到 `T` 的格式化器。
+
+## 非托管数据按原始内存拷贝 [#raw-memory-for-unmanaged-data]
+
+非托管值会按原始内存拷贝：
+
+- 基元类型、枚举、`DateTime`、`Guid`、`Vector3` 和其他非托管结构体；
+- `[NinoType]` 中连续的非托管成员，作为**一整块**写入，只做一次边界检查；
+- 非托管元素的数组和 `List<T>`：整个集合**一次拷贝**；
+- 满足原始内存条件的 `[NinoType]` 结构体（参见[结构体](/zh/docs/v4/defining-types#structs)），无论单独出现还是在数组、列表中。
+
+写入时会把填充字节清零，所以相等的值总是产生相同的字节，即使结构体位于从未清零的内存中（`ArrayPool` 租来的数组、`[SkipLocalsInit]` 下的 `stackalloc`）。Nino 在运行时第一次写入某个类型时识别填充：只读取一次字段偏移，结果会成为 JIT 期常量，所以没有填充的结构体不会为这项检查付出任何开销。带填充的结构体数组会在同一趟拷贝中用 SIMD 掩码处理，比普通 `memcpy` 略慢。
+
+### 结构体布局 [#struct-layout]
+
+热点结构体的声明方式决定了它走哪条路径：
+
+| 声明方式 | 路径 |
+| --- | --- |
+| 调整字段顺序，使其不需要填充（`int, int, DateTime`） | 普通的整块拷贝 |
+| 给 `int, DateTime` 加上 `[StructLayout(LayoutKind.Sequential, Pack = 4)]` | 对更小的结构体（12 字节而不是 16 字节）整块拷贝：最快，数据也最小 |
+| 字段之间有空隙（`int, DateTime`：`int` 之后有 4 字节） | 整块拷贝，并用掩码清掉填充 |
+| `[StructLayout(LayoutKind.Auto)]` | **不按原始内存写入**：运行时可能重排字段，所以 Nino 逐个字段写入，慢好几倍 |
+
+```csharp title="Layouts.cs"
+[NinoType]
+public partial struct Sample // 16 bytes, 4 of them padding
+{
+    public int Id;
+    public DateTime Time;
+}
+
+[NinoType]
+[StructLayout(LayoutKind.Sequential, Pack = 4)] // [!code highlight]
+public partial struct PackedSample // 12 bytes, no padding
+{
+    public int Id;
+    public DateTime Time;
+}
+```
+
+填充是怎么来的：默认情况下（`LayoutKind.Sequential`），每个字段按自身大小对齐（最多 8 字节），结构体的大小再向上取整到其中最大的对齐值。`DateTime` 内部是一个 `ulong`，必须从 8 的倍数开始：在 4 字节的 `int` 后面，运行时会插入 4 个空字节。调整字段顺序（大的在前）能去掉字段之间的填充，但去不掉末尾的填充：`DateTime, int` 仍然是 16 字节。
+
+`Pack = N` 把每个字段的对齐上限设为 `N`。要去掉全部填充，就把 `Pack` 设为**最小字段**的大小：这样每个字段都紧接着前一个字段。`Pack` 设大了仍可能留下空隙：`short, long, short` 默认是 24 字节，`Pack = 2` 时是 12 字节（没有填充），`Pack = 4` 时仍是 16 字节。`Pack = 1` 总能去掉填充，但会让不必要的字段也失去对齐。
+
+`Pack` 同时改变结构体在内存中的布局：`Time` 不再按 8 字节对齐。这在 x64 和 ARM64 上没有开销，但会改变写出的字节，所以请在存储数据之前确定布局。
+
+要留在这条路径上：
+
+- 批量数据（坐标、采样、时间序列）优先使用非托管 `T` 的 `T[]` 和 `List<T>`；
+- 热点结构体中不要放引用类型（`string`、数组），这样它们才能按原始内存写入；
+- 注意 `NinoFormat.VersionTolerant`、`NinoFormat.Keyed` 和自定义成员格式化器都会让该结构体不再按原始内存拷贝。
+
+<Callout type="info">
+
+原始布局以 64 位平台的规范布局为准。在结构体布局不同的运行时上（32 位平台、旧版 Mono），Nino 会逐个字段转换成相同的字节，数据依然可移植，只是速度稍慢。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+
+</Callout>
+
+## 固定大小的类型 [#fixed-size-types]
+
+有些类型无论取什么值，写出的字节数都相同。对这类类型，`NinoSerializer.Serialize(value)` 会按最终大小分配 `byte[]`，再把值直接写进去：不用暂存缓冲区，不用 writer，没有扩容检查，也没有最后的拷贝。写出的字节与通用路径相同。
+
+```csharp title="SensorReading.cs"
+[NinoType]
+public struct GeoPoint               // raw: 8 bytes
+{
+    public float Latitude;
+    public float Longitude;
+}
+
+[NinoType]
+public sealed class SensorReading    // fixed size: 1 (null flag) + 4 + 8 + 8 + 1 = 22 bytes
+{
+    public int SensorId;
+    public long Timestamp;
+    public GeoPoint Location;
+    public bool Alarm;
+}
+
+byte[] bytes = NinoSerializer.Serialize(reading);         // a new byte[22], written in place
+int size = NinoSerializer.GetFixedSize<SensorReading>();  // 22
+```
+
+满足以下条件的类型是固定大小的：
+
+- 非泛型的 `[NinoType]` **结构体**或**密封类**；
+- 格式为 `NinoFormat.Positional`（默认值；所在项目定义了 `WEAK_VERSION_TOLERANCE` 时，它会变成 `NinoFormat.VersionTolerant`），没有开启 `trackReferences`，也不是集合类型；
+- 所有成员都是在 32 位和 64 位运行时上布局相同的非托管值（基元类型、枚举、`DateTime`、`Guid`，以及由它们组成的原始结构体），或者是其他固定大小的结构体，并且没有 `[NinoCustomFormatter]`。
+
+`string`、数组或集合、类、`T?`、元组、`DateTimeOffset` 或 `nint` 成员都会让类型的大小不固定。按原始内存写入的结构体（参见[原始内存](#raw-memory-for-unmanaged-data)）同样是固定大小的，并且本来就直接拷贝到大小正好的数组中；这条路径把同样的做法扩展到了不能按原始内存写入的结构体（有被忽略的字段、嵌套了结构体）和密封类。
+
+- **自动生效。** 在 Roslyn 4.8+ 上，[拦截器](#interceptors)会把固定大小类型的 `Serialize(value)` 导向这条路径；没有拦截器时（Unity、泛型代码、旧编译器），常规调用经过一次检查后也走这条路径，而优化后的代码会把这次检查折叠成常量。
+- 只有返回 `byte[]` 的 `Serialize(value)` 走这条路径。序列化到 `IBufferWriter<byte>` 或 `Writer`，以及固定大小类型的数组和列表，仍按原来的方式写入。
+- 值为 `null` 的密封类写出 1 字节的 null 标志；其他值都正好占 `GetFixedSize<T>()` 字节。
+- `NinoSerializer.GetFixedSize<T>()` 对固定大小的类型和原始值返回其大小，对其他类型返回 `-1`。可以用它来确定缓冲区大小，或在启动时检查消息的大小。
+
+## 内存分配 [#allocation]
+
+- **序列化不分配内存**，唯一的例外是你要的那个 `byte[]`。序列化到复用的 `NinoArrayBufferWriter`（或任意 `IBufferWriter<byte>`）时，每次调用分配 0 B。
+- **反序列化只分配结果对象**，而这些对象也可以复用：用 `ref` 反序列化到已有实例，新实例从 `[NinoPooled]` 对象池中取。复用实例时分配 0 B，只有内容变化的字符串例外：内容不变的字符串会直接保留，变化的文本才读成新实例（非 ASCII 的 `[NinoUtf8]` 文本总是读成新实例）。参见[复用反序列化与对象池](/zh/docs/v4/pooling)。
+- 字符串默认使用 UTF-16（一次整块拷贝）。`[NinoUtf8]` 对以 ASCII 为主的文本写出的数据更小，但要做转码；非空字符串在字符数之后还要多写 4 字节的字节数（参见[二进制格式](/zh/docs/v4/platforms#binary-format)）。
+
+## 缓冲区 [#buffers]
+
+| 写入目标 | 过程 |
+| --- | --- |
+| `NinoSerializer.Serialize(value)` | 写入池化的暂存缓冲区，再拷贝到一个大小正好的新 `byte[]`。[固定大小的类型](#fixed-size-types)则直接写入一个大小正好的 `byte[]`。 |
+| `NinoArrayBufferWriter` | **直接写入**。数组租自 `ArrayPool<byte>.Shared`；用 `ResetWrittenCount()` 复用。 |
+| 其他 `IBufferWriter<byte>`（`ArrayBufferWriter<byte>`、`PipeWriter` 等） | 先写入每个线程各自的[暂存缓冲区](/zh/docs/v4/basic#terms)，再一次性拷贝到目标写入器。 |
+| `ref Writer` | 直接写入该 writer 所属的 `NinoArrayBufferWriter`，可以连续写入多个值。 |
+
+读取方面，`NinoDeserializer` 接受 `ReadOnlySpan<byte>`：直接传入你已有内存的切片即可（池化数组、管道分段、内存映射文件），无需拷贝。
+
+## 线程安全 [#thread-safety]
+
+`NinoSerializer` 和 `NinoDeserializer` 的所有方法都**可以并发调用**，无需加锁：
+
+- 热路径不写共享内存，因此多个序列化线程之间不会争用缓存行；
+- 暂存缓冲区和引用追踪表按线程保存，同一线程上的嵌套调用（例如在自定义格式化器中再次序列化）会拿到自己的一份，所以重入调用是安全的；
+- 格式化器查找是只写一次的泛型静态字段；多态表是不可变快照，以写时复制方式替换，读取无锁；
+- `NinoPool<T>` 为每个线程保留最多 64 个实例，只有在批量转移时才会访问加锁的共享栈；它的热字段独占一条 64 字节的缓存行。
+
+**不**线程安全的是你自己持有的状态：`NinoArrayBufferWriter`、`Writer` 或 `Reader`，以及你反序列化的目标对象。请每个线程或每个连接各用一个缓冲区。
+
+<Callout type="warn">
+
+`NinoSettings` 的值是普通字段，读取时不加同步。请在启动时、任何线程第一次序列化之前设置好。
+
+</Callout>
+
+## 多态 [#polymorphism]
+
+多态值需要额外的 4 字节类型 ID。子类型和基类声明在同一个程序集里时，生成器会为写入生成一串类型判断，为读取生成一个按 ID 的 `switch`，常见情况下直接调用子类型的格式化器；其他程序集中的子类型、封闭泛型和开启了引用追踪的类型则通过无锁注册表分派。没有子类型的类请声明为 `sealed`：密封类只需要 1 字节的 null 标志，也不需要分派。
+
+## 测量 [#measuring]
+
+- 请用 BenchmarkDotNet 或其他长时间运行的方式测量。在分层编译下，短时间运行测到的是未优化的 Tier-0 代码，此时 Nino 中 `static readonly` 的布局检查还没有被折叠成常量。
+- 反序列化大型集合时，耗时往往主要花在分配和清零结果上，而不在 Nino 本身。用复用实例的方式测量，才能看出序列化器自身的开销。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="高性能序列化" href="/zh/docs/v4/advanced/high-performance">复用缓冲区、Span、复用反序列化、对象池和原始结构体如何工作，各自开销如何。</Card>
+  <Card title="基准测试" href="/zh/docs/v4/perf">与 v3 和 MemoryPack 对比构建时间和运行时性能，附完整数据表。</Card>
+</Cards>

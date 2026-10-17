@@ -1,0 +1,360 @@
+---
+title: Supported Types
+description: The types Nino v2 serializes, and how to make your own classes, structs and records serializable with [NinoType].
+icon: Shapes
+---
+
+This page lists the types Nino serializes at run time, shows how to define your own serializable types, and explains which changes to a type keep old data readable.
+
+## Serializable Types [#serializable-types]
+
+### Primitive Types [#primitive-types]
+
+Nino supports all [unmanaged types](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/unmanaged-types), including user-defined ones:
+- `byte`, `short`, `int`, `long`, `float`, `double`
+- `enum`
+- `DateTime`, `Guid`
+- vector and matrix types
+- unmanaged structs, unmanaged generic structs, unmanaged record structs and unmanaged generic record structs
+
+`string` is supported as well.
+
+<Callout type="info" title="Unmanaged structs">
+
+A user-defined `struct`, `struct<T>` (where `T` is unmanaged), `record struct` or `record struct<T>` whose fields are all unmanaged is itself an unmanaged type, and Nino serializes it automatically.
+
+Nino serializes every field of such a struct, in the order the fields are declared (or as `[StructLayout(LayoutKind.Explicit)]` lays them out). You cannot exclude fields or choose the constructor used to deserialize it.
+
+</Callout>
+
+### Custom Types [#custom-types]
+
+To serialize a managed type (anything not listed above), add `[NinoType]` to the `class`, `struct`, `record` or `record struct`, and Nino generates its serialization and deserialization code:
+
+<Tabs items={["Managed struct", "Record", "Record struct", "Class"]}>
+<Tab value="Managed struct">
+
+```csharp
+[NinoType] // [!code highlight]
+public struct SampleStruct
+{
+    public int Id;
+    public string Name { get; set; }
+}
+```
+
+</Tab>
+<Tab value="Record">
+
+```csharp
+[NinoType] // [!code highlight]
+public record SampleRecord(int Id, string Name);
+```
+
+</Tab>
+<Tab value="Record struct">
+
+```csharp
+[NinoType] // [!code highlight]
+public record struct SampleRecord(int Id, string Name);
+```
+
+</Tab>
+<Tab value="Class">
+
+```csharp
+[NinoType] // [!code highlight]
+public class SampleClass
+{
+    public int Id;
+    public string Name { get; set; }
+}
+```
+
+</Tab>
+</Tabs>
+
+#### Choosing Members [#choosing-members]
+
+By default, `[NinoType]` collects every public field, and every public property with a getter and a setter. For a `record` or `record struct`, it also collects the parameters of the primary constructor.
+
+To choose the members yourself, mark the type `[NinoType(false)]` and each member to serialize `[NinoMember(id)]`. The number is the member's position: members are written and read in ascending order of their numbers.
+
+<Tabs items={["Class", "Record", "Record struct"]}>
+<Tab value="Class">
+
+```csharp
+[NinoType(false)] // [!code highlight]
+public class SampleClass
+{
+    public int Id;
+    [NinoMember(1)] // [!code highlight]
+    public string Name { get; set; }
+}
+```
+
+</Tab>
+<Tab value="Record">
+
+```csharp
+[NinoType(false)] // [!code highlight]
+public record SampleRecord(
+    [NinoMember(2)] int Id, // [!code highlight]
+    [NinoMember(1)] string Name); // [!code highlight]
+```
+
+</Tab>
+<Tab value="Record struct">
+
+```csharp
+[NinoType(false)] // [!code highlight]
+public record struct SampleRecordStruct(
+    [NinoMember(2)] int Id, // [!code highlight]
+    [NinoMember(1)] string Name); // [!code highlight]
+```
+
+</Tab>
+</Tabs>
+
+With automatic collection on, mark a field or property `[NinoIgnore]` to skip it. Without automatic collection, `[NinoIgnore]` has no effect.
+
+```csharp
+[NinoType] // [!code highlight]
+public class SampleClass
+{
+    [NinoIgnore] // [!code highlight]
+    public int Id;
+    public string Name { get; set; }
+}
+```
+
+<Callout type="warn">
+
+`[NinoIgnore]` **does not** work on the primary constructor parameters of records, nor on the fields of unmanaged structs.
+
+</Callout>
+
+### Generic Types [#generic-types]
+
+Nino serializes and deserializes generic types:
+
+<Tabs items={["Generic struct", "Generic class", "Generic record", "Generic record struct"]}>
+<Tab value="Generic struct">
+
+```csharp
+[NinoType] // [!code highlight]
+public struct GenericStruct<T>
+{
+    public T Val;
+}
+```
+
+</Tab>
+<Tab value="Generic class">
+
+```csharp
+[NinoType] // [!code highlight]
+public class Generic<T>
+{
+    public T Val;
+}
+```
+
+</Tab>
+<Tab value="Generic record">
+
+```csharp
+[NinoType] // [!code highlight]
+public record SimpleRecord6<T>(int Id, T Data);
+```
+
+</Tab>
+<Tab value="Generic record struct">
+
+```csharp
+[NinoType] // [!code highlight]
+public record struct SimpleRecordStruct2<T>(int Id, T Data);
+```
+
+</Tab>
+</Tabs>
+
+Constraints on type parameters are supported:
+
+```csharp
+[NinoType] // [!code highlight]
+public class ComplexGeneric<T> where T : IList // [!code highlight]
+{
+    public T Val;
+}
+```
+
+So are members whose type is built from the type parameters:
+
+```csharp
+[NinoType] // [!code highlight]
+public class ComplexGeneric2<T>
+{
+    public Generic<T> Val; // [!code highlight]
+}
+```
+
+<Callout type="warn">
+
+Nino generates the serialization code of a generic type where it is instantiated with type arguments, so make sure the type arguments are serializable:
+
+```csharp
+Generic<int> generic = new Generic<int>();
+Generic<string> generic = new Generic<string>();
+Generic<List<int>> generic = new Generic<List<int>>();
+```
+
+</Callout>
+
+### Collection Types [#collection-types]
+
+Nino also serializes collections of the types above, where `T`, `TKey` and `TValue` are serializable types:
+- `T[]`, `List<T>`, `HashSet<T>`, `ICollection<T>`
+- `Dictionary<TKey, TValue>`, `IDictionary<TKey, TValue>`
+- `Span<T>`, `ArraySegment<T>`
+
+### Nested Types [#nested-types]
+
+Serializable types nest to any depth, for example:
+- `List<Dictionary<int, SampleStruct>>[]`, where `SampleStruct` is serializable
+- `Dictionary<int[], List<bool>[]>`
+- `IDictionary<string, IList<List<bool>[]>[]>[]`
+
+### Polymorphic Types [#polymorphic-types]
+
+Nino serializes and deserializes polymorphic types. Every type involved (interface, base class or derived class) must be marked `[NinoType]`:
+
+```csharp
+[NinoType] // [!code highlight]
+public class BaseClass
+{
+    public int Id;
+}
+
+[NinoType] // [!code highlight]
+public class DerivedClass : BaseClass // [!code highlight]
+{
+    public string Name;
+}
+```
+
+When a `DerivedClass` is serialized as a `BaseClass`, Nino writes all the fields and properties of `DerivedClass`, and deserializing returns a `DerivedClass` again.
+
+So a collection of `BaseClass` can hold any mix of subtypes, and each element comes back as its real type:
+
+```csharp
+var list = new List<BaseClass>
+{
+    new BaseClass { Id = 1 },
+    new DerivedClass { Id = 2, Name = "Nino" }
+};
+var bytes = Serializer.Serialize(list);
+Deserializer.Deserialize(bytes, out List<BaseClass> result); // [!code highlight]
+// result[0] is a BaseClass, result[1] is a DerivedClass
+```
+
+### Abstractions [#abstractions]
+
+Nino serializes and deserializes interfaces and abstract classes. Mark both the interface or abstract class and every class that implements it `[NinoType]`:
+
+<Tabs items={["Interface", "Abstract class"]}>
+<Tab value="Interface">
+
+```csharp
+[NinoType] // [!code highlight]
+public interface IBase
+{
+    int A { get; set; }
+}
+
+[NinoType] // [!code highlight]
+public class Impl : IBase // [!code highlight]
+{
+    public int A { get; set; }
+}
+}
+```
+
+</Tab>
+<Tab value="Abstract class">
+
+```csharp
+[NinoType] // [!code highlight]
+public abstract class Base
+{
+    public int A { get; set; }
+}
+
+[NinoType] // [!code highlight]
+public class Derived : Base // [!code highlight]
+{
+    public int B { get; set; }
+}
+```
+
+</Tab>
+</Tabs>
+
+Since Nino supports polymorphism, an implementation serialized through its interface or abstract class keeps its type information, and deserializing restores the object's real type.
+
+## Version Compatibility [#version-compatibility]
+
+Which changes to a serialized type keep existing data readable:
+
+| Change | Allowed? |
+| --- | --- |
+| Rename a serialized field or property (order it explicitly with `[NinoMember(id)]`) | Yes |
+| Change a member's type to an unmanaged struct of the same memory size (`int` → `uint`, `int` → `float`, `List<long>` → `List<double>`, `List<int[]>` → `List<float[]>`) | Yes |
+| Change a member whose type is a reference type to another type | No |
+| Add a member that is **not serialized** (marked `[NinoIgnore]`, or without `[NinoMember]` under `[NinoType(false)]`) | Yes |
+| Add a reference-type member to an unmanaged struct | No |
+| Add a serialized member | Only with [weak version tolerance](/en/docs/v2/advanced#weak-version-tolerance) |
+| Delete a serialized field or property | No |
+
+<Callout type="error" title="Reference-type members cannot change type">
+
+Nino checks types when it deserializes an object, so the type of a field or property declared as a reference type cannot be changed.
+
+A member's declared type can change only when both the old and the new type are value types (structs) with the same memory layout, for example `public MyStruct val` to `public MyStruct2 val`.
+
+</Callout>
+
+<Tabs items={["Allowed", "Not allowed"]}>
+<Tab value="Allowed">
+
+```csharp
+[NinoType]
+public class SampleClass
+{
+    // float and int have the same size, so List<float> can become List<int>
+    public List<float> Data; // [!code --]
+    public List<int> Data; // [!code ++]
+}
+```
+
+</Tab>
+<Tab value="Not allowed">
+
+```csharp
+[NinoType]
+public class SampleClass2
+{
+    // a reference-type member cannot change to another type
+    public SampleClass Data; // [!code --]
+    public SampleClass2 Data; // [!code highlight]
+}
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+
+Adding **serialized** members to a type and still reading old data written without them is possible. This usually comes up with save games, as a game adds data over its versions. It needs extra setup and has restrictions; see [Weak Version Tolerance](/en/docs/v2/advanced#weak-version-tolerance).
+
+</Callout>

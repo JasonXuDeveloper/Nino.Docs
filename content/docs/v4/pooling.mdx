@@ -1,0 +1,272 @@
+---
+title: Reuse Deserialization and Pooling
+description: "Reuse deserialization in Nino: fill existing objects, lists and dictionaries in place, rent from [NinoPooled] pools and recycle dropped instances, with zero allocations."
+icon: Recycle
+---
+
+<AnchorRedirect
+  map={{
+    'creating-instances-with-ninorefdeserialization': '/en/docs/v4/pooling#creating-instances-with-ninofactory',
+  }}
+/>
+
+Deserializing a class normally allocates a new object graph on every call. With **reuse deserialization**, Nino v4 fills the objects you already have and takes any new ones from a pool, so a steady stream of messages or frames is deserialized with **0 B** allocated.
+
+## Deserializing into Existing Instances
+
+`NinoDeserializer.Deserialize(data, ref value)` (or `Deserialize(ref value, ref reader)` with your own `Reader`) populates an existing value in place:
+
+- **`null` target:** a new instance is created; see [Where Instances Come From](#where-instances-come-from).
+- **Existing instance of the right type:** populated in place. Lists and arrays reuse their elements by index; dictionaries are merged by key (each value is read into the value its key already maps to, and keys missing from the data are removed).
+- **Strings** in an existing or pooled instance (members, list and array elements, values of keys already in a dictionary) are kept when the data holds the same text; only a string whose text changed is read into a new one. A `[NinoUtf8]` string is kept only when its text is ASCII: non-ASCII UTF-8 text is decoded into a new string every time.
+- **Re-created types** (a `[NinoConstructor]`, or members that cannot be assigned after construction: constructor parameters, `init`-only, get-only or `readonly` members) get a new instance, and the old one is dropped. See [Re-created Types](/en/docs/v4/constructors#re-created-types).
+
+```csharp
+Snapshot snapshot = null;
+while (transport.TryReceive(out ReadOnlyMemory<byte> message)) // a view of the receive buffer, not a copy
+{
+    NinoDeserializer.Deserialize(message.Span, ref snapshot); // the first message builds the graph, later ones fill it in place
+    Apply(snapshot);
+}
+```
+
+## Where Instances Come From
+
+Whenever Nino needs a new instance for a slot (a member, a collection element or the variable you pass by `ref`), because the slot is `null`, a list grows or a polymorphic slot's type changes, it gets it from:
+
+| Type | New instances come from |
+| --- | --- |
+| A `[NinoPooled]` class | its built-in pool; see [`[NinoPooled]`](#ninopooled) |
+| A type with a `[NinoFactory]` method (a `[NinoType]` or a collection) | your factory, usually backed by your own pool; see [Creating Instances with `[NinoFactory]`](#creating-instances-with-ninofactory) |
+| Anything else, including plain `List<T>` and `Dictionary<K, V>` | `new` |
+
+## Where Dropped Instances Go
+
+Reuse deserialization drops an existing instance when the data holds `null` for it, a list shrinks, an array must be reallocated, a dictionary key disappears, a polymorphic slot changes type, or a type that can only be re-created is replaced. Each dropped instance is handed **once** to the recycler of the slot's declared type:
+
+1. the handler registered for that declared type with `NinoSettings.SetRecycler<T>`; otherwise
+2. `ReturnToPool()`, if the instance implements `INinoPooled` (a `[NinoPooled]` class, or one of your own [pooled collections](#your-own-pooled-collections)); otherwise
+3. nothing: the garbage collector takes it.
+
+### Why Register a Recycler [#why-setrecycler]
+
+An object rented through `[NinoFactory]` often carries members that were rented too. Here a customer comes out of the pool with a pooled `Tags` list:
+
+```csharp title="Customer.cs"
+[NinoType]
+public class Customer
+{
+    public int Id;
+    public List<int> Tags;
+
+    [NinoFactory]
+    public static Customer Rent()
+    {
+        var customer = ObjectPool<Customer>.Rent();
+        customer.Tags ??= ObjectPool<List<int>>.Rent(); // the member is rented as well
+        return customer;
+    }
+}
+```
+
+When a message has `Tags = null`, Nino takes the list off the customer. A `List<int>` does not know which pool it came from, so without a recycler it goes to the garbage collector: the list **leaks** out of your pool, which drains until every rent is a `new` again. With a recycler, the dropped list goes back:
+
+```csharp title="Startup.cs"
+// at startup, before the first serialization call
+NinoSettings.SetRecycler<List<int>>(list =>
+{
+    list.Clear();
+    ObjectPool<List<int>>.Return(list);
+});
+NinoSettings.SetRecycler<Customer>(customer => ObjectPool<Customer>.Return(customer)); // when a customer itself is dropped
+```
+
+`SetRecycler` covers the **return** only. When a later message has `Tags` again, the `Customer` already exists, its factory is not called, and Nino creates the list with `new List<int>()`: creating a plain `List<T>` cannot go through a factory. To rent and return lists through a pool, use a [pooled collection](#your-own-pooled-collections).
+
+<Callout type="warn">
+
+A recycler is registered per **declared type** and applies to every slot of that type. Register one only for objects owned exclusively by the deserialized graph: if code outside the graph still holds an instance, it is shared once the pool rents it out again. If two slots reference the same instance and both drop it, it is recycled twice (a back reference read with [reference tracking](/en/docs/v4/reference-tracking) is never recycled).
+
+</Callout>
+
+## Creating Instances with `[NinoFactory]`
+
+Mark a public static method, callable without arguments, that returns the declaring type. Whenever Nino has to create an instance of that type, it calls the method instead of the constructor and then populates the instance in place. `Customer.Rent()` above is one.
+
+This works for collection types too (a `List<T>` subclass, an `IDictionary<TKey, TValue>` implementation, ...). The method may return an instance that still holds elements; they are dropped (and recycled) before the data is read. It must not return `null`; an invalid method reports NINO017. On a type with a `[NinoConstructor]` the factory is never called, because such a type is re-created through its constructor; the analyzer warns about it (NINO025).
+
+## Built-in Pools: `[NinoPooled]` [#ninopooled]
+
+`[NinoPooled]` gives a `[NinoType]` class a built-in object pool. Wherever Nino creates an instance (the value you deserialize, a member or a collection element), it takes one from the pool and deserializes into it; dropped instances go back to the pool on their own.
+
+```csharp title="Alert.cs"
+[NinoType, NinoPooled] // [!code highlight]
+public sealed partial class Alert
+{
+    public int DeviceId;
+    public float Value;
+    public long Timestamp;
+
+    // Required; the analyzer offers a fix that adds both (NINO019).
+    private static partial IEnumerable<Alert> OnNinoPoolWarmup() => Enumerable.Range(0, 64).Select(_ => new Alert());
+    private partial void OnNinoPoolReturn() { /* clear state Nino does not deserialize */ }
+}
+
+var alert = NinoDeserializer.Deserialize<Alert>(bytes); // reuses a pooled instance if there is one
+// ... use it ...
+alert.ReturnToPool();                                   // returning it twice throws
+```
+
+The typical use is as a collection element: a `List<Alert>` grows and shrinks with every message, new alerts come from the pool and dropped ones go back, with no recycler to register.
+
+- The class must be `sealed`, `partial` and populatable in place (no constructor-only or read-only members); NINO018/NINO002 report otherwise.
+- The generator adds `ReturnToPool()` and two partial methods you implement:
+  - `OnNinoPoolWarmup()` runs once, before the type is first deserialized; the instances it returns go straight into the pool (return `null` or an empty sequence to start empty).
+  - `OnNinoPoolReturn()` runs on `ReturnToPool()`: release state that Nino does not deserialize.
+- Returning an instance twice throws `InvalidOperationException`. Instances never returned are collected normally.
+- `ReturnToPool()` returns only that instance. Its lists, arrays and nested objects (pooled or not) stay attached and are reused with it next time. So **a type that holds pooled children should be pooled itself**: otherwise, when it is dropped, its children go to the garbage collector with it. To return a child to its own pool instead, return it in `OnNinoPoolReturn()` and set the field to `null`.
+- Pools are thread-safe: each thread keeps up to 64 instances of its own, and the shared stack keeps up to 256 by default. Change the limit at startup with `NinoSettings.DefaultPoolMaxRetained` or `NinoSettings.SetPoolMaxRetained<T>(int)`.
+- `NinoPool<T>.Shared` is the pool itself: `Count` is the number of instances in the shared stack (not counting those held per thread), and `Clear()` drops every pooled instance (the shared stack at once, and each thread's own stack the next time that thread uses it).
+
+### Pooled Collections [#your-own-pooled-collections]
+
+Creating a plain `List<T>` cannot go through a factory. To pool the list itself, wrap an object pool and define a list type that implements `INinoPooled` (namespace `Nino.Core`): renting goes through `[NinoFactory]`, and Nino calls `ReturnToPool()` when it drops one, with no recycler to register.
+
+```csharp title="ObjectPool.cs"
+public static class ObjectPool<T> where T : class, new()
+{
+    [ThreadStatic] private static Stack<T> _items;
+
+    public static T Rent()
+    {
+        var items = _items ??= new Stack<T>();
+        return items.Count > 0 ? items.Pop() : new T();
+    }
+
+    public static void Return(T item) => (_items ??= new Stack<T>()).Push(item);
+}
+
+public sealed class PooledList<T> : List<T>, INinoPooled
+{
+    [NinoFactory] // [!code highlight]
+    public static PooledList<T> Rent() => ObjectPool<PooledList<T>>.Rent();
+
+    public void ReturnToPool() // [!code highlight]
+    {
+        Clear();
+        ObjectPool<PooledList<T>>.Return(this);
+    }
+}
+```
+
+Declare the member as `PooledList<int>` instead of `List<int>`. Collection types that already have a pool of their own (such as ET's `ListComponent<T>`) work the same way. A handler registered with `SetRecycler<T>` for that type takes precedence over `ReturnToPool()`.
+
+## Example: Zero-GC State Sync [#example]
+
+A monitoring server sends the full state of a fleet of devices in every message: the number of devices and alerts changes every time, and a device's recent readings are sometimes there and sometimes not. The file below holds every type the example needs.
+
+```csharp title="Snapshot.cs"
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Nino.Core;
+
+[NinoType]
+public class Snapshot
+{
+    public long Sequence;
+    public List<Device> Devices; // length changes with every message
+    public List<Alert> Alerts;   // so does this one
+}
+
+[NinoType, NinoPooled]
+public sealed partial class Device
+{
+    public int Id;
+    public PooledList<float> Readings; // sometimes null; stays attached when the device is pooled
+
+    private static partial IEnumerable<Device> OnNinoPoolWarmup() => null;
+    private partial void OnNinoPoolReturn() { }
+}
+
+[NinoType, NinoPooled]
+public sealed partial class Alert
+{
+    public int DeviceId;
+    public float Value;
+    public long Timestamp;
+
+    private static partial IEnumerable<Alert> OnNinoPoolWarmup() => Enumerable.Range(0, 64).Select(_ => new Alert());
+    private partial void OnNinoPoolReturn() { }
+}
+
+public sealed class PooledList<T> : List<T>, INinoPooled
+{
+    [ThreadStatic] private static Stack<PooledList<T>> _pool;
+
+    [NinoFactory] // called when a Readings slot is null
+    public static PooledList<T> Rent() =>
+        _pool is { Count: > 0 } ? _pool.Pop() : new PooledList<T>();
+
+    public void ReturnToPool() // called when Nino drops a Readings list
+    {
+        Clear();
+        (_pool ??= new Stack<PooledList<T>>()).Push(this);
+    }
+}
+```
+
+```csharp
+Snapshot snapshot = null;
+foreach (ReadOnlyMemory<byte> message in messages)
+    NinoDeserializer.Deserialize(message.Span, ref snapshot);
+```
+
+Once warmed up, every message allocates **0 B**:
+
+- `Snapshot` and its two lists are reused in place.
+- When a list grows, new `Device`s and `Alert`s come from their pools; when it shrinks, the dropped ones go back, each `Device` with its `Readings` still attached.
+- When `Readings` becomes `null`, the `PooledList<float>` goes back through `ReturnToPool()`; when it comes back, it is rented through `[NinoFactory]`.
+
+If `Device` were not pooled, every `Device` dropped from a shrinking list would go to the garbage collector with its `Readings`: messages would keep allocating, and the list pool would slowly drain.
+
+<Callout type="info">
+
+With pooling and reuse deserialization, deserializing into reused instances allocates **0 B** and is up to <BenchValue k="reuse.max" /> faster than MemoryPack's overwrite mode. See [Benchmarks](/en/docs/v4/perf#pooling).
+
+</Callout>
+
+## Settings
+
+All settings are static members of `NinoSettings` (namespace `Nino.Core`):
+
+<TypeTable
+  type={{
+    'SetRecycler<T>(Action<T> handler)': {
+      description: 'Handler called with each instance that reuse deserialization drops from a slot declared as T. Replaces returning [NinoPooled] instances to their pool for that declared type. Pass null to remove it.',
+      type: 'method',
+    },
+    DefaultPoolMaxRetained: {
+      description: 'How many instances the shared stack of each pool keeps, for pools created from now on (a pool is created when its type is first deserialized or returned).',
+      type: 'int',
+      default: '256',
+    },
+    'SetPoolMaxRetained<T>(int maxRetained)': {
+      description: "How many instances the shared stack of T's pool keeps; use it for a pool that may already exist. Each thread additionally keeps up to 64 of its own.",
+      type: 'method',
+    },
+  }}
+/>
+
+<Callout type="warn">
+
+`NinoSettings` values are plain fields read without synchronization: set them in startup code before the first serialization call on any thread.
+
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card title="Custom Formatters" href="/en/docs/v4/custom-formatters">Encode one member differently, or teach Nino a new type.</Card>
+  <Card title="Zero-Allocation Patterns" href="/en/docs/v4/advanced/zero-allocation">Recipes for hot paths that allocate 0 B per call.</Card>
+</Cards>

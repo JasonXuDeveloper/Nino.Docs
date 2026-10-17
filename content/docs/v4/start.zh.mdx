@@ -1,0 +1,204 @@
+---
+title: 快速开始
+seoTitle: "快速开始：在 .NET、Unity、Godot 中安装 Nino – Nino v4 文档"
+description: "在 .NET、Unity 或 Godot 项目中安装 Nino v4，序列化第一个类型。"
+icon: Rocket
+---
+
+安装 Nino，给类型加上 `[NinoType]`，然后序列化。不需要注册，也不需要初始化。
+
+<Callout type="idea">
+
+第一次接触 v4，或者正从 v3 升级？请先看 [v4 新特性](/zh/docs/v4/whats-new)和[迁移指南](/zh/docs/v4/migration)。v4 的二进制格式与 v3 以及更早的 v4 beta 版本**不兼容**。
+
+</Callout>
+
+## 安装 [#installation]
+
+<Tabs groupId="platform" persist items={['.NET', 'Unity', 'Godot']}>
+<Tab value=".NET">
+
+```shell
+dotnet add package Nino --prerelease
+```
+
+详见 [.NET 项目](#net-project)。
+
+</Tab>
+<Tab value="Unity">
+
+```shell
+openupm add com.jasonxudeveloper.nino
+```
+
+详见 [Unity 项目](#unity-project)。
+
+</Tab>
+<Tab value="Godot">
+
+```shell
+# in the folder with your Godot project's .csproj
+dotnet add package Nino --prerelease
+```
+
+详见 [Godot 项目](#godot-project)。
+
+</Tab>
+</Tabs>
+
+### .NET 项目 [#net-project]
+
+环境要求：
+
+- **运行时**：`Nino.Core` 的目标框架是 `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0`，凡是能引用 .NET Standard 2.0 库的项目都能用。所有目标框架写出的字节完全相同。
+- **编译器**：源生成器需要 Roslyn 4.3 及以上（Visual Studio 2022 17.3+、Rider，或 .NET 6.0.400 及以上的 SDK）。
+- **语言版本**：生成的代码用到了 C# 9，所以项目的 `LangVersion` 至少要是 9。较老的 .NET Framework 项目默认是 C# 7.3，需要设置 `<LangVersion>9</LangVersion>` 或更高。
+
+安装方式：
+
+- 在 Visual Studio 或 Rider 的 NuGet 包管理器中勾选**包括预发行版**，搜索 `Nino` 并安装；
+- 或者使用 `dotnet` 命令行：
+    ```shell
+    dotnet add package Nino --prerelease
+    # Optional: ImmutableArray<T> / ImmutableList<T> support
+    dotnet add package Nino.Immutable --prerelease
+    ```
+
+<Callout type="info">
+
+Nino v4 目前仍是预发行版，所以必须加 `--prerelease`（或勾选**包括预发行版**）：不加时 NuGet 会安装最新的稳定版 3.9.x，它是测试 v4 功能的过渡版本，读写不了 v4 的数据。
+
+</Callout>
+
+<Callout type="info">
+
+`Nino` 包会引入以下两个包，缺一不可：
+- `Nino.Serialization`：运行时库（`Nino.Core.dll`）
+- `Nino.Generator`：源生成器、分析器和代码修复
+
+`Nino.Immutable` 是可选包，为 `ImmutableArray<T>` 和 `ImmutableList<T>` 提供格式化器。
+
+</Callout>
+
+使用 .NET 8 SDK 及以上版本编译时，编译期就能确定类型的 `NinoSerializer`/`NinoDeserializer` 调用会直接转给生成的格式化器（[拦截器](/zh/docs/v4/performance#interceptors)）。这一切自动完成，写出的字节也完全相同。
+
+### Unity 项目 [#unity-project]
+
+Nino 支持 Unity 2022.3 及以上版本，支持所有 Player 平台（Mono 和 IL2CPP）。用 Unity Package Manager 从 [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation) 安装，例如：
+
+```shell
+openupm add com.jasonxudeveloper.nino
+```
+
+包里同时带有 `Nino.Core.dll` 和源生成器（`Nino.Generator.dll`，已标记为 `RoslynAnalyzer`），不需要再装别的东西。这是源生成器的 Roslyn 4.3 版本，对应 Unity 支持的最低编译器版本，所以 Unity 中的调用不会被[拦截](/zh/docs/v4/performance#interceptors)，而是走常规路径，写出的字节完全相同。
+
+Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`。因此，序列化非公开成员（或使用 `[NinoPooled]`）的类型必须声明为 `partial`，包含它的外层类型也一样。分析器会报告 NINO002 并提供修复。
+
+<Callout type="warn">
+
+如果用了 `asmdef`，请确认勾选了 `Auto Referenced`；如果开启了 `Override References`，则要手动添加对 `Nino.Core.dll` 的引用。
+
+</Callout>
+
+GitHub 上的 `Nino.Unity` 示例项目演示了 Nino 在 Unity 中的用法，并附带可在 Test Runner 中运行的单元测试。遇到问题时，先确认这个示例项目能正常运行；如果问题依旧，请到 GitHub 提交 issue。
+
+#### 热更新代码 [#hot-update-code]
+- Nino 支持 **HybridCLR**。生成的注册表会在其中某个类型第一次用到时才加载，所以用 `Assembly.Load` 加载的热更新程序集**不需要任何初始化调用**。详见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity#hybridclr-hot-update)。
+- 热更新代码可以放在 Unity 的 `asmdef` 里，也可以放在通过 NuGet 安装 Nino 的独立 C# 项目中（[见上文](#net-project)），编译出的 DLL 照常交给 HybridCLR 使用即可。
+
+### Godot 项目 [#godot-project]
+
+Godot 4 的 C# 项目（Godot 的 .NET 版）就是普通的 .NET 项目，用 `Godot.NET.Sdk` 构建（Godot 4.4 起目标框架为 .NET 8，4.0–4.3 为 .NET 6），所以像其他 NuGet 包一样安装即可：
+
+```shell
+# in the folder with your Godot project's .csproj
+dotnet add package Nino --prerelease
+```
+
+然后构建项目（Godot 的 **Build** 按钮、IDE 或 `dotnet build` 均可）。
+
+- 源生成器和分析器始终生效；用 .NET 8 及以上的 SDK 构建时，[拦截器](/zh/docs/v4/performance#interceptors)也会生效。
+- 在 .NET 8 上，`[UnsafeAccessor]` 可以访问私有成员，所以类型不必声明为 `partial`（泛型类型除外）。在 .NET 6 上（Godot 4.0–4.3），含有需序列化私有成员的类型必须声明为 `partial`。`[NinoPooled]` 类则始终要声明为 `partial`。
+- Godot 的数学结构体（`Vector2`、`Vector3`、`Quaternion`、`Transform3D`、`Color` 等）都是非托管类型，和其他非托管结构体一样按原始内存拷贝。
+- 要序列化的是你自己的数据类和结构体。`Node`、`Resource` 等 Godot 对象是引擎对象而不是数据，Nino 不会序列化它们。
+
+详见[平台](/zh/docs/v4/platforms#godot)。
+
+## 第一次序列化 [#first-serialization]
+
+源生成器会在编译期为每个 `[NinoType]` 生成**格式化器**，也就是读写这个类型的代码。你只需要调用 `NinoSerializer` 和 `NinoDeserializer`（命名空间 `Nino.Core`）：
+
+<Steps>
+<Step>
+
+### 给类型加上 `[NinoType]` [#mark-a-type-with-ninotype]
+
+```csharp
+using Nino.Core;
+
+[NinoType]
+public class UserProfile
+{
+    public long Id;
+    public string Name;
+    public DateTime LastLogin;
+}
+```
+
+</Step>
+<Step>
+
+### 序列化 [#serialize-it]
+
+```csharp
+var data = new UserProfile { Id = 42, Name = "Ada", LastLogin = DateTime.UtcNow };
+byte[] bytes = NinoSerializer.Serialize(data);
+```
+
+这会分配返回的数组。在热路径上，改为序列化到一个你保留下来的缓冲区，就不会分配内存，参见[复用缓冲区](/zh/docs/v4/basic#reusing-a-buffer)。
+
+</Step>
+<Step>
+
+### 反序列化 [#deserialize-it]
+
+```csharp
+UserProfile restored = NinoDeserializer.Deserialize<UserProfile>(bytes);
+```
+
+数据的类型是 `ReadOnlySpan<byte>`，所以也可以直接传入池化数组或网络缓冲区的一个切片，无需拷贝。
+
+</Step>
+<Step>
+
+### 或者反序列化到已有对象 [#or-deserialize-into-an-object-you-already-have]
+
+用 `ref` 传入已有实例，Nino 会原地填充它，并复用其中的嵌套对象和集合；传入 `null` 则创建新实例：
+
+```csharp
+UserProfile current = null;
+NinoDeserializer.Deserialize(bytes, ref current);    // creates the instance
+NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
+```
+
+</Step>
+</Steps>
+
+## 启动时 [#at-startup]
+
+Nino 不需要任何初始化调用：生成的代码会自行注册，之后加载的程序集在第一次用到时也会被找到。以下三项调用是可选的：
+
+- `NinoSettings`（池大小、回收器），在第一次序列化调用之前设置。
+- `NinoPolymorphic.Register<T>()`：某个封闭泛型 `[NinoType]` 只会通过基类型读取、代码里从没写出过它的名字时，用它来注册。
+- `NinoRegistry.EnsureInitialized(assembly)`：立即加载某个插件的注册表，而不是等到第一次用到时。
+
+自定义格式化器也不需要调用任何方法：它们用特性声明（参见[自定义格式化器](/zh/docs/v4/custom-formatters)）。Unity 和 HybridCLR 项目请参见[启动检查清单](/zh/docs/v4/advanced/unity#startup-checklist)。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="序列化与反序列化" href="/zh/docs/v4/basic">全部重载：缓冲区写入器、Span、`Writer`/`Reader`、装箱值。</Card>
+  <Card title="定义类型" href="/zh/docs/v4/defining-types">选择成员和顺序，私有成员、记录、泛型。</Card>
+  <Card title="支持的类型" href="/zh/docs/v4/types">基元类型、字符串、元组、集合，以及你自己的集合类型。</Card>
+  <Card title="进阶指南" href="/zh/docs/v4/advanced">热路径、网络与 RPC、消息队列、缓存、持久化和 Unity 的完整实践方案。</Card>
+</Cards>

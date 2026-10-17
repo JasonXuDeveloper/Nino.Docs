@@ -1,0 +1,313 @@
+---
+title: 流、异步、回调与压缩
+description: "基于 Nino 缓冲区和 span API 的几个小工具：在 Stream 上读写带长度前缀的帧、异步读写、ReadOnlySequence 输入、前后钩子，以及 Brotli 或 GZip 压缩。"
+icon: ArrowDownUp
+---
+
+Nino 序列化到 `IBufferWriter<byte>`，从 `ReadOnlySpan<byte>` 反序列化。流、异步 I/O、多段输入、序列化回调和压缩，在这两个调用之上多写几行就能实现。本页为每一种都给出了可以直接复制的写法。
+
+## 流 [#streams]
+
+流没有消息边界，所以每个值都写成一帧：先是 4 字节小端序的长度，再是数据。`Writer` 先预留长度的位置，接着序列化值，最后回填长度，全部在同一个缓冲区里完成：
+
+```csharp title="NinoStream.cs"
+using System;
+using System.Buffers;
+using System.Buffers.Binary;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using Nino.Core;
+
+public static partial class NinoStream
+{
+    public const int MaxFrameSize = 16 << 20; // reject absurd lengths before renting a buffer
+
+    // [int32 length][payload], built in buffer
+    public static void Frame<T>(T value, NinoArrayBufferWriter buffer)
+    {
+        buffer.ResetWrittenCount();
+        var writer = new Writer(buffer);
+        int slot = writer.ReserveInt32();
+        NinoSerializer.Serialize(value, ref writer); // [!code highlight]
+        writer.PatchLength(slot);   // bytes written after the slot
+        writer.Flush();
+        writer.ReleaseReferences(); // end the call, as NinoSerializer does
+    }
+
+    public static void Write<T>(Stream stream, T value, NinoArrayBufferWriter buffer)
+    {
+        Frame(value, buffer);
+        stream.Write(buffer.WrittenSpan);
+    }
+}
+```
+
+读取正好反过来：先读 4 字节前缀，检查长度，再读入恰好这么多字节，然后反序列化。流一次返回的字节可能比请求的少，所以 `Fill` 会循环读取，直到读满为止：
+
+```csharp title="NinoStream.cs"
+public static partial class NinoStream
+{
+    /// <summary>Reads the next frame into value (default: a new one). False at the end of the stream.</summary>
+    public static bool TryRead<T>(Stream stream, ref T value)
+    {
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(4096); // the prefix, then the payload
+        try
+        {
+            if (!Fill(stream, buffer, 4, endAllowed: true))
+                return false;                              // clean end between frames
+            int length = ReadLength(buffer);
+            if (length > buffer.Length)
+                Grow(ref buffer, length);
+            Fill(stream, buffer, length, endAllowed: false);
+            NinoDeserializer.Deserialize(buffer.AsSpan(0, length), ref value); // [!code highlight]
+            return true;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    public static T Read<T>(Stream stream)
+    {
+        T value = default;
+        if (!TryRead(stream, ref value))
+            throw new EndOfStreamException();
+        return value;
+    }
+
+    // Stream.ReadAtLeast does the same on .NET 7+; this loop runs everywhere, including Unity
+    private static bool Fill(Stream stream, byte[] buffer, int count, bool endAllowed)
+    {
+        for (int read = 0; read < count; )
+        {
+            int n = stream.Read(buffer, read, count - read);
+            if (n == 0)
+            {
+                if (read == 0 && endAllowed)
+                    return false;
+                throw new EndOfStreamException();
+            }
+            read += n;
+        }
+        return true;
+    }
+
+    private static void Grow(ref byte[] buffer, int length)
+    {
+        byte[] larger = ArrayPool<byte>.Shared.Rent(length);
+        ArrayPool<byte>.Shared.Return(buffer);
+        buffer = larger;
+    }
+
+    private static int ReadLength(ReadOnlySpan<byte> prefix)
+    {
+        int length = BinaryPrimitives.ReadInt32LittleEndian(prefix);
+        if ((uint)length > MaxFrameSize)
+            throw new InvalidDataException($"Frame of {length} bytes");
+        return length;
+    }
+}
+```
+
+```csharp
+using var buffer = new NinoArrayBufferWriter(); // one per thread or connection
+using (var file = File.Create(path))
+    NinoStream.Write(file, checkpoint, buffer);
+
+using (var file = File.OpenRead(path))
+    checkpoint = NinoStream.Read<Checkpoint>(file);
+```
+
+`TryRead` 每帧租一个池化数组来读前缀和数据，并把结果原地反序列化到 `value` 中：`value` 的结构合适之后，写一帧、读一帧除了内容有变化的字符串之外都不分配内存。`Read` 每次返回新值。
+
+一串值（其他库用 `IAsyncEnumerable<T>` 流式传输的那种）就是连续的帧：每个元素写一帧，读到流结束为止，每一帧都读进同一个实例：
+
+```csharp
+AuditEvent auditEvent = null;                   // filled in place by every frame
+while (NinoStream.TryRead(stream, ref auditEvent))
+    Index(auditEvent);
+```
+
+帧格式与[网络层指南](/zh/docs/v4/advanced/networking#frame-the-stream)相同，两边可以混用。
+
+## 异步 [#async]
+
+`Writer` 是 `ref struct`，不能用在 `async` 方法里，所以先用 `Frame` 同步构建帧，再 await I/O。`WriteAsync` 本身不需要 `async`：它直接返回流的任务，所以在任务完成之前不要复用缓冲区。把下面几个方法加到 `NinoStream` 中：
+
+```csharp
+/// <summary>Do not reuse buffer until the returned task has completed.</summary>
+public static ValueTask WriteAsync<T>(Stream stream, T value, NinoArrayBufferWriter buffer,
+    CancellationToken ct = default)
+{
+    Frame(value, buffer);
+    return stream.WriteAsync(buffer.WrittenMemory, ct);
+}
+
+public static async ValueTask<T> ReadAsync<T>(Stream stream, CancellationToken ct = default)
+{
+    byte[] buffer = ArrayPool<byte>.Shared.Rent(4096);
+    try
+    {
+        await FillAsync(stream, buffer, 4, ct);
+        int length = ReadLength(buffer);
+        if (length > buffer.Length)
+            Grow(ref buffer, length);
+        await FillAsync(stream, buffer, length, ct);
+        return NinoDeserializer.Deserialize<T>(buffer.AsSpan(0, length));
+    }
+    finally
+    {
+        ArrayPool<byte>.Shared.Return(buffer);
+    }
+}
+
+private static async ValueTask FillAsync(Stream stream, byte[] buffer, int count, CancellationToken ct)
+{
+    for (int read = 0; read < count; )
+    {
+        int n = await stream.ReadAsync(buffer.AsMemory(read, count - read), ct);
+        if (n == 0) throw new EndOfStreamException();
+        read += n;
+    }
+}
+```
+
+`async` 方法只有在真正等待 I/O 时才会分配状态机；`ReadAsync` 每帧返回一个新值（`async` 方法不能带 `ref` 参数）。不允许分配内存的循环，请用同步的 `TryRead` 或 [`PipeReader`](/zh/docs/v4/advanced/networking#reading-frames)。
+
+`Fill` 和 `FillAsync` 在所有目标上都能用；在 .NET 7 及以上，也可以换成 `Stream.ReadAtLeast` / `ReadExactlyAsync`。`stream.Write(span)`、`WriteAsync(memory)` 和 `ReadAsync(memory)` 需要 .NET Standard 2.1（Unity 2021.2 及以上满足）；只面向 .NET Standard 2.0 时，改用 `byte[]` 重载，写入的数组用 `MemoryMarshal.TryGetArray(buffer.WrittenMemory, out var segment)` 取出。
+
+使用 `System.IO.Pipelines` 时，直接序列化到 `PipeWriter`（它就是 `IBufferWriter<byte>`），再从 `PipeReader` 中读取帧。完整的读取循环参见[读取帧](/zh/docs/v4/advanced/networking#reading-frames)，它解码每一帧的方式与下面的工具方法相同。
+
+## 多段输入（`ReadOnlySequence`） [#readonlysequence-input]
+
+`PipeReader` 或 `SequenceReader` 给出的是 `ReadOnlySequence<byte>`。只有一段时直接原地反序列化；有多段时，先拷贝一次到池化的缓冲区。`ref` 重载会填充你保留的实例：
+
+```csharp
+public static T Deserialize<T>(in ReadOnlySequence<byte> data)
+{
+    T value = default;
+    Deserialize(data, ref value);
+    return value;
+}
+
+public static void Deserialize<T>(in ReadOnlySequence<byte> data, ref T value)
+{
+    if (data.IsSingleSegment)
+    {
+        NinoDeserializer.Deserialize(data.First.Span, ref value); // data.FirstSpan on .NET 5+
+        return;
+    }
+
+    int length = checked((int)data.Length);
+    byte[] rented = ArrayPool<byte>.Shared.Rent(length);
+    try
+    {
+        data.CopyTo(rented);
+        NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
+    }
+    finally
+    {
+        ArrayPool<byte>.Shared.Return(rented);
+    }
+}
+```
+
+把这两个方法也加到 `NinoStream` 中。管道每次读取通常只返回一段，所以大多数帧走第一个分支，不需要任何拷贝。
+
+## 回调 [#callbacks]
+
+Nino 自己不调用任何钩子。把前后要执行的逻辑放进一个接口，再写一个小工具方法，在调用 Nino 的前后调用它们。由于泛型约束为该接口，这些调用不会对结构体装箱：
+
+```csharp
+public interface ISerializationCallbacks
+{
+    void OnBeforeSerialize();
+    void OnAfterDeserialize();
+}
+
+public static class CallbackSerializer
+{
+    public static void Serialize<T>(T value, IBufferWriter<byte> output) where T : ISerializationCallbacks
+    {
+        value?.OnBeforeSerialize();
+        NinoSerializer.Serialize(value, output);
+    }
+
+    public static void Deserialize<T>(ReadOnlySpan<byte> data, ref T value) where T : ISerializationCallbacks
+    {
+        NinoDeserializer.Deserialize(data, ref value);
+        value?.OnAfterDeserialize();
+    }
+}
+```
+
+- 泛型工具方法里的调用不会被[拦截](/zh/docs/v4/performance#interceptors)，因为那里的 `T` 是类型参数。这些调用走常规路径，每次慢几纳秒。
+- 嵌套对象的钩子也由你的工具方法负责：在根对象的 `OnAfterDeserialize` 中调用它们。
+- 属于构造过程的逻辑，可以放在 [`[NinoConstructor]`](/zh/docs/v4/constructors) 或属性 setter 里，它们在反序列化过程中就会执行。
+
+## 压缩 [#compression]
+
+压缩 Nino 写出的字节；读取前先解压到池化的缓冲区。使用 span 时，先写入未压缩的长度，这样读取方才知道要租多大的缓冲区。`Compress` 可以写入任意 `IBufferWriter<byte>`（另一个你保留的 `NinoArrayBufferWriter`、`PipeWriter`），`Decompress` 填充你保留的实例，所以缓冲区增长到位之后两者都不分配内存：
+
+```csharp title="NinoBrotli.cs"
+using System;
+using System.Buffers;
+using System.Buffers.Binary;
+using System.IO;
+using System.IO.Compression;
+using Nino.Core;
+
+public static class NinoBrotli
+{
+    public const int MaxSize = 64 << 20;
+
+    /// <summary>Writes [int32 length][Brotli data] to output. scratch holds the uncompressed bytes.</summary>
+    public static void Compress<T>(T value, NinoArrayBufferWriter scratch, IBufferWriter<byte> output)
+    {
+        scratch.ResetWrittenCount();
+        NinoSerializer.Serialize(value, scratch);
+
+        int length = scratch.WrittenCount;
+        Span<byte> target = output.GetSpan(4 + BrotliEncoder.GetMaxCompressedLength(length));
+        BinaryPrimitives.WriteInt32LittleEndian(target, length);
+        // quality 1 of 0-11: fast, still compact; window 22 is the default
+        if (!BrotliEncoder.TryCompress(scratch.WrittenSpan, target.Slice(4), out int written, 1, 22))
+            throw new InvalidOperationException("Compression failed");
+        output.Advance(4 + written);
+    }
+
+    public static void Decompress<T>(ReadOnlySpan<byte> data, ref T value)
+    {
+        int length = BinaryPrimitives.ReadInt32LittleEndian(data);
+        if ((uint)length > MaxSize)
+            throw new InvalidDataException($"{length} bytes");
+
+        byte[] rented = ArrayPool<byte>.Shared.Rent(length);
+        try
+        {
+            if (!BrotliDecoder.TryDecompress(data.Slice(4), rented.AsSpan(0, length), out int written)
+                || written != length)
+                throw new InvalidDataException("Corrupt data");
+            NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rented);
+        }
+    }
+}
+```
+
+使用流时，把流包装一层，再复用上面的帧工具方法。`GZipStream` 在所有平台上都可用，包括 .NET Standard 2.0 和 Unity：
+
+```csharp
+using (var gzip = new GZipStream(File.Create(path), CompressionLevel.Fastest))
+    NinoStream.Write(gzip, checkpoint, buffer);
+
+using (var gzip = new GZipStream(File.OpenRead(path), CompressionMode.Decompress))
+    checkpoint = NinoStream.Read<Checkpoint>(gzip);
+```
+
+`BrotliEncoder`、`BrotliDecoder` 和 `BrotliStream` 需要 .NET Core 2.1 及以上，.NET Standard 中没有。如果想要更快、可以接受压缩率低一些，可以用 LZ4 库，它们提供和 `BrotliEncoder.TryCompress` 一样的 span 输入、span 输出接口。

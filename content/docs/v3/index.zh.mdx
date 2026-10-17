@@ -1,0 +1,56 @@
+---
+title: 介绍
+description: Nino v3，高性能的 C# 二进制序列化库。
+icon: BookOpen
+---
+
+import { ChartColumn, Layers, Milestone, Play, Rocket, Shapes } from 'lucide-react';
+
+## Nino 是什么？ [#what-is-nino]
+
+Nino 是高性能的 C# 二进制序列化库。给类型加上 `[NinoType]`，源生成器就会在你写代码的同时生成它的序列化代码。运行时调用生成的 `Serializer` 和 `Deserializer` 即可：
+
+```csharp title="Program.cs"
+[NinoType]
+public class ObjClass
+{
+    public int Id;
+    public string Name { get; set; }
+}
+
+byte[] bytes = Serializer.Serialize(obj);
+Deserializer.Deserialize(bytes, out ObjClass copy);
+```
+
+## 为什么选 Nino v3 [#why-nino-v3]
+
+- **相比 v2 的一大步。** 总体性能比 Nino v2 提升约 **25%**。
+- **可能是最快的。** 比 MemoryPack 快 **30%** 到 **120%**，比 MessagePack 快 **360%** 到 **900%**。详见[基准测试](/zh/docs/v3/perf)。
+- **生来全能。** 支持记录、多态、泛型、跨项目引用等功能。详见[支持的类型](/zh/docs/v3/types)。
+
+## 从这里开始 [#start-here]
+
+<Cards>
+  <Card icon={<Rocket />} title="快速开始" href="/zh/docs/v3/start">
+    在 .NET 或 Unity 项目中安装 Nino v3。
+  </Card>
+  <Card icon={<Play />} title="序列化与反序列化" href="/zh/docs/v3/basic">
+    序列化到数组和缓冲区写入器，从 span 反序列化。
+  </Card>
+  <Card icon={<Shapes />} title="支持的类型" href="/zh/docs/v3/types">
+    非托管类型、`[NinoType]` 类型、泛型、集合与多态。
+  </Card>
+  <Card icon={<Layers />} title="进阶用法" href="/zh/docs/v3/advanced">
+    类型改名、UTF-8 字符串、版本兼容与自定义构造函数。
+  </Card>
+  <Card icon={<ChartColumn />} title="基准测试" href="/zh/docs/v3/perf">
+    Nino v3 与 MemoryPack、MessagePack 的对比。
+  </Card>
+  <Card icon={<Milestone />} title="版本迭代" href="/zh/docs/v3/versioning">
+    哪些 v3 版本改变了二进制格式，以及如何读取旧数据。
+  </Card>
+</Cards>
+
+## 新版本 [#newer-version]
+
+Nino v3 已归档。当前版本是 [Nino v4](/zh/docs/v4)，它经过重写，二进制格式是新的，v3 读不了。参见 [v4 新特性](/zh/docs/v4/whats-new)和[从 v3 迁移](/zh/docs/v4/migration)。

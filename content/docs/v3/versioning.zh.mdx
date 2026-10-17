@@ -1,0 +1,78 @@
+---
+title: 版本迭代
+description: 哪些 Nino v3 版本改变了二进制格式，如何从 v2 迁移，以及如何读取旧版本写出的数据。
+icon: Milestone
+---
+
+<AnchorRedirect
+  map={{
+    '不兼容性': '/zh/docs/v3/versioning#format-changes',
+    '从-nino-v2-迁移': '/zh/docs/v3/versioning#migrating-from-nino-v2',
+    '如果我想用新版本反序列化旧数据怎么办': '/zh/docs/v3/versioning#reading-data-from-an-older-version',
+  }}
+/>
+
+## 格式变化 [#format-changes]
+
+下面每个版本都与之前的版本不兼容，生成的代码可能需要重新生成。要读取这些版本之前写出的数据，参见[读取旧版本的数据](/zh/docs/v3/versioning#reading-data-from-an-older-version)。
+
+<Accordions type="single" defaultValue="v3.3.4">
+<Accordion title="v3.3.4" value="v3.3.4">
+
+非托管字段改为对齐存放，反序列化时访问内存更快；把非托管字段复制到内存的调用被内联，序列化也更快。代价是输出变大，并且与之前的版本不兼容。
+
+</Accordion>
+<Accordion title="v3.2.0" value="v3.2.0">
+
+类型修改成员之后，仍能反序列化修改前序列化的数据，包括列表中可能是多态的元素。生成的代码与 v3.0.3 不同。
+
+</Accordion>
+<Accordion title="v3.0.3" value="v3.0.3">
+
+修复了多态非托管结构体的问题。生成的代码与 v3.0.0 不同。
+
+</Accordion>
+<Accordion title="v3.0.0" value="v3.0.0">
+
+废弃 v2 的实现，重写了整个项目。生成的代码与 v2 不同。
+
+</Accordion>
+</Accordions>
+
+## 从 Nino v2 迁移 [#migrating-from-nino-v2]
+
+更新到最新版本的 Nino，再把生成代码的命名空间从 `AssemblyName_Nino` 改为 `AssemblyName.NinoGen`，就完成了。
+
+## 读取旧版本的数据 [#reading-data-from-an-older-version]
+
+要用新版本反序列化旧版本写出的数据：
+
+<Steps>
+<Step>
+
+### 保留旧的反序列化器 [#keep-the-old-deserializer]
+
+把旧的生成代码，尤其是**旧的反序列化器**及其依赖的代码，**复制**到新项目中，并换一个命名空间，免得混淆。
+
+</Step>
+<Step>
+
+### 升级 Nino [#upgrade-nino]
+
+**升级**到需要的 Nino 版本，这样会生成**新的**序列化器和反序列化器。
+
+</Step>
+<Step>
+
+### 转换数据 [#convert-the-data]
+
+用**旧的反序列化器**读取**旧数据**，再用**新的序列化器**重新序列化。
+
+</Step>
+</Steps>
+
+<Callout type="idea" title="游戏存档">
+
+对于游戏存档，可以用**头部标识**区分新旧数据：用新版 Nino 保存时，先在数据前写入一个头部。读取时，带头部的文件用**新的反序列化器**读取；不带头部的就是**旧数据**，用复制出来的**旧反序列化器**读取。
+
+</Callout>

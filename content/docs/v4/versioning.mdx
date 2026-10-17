@@ -1,0 +1,90 @@
+---
+title: Versioning
+seoTitle: "Versioning and Data Compatibility – Nino v4 Docs"
+description: "Which Nino versions changed the binary format, and how to read data written by an older one."
+icon: Milestone
+---
+
+<AnchorRedirect
+  map={{
+    'what-if-i-really-want-to-deserialize-the-old-data-with-the-new-version': '/en/docs/v4/versioning#reading-data-from-an-older-version',
+  }}
+/>
+
+Every major Nino version so far has a new binary format. This page lists the versions that changed the format and how to move data written by an older one to v4.
+
+## Format Changes
+
+Each version below writes a binary format that earlier versions cannot read, and cannot read data written by earlier versions. Formats are never converted automatically; see [Reading Data from an Older Version](#reading-data-from-an-older-version).
+
+<Accordions type="single" defaultValue="v4.0.0">
+<Accordion title="v4.0.0" value="v4.0.0">
+
+A rewrite of the runtime and the source generator. **The binary format is not compatible with v3 or the earlier v4 betas/previews**, and the public API changed. Main changes:
+- `NinoSerializer` / `NinoDeserializer` in `Nino.Core` replace the generated `Serializer` / `Deserializer` classes and their extension methods.
+- New wire format: little-endian, unaligned, padding zeroed, identical bytes on `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0`; type ids are FNV-1a hashes of the runtime type name. Strings, UTF-16 or `[NinoUtf8]`, are prefixed with their length in chars, and a `[NinoUtf8]` string also with its length in bytes; a version-tolerant object writes one length for its whole hierarchy (both since 4.0.0-rc.1, see [Behavior Changes since the v4 Betas](/en/docs/v4/migration#behavior-changes-since-the-v4-betas)).
+- Per-type options on `[NinoType]`: `format` (`NinoFormat.Positional`, `VersionTolerant` or `Keyed`), `trackReferences`, `allowInheritance`. Subtypes inherit `[NinoType]`.
+- A boxed API for types known only at run time (`SerializeBoxed`, `DeserializeBoxed`); `[NinoExplicitOrder]` and run-time formatter registration are removed.
+- Reuse deserialization into existing instances with recycling, `[NinoPooled]` pools, `[NinoFactory]` factories and `NinoSettings`.
+- User collections, `PriorityQueue`, `Nino.Immutable`, pluggable formatters (`[assembly: NinoFormatter]`, `[NinoCustomFormatter]`).
+- An incremental generator, analyzers with code fixes, and interceptors on the .NET 8 SDK and later.
+
+See [What's New in v4](/en/docs/v4/whats-new), [v3 vs v4](/en/docs/v4/v3-vs-v4) and [Migrating from v3](/en/docs/v4/migration).
+
+</Accordion>
+<Accordion title="v3.3.4" value="v3.3.4">
+
+Unmanaged fields are aligned in the output, which makes reading them faster, and the copies that write them are inlined, which makes serialization faster. The output is larger than before.
+
+</Accordion>
+<Accordion title="v3.2.0" value="v3.2.0">
+
+Types can change their members and still read data written before the change, including list elements, which may be polymorphic. The generated code differs from v3.0.3.
+
+</Accordion>
+<Accordion title="v3.0.3" value="v3.0.3">
+
+Fixes polymorphic unmanaged structs. The generated code differs from v3.0.0.
+
+</Accordion>
+<Accordion title="v3.0.0" value="v3.0.0">
+
+A rewrite that replaces the v2 implementation. The generated code differs from v2.
+
+</Accordion>
+</Accordions>
+
+## Migrating
+
+- **From Nino v3:** see [Migrating from v3](/en/docs/v4/migration).
+- **From Nino v2 to v3:** update to v3, then change the namespace of the generated code from `AssemblyName_Nino` to `AssemblyName.NinoGen`. To continue to v4, follow the v3 migration guide afterwards.
+
+## Reading Data from an Older Version
+
+Keep the old deserializer, read the old data with it, and write it again with the new version:
+
+<Steps>
+<Step>
+
+**Keep the old deserializer.** Between v3 releases, copy the old generated code (the deserializer and what it depends on) into the project and give it its own namespace. For v3 data read by v4, the v3 generated code depends on v3's `Nino.Core`, so it has to live in a separate converter; see [Converting v3 data](/en/docs/v4/migration#converting-v3-data).
+
+</Step>
+<Step>
+
+**Upgrade** Nino, so the new serializer and deserializer are generated.
+
+</Step>
+<Step>
+
+**Convert.** Read the old data with the old deserializer and serialize it again with the new serializer.
+
+</Step>
+</Steps>
+
+Data you store, such as user documents or archived records, should start with your own header (a magic number and a format version) written by the new version. When loading, a file with the header is read with the new deserializer; a file without it is old data, read with the old one and converted. See [Add a File Header](/en/docs/v4/advanced/persistence#add-a-file-header).
+
+<Callout type="idea">
+
+From v4 on, mark long-lived data such as stored documents `[NinoType(format: NinoFormat.VersionTolerant)]` or `[NinoType(format: NinoFormat.Keyed)]`, so that later changes to your own types need no conversion step. See [Evolving Your Data](/en/docs/v4/evolving-data).
+
+</Callout>

@@ -1,0 +1,179 @@
+---
+title: 基准测试
+description: "Nino v2 与 MemoryPack、MessagePack 的运行时基准测试，附数据结构和测试环境。"
+icon: ChartColumn
+---
+
+import benchmarks from '@/data/bench-v2.json';
+
+<AnchorRedirect
+  map={{
+    '数据结构': '/zh/docs/v2/perf#data-structures',
+    '数据生成': '/zh/docs/v2/perf#data-generation',
+    '生成函数': '/zh/docs/v2/perf#generation-function',
+    '测试数据': '/zh/docs/v2/perf#benchmark-data',
+    '测试环境': '/zh/docs/v2/perf#setup',
+    '测试结果': '/zh/docs/v2/perf#results',
+    '柱状图': '/zh/docs/v2/perf#results',
+    '表格数据': '/zh/docs/v2/perf#results-table',
+  }}
+/>
+
+Nino v2、[MemoryPack](https://github.com/Cysharp/MemoryPack) 和 [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) 在同一份数据上的序列化与反序列化耗时。绝对耗时因机器而异，请看比值。当前版本的数据见 [v4 基准测试](/zh/docs/v4/perf)。
+
+## 测试环境 [#setup]
+
+| | |
+| --- | --- |
+| CPU | Apple M1，8 核 |
+| 操作系统 | macOS Sonoma 14.4 |
+| 运行时 | .NET 9.0.0（SDK 9.0.100-rc.2.24474.11） |
+| 测试框架 | BenchmarkDotNet 0.14.0，1 次预热、20 次测量迭代 |
+
+<Accordions type="single">
+<Accordion title="完整的 BenchmarkDotNet 环境信息" value="environment">
+
+```text title="BenchmarkDotNet"
+BenchmarkDotNet v0.14.0, macOS Sonoma 14.4 (23E214) [Darwin 23.4.0]
+Apple M1, 1 CPU, 8 logical and 8 physical cores
+.NET SDK 9.0.100-rc.2.24474.11
+  [Host]     : .NET 8.0.6 (8.0.624.26715), Arm64 RyuJIT AdvSIMD
+  Job-IBNCAG : .NET 9.0.0 (9.0.24.47305), Arm64 RyuJIT AdvSIMD
+
+Runtime=.NET 9.0  IterationCount=20  WarmupCount=1
+```
+
+</Accordion>
+</Accordions>
+
+## 测试结果 [#results]
+
+序列化或反序列化下方数据的平均耗时，越低越好。
+
+<BenchChart data={benchmarks} version="v2" source="Nino v2，BenchmarkDotNet 0.14.0，Apple M1，.NET 9.0.0。" lang="zh" />
+
+### 结果表 [#results-table]
+
+| 方法 | 平均耗时（ns） | 误差（ns） | 标准差（ns） | 比值 | 比值标准差 | 载荷 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `MessagePackDeserializeSimpleClass` | 1,189.1591 | 2.6112 | 3.0071 | 3.44 | 0.02 | - |
+| `MemoryPackDeserializeSimpleClass` | 386.6335 | 6.0955 | 6.2597 | 1.12 | 0.02 | - |
+| `NinoDeserializeSimpleClass` | 345.9820 | 1.2995 | 1.3345 | 1.00 | 0.01 | - |
+| `MessagePackSerializeSimpleClass` | 1,638.9940 | 4.8849 | 5.4295 | 8.34 | 0.03 | 674B |
+| `MemoryPackSerializeSimpleClass` | 345.3897 | 0.5703 | 0.6102 | 1.76 | 0.00 | 730B |
+| `NinoSerializeSimpleClass` | 196.4610 | 0.1776 | 0.2045 | 1.00 | 0.00 | 738B |
+| `MessagePackDeserializeSimpleClasses` | 118,102.4352 | 43.1878 | 48.0031 | 3.11 | 0.01 | - |
+| `MemoryPackDeserializeSimpleClasses` | 39,079.8249 | 32.2887 | 33.1581 | 1.03 | 0.00 | - |
+| `NinoDeserializeSimpleClasses` | 37,926.0608 | 96.1285 | 106.8466 | 1.00 | 0.00 | - |
+| `MessagePackSerializeSimpleClasses` | 190,110.8829 | 646.5527 | 744.5710 | 11.29 | 0.09 | 65.82KB |
+| `MemoryPackSerializeSimpleClasses` | 31,656.0714 | 94.5945 | 105.1415 | 1.88 | 0.01 | 71.29KB |
+| `NinoSerializeSimpleClasses` | 16,840.9377 | 111.0911 | 123.4774 | 1.00 | 0.01 | 72.08KB |
+| `MessagePackDeserializeSimpleStruct` | 48.9905 | 0.0223 | 0.0219 | 130.80 | 0.17 | - |
+| `MemoryPackDeserializeSimpleStruct` | 0.9634 | 0.0158 | 0.0169 | 2.57 | 0.04 | - |
+| `NinoDeserializeSimpleStruct` | 0.3746 | 0.0004 | 0.0005 | 1.00 | 0.00 | - |
+| `MessagePackSerializeSimpleStruct` | 141.2677 | 0.3008 | 0.3343 | 38.20 | 0.19 | 16B |
+| `MemoryPackSerializeSimpleStruct` | 3.9620 | 0.0240 | 0.0246 | 1.07 | 0.01 | 16B |
+| `NinoSerializeSimpleStruct` | 3.6983 | 0.0161 | 0.0172 | 1.00 | 0.01 | 16B |
+| `MessagePackDeserializeSimpleStructs` | 2,794.3856 | 2.4233 | 2.7907 | 33.28 | 0.15 | - |
+| `MemoryPackDeserializeSimpleStructs` | 111.8475 | 0.3823 | 0.3926 | 1.33 | 0.01 | - |
+| `NinoDeserializeSimpleStructs` | 83.9682 | 0.3803 | 0.3905 | 1.00 | 0.01 | - |
+| `MessagePackSerializeSimpleStructs` | 13,915.2471 | 18.5713 | 19.8711 | 171.61 | 0.32 | 1.57KB |
+| `MemoryPackSerializeSimpleStructs` | 86.5175 | 1.1389 | 1.3116 | 1.07 | 0.02 | 1.57KB |
+| `NinoSerializeSimpleStructs` | 81.0850 | 0.1019 | 0.1047 | 1.00 | 0.00 | 1.57KB |
+
+**比值**列是同一测试中各库的平均耗时除以 Nino 的平均耗时，**载荷**列是序列化后数据的大小。
+
+## 数据结构 [#data-structures]
+
+<Tabs groupId="bench-type" items={["Simple Class", "Simple Struct"]}>
+<Tab value="Simple Class">
+
+```csharp
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+public partial class SimpleClass
+{
+    [Key(0)]
+    public int Id;
+    [Key(1)]
+    public string Name { get; set; }
+    [Key(2)]
+    public int[] Numbers { get; set; }
+    [Key(3)]
+    public List<DateTime> Dates { get; set; }
+    [Key(4)]
+    public Dictionary<int, string> Map1;
+    [Key(5)]
+    public Dictionary<int, int> Map2 { get; set; }
+}
+```
+
+</Tab>
+<Tab value="Simple Struct">
+
+```csharp
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+public partial struct SimpleStruct
+{
+    [Key(0)]
+    public int Id;
+    [Key(1)]
+    public DateTime CreateTime;
+}
+```
+
+</Tab>
+</Tabs>
+
+## 数据生成 [#data-generation]
+
+### 生成函数 [#generation-function]
+
+<Tabs groupId="bench-type" items={["Simple Class", "Simple Struct"]}>
+<Tab value="Simple Class">
+
+```csharp
+public static SimpleClass Create()
+{
+    Random random = new Random();
+    return new SimpleClass
+    {
+        Id = random.Next(),
+        Name = "SimpleClass",
+        Numbers = Enumerable.Range(0, 100).Select(n => random.Next()).ToArray(),
+        Dates = Enumerable.Range(0, 10).Select(n => DateTime.Now.AddSeconds(random.Next())).ToList(),
+        Map1 = Enumerable.Range(0, 10).ToDictionary(n => n, n => n.ToString()),
+        Map2 = Enumerable.Range(0, 10).ToDictionary(n => n, n => n * 2)
+    };
+}
+```
+
+</Tab>
+<Tab value="Simple Struct">
+
+```csharp
+public static SimpleStruct Create()
+{
+    Random random = new Random();
+    return new SimpleStruct
+    {
+        Id = random.Next(),
+        CreateTime = DateTime.Now.AddSeconds(random.Next())
+    };
+}
+```
+
+</Tab>
+</Tabs>
+
+### 测试数据 [#benchmark-data]
+
+```csharp
+_simpleClass = SimpleClass.Create();
+_simpleClasses = Enumerable.Range(0, 30).Select(_ => SimpleClass.Create()).ToArray();
+_simpleStruct = SimpleStruct.Create();
+_simpleStructs = Enumerable.Range(0, 30).Select(_ => SimpleStruct.Create()).ToArray();
+```

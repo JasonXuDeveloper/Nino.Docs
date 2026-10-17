@@ -1,0 +1,85 @@
+---
+title: 引用追踪
+description: "序列化含共享引用与循环引用的对象图：按类型开启，不开启的类型没有任何开销。"
+icon: Share2
+---
+
+默认情况下，被引用两次的对象会写入两次，读回来变成两个实例；序列化带环的对象图会抛出 `InvalidOperationException`（参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)）。给类加上 `trackReferences: true` 即可保留对象图。它的所有子类型也都会被追踪，即使子类型自己声明的 `[NinoType]` 没有写这个选项：
+
+```csharp
+[NinoType(trackReferences: true)] // [!code highlight]
+public class Node
+{
+    public int Value;
+    public Node Next;    // may point back to an earlier node
+}
+
+var a = new Node { Value = 1 };
+var b = new Node { Value = 2, Next = a };
+a.Next = b;                                   // a cycle
+var bytes = NinoSerializer.Serialize(a);
+var copy = NinoDeserializer.Deserialize<Node>(bytes);
+// copy.Next.Next == copy
+```
+
+共享引用和循环引用同样重要。比如在一张组织架构图里，两名员工属于同一个部门：
+
+```csharp
+[NinoType(trackReferences: true)]
+public class Department { public string Name; }
+
+[NinoType]
+public class Employee { public string Name; public Department Department; }
+
+var sales = new Department { Name = "Sales" };
+var staff = new List<Employee>
+{
+    new() { Name = "Ana", Department = sales },
+    new() { Name = "Ben", Department = sales },
+};
+byte[] bytes = NinoSerializer.Serialize(staff);
+var loaded = NinoDeserializer.Deserialize<List<Employee>>(bytes);
+// loaded[0].Department == loaded[1].Department: one object, so a rename shows on both employees // [!code highlight]
+```
+
+如果不追踪，读取后会得到两个独立的 `Department` 对象，之后给部门改名只会反映在其中一名员工身上。只有被共享的类型需要这个选项，`Employee` 本身不需要追踪。
+
+- 每个被追踪的对象前面都有 4 字节的引用头部；同一次调用中已经写过的对象，只写它的序号。
+- 无论槽位的声明类型是什么（包括 `object` 和接口），共享引用都能保持对象身份。
+- 追踪只针对 `[NinoType]` 类，不包括集合：同一个 `List<T>` 出现在两个成员中，仍然会写两次。
+- 开销：你每调用一次 `NinoSerializer`/`NinoDeserializer`（[顶层调用](/zh/docs/v4/basic#terms)），有一小笔固定开销；每个被追踪的对象再多 4 字节和一次身份查找。不涉及追踪类型的调用没有任何开销。
+
+<Callout type="warn">
+
+必须通过构造函数参数或只读成员重新创建的类型（例如位置记录）不能开启追踪（NINO016）。在结构体上设置 `trackReferences` 会被忽略，并给出警告（NINO015）。
+
+</Callout>
+
+## 何时使用 [#when-to-use-it]
+
+<Accordions type="single">
+<Accordion title="用于对象图">
+
+带关联关系的领域模型（多个订单指向同一个客户）、撤销栈、多个对象指向同一对象的文档、带父节点引用的树：凡是对象身份有意义或存在循环的地方都适用。一个列表把同一个被追踪的对象重复 100 次时，写出的字节数和耗时都只是不追踪时的一小部分。
+
+</Accordion>
+<Accordion title="消息和普通数据不需要">
+
+网络消息、配置以及其他树状数据没有共享引用。这些地方不要开启追踪：不追踪的类型没有任何开销，连 4 字节的头部都没有。
+
+</Accordion>
+<Accordion title="自己连续写入、读取多个值时">
+
+传入值、返回字节（或写入缓冲区写入器）的调用，以及从 span 读出一个值的调用，引用表都只在这一次调用内有效。如果你自己创建 `Writer` 或 `Reader`，通过它写入的所有内容会共享引用，直到调用 `ReleaseReferences()` 为止。请在每条逻辑消息结束时调用它。
+
+</Accordion>
+</Accordions>
+
+复用反序列化对新对象照常工作；遇到指向已读对象的反向引用时，会直接替换当前值，而不会回收旧值，因为旧值可能仍被对象图中的其他地方引用。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="复用反序列化与对象池" href="/zh/docs/v4/pooling">原地填充已有实例，新实例从对象池中取。</Card>
+  <Card title="自定义格式化器" href="/zh/docs/v4/custom-formatters">用另一种方式编码某个成员，或让 Nino 支持新的类型。</Card>
+</Cards>

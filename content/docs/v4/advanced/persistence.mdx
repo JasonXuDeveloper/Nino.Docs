@@ -1,0 +1,411 @@
+---
+title: "Persistence and Storage"
+seoTitle: "Persistence and Storage in C#: Data That Survives Updates – Nino v4 Docs"
+description: "Store Nino data in files, databases and other storage so it survives updates: keyed and version-tolerant types, object graphs with shared references, headers and safe writes."
+icon: Save
+---
+
+Stored data is read by builds that did not exist when it was written: a desktop app's document, a user's settings, a local cache, a game save, a snapshot, an event log. This guide shows how to lay out persistent data so that next year's release still opens this year's files, using a document file as the running example, and then covers [key-value stores](#key-value-stores), [append-only logs](#append-only-logs) and [snapshots](#snapshots-and-checkpoints).
+
+## Pick a Format per Type
+
+| Data | Format | Why |
+| --- | --- | --- |
+| The file's root and long-lived records | `format: NinoFormat.Keyed` | Fields can be added, removed and reordered in any update. |
+| Records that only ever grow | `format: NinoFormat.VersionTolerant` | Append fields to classes without subclasses; 4 bytes per object instead of 8 per member. |
+| Small value structs (`Point`, `Rgba`) | positional (bare `[NinoType]`) | Raw, compact, and unlikely to change. Freeze them. |
+
+```csharp title="Document.cs"
+using Nino.Core;
+
+[NinoType(format: NinoFormat.Keyed)]
+public sealed class Document
+{
+    public int Version;              // your own content version, see below
+    public DateTime SavedAt;
+    public Profile Owner;
+    public List<Layer> Layers;
+    public Dictionary<string, string> Settings;
+}
+
+[NinoType(format: NinoFormat.Keyed)]
+public sealed class Profile
+{
+    public string DisplayName;
+    public string Email;
+}
+
+[NinoType(format: NinoFormat.VersionTolerant)]
+public sealed class Layer
+{
+    public string Name;
+    public bool Visible;
+    public Rgba Color;
+    public List<Point> Path;
+}
+
+[NinoType]
+public struct Point              // positional raw structs: never reorder their fields
+{
+    public float X, Y;
+}
+
+[NinoType]
+public struct Rgba
+{
+    public byte R, G, B, A;
+}
+```
+
+A field added in a later update is missing from older files. When they load, it keeps the value the constructor gives it, so give new fields a sensible initializer: with `public float Zoom = 1f;` added to `Document`, every old file opens at 100% instead of a zoom of `0`.
+
+A game save has the same shape: a keyed `SaveGame` root and `Player`, version-tolerant inventory items, positional structs for positions. The rules on this page apply to it unchanged.
+
+<Callout type="warn">
+
+Keyed members are identified by the hash of their **name**. When you rename a field, keep its old name with `[NinoFormerName]` (see [Rename a Field](#rename-a-field)); otherwise the rename reads as "removed one, added another" and the old value is not loaded. Rename *types* with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name) on the type.
+
+</Callout>
+
+## Rename a Field
+
+In a keyed type, rename the field and list its old name. Files written before the rename load into the new field, and new files are written under the new name:
+
+```csharp
+[NinoType(format: NinoFormat.Keyed)]
+public sealed class Profile
+{
+    [NinoFormerName("Name")]  // [!code highlight]
+    public string DisplayName; // was: public string Name;
+    public string Email;
+}
+```
+
+Keep the attribute for as long as old files may still be opened. A build that predates the rename does not know the new name: it opens newer files without that value (and drops it if it saves the file again), so do not let users downgrade after it.
+
+## Object Graphs
+
+By default every reference is written as its own copy. If several parts of a file point to the same object (a task that several others depend on, a parent link back up a tree), mark the shared types `trackReferences: true`:
+
+```csharp
+[NinoType(format: NinoFormat.Keyed, trackReferences: true)] // [!code highlight]
+public class TaskItem
+{
+    public string Title;
+    public TaskItem Parent;            // may point to another task in the file
+    public List<TaskItem> DependsOn;   // the same task may appear in many lists, or point back here
+}
+```
+
+Each object is written once; later references are written as a 4-byte index, and cycles are restored. Tracking covers `[NinoType]` classes, not collections, and cannot be used with types re-created from constructor arguments such as positional records (NINO016). See [Reference Tracking](/en/docs/v4/reference-tracking).
+
+## Add a File Header
+
+Nino writes no magic number or format version of its own. Put a small header in front of the data so you can recognize the file and decide how to migrate it. Encode into a buffer you pass in, so a reused buffer serves every save:
+
+```csharp title="DocumentFile.cs"
+using System.IO;
+using Nino.Core;
+
+public static class DocumentFile
+{
+    private const int Magic = 0x434F444E;   // any constant you like ("NDOC")
+    private const int FormatVersion = 3;    // bump when you change the layout by hand
+
+    public static void Encode(Document document, NinoArrayBufferWriter buffer)
+    {
+        buffer.ResetWrittenCount();
+        var writer = new Writer(buffer);
+        writer.Write(Magic);
+        writer.Write(FormatVersion);
+        NinoSerializer.Serialize(document, ref writer);
+        writer.Flush();
+        writer.ReleaseReferences();         // returns the reference table (trackReferences types) to its pool
+    }
+
+    public static Document Decode(ReadOnlySpan<byte> data)
+    {
+        var reader = new Reader(data);
+        if (reader.Read<int>() != Magic)
+            throw new InvalidDataException("Not a document file");
+        int version = reader.Read<int>();
+        if (version > FormatVersion)
+            throw new InvalidDataException("File from a newer version of the app");
+
+        var document = NinoDeserializer.Deserialize<Document>(ref reader); // [!code highlight]
+        reader.ReleaseReferences();
+        return Migrate(document, version);
+    }
+
+    // fix up content written by older layouts (FormatVersion < 3)
+    private static Document Migrate(Document document, int fromVersion) => document;
+}
+```
+
+## Write Safely
+
+A crash or power loss in the middle of a write must not destroy the previous file. Write to a temporary file, flush it to disk, then swap it in. Read files back into a reused buffer, so loading needs no `byte[]` of its own either:
+
+```csharp title="SafeFile.cs"
+using System.IO;
+using Nino.Core;
+
+public static class SafeFile
+{
+    /// <summary>Replaces the file at path; a crash leaves the old file or the new one, never a mix.</summary>
+    public static void Write(string path, ReadOnlySpan<byte> bytes)
+    {
+        string temp = path + ".tmp";
+        using (var file = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 1))
+        {
+            file.Write(bytes);
+            file.Flush(flushToDisk: true);              // on disk before it replaces the old file
+        }
+        if (File.Exists(path))
+            File.Replace(temp, path, path + ".bak");    // keeps the previous file as a backup
+        else
+            File.Move(temp, path);
+    }
+
+    /// <summary>Reads the whole file into buffer, which is reused from call to call.</summary>
+    public static ReadOnlySpan<byte> Read(string path, NinoArrayBufferWriter buffer)
+    {
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1);
+        int length = checked((int)file.Length);
+        buffer.ResetWrittenCount();
+        file.ReadExactly(buffer.GetSpan(length).Slice(0, length));
+        buffer.Advance(length);
+        return buffer.WrittenSpan;
+    }
+}
+```
+
+```csharp
+using var buffer = new NinoArrayBufferWriter(64 * 1024); // or keep one per thread and reuse it
+
+DocumentFile.Encode(document, buffer);
+SafeFile.Write(path, buffer.WrittenSpan);
+
+Document loaded = DocumentFile.Decode(SafeFile.Read(path, buffer));
+```
+
+<Callout type="info">
+
+`bufferSize: 1` turns off `FileStream`'s own buffer, which would only add a copy for a single large read or write. `Stream.ReadExactly` needs .NET 7 or later; elsewhere (Unity included), call `Read` in a loop until `length` bytes are in. On Unity, write under `Application.persistentDataPath`.
+
+</Callout>
+
+## Key-Value Stores [#key-value-stores]
+
+Embedded stores (RocksDB, LMDB, FASTER, LiteDB's file storage, SQLite `BLOB` columns) and local caches take bytes in and give bytes out. Nino fits both sides: serialize the key and the value into reused buffers, pass the spans, and deserialize what comes back into a reused instance. The store interface below stands in for your store's API:
+
+```csharp title="TypedStore.cs"
+using System.Buffers;
+using Nino.Core;
+
+public interface IKeyValueStore            // stands in for your store's API
+{
+    void Put(ReadOnlySpan<byte> key, ReadOnlySpan<byte> value);
+    bool TryGet(ReadOnlySpan<byte> key, IBufferWriter<byte> value);  // copies the value into the writer
+}
+
+public sealed class TypedStore<TKey, TValue> where TKey : unmanaged
+{
+    private readonly IKeyValueStore _store;
+    private readonly NinoArrayBufferWriter _key = new(64);
+    private readonly NinoArrayBufferWriter _value = new(1024);
+
+    public TypedStore(IKeyValueStore store) => _store = store;
+
+    public void Put(TKey key, TValue value)
+    {
+        _key.ResetWrittenCount();
+        NinoSerializer.Serialize(key, _key);
+        _value.ResetWrittenCount();
+        NinoSerializer.Serialize(value, _value);
+        _store.Put(_key.WrittenSpan, _value.WrittenSpan);
+    }
+
+    public bool TryGet(TKey key, ref TValue value)
+    {
+        _key.ResetWrittenCount();
+        NinoSerializer.Serialize(key, _key);
+        _value.ResetWrittenCount();
+        if (!_store.TryGet(_key.WrittenSpan, _value))
+            return false;
+        NinoDeserializer.Deserialize(_value.WrittenSpan, ref value);   // [!code highlight]
+        return true;
+    }
+}
+```
+
+- `Put` and `TryGet` reuse both buffers, and `TryGet` fills the `value` you pass in place when it is not null: with a store that copies into the buffer it is given, a steady stream of calls allocates nothing but the changed strings and the arrays inside the values. If your store returns a `byte[]` or a span instead, deserialize from that directly.
+- An unmanaged key (an `int`, a `Guid`, a struct of ids) is written as its raw little-endian bytes. Stores that sort keys bytewise do **not** sort little-endian integers numerically; if you need range scans in numeric order, write such keys yourself with `BinaryPrimitives.WriteInt64BigEndian`.
+- The instance holds two buffers, so use one per thread or guard it with a lock.
+- Stored values outlive the code that wrote them: make value types `NinoFormat.Keyed` or `NinoFormat.VersionTolerant`, as for document files.
+
+## Append-Only Logs [#append-only-logs]
+
+An append-only log (an event store, a write-ahead log, a journal of changes) appends records and never rewrites them. Frame each record with a length prefix, so a reader can find the record boundaries and detect a record that a crash cut short:
+
+```csharp title="EventLog.cs"
+using System.Buffers;
+using System.Buffers.Binary;
+using Nino.Core;
+
+[NinoType(format: NinoFormat.VersionTolerant)]
+public abstract class AccountEvent
+{
+    public long Sequence;
+}
+
+public sealed class Deposited : AccountEvent { public decimal Amount; }
+public sealed class Withdrawn : AccountEvent { public decimal Amount; }
+
+/// <summary>An append-only file of [int32 length][payload] records.</summary>
+public sealed class EventLog : IDisposable
+{
+    public const int MaxRecordSize = 1 << 20;
+
+    private readonly FileStream _file;
+    private readonly NinoArrayBufferWriter _buffer = new(1024);
+
+    public EventLog(string path) =>
+        _file = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
+
+    public void Append(AccountEvent evt)
+    {
+        _buffer.ResetWrittenCount();
+        var writer = new Writer(_buffer);
+        int slot = writer.ReserveInt32();
+        NinoSerializer.Serialize(evt, ref writer);
+        writer.PatchLength(slot);                 // bytes written after the slot
+        writer.Flush();
+        writer.ReleaseReferences();               // end the call, as NinoSerializer does
+        _file.Write(_buffer.WrittenSpan);
+        _file.Flush(flushToDisk: true);           // durable before the caller is told it is stored
+    }
+
+    public void Dispose()
+    {
+        _file.Dispose();
+        _buffer.Dispose();
+    }
+
+    /// <summary>
+    /// Passes every complete record to apply, in order; a torn record at the end (a crash mid-write) is ignored.
+    /// apply receives a reused instance: do not keep it.
+    /// </summary>
+    public static void Replay(string path, Action<AccountEvent> apply)
+    {
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        byte[] record = ArrayPool<byte>.Shared.Rent(4096);
+        AccountEvent evt = null;                  // filled in place when the next record has the same type
+        try
+        {
+            while (file.ReadAtLeast(record.AsSpan(0, 4), 4, throwOnEndOfStream: false) == 4)
+            {
+                int length = BinaryPrimitives.ReadInt32LittleEndian(record);
+                if ((uint)length > MaxRecordSize)
+                    throw new InvalidDataException($"Record of {length} bytes");
+                if (length > record.Length)
+                {
+                    byte[] larger = ArrayPool<byte>.Shared.Rent(length);
+                    ArrayPool<byte>.Shared.Return(record);
+                    record = larger;              // the finally returns whichever array is current
+                }
+                if (file.ReadAtLeast(record.AsSpan(0, length), length, throwOnEndOfStream: false) < length)
+                    break;                        // incomplete tail
+                NinoDeserializer.Deserialize(record.AsSpan(0, length), ref evt); // [!code highlight]
+                apply(evt);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(record);
+        }
+    }
+}
+```
+
+- `Append` writes each record from a reused buffer and allocates nothing. `Replay` reads the file through one pooled array and deserializes into one reused event, so it allocates per record only when the event type changes from the previous record (and for the changed strings or the arrays an event contains). `ReadAtLeast` needs .NET 7 or later; elsewhere, call `Read` in a loop.
+- `Flush(flushToDisk: true)` per record is the safe default and the slowest. To trade durability for throughput, append several records and flush once (group commit).
+- The length prefix finds a torn **tail**. To detect corruption in the middle of a file, add a checksum per record (for example `System.IO.Hashing.Crc32`) after the length.
+- Events are read back by builds that did not exist when they were written: the [message queue rules](/en/docs/v4/advanced/message-queues#topics-that-outlive-a-deployment) apply unchanged.
+- The records use the same `[int32 length][payload]` frames as the [`Stream` helpers](/en/docs/v4/advanced/streams#streams) and the [network guide](/en/docs/v4/advanced/networking#frame-the-stream), so those can read and write the log too.
+
+## Snapshots and Checkpoints [#snapshots-and-checkpoints]
+
+Replaying a long log on every start is slow. Store a snapshot of the state together with the position it covers, and apply only the events after it (or truncate the log at each snapshot, so replay stays short):
+
+```csharp title="Snapshots.cs"
+using Nino.Core;
+
+[NinoType(format: NinoFormat.Keyed)]
+public sealed class AccountSnapshot
+{
+    public long LastSequence;   // the last event the snapshot includes
+    public decimal Balance;
+
+    public void Apply(AccountEvent evt)
+    {
+        if (evt.Sequence <= LastSequence)
+            return;                               // already in the snapshot
+        Balance += evt switch
+        {
+            Deposited d => d.Amount,
+            Withdrawn w => -w.Amount,
+            _ => 0m,
+        };
+        LastSequence = evt.Sequence;
+    }
+}
+
+public static class Snapshots
+{
+    public static void Write(string path, AccountSnapshot snapshot, NinoArrayBufferWriter buffer)
+    {
+        buffer.ResetWrittenCount();
+        NinoSerializer.Serialize(snapshot, buffer);
+        SafeFile.Write(path, buffer.WrittenSpan); // never leaves a half-written snapshot
+    }
+
+    public static AccountSnapshot Load(string snapshotPath, string logPath, NinoArrayBufferWriter buffer)
+    {
+        var state = File.Exists(snapshotPath)
+            ? NinoDeserializer.Deserialize<AccountSnapshot>(SafeFile.Read(snapshotPath, buffer))
+            : new AccountSnapshot();
+        if (File.Exists(logPath))
+            EventLog.Replay(logPath, state.Apply);   // reads the whole log; Apply skips what the snapshot covers
+        return state;
+    }
+}
+```
+
+`SafeFile` is the helper from [Write Safely](#write-safely). The same pattern checkpoints any long-running computation (a simulation, a stream processor, a training job): serialize its state and the input position it has reached, write it safely, and resume from it after a restart. Object graphs with shared references need [`trackReferences`](#object-graphs) in the snapshot types.
+
+## Test Old Files
+
+The rules above keep old data readable, but only a test proves it. Keep a few files from every released version in your repository and load them in a unit test on each build:
+
+```csharp
+[TestMethod]
+public void OpensEveryShippedDocument()
+{
+    foreach (var file in Directory.GetFiles("TestData/Documents", "*.ndoc"))
+    {
+        var document = DocumentFile.Decode(File.ReadAllBytes(file));
+        Assert.IsNotNull(document.Owner);
+    }
+}
+```
+
+## Checklist
+
+- [ ] Root and long-lived records are `NinoFormat.Keyed` (or `NinoFormat.VersionTolerant` if they only grow).
+- [ ] Small raw structs are frozen: never reorder or retype their fields.
+- [ ] Shared or cyclic objects are `trackReferences`.
+- [ ] Renamed types and renamed keyed members carry `[NinoFormerName]`.
+- [ ] The file starts with your own magic number and version.
+- [ ] Files are written to a temporary file, flushed to disk and swapped in.
+- [ ] Files from every shipped version are loaded in a test.

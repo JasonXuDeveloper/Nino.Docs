@@ -1,0 +1,374 @@
+---
+title: 支持的类型
+description: Nino v2 能在运行时序列化的类型，以及如何用 [NinoType] 让你自己的类、结构体和记录可被序列化。
+icon: Shapes
+---
+
+<AnchorRedirect
+  map={{
+    '可序列化类型': '/zh/docs/v2/types#serializable-types',
+    '基础类型': '/zh/docs/v2/types#primitive-types',
+    '自定义类型': '/zh/docs/v2/types#custom-types',
+    '泛型类型': '/zh/docs/v2/types#generic-types',
+    '集合类型': '/zh/docs/v2/types#collection-types',
+    '嵌套类型': '/zh/docs/v2/types#nested-types',
+    '多态类型': '/zh/docs/v2/types#polymorphic-types',
+    '抽象类和接口': '/zh/docs/v2/types#abstractions',
+    '版本兼容': '/zh/docs/v2/types#version-compatibility',
+  }}
+/>
+
+本页列出 Nino 在运行时能序列化的类型，介绍如何定义你自己的可序列化类型，并说明对类型做哪些修改后旧数据仍然可读。
+
+## 可序列化类型 [#serializable-types]
+
+### 基础类型 [#primitive-types]
+
+Nino 支持所有[非托管类型](https://learn.microsoft.com/zh-cn/dotnet/csharp/language-reference/builtin-types/unmanaged-types)，包括用户自定义的：
+- `byte`、`short`、`int`、`long`、`float`、`double`
+- `enum`
+- `DateTime`、`Guid`
+- 向量和矩阵类型
+- 非托管结构体、非托管泛型结构体、非托管 record struct 和非托管泛型 record struct
+
+`string` 也同样支持。
+
+<Callout type="info" title="非托管结构体">
+
+用户自定义的 `struct`、`struct<T>`（`T` 为非托管类型）、`record struct` 或 `record struct<T>`，只要所有字段都是非托管类型，它本身就是非托管类型，Nino 会自动序列化它。
+
+Nino 会序列化这类结构体的全部字段，顺序就是字段的声明顺序（或由 `[StructLayout(LayoutKind.Explicit)]` 指定的布局）。不能排除某些字段，也不能指定反序列化时使用的构造函数。
+
+</Callout>
+
+### 自定义类型 [#custom-types]
+
+要序列化托管类型（上面没列出的类型），给 `class`、`struct`、`record` 或 `record struct` 加上 `[NinoType]`，Nino 就会生成它的序列化和反序列化代码：
+
+<Tabs items={["托管结构体", "Record", "Record struct", "类"]}>
+<Tab value="托管结构体">
+
+```csharp
+[NinoType] // [!code highlight]
+public struct SampleStruct
+{
+    public int Id;
+    public string Name { get; set; }
+}
+```
+
+</Tab>
+<Tab value="Record">
+
+```csharp
+[NinoType] // [!code highlight]
+public record SampleRecord(int Id, string Name);
+```
+
+</Tab>
+<Tab value="Record struct">
+
+```csharp
+[NinoType] // [!code highlight]
+public record struct SampleRecord(int Id, string Name);
+```
+
+</Tab>
+<Tab value="类">
+
+```csharp
+[NinoType] // [!code highlight]
+public class SampleClass
+{
+    public int Id;
+    public string Name { get; set; }
+}
+```
+
+</Tab>
+</Tabs>
+
+#### 选择成员 [#choosing-members]
+
+`[NinoType]` 默认收集所有 public 字段，以及所有同时带 getter 和 setter 的 public 属性。对于 `record` 或 `record struct`，还会收集主构造函数的参数。
+
+想自己决定序列化哪些成员，就给类型标上 `[NinoType(false)]`，再给要序列化的成员标上 `[NinoMember(id)]`。数字是成员的位置：成员按数字从小到大的顺序写入和读取。
+
+<Tabs items={["类", "Record", "Record struct"]}>
+<Tab value="类">
+
+```csharp
+[NinoType(false)] // [!code highlight]
+public class SampleClass
+{
+    public int Id;
+    [NinoMember(1)] // [!code highlight]
+    public string Name { get; set; }
+}
+```
+
+</Tab>
+<Tab value="Record">
+
+```csharp
+[NinoType(false)] // [!code highlight]
+public record SampleRecord(
+    [NinoMember(2)] int Id, // [!code highlight]
+    [NinoMember(1)] string Name); // [!code highlight]
+```
+
+</Tab>
+<Tab value="Record struct">
+
+```csharp
+[NinoType(false)] // [!code highlight]
+public record struct SampleRecordStruct(
+    [NinoMember(2)] int Id, // [!code highlight]
+    [NinoMember(1)] string Name); // [!code highlight]
+```
+
+</Tab>
+</Tabs>
+
+开启自动收集时，给字段或属性标上 `[NinoIgnore]` 即可跳过它。没有开启自动收集时，`[NinoIgnore]` 不起作用。
+
+```csharp
+[NinoType] // [!code highlight]
+public class SampleClass
+{
+    [NinoIgnore] // [!code highlight]
+    public int Id;
+    public string Name { get; set; }
+}
+```
+
+<Callout type="warn">
+
+`[NinoIgnore]` 对 record 的主构造函数参数**无效**，对非托管结构体的字段也**无效**。
+
+</Callout>
+
+### 泛型类型 [#generic-types]
+
+Nino 支持序列化和反序列化泛型类型：
+
+<Tabs items={["泛型结构体", "泛型类", "泛型 record", "泛型 record struct"]}>
+<Tab value="泛型结构体">
+
+```csharp
+[NinoType] // [!code highlight]
+public struct GenericStruct<T>
+{
+    public T Val;
+}
+```
+
+</Tab>
+<Tab value="泛型类">
+
+```csharp
+[NinoType] // [!code highlight]
+public class Generic<T>
+{
+    public T Val;
+}
+```
+
+</Tab>
+<Tab value="泛型 record">
+
+```csharp
+[NinoType] // [!code highlight]
+public record SimpleRecord6<T>(int Id, T Data);
+```
+
+</Tab>
+<Tab value="泛型 record struct">
+
+```csharp
+[NinoType] // [!code highlight]
+public record struct SimpleRecordStruct2<T>(int Id, T Data);
+```
+
+</Tab>
+</Tabs>
+
+支持给类型参数加约束：
+
+```csharp
+[NinoType] // [!code highlight]
+public class ComplexGeneric<T> where T : IList // [!code highlight]
+{
+    public T Val;
+}
+```
+
+也支持类型由类型参数构成的成员：
+
+```csharp
+[NinoType] // [!code highlight]
+public class ComplexGeneric2<T>
+{
+    public Generic<T> Val; // [!code highlight]
+}
+```
+
+<Callout type="warn">
+
+Nino 在泛型类型被具体的类型参数实例化的地方生成它的序列化代码，所以请确保这些类型参数都是可序列化的类型：
+
+```csharp
+Generic<int> generic = new Generic<int>();
+Generic<string> generic = new Generic<string>();
+Generic<List<int>> generic = new Generic<List<int>>();
+```
+
+</Callout>
+
+### 集合类型 [#collection-types]
+
+Nino 还支持由上述类型组成的集合，其中 `T`、`TKey` 和 `TValue` 都是可序列化类型：
+- `T[]`、`List<T>`、`HashSet<T>`、`ICollection<T>`
+- `Dictionary<TKey, TValue>`、`IDictionary<TKey, TValue>`
+- `Span<T>`、`ArraySegment<T>`
+
+### 嵌套类型 [#nested-types]
+
+可序列化类型可以任意嵌套，例如：
+- `List<Dictionary<int, SampleStruct>>[]`，其中 `SampleStruct` 是可序列化类型
+- `Dictionary<int[], List<bool>[]>`
+- `IDictionary<string, IList<List<bool>[]>[]>[]`
+
+### 多态类型 [#polymorphic-types]
+
+Nino 支持序列化和反序列化多态类型。涉及的每个类型（接口、基类或派生类）都要标上 `[NinoType]`：
+
+```csharp
+[NinoType] // [!code highlight]
+public class BaseClass
+{
+    public int Id;
+}
+
+[NinoType] // [!code highlight]
+public class DerivedClass : BaseClass // [!code highlight]
+{
+    public string Name;
+}
+```
+
+把 `DerivedClass` 当作 `BaseClass` 序列化时，Nino 会写入 `DerivedClass` 的全部字段和属性，反序列化得到的仍然是 `DerivedClass`。
+
+因此 `BaseClass` 的集合里可以随意混放各种子类，每个元素读回来都是它的真实类型：
+
+```csharp
+var list = new List<BaseClass>
+{
+    new BaseClass { Id = 1 },
+    new DerivedClass { Id = 2, Name = "Nino" }
+};
+var bytes = Serializer.Serialize(list);
+Deserializer.Deserialize(bytes, out List<BaseClass> result); // [!code highlight]
+// result[0] 是 BaseClass，result[1] 是 DerivedClass
+```
+
+### 抽象类和接口 [#abstractions]
+
+Nino 支持序列化和反序列化接口与抽象类。接口或抽象类本身，以及实现它的每个类，都要标上 `[NinoType]`：
+
+<Tabs items={["接口", "抽象类"]}>
+<Tab value="接口">
+
+```csharp
+[NinoType] // [!code highlight]
+public interface IBase
+{
+    int A { get; set; }
+}
+
+[NinoType] // [!code highlight]
+public class Impl : IBase // [!code highlight]
+{
+    public int A { get; set; }
+}
+}
+```
+
+</Tab>
+<Tab value="抽象类">
+
+```csharp
+[NinoType] // [!code highlight]
+public abstract class Base
+{
+    public int A { get; set; }
+}
+
+[NinoType] // [!code highlight]
+public class Derived : Base // [!code highlight]
+{
+    public int B { get; set; }
+}
+```
+
+</Tab>
+</Tabs>
+
+由于 Nino 支持多态，通过接口或抽象类序列化的实现类会保留类型信息，反序列化时会还原对象的真实类型。
+
+## 版本兼容 [#version-compatibility]
+
+对已序列化的类型做哪些修改后，现有数据仍然可读：
+
+| 修改 | 是否允许 |
+| --- | --- |
+| 给已序列化的字段或属性改名（需用 `[NinoMember(id)]` 显式指定顺序） | 允许 |
+| 把成员类型改成内存大小相同的非托管结构体（`int` → `uint`、`int` → `float`、`List<long>` → `List<double>`、`List<int[]>` → `List<float[]>`） | 允许 |
+| 把引用类型的成员改成其他类型 | 不允许 |
+| 添加**不参与序列化**的成员（标了 `[NinoIgnore]`，或在 `[NinoType(false)]` 下没有标 `[NinoMember]`） | 允许 |
+| 给非托管结构体添加引用类型成员 | 不允许 |
+| 添加参与序列化的成员 | 仅在[弱版本兼容](/zh/docs/v2/advanced#weak-version-tolerance)下允许 |
+| 删除已序列化的字段或属性 | 不允许 |
+
+<Callout type="error" title="引用类型的成员不能改类型">
+
+Nino 在反序列化对象时会校验类型，所以声明为引用类型的字段或属性不能改成别的类型。
+
+只有新旧类型都是值类型（结构体）且内存布局一致时，才能修改成员的声明类型，例如把 `public MyStruct val` 改成 `public MyStruct2 val`。
+
+</Callout>
+
+<Tabs items={["允许", "不允许"]}>
+<Tab value="允许">
+
+```csharp
+[NinoType]
+public class SampleClass
+{
+    // float 和 int 大小相同，所以 List<float> 可以改成 List<int>
+    public List<float> Data; // [!code --]
+    public List<int> Data; // [!code ++]
+}
+```
+
+</Tab>
+<Tab value="不允许">
+
+```csharp
+[NinoType]
+public class SampleClass2
+{
+    // 引用类型的成员不能改成其他类型
+    public SampleClass Data; // [!code --]
+    public SampleClass2 Data; // [!code highlight]
+}
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+
+给类型添加**参与序列化**的新成员，同时还能读取不含这些成员的旧数据，是可以做到的。这种需求常见于游戏存档：游戏不断更新，存档数据也会加字段。实现它需要额外的设置，并且有限制，参见[弱版本兼容](/zh/docs/v2/advanced#weak-version-tolerance)。
+
+</Callout>

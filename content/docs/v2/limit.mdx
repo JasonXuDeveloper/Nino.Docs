@@ -1,0 +1,27 @@
+---
+title: Limitations
+description: What Nino v2 cannot do, and which of these Nino v3 resolved.
+icon: TriangleAlert
+---
+
+What Nino v2 does not do.
+
+## Current Limitations [#current-limitations]
+- **Source generator required.** Nino has to be used with its source generator.
+- **No non-public members.** Non-public fields and properties cannot be serialized or deserialized.
+- **Unsupported types fail the build.** Serializing a type that is not supported (such as `Queue<T>`) causes a compilation error.
+- **Both sides need the same set of types.** The serializing and the deserializing project must have exactly the same `[NinoType]` types. For example, if project A serializes with 10 `[NinoType]` types, project B must have exactly those 10 types, no more and no fewer, to deserialize the data written by A.
+
+<Callout type="info" title="Why, and the workaround">
+
+To support polymorphism, every type is assigned a TypeId, and the TypeIds are assigned in order of the names of all `[NinoType]` types. If two projects have different `[NinoType]`s, they generate different TypeIds and cannot read each other's data.
+
+You can work around this by copying the generated code (`NinoSerializerExtension.(Ext.)g.cs` and `NinoDeserializerExtension.(Ext.)g.cs`) from one project into the other. The number of types in each project then no longer matters: for example, the server deserializes data from the client with the client's deserializer, the client deserializes data from the server with the server's deserializer, and each side sends data with its own serializer.
+
+</Callout>
+
+<Callout type="idea" title="Resolved in Nino v3.0.0">
+
+Nino v3.0.0 removes this limitation. Once you migrate to v3.0.0 or later, no changes are needed. See [Migrating from Nino v2](/en/docs/v3/versioning#migrating-from-nino-v2).
+
+</Callout>

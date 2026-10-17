@@ -1,0 +1,107 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+/*
+ * Fumadocs neutral theme on a white page. Accent: midnight blue (light) and
+ * champagne (dark), matching the logo; tune it here.
+ */
+@theme {
+  --color-fd-background: #ffffff;
+  --color-fd-card: #fafafa;
+  --color-fd-primary: #2a4a8a;
+  --color-fd-primary-foreground: #eee9dd;
+  --color-nino-champagne: #b08c4e;
+  /* Headline gradient: midnight to champagne on white */
+  --color-nino-grad-from: #2a4a8a;
+  --color-nino-grad-to: #b08c4e;
+  --color-nino-glow: transparent;
+}
+
+/* Dark: a warm near-black, pale steel blue to champagne, a faint midnight glow */
+.dark {
+  --color-fd-background: #12110f;
+  --color-fd-card: #181715;
+  --color-fd-border: hsl(40 8% 100% / 9%);
+  --color-fd-primary: #e2c88e;
+  --color-fd-primary-foreground: #0e1426;
+  --color-nino-champagne: #e8d4a0;
+  --color-nino-grad-from: #a7bbd7;
+  --color-nino-grad-to: #e2c88e;
+  --color-nino-glow: rgb(42 74 138 / 22%);
+}
+
+/* Behind the home hero only; invisible in light mode */
+.nino-hero-glow {
+  background: radial-gradient(
+    ellipse 60% 55% at 50% 0%,
+    var(--color-nino-glow),
+    transparent 70%
+  );
+}
+
+/*
+ * Benchmark charts (src/components/charts): Nino v4 in the accent, everything
+ * else in neutral greys. Nino's "new instances" bar is a lighter accent tint;
+ * MemoryPack's overwrite bar is the darker grey.
+ */
+:root {
+  --nino-chart-v4: var(--color-fd-primary);
+  --nino-chart-v4-soft: color-mix(in oklab, var(--color-fd-primary) 40%, white);
+  --nino-chart-other: hsl(0, 0%, 64%);
+  --nino-chart-other-strong: hsl(0, 0%, 45%);
+  --nino-chart-faint: hsl(0, 0%, 80%);
+}
+
+.dark {
+  --nino-chart-v4-soft: color-mix(in oklab, var(--color-fd-primary) 45%, black);
+  --nino-chart-other: hsl(0, 0%, 45%);
+  --nino-chart-other-strong: hsl(0, 0%, 55%);
+  --nino-chart-faint: hsl(0, 0%, 30%);
+}
+
+.nino-chart-bar {
+  transform-box: fill-box;
+  transform-origin: left center;
+  transition: transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.nino-chart-value {
+  transition: opacity 0.4s ease;
+}
+
+.nino-chart[data-hidden] .nino-chart-bar {
+  transform: scaleX(0);
+}
+
+.nino-chart[data-hidden] .nino-chart-value {
+  opacity: 0;
+}
+
+.nino-chart-row {
+  transition: opacity 0.15s ease;
+  outline: none;
+}
+
+.nino-chart-row:focus-visible .nino-chart-hit {
+  stroke: var(--color-fd-ring);
+  stroke-width: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nino-chart-bar,
+  .nino-chart-value,
+  .nino-chart-row {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  * {
+    transition-property:
+      color, background-color, border-color, box-shadow, outline-color,
+      text-decoration-color, fill, stroke;
+    transition-duration: 0.2s;
+    transition-timing-function: ease-out;
+  }
+}

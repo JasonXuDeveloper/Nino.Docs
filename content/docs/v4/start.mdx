@@ -1,0 +1,204 @@
+---
+title: Quick Start
+seoTitle: "Quick Start: Install Nino in .NET, Unity and Godot – Nino v4 Docs"
+description: "Install Nino v4 in a .NET, Unity or Godot project and serialize your first type."
+icon: Rocket
+---
+
+Install Nino, mark a type with `[NinoType]` and serialize it. There is nothing to register and nothing to initialize.
+
+<Callout type="idea">
+
+New to v4, or upgrading from v3? Read [What's New in v4](/en/docs/v4/whats-new) and the [migration guide](/en/docs/v4/migration) first. The v4 binary format is **not compatible** with v3 or the earlier v4 betas.
+
+</Callout>
+
+## Installation
+
+<Tabs groupId="platform" persist items={['.NET', 'Unity', 'Godot']}>
+<Tab value=".NET">
+
+```shell
+dotnet add package Nino --prerelease
+```
+
+Details: [.NET Project](#net-project).
+
+</Tab>
+<Tab value="Unity">
+
+```shell
+openupm add com.jasonxudeveloper.nino
+```
+
+Details: [Unity Project](#unity-project).
+
+</Tab>
+<Tab value="Godot">
+
+```shell
+# in the folder with your Godot project's .csproj
+dotnet add package Nino --prerelease
+```
+
+Details: [Godot Project](#godot-project).
+
+</Tab>
+</Tabs>
+
+### .NET Project
+
+Requirements:
+
+- **Runtime**: `Nino.Core` targets `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0`, so any project that can consume a .NET Standard 2.0 library can use it. All targets write identical bytes.
+- **Compiler**: the source generator needs Roslyn 4.3 or later (Visual Studio 2022 17.3+, Rider, or the .NET 6.0.400 SDK and later).
+- **Language version**: generated code uses C# 9, so the project needs `LangVersion` 9 or later. Older .NET Framework projects default to C# 7.3 and need `<LangVersion>9</LangVersion>` or later.
+
+Install the package:
+
+- search for `Nino` in the NuGet package manager of Visual Studio or Rider with **Include prerelease** ticked, and install it,
+- or use the `dotnet` CLI:
+    ```shell
+    dotnet add package Nino --prerelease
+    # Optional: ImmutableArray<T> / ImmutableList<T> support
+    dotnet add package Nino.Immutable --prerelease
+    ```
+
+<Callout type="info">
+
+Nino v4 is still a prerelease, so `--prerelease` (or **Include prerelease**) is required: without it NuGet installs the latest stable 3.9.x, a test build of v4 features that cannot read or write v4 data.
+
+</Callout>
+
+<Callout type="info">
+
+The `Nino` package brings in two packages, both of which are required:
+- `Nino.Serialization`: the runtime library (`Nino.Core.dll`)
+- `Nino.Generator`: the source generator, analyzers and code fixes
+
+`Nino.Immutable` is optional and adds formatters for `ImmutableArray<T>` and `ImmutableList<T>`.
+
+</Callout>
+
+With the .NET 8 SDK or later, each `NinoSerializer`/`NinoDeserializer` call whose type is known at compile time is redirected to the generated formatter ([interceptors](/en/docs/v4/performance#interceptors)). This is automatic and writes the same bytes.
+
+### Unity Project
+
+Nino supports Unity 2022.3 or later on every player platform (Mono and IL2CPP). Install it through the Unity Package Manager from [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation), for example:
+
+```shell
+openupm add com.jasonxudeveloper.nino
+```
+
+The package ships `Nino.Core.dll` together with the source generator (`Nino.Generator.dll`, labelled as a `RoslynAnalyzer`), so nothing else has to be installed. This is the generator's Roslyn 4.3 build, which matches the oldest compiler Unity supports, so calls are not [intercepted](/en/docs/v4/performance#interceptors) in Unity. They take the regular path and write the same bytes.
+
+Unity compiles against .NET Standard, which has no `[UnsafeAccessor]`. A type that serializes non-public members (or uses `[NinoPooled]`) must therefore be declared `partial`, and so must every type that contains it. The analyzer reports this (NINO002) and offers a fix.
+
+<Callout type="warn">
+
+If you use `asmdef` files, make sure `Auto Referenced` is enabled. If `Override References` is on, add a reference to `Nino.Core.dll` explicitly.
+
+</Callout>
+
+The `Nino.Unity` sample project on GitHub shows Nino in a Unity project, with unit tests you can run in the Test Runner. If something does not work, check that the sample project runs first; if the problem persists, open an issue on GitHub.
+
+#### Hot Update Code
+- Nino supports **HybridCLR**. Generated registries are found lazily the first time one of their types is used, so a hot-update assembly loaded with `Assembly.Load` needs **no initialization call**. See [Unity and HybridCLR](/en/docs/v4/advanced/unity#hybridclr-hot-update).
+- Hot-update code can live in a Unity `asmdef`, or in an external C# project that installs Nino from NuGet ([see above](#net-project)); use the compiled DLL in HybridCLR as usual.
+
+### Godot Project
+
+Godot 4 C# projects (the .NET build of Godot) are regular .NET projects built with `Godot.NET.Sdk` (targeting .NET 8 from Godot 4.4, .NET 6 in 4.0–4.3), so Nino installs like any NuGet package:
+
+```shell
+# in the folder with your Godot project's .csproj
+dotnet add package Nino --prerelease
+```
+
+Then build the project (from Godot's **Build** button, your IDE or `dotnet build`).
+
+- The source generator and the analyzers always run; the [interceptors](/en/docs/v4/performance#interceptors) run when the .NET 8 SDK or later builds the project.
+- On .NET 8, `[UnsafeAccessor]` reaches private members, so their types need not be `partial` (except generic types). On .NET 6 (Godot 4.0–4.3), a type with serialized private members must be `partial`. `[NinoPooled]` classes are always `partial`.
+- Godot's math structs (`Vector2`, `Vector3`, `Quaternion`, `Transform3D`, `Color`, ...) are unmanaged, so they are copied as raw memory like any other unmanaged struct.
+- Serialize your own data classes and structs. Godot objects such as `Node` and `Resource` are engine objects, not data, and Nino does not serialize them.
+
+See [Platforms](/en/docs/v4/platforms#godot) for details.
+
+## First Serialization
+
+At compile time, the source generator writes a **formatter** for every `[NinoType]`: the code that writes and reads that type. `NinoSerializer` and `NinoDeserializer` (namespace `Nino.Core`) are the only API you call:
+
+<Steps>
+<Step>
+
+### Mark a type with `[NinoType]`
+
+```csharp
+using Nino.Core;
+
+[NinoType]
+public class UserProfile
+{
+    public long Id;
+    public string Name;
+    public DateTime LastLogin;
+}
+```
+
+</Step>
+<Step>
+
+### Serialize it
+
+```csharp
+var data = new UserProfile { Id = 42, Name = "Ada", LastLogin = DateTime.UtcNow };
+byte[] bytes = NinoSerializer.Serialize(data);
+```
+
+This allocates the returned array. On a hot path, serialize into a buffer you keep instead, and nothing is allocated: see [Reusing a Buffer](/en/docs/v4/basic#reusing-a-buffer).
+
+</Step>
+<Step>
+
+### Deserialize it
+
+```csharp
+UserProfile restored = NinoDeserializer.Deserialize<UserProfile>(bytes);
+```
+
+The data is a `ReadOnlySpan<byte>`, so a slice of a pooled array or a network buffer works too, without copying.
+
+</Step>
+<Step>
+
+### Or deserialize into an object you already have
+
+Pass an existing instance by `ref` and Nino fills it in place, reusing its nested objects and collections. Pass `null` and a new one is created:
+
+```csharp
+UserProfile current = null;
+NinoDeserializer.Deserialize(bytes, ref current);    // creates the instance
+NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
+```
+
+</Step>
+</Steps>
+
+## At Startup
+
+Nino needs no initialization call: generated code registers itself, and assemblies loaded later are found on first use. Three calls are optional:
+
+- `NinoSettings` (pool sizes, recyclers), set before the first serialization call.
+- `NinoPolymorphic.Register<T>()`, for a closed generic `[NinoType]` that the process only reads through a base type and never names in code.
+- `NinoRegistry.EnsureInitialized(assembly)`, to load a plugin's registry now instead of on first use.
+
+Custom formatters need no call either: they are declared with attributes ([Custom Formatters](/en/docs/v4/custom-formatters)). For Unity and HybridCLR projects, see the [startup checklist](/en/docs/v4/advanced/unity#startup-checklist).
+
+## Next Steps
+
+<Cards>
+  <Card title="Serialize and Deserialize" href="/en/docs/v4/basic">Every overload: buffer writers, spans, `Writer`/`Reader`, boxed values.</Card>
+  <Card title="Defining Types" href="/en/docs/v4/defining-types">Choose members, order, private members, records, generics.</Card>
+  <Card title="Supported Types" href="/en/docs/v4/types">Primitives, strings, tuples, collections and your own collections.</Card>
+  <Card title="Advanced Guides" href="/en/docs/v4/advanced">Complete patterns for hot paths, networking and RPC, message queues, caching, persistence and Unity.</Card>
+</Cards>
