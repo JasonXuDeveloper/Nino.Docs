@@ -119,6 +119,7 @@ Every `NinoSerializer` and `NinoDeserializer` method can be called concurrently 
 
 - **One format everywhere**: `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` produce identical bytes, and data is portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit.
 - **No init calls**: generated registries are found lazily, so hot-update assemblies (HybridCLR) just work.
+- **Unloadable assemblies**: an assembly in a collectible `AssemblyLoadContext` unloads with it; Nino clears what it cached for it. See [Unloading Assemblies](/en/docs/v4/platforms#unloading-assemblies).
 - **Unity**: the generator ships in the package; there is nothing else to install.
 
 </Accordion>
@@ -146,6 +147,8 @@ Every `NinoSerializer` and `NinoDeserializer` method can be called concurrently 
 
 - **One option for the format**: `[NinoType(format: ...)]` takes a `NinoFormat` (`Positional`, the default, `VersionTolerant` or `Keyed`). Defining `WEAK_VERSION_TOLERANCE` in a project turns its `Positional` types into `VersionTolerant` ones. See [Evolving Your Data](/en/docs/v4/evolving-data).
 - **Fixed-size types**: `NinoSerializer.Serialize(value)` of a type whose values always take the same number of bytes allocates the result at its final size, and `NinoSerializer.GetFixedSize<T>()` returns that size. See [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
+- **Layout metadata**: how each `[NinoType]` is written is recorded in the assembly's metadata (`[assembly: NinoTypeLayout]`), for compatibility checks and diffs between builds. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata).
+- **Your own buffers**: `new NinoArrayBufferWriter(initialCapacity, pool)` rents from your `ArrayPool<byte>`. See [Reusing a Buffer](/en/docs/v4/basic#reusing-a-buffer).
 - **A boxed API for runtime types**: `SerializeBoxed(value, type)` and `DeserializeBoxed(data, type)` serialize a type known only as a `Type` when the types share no common `[NinoType]` base, writing exactly what `Serialize<T>` writes. For message dispatch, plugins and tools, give the types a common `[NinoType]` base and call `Serialize<TBase>`/`Deserialize<TBase>`, which is faster and allocation-free; see [Runtime Types](/en/docs/v4/basic#runtime-types).
 - **Removed**: `[NinoExplicitOrder]` (use `[NinoType(false)]` with `[NinoMember(index)]`), the betas' `Serialize(object)` (now `SerializeBoxed`) and run-time formatter registration with `NinoFormatterCache<T>.Register<TFormatter>()` (declare formatters with `[assembly: NinoFormatter]` or `[NinoCustomFormatter]`). See [Migrating from v3](/en/docs/v4/migration).
 

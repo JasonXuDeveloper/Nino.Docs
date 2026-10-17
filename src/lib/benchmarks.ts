@@ -9,7 +9,7 @@
  *
  * Runtime against v3: src/data/bench-v3-runtime.json (V3_RUNTIME below), synced
  * from the "v3 3.3.13 vs v4 (same machine)" section of the same release: Nino
- * 3.3.13 run before and after v4 in the same CI job. Ratios use the v3 and v4
+ * 3.3.13 run directly before v4 in the same CI job. Ratios use the v3 and v4
  * times of that section, so both sides always come from one machine and one run.
  *
  * Build time (source generator, v3 3.3.13 vs v4): static, from
@@ -184,7 +184,7 @@ export const V3_RUNTIME: {
   publishedAt: string | null;
   /** BenchmarkDotNet's environment summary of the v3 run */
   environment: string | null;
-  /** Number of v3 runs (before and after v4) that v3Ns is the mean of */
+  /** Number of v3 runs that v3Ns is the mean of (1: before v4; 2: before and after) */
   runs: number;
   /** Shown instead of the generated description (local runs) */
   note: string | null;

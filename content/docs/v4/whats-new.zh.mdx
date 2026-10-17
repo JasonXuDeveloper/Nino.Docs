@@ -119,6 +119,7 @@ v4 新增：通过 `ref` 反序列化到你已有的对象中，需要新实例�
 
 - **处处同一格式**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出完全相同的字节，数据在 CoreCLR、Mono、IL2CPP 之间以及 64 位和 32 位平台之间通用。
 - **无需初始化调用**：生成的注册表在用到时才查找，所以热更新程序集（HybridCLR）直接可用。
+- **程序集可卸载**：可回收 `AssemblyLoadContext` 中的程序集能随上下文一起卸载，Nino 会自动清除相关缓存。参见[卸载程序集](/zh/docs/v4/platforms#unloading-assemblies)。
 - **Unity**：源生成器随包附带，无需另外安装。
 
 </Accordion>
@@ -146,6 +147,8 @@ v4 新增：通过 `ref` 反序列化到你已有的对象中，需要新实例�
 
 - **用一个选项决定格式**：`[NinoType(format: ...)]` 接收一个 `NinoFormat`（`Positional`，即默认值；`VersionTolerant`；`Keyed`）。在项目中定义 `WEAK_VERSION_TOLERANCE`，会把该项目中 `Positional` 的类型变为 `VersionTolerant`。参见[数据演进](/zh/docs/v4/evolving-data)。
 - **固定大小的类型**：如果一个类型的每个值都占用相同的字节数，`NinoSerializer.Serialize(value)` 会直接按最终大小分配结果，`NinoSerializer.GetFixedSize<T>()` 返回这个大小。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
+- **布局元数据**：每个 `[NinoType]` 的二进制布局都记录在程序集元数据里（`[assembly: NinoTypeLayout]`），可用于兼容性检查和版本对比。参见[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)。
+- **使用自己的缓冲区**：`new NinoArrayBufferWriter(initialCapacity, pool)` 从你提供的 `ArrayPool<byte>` 租用数组。参见[复用缓冲区](/zh/docs/v4/basic#reusing-a-buffer)。
 - **用于运行时类型的装箱 API**：`SerializeBoxed(value, type)` 和 `DeserializeBoxed(data, type)` 用于只能以 `Type` 形式得知、并且没有共同 `[NinoType]` 基类型的类型，写出的内容与 `Serialize<T>` 完全相同。消息分派、插件和工具则应给类型一个共同的 `[NinoType]` 基类型，调用 `Serialize<TBase>`/`Deserialize<TBase>`，更快，也不分配内存；参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
 - **已移除**：`[NinoExplicitOrder]`（改用 `[NinoType(false)]` 配合 `[NinoMember(index)]`）、beta 中的 `Serialize(object)`（现为 `SerializeBoxed`），以及用 `NinoFormatterCache<T>.Register<TFormatter>()` 在运行时注册格式化器（请用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明）。参见[从 v3 迁移](/zh/docs/v4/migration)。
 

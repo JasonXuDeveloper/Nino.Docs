@@ -42,7 +42,7 @@ icon: ChartColumn
 - **序列化**测试写入一个只创建一次、每次调用前重置的缓冲区写入器（Nino 用 `NinoArrayBufferWriter`，其他库用 `ArrayBufferWriter<byte>`），因此测的是序列化本身，而不是数组分配。
 - **反序列化**测试读取各个库在启动时写好的字节，每次调用都创建新对象。
 - **复用**测试反序列化到已经存在的对象中：Nino 通过 `ref` 和 `[NinoPooled]` 对象池，MemoryPack 用它的覆盖模式。
-- **v3** 运行的是同一个 `SimpleTest`，但编译时引用的是 NuGet 上的 Nino 3.3.13，在同一台机器上紧挨着 v4 的运行之前和之后各跑一次；v3 的耗时取两次的平均值。
+- **v3** 运行的是同一个 `SimpleTest`，但编译时引用的是 NuGet 上的 Nino 3.3.13，在同一台机器上紧挨着 v4 的运行之前跑一次。两次运行都包含 MemoryPack，它前后两次耗时的差别就是机器本身的波动。每张 v3 图表下方都注明了数据来自哪次运行。
 
 每个基准测试的代码见[基准测试代码](#benchmark-code)。
 
@@ -895,6 +895,6 @@ dotnet run -c Release --project src/Nino.Benchmark -- --filter '*ReferenceTest*'
 dotnet run -c Release --project src/Nino.GeneratorBenchmark -- 30 8
 ```
 
-- `benchmarks/run.sh` 会构建 `benchmarks/v3`（引用 NuGet 上 Nino 3.3.13 的同一个 `SimpleTest`），并在 v4 运行之前和之后各运行一次，抵消 v4 运行期间机器状态的漂移。它会为每个用例和两次 v3 运行分别输出 **v4 对比 v3**。
+- `benchmarks/run.sh` 会构建 `benchmarks/v3`（引用 NuGet 上 Nino 3.3.13 的同一个 `SimpleTest`），在 v4 之前紧接着运行一次，然后逐个用例输出 **v4 对比 v3**。
 - 每次发布时，CI 都在同一台运行器上按同样的流程运行，并把结果写进发布说明：Performance Report，以及 **v3 3.3.13 vs v4 (same machine)** 一节。本站的运行时数据取自包含这些数据的最新 v4 版本。
 - `benchmarks/members` 把 `SimpleClass` 按成员逐个拆开，分别对比 v3 和 v4，用来找出是哪个成员拖慢了某个用例。参见 [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks)。

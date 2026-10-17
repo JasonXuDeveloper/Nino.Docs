@@ -90,6 +90,8 @@ await pipe.Output.FlushAsync();
 
 <Callout type="info">
 
+To write frames into buffers you manage (pinned arrays for socket I/O, for example), create the buffer with your pool: `new NinoArrayBufferWriter(4096, pool)`; see [Reusing a Buffer](/en/docs/v4/basic#reusing-a-buffer).
+
 If your transport already frames messages (WebSocket messages, UDP datagrams, a message queue), skip the prefix and serialize into a reused `NinoArrayBufferWriter`, or straight into the transport's `IBufferWriter<byte>` (`NinoSerializer.Serialize(message, pipeWriter)`, which writes into a per-thread scratch buffer and copies the result in once); see [WebSocket and UDP](#websocket-and-udp) and [Message Queues and Event Streams](/en/docs/v4/advanced/message-queues).
 
 </Callout>
@@ -342,5 +344,6 @@ When clients and servers are not always on the same build, choose the format wit
 - A reused or pooled message is filled in place, so there a missing field keeps the value of the **previous** message: reset such fields in `OnNinoPoolReturn`, or do not reuse instances while old peers are connected.
 - A peer that receives a **message type it does not know** cannot deserialize it: the call throws an `InvalidOperationException` (unknown type id). Negotiate a protocol version in your handshake and only send new message types to peers that announced support; `NinoTypeId.Of(typeof(T))` gives the id of each message type if you want to exchange the list.
 - If both sides always ship together (two services deployed as one unit, a game client and its dedicated server), stay positional: it is the smallest and fastest format.
+- To catch a change that old peers would misread before it ships, compare your message types' [layout metadata](/en/docs/v4/evolving-data#layout-metadata) with the last release's in CI.
 
 See [Evolving Your Data](/en/docs/v4/evolving-data) for the exact rules.

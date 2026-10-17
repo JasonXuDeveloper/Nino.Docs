@@ -58,6 +58,13 @@ NinoSerializer.Serialize(order, buffer);       // no allocation this time
 
 缓冲区不够用时，会从池里租一个更大的数组。如果大致知道消息有多大，可以用 `new NinoArrayBufferWriter(initialCapacity)` 或 `EnsureCapacity(sizeHint)` 预先分配好；`Capacity` 和 `FreeCapacity` 分别是数组的大小和剩余空间。
 
+如果想让 Nino 直接写进你自己管理的缓冲区，可以传入自己的 `ArrayPool<byte>`：`new NinoArrayBufferWriter(initialCapacity, pool)` 会从这个池租用数组，扩容时换下的数组和 `Dispose()` 时的数组也都还给它。例如服务器把 socket 缓冲区分配在固定对象堆（POH）上，这样就能把消息直接序列化进这些缓冲区，不用再拷贝一次。
+
+```csharp
+// pinnedPool: an ArrayPool<byte> of your own, e.g. of GC.AllocateUninitializedArray<byte>(n, pinned: true) arrays
+var buffer = new NinoArrayBufferWriter(4096, pinnedPool);
+```
+
 <Callout type="warn">
 
 `NinoArrayBufferWriter` **不是**线程安全的：每个线程、每个连接或每次操作各用一个。不再使用时调用 `Dispose()`，把数组还给池。

@@ -90,6 +90,8 @@ await pipe.Output.FlushAsync();
 
 <Callout type="info">
 
+如果帧要写进你自己管理的缓冲区（比如 socket I/O 用的 pinned 数组），创建缓冲区时传入你的池即可：`new NinoArrayBufferWriter(4096, pool)`，参见[复用缓冲区](/zh/docs/v4/basic#reusing-a-buffer)。
+
 如果传输层本身已经分帧（WebSocket 消息、UDP 数据报、消息队列），就不需要长度前缀，序列化到复用的 `NinoArrayBufferWriter`，或直接序列化到传输层的 `IBufferWriter<byte>`（`NinoSerializer.Serialize(message, pipeWriter)`，它先写入每个线程一份的暂存缓冲区，再一次性拷贝过去）即可；参见 [WebSocket 与 UDP](#websocket-and-udp) 和[消息队列与事件流](/zh/docs/v4/advanced/message-queues)。
 
 </Callout>
@@ -342,5 +344,6 @@ public static class PricingMethods
 - 复用或池化的消息是原地填充的，这时缺失的字段保留的是**上一条**消息的值：请在 `OnNinoPoolReturn` 中重置这些字段，或者在还有旧版对端连接时不要复用实例。
 - 对端收到**它不认识的消息类型**时无法反序列化，调用会抛出 `InvalidOperationException`（未知的类型 ID）。请在握手时协商协议版本，只向声明支持的对端发送新的消息类型；如果想交换消息类型列表，`NinoTypeId.Of(typeof(T))` 可以给出每种消息的 ID。
 - 如果两端总是一起发布（作为一个整体部署的两个服务、游戏客户端和它的专用服务器），就保持按位置格式：它最小也最快。
+- 要在发布前发现会让旧版本对端读错的改动，可以在 CI 里把消息类型的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)和上一个版本做对比。
 
 具体规则参见[数据演进](/zh/docs/v4/evolving-data)。

@@ -136,6 +136,22 @@ public class UserProfile
 - In positional and version-tolerant types the attribute has no effect, since they write no names; the analyzer warns about it there (NINO024).
 - Old code still knows only the old name, so data written after the rename loses this member when old code reads it.
 
+## Layout Metadata
+
+For every `[NinoType]`, the generator records how the type is written in the assembly's metadata, as an `[assembly: NinoTypeLayout]`: the format, the header in front of the body (`None` for a struct, `NullFlag` for a sealed class, `TypeId` otherwise), whether references are tracked, whether the type is a raw struct, its type id, and its members in the order they are written. Tools that check data compatibility (a schema check in CI, a diff between two builds, a migration tool) can read it instead of re-implementing Nino's rules:
+
+```csharp
+foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutAttribute>())
+    Console.WriteLine($"{layout.Type}: {layout}");
+
+// Game.Move: format=Positional; header=None; trackReferences=false; raw=true; typeId=0x…;
+//            members=VelocityX:float:raw(4);VelocityY:float:raw(4)
+```
+
+- Each member is written as `name:type:encoding`. The encoding is `raw(n)` for a member copied as `n` bytes, otherwise the formatter that writes it: `Nino.Core.StringFormatter` or `Utf8StringFormatter` for a string, your custom formatter, a collection formatter, or the generated formatter of a nested `[NinoType]`, whose own layout describes it. A keyed member with [former names](#renaming-keyed-members) ends with their keys.
+- Two types have the same layout exactly when Nino writes them the same way, so compare `layout.ToString()` with what you recorded for the last release: any difference means the bytes changed. Whether old data still reads correctly then depends on the format, as described above.
+- Because the layout is metadata, a tool can also read it from referenced assemblies, even without loading them (`System.Reflection.Metadata`). A project gets the same layouts in every target framework.
+
 ## Choosing
 
 <Accordions type="single">

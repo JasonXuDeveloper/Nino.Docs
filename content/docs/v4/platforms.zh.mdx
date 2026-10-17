@@ -128,3 +128,17 @@ CoreCLR 和 Unity 2021.3+ 的布局是 `bool hasValue; T value;`，而旧版 Mon
 生成的注册表是按需查找的：Nino 第一次遇到某个程序集中的类型，或者读取时遇到不认识的类型 ID，才会去找该程序集的注册表。所以用 `Assembly.Load` 加载的热更新程序集**不需要任何初始化调用**，其中的类型（包括继承自 AOT 程序集基类的子类型）在第一次使用时就能找到。
 
 生成的代码有意不加转发层：HybridCLR 和 Mono 的解释器不会内联，每多一层调用都有实打实的开销。
+
+## 卸载程序集 [#unloading-assemblies]
+
+支持热重载的服务器通常把业务逻辑加载到可回收的 `AssemblyLoadContext` 里，重载时卸载旧的上下文。在 .NET 8 及以上版本，含有 Nino 生成代码的程序集所在的上下文开始卸载时，Nino 会自动清除与这个程序集有关的全部缓存：注册表，其中类型的格式化器、类型 ID 和内存布局，多态子类型的登记，以及它的 `[assembly: NinoFormatter]` 注册。这样旧的上下文就能被 GC 回收，新版本的同名类型加载进来也不会报类型 ID 冲突。
+
+```csharp
+var context = new AssemblyLoadContext("logic", isCollectible: true);
+var logic = context.LoadFromAssemblyPath(path);
+// ... serialize and deserialize the logic's [NinoType]s ...
+
+context.Unload(); // Nino clears what it cached for the assembly here
+```
+
+也可以手动调用 `NinoRegistry.Remove(assembly)` 做同样的清理，适用于其他运行时，或者想在卸载前确认已经清理干净的情况。调用前要确保已经没有代码在序列化或反序列化这个程序集的类型，调用之后 Nino 就不能再处理这些类型了。另外，被卸载的程序集如果为**其他**程序集的类型声明了格式化器（例如为共享库里的类型写的 `[assembly: NinoFormatter]`），只要 Nino 用过，它就会一直保留，所以这类格式化器应该放在共享库里。

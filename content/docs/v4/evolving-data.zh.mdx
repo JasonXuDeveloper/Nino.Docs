@@ -136,6 +136,22 @@ public class UserProfile
 - 按位置和版本容错的类型不写成员名，这个特性在其中不起作用，分析器会给出警告（NINO024）。
 - 旧代码只认识旧名称，所以改名后写出的数据被旧代码读取时，会丢失这个成员。
 
+## 布局元数据 [#layout-metadata]
+
+生成器会在程序集元数据里为每个 `[NinoType]` 记录一条 `[assembly: NinoTypeLayout]`，说明这个类型是怎么写出的：格式、主体前面的头（结构体是 `None`，密封类是 `NullFlag`，其他是 `TypeId`）、是否跟踪引用、是否按原始内存整体拷贝、类型 ID，以及按写入顺序排列的成员。做数据兼容检查的工具（CI 里的 schema 检查、两次构建的对比、迁移工具）直接读这些信息就行，不用自己再实现一遍 Nino 的规则：
+
+```csharp
+foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutAttribute>())
+    Console.WriteLine($"{layout.Type}: {layout}");
+
+// Game.Move: format=Positional; header=None; trackReferences=false; raw=true; typeId=0x…;
+//            members=VelocityX:float:raw(4);VelocityY:float:raw(4)
+```
+
+- 每个成员写成 `name:type:encoding`，即成员名、类型和编码方式。按 `n` 字节原样拷贝的成员，编码是 `raw(n)`；其他成员的编码是负责写它的格式化器，比如字符串的 `Nino.Core.StringFormatter` 或 `Utf8StringFormatter`、自定义格式化器、集合格式化器，或者嵌套 `[NinoType]` 的生成格式化器（嵌套类型有自己的布局记录）。键控成员如果有[旧名称](#renaming-keyed-members)，末尾还会列出旧名称对应的键。
+- 只有 Nino 写出的字节相同，两个类型的布局才会相同。把 `layout.ToString()` 和上个版本记下的结果对比即可：有差异，就说明写出的字节变了。旧数据还能不能正确读出，要看类型用的是哪种格式，见上文。
+- 布局记录在元数据里，所以工具也能读取所引用程序集里的布局，甚至不必加载程序集（用 `System.Reflection.Metadata` 即可）。同一个项目在不同目标框架下得到的布局完全一样。
+
 ## 如何选择 [#choosing]
 
 <Accordions type="single">

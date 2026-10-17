@@ -128,3 +128,17 @@ See [Unity and HybridCLR](/en/docs/v4/advanced/unity) for project setup and IL2C
 Generated registries are discovered lazily: the first time Nino meets a type of an assembly, or an unknown type id while reading, it finds that assembly's registry. A hot-update assembly loaded with `Assembly.Load` therefore needs **no initialization call**, and its types (including subtypes of base classes in AOT assemblies) are found on first use.
 
 Generated code avoids forwarding facades on purpose: interpreters such as HybridCLR's and Mono's do not inline, so every extra call layer would cost real time there.
+
+## Unloading Assemblies
+
+A server that hot-reloads its logic loads it into a collectible `AssemblyLoadContext` and unloads the old context on each reload. On .NET 8 and later, when the context of an assembly with generated Nino code starts unloading, Nino clears everything it cached for that assembly: its registry, the formatters, type ids and layouts of its types, its polymorphic subtypes and its `[assembly: NinoFormatter]` registrations. The old context can then be collected, and the new version of the same types loads without type id collisions.
+
+```csharp
+var context = new AssemblyLoadContext("logic", isCollectible: true);
+var logic = context.LoadFromAssemblyPath(path);
+// ... serialize and deserialize the logic's [NinoType]s ...
+
+context.Unload(); // Nino clears what it cached for the assembly here
+```
+
+`NinoRegistry.Remove(assembly)` does the same cleanup by hand, for other runtimes or to make sure it has happened before you unload. Call it only once nothing serializes or deserializes the assembly's types any more; Nino cannot handle them afterwards. A formatter that the unloaded assembly declares for a type of **another** assembly (an `[assembly: NinoFormatter]` for a type in a shared library) stays registered once Nino has used it, so put such formatters in the shared library.

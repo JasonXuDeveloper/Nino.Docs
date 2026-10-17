@@ -58,6 +58,13 @@ NinoSerializer.Serialize(order, buffer);       // no allocation this time
 
 The buffer grows by renting a larger array from the pool. If you know roughly how large your messages are, size it up front with `new NinoArrayBufferWriter(initialCapacity)` or `EnsureCapacity(sizeHint)`; `Capacity` and `FreeCapacity` report the array's size and the room left.
 
+To serialize straight into buffers you manage, pass your own `ArrayPool<byte>`: `new NinoArrayBufferWriter(initialCapacity, pool)` rents every array from that pool and returns them to it as it grows and on `Dispose()`. A server that allocates its socket buffers on the pinned object heap, for example, can then serialize messages directly into them, with no extra copy.
+
+```csharp
+// pinnedPool: an ArrayPool<byte> of your own, e.g. of GC.AllocateUninitializedArray<byte>(n, pinned: true) arrays
+var buffer = new NinoArrayBufferWriter(4096, pinnedPool);
+```
+
 <Callout type="warn">
 
 A `NinoArrayBufferWriter` is **not** thread safe: use one per thread, per connection or per operation. When you no longer need it, call `Dispose()` to return its array to the pool.

@@ -63,7 +63,7 @@ export interface V3RuntimeFile {
   publishedAt: string | null;
   /** BenchmarkDotNet's environment summary of the v3 run */
   environment: string | null;
-  /** How many v3 runs v3Ns is the mean of (before and after v4: 2) */
+  /** How many v3 runs v3Ns is the mean of (1 since rc.2: v3 runs once, before v4) */
   runs: number;
   /** Free text shown instead of the generated description (local runs only) */
   note: string | null;
@@ -225,7 +225,8 @@ export function parseReport(body: string) {
 
 /**
  * Parses the v3 section of a release body: the compare.py tables (case,
- * "v3 3.3.13", "v4", ...), one per v3 run. v3Ns is the mean of the runs; v4Ns
+ * "v3 3.3.13", "v4", ...), one per v3 run (one since rc.2; older reports have
+ * two, before and after v4). v3Ns is the mean of the runs; v4Ns
  * is the v4 run they were all compared with. Returns null when the body has no
  * v3 section; throws when the section has no usable table.
  */
