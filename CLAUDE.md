@@ -13,7 +13,7 @@ The facts in the docs come from the Nino repository (`src/Nino.Core`, `src/Nino.
 ```bash
 bun install            # install dependencies (runs fumadocs-mdx)
 bun run dev            # dev server
-bun run check          # tsc + Biome + internal link check: run before committing
+bun run check          # tsc + Biome + internal link and icon check: run before committing
 bun run build          # prerender everything into build/client
 bun run preview        # build, then wrangler pages dev (static site + functions)
 bun run deploy         # build + wrangler pages deploy
@@ -70,7 +70,12 @@ Cloudflare Pages builds with the Node version in `.node-version` and the Bun ver
 - Runtime against v3: only `V3_RUNTIME` in `src/lib/benchmarks.ts`, read from `src/data/bench-v3-runtime.json` (v3 and v4 mean times of one back-to-back run of v3 3.3.13 from NuGet and v4 on the same machine; one v3 run directly before v4 since rc.2; older reports and the local run had a v3 run before and after v4, and v3 is then their mean). Ratios are computed from those two times, never from `bench-v4.json`; the v3 charts' footnote (`v3SourceNote`) names the release (or, for `origin: "local"`, the local run) and the machine from that run's environment; a non-null `note` replaces it. With no rows the site shows no v4-vs-v3 runtime numbers. Never type v3 numbers in by hand: they come from a release, or from a local `benchmarks/run.sh` with `origin: "local"`. v3 means **3.3.13**, never a 4.0 beta. Build-time numbers (generator benchmark) are static in `benchmarks.ts` (`build`, `buildLarge`) and the perf/v3-vs-v4 tables.
 - v3 and v2 pages keep their own `src/data/bench-v3.json` / `bench-v2.json`; never point them at the synced data.
 - Interceptors are always on with Roslyn 4.8+; there is no opt-out property. Do not reintroduce one.
-- Every v4 release (prereleases included) gets a section at the top of `changelog.mdx` / `changelog.zh.mdx`: user-facing changes only, a "Wire Format" subsection first for anything that changes the bytes, then "New" and fixes, each linking its issue and the page that documents it. Nino's `.github/release-notes/vX.Y.Z.md` carries the same highlights into the GitHub release.
+- **Changelog** (`changelog.mdx` / `changelog.zh.mdx`): one section per v4 release, prereleases included, newest first. Each section lists user-facing changes only (no CI, tests, benchmarks, docs or refactors): a "Wire Format" subsection first for anything that changes the bytes, then "New" and fixes. Each entry is checked against the Nino source and links its issue and the page that documents it. Nino's `.github/release-notes/vX.Y.Z.md` carries the same highlights into the GitHub release. At the start of any work here, bring the changelog in line with Nino:
+  1. Read the newest v4 releases (`curl -s 'https://api.github.com/repos/JasonXuDeveloper/Nino/releases?per_page=5'`, `tag_name`; prereleases count) and the commits on Nino's `main` since the newest tag (in a Nino clone, `git log <tag>..origin/main`, or the GitHub compare API).
+  2. A released version without a section: add one from its release notes (the hand-written highlights, then the commit list).
+  3. A section whose first line is "Not released yet." / "尚未发布。" and whose tag now exists: remove that line.
+  4. User-facing commits on `main` after the newest tag: describe them in a section for the next version, under "Not released yet." / "尚未发布。", and keep Nino's `.github/release-notes/v<next>.md` in step. The next version is the one the maintainer plans; ask if it is not known.
+- Page and folder icons are names from lucide's `icons` table (`Object.keys(require('lucide-react').icons)`), not alias exports such as `History` (use `RotateCcwClock`); `bun run lint:links` fails on an unknown one.
 
 ## SEO and GEO
 

@@ -1,9 +1,15 @@
 /**
  * Checks every internal link in the docs: the target page must exist and,
  * when the link has a #fragment, the target page must have that heading.
+ * Also checks every page and folder icon: Fumadocs looks it up in lucide's
+ * `icons` table, which leaves out alias names such as `History`, and only
+ * logs a warning for a name it does not find (the sidebar shows no icon).
  *
  * Usage: bun run lint:links
  */
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { icons } from 'lucide-react';
 import { source } from '../src/lib/source';
 
 type Page = ReturnType<typeof source.getPages>[number];
@@ -28,8 +34,26 @@ function linksOf(content: string) {
   return links;
 }
 
-async function main() {
+function iconErrors(dir = 'content/docs'): string[] {
   const errors: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const file = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      errors.push(...iconErrors(file));
+      continue;
+    }
+    const text = readFileSync(file, 'utf8');
+    const icon = entry.name.endsWith('.json')
+      ? (JSON.parse(text) as { icon?: string }).icon
+      : /^---\n[\s\S]*?^icon:\s*['"]?(\w+)/m.exec(text)?.[1];
+    if (icon && !(icon in icons))
+      errors.push(`${file}: unknown lucide icon ${icon}`);
+  }
+  return errors;
+}
+
+async function main() {
+  const errors: string[] = iconErrors();
 
   for (const page of pages) {
     const content = await page.data.getText('raw');
@@ -58,10 +82,12 @@ async function main() {
 
   if (errors.length > 0) {
     console.error(errors.join('\n'));
-    console.error(`\n${errors.length} broken link(s)`);
+    console.error(`\n${errors.length} problem(s)`);
     process.exit(1);
   }
-  console.log(`Checked ${pages.length} pages: all internal links resolve.`);
+  console.log(
+    `Checked ${pages.length} pages: all internal links and icons resolve.`,
+  );
 }
 
 void main();
