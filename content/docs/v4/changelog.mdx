@@ -7,6 +7,25 @@ icon: RotateCcwClock
 
 What changed from one v4 release to the next, newest first. For everything v4 changed since v3, see [What's New in v4](/en/docs/v4/whats-new). Each GitHub release also lists every commit it contains.
 
+## 4.0.0-rc.6
+
+Not released yet.
+
+### Wire Format [#wire-format-2]
+
+- **Strings in one byte a char**: the default `string` encoding writes text whose chars are all at most U+00FF (ASCII, Latin-1) in one byte a char, behind a negative length header (`~length`); other text stays UTF-16, and `[NinoUtf8]` is unchanged. This covers every string in the default encoding: members, elements and keys of collections, and the text of `Uri` and `CultureInfo` values. Data with such strings written by earlier v4 releases is not read by this one, and the other way round. A `StringBuilder` keeps writing UTF-16 and reads both forms. See [Binary Format](/en/docs/v4/platforms#binary-format) and [String Encoding](/en/docs/v4/defining-types#string-encoding).
+
+### New [#new-4]
+
+- **Nino.AspNetCore**: MVC input and output formatters (`AddNinoFormatters()`, `application/x-nino`, `?format=nino`) and Minimal API support (`NinoBody<T>` parameters, `NinoResults.Ok` and `NinoResults.Status`, `ReadFromNinoAsync` and `WriteAsNinoAsync`), reading and writing bodies straight from the request and response pipes, with no allocations of their own. See [ASP.NET Core](/en/docs/v4/advanced/aspnetcore).
+- **Nino.TypeScript**: a build package that writes TypeScript classes, enums and codecs for the project's `[NinoType]`s after each build (`NinoTypeScriptOutput`, `NinoTypeScriptImportExtension`, `NinoTypeScriptNames`), with the `nino.ts` runtime, so browsers and Node read and write exactly the bytes Nino writes in .NET. Types it cannot express are left out with warning `NINOTS002`. See [TypeScript Clients](/en/docs/v4/advanced/typescript).
+- **Layout metadata by bytes**: `[assembly: NinoTypeLayout]` now describes each member by the bytes it is written as (`seq(string)`, `map(string,seq(raw(4)))`, `nullable(raw(4))`, `type(MyType)`...) instead of the formatter class, and keyed members carry their key (`:key=0x…`). Layouts recorded with an earlier release differ as text for every member that is not raw, though the bytes are unchanged apart from strings; record them again. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata).
+- **`NinoSerializer.IsSupported(Type)`** tells whether Nino can serialize and deserialize a type, for integrations that only have a `Type`. See [The Boxed API](/en/docs/v4/basic#the-boxed-api).
+
+### Performance [#performance-1]
+
+- **Smaller payloads with Latin-1 strings**, with the same serialize and deserialize times as before: in the benchmark, `Orders` shrinks from 30,848 to 26,126 bytes, `Players` from 45,124 to 39,164 and `Tree` from 40,676 to 31,258, now smaller than MemoryPack's (27,990, 43,364 and 32,623). See [Benchmarks](/en/docs/v4/perf).
+
 ## 4.0.0-rc.5
 
 ### New [#new-3]

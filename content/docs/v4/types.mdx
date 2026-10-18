@@ -49,13 +49,13 @@ The raw layout is the canonical 64-bit layout. On runtimes that lay a struct out
 
 ### Strings
 
-`string` is supported. By default it is written as UTF-16 (one block copy); mark a member with [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) to write it as UTF-8. This also covers the strings inside a collection or tuple member (`List<string>`, `Dictionary<string, int>`).
+`string` is supported. By default it is written in one byte a char when every char is at most U+00FF, and as UTF-16 otherwise ([Binary Format](/en/docs/v4/platforms#binary-format)); mark a member with [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) to write it as UTF-8. This also covers the strings inside a collection or tuple member (`List<string>`, `Dictionary<string, int>`).
 
 ### Other Built-in Types
 - `Nullable<T>` (`T?`) of any serializable `T`
 - `ValueTuple` and `Tuple` with 1 to 7 elements
 - `KeyValuePair<TKey, TValue>`
-- `BigInteger` (its two's-complement bytes), `Version`, `Uri` (its original string, read back relative or absolute), `StringBuilder` (the bytes of a `string`), `BitArray`, `CultureInfo` (its name) and `TimeZoneInfo` (its id, plus its serialized form, adjustment rules included, for a custom zone; a system zone reads back as the reading machine's zone of that id)
+- `BigInteger` (its two's-complement bytes), `Version`, `Uri` (its original string, read back relative or absolute), `StringBuilder` (a `string` in its UTF-16 form; it reads either form), `BitArray`, `CultureInfo` (its name) and `TimeZoneInfo` (its id, plus its serialized form, adjustment rules included, for a custom zone; a system zone reads back as the reading machine's zone of that id)
 - `Lazy<T>`: its value, which serializing creates if it was not yet; read back as an already created `Lazy<T>`
 - `object`: a member declared as `object` can hold any `[NinoType]` instance (class or struct), written with its type id so the runtime type is preserved. Other values (an `int`, a `List<T>`) cannot be written through `object`; serializing one throws.
 

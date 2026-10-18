@@ -7,6 +7,25 @@ icon: RotateCcwClock
 
 这里按从新到旧的顺序，列出 v4 各版本之间的变化。v4 相对 v3 的全部变化见 [v4 新特性](/zh/docs/v4/whats-new)。每个 GitHub Release 也会列出它包含的全部提交。
 
+## 4.0.0-rc.6
+
+尚未发布。
+
+### 二进制格式 [#wire-format-2]
+
+- **每个字符一个字节的字符串**：默认的 `string` 编码在所有字符都不超过 U+00FF（ASCII、Latin-1）时，每个字符写一个字节，头部为负数长度（`~长度`）；其他文本仍是 UTF-16，`[NinoUtf8]` 不变。这适用于所有默认编码的字符串：成员、集合的元素和键，以及 `Uri` 和 `CultureInfo` 值的文本。此前的 v4 版本写出的含这类字符串的数据，本版本无法读取，反之亦然。`StringBuilder` 仍以 UTF-16 写出，两种形式都能读取。参见[二进制格式](/zh/docs/v4/platforms#binary-format)和[字符串编码](/zh/docs/v4/defining-types#string-encoding)。
+
+### 新功能 [#new-4]
+
+- **Nino.AspNetCore**：MVC 输入和输出格式化器（`AddNinoFormatters()`、`application/x-nino`、`?format=nino`）以及 Minimal API 支持（`NinoBody<T>` 参数、`NinoResults.Ok` 和 `NinoResults.Status`、`ReadFromNinoAsync` 和 `WriteAsNinoAsync`），直接基于请求和响应管道读写请求体与响应，自身不做任何分配。参见 [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)。
+- **Nino.TypeScript**：一个构建包，每次构建后为项目的 `[NinoType]` 写出 TypeScript 类、枚举和编解码器（`NinoTypeScriptOutput`、`NinoTypeScriptImportExtension`、`NinoTypeScriptNames`），并附带 `nino.ts` 运行时，浏览器和 Node 读写的字节与 Nino 在 .NET 中写出的完全相同。无法表达的类型会被跳过，并给出警告 `NINOTS002`。参见 [TypeScript 客户端](/zh/docs/v4/advanced/typescript)。
+- **按字节描述的布局元数据**：`[assembly: NinoTypeLayout]` 现在按每个成员写出的字节来描述它（`seq(string)`、`map(string,seq(raw(4)))`、`nullable(raw(4))`、`type(MyType)` 等），不再写格式化器类名；键控成员带上了它的键（`:key=0x…`）。用之前版本记录的布局，每个非原始内存成员的文本都会不同，但除字符串外字节并未改变；请重新记录。参见[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)。
+- **`NinoSerializer.IsSupported(Type)`** 判断 Nino 能否序列化和反序列化某个类型，供只有 `Type` 的集成代码使用。参见[装箱 API](/zh/docs/v4/basic#the-boxed-api)。
+
+### 性能 [#performance-1]
+
+- **含 Latin-1 字符串的数据更小**，序列化和反序列化时间与之前相同：基准测试中，`Orders` 从 30,848 字节降到 26,126 字节，`Players` 从 45,124 降到 39,164，`Tree` 从 40,676 降到 31,258，现在都比 MemoryPack 的更小（27,990、43,364 和 32,623）。参见[基准测试](/zh/docs/v4/perf)。
+
 ## 4.0.0-rc.5
 
 ### 新功能 [#new-3]

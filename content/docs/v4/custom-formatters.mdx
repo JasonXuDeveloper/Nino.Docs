@@ -239,14 +239,14 @@ A formatter writes with `Writer` and reads with `Reader`, both `ref struct`s. Th
 | `Write<T>(T? value)` | `Read(out T? value)` | a nullable unmanaged value |
 | `Write<T>(T[] values)`, `Write<T>(ReadOnlySpan<T>)` | `Read(out T[] values)` | an unmanaged array: length, then one block |
 | `WriteUnmanagedRaw<T>(ReadOnlySpan<T>)` | `ReadUnmanagedRaw<T>(Span<T>)` | unmanaged values as one block with no length, read into memory you already have |
-| `Write(string)`, `WriteUtf8(string)` | `Read(out string)`, `ReadUtf8(out string)` | a string, UTF-16 or UTF-8 |
+| `Write(string)`, `WriteUtf8(string)` | `Read(out string)`, `ReadUtf8(out string)` | a string: one byte a char or UTF-16, chosen per string, or UTF-8 |
 | | `ReadString(string current)`, `ReadUtf8(string current)` | a string, returning `current` itself when the data holds the same text, as generated code does when it reads into an existing instance |
 | `WriteLength(int)`, `WriteNullLength()` | `ReadLength(minElementSize = 1)` | a collection length, `-1` for null; `ReadLength` throws if the bytes left cannot hold that many elements of at least `minElementSize` bytes |
 | `ReserveInt32()`, `PatchInt32(...)`, `PatchLength(...)` | | 4 bytes to fill in later, such as a byte length |
 | `WriteRaw(ReadOnlySpan<byte>)` | `ReadRaw(int)`, `Advance(int)` | raw bytes, or skipping them |
 | `Position` | `Position`, `Remaining`, `Eof` | where you are: `Position` is an absolute offset, `Remaining` the bytes left |
 
-Both encodings of a string start with its `int32` length in chars (UTF-16 code units; `-1` for `null`, `0` for empty, with nothing after either). `WriteUtf8` then writes an `int32` byte count and exactly that many UTF-8 bytes: `"é😀"` is `03 00 00 00` `06 00 00 00` `C3 A9 F0 9F 98 80`. An unpaired surrogate is written as U+FFFD. See [Binary Format](/en/docs/v4/platforms#binary-format).
+`Write(string)` writes an `int32` header and the chars: `-1` for `null` and `0` for empty, with nothing after either; `~length` and one byte a char when every char is at most U+00FF; otherwise the length and the UTF-16 code units. `WriteUtf8` writes the length in chars (`-1` and `0` as before), then an `int32` byte count and exactly that many UTF-8 bytes: `"é😀"` is `03 00 00 00` `06 00 00 00` `C3 A9 F0 9F 98 80`. An unpaired surrogate is written as U+FFFD. See [Binary Format](/en/docs/v4/platforms#binary-format).
 
 ### Positions in a Slice [#positions-in-a-slice]
 

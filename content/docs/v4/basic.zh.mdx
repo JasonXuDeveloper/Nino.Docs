@@ -201,7 +201,7 @@ NinoDeserializer.DeserializeBoxed(bytes, ref current, type);
 field.SetValue(target, current);
 ```
 
-`SerializeBoxed(value, type)` 写出的字节与 `T` = `type` 时的 `Serialize<T>(value)` 完全相同（对可以为 null 的类型，`null` 也一样），所以泛型调用和装箱调用可以互相读取对方的数据。装箱 API 按 `Type` 查找格式化器（第一次用到时通过反射，之后查字典），值类型会被装箱。
+`SerializeBoxed(value, type)` 写出的字节与 `T` = `type` 时的 `Serialize<T>(value)` 完全相同（对可以为 null 的类型，`null` 也一样），所以泛型调用和装箱调用可以互相读取对方的数据。装箱 API 按 `Type` 查找格式化器（第一次用到时通过反射，之后查字典），值类型会被装箱。`NinoSerializer.IsSupported(type)` 判断 Nino 能否序列化和反序列化某个类型（`[NinoType]`、内置类型或有已注册格式化器的类型），供只有 `Type`、需要决定是否处理它的代码使用，比如 [ASP.NET Core 格式化器](/zh/docs/v4/advanced/aspnetcore#mvc)。
 
 <Callout type="warn" title="不要把 object 当作 T">
 

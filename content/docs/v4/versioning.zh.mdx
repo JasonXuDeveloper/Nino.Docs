@@ -23,7 +23,7 @@ Nino 至今的每个大版本都使用新的二进制格式。本页列出改变
 
 运行时和源生成器全部重写。**二进制格式与 v3 以及更早的 v4 beta/preview 版本不兼容**，公共 API 也有变化。主要变化：
 - `Nino.Core` 中的 `NinoSerializer` / `NinoDeserializer` 取代了生成的 `Serializer` / `Deserializer` 类及其扩展方法。
-- 新的数据格式：小端序、不对齐、填充字节清零，`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出的字节完全相同；类型 ID 是运行时类型名的 FNV-1a 哈希。字符串无论是 UTF-16 还是 `[NinoUtf8]`，都以字符数作前缀，`[NinoUtf8]` 字符串还会写入字节数；版本容错的对象整个继承体系只写一个长度（这两项都从 4.0.0-rc.1 开始，参见 [v4 beta 之后的行为变化](/zh/docs/v4/migration#behavior-changes-since-the-v4-betas)）。
+- 新的数据格式：小端序、不对齐、填充字节清零，`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出的字节完全相同；类型 ID 是运行时类型名的 FNV-1a 哈希。字符串都以字符数作前缀（每个字符写一个字节的默认编码字符串写成 `~长度`，从 4.0.0-rc.6 开始），`[NinoUtf8]` 字符串还会写入字节数；版本容错的对象整个继承体系只写一个长度（这两项都从 4.0.0-rc.1 开始，参见 [v4 beta 之后的行为变化](/zh/docs/v4/migration#behavior-changes-since-the-v4-betas)）。
 - `[NinoType]` 上按类型设置的选项：`format`（`NinoFormat.Positional`、`VersionTolerant` 或 `Keyed`）、`trackReferences`、`allowInheritance`。子类型会继承 `[NinoType]`。
 - 用于运行时才知道的类型的装箱 API（`SerializeBoxed`、`DeserializeBoxed`）；`[NinoExplicitOrder]` 和运行时注册格式化器已移除。
 - 复用反序列化到已有实例（可回收丢弃的实例）、`[NinoPooled]` 对象池、`[NinoFactory]` 工厂方法和 `NinoSettings`。

@@ -1,12 +1,12 @@
 ---
 title: "What's New in v4"
-description: "Everything Nino v4 adds over v3, through 4.0.0-rc.5: a rewritten runtime and incremental generator, keyed and version-tolerant types, reference tracking, pooling, many more built-in types, and the same bytes on every platform."
+description: "Everything Nino v4 adds over v3: a rewritten runtime and incremental generator, keyed and version-tolerant types, reference tracking, pooling, many more built-in types, the same bytes on every platform, ASP.NET Core formatters and generated TypeScript."
 icon: Sparkles
 ---
 
 import { Cpu, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes } from 'lucide-react';
 
-Nino v4 rewrites the runtime and the source generator. It runs faster than v3 and MemoryPack, builds much faster, and adds keyed and version-tolerant types, reference tracking, object pools, analyzers and many more built-in types. This page covers all of v4 as released through **4.0.0-rc.5**, grouped by area; the [Changelog](/en/docs/v4/changelog) lists what each release changed.
+Nino v4 rewrites the runtime and the source generator. It runs faster than v3 and MemoryPack, builds much faster, and adds keyed and version-tolerant types, reference tracking, object pools, analyzers and many more built-in types. This page covers all of v4 as released through **4.0.0-rc.5**, grouped by area, plus what **4.0.0-rc.6** adds (marked *rc.6*); the [Changelog](/en/docs/v4/changelog) lists what each release changed.
 
 <Callout type="warn">
 
@@ -86,7 +86,7 @@ None of these change the bytes: every path writes what the plain path writes.
 ## Evolving Data and Object Graphs [#data-and-object-graphs]
 
 - **One option for the format**: `[NinoType(format: ...)]` takes a `NinoFormat`. `Positional` (the default) is the fastest; `VersionTolerant` lets you append members to the most derived type at any nesting depth, at 4 bytes per object, and old code skips the members it does not know; `Keyed` writes members by name hash, so they can be reordered, removed and inserted in any class of a hierarchy. Defining `WEAK_VERSION_TOLERANCE` in a project turns its `Positional` types into `VersionTolerant` ones. See [Evolving Your Data](/en/docs/v4/evolving-data).
-- **Layout metadata**: the generator records how each `[NinoType]` is written as an `[assembly: NinoTypeLayout]`, including the size and field offsets of every value copied as raw memory, so tools can compare layouts between builds and catch a change in the bytes before it ships. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata).
+- **Layout metadata**: the generator records how each `[NinoType]` is written as an `[assembly: NinoTypeLayout]`, including the size and field offsets of every value copied as raw memory, so tools can compare layouts between builds and catch a change in the bytes before it ships. Since *rc.6* each member is described by the bytes it is written as (`seq(string)`, `map(K,V)`, `type(T)`...), with its key in keyed types. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata).
 - **Renamed types** keep their data with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name), and so do renamed keyed members.
 - **Reference tracking**: `[NinoType(trackReferences: true)]` keeps shared references and cycles: an object reached twice is written once and read back as one instance, at 4 bytes per tracked object. See [Reference Tracking](/en/docs/v4/reference-tracking).
 - **Polymorphism without tags**: type ids are hashes of type names, any non-sealed class or interface can be a base, and subtypes in other assemblies (plugins, hot updates) are found on their own. See [Polymorphism](/en/docs/v4/polymorphism).
@@ -97,7 +97,7 @@ None of these change the bytes: every path writes what the plain path writes.
 
 - **Private members** with `containNonPublicMembers`: on .NET 8 and later they are reached through `[UnsafeAccessor]` without `partial` (except in generic types). See [Private Members](/en/docs/v4/defining-types#private-members).
 - **Constructors, records and `required` members**: Nino calls the constructor that fits, or the one marked `[NinoConstructor]`. See [Constructors](/en/docs/v4/constructors).
-- **UTF-8 strings** per member with [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding); UTF-16 stays the default.
+- **Compact strings** (*rc.6*): text whose chars are all at most U+00FF (ASCII, Latin-1) is written in one byte a char, other text as UTF-16. [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) writes UTF-8 per member.
 - **Subtypes inherit `[NinoType]`** from their base class or interface, and generic types work as members, elements and top-level values. See [Defining Types](/en/docs/v4/defining-types).
 
 ## Supported Types [#supported-types]
@@ -132,7 +132,8 @@ See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 - **Unity 2022.3+** from OpenUPM, with the generator and `Nino.UnityTypes.dll` in the package. See [Unity and HybridCLR](/en/docs/v4/advanced/unity).
 - **HybridCLR hot update** without an initialization call, and **Godot 4** as a regular NuGet package. See [HybridCLR and Hot Update](/en/docs/v4/platforms#hybridclr-and-hot-update) and [Godot](/en/docs/v4/platforms#godot).
 - **Unloadable assemblies**: an assembly in a collectible `AssemblyLoadContext` unloads with it; Nino clears what it cached for it, on its own on .NET 8 and later, through `NinoRegistry.Remove` on .NET Core 3.0 to .NET 7. See [Unloading Assemblies](/en/docs/v4/platforms#unloading-assemblies).
-- **Browsers**: JavaScript and TypeScript clients read and write the same bytes by running your types on .NET WebAssembly. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
+- **Browsers and Node**: TypeScript codecs generated from your types after each build (*rc.6*, [TypeScript Clients](/en/docs/v4/advanced/typescript)), or your types themselves running on .NET WebAssembly ([Browser and JavaScript Clients](/en/docs/v4/advanced/browser)); both read and write the same bytes as .NET.
+- **ASP.NET Core** (*rc.6*): MVC input and output formatters and Minimal API bodies and results for `application/x-nino`, read and written straight from the request and response pipes. See [ASP.NET Core](/en/docs/v4/advanced/aspnetcore).
 
 ## Tooling [#tooling]
 

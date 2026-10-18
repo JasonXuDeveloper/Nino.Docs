@@ -54,13 +54,13 @@ Nino 支持所有[非托管类型](https://learn.microsoft.com/zh-cn/dotnet/csha
 
 ### 字符串 [#strings]
 
-支持 `string`。默认以 UTF-16 写入（一次整块拷贝）；给成员加上 [`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 则改为 UTF-8，集合或元组成员里的字符串（`List<string>`、`Dictionary<string, int>`）也一样。
+支持 `string`。默认在所有字符都不超过 U+00FF 时每个字符写一个字节，否则以 UTF-16 写入（[二进制格式](/zh/docs/v4/platforms#binary-format)）；给成员加上 [`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 则改为 UTF-8，集合或元组成员里的字符串（`List<string>`、`Dictionary<string, int>`）也一样。
 
 ### 其他内置类型 [#other-built-in-types]
 - 任意可序列化类型 `T` 的 `Nullable<T>`（`T?`）
 - 1 到 7 个元素的 `ValueTuple` 和 `Tuple`
 - `KeyValuePair<TKey, TValue>`
-- `BigInteger`（它的二进制补码字节）、`Version`、`Uri`（它的原始字符串，读回时相对或绝对 URI 均可）、`StringBuilder`（与 `string` 字节相同）、`BitArray`、`CultureInfo`（它的名称）和 `TimeZoneInfo`（它的 ID；自定义时区再加上它的序列化形式，包括调整规则；系统时区读回时是读取方机器上该 ID 的时区）
+- `BigInteger`（它的二进制补码字节）、`Version`、`Uri`（它的原始字符串，读回时相对或绝对 URI 均可）、`StringBuilder`（按 UTF-16 形式的 `string` 写出，两种形式都能读取）、`BitArray`、`CultureInfo`（它的名称）和 `TimeZoneInfo`（它的 ID；自定义时区再加上它的序列化形式，包括调整规则；系统时区读回时是读取方机器上该 ID 的时区）
 - `Lazy<T>`：写入它的值（如果还没创建，序列化时会创建）；读回的是已经创建好值的 `Lazy<T>`
 - `object`：声明为 `object` 的成员可以存放任何 `[NinoType]` 实例（类或结构体），写入时带上类型 ID，读回后仍是原来的运行时类型。其他值（如 `int`、`List<T>`）不能通过 `object` 写入，序列化这样的值会抛出异常。
 

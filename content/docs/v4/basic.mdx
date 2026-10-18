@@ -201,7 +201,7 @@ NinoDeserializer.DeserializeBoxed(bytes, ref current, type);
 field.SetValue(target, current);
 ```
 
-`SerializeBoxed(value, type)` writes exactly what `Serialize<T>(value)` with `T` = `type` would, `null` included for a type that can be null, so the generic and boxed calls read each other's data. The boxed API finds the formatter by `Type` (through reflection on first use, a dictionary lookup afterward) and boxes value types.
+`SerializeBoxed(value, type)` writes exactly what `Serialize<T>(value)` with `T` = `type` would, `null` included for a type that can be null, so the generic and boxed calls read each other's data. The boxed API finds the formatter by `Type` (through reflection on first use, a dictionary lookup afterward) and boxes value types. `NinoSerializer.IsSupported(type)` tells whether Nino can serialize and deserialize a type at all (a `[NinoType]`, a built-in type or a type with a registered formatter), for code that has only a `Type` and must decide whether to handle it, such as the [ASP.NET Core formatters](/en/docs/v4/advanced/aspnetcore#mvc).
 
 <Callout type="warn" title="Don't use object as T">
 

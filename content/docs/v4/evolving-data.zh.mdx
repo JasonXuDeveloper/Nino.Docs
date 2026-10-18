@@ -148,10 +148,20 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
 //            members=raw(8){VelocityX:float@0:raw(4),VelocityY:float@4:raw(4)}
 ```
 
-- 每个成员写成 `name:type:encoding`，即成员名、类型和编码方式。按原始内存拷贝的成员，编码是它的原始布局（见下一条）；其他成员的编码是负责写它的格式化器，比如字符串的 `Nino.Core.StringFormatter` 或 `Nino.Core.Utf8StringFormatter`、自定义格式化器、集合格式化器，或者嵌套 `[NinoType]` 的生成格式化器。键控成员如果有[旧名称](#renaming-keyed-members)，末尾还会列出旧名称对应的键。`[NinoType]` 集合类型的开头是 `[elements]::` 加上元素的格式化器。
+- 每个成员写成 `name:type:encoding`，即成员名、类型和编码方式。编码描述的是字节本身，而不是写出它的格式化器类，因此工具不必了解 Nino.Core 的格式化器就能读写这些字节（[Nino.TypeScript](/zh/docs/v4/advanced/typescript) 就是这样做的）：
+  - `raw(n)` 或 `raw(n){...}`：按原始内存拷贝的值（见下一条）；
+  - `string`：默认编码的字符串；`utf8`：`[NinoUtf8]` 字符串；
+  - `type(T)`：一个 `[NinoType]`，按它自己的布局写出；`object`：带类型 ID 的 `[NinoType]`；
+  - `nullable(E)`：一个存在标记字节，然后是 `E`；
+  - `seq(E)`：`int32` 元素个数（`-1` = null），然后是各元素；`map(K,V)`：元素个数，然后是每个键和值；`grid(rank,E)`：每一维的长度，然后按行优先顺序排列的元素；
+  - `pair(K,V)` 和 `tuple(E,...)`：按顺序排列的各项；`group(K,E)`：元素个数、键，然后是各元素；
+  - `datetimeoffset`、`bigint`、`version`、`bits`、`timezone`：这几种内置类型；
+  - `formatter(F)`：由自定义或第三方格式化器 `F` 写出。
+
+  比如 `Dictionary<string, int[]> Inventory` 写成 `Inventory:System.Collections.Generic.Dictionary<string, int[]>:map(string,seq(raw(4)))`。键控类型的每个成员末尾都有 `:key=0x…`，即它的键；有[旧名称](#renaming-keyed-members)时还有 `:former=0x…,0x…`，即旧名称对应的键。`[NinoType]` 集合类型的开头是 `[elements]::` 加上元素的编码。在 4.0.0-rc.5 及之前，非原始内存的成员写的是格式化器类名。
 - 原始布局描述的是这个值在 Nino 规范布局下的字节：基本类型、枚举、`decimal`、`Guid`、`DateTime` 和 `TimeSpan` 写成 `raw(n)`，`n` 是字节数；`n` 字节的结构体写成 `raw(n){name:type@offset:encoding,...}`，列出每个字段和它的偏移。比如 `readonly record struct PlayerId(long Value)` 这样的 ID，会写成 `Id:Game.PlayerId:raw(8){Value:long@0:raw(8)}`。原始值里的每个结构体都会展开，不管它是不是 `[NinoType]`，所以改了字段、`[StructLayout]` 的 `Pack` 或 `Size`、或者 `[FieldOffset]`，布局都会跟着变。原始内存结构体的成员部分就是它自己的原始布局，如上面的 `Move`。
 - 泛型类型只记录一次，记录的是开放定义（`typeof(Box<>)`），类型 ID 为 0：每个封闭类型的 ID 在运行时计算。
-- 两个类型的布局相同，当且仅当 Nino 以相同的方式写出它们。由另一个 `[NinoType]` 的格式化器写出的成员，这里只引用那个类型自己的布局，所以它内部的变化只会体现在它自己的记录里；按原始内存拷贝的成员则会把字节直接展开在这里。要发现所有变化，就按 `layout.Type` 记下全部类型的布局，再把每个 `layout.ToString()` 和上个版本记下的结果对比：有差异，就说明写出的字节变了。旧数据还能不能正确读出，要看类型用的是哪种格式，见上文。
+- 两个类型的布局相同，当且仅当 Nino 以相同的方式写出它们。另一个 `[NinoType]` 类型的成员写成 `type(T)`，这里只引用那个类型自己的布局，所以它内部的变化只会体现在它自己的记录里；按原始内存拷贝的成员则会把字节直接展开在这里。要发现所有变化，就按 `layout.Type` 记下全部类型的布局，再把每个 `layout.ToString()` 和上个版本记下的结果对比：有差异，就说明写出的字节变了。旧数据还能不能正确读出，要看类型用的是哪种格式，见上文。
 - 布局记录在元数据里，所以工具也能读取所引用程序集里的布局，甚至不必加载程序集（用 `System.Reflection.Metadata` 即可）。同一个项目在不同目标框架下得到的布局完全一样。
 
 ## 如何选择 [#choosing]

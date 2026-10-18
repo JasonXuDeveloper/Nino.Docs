@@ -239,14 +239,14 @@ public sealed class Level
 | `Write<T>(T? value)` | `Read(out T? value)` | 可空的非托管值 |
 | `Write<T>(T[] values)`、`Write<T>(ReadOnlySpan<T>)` | `Read(out T[] values)` | 非托管数组：长度加一整块数据 |
 | `WriteUnmanagedRaw<T>(ReadOnlySpan<T>)` | `ReadUnmanagedRaw<T>(Span<T>)` | 不带长度的一整块非托管值，可以读进你已有的内存 |
-| `Write(string)`、`WriteUtf8(string)` | `Read(out string)`、`ReadUtf8(out string)` | 字符串，UTF-16 或 UTF-8 |
+| `Write(string)`、`WriteUtf8(string)` | `Read(out string)`、`ReadUtf8(out string)` | 字符串：逐个选择每字符一个字节或 UTF-16，或者 UTF-8 |
 | | `ReadString(string current)`、`ReadUtf8(string current)` | 字符串；数据中的文本与 `current` 相同时直接返回 `current`，生成代码读入已有实例时就是这样做的 |
 | `WriteLength(int)`、`WriteNullLength()` | `ReadLength(minElementSize = 1)` | 集合长度，`-1` 表示 null；如果剩余字节装不下这么多个至少 `minElementSize` 字节的元素，`ReadLength` 会抛出异常 |
 | `ReserveInt32()`、`PatchInt32(...)`、`PatchLength(...)` | | 预留 4 字节稍后回填，例如字节长度 |
 | `WriteRaw(ReadOnlySpan<byte>)` | `ReadRaw(int)`、`Advance(int)` | 原始字节，或跳过若干字节 |
 | `Position` | `Position`、`Remaining`、`Eof` | 当前位置：`Position` 是绝对偏移，`Remaining` 是剩余字节数 |
 
-两种编码的字符串都以 `int32` 字符数（UTF-16 码元数）开头：`null` 为 `-1`，空串为 `0`，两者之后都不再有内容。`WriteUtf8` 接着写入 `int32` 字节数，然后正好是这么多个 UTF-8 字节：`"é😀"` 写成 `03 00 00 00` `06 00 00 00` `C3 A9 F0 9F 98 80`。不成对的代理项写成 U+FFFD。参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
+`Write(string)` 写入一个 `int32` 头和字符：`null` 为 `-1`，空串为 `0`，两者之后都不再有内容；所有字符都不超过 U+00FF 时为 `~长度`，然后每个字符一个字节；否则为长度，然后是 UTF-16 码元。`WriteUtf8` 先写字符数（`-1` 和 `0` 同上），再写 `int32` 字节数，然后正好是这么多个 UTF-8 字节：`"é😀"` 写成 `03 00 00 00` `06 00 00 00` `C3 A9 F0 9F 98 80`。不成对的代理项写成 U+FFFD。参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
 
 ### 切片中的位置 [#positions-in-a-slice]
 

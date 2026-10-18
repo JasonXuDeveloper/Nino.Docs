@@ -5,14 +5,14 @@ description: "在浏览器的 JavaScript 或 TypeScript 中使用 Nino：把 [Ni
 icon: Globe
 ---
 
-**能在 JavaScript 或 TypeScript 中使用 Nino 吗？** 可以在浏览器中使用，做法是让 Nino 本身在浏览器里运行。把客户端的序列化部分构建成一个引用 Nino 和你的 `[NinoType]` 类型的小型 .NET `browser-wasm` 应用，用 `[JSExport]` 向 JavaScript 暴露几个函数，再在 JavaScript 或 TypeScript 前端中调用它们。Nino 不生成 TypeScript 或 JavaScript 代码，这种做法也不需要它：浏览器运行的是与服务端相同的 C# 类型和相同的生成格式化器，因此没有第二份 schema 需要同步，字节也完全相同。
+**能在 JavaScript 或 TypeScript 中使用 Nino 吗？** 可以，有两种方式：使用 [Nino.TypeScript](/zh/docs/v4/advanced/typescript) 从你的类型生成的 TypeScript 编解码器，或者让 Nino 本身在浏览器里运行，也就是本指南介绍的做法。把客户端的序列化部分构建成一个引用 Nino 和你的 `[NinoType]` 类型的小型 .NET `browser-wasm` 应用，用 `[JSExport]` 向 JavaScript 暴露几个函数，再在 JavaScript 或 TypeScript 前端中调用它们。这种做法不需要生成 TypeScript：浏览器运行的是与服务端相同的 C# 类型和相同的生成格式化器，因此没有第二份 schema 需要同步，字节也完全相同。如果浏览器不应下载 .NET 运行时，请改用 Nino.TypeScript。
 
 本指南完整搭建这一方案：一个共享的订单类型、一组导出函数、一个加载它们的页面，以及通过 `fetch` 和 WebSocket 与 ASP.NET Core 服务端的通信。所有代码片段都来自一个用 .NET 10 SDK 构建、并在无头 Chromium 中实际运行过的项目。
 
 ## 为什么在浏览器中运行 Nino [#why-run-nino-in-the-browser]
 
 - **只有一份 schema。** `[NinoType]` 类就是格式的唯一定义。不需要为每个类维护一份 `.ts` 镜像，成员变化时也没有 `.proto` 文件要更新。
-- **字节相同。** 在测试项目中，浏览器序列化出的订单与 .NET 10 控制台程序序列化同一订单得到的字节逐字节相同（62 字节），浏览器也能正确解码控制台程序和 ASP.NET Core 接口返回的字节。Nino 定义了自己的小端格式，而 WebAssembly 本身是小端的，所以没有任何差异。
+- **字节相同。** 在测试项目中，浏览器序列化出的订单与 .NET 10 控制台程序序列化同一订单得到的字节逐字节相同，浏览器也能正确解码控制台程序和 ASP.NET Core 接口返回的字节。Nino 定义了自己的小端格式，而 WebAssembly 本身是小端的，所以没有任何差异。
 - **所有功能都能用。** [版本容错与键控成员](/zh/docs/v4/evolving-data)、[多态](/zh/docs/v4/polymorphism)、[引用跟踪](/zh/docs/v4/reference-tracking)和[复用反序列化](/zh/docs/v4/pooling)在模块中的行为与服务端完全一致。
 - **JavaScript 只接触普通值。** 导出函数接收和返回 `Uint8Array`、数字、字符串和数组；前端代码从不需要了解 Nino 的格式。
 
@@ -209,7 +209,7 @@ dotnet publish Shop.Browser -c Release
 
 ### 在 TypeScript 中为导出函数声明类型 [#type-the-exports-in-typescript]
 
-`getAssemblyExports` 返回 `any`。由于 Nino 不生成 TypeScript，请手写导出函数的类型声明，放在 `OrderCodec.cs` 旁边，C# 签名变化时同步更新：
+`getAssemblyExports` 返回 `any`。导出函数是你自己写的，请手写它们的类型声明，放在 `OrderCodec.cs` 旁边，C# 签名变化时同步更新：
 
 ```ts title="order-codec.d.ts"
 export interface OrderCodec {
@@ -244,23 +244,20 @@ const codec: OrderCodec = exports.Shop.Browser.OrderCodec;
 ```js
 const reply = await fetch('/orders', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/octet-stream' },
+  headers: { 'Content-Type': 'application/x-nino' },
   body: codec.EncodeOrder(42, 'Ada', [7, 9], [2, 1], [9.5, 20]),
 });
 const replyBytes = new Uint8Array(await reply.arrayBuffer());
 codec.GetCustomer(replyBytes);
 ```
 
-服务端用同一个 `Order` 类型反序列化并应答。Nino 没有 ASP.NET Core MVC 输入/输出格式化器，所以接口自己读写请求体：
+服务端用同一个 `Order` 类型反序列化并应答。使用 [Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 时，接口以 `NinoBody<Order>` 接收请求体，返回 `NinoResults.Ok`，两者都是 `application/x-nino`：
 
 ```csharp title="Program.cs (ASP.NET Core)"
-app.MapPost("/orders", async (HttpRequest request) =>
+app.MapPost("/orders", (NinoBody<Order> order) =>
 {
-    using var body = new MemoryStream();
-    await request.Body.CopyToAsync(body);
-    Order order = NinoDeserializer.Deserialize<Order>(body.GetBuffer().AsSpan(0, (int)body.Length));
-    // ... handle the order ...
-    return Results.Bytes(NinoSerializer.Serialize(order), "application/octet-stream");
+    // ... 处理 order.Value ...
+    return NinoResults.Ok(order.Value);
 });
 ```
 
@@ -298,7 +295,7 @@ socket.onmessage = (e) => {
 
 ### 其他方案更合适的情况 [#when-something-else-fits-better]
 
-- **MemoryPack** 可以生成 TypeScript 类（`[GenerateTypeScript]`），直接在 JavaScript 中读写它的格式，浏览器无需下载 .NET 运行时。如果小体积比统一 schema 和 Nino 的功能更重要，参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)。
+- **Nino.TypeScript** 在每次构建后从 `[NinoType]` 生成 TypeScript 类和编解码器，浏览器无需下载 .NET 运行时就能读写相同的字节。如果小体积和快速启动比它不支持的功能（引用跟踪、泛型类型；见[不支持的情况](/zh/docs/v4/advanced/typescript#not-supported)）更重要，就用它。
 - **JSON API** 更适合公开 API、小负载，或由 .NET 以外的团队维护的前端。Nino 仍可用于你的 .NET 服务之间。
 - **Protocol Buffers 或 MessagePack** 适合需要被多种语言读取的数据；Nino 的格式只由 C# 类型定义。
 - **Blazor WebAssembly** 应用本来就在浏览器中运行 .NET：直接在 Blazor 项目中引用并调用 Nino 即可，不需要 `[JSExport]` 这一层。

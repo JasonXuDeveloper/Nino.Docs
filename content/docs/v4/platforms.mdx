@@ -30,14 +30,16 @@ All multi-byte values are **little-endian** and written unaligned. Positional ty
 | `bool` | 1 byte |
 | `T?` | 1 byte has-value flag, then the value if present |
 | Length of a string, array or collection | `int32`; `-1` means `null` |
-| `string` | `int32` length in UTF-16 chars (`-1` = null), then the UTF-16 code units |
+| `string` | `int32` header (`-1` = null, `0` = empty): `~length` then one byte per char when every char is at most U+00FF, otherwise the length then the UTF-16 code units |
 | `string` with `[NinoUtf8]` | `int32` length in UTF-16 chars (`-1` = null, `0` = empty), then `int32` length in bytes, then the UTF-8 bytes |
 | Array or list of unmanaged `T` | length, then one block of elements |
 | Other collections | length, then each element |
 | Dictionary | length, then key/value pairs |
 | `T[,]` and higher ranks | each dimension's length, then elements in row-major order |
 
-Both string encodings start with the string's length in UTF-16 chars (`string.Length`): `-1` for `null`, `0` for an empty string, and nothing follows either. A non-empty `[NinoUtf8]` string then carries its length in bytes, followed by exactly that many UTF-8 bytes. An unpaired surrogate is written as U+FFFD, which is one char as well, so the char count always matches the string that is read back.
+A default string picks its form per string. When every char is at most U+00FF (ASCII and Latin-1: English, digits, identifiers, keys, Western European text), it is written in one byte a char after the header `~length` (`-length - 1`): `"Ada"` is `FC FF FF FF` `41 64 61`. Any other text is written as UTF-16 after its length: `"名字"` is `02 00 00 00` `0D 54 57 5B`. Both forms carry the length in chars, so the reader allocates the string at its final length and widens or copies the chars into it in one pass. A `StringBuilder` is always written in the UTF-16 form, which the same reader reads.
+
+A `[NinoUtf8]` string starts with the string's length in UTF-16 chars (`string.Length`): `-1` for `null`, `0` for an empty string, and nothing follows either. A non-empty `[NinoUtf8]` string then carries its length in bytes, followed by exactly that many UTF-8 bytes. An unpaired surrogate is written as U+FFFD, which is one char as well, so the char count always matches the string that is read back.
 
 The reader allocates the string at its final length and transcodes exactly the given bytes into it in one pass; the next value starts right after them. It throws `InvalidOperationException` when:
 

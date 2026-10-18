@@ -56,8 +56,12 @@ Nino.Core 的 net8.0 和 net10.0 版本还带有裁剪和 Native AOT 标注：�
 
 ## 能在 JavaScript 或 TypeScript 中使用 Nino 吗？ [#can-i-use-nino-from-javascript-or-typescript]
 
-可以在浏览器中使用，方式是 .NET WebAssembly，而不是生成 TypeScript。把客户端的序列化部分构建成引用 Nino 和你的 `[NinoType]` 类型的 .NET `browser-wasm` 应用，再用 `[JSExport]` 把函数暴露给 JavaScript。这样服务端和浏览器共用一套 C# 类型，写出的字节完全相同；代价是浏览器要下载 .NET 运行时。Nino 不生成 TypeScript 或 JavaScript 代码。参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)。
+可以。[Nino.TypeScript](/zh/docs/v4/advanced/typescript)（4.0.0-rc.6 及以上）在每次构建后为你的 `[NinoType]` 生成 TypeScript 类、枚举和编解码器，并附带 `nino.ts` 运行时，浏览器和 Node 读写的字节与 .NET 写出的完全相同，无需 .NET 运行时。它不支持泛型类型、引用跟踪和少数内置类型（[不支持的情况](/zh/docs/v4/advanced/typescript#not-supported)）。需要这些功能时，可以在浏览器中直接运行 C# 类型：构建一个引用 Nino 的 .NET `browser-wasm` 应用，通过 `[JSExport]` 从 JavaScript 调用，代价是浏览器要下载 .NET 运行时。参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)。
+
+## ASP.NET Core 能读写 Nino 请求体和响应吗？ [#can-aspnet-core-read-and-write-nino-bodies]
+
+可以，使用 [Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore)（4.0.0-rc.6 及以上）：`AddNinoFormatters()` 为 `application/x-nino` 添加 MVC 输入和输出格式化器，Minimal API 用 `NinoBody<T>` 参数接收、用 `NinoResults.Ok(value)` 返回。请求体从请求管道读取、响应写入响应管道，自身不做任何分配。
 
 ## 什么时候不该用 Nino？ [#when-should-i-not-use-nino]
 
-当数据需要人来阅读或编辑时（请用 JSON、YAML 或 TOML），或者需要由 C#、JavaScript、TypeScript 以外语言的程序读取时：格式由你的 C# 类型定义，没有 schema 文件，也没有面向这些语言的生成器，这种情况请使用 Protocol Buffers、FlatBuffers 或 MessagePack。JavaScript 和 TypeScript 客户端现在就能通过 .NET WebAssembly 使用 Nino（[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)）。参见[局限性](/zh/docs/v4/limit)。
+当数据需要人来阅读或编辑时（请用 JSON、YAML 或 TOML），或者需要由 C#、JavaScript、TypeScript 以外语言的程序读取时：格式由你的 C# 类型定义，没有 schema 文件，也没有面向这些语言的生成器，这种情况请使用 Protocol Buffers、FlatBuffers 或 MessagePack。JavaScript 和 TypeScript 客户端可以通过[生成的 TypeScript](/zh/docs/v4/advanced/typescript) 或 [.NET WebAssembly](/zh/docs/v4/advanced/browser) 使用 Nino。参见[局限性](/zh/docs/v4/limit)。

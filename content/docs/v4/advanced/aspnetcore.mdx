@@ -1,0 +1,120 @@
+---
+title: ASP.NET Core
+seoTitle: "Nino in ASP.NET Core: MVC Formatters and Minimal APIs – Nino v4 Docs"
+description: "Nino.AspNetCore reads and writes application/x-nino bodies in ASP.NET Core: MVC input and output formatters, NinoBody<T> parameters and NinoResults for Minimal APIs, straight from the request and response pipes."
+icon: Server
+---
+
+**Nino.AspNetCore** lets ASP.NET Core read request bodies and write responses with Nino, under the media type `application/x-nino`: input and output formatters for MVC controllers, and a parameter type and results for Minimal APIs. Bodies are deserialized from the request pipe where they lie and responses serialized straight into the response pipe, so reading a body and writing a response allocate nothing beyond the value itself.
+
+<Callout type="info">
+
+Nino.AspNetCore needs Nino **4.0.0-rc.6** or later. It targets `net8.0` and `net10.0`.
+
+</Callout>
+
+## Install [#install]
+
+```shell
+dotnet add package Nino --prerelease             # in the project that declares the [NinoType]s
+dotnet add package Nino.AspNetCore --prerelease  # in the web project
+```
+
+The types are the ones you already serialize: any `[NinoType]`, built-in type or type with a [custom formatter](/en/docs/v4/custom-formatters). Clients and servers that update at different times need a [format that tolerates changes](/en/docs/v4/evolving-data).
+
+## MVC Controllers [#mvc]
+
+Add the formatters to MVC with `AddNinoFormatters()`, on `AddControllers()`, `AddMvc()` or `AddMvcCore()`:
+
+```csharp title="Program.cs"
+using Nino.AspNetCore;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddControllers().AddNinoFormatters(); // [!code highlight]
+
+var app = builder.Build();
+app.MapControllers();
+app.Run();
+```
+
+```csharp title="OrdersController.cs"
+[ApiController]
+[Route("orders")]
+public class OrdersController : ControllerBase
+{
+    [HttpPost]
+    public Order Create([FromBody] Order order) => Save(order);  // reads application/x-nino
+
+    [HttpGet("{id}.{format?}")]
+    [FormatFilter]                                               // /orders/42.nino or ?format=nino
+    public Order Get(int id) => Load(id);
+
+    [HttpGet("shape")]
+    public ActionResult<Shape> GetShape() => new Circle { Radius = 2.5 };
+}
+```
+
+- **Content negotiation.** The formatters are added after the existing ones, so JSON stays the default for a client that accepts anything. A request with `Content-Type: application/x-nino` is read with Nino, and a client that sends `Accept: application/x-nino`, or a URL with `format` set to `nino` under `[FormatFilter]`, gets a Nino response.
+- **Only types Nino supports.** The formatters claim a type only when `NinoSerializer.IsSupported(type)` is true (the answer is cached per type), and leave every other type to the other formatters.
+- **The declared type is written.** A result is serialized as the action's declared type, as `Serialize<T>` with that `T` would: `ActionResult<Shape>` writes the type id of the `Circle` it returns, and a client that reads a `Shape` gets a `Circle` back. See [Polymorphism](/en/docs/v4/polymorphism).
+- **Invalid data is a 400.** A body Nino cannot read (truncated, corrupt or written for another type) becomes a model state error, which `[ApiController]` answers with a 400.
+
+## Minimal APIs [#minimal-apis]
+
+Take a `NinoBody<T>` parameter and return `NinoResults.Ok(value)` or `NinoResults.Status(statusCode, value)`:
+
+```csharp title="Program.cs"
+using Nino.AspNetCore;
+
+app.MapPost("/orders", (NinoBody<Order> order) => NinoResults.Ok(Save(order.Value)));
+app.MapPost("/orders/new", (NinoBody<Order> order) => NinoResults.Status(201, Save(order.Value)));
+app.MapGet("/shape", () => NinoResults.Ok<Shape>(new Square { Side = 3 })); // written as Shape, with Square's type id
+```
+
+- **`NinoBody<T>`** binds the request body; the value is `order.Value`. A request with another content type gets a 415, and a body that is not a valid `T` a 400.
+- **`NinoResults.Ok` and `NinoResults.Status`** return a `NinoResult<T>`, which writes the value as `T` with the content type `application/x-nino`. Give `T` explicitly to write a subtype as its base.
+- **OpenAPI** sees both: `NinoBody<T>` declares that the endpoint accepts `T` as `application/x-nino`, and `NinoResult<T>` that it produces `T` as `application/x-nino`.
+
+## Reading and Writing by Hand [#by-hand]
+
+Inside any handler or middleware, `HttpRequest.ReadFromNinoAsync<T>()` reads the whole body as one `T`, and `HttpResponse.WriteAsNinoAsync(value)` writes one:
+
+```csharp title="Program.cs"
+app.MapPost("/orders/bump", async (HttpContext context) =>
+{
+    Order order = await context.Request.ReadFromNinoAsync<Order>(context.RequestAborted);
+    order.Id++;
+    await context.Response.WriteAsNinoAsync(order, context.RequestAborted);
+});
+```
+
+`ReadFromNinoAsync` throws `InvalidOperationException` when the request's content type is not `application/x-nino` (check with `request.HasNinoContentType()`), and `BadHttpRequestException` with status 400 when the body is not a valid `T`. `WriteAsNinoAsync` sets the response's content type. The media type and format name are constants: `NinoMediaTypes.Application` (`application/x-nino`) and `NinoMediaTypes.Format` (`nino`).
+
+## Clients [#clients]
+
+A .NET client sends and reads the bytes with `NinoSerializer` and `NinoDeserializer`:
+
+```csharp title="Client.cs"
+using var content = new ByteArrayContent(NinoSerializer.Serialize(order));
+content.Headers.ContentType = new MediaTypeHeaderValue(NinoMediaTypes.Application);
+using var request = new HttpRequestMessage(HttpMethod.Post, "/orders") { Content = content };
+request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(NinoMediaTypes.Application));
+
+using HttpResponseMessage response = await http.SendAsync(request);
+Order saved = NinoDeserializer.Deserialize<Order>(await response.Content.ReadAsByteArrayAsync());
+```
+
+A browser or Node client uses the codecs that [Nino.TypeScript](/en/docs/v4/advanced/typescript#with-aspnet-core) generates from the same types, or runs the C# types themselves on [.NET WebAssembly](/en/docs/v4/advanced/browser).
+
+## How Bodies Are Read and Written [#performance]
+
+- **Requests** are read from the request's `PipeReader`. With a `Content-Length`, the reader waits for the whole body at once instead of waking on every segment. A body that arrives in one segment is deserialized where it lies; only a body split across segments is copied, once, into a buffer rented from `ArrayPool<byte>.Shared` and returned after reading.
+- **Responses** are serialized straight into the response's `PipeWriter`, with no intermediate `byte[]`.
+- **No allocations of its own.** The content type is checked on the header's characters instead of being parsed, the async readers take pooled state machines, and a flush that completes at once returns a cached task. Nino's tests measure zero bytes allocated for reading a request body and for writing a response, around a value that itself deserializes without allocating.
+- **The whole body is buffered before it is read.** Nino deserializes a complete value, so a request body is held in the pipe until it has fully arrived; ASP.NET Core's request body size limit (Kestrel's `MaxRequestBodySize`) bounds it as for any other body.
+
+## Next Steps [#next-steps]
+
+- [TypeScript Clients](/en/docs/v4/advanced/typescript): generated TypeScript codecs for browsers and Node.
+- [Network Layer](/en/docs/v4/advanced/networking): framing, pipes and polymorphic messages for protocols other than HTTP.
+- [Evolving Your Data](/en/docs/v4/evolving-data): version-tolerant and keyed types for APIs whose clients update at different times.

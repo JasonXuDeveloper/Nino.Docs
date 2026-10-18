@@ -5,14 +5,14 @@ description: "Use Nino from browser JavaScript or TypeScript: compile your [Nino
 icon: Globe
 ---
 
-**Can I use Nino from JavaScript or TypeScript?** Yes, in the browser, by running Nino itself there. Build the client-side serialization as a small .NET `browser-wasm` app that references Nino and your `[NinoType]` types, expose a few functions to JavaScript with `[JSExport]`, and call them from your JavaScript or TypeScript front end. Nino does not generate TypeScript or JavaScript code, and this setup does not need it: the browser runs the same C# types and the same generated formatters as your server, so there is no second schema to keep in sync and the bytes are identical.
+**Can I use Nino from JavaScript or TypeScript?** Yes, in two ways: with the TypeScript codecs that [Nino.TypeScript](/en/docs/v4/advanced/typescript) generates from your types, or by running Nino itself in the browser, which this guide covers. Build the client-side serialization as a small .NET `browser-wasm` app that references Nino and your `[NinoType]` types, expose a few functions to JavaScript with `[JSExport]`, and call them from your JavaScript or TypeScript front end. This setup needs no generated TypeScript: the browser runs the same C# types and the same generated formatters as your server, so there is no second schema to keep in sync and the bytes are identical. Choose Nino.TypeScript instead when the browser should not download the .NET runtime.
 
 This guide builds that setup end to end: a shared order type, an export surface, a page that loads it, and requests over `fetch` and WebSocket to an ASP.NET Core server. Every snippet comes from a project that was built with the .NET 10 SDK and run in headless Chromium.
 
 ## Why Run Nino in the Browser
 
 - **One schema.** Your `[NinoType]` classes are the only definition of the format. There is no `.ts` mirror of each class and no `.proto` file to update when a member changes.
-- **The same bytes.** In the test project, an order serialized in the browser was byte for byte equal (62 bytes) to the same order serialized by a .NET 10 console app, and the browser decoded bytes from the console app and from an ASP.NET Core endpoint. Nino defines its own little-endian format, and WebAssembly is little-endian, so nothing differs.
+- **The same bytes.** In the test project, an order serialized in the browser was byte for byte equal to the same order serialized by a .NET 10 console app, and the browser decoded bytes from the console app and from an ASP.NET Core endpoint. Nino defines its own little-endian format, and WebAssembly is little-endian, so nothing differs.
 - **Every feature comes along.** [Version tolerance and keyed members](/en/docs/v4/evolving-data), [polymorphism](/en/docs/v4/polymorphism), [reference tracking](/en/docs/v4/reference-tracking) and [reuse deserialization](/en/docs/v4/pooling) run inside the module exactly as on the server.
 - **JavaScript sees plain values.** The exports take and return `Uint8Array`, numbers, strings and arrays; your front-end code never deals with Nino's format.
 
@@ -209,7 +209,7 @@ dotnet publish Shop.Browser -c Release
 
 ### Type the exports in TypeScript
 
-`getAssemblyExports` returns `any`. Since Nino does not generate TypeScript, write the shape of your exports by hand, next to `OrderCodec.cs`, and update it when the C# signatures change:
+`getAssemblyExports` returns `any`. The exports are your own functions, so write their shape by hand, next to `OrderCodec.cs`, and update it when the C# signatures change:
 
 ```ts title="order-codec.d.ts"
 export interface OrderCodec {
@@ -244,23 +244,20 @@ With `fetch`, post them as the request body and read the reply as an `ArrayBuffe
 ```js
 const reply = await fetch('/orders', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/octet-stream' },
+  headers: { 'Content-Type': 'application/x-nino' },
   body: codec.EncodeOrder(42, 'Ada', [7, 9], [2, 1], [9.5, 20]),
 });
 const replyBytes = new Uint8Array(await reply.arrayBuffer());
 codec.GetCustomer(replyBytes);
 ```
 
-The server deserializes and answers with the same `Order` type. Nino has no ASP.NET Core MVC input or output formatter, so the endpoint reads and writes the body itself:
+The server deserializes and answers with the same `Order` type. With [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore), the endpoint takes the body as a `NinoBody<Order>` and returns a `NinoResults.Ok`, both as `application/x-nino`:
 
 ```csharp title="Program.cs (ASP.NET Core)"
-app.MapPost("/orders", async (HttpRequest request) =>
+app.MapPost("/orders", (NinoBody<Order> order) =>
 {
-    using var body = new MemoryStream();
-    await request.Body.CopyToAsync(body);
-    Order order = NinoDeserializer.Deserialize<Order>(body.GetBuffer().AsSpan(0, (int)body.Length));
-    // ... handle the order ...
-    return Results.Bytes(NinoSerializer.Serialize(order), "application/octet-stream");
+    // ... handle order.Value ...
+    return NinoResults.Ok(order.Value);
 });
 ```
 
@@ -298,7 +295,7 @@ On the server side, read and write WebSocket messages as in [WebSocket and UDP](
 
 ### When something else fits better
 
-- **MemoryPack** generates TypeScript classes (`[GenerateTypeScript]`) that read and write its format directly in JavaScript, so the browser downloads no .NET runtime. If a small bundle matters more than one shared schema and Nino's features, see [Nino vs MemoryPack](/en/docs/v4/vs-memorypack).
+- **Nino.TypeScript** generates TypeScript classes and codecs from your `[NinoType]`s after each build, so the browser reads and writes the same bytes without downloading a .NET runtime. Use it when a small bundle and a fast start matter more than the features it leaves out (reference tracking, generic types; see [Not Supported](/en/docs/v4/advanced/typescript#not-supported)).
 - **A JSON API** is simpler for public APIs, small payloads, or front ends owned by teams outside .NET. Keep Nino between your .NET services.
 - **Protocol Buffers or MessagePack** suit data that programs in several languages read; Nino's format is defined by C# types only.
 - **Blazor WebAssembly** apps already run .NET in the browser: reference Nino from the Blazor project and call it directly, with no `[JSExport]` layer.

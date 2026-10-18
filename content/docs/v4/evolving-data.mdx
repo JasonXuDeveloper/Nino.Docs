@@ -148,10 +148,20 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
 //            members=raw(8){VelocityX:float@0:raw(4),VelocityY:float@4:raw(4)}
 ```
 
-- Each member is written as `name:type:encoding`. For a member copied as raw memory the encoding is its raw layout (below); otherwise it is the formatter that writes it: `Nino.Core.StringFormatter` or `Nino.Core.Utf8StringFormatter` for a string, your custom formatter, a collection formatter, or the generated formatter of a nested `[NinoType]`. A keyed member with [former names](#renaming-keyed-members) ends with their keys. A `[NinoType]` collection starts with `[elements]::` and the formatter of its elements.
+- Each member is written as `name:type:encoding`, and the encoding describes the bytes, not the formatter class that writes them, so a tool can read and write them without knowing Nino.Core's formatters ([Nino.TypeScript](/en/docs/v4/advanced/typescript) does):
+  - `raw(n)` or `raw(n){...}`: a value copied as raw memory (next point);
+  - `string`: a string in the default encoding; `utf8`: a `[NinoUtf8]` string;
+  - `type(T)`: a `[NinoType]`, as its own layout describes it; `object`: a `[NinoType]` behind its type id;
+  - `nullable(E)`: a presence byte, then `E`;
+  - `seq(E)`: an `int32` count (`-1` = null), then the elements; `map(K,V)`: a count, then each key and value; `grid(rank,E)`: each dimension's length, then the elements in row-major order;
+  - `pair(K,V)` and `tuple(E,...)`: the items in order; `group(K,E)`: an element count, the key, then the elements;
+  - `datetimeoffset`, `bigint`, `version`, `bits`, `timezone`: those built-in types;
+  - `formatter(F)`: written by `F`, a custom or third-party formatter.
+
+  A `Dictionary<string, int[]> Inventory` reads `Inventory:System.Collections.Generic.Dictionary<string, int[]>:map(string,seq(raw(4)))`. In a keyed type each member ends with `:key=0x…`, its key, and `:former=0x…,0x…` for the keys of its [former names](#renaming-keyed-members). A `[NinoType]` collection starts with `[elements]::` and the encoding of its elements. Up to 4.0.0-rc.5, members that were not raw named their formatter class instead.
 - A raw layout is the value's bytes in Nino's canonical layout: `raw(n)` for a primitive, enum, `decimal`, `Guid`, `DateTime` or `TimeSpan` of `n` bytes, and `raw(n){name:type@offset:encoding,...}` for a struct of `n` bytes, with each field at its offset. An id such as `readonly record struct PlayerId(long Value)` shows as `Id:Game.PlayerId:raw(8){Value:long@0:raw(8)}`. Every struct inside a raw value is spelled out, `[NinoType]` or not, so a changed field, `[StructLayout]` `Pack` or `Size`, or `[FieldOffset]` changes the layout. A raw struct's members are just its raw layout, as `Move` shows above.
 - A generic type is recorded once, as its open definition (`typeof(Box<>)`), with type id 0: the id of each closed type is computed at run time.
-- Two types have the same layout exactly when Nino writes them the same way. A member written by another `[NinoType]`'s formatter refers to that type's own layout, so a change inside it shows up only in its own entry; a member copied as raw memory spells out its bytes in place. To catch every change, record the layouts of all your types, keyed by `layout.Type`, and compare each `layout.ToString()` with what you recorded for the last release: any difference means the bytes changed. Whether old data still reads correctly then depends on the format, as described above.
+- Two types have the same layout exactly when Nino writes them the same way. A member of another `[NinoType]` reads `type(T)` and refers to that type's own layout, so a change inside it shows up only in its own entry; a member copied as raw memory spells out its bytes in place. To catch every change, record the layouts of all your types, keyed by `layout.Type`, and compare each `layout.ToString()` with what you recorded for the last release: any difference means the bytes changed. Whether old data still reads correctly then depends on the format, as described above.
 - Because the layout is metadata, a tool can also read it from referenced assemblies, even without loading them (`System.Reflection.Metadata`). A project gets the same layouts in every target framework.
 
 ## Choosing

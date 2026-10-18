@@ -56,9 +56,13 @@ No. v4 has a new binary format and cannot read data written by v3 or by the v4 b
 
 ## Can I use Nino from JavaScript or TypeScript?
 
-Yes, in the browser, through .NET WebAssembly rather than generated TypeScript. Build the client-side serialization as a .NET `browser-wasm` app that references Nino and your `[NinoType]` types, and expose functions to JavaScript with `[JSExport]`. Server and browser then share one set of C# types and produce identical bytes; the cost is downloading the .NET runtime. Nino does not generate TypeScript or JavaScript code. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
+Yes. [Nino.TypeScript](/en/docs/v4/advanced/typescript) (4.0.0-rc.6 and later) generates TypeScript classes, enums and codecs for your `[NinoType]`s after each build, with the `nino.ts` runtime, so browsers and Node read and write exactly the bytes .NET writes, without the .NET runtime. It leaves out generic types, reference tracking and a few built-in types ([Not Supported](/en/docs/v4/advanced/typescript#not-supported)). For those, run the C# types themselves in the browser: a .NET `browser-wasm` app that references Nino, called from JavaScript through `[JSExport]`, at the cost of downloading the .NET runtime. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
+
+## Can ASP.NET Core read and write Nino bodies?
+
+Yes, with [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) (4.0.0-rc.6 and later): `AddNinoFormatters()` adds MVC input and output formatters for `application/x-nino`, and Minimal APIs take a `NinoBody<T>` parameter and return `NinoResults.Ok(value)`. Bodies are read from the request pipe and written to the response pipe without allocations of their own.
 
 ## When should I not use Nino?
 
-When people need to read or edit the data (use JSON, YAML or TOML), or when a program in a language other than C#, JavaScript or TypeScript must read it: the format is defined by your C# types, with no schema file and no generator for those languages, so use Protocol Buffers, FlatBuffers or MessagePack for that. JavaScript and TypeScript clients can use Nino today through .NET WebAssembly ([Browser and JavaScript Clients](/en/docs/v4/advanced/browser)). See [Limitations](/en/docs/v4/limit).
+When people need to read or edit the data (use JSON, YAML or TOML), or when a program in a language other than C#, JavaScript or TypeScript must read it: the format is defined by your C# types, with no schema file and no generator for those languages, so use Protocol Buffers, FlatBuffers or MessagePack for that. JavaScript and TypeScript clients use Nino through [generated TypeScript](/en/docs/v4/advanced/typescript) or [.NET WebAssembly](/en/docs/v4/advanced/browser). See [Limitations](/en/docs/v4/limit).
 

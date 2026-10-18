@@ -1,12 +1,12 @@
 ---
 title: v4 新特性
-description: "Nino v4 相对 v3 新增的全部内容（截至 4.0.0-rc.5）：重写的运行时与增量源生成器、键控与版本容错类型、引用追踪、对象池、更多内置类型，以及各平台一致的字节。"
+description: "Nino v4 相对 v3 新增的全部内容：重写的运行时与增量源生成器、键控与版本容错类型、引用追踪、对象池、更多内置类型、各平台一致的字节、ASP.NET Core 格式化器，以及生成的 TypeScript。"
 icon: Sparkles
 ---
 
 import { Cpu, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes } from 'lucide-react';
 
-Nino v4 重写了运行时和源生成器。运行速度超过 v3 和 MemoryPack，构建速度大幅提升，并新增了键控与版本容错类型、引用追踪、对象池、分析器以及大量内置类型。本页按领域介绍截至 **4.0.0-rc.5** 已发布的全部 v4 内容；每个版本各自改了什么，见[更新日志](/zh/docs/v4/changelog)。
+Nino v4 重写了运行时和源生成器。运行速度超过 v3 和 MemoryPack，构建速度大幅提升，并新增了键控与版本容错类型、引用追踪、对象池、分析器以及大量内置类型。本页按领域介绍截至 **4.0.0-rc.5** 已发布的全部 v4 内容，以及 **4.0.0-rc.6** 新增的内容（标为 *rc.6*）；每个版本各自改了什么，见[更新日志](/zh/docs/v4/changelog)。
 
 <Callout type="warn">
 
@@ -86,7 +86,7 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 ## 数据演进与对象图 [#data-and-object-graphs]
 
 - **用一个选项决定格式**：`[NinoType(format: ...)]` 接收一个 `NinoFormat`。`Positional`（默认值）最快；`VersionTolerant` 允许向最末端的派生类型追加成员，嵌套多深都可以，每个对象多 4 字节，旧代码会跳过它不认识的成员；`Keyed` 按成员名的哈希写入成员，因此层次结构中的任何类都可以重排、删除和插入成员。在项目中定义 `WEAK_VERSION_TOLERANCE`，会把该项目中 `Positional` 的类型变为 `VersionTolerant`。参见[数据演进](/zh/docs/v4/evolving-data)。
-- **布局元数据**：生成器把每个 `[NinoType]` 的写入方式记录为 `[assembly: NinoTypeLayout]`，包括每个按原始内存拷贝的值的大小和字段偏移，工具可以借此比较两次构建的布局，在发布前发现字节的变化。参见[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)。
+- **布局元数据**：生成器把每个 `[NinoType]` 的写入方式记录为 `[assembly: NinoTypeLayout]`，包括每个按原始内存拷贝的值的大小和字段偏移，工具可以借此比较两次构建的布局，在发布前发现字节的变化。自 *rc.6* 起，每个成员都按它写出的字节来描述（`seq(string)`、`map(K,V)`、`type(T)` 等），键控类型的成员还带有它的键。参见[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)。
 - **类型改名**后，用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name) 仍能读取旧数据；键控成员改名也一样。
 - **引用追踪**：`[NinoType(trackReferences: true)]` 保留共享引用和循环引用：同一个对象被引用多次时只写一次，读回后仍是同一个实例，每个被追踪的对象只多 4 字节。参见[引用追踪](/zh/docs/v4/reference-tracking)。
 - **无需标签的多态**：类型 ID 是类型名的哈希，任何非 sealed 的类或接口都可以作为基类型，其他程序集（插件、热更新）中的子类型会被自动找到。参见[多态](/zh/docs/v4/polymorphism)。
@@ -97,7 +97,7 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 
 - **私有成员**：使用 `containNonPublicMembers`；在 .NET 8 及以上通过 `[UnsafeAccessor]` 访问，无需 `partial`（泛型类型除外）。参见[私有成员](/zh/docs/v4/defining-types#private-members)。
 - **构造函数、record 和 `required` 成员**：Nino 调用合适的构造函数，或标记了 `[NinoConstructor]` 的那个。参见[自定义构造函数](/zh/docs/v4/constructors)。
-- **UTF-8 字符串**：用 [`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 按成员指定；默认仍为 UTF-16。
+- **紧凑的字符串**（*rc.6*）：所有字符都不超过 U+00FF（ASCII、Latin-1）的文本每个字符写一个字节，其他文本按 UTF-16 写出。[`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 可按成员写成 UTF-8。
 - **子类型继承 `[NinoType]`**：子类型自动从基类或接口继承该特性；泛型类型可以用作成员、元素和顶层值。参见[定义类型](/zh/docs/v4/defining-types)。
 
 ## 支持的类型 [#supported-types]
@@ -132,7 +132,8 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 - **Unity 2022.3+**：从 OpenUPM 安装，包内附带源生成器和 `Nino.UnityTypes.dll`。参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)。
 - **HybridCLR 热更新**无需初始化调用，**Godot 4** 以普通 NuGet 包安装。参见 [HybridCLR 与热更新](/zh/docs/v4/platforms#hybridclr-and-hot-update)和 [Godot](/zh/docs/v4/platforms#godot)。
 - **程序集可卸载**：可回收 `AssemblyLoadContext` 中的程序集能随上下文一起卸载，Nino 会清除相关缓存（.NET 8 及以上自动完成；.NET Core 3.0 到 .NET 7 需调用 `NinoRegistry.Remove`）。参见[卸载程序集](/zh/docs/v4/platforms#unloading-assemblies)。
-- **浏览器**：JavaScript 和 TypeScript 客户端在 .NET WebAssembly 上运行你的类型，读写相同的字节。参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)。
+- **浏览器与 Node**：每次构建后从你的类型生成的 TypeScript 编解码器（*rc.6*，[TypeScript 客户端](/zh/docs/v4/advanced/typescript)），或者在 .NET WebAssembly 上直接运行你的类型（[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)）；两者读写的字节都与 .NET 相同。
+- **ASP.NET Core**（*rc.6*）：用于 `application/x-nino` 的 MVC 输入输出格式化器，以及 Minimal API 的请求体和结果，直接基于请求和响应管道读写。参见 [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)。
 
 ## 工具 [#tooling]
 
