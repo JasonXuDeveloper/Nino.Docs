@@ -9,7 +9,7 @@ icon: FileCode
 
 <Callout type="info">
 
-Nino.TypeScript needs Nino **4.0.0-rc.6** or later: it reads the byte encodings that the generator publishes in the layout metadata since that release.
+Nino.TypeScript needs Nino **4.0.0-rc.6** or later: it reads the byte encodings that the generator publishes in the layout metadata since that release. The generated code needs TypeScript 5.7 or later (the typed arrays it returns name their `ArrayBuffer`), and runs in ES2020 environments such as browsers and Node.
 
 </Callout>
 
@@ -194,7 +194,7 @@ export async function placeOrder(order: Order): Promise<Order | null> {
   const response = await fetch('/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-nino', Accept: 'application/x-nino' },
-    body: serialize(OrderCodec, order) as BodyInit, // newer DOM typings want a Uint8Array over an ArrayBuffer
+    body: serialize(OrderCodec, order),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return deserialize(OrderCodec, new Uint8Array(await response.arrayBuffer()));

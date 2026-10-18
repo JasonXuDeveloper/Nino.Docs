@@ -9,7 +9,7 @@ icon: FileCode
 
 <Callout type="info">
 
-Nino.TypeScript 需要 Nino **4.0.0-rc.6** 或更高版本：它读取的是生成器自该版本起在布局元数据中发布的字节编码。
+Nino.TypeScript 需要 Nino **4.0.0-rc.6** 或更高版本：它读取的是生成器自该版本起在布局元数据中发布的字节编码。生成的代码需要 TypeScript 5.7 或更高版本（它返回的类型化数组标明了 `ArrayBuffer` 类型），可在浏览器、Node 等 ES2020 环境中运行。
 
 </Callout>
 
@@ -194,7 +194,7 @@ export async function placeOrder(order: Order): Promise<Order | null> {
   const response = await fetch('/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-nino', Accept: 'application/x-nino' },
-    body: serialize(OrderCodec, order) as BodyInit, // 较新的 DOM 类型定义要求基于 ArrayBuffer 的 Uint8Array
+    body: serialize(OrderCodec, order),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return deserialize(OrderCodec, new Uint8Array(await response.arrayBuffer()));
