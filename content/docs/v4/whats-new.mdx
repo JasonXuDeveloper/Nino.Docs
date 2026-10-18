@@ -4,7 +4,7 @@ description: "Everything Nino v4 adds over v3: a rewritten runtime and increment
 icon: Sparkles
 ---
 
-import { Cpu, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes } from 'lucide-react';
+import { Cpu, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes, Server, Globe } from 'lucide-react';
 
 Nino v4 rewrites the runtime and the source generator. It runs faster than v3 and MemoryPack, builds much faster, and adds keyed and version-tolerant types, reference tracking, object pools, analyzers and many more built-in types. This page covers all of v4 as released through **4.0.0-rc.5**, grouped by area, plus what **4.0.0-rc.6** adds (marked *rc.6*); the [Changelog](/en/docs/v4/changelog) lists what each release changed.
 
@@ -40,6 +40,12 @@ The v4 binary format is **not compatible** with v3 or the earlier v4 betas/previ
   </Card>
   <Card icon={<ShieldCheck />} title="Analyzers NINO001–NINO026" href="/en/docs/v4/analyzers">
     Mistakes reported while you type, many with a one-click code fix.
+  </Card>
+  <Card icon={<Server />} title="ASP.NET Core (rc.6)" href="/en/docs/v4/advanced/aspnetcore">
+    `Nino.AspNetCore`: MVC input and output formatters and Minimal API bodies and results for `application/x-nino`, without allocating per request.
+  </Card>
+  <Card icon={<Globe />} title="TypeScript for browsers and Node (rc.6)" href="/en/docs/v4/advanced/typescript">
+    `Nino.TypeScript` generates classes and codecs for your `[NinoType]`s after each build, reading and writing the same bytes as .NET.
   </Card>
 </Cards>
 
@@ -126,6 +132,12 @@ See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 - **`NinoSerializer.IsSupported(Type)`** (*rc.6*) tells whether Nino can serialize and deserialize a type, for code that has only a `Type`, such as the ASP.NET Core formatters. See [The Boxed API](/en/docs/v4/basic#the-boxed-api).
 - **No initialization**: generated registries register themselves and are found lazily; `NinoSettings`, `NinoPolymorphic.Register<T>()` and `NinoRegistry.EnsureInitialized` are optional. See [At Startup](/en/docs/v4/start#at-startup).
 
+## Web and ASP.NET Core [#web-and-aspnet-core]
+
+- **ASP.NET Core** (*rc.6*): the `Nino.AspNetCore` package adds MVC input and output formatters (`AddNinoFormatters()`) and Minimal API bodies (`NinoBody<T>`) and results (`NinoResults`) for `application/x-nino`, read and written straight from the request and response pipes. See [ASP.NET Core](/en/docs/v4/advanced/aspnetcore).
+- **TypeScript clients** (*rc.6*): the `Nino.TypeScript` package generates TypeScript classes, enums and codecs for your `[NinoType]`s after each build, with the `nino.ts` runtime, so browsers and Node read and write exactly the bytes .NET writes. See [TypeScript Clients](/en/docs/v4/advanced/typescript).
+- **.NET in the browser**: your types themselves can also run on .NET WebAssembly. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
+
 ## Platforms [#platforms]
 
 - **One format everywhere**: `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` write identical bytes, portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, x64 and Arm64. Nino defines its bytes instead of copying memory where runtimes disagree (`Nullable<T>`, tuples, `decimal`, 32-bit alignment) and zeroes padding, so equal values serialize to equal bytes. See [Platforms and Binary Format](/en/docs/v4/platforms).
@@ -133,8 +145,6 @@ See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 - **Unity 2022.3+** from OpenUPM, with the generator and `Nino.UnityTypes.dll` in the package. See [Unity and HybridCLR](/en/docs/v4/advanced/unity).
 - **HybridCLR hot update** without an initialization call, and **Godot 4** as a regular NuGet package. See [HybridCLR and Hot Update](/en/docs/v4/platforms#hybridclr-and-hot-update) and [Godot](/en/docs/v4/platforms#godot).
 - **Unloadable assemblies**: an assembly in a collectible `AssemblyLoadContext` unloads with it; Nino clears what it cached for it, on its own on .NET 8 and later, through `NinoRegistry.Remove` on .NET Core 3.0 to .NET 7. See [Unloading Assemblies](/en/docs/v4/platforms#unloading-assemblies).
-- **Browsers and Node**: TypeScript codecs generated from your types after each build (*rc.6*, [TypeScript Clients](/en/docs/v4/advanced/typescript)), or your types themselves running on .NET WebAssembly ([Browser and JavaScript Clients](/en/docs/v4/advanced/browser)); both read and write the same bytes as .NET.
-- **ASP.NET Core** (*rc.6*): MVC input and output formatters and Minimal API bodies and results for `application/x-nino`, read and written straight from the request and response pipes. See [ASP.NET Core](/en/docs/v4/advanced/aspnetcore).
 
 ## Tooling [#tooling]
 

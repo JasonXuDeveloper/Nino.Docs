@@ -4,7 +4,7 @@ description: "Nino v4 相对 v3 新增的全部内容：重写的运行时与增
 icon: Sparkles
 ---
 
-import { Cpu, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes } from 'lucide-react';
+import { Cpu, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes, Server, Globe } from 'lucide-react';
 
 Nino v4 重写了运行时和源生成器。运行速度超过 v3 和 MemoryPack，构建速度大幅提升，并新增了键控与版本容错类型、引用追踪、对象池、分析器以及大量内置类型。本页按领域介绍截至 **4.0.0-rc.5** 已发布的全部 v4 内容，以及 **4.0.0-rc.6** 新增的内容（标为 *rc.6*）；每个版本各自改了什么，见[更新日志](/zh/docs/v4/changelog)。
 
@@ -40,6 +40,12 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
   </Card>
   <Card icon={<ShieldCheck />} title="分析器 NINO001–NINO026" href="/zh/docs/v4/analyzers">
     写代码时就报告错误，许多都带一键代码修复。
+  </Card>
+  <Card icon={<Server />} title="ASP.NET Core（rc.6）" href="/zh/docs/v4/advanced/aspnetcore">
+    `Nino.AspNetCore`：用于 `application/x-nino` 的 MVC 输入输出格式化器，以及 Minimal API 的请求体和结果，每个请求不分配内存。
+  </Card>
+  <Card icon={<Globe />} title="浏览器与 Node 的 TypeScript（rc.6）" href="/zh/docs/v4/advanced/typescript">
+    `Nino.TypeScript` 在每次构建后为你的 `[NinoType]` 生成类和编解码器，读写的字节与 .NET 相同。
   </Card>
 </Cards>
 
@@ -126,6 +132,12 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 - **`NinoSerializer.IsSupported(Type)`**（*rc.6*）判断 Nino 能否序列化和反序列化某个类型，供只拿到 `Type` 的代码使用，例如 ASP.NET Core 格式化器。参见[装箱 API](/zh/docs/v4/basic#the-boxed-api)。
 - **无需初始化**：生成的注册表会自行注册并按需查找；`NinoSettings`、`NinoPolymorphic.Register<T>()` 和 `NinoRegistry.EnsureInitialized` 都是可选的。参见[启动时](/zh/docs/v4/start#at-startup)。
 
+## Web 与 ASP.NET Core [#web-and-aspnet-core]
+
+- **ASP.NET Core**（*rc.6*）：`Nino.AspNetCore` 包提供用于 `application/x-nino` 的 MVC 输入输出格式化器（`AddNinoFormatters()`），以及 Minimal API 的请求体（`NinoBody<T>`）和结果（`NinoResults`），直接基于请求和响应管道读写。参见 [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)。
+- **TypeScript 客户端**（*rc.6*）：`Nino.TypeScript` 包在每次构建后为你的 `[NinoType]` 生成 TypeScript 类、枚举和编解码器，并附带 `nino.ts` 运行时，浏览器和 Node 读写的字节与 .NET 完全相同。参见 [TypeScript 客户端](/zh/docs/v4/advanced/typescript)。
+- **浏览器中的 .NET**：你的类型本身也可以运行在 .NET WebAssembly 上。参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)。
+
 ## 平台 [#platforms]
 
 - **处处同一格式**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出完全相同的字节，数据在 CoreCLR、Mono、IL2CPP 之间，64 位和 32 位之间，x64 和 Arm64 之间通用。在运行时内存布局不一致的地方（`Nullable<T>`、元组、`decimal`、32 位对齐），Nino 自己定义字节而不是拷贝内存，并清零填充字节，所以相等的值总是序列化为相同的字节。参见[平台与二进制格式](/zh/docs/v4/platforms)。
@@ -133,8 +145,6 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 - **Unity 2022.3+**：从 OpenUPM 安装，包内附带源生成器和 `Nino.UnityTypes.dll`。参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)。
 - **HybridCLR 热更新**无需初始化调用，**Godot 4** 以普通 NuGet 包安装。参见 [HybridCLR 与热更新](/zh/docs/v4/platforms#hybridclr-and-hot-update)和 [Godot](/zh/docs/v4/platforms#godot)。
 - **程序集可卸载**：可回收 `AssemblyLoadContext` 中的程序集能随上下文一起卸载，Nino 会清除相关缓存（.NET 8 及以上自动完成；.NET Core 3.0 到 .NET 7 需调用 `NinoRegistry.Remove`）。参见[卸载程序集](/zh/docs/v4/platforms#unloading-assemblies)。
-- **浏览器与 Node**：每次构建后从你的类型生成的 TypeScript 编解码器（*rc.6*，[TypeScript 客户端](/zh/docs/v4/advanced/typescript)），或者在 .NET WebAssembly 上直接运行你的类型（[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)）；两者读写的字节都与 .NET 相同。
-- **ASP.NET Core**（*rc.6*）：用于 `application/x-nino` 的 MVC 输入输出格式化器，以及 Minimal API 的请求体和结果，直接基于请求和响应管道读写。参见 [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)。
 
 ## 工具 [#tooling]
 
