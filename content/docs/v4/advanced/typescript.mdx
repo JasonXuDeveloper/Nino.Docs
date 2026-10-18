@@ -228,7 +228,7 @@ A WebSocket works the same way: send the result of `serialize`, set `binaryType 
 
 ## API [#api]
 
-- **`serialize(codec, value)`** returns a `Uint8Array` with what `NinoSerializer.Serialize<T>` writes in .NET. The bytes are written into one buffer kept between calls and then copied out, so each call allocates only the array it returns. Small results are views into a shared, pooled `ArrayBuffer` (as Node's `Buffer`s are): pass the `Uint8Array` itself to `fetch`, `WebSocket.send`, `Blob` or a stream, which use its `byteOffset` and `length`, and never its `.buffer`. Call `bytes.slice()` when you need an array with a buffer of its own.
+- **`serialize(codec, value)`** returns a `Uint8Array` with what `NinoSerializer.Serialize<T>` writes in .NET. Nothing is copied: each result is written right after the previous one in a shared 64 KB buffer and returned as a view of it, which later calls never overwrite (a new buffer is started when little room is left, or when a result outgrows it). Pass the `Uint8Array` itself to `fetch`, `WebSocket.send`, `Blob` or a stream, which use its `byteOffset` and `length`, and never its `.buffer`, which holds other results too. A result you keep keeps its whole buffer alive: call `bytes.slice()` when you need an array with a buffer of its own.
 - **`deserialize(codec, bytes)`** reads one value from a `Uint8Array` (a Node `Buffer` works too).
 - **`XCodec`** for every type `X`: reads and writes the value with the header .NET writes for its declared type. A struct has none (`NinoCodec<X>`), a sealed class a null flag (`NinoCodec<X | null>`), and a class that is not sealed or an interface a type id, so `AnimalCodec` reads and writes any generated subtype of `Animal`, as `Serialize<Animal>` does.
 - **`NinoWriter` and `NinoReader`** write several values into one buffer and read them back in order, like `Writer` and `Reader` in .NET: `codec.write(writer, value)`, then `writer.toBytes()`; `codec.read(new NinoReader(bytes))`.
@@ -281,6 +281,67 @@ nino-ts : warning NINOTS002: Samples.Node is not written to TypeScript: referenc
 - members whose encoding has no TypeScript form yet: multi-dimensional arrays, `DateTimeOffset`, `BigInteger`, `Version`, `BitArray`, `TimeZoneInfo`, `Uri`, `CultureInfo`, `StringBuilder`, `Memory<T>`, `ReadOnlyMemory<T>`, `ReadOnlySequence<T>`, `PriorityQueue<TElement, TPriority>`, `ILookup` and `IGrouping`, tuples of more than 7 items, and members written by a formatter outside Nino.Core: a [custom formatter](/en/docs/v4/custom-formatters), the immutable collections of `Nino.Immutable`, and Unity's `AnimationCurve`, `Gradient` and `RectOffset`.
 
 Invalid arguments, or an assembly the tool cannot read, fail the build with `NINOTS001`.
+
+## Compared with JSON [#compared-with-json]
+
+How the generated code compares with `JSON.stringify` and `JSON.parse` on the same data, measured with [`benchmarks/typescript`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/typescript) in Nino's repository:
+
+- Each scenario's values are written by Nino in .NET. Before anything is timed, every value is read and written again in TypeScript, and must give exactly the bytes .NET wrote.
+- JSON gets the same values as plain JSON data: 64-bit integers as strings, maps as objects. What `JSON.parse` returns is not converted back to `bigint`s or `Map`s, so JSON does less work than the generated readers, which build the typed values.
+- Times are milliseconds for one pass over all the values of a scenario, each the median of 15 samples. JSON ÷ Nino is how many times faster Nino is; below 1×, JSON is faster.
+- The machine: a cloud VM with 4 vCPUs (Intel Xeon @ 2.10GHz), Node 22.22.0 and headless Chromium 141 (Playwright).
+
+<Tabs groupId="ts-runtime" persist items={['Node 22', 'Chromium 141']}>
+<Tab value="Node 22">
+
+| Scenario | Nino serialize (ms) | `JSON.stringify` (ms) | JSON ÷ Nino | Nino deserialize (ms) | `JSON.parse` (ms) | JSON ÷ Nino |
+| --- | --: | --: | --: | --: | --: | --: |
+| Player ×1000 | 0.318 | 1.56 | 4.9× | 0.469 | 1.78 | 3.8× |
+| Zoo 50 × 100 animals behind type ids | 0.225 | 0.45 | 2.0× | 0.192 | 0.96 | 5.0× |
+| OrderBook 100 × 50 orders | 0.384 | 1.69 | 4.4× | 0.459 | 1.97 | 4.3× |
+| Article ×200 (long text) | 0.125 | 1.59 | 12.7× | 0.128 | 0.38 | 3.0× |
+| Mesh 20 × (2 × 500 `Vec3`, 1,500 `int`) | 0.278 | 12.2 | 43.8× | 0.418 | 10.0 | 24.0× |
+| Samples 20 × (3 × 1,000 numbers) | 0.244 | 6.27 | 25.7× | 0.112 | 5.16 | 46.1× |
+| Lookup 50 × (2 maps of 100 short strings) | 0.385 | 1.12 | 2.9× | 0.710 | 0.50 | 0.7× |
+| Event ×1000 (64-bit integers) | 0.119 | 0.37 | 3.1× | 0.156 | 0.53 | 3.4× |
+
+</Tab>
+<Tab value="Chromium 141">
+
+| Scenario | Nino serialize (ms) | `JSON.stringify` (ms) | JSON ÷ Nino | Nino deserialize (ms) | `JSON.parse` (ms) | JSON ÷ Nino |
+| --- | --: | --: | --: | --: | --: | --: |
+| Player ×1000 | 0.425 | 0.68 | 1.6× | 0.303 | 1.06 | 3.5× |
+| Zoo 50 × 100 animals behind type ids | 0.327 | 0.26 | 0.8× | 0.145 | 0.74 | 5.1× |
+| OrderBook 100 × 50 orders | 0.688 | 0.89 | 1.3× | 0.419 | 1.47 | 3.5× |
+| Article ×200 (long text) | 0.808 | 0.24 | 0.3× | 0.320 | 0.64 | 2.0× |
+| Mesh 20 × (2 × 500 `Vec3`, 1,500 `int`) | 0.398 | 3.94 | 9.9× | 0.496 | 4.32 | 8.7× |
+| Samples 20 × (3 × 1,000 numbers) | 0.528 | 2.06 | 3.9× | 0.116 | 1.74 | 15.0× |
+| Lookup 50 × (2 maps of 100 short strings) | 0.677 | 0.95 | 1.4× | 0.689 | 0.34 | 0.5× |
+| Event ×1000 (64-bit integers) | 0.115 | 0.31 | 2.7× | 0.111 | 0.38 | 3.4× |
+
+</Tab>
+</Tabs>
+
+Payload size, the same in both runtimes (JSON counted as UTF-8):
+
+| Scenario | Nino (KiB) | JSON (KiB) |
+| --- | --: | --: |
+| Player ×1000 | 130 | 285 |
+| Zoo 50 × 100 animals behind type ids | 86 | 161 |
+| OrderBook 100 × 50 orders | 254 | 551 |
+| Article ×200 (long text) | 435 | 434 |
+| Mesh 20 × (2 × 500 `Vec3`, 1,500 `int`) | 352 | 1,514 |
+| Samples 20 × (3 × 1,000 numbers) | 313 | 876 |
+| Lookup 50 × (2 maps of 100 short strings) | 185 | 195 |
+| Event ×1000 (64-bit integers) | 56 | 152 |
+
+JSON is faster in three cases:
+
+- **Long text, serialized in Chromium.** Browsers have no native Latin-1 writer, so `nino.ts` writes text of more than 256 chars with `TextEncoder.encodeInto`, which costs about 0.8 ns a char, while V8's `JSON.stringify` copies one-byte strings with SIMD. Chromium 141's `JSON.stringify` is also about twice as fast as Node 22's, with a newer V8.
+- **Zoo, serialized in Chromium.** It is many tiny objects, each written behind a type id.
+- **Maps of short strings, deserialized.** Each entry is a new string and a `Map.set`, while `JSON.parse` builds a plain object and reuses its keys natively.
+
+`Article` is about the same size in both: it is mostly text, which takes about one byte a char in either format.
 
 ## Compared with MemoryPack's TypeScript [#compared-with-memorypack]
 
