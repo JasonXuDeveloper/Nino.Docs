@@ -284,17 +284,17 @@ Invalid arguments, or an assembly the tool cannot read, fail the build with `NIN
 
 ## Compared with JSON [#compared-with-json]
 
-How the generated code compares with `JSON.stringify` and `JSON.parse` on the same data, measured with [`benchmarks/typescript`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/typescript) in Nino's repository:
+How the TypeScript that Nino.TypeScript exports (the generated readers and writers on `nino.ts`, running in JavaScript, not Nino in .NET) compares with `JSON.stringify` and `JSON.parse` on the same data, measured with [`benchmarks/typescript`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/typescript) in Nino's repository:
 
 - Each scenario's values are written by Nino in .NET. Before anything is timed, every value is read and written again in TypeScript, and must give exactly the bytes .NET wrote.
 - JSON gets the same values as plain JSON data: 64-bit integers as strings, maps as objects. What `JSON.parse` returns is not converted back to `bigint`s or `Map`s, so JSON does less work than the generated readers, which build the typed values.
-- Times are milliseconds for one pass over all the values of a scenario, each the median of 15 samples. JSON ÷ Nino is how many times faster Nino is; below 1×, JSON is faster.
+- Times are milliseconds for one pass over all the values of a scenario, each the median of 15 samples. JSON ÷ Nino TS is how many times faster the exported TypeScript is; below 1×, JSON is faster.
 - The machine: a cloud VM with 4 vCPUs (Intel Xeon @ 2.10GHz), Node 22.22.0 and headless Chromium 141 (Playwright).
 
 <Tabs groupId="ts-runtime" persist items={['Node 22', 'Chromium 141']}>
 <Tab value="Node 22">
 
-| Scenario | Nino serialize (ms) | `JSON.stringify` (ms) | JSON ÷ Nino | Nino deserialize (ms) | `JSON.parse` (ms) | JSON ÷ Nino |
+| Scenario | Nino TS serialize (ms) | `JSON.stringify` (ms) | JSON ÷ Nino TS | Nino TS deserialize (ms) | `JSON.parse` (ms) | JSON ÷ Nino TS |
 | --- | --: | --: | --: | --: | --: | --: |
 | Player ×1000 | 0.318 | 1.56 | 4.9× | 0.469 | 1.78 | 3.8× |
 | Zoo 50 × 100 animals behind type ids | 0.225 | 0.45 | 2.0× | 0.192 | 0.96 | 5.0× |
@@ -308,7 +308,7 @@ How the generated code compares with `JSON.stringify` and `JSON.parse` on the sa
 </Tab>
 <Tab value="Chromium 141">
 
-| Scenario | Nino serialize (ms) | `JSON.stringify` (ms) | JSON ÷ Nino | Nino deserialize (ms) | `JSON.parse` (ms) | JSON ÷ Nino |
+| Scenario | Nino TS serialize (ms) | `JSON.stringify` (ms) | JSON ÷ Nino TS | Nino TS deserialize (ms) | `JSON.parse` (ms) | JSON ÷ Nino TS |
 | --- | --: | --: | --: | --: | --: | --: |
 | Player ×1000 | 0.425 | 0.68 | 1.6× | 0.303 | 1.06 | 3.5× |
 | Zoo 50 × 100 animals behind type ids | 0.327 | 0.26 | 0.8× | 0.145 | 0.74 | 5.1× |
@@ -324,7 +324,7 @@ How the generated code compares with `JSON.stringify` and `JSON.parse` on the sa
 
 Payload size, the same in both runtimes (JSON counted as UTF-8):
 
-| Scenario | Nino (KiB) | JSON (KiB) |
+| Scenario | Nino TS (KiB) | JSON (KiB) |
 | --- | --: | --: |
 | Player ×1000 | 130 | 285 |
 | Zoo 50 × 100 animals behind type ids | 86 | 161 |

@@ -284,17 +284,17 @@ nino-ts : warning NINOTS002: Samples.Node is not written to TypeScript: referenc
 
 ## 与 JSON 对比 [#compared-with-json]
 
-在相同数据上，生成的代码与 `JSON.stringify` 和 `JSON.parse` 的对比，用 Nino 仓库中的 [`benchmarks/typescript`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/typescript) 测得：
+在相同数据上，Nino.TypeScript 导出的 TypeScript（基于 `nino.ts` 生成的读写代码，运行在 JavaScript 中，不是 .NET 中的 Nino）与 `JSON.stringify` 和 `JSON.parse` 的对比，用 Nino 仓库中的 [`benchmarks/typescript`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/typescript) 测得：
 
 - 每个场景的值都由 .NET 中的 Nino 写出。计时之前，每个值都先在 TypeScript 中读取再写回，必须得到与 .NET 写出的完全相同的字节。
 - JSON 拿到的是同样的值，形式为普通 JSON 数据：64 位整数为字符串，映射为对象。`JSON.parse` 的结果不会再转换回 `bigint` 或 `Map`，所以 JSON 做的工作比生成的读取函数少，后者要构建带类型的值。
-- 时间是遍历一个场景所有值一次所用的毫秒数，各取 15 次采样的中位数。JSON ÷ Nino 表示 Nino 快多少倍；低于 1× 时 JSON 更快。
+- 时间是遍历一个场景所有值一次所用的毫秒数，各取 15 次采样的中位数。JSON ÷ Nino TS 表示导出的 TypeScript 快多少倍；低于 1× 时 JSON 更快。
 - 机器：4 vCPU 的云虚拟机（Intel Xeon @ 2.10GHz），Node 22.22.0 和无头 Chromium 141（Playwright）。
 
 <Tabs groupId="ts-runtime" persist items={['Node 22', 'Chromium 141']}>
 <Tab value="Node 22">
 
-| 场景 | Nino 序列化 (ms) | `JSON.stringify` (ms) | JSON ÷ Nino | Nino 反序列化 (ms) | `JSON.parse` (ms) | JSON ÷ Nino |
+| 场景 | Nino TS 序列化 (ms) | `JSON.stringify` (ms) | JSON ÷ Nino TS | Nino TS 反序列化 (ms) | `JSON.parse` (ms) | JSON ÷ Nino TS |
 | --- | --: | --: | --: | --: | --: | --: |
 | Player ×1000 | 0.318 | 1.56 | 4.9× | 0.469 | 1.78 | 3.8× |
 | Zoo 50 × 100 只按类型 ID 写出的动物 | 0.225 | 0.45 | 2.0× | 0.192 | 0.96 | 5.0× |
@@ -308,7 +308,7 @@ nino-ts : warning NINOTS002: Samples.Node is not written to TypeScript: referenc
 </Tab>
 <Tab value="Chromium 141">
 
-| 场景 | Nino 序列化 (ms) | `JSON.stringify` (ms) | JSON ÷ Nino | Nino 反序列化 (ms) | `JSON.parse` (ms) | JSON ÷ Nino |
+| 场景 | Nino TS 序列化 (ms) | `JSON.stringify` (ms) | JSON ÷ Nino TS | Nino TS 反序列化 (ms) | `JSON.parse` (ms) | JSON ÷ Nino TS |
 | --- | --: | --: | --: | --: | --: | --: |
 | Player ×1000 | 0.425 | 0.68 | 1.6× | 0.303 | 1.06 | 3.5× |
 | Zoo 50 × 100 只按类型 ID 写出的动物 | 0.327 | 0.26 | 0.8× | 0.145 | 0.74 | 5.1× |
@@ -324,7 +324,7 @@ nino-ts : warning NINOTS002: Samples.Node is not written to TypeScript: referenc
 
 数据大小在两个运行时中相同（JSON 按 UTF-8 计算）：
 
-| 场景 | Nino (KiB) | JSON (KiB) |
+| 场景 | Nino TS (KiB) | JSON (KiB) |
 | --- | --: | --: |
 | Player ×1000 | 130 | 285 |
 | Zoo 50 × 100 只按类型 ID 写出的动物 | 86 | 161 |
