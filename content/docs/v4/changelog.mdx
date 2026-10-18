@@ -14,6 +14,8 @@ Not released yet.
 ### Performance [#performance]
 
 - **`Stack<T>`, `Queue<T>` and collections declared as interfaces** (`IList<T>`, `IEnumerable<T>`, `IReadOnlyCollection<T>`...) whose elements are unmanaged values or raw `[NinoType]` structs are written and read as one block, like a `List<T>` or an array of them. With 1,000 `int`s, they serialize 17× to 75× faster and deserialize 2.5× to 6× faster. A `Stack<T>` or `Queue<T>` of other elements is read and written through its backing array too. The bytes are unchanged. See [Collection Types](/en/docs/v4/types#collection-types).
+- **`DateTimeOffset`** is read and written through its two fields (their positions are checked once at startup, since .NET 10 stores them in another order than .NET 8, .NET Framework and Mono), and arrays and lists of it as one block. With 1,000 values, they serialize 2.9× faster and deserialize 2× faster. Invalid data still throws the constructor's exception. See [Primitive and Unmanaged Types](/en/docs/v4/types#primitive-and-unmanaged-types).
+- **Value tuples of unmanaged values**, such as `(int, long)`, are written and read with one capacity check per tuple, and collections of non-raw elements are read with the reader's position kept in registers: a `List<(int, long)>` of 1,000 tuples serializes 1.25× faster and deserializes 2.3× faster. The bytes are unchanged. See [Other Built-in Types](/en/docs/v4/types#other-built-in-types).
 
 ## 4.0.0-rc.4
 
