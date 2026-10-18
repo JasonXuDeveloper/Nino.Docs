@@ -8,7 +8,9 @@
  *   from the same release;
  * - the "Arm64 benchmark" section (the same benchmark classes on GitHub's
  *   ubuntu-24.04-arm runners, a table in the Performance Report's format) into
- *   src/data/bench-v4-arm64.json, from the same release.
+ *   src/data/bench-v4-arm64.json, from the same release. When the body is too
+ *   long for it (GitHub's limit), report.yml attaches the section to the release
+ *   as arm64-benchmark.md instead, and it is read from there.
  *
  *   bun scripts/sync-benchmarks.ts                       # newest v4.* release with a report
  *   bun scripts/sync-benchmarks.ts --fixture <file.md>   # parse a release body from a file
@@ -52,6 +54,9 @@ export const v3Heading = 'v3 3.3.13 vs v4 (same machine)';
  * "Performance Report", so the x64 report is still found by those words.
  */
 export const arm64Heading = '## 📊 Arm64 benchmark';
+
+/** The release asset that holds the Arm64 section (report.yml's ARM64_ASSET) */
+export const arm64Asset = 'arm64-benchmark.md';
 
 export interface BenchRow {
   method: string;
@@ -99,6 +104,7 @@ interface Release {
   created_at: string;
   draft: boolean;
   body: string | null;
+  assets?: { name: string; browser_download_url: string }[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -512,13 +518,25 @@ function syncV3(release: Release, out: string | undefined) {
  * The Arm64 section of the release the x64 numbers came from, under the same
  * rule (every method the site shows); keeps the committed file otherwise.
  */
-function syncArm64(release: Release, out: string | undefined) {
+async function syncArm64(release: Release, out: string | undefined) {
   const kept = () => {
     const file = JSON.parse(readFileSync(arm64DataFile, 'utf8')) as BenchFile;
     return `keeping src/data/bench-v4-arm64.json (${summary(file)})`;
   };
   try {
-    const arm64 = parseArm64Section(release.body ?? '');
+    const asset = release.assets?.find((a) => a.name === arm64Asset);
+    let text = release.body ?? '';
+    if (asset) {
+      const response = await fetch(asset.browser_download_url, {
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok)
+        throw new Error(
+          `${arm64Asset}: ${response.status} ${response.statusText}`,
+        );
+      text = await response.text();
+    }
+    const arm64 = parseArm64Section(text);
     if (!arm64) {
       console.warn(
         `[benchmarks] ${release.tag_name} has no "${arm64Heading}" section; ${kept()}`,
@@ -596,7 +614,7 @@ async function main() {
     console.log(`[benchmarks] synced ${summary(file)}`);
     // Only from the release the v4 numbers came from, so the site never mixes releases.
     syncV3(release, argument('--out-v3'));
-    syncArm64(release, argument('--out-arm64'));
+    await syncArm64(release, argument('--out-arm64'));
   } catch (error) {
     const kept = JSON.parse(readFileSync(dataFile, 'utf8')) as BenchFile;
     console.warn(
