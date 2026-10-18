@@ -1,11 +1,19 @@
 /**
  * MDX components that print the v4 runtime benchmarks from src/lib/benchmarks.ts
  * (synced from the release report), so no page types those numbers in.
+ *
+ * Once the synced data has an Arm64 report, every table of Nino against
+ * MemoryPack shows x64 and Arm64 in tabs (`ArchTabs`), each with the source line
+ * of its run; without it, the x64 table alone, as before. Values in prose
+ * (BenchValue) are always x64.
  */
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Fragment, type ReactNode } from 'react';
 import {
-  benchRows,
-  benchSource,
-  extraRuntime,
+  archLabels,
+  arm64,
+  type BenchDataset,
+  datasets,
   formatBytes,
   formatRatio,
   formatTime,
@@ -17,10 +25,77 @@ import {
   reuseSpeedup,
   runtime,
   sourceNote,
+  x64,
 } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
 
 type Op = 'serialize' | 'deserialize';
+
+/**
+ * One groupId for every architecture switch on the site, persisted: picking
+ * Arm64 once switches every table and chart, on this page and the next.
+ */
+export const archGroupId = 'bench-arch';
+
+/** Props every component that can show both architectures takes */
+interface ArchProps {
+  lang?: Locale;
+  /** The Markdown copy (src/lib/markdown.tsx): both architectures under labels instead of tabs */
+  markdown?: boolean;
+}
+
+/**
+ * `render(dataset)` for x64 alone while there is no Arm64 data; otherwise
+ * x64 and Arm64 in synced tabs (both rendered, so the prerendered HTML holds
+ * both), or one after the other under labels in Markdown. `render` gets
+ * `tabbed` to add the source line naming the machine.
+ */
+export function ArchTabs({
+  render,
+  markdown,
+}: {
+  render: (ds: BenchDataset, tabbed: boolean) => ReactNode;
+  markdown?: boolean;
+}) {
+  if (!arm64) return <>{render(x64, false)}</>;
+  if (markdown)
+    return (
+      <>
+        {datasets.map((ds) => (
+          <Fragment key={ds.arch}>
+            <p>
+              <strong>{archLabels[ds.arch]}</strong>
+            </p>
+            {render(ds, true)}
+          </Fragment>
+        ))}
+      </>
+    );
+  return (
+    <Tabs
+      groupId={archGroupId}
+      persist
+      items={datasets.map((ds) => archLabels[ds.arch])}
+    >
+      {datasets.map((ds) => (
+        <Tab key={ds.arch} value={archLabels[ds.arch]} forceMount>
+          {render(ds, true)}
+        </Tab>
+      ))}
+    </Tabs>
+  );
+}
+
+/** Source line of one architecture's run: the release, and in tabs the machine */
+function sourceLine(ds: BenchDataset, zh: boolean, tabbed: boolean) {
+  return (
+    <p className="text-sm text-fd-muted-foreground">
+      <a href={ds.source.url} target="_blank" rel="noopener noreferrer">
+        {sourceNote(zh, ds, tabbed)}
+      </a>
+    </p>
+  );
+}
 
 function caseName(row: RuntimeCase, zh: boolean) {
   const name = zh && row.zh ? row.zh : row.name;
@@ -43,15 +118,12 @@ function ratioCell(ratio: number | undefined, zh: boolean, tooFast?: boolean) {
 }
 
 /** Where the numbers come from, with a link to the release or the local report */
-export function BenchSource({ lang = 'en' }: { lang?: Locale }) {
+export function BenchSource({ lang = 'en', markdown }: ArchProps) {
   const zh = lang === 'zh';
-  return (
-    <p className="text-sm text-fd-muted-foreground">
-      <a href={benchSource.url} target="_blank" rel="noopener noreferrer">
-        {sourceNote(zh)}
-      </a>
-    </p>
-  );
+  return ArchTabs({
+    markdown,
+    render: (ds, tabbed) => sourceLine(ds, zh, tabbed),
+  });
 }
 
 /**
@@ -63,13 +135,30 @@ export function RuntimeTable({
   op,
   set = 'main',
   lang = 'en',
-}: {
+  markdown,
+}: ArchProps & {
   op: Op;
   set?: 'main' | 'extra';
-  lang?: Locale;
 }) {
   const zh = lang === 'zh';
-  const rows = (set === 'extra' ? extraRuntime : runtime)[op];
+  return ArchTabs({
+    markdown,
+    render: (ds, tabbed) => (
+      <>
+        {runtimeTable(ds, op, set, zh)}
+        {tabbed && sourceLine(ds, zh, true)}
+      </>
+    ),
+  });
+}
+
+function runtimeTable(
+  ds: BenchDataset,
+  op: Op,
+  set: 'main' | 'extra',
+  zh: boolean,
+) {
+  const rows = (set === 'extra' ? ds.extraRuntime : ds.runtime)[op];
   if (rows.length === 0)
     return (
       <p className="text-sm text-fd-muted-foreground">
@@ -138,35 +227,54 @@ export function RuntimeTable({
  * note until then. RuntimeTable is called, not rendered as an element, so the
  * Markdown copies (src/lib/markdown.tsx) get the table itself.
  */
-export function ExtraRuntimeTables({ lang = 'en' }: { lang?: Locale }) {
+export function ExtraRuntimeTables({ lang = 'en', markdown }: ArchProps) {
   const zh = lang === 'zh';
-  if (extraRuntime.serialize.length + extraRuntime.deserialize.length === 0)
-    return RuntimeTable({ op: 'serialize', set: 'extra', lang });
-  return (
-    <>
-      {extraRuntime.serialize.length > 0 && (
+  return ArchTabs({
+    markdown,
+    render: (ds, tabbed) => {
+      const { serialize, deserialize } = ds.extraRuntime;
+      if (serialize.length + deserialize.length === 0)
+        return runtimeTable(ds, 'serialize', 'extra', zh);
+      return (
         <>
-          <p>
-            <strong>{zh ? '序列化' : 'Serialize'}</strong>
-          </p>
-          {RuntimeTable({ op: 'serialize', set: 'extra', lang })}
+          {serialize.length > 0 && (
+            <>
+              <p>
+                <strong>{zh ? '序列化' : 'Serialize'}</strong>
+              </p>
+              {runtimeTable(ds, 'serialize', 'extra', zh)}
+            </>
+          )}
+          {deserialize.length > 0 && (
+            <>
+              <p>
+                <strong>{zh ? '反序列化' : 'Deserialize'}</strong>
+              </p>
+              {runtimeTable(ds, 'deserialize', 'extra', zh)}
+            </>
+          )}
+          {tabbed && sourceLine(ds, zh, true)}
         </>
-      )}
-      {extraRuntime.deserialize.length > 0 && (
-        <>
-          <p>
-            <strong>{zh ? '反序列化' : 'Deserialize'}</strong>
-          </p>
-          {RuntimeTable({ op: 'deserialize', set: 'extra', lang })}
-        </>
-      )}
-    </>
-  );
+      );
+    },
+  });
 }
 
 /** Deserializing into existing objects: Nino new / reusing vs MemoryPack new / overwrite */
-export function ReuseTable({ lang = 'en' }: { lang?: Locale }) {
+export function ReuseTable({ lang = 'en', markdown }: ArchProps) {
   const zh = lang === 'zh';
+  return ArchTabs({
+    markdown,
+    render: (ds, tabbed) => (
+      <>
+        {reuseTable(ds, zh)}
+        {tabbed && sourceLine(ds, zh, true)}
+      </>
+    ),
+  });
+}
+
+function reuseTable(ds: BenchDataset, zh: boolean) {
   return (
     <table>
       <thead>
@@ -183,7 +291,7 @@ export function ReuseTable({ lang = 'en' }: { lang?: Locale }) {
         </tr>
       </thead>
       <tbody>
-        {reuse.map((row) => {
+        {ds.reuse.map((row) => {
           const best = reuseSpeedup(row) >= 2;
           const reused = `${row.ninoReuse.text} (${formatBytes(row.ninoReuseBytes)})`;
           return (
@@ -209,8 +317,15 @@ export function ReuseTable({ lang = 'en' }: { lang?: Locale }) {
 }
 
 /** Every row of the report, as measured, with the environment */
-export function ResultsTable({ lang = 'en' }: { lang?: Locale }) {
+export function ResultsTable({ lang = 'en', markdown }: ArchProps) {
   const zh = lang === 'zh';
+  return ArchTabs({
+    markdown,
+    render: (ds, tabbed) => resultsTable(ds, zh, tabbed),
+  });
+}
+
+function resultsTable(ds: BenchDataset, zh: boolean, tabbed: boolean) {
   const size = (value: number | null) =>
     value === null ? '—' : formatBytes(value);
   // The report prints payloads in KB with two decimals; show them the same way.
@@ -222,11 +337,10 @@ export function ResultsTable({ lang = 'en' }: { lang?: Locale }) {
         : `${(value / 1024).toFixed(2)} KB`;
   return (
     <>
-      {/* Called, not rendered as an element, so the Markdown copy (src/lib/markdown.tsx) gets its text instead of a JSX tag */}
-      {BenchSource({ lang })}
-      {benchSource.environment && (
+      {sourceLine(ds, zh, tabbed)}
+      {ds.source.environment && (
         <pre className="overflow-x-auto rounded-lg border bg-fd-secondary/50 p-4 text-xs">
-          <code>{benchSource.environment}</code>
+          <code>{ds.source.environment}</code>
         </pre>
       )}
       <table>
@@ -239,7 +353,7 @@ export function ResultsTable({ lang = 'en' }: { lang?: Locale }) {
           </tr>
         </thead>
         <tbody>
-          {benchRows.map((row) => (
+          {ds.rows.map((row) => (
             <tr key={row.method}>
               <td>
                 <code>{row.method}</code>
@@ -262,7 +376,7 @@ export function ResultsTable({ lang = 'en' }: { lang?: Locale }) {
 }
 
 /**
- * One number from the data, for prose:
+ * One number from the data (x64), for prose:
  * serialize.max / serialize.min / deserialize.max / deserialize.min (ratios
  * against MemoryPack), reuse.max (vs MemoryPack's overwrite), payload.v4 /
  * payload.memorypack (bytes for one SimpleClass), or

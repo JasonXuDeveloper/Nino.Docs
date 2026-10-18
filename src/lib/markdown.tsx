@@ -7,6 +7,7 @@
 import { asMarkdown, md, renderToMarkdown } from 'fumadocs-core/server';
 import type { ComponentProps, ReactNode } from 'react';
 import {
+  ArchTabs,
   BenchSource,
   benchValue,
   ExtraRuntimeTables,
@@ -14,7 +15,8 @@ import {
   ReuseTable,
   RuntimeTable,
 } from '@/components/bench-data';
-import { type ChartId, chartProps } from '@/components/charts/benchmark-charts';
+import { chartProps } from '@/components/charts/benchmark-charts';
+import { type ChartId, isArchChart } from '@/components/charts/ids';
 import { getMDXComponents } from '@/mdx-components';
 import type { Locale } from './i18n';
 import { siteUrl } from './site';
@@ -198,23 +200,23 @@ function markdownComponents(lang: Locale, pageUrl: string) {
     },
     BenchSource(props: { lang?: Locale }) {
       asMarkdown();
-      return BenchSource(props);
+      return BenchSource({ ...props, markdown: true });
     },
     RuntimeTable(props: ComponentProps<typeof RuntimeTable>) {
       asMarkdown();
-      return RuntimeTable(props);
+      return RuntimeTable({ ...props, markdown: true });
     },
     ExtraRuntimeTables(props: ComponentProps<typeof ExtraRuntimeTables>) {
       asMarkdown();
-      return ExtraRuntimeTables(props);
+      return ExtraRuntimeTables({ ...props, markdown: true });
     },
     ReuseTable(props: ComponentProps<typeof ReuseTable>) {
       asMarkdown();
-      return ReuseTable(props);
+      return ReuseTable({ ...props, markdown: true });
     },
     ResultsTable(props: ComponentProps<typeof ResultsTable>) {
       asMarkdown();
-      return ResultsTable(props);
+      return ResultsTable({ ...props, markdown: true });
     },
     // A chart becomes its title, its data table and its footnotes. Charts
     // drawn next to a table of the same numbers (table={false}) are skipped.
@@ -228,20 +230,27 @@ function markdownComponents(lang: Locale, pageUrl: string) {
       asMarkdown();
       if (!withTable) return null;
       const ids = Array.isArray(chart) ? chart : [chart];
-      return ids.map((id) => {
-        const props = chartProps(id, zh);
-        if (!props?.table) return null;
-        return (
-          <div key={id}>
-            <p>
-              <strong>{props.title}</strong>
-            </p>
-            {table(props.table.head, props.table.rows)}
-            {props.footnotes?.map((note) => (
-              <p key={String(note)}>{note}</p>
-            ))}
-          </div>
-        );
+      const charts = (arch?: 'x64' | 'arm64') =>
+        ids.map((id) => {
+          const props = chartProps(id, zh, arch);
+          if (!props?.table) return null;
+          return (
+            <div key={id}>
+              <p>
+                <strong>{props.title}</strong>
+              </p>
+              {table(props.table.head, props.table.rows)}
+              {props.footnotes?.map((note) => (
+                <p key={String(note)}>{note}</p>
+              ))}
+            </div>
+          );
+        });
+      if (!isArchChart(chart)) return charts();
+      // x64 and Arm64 under labels once Arm64 data exists
+      return ArchTabs({
+        markdown: true,
+        render: (ds, tabbed) => charts(tabbed ? ds.arch : undefined),
       });
     },
     // Archived versions' benchmark chart: its numbers as a table.

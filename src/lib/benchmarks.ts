@@ -12,11 +12,18 @@
  * 3.3.13 run directly before v4 in the same CI job. Ratios use the v3 and v4
  * times of that section, so both sides always come from one machine and one run.
  *
+ * Arm64: src/data/bench-v4-arm64.json, synced from the "Arm64 benchmark"
+ * section of the same release (the same benchmark classes on GitHub's
+ * ubuntu-24.04-arm runners). Both architectures go through `dataset()` below,
+ * so the same rules (FLOOR_NS, on par, ratios) apply to both; `arm64` is null
+ * until a release has that section. Comparisons with v3 are x64 only.
+ *
  * Build time (source generator, v3 3.3.13 vs v4): static, from
  * docs/v4-benchmarks.md in the Nino repository; it is not in the release report.
  */
 import benchV3 from '@/data/bench-v3-runtime.json';
 import bench from '@/data/bench-v4.json';
+import benchArm64 from '@/data/bench-v4-arm64.json';
 
 export interface Measure {
   /** Formatted for display, e.g. "1.13 µs" */
@@ -34,28 +41,24 @@ interface BenchRow {
   rerun?: boolean;
 }
 
-/** Where the runtime numbers come from */
-export const benchSource = {
-  origin: bench.origin as 'release' | 'local' | 'fixture',
-  tag: bench.tag,
-  url: bench.url,
-  publishedAt: bench.publishedAt as string | null,
-  environment: bench.environment as string | null,
-};
-
-const rows = new Map(
-  (bench.rows as BenchRow[]).map((row) => [row.method, row] as const),
-);
-
-/** "Nino v4.0.0, 2026-10-14." — tag and date only, linked to the release */
-export function sourceNote(zh: boolean) {
-  const date = benchSource.publishedAt?.slice(0, 10);
-  const parts = [`Nino ${benchSource.tag}`, date].filter(Boolean);
-  return zh ? `${parts.join('，')}。` : `${parts.join(', ')}.`;
+/** Where one dataset's runtime numbers come from */
+export interface BenchSourceInfo {
+  origin: 'release' | 'local' | 'fixture' | 'none';
+  tag: string;
+  url: string;
+  publishedAt: string | null;
+  environment: string | null;
 }
 
-/** All rows of the report, in report order (for the full results table) */
-export const benchRows: readonly BenchRow[] = bench.rows as BenchRow[];
+/** The shape of src/data/bench-v4.json and bench-v4-arm64.json */
+interface BenchFile extends BenchSourceInfo {
+  rows: BenchRow[];
+}
+
+export type Arch = 'x64' | 'arm64';
+
+/** Tab labels, in tab order */
+export const archLabels: Record<Arch, string> = { x64: 'x64', arm64: 'Arm64' };
 
 /**
  * Below a third of a clock cycle, a time cannot be told apart from
@@ -83,13 +86,6 @@ export function formatTime(ns: number) {
 
 export const formatBytes = (bytes: number) =>
   `${bytes.toLocaleString('en-US')} B`;
-
-function measure(method: string): Measure | undefined {
-  const row = rows.get(method);
-  return row ? { text: formatTime(row.meanNs), ns: row.meanNs } : undefined;
-}
-
-const bytes = (method: string) => rows.get(method)?.allocatedBytes ?? null;
 
 /** A ratio within 5% of 1 (0.95–1.05 at two decimals) is on par: below the run-to-run noise */
 export function isOnPar(ratio: number) {
@@ -225,39 +221,6 @@ export function v3SourceNote(zh: boolean): string | null {
   return `Nino 3.3.13 (NuGet) ran ${runs > 1 ? 'before and after' : 'before'} the Nino ${tag} benchmark${local ? '' : ' in the same CI job'}, on the same machine with the same settings${runs > 1 ? '; v3 is the mean of the two runs' : ''}.${env ? ` ${env}.` : ''}`;
 }
 
-function buildCase(op: 'serialize' | 'deserialize', info: CaseInfo) {
-  const verb = op === 'serialize' ? 'Serialize' : 'Deserialize';
-  const nino = rows.get(`Nino${verb}${info.key}`);
-  const v4 = measure(`Nino${verb}${info.key}`);
-  const memorypack = measure(`MemoryPack${verb}${info.key}`);
-  if (!v4 || !memorypack || !nino) return [];
-  const v3Row = V3_RUNTIME.rows[`${op}:${info.key}`];
-  const unmeasured = v4.ns < FLOOR_NS;
-  const result: RuntimeCase = {
-    ...info,
-    v4,
-    memorypack,
-    ratio: unmeasured ? undefined : ratioOf(memorypack.ns, v4.ns),
-    tooFast: unmeasured && memorypack.ns >= FLOOR_NS,
-    rerun: nino.rerun,
-  };
-  if (v3Row) {
-    result.v3 = { text: formatTime(v3Row.v3Ns), ns: v3Row.v3Ns };
-    if (v3Row.v4Ns >= FLOOR_NS)
-      result.vsV3 = Math.round((v3Row.v3Ns / v3Row.v4Ns) * 100) / 100;
-    else if (v3Row.v3Ns >= FLOOR_NS) result.v3TooFast = true;
-    else result.vsV3 = 1;
-  }
-  return [result];
-}
-
-export const runtime: Record<'serialize' | 'deserialize', RuntimeCase[]> = {
-  serialize: cases.serialize.flatMap((info) => buildCase('serialize', info)),
-  deserialize: cases.deserialize.flatMap((info) =>
-    buildCase('deserialize', info),
-  ),
-};
-
 /**
  * Reference tracking (ReferenceTest), version tolerance (VersionTolerantTest)
  * and fixed-size types (FixedSizeTest), against MemoryPack's CircularReference
@@ -294,39 +257,6 @@ const extraCases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
     { name: 'FixedClass[100]', code: true, key: 'FixedClasses' },
   ],
 };
-
-export const extraRuntime: Record<'serialize' | 'deserialize', RuntimeCase[]> =
-  {
-    serialize: extraCases.serialize.flatMap((info) =>
-      buildCase('serialize', info),
-    ),
-    deserialize: extraCases.deserialize.flatMap((info) =>
-      buildCase('deserialize', info),
-    ),
-  };
-
-/** Fastest / slowest win against MemoryPack (ignores on-par and losses) */
-export function ratioRange(op: 'serialize' | 'deserialize') {
-  const wins = runtime[op]
-    .map((row) => row.ratio)
-    .filter((ratio): ratio is number => ratio !== undefined && ratio > 1);
-  return { min: Math.min(...wins), max: Math.max(...wins) };
-}
-
-/** Unmanaged-struct cases, which both libraries copy as one block */
-const structKeys = new Set(['SimpleStruct', 'SimpleStructs', 'Vectors']);
-
-/**
- * Fastest / slowest win against MemoryPack on classes and polymorphic types
- * (the cases that are not unmanaged structs)
- */
-export function classRatioRange(op: 'serialize' | 'deserialize') {
-  const wins = runtime[op]
-    .filter((row) => !structKeys.has(row.key))
-    .map((row) => row.ratio)
-    .filter((ratio): ratio is number => ratio !== undefined && ratio > 1);
-  return { min: Math.min(...wins), max: Math.max(...wins) };
-}
 
 /* ------------------------------------------------------------------ */
 /* Deserializing into existing objects                                 */
@@ -388,29 +318,185 @@ const reuseCases = [
   },
 ];
 
-export const reuse: ReuseCase[] = reuseCases.flatMap(
-  ({ name, zh, methods: [ninoNew, ninoReuse, mpNew, mpOverwrite] }) => {
-    const a = measure(ninoNew);
-    const b = measure(ninoReuse);
-    const c = measure(mpNew);
-    const d = measure(mpOverwrite);
-    const bBytes = bytes(ninoReuse);
-    const dBytes = bytes(mpOverwrite);
-    if (!a || !b || !c || !d || bBytes === null || dBytes === null) return [];
-    return [
-      {
-        name,
-        zh,
-        ninoNew: a,
-        ninoReuse: b,
-        ninoReuseBytes: bBytes,
-        memorypackNew: c,
-        memorypackOverwrite: d,
-        memorypackOverwriteBytes: dBytes,
-      },
-    ];
-  },
-);
+/* ------------------------------------------------------------------ */
+/* Datasets: x64 and Arm64                                             */
+/* ------------------------------------------------------------------ */
+
+/** One architecture's report, with everything the site derives from it */
+export interface BenchDataset {
+  arch: Arch;
+  source: BenchSourceInfo;
+  /** All rows of the report, in report order (for the full results table) */
+  rows: readonly BenchRow[];
+  runtime: Record<'serialize' | 'deserialize', RuntimeCase[]>;
+  /** See extraCases */
+  extraRuntime: Record<'serialize' | 'deserialize', RuntimeCase[]>;
+  reuse: ReuseCase[];
+  /** True when every serialize case allocated 0 B in both libraries */
+  serializeAllocatesNothing: boolean;
+  /** Bytes written for one SimpleClass */
+  payload: { name: string; v4: number | null; memorypack: number | null };
+}
+
+type V3Rows = (typeof V3_RUNTIME)['rows'];
+
+/** Derives every runtime number from one report; `v3` only for x64 */
+function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
+  const rows = new Map(file.rows.map((row) => [row.method, row] as const));
+  const measure = (method: string): Measure | undefined => {
+    const row = rows.get(method);
+    return row ? { text: formatTime(row.meanNs), ns: row.meanNs } : undefined;
+  };
+  const bytes = (method: string) => rows.get(method)?.allocatedBytes ?? null;
+
+  function buildCase(op: 'serialize' | 'deserialize', info: CaseInfo) {
+    const verb = op === 'serialize' ? 'Serialize' : 'Deserialize';
+    const nino = rows.get(`Nino${verb}${info.key}`);
+    const v4 = measure(`Nino${verb}${info.key}`);
+    const memorypack = measure(`MemoryPack${verb}${info.key}`);
+    if (!v4 || !memorypack || !nino) return [];
+    const v3Row = v3[`${op}:${info.key}`];
+    const unmeasured = v4.ns < FLOOR_NS;
+    const result: RuntimeCase = {
+      ...info,
+      v4,
+      memorypack,
+      ratio: unmeasured ? undefined : ratioOf(memorypack.ns, v4.ns),
+      tooFast: unmeasured && memorypack.ns >= FLOOR_NS,
+      rerun: nino.rerun,
+    };
+    if (v3Row) {
+      result.v3 = { text: formatTime(v3Row.v3Ns), ns: v3Row.v3Ns };
+      if (v3Row.v4Ns >= FLOOR_NS)
+        result.vsV3 = Math.round((v3Row.v3Ns / v3Row.v4Ns) * 100) / 100;
+      else if (v3Row.v3Ns >= FLOOR_NS) result.v3TooFast = true;
+      else result.vsV3 = 1;
+    }
+    return [result];
+  }
+  const build = (set: Record<'serialize' | 'deserialize', CaseInfo[]>) => ({
+    serialize: set.serialize.flatMap((info) => buildCase('serialize', info)),
+    deserialize: set.deserialize.flatMap((info) =>
+      buildCase('deserialize', info),
+    ),
+  });
+
+  const reuse = reuseCases.flatMap(
+    ({ name, zh, methods: [ninoNew, ninoReuse, mpNew, mpOverwrite] }) => {
+      const a = measure(ninoNew);
+      const b = measure(ninoReuse);
+      const c = measure(mpNew);
+      const d = measure(mpOverwrite);
+      const bBytes = bytes(ninoReuse);
+      const dBytes = bytes(mpOverwrite);
+      if (!a || !b || !c || !d || bBytes === null || dBytes === null) return [];
+      return [
+        {
+          name,
+          zh,
+          ninoNew: a,
+          ninoReuse: b,
+          ninoReuseBytes: bBytes,
+          memorypackNew: c,
+          memorypackOverwrite: d,
+          memorypackOverwriteBytes: dBytes,
+        },
+      ];
+    },
+  );
+
+  return {
+    arch,
+    source: {
+      origin: file.origin,
+      tag: file.tag,
+      url: file.url,
+      publishedAt: file.publishedAt,
+      environment: file.environment,
+    },
+    rows: file.rows,
+    runtime: build(cases),
+    extraRuntime: build(extraCases),
+    reuse,
+    serializeAllocatesNothing: cases.serialize.every((info) =>
+      ['Nino', 'MemoryPack'].every(
+        (lib) => (bytes(`${lib}Serialize${info.key}`) ?? 0) === 0,
+      ),
+    ),
+    payload: {
+      name: 'SimpleClass',
+      v4: rows.get('NinoSerializeSimpleClass')?.payloadBytes ?? null,
+      memorypack:
+        rows.get('MemoryPackSerializeSimpleClass')?.payloadBytes ?? null,
+    },
+  };
+}
+
+/** The Performance Report (x64), with the v3 comparison */
+export const x64 = dataset('x64', bench as BenchFile, V3_RUNTIME.rows);
+
+/** The Arm64 section of the same release; null until a release has one */
+export const arm64: BenchDataset | null =
+  benchArm64.rows.length > 0
+    ? dataset('arm64', benchArm64 as unknown as BenchFile)
+    : null;
+
+/** The datasets to show, x64 first (one entry until Arm64 data exists) */
+export const datasets: BenchDataset[] = arm64 ? [x64, arm64] : [x64];
+
+// x64, for the headlines and the pages that show one architecture
+export const benchSource: BenchSourceInfo = x64.source;
+export const benchRows = x64.rows;
+export const runtime = x64.runtime;
+export const extraRuntime = x64.extraRuntime;
+export const reuse = x64.reuse;
+export const serializeAllocatesNothing = x64.serializeAllocatesNothing;
+export const payload = x64.payload;
+
+/**
+ * "Nino v4.0.0, 2026-10-14." — tag and date, linked to the release. With
+ * `machine` (the source line of an architecture tab), also the runner and the
+ * CPU, OS and .NET of that run.
+ */
+export function sourceNote(zh: boolean, ds = x64, machine = false) {
+  const { tag, publishedAt, environment, origin } = ds.source;
+  const parts = [`Nino ${tag}`, publishedAt?.slice(0, 10)].filter(Boolean);
+  const text = zh ? `${parts.join('，')}。` : `${parts.join(', ')}.`;
+  if (!machine) return text;
+  const runner =
+    ds.arch === 'arm64' && origin === 'release'
+      ? zh
+        ? 'GitHub 的 ubuntu-24.04-arm 运行器'
+        : "GitHub's ubuntu-24.04-arm runners"
+      : null;
+  const env = environment ? environmentLabel(environment) : '';
+  const machineText = [runner, env].filter(Boolean).join(zh ? '；' : '; ');
+  if (!machineText) return text;
+  return zh ? `${text}${machineText}。` : `${text} ${machineText}.`;
+}
+
+/** Fastest / slowest win against MemoryPack (ignores on-par and losses) */
+export function ratioRange(op: 'serialize' | 'deserialize', ds = x64) {
+  const wins = ds.runtime[op]
+    .map((row) => row.ratio)
+    .filter((ratio): ratio is number => ratio !== undefined && ratio > 1);
+  return { min: Math.min(...wins), max: Math.max(...wins) };
+}
+
+/** Unmanaged-struct cases, which both libraries copy as one block */
+const structKeys = new Set(['SimpleStruct', 'SimpleStructs', 'Vectors']);
+
+/**
+ * Fastest / slowest win against MemoryPack on classes and polymorphic types
+ * (the cases that are not unmanaged structs)
+ */
+export function classRatioRange(op: 'serialize' | 'deserialize', ds = x64) {
+  const wins = ds.runtime[op]
+    .filter((row) => !structKeys.has(row.key))
+    .map((row) => row.ratio)
+    .filter((ratio): ratio is number => ratio !== undefined && ratio > 1);
+  return { min: Math.min(...wins), max: Math.max(...wins) };
+}
 
 /** How many times faster Nino reusing is than MemoryPack overwrite (two decimals, from the raw means) */
 export function reuseSpeedup(row: ReuseCase) {
@@ -419,29 +505,11 @@ export function reuseSpeedup(row: ReuseCase) {
   );
 }
 
-/** The reuse case where Nino gains most over MemoryPack's overwrite mode */
-export const bestReuse = reuse.reduce<ReuseCase | undefined>(
+/** The reuse case where Nino gains most over MemoryPack's overwrite mode (x64) */
+export const bestReuse = x64.reuse.reduce<ReuseCase | undefined>(
   (best, row) => (!best || reuseSpeedup(row) > reuseSpeedup(best) ? row : best),
   undefined,
 );
-
-/* ------------------------------------------------------------------ */
-/* Allocations and payload size                                        */
-/* ------------------------------------------------------------------ */
-
-/** True when every serialize case allocated 0 B in both libraries */
-export const serializeAllocatesNothing = cases.serialize.every((info) =>
-  ['Nino', 'MemoryPack'].every(
-    (lib) => (bytes(`${lib}Serialize${info.key}`) ?? 0) === 0,
-  ),
-);
-
-/** Bytes written for one SimpleClass */
-export const payload = {
-  name: 'SimpleClass',
-  v4: rows.get('NinoSerializeSimpleClass')?.payloadBytes ?? null,
-  memorypack: rows.get('MemoryPackSerializeSimpleClass')?.payloadBytes ?? null,
-};
 
 /**
  * The one way to print a ratio. Runtime ratios (computed from the raw means)

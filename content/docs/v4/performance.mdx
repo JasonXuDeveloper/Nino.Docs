@@ -61,7 +61,7 @@ How you declare a hot struct decides which path it takes:
 | Fields ordered so that nothing needs padding (`int, int, DateTime`) | plain block copy |
 | `[StructLayout(LayoutKind.Sequential, Pack = 4)]` on `int, DateTime` | plain block copy of a smaller struct (12 bytes instead of 16): the fastest and the smallest payload |
 | Fields with gaps (`int, DateTime`: 4 bytes after the `int`) | block copy with the padding masked out |
-| `[StructLayout(LayoutKind.Auto)]` | **not raw**: the runtime may reorder the fields, so Nino writes them one by one, several times slower |
+| `[StructLayout(LayoutKind.Auto)]` | **not raw**: the runtime may reorder the fields, so Nino writes them one by one, at several times the cost |
 
 ```csharp title="Layouts.cs"
 [NinoType]

@@ -44,7 +44,7 @@ Nino.Core 的 net8.0 和 net10.0 版本还带有裁剪和 Native AOT 标注：�
 
 ## 如何序列化多种消息类型，或者运行时才知道的类型？ [#how-do-i-serialize-many-message-types-or-a-type-known-only-at-run-time]
 
-给这些类型一个共同的 `[NinoType]` 基类或接口，然后调用 `Serialize<TBase>` / `Deserialize<TBase>`：类型 ID 的写入和分派都由生成代码完成，速度最快，还能配合复用反序列化和对象池，每条消息除了内容变化的字符串之外不分配内存。RPC 和消息分派、插件系统、编辑器工具都适用这种做法。只有当类型只能以 `Type` 的形式得知、并且这些类型没有共同的基类型时（例如基于反射、面向任意类型的工具），才使用 `SerializeBoxed(value, type)` 和 `DeserializeBoxed(data, type)`。不要把 `object` 当作类型参数：它只接受 `[NinoType]` 的值，并通过较慢的全局注册表分派。参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
+给这些类型一个共同的 `[NinoType]` 基类或接口，然后调用 `Serialize<TBase>` / `Deserialize<TBase>`：类型 ID 的写入和分派都由生成代码完成，速度最快，还能配合复用反序列化和对象池，每条消息除了内容变化的字符串之外不分配内存。RPC 和消息分派、插件系统、编辑器工具都适用这种做法。只有当类型只能以 `Type` 的形式得知、并且这些类型没有共同的基类型时（例如基于反射、面向任意类型的工具），才使用 `SerializeBoxed(value, type)` 和 `DeserializeBoxed(data, type)`。不要把 `object` 当作类型参数：它只接受 `[NinoType]` 的值，并通过开销更大的全局注册表分派。参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
 
 ## Nino 是线程安全的吗？ [#is-nino-thread-safe]
 

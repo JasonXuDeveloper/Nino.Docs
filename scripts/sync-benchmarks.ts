@@ -5,22 +5,28 @@
  * - the "Performance Report" (v4 and MemoryPack) into src/data/bench-v4.json;
  * - the "v3 3.3.13 vs v4 (same machine)" section (Nino 3.3.13 run before and
  *   after the v4 run on the same runner) into src/data/bench-v3-runtime.json,
- *   from the same release.
+ *   from the same release;
+ * - the "Arm64 benchmark" section (the same benchmark classes on GitHub's
+ *   ubuntu-24.04-arm runners, a table in the Performance Report's format) into
+ *   src/data/bench-v4-arm64.json, from the same release.
  *
  *   bun scripts/sync-benchmarks.ts                       # newest v4.* release with a report
  *   bun scripts/sync-benchmarks.ts --fixture <file.md>   # parse a release body from a file
- *   bun scripts/sync-benchmarks.ts --fixture <file> --out <file.json> [--out-v3 <file.json>]
+ *   bun scripts/sync-benchmarks.ts --fixture <file> --out <file.json> [--out-v3 <file.json>] [--out-arm64 <file.json>]
  *
  * Fixtures: scripts/fixtures/release-body.md (made-up numbers, the methods the
- * site requires), release-body-v3.md (with the v3 section) and
+ * site requires), release-body-v3.md (with the v3 section),
  * release-body-new.md (a sample of the ReferenceTest, VersionTolerantTest and
- * FixedSizeTest rows; its numbers are noise, only its format matters).
+ * FixedSizeTest rows; its numbers are noise, only its format matters) and
+ * release-body-arm64.md (release-body-new.md plus an Arm64 section whose
+ * numbers are a copy of its x64 ones: for parser tests only).
  *
  * Runs before every build. It never fails the build: on any error (network,
  * rate limit, no matching release, a table it cannot read) it prints a warning
- * and leaves the committed JSON as it is. A release without the v3 section
- * keeps the committed src/data/bench-v3-runtime.json. Set GITHUB_TOKEN to
- * raise the API rate limit.
+ * and leaves the committed JSON as it is. A release without the v3 or the
+ * Arm64 section (or whose Arm64 table lacks a method the site shows) keeps the
+ * committed src/data/bench-v3-runtime.json or src/data/bench-v4-arm64.json.
+ * Set GITHUB_TOKEN to raise the API rate limit.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -34,8 +40,18 @@ const v3DataFile = fileURLToPath(
   new URL('../src/data/bench-v3-runtime.json', import.meta.url),
 );
 
+const arm64DataFile = fileURLToPath(
+  new URL('../src/data/bench-v4-arm64.json', import.meta.url),
+);
+
 /** Heading of the v3 section in the release body (report.yml's V3_HEADING) */
 export const v3Heading = 'v3 3.3.13 vs v4 (same machine)';
+
+/**
+ * Heading of the Arm64 section (report.yml's ARM64_HEADING). It never contains
+ * "Performance Report", so the x64 report is still found by those words.
+ */
+export const arm64Heading = '## 📊 Arm64 benchmark';
 
 export interface BenchRow {
   method: string;
@@ -46,8 +62,13 @@ export interface BenchRow {
   rerun?: boolean;
 }
 
+/**
+ * src/data/bench-v4.json and bench-v4-arm64.json. `origin: 'none'` (empty
+ * rows, empty tag and url) is the committed Arm64 file before any release had
+ * an Arm64 section: the site then shows x64 only.
+ */
 export interface BenchFile {
-  origin: 'release' | 'local' | 'fixture';
+  origin: 'release' | 'local' | 'fixture' | 'none';
   tag: string;
   url: string;
   publishedAt: string | null;
@@ -183,12 +204,12 @@ function environmentOf(section: string, beforeTables = true) {
   return fence ? fence[1].trim() : null;
 }
 
-/** Parses the "Performance Report" section of a release body. Throws when it finds no usable table. */
-export function parseReport(body: string) {
-  const start = body.search(/Performance Report/i);
-  if (start < 0) throw new Error('no "Performance Report" section');
-  const section = sectionFrom(body, start);
-
+/**
+ * The BenchmarkDotNet tables (Method and Mean columns) of one section and its
+ * environment: the Performance Report and the Arm64 section share this format.
+ * Throws when it finds no usable table.
+ */
+function parseBenchSection(section: string, name: string) {
   const rows: BenchRow[] = [];
   for (const table of tables(section)) {
     if (table.length < 3 || !isSeparator(table[1])) continue;
@@ -216,11 +237,28 @@ export function parseReport(body: string) {
     }
   }
   if (rows.length === 0)
-    throw new Error('no benchmark table with Method and Mean columns');
+    throw new Error(`${name}: no benchmark table with Method and Mean columns`);
   if (!rows.some((row) => row.method === 'NinoSerializeSimpleClass'))
-    throw new Error('the report has no NinoSerializeSimpleClass row');
+    throw new Error(`${name}: no NinoSerializeSimpleClass row`);
 
   return { rows, environment: environmentOf(section) };
+}
+
+/** Parses the "Performance Report" section (x64) of a release body. Throws when it finds no usable table. */
+export function parseReport(body: string) {
+  const start = body.search(/Performance Report/i);
+  if (start < 0) throw new Error('no "Performance Report" section');
+  return parseBenchSection(sectionFrom(body, start), 'the Performance Report');
+}
+
+/**
+ * Parses the Arm64 section (from its heading to the next "## " heading).
+ * Returns null when the body has none; throws when it has no usable table.
+ */
+export function parseArm64Section(body: string) {
+  const start = body.indexOf(arm64Heading);
+  if (start < 0) return null;
+  return parseBenchSection(sectionFrom(body, start), 'the Arm64 section');
 }
 
 /**
@@ -383,11 +421,69 @@ function argument(name: string) {
 }
 
 function summary(file: BenchFile) {
+  if (file.origin === 'none') return 'no data yet';
   return `${file.rows.length} rows from ${file.tag} (${file.origin})`;
 }
 
 function v3Summary(file: V3RuntimeFile) {
   return `${Object.keys(file.rows).length} v3 cases (${file.runs} v3 runs) from ${file.tag} (${file.origin})`;
+}
+
+function write(out: string, data: unknown) {
+  writeFileSync(out, `${JSON.stringify(data, null, 2)}\n`);
+}
+
+function message(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function lacking(missing: string[]) {
+  return `lacks ${missing.length} of the methods the site shows (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ', ...' : ''})`;
+}
+
+/** Where a parsed section came from, for the JSON files */
+interface Origin {
+  origin: 'release' | 'fixture';
+  tag: string;
+  url: string;
+  publishedAt: string | null;
+}
+
+function releaseOrigin(release: Release): Origin {
+  return {
+    origin: 'release',
+    tag: release.tag_name,
+    url: release.html_url,
+    publishedAt: release.published_at ?? release.created_at,
+  };
+}
+
+/** A parsed section as a JSON file, keys in the committed files' order */
+function benchFile(
+  origin: Origin,
+  { environment, rows }: ReturnType<typeof parseBenchSection>,
+): BenchFile {
+  return { ...origin, environment, rows };
+}
+
+const fixtureOrigin: Origin = {
+  origin: 'fixture',
+  tag: 'fixture',
+  url: `https://github.com/${repo}/releases`,
+  publishedAt: null,
+};
+
+function v3File(
+  origin: Origin,
+  v3: NonNullable<ReturnType<typeof parseV3Section>>,
+): V3RuntimeFile {
+  return {
+    ...origin,
+    environment: v3.environment,
+    runs: v3.runs,
+    note: null,
+    rows: v3.rows,
+  };
 }
 
 /** The v3 section of the release the v4 numbers came from; keeps the committed file when it has none */
@@ -404,100 +500,107 @@ function syncV3(release: Release, out: string | undefined) {
       );
       return;
     }
-    const file: V3RuntimeFile = {
-      origin: 'release',
-      tag: release.tag_name,
-      url: release.html_url,
-      publishedAt: release.published_at ?? release.created_at,
-      environment: v3.environment,
-      runs: v3.runs,
-      note: null,
-      rows: v3.rows,
-    };
-    writeFileSync(out ?? v3DataFile, `${JSON.stringify(file, null, 2)}\n`);
+    const file = v3File(releaseOrigin(release), v3);
+    write(out ?? v3DataFile, file);
     console.log(`[benchmarks] synced ${v3Summary(file)}`);
   } catch (error) {
-    console.warn(
-      `[benchmarks] warning: ${error instanceof Error ? error.message : String(error)}; ${kept()}`,
-    );
+    console.warn(`[benchmarks] warning: ${message(error)}; ${kept()}`);
   }
 }
 
-async function main() {
-  const fixture = argument('--fixture');
-  const out = argument('--out');
+/**
+ * The Arm64 section of the release the x64 numbers came from, under the same
+ * rule (every method the site shows); keeps the committed file otherwise.
+ */
+function syncArm64(release: Release, out: string | undefined) {
+  const kept = () => {
+    const file = JSON.parse(readFileSync(arm64DataFile, 'utf8')) as BenchFile;
+    return `keeping src/data/bench-v4-arm64.json (${summary(file)})`;
+  };
+  try {
+    const arm64 = parseArm64Section(release.body ?? '');
+    if (!arm64) {
+      console.warn(
+        `[benchmarks] ${release.tag_name} has no "${arm64Heading}" section; ${kept()}`,
+      );
+      return;
+    }
+    const missing = missingMethods(arm64.rows);
+    if (missing.length > 0)
+      throw new Error(
+        `${release.tag_name}'s Arm64 section ${lacking(missing)}`,
+      );
+    const file = benchFile(releaseOrigin(release), arm64);
+    write(out ?? arm64DataFile, file);
+    console.log(`[benchmarks] synced Arm64: ${summary(file)}`);
+  } catch (error) {
+    console.warn(`[benchmarks] warning: ${message(error)}; ${kept()}`);
+  }
+}
 
-  if (fixture) {
-    const { rows, environment } = parseReport(readFileSync(fixture, 'utf8'));
-    const file: BenchFile = {
-      origin: 'fixture',
-      tag: 'fixture',
-      url: `https://github.com/${repo}/releases`,
-      publishedAt: null,
-      environment,
-      rows,
-    };
+/** Fixture mode: every section the file has, written to --out* or printed */
+function fixture(path: string) {
+  const body = readFileSync(path, 'utf8');
+  const output = (flag: string, data: unknown, text: string) => {
+    const out = argument(flag);
+    if (out) {
+      write(out, data);
+      console.log(`[benchmarks] wrote ${out}: ${text}`);
+    } else {
+      console.log(JSON.stringify(data, null, 2));
+    }
+  };
+  const warnMissing = (what: string, rows: BenchRow[]) => {
     const missing = missingMethods(rows);
     if (missing.length > 0)
       console.warn(
-        `[benchmarks] fixture lacks ${missing.length} of the ${requiredMethods.length} methods the site needs (a release like this would not be used): ${missing.join(', ')}`,
+        `[benchmarks] ${what} lacks ${missing.length} of the ${requiredMethods.length} methods the site needs (a release like this would not be used): ${missing.join(', ')}`,
       );
-    if (out) {
-      writeFileSync(out, `${JSON.stringify(file, null, 2)}\n`);
-      console.log(`[benchmarks] wrote ${out}: ${summary(file)}`);
-    } else {
-      console.log(JSON.stringify(file, null, 2));
-    }
+  };
 
-    const v3 = parseV3Section(readFileSync(fixture, 'utf8'));
-    if (!v3) {
-      console.log('[benchmarks] fixture has no v3 section');
-      return;
-    }
-    const v3File: V3RuntimeFile = {
-      origin: 'fixture',
-      tag: 'fixture',
-      url: file.url,
-      publishedAt: null,
-      environment: v3.environment,
-      runs: v3.runs,
-      note: null,
-      rows: v3.rows,
-    };
-    const outV3 = argument('--out-v3');
-    if (outV3) {
-      writeFileSync(outV3, `${JSON.stringify(v3File, null, 2)}\n`);
-      console.log(`[benchmarks] wrote ${outV3}: ${v3Summary(v3File)}`);
-    } else {
-      console.log(JSON.stringify(v3File, null, 2));
-    }
+  const x64 = benchFile(fixtureOrigin, parseReport(body));
+  warnMissing('fixture', x64.rows);
+  output('--out', x64, summary(x64));
+
+  const v3 = parseV3Section(body);
+  if (v3) {
+    const file = v3File(fixtureOrigin, v3);
+    output('--out-v3', file, v3Summary(file));
+  } else console.log('[benchmarks] fixture has no v3 section');
+
+  const arm64 = parseArm64Section(body);
+  if (arm64) {
+    const file = benchFile(fixtureOrigin, arm64);
+    warnMissing("fixture's Arm64 section", file.rows);
+    output('--out-arm64', file, `Arm64: ${summary(file)}`);
+  } else console.log('[benchmarks] fixture has no Arm64 section');
+}
+
+async function main() {
+  const fixturePath = argument('--fixture');
+  if (fixturePath) {
+    fixture(fixturePath);
     return;
   }
 
   try {
     const release = await latestRelease();
-    const { rows, environment } = parseReport(release.body ?? '');
-    const missing = missingMethods(rows);
+    const file = benchFile(
+      releaseOrigin(release),
+      parseReport(release.body ?? ''),
+    );
+    const missing = missingMethods(file.rows);
     if (missing.length > 0)
-      throw new Error(
-        `${release.tag_name}'s report lacks ${missing.length} of the methods the site shows (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ', ...' : ''})`,
-      );
-    const file: BenchFile = {
-      origin: 'release',
-      tag: release.tag_name,
-      url: release.html_url,
-      publishedAt: release.published_at ?? release.created_at,
-      environment,
-      rows,
-    };
-    writeFileSync(out ?? dataFile, `${JSON.stringify(file, null, 2)}\n`);
+      throw new Error(`${release.tag_name}'s report ${lacking(missing)}`);
+    write(argument('--out') ?? dataFile, file);
     console.log(`[benchmarks] synced ${summary(file)}`);
     // Only from the release the v4 numbers came from, so the site never mixes releases.
     syncV3(release, argument('--out-v3'));
+    syncArm64(release, argument('--out-arm64'));
   } catch (error) {
     const kept = JSON.parse(readFileSync(dataFile, 'utf8')) as BenchFile;
     console.warn(
-      `[benchmarks] warning: ${error instanceof Error ? error.message : String(error)}; keeping src/data/bench-v4.json (${summary(kept)}) and src/data/bench-v3-runtime.json`,
+      `[benchmarks] warning: ${message(error)}; keeping src/data/bench-v4.json (${summary(kept)}), src/data/bench-v3-runtime.json and src/data/bench-v4-arm64.json`,
     );
   }
 }

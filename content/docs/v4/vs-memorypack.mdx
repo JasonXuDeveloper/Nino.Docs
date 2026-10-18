@@ -100,6 +100,15 @@ To put it plainly, MemoryPack does these things and Nino v4 does not:
 
 Streams, async I/O, `ReadOnlySequence<byte>` input, serialization callbacks and compression are not on this list: each takes a few lines on top of Nino's `IBufferWriter<byte>` and `ReadOnlySpan<byte>` APIs. See [Streams, Async, Callbacks and Compression](/en/docs/v4/advanced/streams) for ready-to-copy helpers.
 
+## MemoryPack Bugs Found While Benchmarking
+
+Comparing every built-in type both libraries share, we round-tripped each value through MemoryPack 1.21.4 before timing it. Two types fail, so the benchmarks time them for Nino only:
+
+- **`BigInteger`.** Its formatter writes `temp.Slice(written)` of a 255-byte stack buffer where `temp.Slice(0, written)` is meant: the unused end of the buffer instead of the value. Any `BigInteger` of up to 255 bytes, `3^10` included, reads back as another value, on every runtime; larger values take another path and round-trip.
+- **`BitArray` on .NET 10.** Its formatter reinterprets a `BitArray` as `{ int[] m_array; int m_length }`, its layout on .NET 8. .NET 10's `BitArray` holds a `byte[] _array` instead, so MemoryPack writes the wrong bytes and reading one corrupts the heap and crashes the process.
+
+Nino writes a `BigInteger` as its two's-complement bytes and a `BitArray` through its public API, so neither depends on the runtime's private layout. See [Other Built-in Types](/en/docs/v4/types#other-built-in-types).
+
 ## Type Ids and Union Tags
 
 MemoryPack writes a 1-byte union tag (3 bytes above 249) where Nino writes a 4-byte type id. This is a deliberate trade-off:

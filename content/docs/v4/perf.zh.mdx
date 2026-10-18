@@ -42,6 +42,7 @@ icon: ChartColumn
 - **反序列化**测试读取各个库在启动时写好的字节，每次调用都创建新对象。
 - **复用**测试反序列化到已经存在的对象中：Nino 通过 `ref` 和 `[NinoPooled]` 对象池，MemoryPack 用它的覆盖模式。
 - **v3** 运行的是同一个 `SimpleTest`，但编译时引用的是 NuGet 上的 Nino 3.3.13，在同一台运行器上、紧接在 v4 的 `SimpleTest` 之前运行一次。两次运行都包含 MemoryPack，它前后两次耗时的差别就是机器本身的波动。每张 v3 图表下方都注明了数据来自哪次运行。
+- **Arm64**：发布时的基准测试还会以相同设置在 GitHub 的 Arm64 运行器（`ubuntu-24.04-arm`）上运行同样的基准测试类。等某个版本的发布报告包含这些结果后，Nino 对比 MemoryPack 的运行时表格和图表会在 **x64** 旁边多出一个 **Arm64** 标签页，你选择的标签页会同时切换全站所有基准测试表格和图表。两种运行器不同，请在同一架构内比较 Nino 与 MemoryPack，不要跨架构比较耗时。与 v3 的对比只有 x64。
 
 每个基准测试的代码见[基准测试代码](#benchmark-code)。
 
@@ -117,7 +118,7 @@ v4.0.0-rc.4 之后又加入了三个测试类；发布报告包含它们之后�
 
 - **常用类型**（[`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/CommonTypesTest.cs)）：形态接近常见应用的数据，`List<Player>`（100 个）、`List<Order>`（100 个）、`List<Shape>`（1,000 个，声明为抽象基类）、一棵 `TreeNode` 树（1,365 个节点）、`InventoryItem[1000]`（带填充的结构体）和 `Dictionary<string, string>`（1,000 项）。
 - **集合**（[`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/CollectionsTest.cs)）：基础类库中的集合，各 1,000 个元素：`List<(int, long)>`、`KeyValuePair<int, int>[]`、`HashSet<int>`、`Queue<int>`、`LinkedList<int>`、`SortedList<int, int>` 和 `ConcurrentDictionary<int, int>`。
-- **BCL 类型**（[`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/BclTypesTest.cs)）：两个库都有格式化器的其他基础类库类型：`BigInteger`（3^1000）、`Uri`、`Version`、`StringBuilder`（1,000 个字符）、`BitArray`（1,000 位）、`CultureInfo`、`TimeZoneInfo`、`Lazy<string>`，以及各 1,000 个元素的 `Memory<int>`、`ReadOnlySequence<int>`、`ReadOnlyCollection<int>`、`ILookup<int, int>`、`BlockingCollection<int>` 和 `Nino.Immutable` 中的不可变集合（`ImmutableHashSet`、`ImmutableSortedSet`、`ImmutableQueue`、`ImmutableStack`、`ImmutableDictionary`、`ImmutableSortedDictionary`）。
+- **BCL 类型**（[`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/BclTypesTest.cs)）：两个库都有格式化器的其他基础类库类型：`BigInteger`（3^1000）、`Uri`、`Version`、`StringBuilder`（1,000 个字符）、`BitArray`（1,000 位）、`CultureInfo`、`TimeZoneInfo`、`Lazy<string>`，以及各 1,000 个元素的 `Memory<int>`、`ReadOnlySequence<int>`、`ReadOnlyCollection<int>`、`ILookup<int, int>`、`BlockingCollection<int>` 和 `Nino.Immutable` 中的不可变集合（`ImmutableHashSet`、`ImmutableSortedSet`、`ImmutableQueue`、`ImmutableStack`、`ImmutableDictionary`、`ImmutableSortedDictionary`）。`BigInteger` 和 `BitArray` 只测 Nino：MemoryPack 1.21.4 无法正确往返它们（参见[基准测试中发现的 MemoryPack 问题](/zh/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)）。
 
 三者都序列化到复用的缓冲区写入器，并反序列化为新实例。
 
@@ -906,4 +907,4 @@ dotnet run -c Release --project src/Nino.GeneratorBenchmark -- 30 8
 
 - `benchmarks/run.sh` 会构建 `benchmarks/v3`（引用 NuGet 上 Nino 3.3.13 的同一个 `SimpleTest`），在 v4 之前紧接着运行一次，然后逐个用例输出 **v4 对比 v3**。
 - 每次发布时，CI 都按同样的流程运行，各基准测试类分布在四台运行器上（v3 在 `SimpleTest` 所在的运行器上、紧接在它之前运行），并把结果写进发布说明：Performance Report，以及 **v3 3.3.13 vs v4 (same machine)** 一节。本站的运行时数据取自包含这些数据的最新 v4 版本。
-- `benchmarks/members` 把 `SimpleClass` 按成员逐个拆开，分别对比 v3 和 v4，用来找出是哪个成员拖慢了某个用例。参见 [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks)。
+- `benchmarks/members` 把 `SimpleClass` 按成员逐个拆开，分别对比 v3 和 v4，用来找出某个用例的时间花在哪个成员上。参见 [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks)。

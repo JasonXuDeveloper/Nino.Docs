@@ -61,7 +61,7 @@ static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 | 调整字段顺序，使其不需要填充（`int, int, DateTime`） | 普通的整块拷贝 |
 | 给 `int, DateTime` 加上 `[StructLayout(LayoutKind.Sequential, Pack = 4)]` | 对更小的结构体（12 字节而不是 16 字节）整块拷贝：最快，数据也最小 |
 | 字段之间有空隙（`int, DateTime`：`int` 之后有 4 字节） | 整块拷贝，并用掩码清掉填充 |
-| `[StructLayout(LayoutKind.Auto)]` | **不按原始内存写入**：运行时可能重排字段，所以 Nino 逐个字段写入，慢好几倍 |
+| `[StructLayout(LayoutKind.Auto)]` | **不按原始内存写入**：运行时可能重排字段，所以 Nino 逐个字段写入，耗时是整块拷贝的好几倍 |
 
 ```csharp title="Layouts.cs"
 [NinoType]

@@ -5,33 +5,28 @@
 import { useState } from 'react';
 import { Segmented } from '@/components/showcase';
 import {
+  type Arch,
+  arm64,
+  type BenchDataset,
   build,
   FLOOR_NS,
   formatBytes,
   formatTime,
   isOnPar,
-  payload,
   type RuntimeCase,
-  reuse,
   reuseSpeedup,
   runtime,
-  serializeAllocatesNothing,
   sourceNote,
   V3_RUNTIME,
   v3SourceNote,
+  x64,
 } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
 import { BarChart, type BarChartProps, type ChartSeries } from './bar-chart';
 
-export type ChartId =
-  | 'serialize'
-  | 'deserialize'
-  | 'reuse'
-  | 'v3-serialize'
-  | 'v3-deserialize'
-  | 'compile'
-  | 'allocation'
-  | 'payload';
+import type { ChartId } from './ids';
+
+export type { ChartId };
 
 const ratioText = (value: number) => value.toFixed(2);
 const rel = (value: number) => (value === 0 ? '0' : value.toFixed(1));
@@ -96,12 +91,20 @@ function mpBadge(row: RuntimeCase, zh: boolean) {
   return undefined;
 }
 
+/** The data a Nino-vs-MemoryPack chart is drawn from: one architecture's run */
+interface ChartData {
+  ds: BenchDataset;
+  /** In an architecture tab: the source line also names the machine */
+  tabbed: boolean;
+}
+
 function memoryPackChart(
   op: 'serialize' | 'deserialize',
   zh: boolean,
+  { ds, tabbed }: ChartData,
 ): BarChartProps {
   const s = seriesFor(zh);
-  const rows = runtime[op];
+  const rows = ds.runtime[op];
   const hasGc = rows.some((row) => row.gcBound);
   return {
     title: zh
@@ -123,7 +126,10 @@ function memoryPackChart(
       ? '相对耗时（MemoryPack = 1.0）'
       : 'Relative time (MemoryPack = 1.0)',
     tickFormat: rel,
-    footnotes: [sourceNote(zh), ...(hasGc ? [zh ? gcNote.zh : gcNote.en] : [])],
+    footnotes: [
+      sourceNote(zh, ds, tabbed),
+      ...(hasGc ? [zh ? gcNote.zh : gcNote.en] : []),
+    ],
     table: {
       caption: zh ? '数据表' : 'Data table',
       head: zh
@@ -139,8 +145,9 @@ function memoryPackChart(
   };
 }
 
-function reuseChart(zh: boolean): BarChartProps {
+function reuseChart(zh: boolean, { ds, tabbed }: ChartData): BarChartProps {
   const s = seriesFor(zh);
+  const reuse = ds.reuse;
   return {
     title: zh
       ? '反序列化到已有对象：Nino 复用 对比 MemoryPack 覆盖'
@@ -178,7 +185,7 @@ function reuseChart(zh: boolean): BarChartProps {
       ? '相对耗时（MemoryPack 新建 = 1.0）'
       : 'Relative time (MemoryPack, new instances = 1.0)',
     tickFormat: rel,
-    footnotes: [sourceNote(zh)],
+    footnotes: [sourceNote(zh, ds, tabbed)],
     table: {
       caption: zh ? '数据表' : 'Data table',
       head: zh
@@ -309,8 +316,12 @@ function compileChart(zh: boolean): BarChartProps {
   };
 }
 
-function allocationChart(zh: boolean): BarChartProps {
+function allocationChart(
+  zh: boolean,
+  { ds, tabbed }: ChartData,
+): BarChartProps {
   const s = seriesFor(zh);
+  const reuse = ds.reuse;
   return {
     title: zh
       ? '每次调用分配的内存：反序列化到已有对象'
@@ -333,14 +344,14 @@ function allocationChart(zh: boolean): BarChartProps {
     axisLabel: zh ? '每次调用分配的字节数' : 'Bytes allocated per call',
     tickFormat: (value) => (value >= 1000 ? `${value / 1000}K` : String(value)),
     footnotes: [
-      ...(serializeAllocatesNothing
+      ...(ds.serializeAllocatesNothing
         ? [
             zh
               ? '序列化：两个库在所有用例中都是每次调用 0 B。'
               : 'Serialize: 0 B per call in both libraries, in every case.',
           ]
         : []),
-      sourceNote(zh),
+      sourceNote(zh, ds, tabbed),
     ],
     table: {
       caption: zh ? '数据表' : 'Data table',
@@ -356,8 +367,12 @@ function allocationChart(zh: boolean): BarChartProps {
   };
 }
 
-function payloadChart(zh: boolean): BarChartProps | null {
+function payloadChart(
+  zh: boolean,
+  { ds, tabbed }: ChartData,
+): BarChartProps | null {
   const s = seriesFor(zh);
+  const payload = ds.payload;
   const v4 = payload.v4;
   const mp = payload.memorypack;
   if (v4 === null || mp === null) return null;
@@ -380,6 +395,7 @@ function payloadChart(zh: boolean): BarChartProps | null {
     ],
     axisLabel: zh ? '字节' : 'Bytes',
     tickFormat: (value) => value.toLocaleString('en-US'),
+    footnotes: tabbed ? [sourceNote(zh, ds, true)] : undefined,
     table: {
       caption: zh ? '数据表' : 'Data table',
       head: zh
@@ -390,13 +406,26 @@ function payloadChart(zh: boolean): BarChartProps | null {
   };
 }
 
-export function chartProps(id: ChartId, zh: boolean): BarChartProps | null {
+/**
+ * `arch` picks the run of the Nino-vs-MemoryPack charts (x64 by default);
+ * given, the footnote names the machine, as in an architecture tab. The v3 and
+ * build charts are x64 only and ignore it.
+ */
+export function chartProps(
+  id: ChartId,
+  zh: boolean,
+  arch?: Arch,
+): BarChartProps | null {
+  const data: ChartData = {
+    ds: arch === 'arm64' && arm64 ? arm64 : x64,
+    tabbed: arch !== undefined,
+  };
   switch (id) {
     case 'serialize':
     case 'deserialize':
-      return memoryPackChart(id, zh);
+      return memoryPackChart(id, zh, data);
     case 'reuse':
-      return reuseChart(zh);
+      return reuseChart(zh, data);
     case 'v3-serialize':
       return v3Chart('serialize', zh);
     case 'v3-deserialize':
@@ -404,9 +433,9 @@ export function chartProps(id: ChartId, zh: boolean): BarChartProps | null {
     case 'compile':
       return compileChart(zh);
     case 'allocation':
-      return allocationChart(zh);
+      return allocationChart(zh, data);
     case 'payload':
-      return payloadChart(zh);
+      return payloadChart(zh, data);
   }
 }
 
@@ -438,17 +467,20 @@ export interface BenchmarkChartProps {
   lang?: Locale;
   /** Hide the data table when the page already has one next to the chart */
   table?: boolean;
+  /** Set by ./index.tsx inside an architecture tab */
+  arch?: Arch;
 }
 
 export default function BenchmarkCharts({
   chart,
   lang = 'en',
   table = true,
+  arch,
 }: BenchmarkChartProps) {
   const zh = lang === 'zh';
   const ids = Array.isArray(chart) ? chart : [chart];
   const [current, setCurrent] = useState<ChartId>(ids[0]);
-  const props = chartProps(current, zh);
+  const props = chartProps(current, zh, arch);
   if (props && !table) props.table = undefined;
   const body = props ? (
     <BarChart key={current} {...props} />

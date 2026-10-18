@@ -171,7 +171,7 @@ public sealed class CommandChannel
 }
 ```
 
-另外还有两种做法，但都更慢：
+另外还有两种做法，但开销都更大：
 
 - **把 `object` 作为声明类型**（成员、元素，或 `Serialize<object>` 调用）：只接受 `[NinoType]` 的值，会写入类型 ID，读取时通过包含所有 `[NinoType]` 的全局注册表分派，而不是某个基类型的生成分派。请优先使用共同基类型。
 - **[装箱 API](/zh/docs/v4/basic#the-boxed-api)**（带 `Type` 的 `SerializeBoxed` / `DeserializeBoxed`）：按 `Type` 查找格式化器，值类型会被装箱。只有当类型要到运行时才以 `Type` 的形式得知、并且这些类型没有共同的 `[NinoType]` 基类型时才使用，例如基于反射、面向任意类型的工具。

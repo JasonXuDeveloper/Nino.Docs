@@ -91,6 +91,7 @@ The v4 runtime numbers (Nino and MemoryPack) come from `src/data/bench-v4.json`.
 bun run sync:benchmarks                                              # sync now
 bun scripts/sync-benchmarks.ts --fixture scripts/fixtures/release-body.md  # test the parser
 bun scripts/sync-benchmarks.ts --fixture scripts/fixtures/release-body-new.md  # every benchmark class and the v3 section
+bun scripts/sync-benchmarks.ts --fixture scripts/fixtures/release-body-arm64.md  # plus the Arm64 section (numbers copied from x64, parser test only)
 ```
 
 Every benchmark class is required, the reference tracking, version tolerance and fixed-size rows (`ReferenceTest`, `VersionTolerantTest`, `FixedSizeTest`) included: a report without them is not used. `release-body-new.md` is the body `report.yml` would write for a local `benchmarks/run.sh` run (the run the committed data files come from, marked `"origin": "local"`), with its Payload cells in exact bytes as the benchmark now prints them.
