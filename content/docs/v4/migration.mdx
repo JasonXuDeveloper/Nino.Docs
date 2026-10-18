@@ -4,7 +4,7 @@ description: "Upgrade a Nino v3 project to v4 step by step: package changes, ren
 icon: ArrowRightLeft
 ---
 
-Nino v4 is a breaking release. This page lists every API, attribute and option that changed, with before/after code, and explains what to do with data written by v3. Upgrading from a v4 beta or preview instead? See [Upgrading from a v4 Beta](#upgrading-from-a-v4-beta).
+Nino v4 is a breaking release. This page lists every API, attribute and option that changed, with before/after code, and explains what to do with data written by v3. Upgrading from a v4 beta or preview instead? See [Upgrading from a v4 Beta](#upgrading-from-a-v4-beta). From an earlier release candidate: [Upgrading from an Earlier Release Candidate](#upgrading-from-an-earlier-release-candidate).
 
 <Callout type="warn">
 
@@ -317,3 +317,10 @@ Code written against an early v4 beta uses names that changed before the release
 - **Formatters cannot be registered at run time.** `NinoFormatterCache<T>.Register<TFormatter>()` is removed; declare the formatter with `[assembly: NinoFormatter]` or `[NinoCustomFormatter]` instead. See [Custom Formatters](/en/docs/v4/custom-formatters).
 - **`[NinoFactory]` next to a `[NinoConstructor]` is reported.** Such a factory was never called; the analyzer now warns about it (NINO025). See [Constructor or Factory?](/en/docs/v4/constructors#constructor-or-factory).
 - **On a reader returned by `ReadSlice()`, `Reader.Position` is an offset into the whole input**, not into the slice. A custom formatter that compared it with the slice's length should record the position where the slice starts and subtract it. See [Positions in a Slice](/en/docs/v4/custom-formatters#positions-in-a-slice).
+
+## Upgrading from an Earlier Release Candidate [#upgrading-from-an-earlier-release-candidate]
+
+The release candidates keep the format of 4.0.0-rc.1, except for the changes the [Changelog](/en/docs/v4/changelog) lists under **Wire Format**:
+
+- **4.0.0-rc.6** writes a string whose chars are all at most U+00FF in one byte a char, behind a negative header. It still reads strings written by earlier releases (their UTF-16 form is the other form it reads), so stored data needs no conversion. Earlier releases cannot read the one-byte strings it writes, though: upgrade the processes that read the data before, or together with, those that write it. `[NinoUtf8]` strings are unchanged. Layouts recorded from the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) of an earlier release differ as text for every member that is not raw: record them again.
+- **4.0.0-rc.3** and **4.0.0-rc.2** changed the bytes of a few structs declared in another assembly, and of `nint` and `nuint` members on netstandard; see their [Wire Format entries](/en/docs/v4/changelog#wire-format) in the Changelog.

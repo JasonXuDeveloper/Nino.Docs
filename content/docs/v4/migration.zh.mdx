@@ -4,7 +4,7 @@ description: "把 Nino v3 项目逐步升级到 v4：包的变化、改名的特
 icon: ArrowRightLeft
 ---
 
-Nino v4 是不向后兼容的大版本。本页列出所有变化的 API、特性和选项，附上修改前后的代码，并说明 v3 写出的数据该怎么处理。如果是从 v4 beta 或 preview 升级，请看[从 v4 beta 升级](#upgrading-from-a-v4-beta)。
+Nino v4 是不向后兼容的大版本。本页列出所有变化的 API、特性和选项，附上修改前后的代码，并说明 v3 写出的数据该怎么处理。如果是从 v4 beta 或 preview 升级，请看[从 v4 beta 升级](#upgrading-from-a-v4-beta)；从更早的候选版本升级，请看[从更早的候选版本升级](#upgrading-from-an-earlier-release-candidate)。
 
 <Callout type="warn">
 
@@ -317,3 +317,10 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 - **不能再在运行时注册格式化器。** `NinoFormatterCache<T>.Register<TFormatter>()` 已移除，请改用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明格式化器。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
 - **`[NinoFactory]` 与 `[NinoConstructor]` 同时出现时会报告。** 这样的工厂方法本来就不会被调用，现在分析器会给出警告（NINO025）。参见[构造函数还是工厂方法？](/zh/docs/v4/constructors#constructor-or-factory)。
 - **在 `ReadSlice()` 返回的 reader 上，`Reader.Position` 是相对整个输入的偏移**，而不是相对切片起点。如果自定义格式化器拿它和切片长度比较，应当在切片开始处记下位置，再把它减掉。参见[切片中的位置](/zh/docs/v4/custom-formatters#positions-in-a-slice)。
+
+## 从更早的候选版本升级 [#upgrading-from-an-earlier-release-candidate]
+
+各个候选版本沿用 4.0.0-rc.1 的格式，只有[更新日志](/zh/docs/v4/changelog)中“二进制格式”一节列出的变化除外：
+
+- **4.0.0-rc.6** 在字符串的所有字符都不超过 U+00FF 时，每个字符写一个字节，头部为负数。它仍能读取早期版本写出的字符串（早期的 UTF-16 形式正是它读取的另一种形式），所以已存储的数据无需转换。但早期版本读不了它写出的单字节字符串：读取数据的进程要先于写入数据的进程升级，或者同时升级。`[NinoUtf8]` 字符串不变。早期版本记录下来的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)，每个非原始内存成员的文本都会不同，需要重新记录。
+- **4.0.0-rc.3** 和 **4.0.0-rc.2** 改变了少数在其他程序集中声明的结构体的字节，以及 netstandard 上 `nint` 和 `nuint` 成员的字节；参见更新日志中对应的[二进制格式条目](/zh/docs/v4/changelog#wire-format)。

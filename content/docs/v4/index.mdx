@@ -35,7 +35,7 @@ Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 - **Everything at compile time.** The generator writes one formatter per type, so Nino works on IL2CPP, NativeAOT and HybridCLR. On the .NET 8 SDK and later, [interceptors](/en/docs/v4/performance#interceptors) route each call straight to the right formatter. The generator is incremental: editing a type regenerates that type only, and the generated code compiles far faster than v3's ([build times](/en/docs/v4/v3-vs-v4#build-time-and-generated-code)).
 - **Polymorphism without tags.** Values declared as a base class or interface are read back as their runtime type. Type ids are hashes of type names, so there is no tag table to maintain, and Nino finds subtypes in other assemblies on its own. See [Polymorphism](/en/docs/v4/polymorphism).
 - **Data that evolves.** Per type, choose [version tolerance](/en/docs/v4/evolving-data#version-tolerance) (append members), [keyed members](/en/docs/v4/evolving-data#keyed-members) (add, remove and reorder members) or [reference tracking](/en/docs/v4/reference-tracking) (shared references and cycles). Types that don't opt in pay nothing.
-- **The same bytes everywhere.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` write identical bytes on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, so a Unity client and a .NET server can read each other's data. See [Platforms and Binary Format](/en/docs/v4/platforms).
+- **The same bytes everywhere.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` write identical bytes on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, x64 and Arm64, so a Unity client and a .NET server can read each other's data. See [Platforms and Binary Format](/en/docs/v4/platforms).
 - **Thread safe.** Every `NinoSerializer` and `NinoDeserializer` method can be called from any number of threads, with no locks on the hot path.
 - **Mistakes caught while you type.** 26 [analyzer diagnostics](/en/docs/v4/analyzers) (NINO001–NINO026), many with a one-click code fix.
 
@@ -44,6 +44,8 @@ Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 | Use case | What Nino gives you |
 | --- | --- |
 | [Networking and RPC](/en/docs/v4/advanced/networking) | Serialize into a `PipeWriter` or any `IBufferWriter<byte>`, read from a `ReadOnlySpan<byte>`, reuse pooled messages; polymorphic messages without opcode tables. |
+| [ASP.NET Core](/en/docs/v4/advanced/aspnetcore) | `application/x-nino` request and response bodies in MVC and Minimal APIs, read and written straight from the request and response pipes (Nino.AspNetCore). |
+| [Browsers and Node](/en/docs/v4/advanced/typescript) | TypeScript classes and codecs generated from your types after each build (Nino.TypeScript), reading and writing the same bytes as .NET. |
 | [Message queues and event streams](/en/docs/v4/advanced/message-queues) | Compact payloads, event hierarchies read back as their real type, batches of unmanaged records copied as one block. |
 | [Caching](/en/docs/v4/advanced/caching) | Small values for Redis or `IDistributedCache`, no allocations of its own per call, types that stay readable across deployments. |
 | [Persistence](/en/docs/v4/advanced/persistence) | Files, key-value stores and logs: keyed and version-tolerant types survive updates, reference tracking keeps object graphs intact. |
@@ -82,7 +84,7 @@ Order copy = NinoDeserializer.Deserialize<Order>(bytes);
     Build time and runtime against v3 and MemoryPack, with the full tables.
   </Card>
   <Card icon={<Compass />} title="Advanced Guides" href="/en/docs/v4/advanced">
-    Complete patterns for hot paths, networking and RPC, message queues, caching, persistence and Unity.
+    Complete patterns for hot paths, networking and RPC, ASP.NET Core, TypeScript clients, message queues, caching, persistence and Unity.
   </Card>
 </Cards>
 

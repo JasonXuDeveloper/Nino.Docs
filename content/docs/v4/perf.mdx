@@ -98,7 +98,7 @@ Nino deserializes into an existing object graph ([reuse deserialization](/en/doc
 
 ### Allocations and Payload Size [#allocations-and-payload-size]
 
-Bytes allocated per call, and the size of one serialized `SimpleClass` (<BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack). No serializer allocates on the serialize paths.
+Bytes allocated per call, and the size of one serialized `SimpleClass` (<BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack). No serializer allocates on the serialize paths. Since 4.0.0-rc.6, Nino writes text whose chars are all at most U+00FF in one byte a char ([Binary Format](/en/docs/v4/platforms#binary-format)), so payloads with such strings measured on an earlier release are larger than what rc.6 writes; the sizes here come from the release named under [How It Is Measured](#setup).
 
 <BenchmarkChart chart={['allocation', 'payload']} lang="en" />
 
@@ -114,7 +114,7 @@ Three more benchmark classes compare features that change how a type is written,
 
 ### Common Types, Collections and BCL Types [#common-types-and-collections]
 
-Three more classes were added after v4.0.0-rc.4; their rows appear in [All Measurements](#results) once a release's report includes them:
+Three more classes, measured since v4.0.0-rc.5; their rows are in [All Measurements](#results):
 
 - **Common types** ([`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/CommonTypesTest.cs)): data shaped like that of common applications, `List<Player>` (100), `List<Order>` (100), `List<Shape>` (1,000 through an abstract base), a `TreeNode` tree (1,365 nodes), `InventoryItem[1000]` (a padded struct) and `Dictionary<string, string>` (1,000).
 - **Collections** ([`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/CollectionsTest.cs)): collections of the base class library, 1,000 elements each: `List<(int, long)>`, `KeyValuePair<int, int>[]`, `HashSet<int>`, `Queue<int>`, `LinkedList<int>`, `SortedList<int, int>` and `ConcurrentDictionary<int, int>`.

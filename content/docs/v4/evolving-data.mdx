@@ -148,15 +148,15 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
 //            members=raw(8){VelocityX:float@0:raw(4),VelocityY:float@4:raw(4)}
 ```
 
-- Each member is written as `name:type:encoding`, and the encoding describes the bytes, not the formatter class that writes them, so a tool can read and write them without knowing Nino.Core's formatters ([Nino.TypeScript](/en/docs/v4/advanced/typescript) does):
-  - `raw(n)` or `raw(n){...}`: a value copied as raw memory (next point);
+- Members are listed in the order they are written, separated by `;`. Each member is written as `name:type:encoding`, and the encoding describes the bytes, not the formatter class that writes them, so a tool can read and write them without knowing Nino.Core's formatters ([Nino.TypeScript](/en/docs/v4/advanced/typescript) does):
+  - `raw(n)` or `raw(n){...}`: a value copied as raw memory (next point); `raw` alone: one whose size is known only at run time;
   - `string`: a string in the default encoding; `utf8`: a `[NinoUtf8]` string;
   - `type(T)`: a `[NinoType]`, as its own layout describes it; `object`: a `[NinoType]` behind its type id;
   - `nullable(E)`: a presence byte, then `E`;
   - `seq(E)`: an `int32` count (`-1` = null), then the elements; `map(K,V)`: a count, then each key and value; `grid(rank,E)`: each dimension's length, then the elements in row-major order;
   - `pair(K,V)` and `tuple(E,...)`: the items in order; `group(K,E)`: an element count, the key, then the elements;
   - `datetimeoffset`, `bigint`, `version`, `bits`, `timezone`: those built-in types;
-  - `formatter(F)`: written by `F`, a custom or third-party formatter.
+  - `formatter(F)`: written by `F`, a formatter outside Nino.Core: a [custom formatter](/en/docs/v4/custom-formatters), another library's, or those of `Nino.Immutable` and of Unity's `AnimationCurve`, `Gradient` and `RectOffset`.
 
   A `Dictionary<string, int[]> Inventory` reads `Inventory:System.Collections.Generic.Dictionary<string, int[]>:map(string,seq(raw(4)))`. In a keyed type each member ends with `:key=0x…`, its key, and `:former=0x…,0x…` for the keys of its [former names](#renaming-keyed-members). A `[NinoType]` collection starts with `[elements]::` and the encoding of its elements. Up to 4.0.0-rc.5, members that were not raw named their formatter class instead.
 - A raw layout is the value's bytes in Nino's canonical layout: `raw(n)` for a primitive, enum, `decimal`, `Guid`, `DateTime` or `TimeSpan` of `n` bytes, and `raw(n){name:type@offset:encoding,...}` for a struct of `n` bytes, with each field at its offset. An id such as `readonly record struct PlayerId(long Value)` shows as `Id:Game.PlayerId:raw(8){Value:long@0:raw(8)}`. Every struct inside a raw value is spelled out, `[NinoType]` or not, so a changed field, `[StructLayout]` `Pack` or `Size`, or `[FieldOffset]` changes the layout. A raw struct's members are just its raw layout, as `Move` shows above.

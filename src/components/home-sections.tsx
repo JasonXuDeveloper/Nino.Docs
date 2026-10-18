@@ -7,12 +7,13 @@
 import {
   ChevronDown,
   Database,
+  FileCode,
   Gamepad2,
   Gauge,
   type LucideIcon,
   MessagesSquare,
   Network,
-  Recycle,
+  Server,
   Shapes,
   Zap,
 } from 'lucide-react';
@@ -95,7 +96,7 @@ const text: Record<
       {
         label: 'Runs on',
         value:
-          '.NET Standard 2.0+, .NET 8, .NET 10, NativeAOT, Unity 2022.3+ (Mono, IL2CPP, HybridCLR), Godot 4',
+          '.NET Standard 2.0+, .NET 8, .NET 10, NativeAOT, ASP.NET Core, Unity 2022.3+ (Mono, IL2CPP, HybridCLR), Godot 4; browsers and Node through generated TypeScript',
       },
       ...(serializeRange
         ? [
@@ -121,6 +122,18 @@ const text: Record<
         href: 'advanced/networking',
       },
       {
+        icon: Server,
+        title: 'ASP.NET Core',
+        text: 'application/x-nino request and response bodies in MVC and Minimal APIs, read and written straight from the pipes (Nino.AspNetCore).',
+        href: 'advanced/aspnetcore',
+      },
+      {
+        icon: FileCode,
+        title: 'Browsers and Node',
+        text: 'TypeScript classes and codecs generated from your [NinoType]s after each build (Nino.TypeScript), with the same bytes as .NET.',
+        href: 'advanced/typescript',
+      },
+      {
         icon: MessagesSquare,
         title: 'Message queues and event streams',
         text: 'One base type for every event, small messages, and formats that let producers and consumers upgrade at different times.',
@@ -141,14 +154,8 @@ const text: Record<
       {
         icon: Gauge,
         title: 'Hot paths and IPC',
-        text: 'Thread-safe serialization with no per-call allocations for workers, actors, inter-process channels and data pipelines.',
+        text: 'Thread-safe serialization with no per-call allocations for workers, actors, inter-process channels and data pipelines; deserializing into existing objects and [NinoPooled] instances keeps steady-state loops at zero GC.',
         href: 'advanced/high-performance',
-      },
-      {
-        icon: Recycle,
-        title: 'Zero-GC loops',
-        text: 'Deserialize into existing objects and [NinoPooled] instances, so steady-state loops allocate nothing.',
-        href: 'advanced/zero-allocation',
       },
       {
         icon: Gamepad2,
@@ -179,7 +186,7 @@ const text: Record<
       {
         question: 'Which platforms does Nino support?',
         answer:
-          'The runtime targets netstandard2.0, netstandard2.1, net8.0 and net10.0, so it runs on .NET Framework 4.6.1+, .NET Core, .NET 5–10 and NativeAOT, as well as Unity 2022.3 and later (Mono, IL2CPP, HybridCLR) and Godot 4. Every platform, 64-bit or 32-bit, writes the same bytes.',
+          'The runtime targets netstandard2.0, netstandard2.1, net8.0 and net10.0, so it runs on .NET Framework 4.6.1+, .NET Core, .NET 5–10 and NativeAOT, as well as Unity 2022.3 and later (Mono, IL2CPP, HybridCLR) and Godot 4. Every platform, 64-bit or 32-bit, writes the same bytes. Nino.AspNetCore reads and writes ASP.NET Core bodies, and Nino.TypeScript generates TypeScript codecs that read and write the same bytes in browsers and Node.',
         href: 'platforms',
       },
       {
@@ -222,7 +229,7 @@ const text: Record<
       {
         label: '运行环境',
         value:
-          '.NET Standard 2.0+、.NET 8、.NET 10、NativeAOT、Unity 2022.3+（Mono、IL2CPP、HybridCLR）、Godot 4',
+          '.NET Standard 2.0+、.NET 8、.NET 10、NativeAOT、ASP.NET Core、Unity 2022.3+（Mono、IL2CPP、HybridCLR）、Godot 4；通过生成的 TypeScript 支持浏览器和 Node',
       },
       ...(serializeRange
         ? [
@@ -245,6 +252,18 @@ const text: Record<
         href: 'advanced/networking',
       },
       {
+        icon: Server,
+        title: 'ASP.NET Core',
+        text: '在 MVC 和 Minimal API 中读写 application/x-nino 请求体与响应，直接基于管道读写（Nino.AspNetCore）。',
+        href: 'advanced/aspnetcore',
+      },
+      {
+        icon: FileCode,
+        title: '浏览器与 Node',
+        text: '每次构建后为你的 [NinoType] 生成 TypeScript 类和编解码器（Nino.TypeScript），字节与 .NET 相同。',
+        href: 'advanced/typescript',
+      },
+      {
         icon: MessagesSquare,
         title: '消息队列与事件流',
         text: '所有事件共用一个基类型，消息小巧，生产者和消费者可以在不同时间升级。',
@@ -265,14 +284,8 @@ const text: Record<
       {
         icon: Gauge,
         title: '热路径与进程间通信',
-        text: '线程安全、每次调用零分配，适合后台任务、Actor、进程间通道和数据管道。',
+        text: '线程安全、每次调用零分配，适合后台任务、Actor、进程间通道和数据管道；反序列化到已有对象和 [NinoPooled] 实例，稳定运行的循环零 GC。',
         href: 'advanced/high-performance',
-      },
-      {
-        icon: Recycle,
-        title: '零 GC 循环',
-        text: '反序列化到已有对象和 [NinoPooled] 实例，稳定运行的循环不再分配内存。',
-        href: 'advanced/zero-allocation',
       },
       {
         icon: Gamepad2,
@@ -303,7 +316,7 @@ const text: Record<
       {
         question: 'Nino 支持哪些平台？',
         answer:
-          '运行时面向 netstandard2.0、netstandard2.1、net8.0 和 net10.0，因此可运行于 .NET Framework 4.6.1+、.NET Core、.NET 5–10 与 NativeAOT，也支持 Unity 2022.3 及以上（Mono、IL2CPP、HybridCLR）和 Godot 4。所有平台，无论 64 位还是 32 位，写出的字节都相同。',
+          '运行时面向 netstandard2.0、netstandard2.1、net8.0 和 net10.0，因此可运行于 .NET Framework 4.6.1+、.NET Core、.NET 5–10 与 NativeAOT，也支持 Unity 2022.3 及以上（Mono、IL2CPP、HybridCLR）和 Godot 4。所有平台，无论 64 位还是 32 位，写出的字节都相同。Nino.AspNetCore 负责在 ASP.NET Core 中读写请求体与响应，Nino.TypeScript 生成的 TypeScript 编解码器让浏览器和 Node 读写相同的字节。',
         href: 'platforms',
       },
       {
@@ -371,7 +384,7 @@ export function HomeUseCases({ lang, docs }: { lang: Locale; docs: string }) {
     <>
       <h2 className="text-2xl font-bold tracking-tight">{t.useTitle}</h2>
       <p className="mt-2 text-fd-muted-foreground">{t.useLead}</p>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {t.useCases.map((u) => (
           <Link
             key={u.href}

@@ -98,7 +98,7 @@ Nino 把数据反序列化到已有的对象图中（[复用反序列化](/zh/do
 
 ### 内存分配与载荷大小 [#allocations-and-payload-size]
 
-每次调用分配的字节数，以及一个 `SimpleClass` 序列化后的大小（Nino 为 <BenchValue k="payload.v4" /> 字节，MemoryPack 为 <BenchValue k="payload.memorypack" /> 字节）。所有序列化库在序列化时都不分配内存。
+每次调用分配的字节数，以及一个 `SimpleClass` 序列化后的大小（Nino 为 <BenchValue k="payload.v4" /> 字节，MemoryPack 为 <BenchValue k="payload.memorypack" /> 字节）。所有序列化库在序列化时都不分配内存。从 4.0.0-rc.6 起，所有字符都不超过 U+00FF 的文本由 Nino 按每个字符一个字节写出（[二进制格式](/zh/docs/v4/platforms#binary-format)），所以在更早版本上测得的、含这类字符串的数据，比 rc.6 写出的更大；这里的大小来自[测量方法](#setup)下注明的版本。
 
 <BenchmarkChart chart={['allocation', 'payload']} lang="zh" />
 
@@ -114,7 +114,7 @@ Nino 把数据反序列化到已有的对象图中（[复用反序列化](/zh/do
 
 ### 常用类型、集合与 BCL 类型 [#common-types-and-collections]
 
-v4.0.0-rc.4 之后又加入了三个测试类；发布报告包含它们之后，结果会出现在[全部测量结果](#results)中：
+自 v4.0.0-rc.5 起又测量了三个测试类，结果在[全部测量结果](#results)中：
 
 - **常用类型**（[`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/CommonTypesTest.cs)）：形态接近常见应用的数据，`List<Player>`（100 个）、`List<Order>`（100 个）、`List<Shape>`（1,000 个，声明为抽象基类）、一棵 `TreeNode` 树（1,365 个节点）、`InventoryItem[1000]`（带填充的结构体）和 `Dictionary<string, string>`（1,000 项）。
 - **集合**（[`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/CollectionsTest.cs)）：基础类库中的集合，各 1,000 个元素：`List<(int, long)>`、`KeyValuePair<int, int>[]`、`HashSet<int>`、`Queue<int>`、`LinkedList<int>`、`SortedList<int, int>` 和 `ConcurrentDictionary<int, int>`。

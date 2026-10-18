@@ -12,6 +12,9 @@ Nino runs on .NET Standard 2.0 and later, Unity 2022.3+ (Mono and IL2CPP) and Go
 | --- | --- |
 | `Nino.Core` (runtime) | `netstandard2.0`, `netstandard2.1`, `net8.0`, `net10.0` |
 | `Nino.Generator` (generator, analyzer) | Roslyn 4.3 and later; builds for Roslyn 4.3, 4.8 and 4.12 in one package |
+| `Nino.Immutable` (immutable collections) | `netstandard2.0`, `net8.0` |
+| `Nino.AspNetCore` ([ASP.NET Core](/en/docs/v4/advanced/aspnetcore)) | `net8.0`, `net10.0` |
+| `Nino.TypeScript` ([TypeScript Clients](/en/docs/v4/advanced/typescript)) | a build tool for projects of any target framework, run on the SDK's .NET 8 or later runtime; the generated code needs TypeScript 5.7+ and runs in ES2020 environments |
 | Generated code | C# 9 or later |
 | Unity | 2022.3 and later, Mono and IL2CPP, every player platform |
 | Godot | Godot 4 .NET projects (.NET 8 from Godot 4.4, .NET 6 before) |
@@ -29,7 +32,7 @@ All multi-byte values are **little-endian** and written unaligned. Positional ty
 | Unmanaged value (`int`, `Guid`, enums, raw structs) | its raw bytes, canonical layout, padding zeroed |
 | `bool` | 1 byte |
 | `T?` | 1 byte has-value flag, then the value if present |
-| Length of a string, array or collection | `int32`; `-1` means `null` |
+| Length of an array or collection | `int32`; `-1` means `null` |
 | `string` | `int32` header (`-1` = null, `0` = empty): `~length` then one byte per char when every char is at most U+00FF, otherwise the length then the UTF-16 code units |
 | `string` with `[NinoUtf8]` | `int32` length in UTF-16 chars (`-1` = null, `0` = empty), then `int32` length in bytes, then the UTF-8 bytes |
 | Array or list of unmanaged `T` | length, then one block of elements |
@@ -125,6 +128,8 @@ The net8.0 and net10.0 builds of `Nino.Core` use hardware intrinsics where the C
 | Arm64 | AdvSimd: the 16-byte shuffle per value (`TBL`), and four 4-register table lookups per 64 bytes for values of up to 8 bytes; strings of 33 to 64 bytes copied as two pairs of 16-byte vectors; `memmove` for blocks |
 | WebAssembly with SIMD (.NET 10) | the 16-byte shuffle per value (`PackedSimd`, `i8x16.swizzle`) |
 | Arm32; Unity (Mono, IL2CPP), .NET Framework and .NET Core 3.0 to .NET 7 | no hardware intrinsics: blocks through `memmove`, rearranged values one at a time |
+
+Strings in the [one-byte form](#binary-format) are narrowed when written and widened when read with 16-byte vectors, and 32-byte ones where AVX2 is available, on every CPU that accelerates them, in the net8.0 and net10.0 builds; the netstandard builds convert four chars at a time.
 
 Unity and .NET Framework, as well as .NET Core 3.0 to .NET 7, use the `netstandard2.0`/`netstandard2.1` builds, which contain no intrinsics. On every platform, blocks of up to 32 bytes (most strings) are copied inline on 64-bit runtimes, and padding is masked with 512-bit vectors on AVX-512, otherwise with `Vector<T>` where the runtime accelerates it, else 8 bytes at a time.
 

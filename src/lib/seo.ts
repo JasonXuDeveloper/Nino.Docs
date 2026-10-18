@@ -184,7 +184,7 @@ export function homeMeta({
         author: { '@id': ids.author },
         runtimePlatform: ['.NET', '.NET Standard 2.0', 'Unity', 'Godot'],
         keywords:
-          'C# serializer, .NET binary serialization, high-performance serializer, source generator, zero allocation, RPC, microservices, message queue, cache, IPC, MemoryPack alternative, Unity, Godot, HybridCLR, IL2CPP, NativeAOT',
+          'C# serializer, .NET binary serialization, high-performance serializer, source generator, zero allocation, RPC, microservices, message queue, cache, IPC, MemoryPack alternative, ASP.NET Core, TypeScript, Unity, Godot, HybridCLR, IL2CPP, NativeAOT',
         sameAs: [githubUrl, nugetUrl, openUpmUrl],
         targetProduct: {
           '@type': 'SoftwareApplication',

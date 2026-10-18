@@ -29,7 +29,7 @@ Measured with BenchmarkDotNet, both libraries in the same run. Bars show time re
 | Deserialize | **<BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" /> faster** where Nino leads; on par on arrays of unmanaged structs, which both copy as one block (see below) |
 | Deserialize into existing / pooled instances | **0 B** allocated, up to **<BenchValue k="reuse.max" /> faster** than MemoryPack's overwrite mode |
 | Allocations when serializing | 0 B for both |
-| Payload size | About the same: `SimpleClass` is <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack |
+| Payload size | About the same for `SimpleClass`: <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack. Strings depend on the text: ASCII takes one byte a char in both; other Latin-1 text and CJK text are smaller in Nino (one byte and two bytes a char, against two and three in UTF-8); mostly-ASCII text with a few wider chars is smaller in UTF-8, which Nino writes with `[NinoUtf8]` |
 
 <Callout type="info" title="Arrays of unmanaged structs">
 

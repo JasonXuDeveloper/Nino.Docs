@@ -12,6 +12,9 @@ Nino 支持 .NET Standard 2.0 及以上、Unity 2022.3+（Mono 和 IL2CPP）以�
 | --- | --- |
 | `Nino.Core`（运行时） | `netstandard2.0`、`netstandard2.1`、`net8.0`、`net10.0` |
 | `Nino.Generator`（源生成器、分析器） | Roslyn 4.3 及以上；同一个包内含 Roslyn 4.3、4.8 和 4.12 三个版本 |
+| `Nino.Immutable`（不可变集合） | `netstandard2.0`、`net8.0` |
+| `Nino.AspNetCore`（[ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)） | `net8.0`、`net10.0` |
+| `Nino.TypeScript`（[TypeScript 客户端](/zh/docs/v4/advanced/typescript)） | 构建工具，适用于任意目标框架的项目，由 SDK 自带的 .NET 8 或更高版本运行时执行；生成的代码需要 TypeScript 5.7+，可运行于 ES2020 环境 |
 | 生成的代码 | C# 9 及以上 |
 | Unity | 2022.3 及以上，Mono 和 IL2CPP，所有 Player 平台 |
 | Godot | Godot 4 .NET 项目（4.4 起为 .NET 8，之前为 .NET 6） |
@@ -29,7 +32,7 @@ Nino 支持 .NET Standard 2.0 及以上、Unity 2022.3+（Mono 和 IL2CPP）以�
 | 非托管值（`int`、`Guid`、枚举、原始结构体） | 原始字节，规范布局，填充字节清零 |
 | `bool` | 1 字节 |
 | `T?` | 1 字节的有值标志，有值时再写入值 |
-| 字符串、数组或集合的长度 | `int32`；`-1` 表示 `null` |
+| 数组或集合的长度 | `int32`；`-1` 表示 `null` |
 | `string` | `int32` 头（`-1` = null，`0` = 空）：所有字符都不超过 U+00FF 时为 `~长度`，然后每个字符一个字节；否则为长度，然后是 UTF-16 码元 |
 | 带 `[NinoUtf8]` 的 `string` | `int32` UTF-16 字符数（`-1` = null，`0` = 空），然后是 `int32` 字节数，然后是 UTF-8 字节 |
 | 非托管 `T` 的数组或列表 | 长度，然后整块写入元素 |
@@ -125,6 +128,8 @@ Nino 直接读写 `List<T>`、`Stack<T>`、`Queue<T>`、`SortedList<TKey, TValue
 | Arm64 | AdvSimd：每个值一次 16 字节重排（`TBL`），不超过 8 字节的值每 64 字节用四次 4 寄存器查表；33 到 64 字节的字符串用两对 16 字节向量拷贝；块用 `memmove` 拷贝 |
 | 支持 SIMD 的 WebAssembly（.NET 10） | 每个值一次 16 字节重排（`PackedSimd`，`i8x16.swizzle`） |
 | Arm32；Unity（Mono、IL2CPP）、.NET Framework 以及 .NET Core 3.0 到 .NET 7 | 不使用硬件指令集：块用 `memmove` 拷贝，需要重排的值逐个处理 |
+
+[单字节形式](#binary-format)的字符串在 net8.0 和 net10.0 版本中，凡是 CPU 能加速的地方，写入时用 16 字节向量收窄、读取时用 16 字节向量扩展，有 AVX2 时用 32 字节向量；netstandard 版本每次转换四个字符。
 
 Unity、.NET Framework 以及 .NET Core 3.0 到 .NET 7 使用 `netstandard2.0`/`netstandard2.1` 版本，其中没有硬件指令集代码。在所有平台上，64 位运行时会内联拷贝不超过 32 字节的块（大多数字符串）；填充字节在支持 AVX-512 时用 512 位向量清零，否则在运行时加速 `Vector<T>` 时用它清零，再不行就每次 8 字节。
 
