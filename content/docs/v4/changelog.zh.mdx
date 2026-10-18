@@ -25,6 +25,7 @@ icon: RotateCcwClock
 ### 性能 [#performance-1]
 
 - **含 Latin-1 字符串的数据更小**，序列化和反序列化时间与之前相同：基准测试中，`Orders` 从 30,848 字节降到 26,126 字节，`Players` 从 45,124 降到 39,164，`Tree` 从 40,676 降到 31,258，现在都比 MemoryPack 的更小（27,990、43,364 和 32,623）。参见[基准测试](/zh/docs/v4/perf)。
+- **带填充的元组和键值对序列化更快**：值元组、`KeyValuePair` 以及其他内存中有填充的原始值组成的数组和列表，先对齐目标地址，再按整向量写出它们的字节（AVX-512 VBMI、AVX2、Arm64，以及 .NET 10 上的 WebAssembly）：在一台 AVX-512 Xeon 上，1,000 个 `(int, long)` 从 228 ns 降到 154 ns，MemoryPack 为 166 ns。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
 
 ## 4.0.0-rc.5
 

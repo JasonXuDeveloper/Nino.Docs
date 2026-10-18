@@ -25,6 +25,7 @@ Not released yet.
 ### Performance [#performance-1]
 
 - **Smaller payloads with Latin-1 strings**, with the same serialize and deserialize times as before: in the benchmark, `Orders` shrinks from 30,848 to 26,126 bytes, `Players` from 45,124 to 39,164 and `Tree` from 40,676 to 31,258, now smaller than MemoryPack's (27,990, 43,364 and 32,623). See [Benchmarks](/en/docs/v4/perf).
+- **Tuples and pairs with padding serialize faster**: arrays and lists of value tuples, `KeyValuePair`s and other raw values whose memory has padding are written as whole vectors of their bytes from an aligned destination (AVX-512 VBMI, AVX2, Arm64 and WebAssembly on .NET 10): 1,000 `(int, long)` in 154 ns instead of 228 ns on an AVX-512 Xeon, against 166 ns for MemoryPack. See [SIMD by Platform](/en/docs/v4/platforms#simd).
 
 ## 4.0.0-rc.5
 

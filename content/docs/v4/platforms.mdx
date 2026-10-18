@@ -122,11 +122,11 @@ The net8.0 and net10.0 builds of `Nino.Core` use hardware intrinsics where the C
 
 | Platform | What Nino uses |
 | --- | --- |
-| x64 with AVX-512 | 64-byte vector copies for blocks of 64 bytes to 8 KB; AVX-512 VBMI byte permutes that rearrange tuples and `KeyValuePair`s of raw items, whose memory differs from their bytes, 64 bytes at a time; 512-bit masked copies that zero padding |
-| x64 with AVX2 | 32-byte vector copies for blocks of 256 bytes to 4 KB (also on AVX-512 CPUs where .NET prefers 256-bit vectors); an SSSE3 16-byte shuffle per value for such tuples and pairs of up to 16 bytes |
+| x64 with AVX-512 | 64-byte vector copies for blocks of 64 bytes to 8 KB; AVX-512 VBMI byte permutes for tuples and `KeyValuePair`s of raw items, whose memory differs from their bytes: where their memory has padding, two-source permutes write them as whole 64-byte vectors from an aligned destination (16 `(int, long)` in three), otherwise 64 bytes at a time; 512-bit masked copies that zero padding |
+| x64 with AVX2 | 32-byte vector copies for blocks of 256 bytes to 4 KB (also on AVX-512 CPUs where .NET prefers 256-bit vectors); two-source word permutes (`vpermd`, `vblendvps`) that write such tuples and pairs with padding and 4-byte fields as whole 32-byte vectors from an aligned destination; otherwise an SSSE3 16-byte shuffle per value for such tuples and pairs of up to 16 bytes |
 | x64 with SSSE3 | the 16-byte shuffle per value; `memmove` for blocks |
-| Arm64 | AdvSimd: the 16-byte shuffle per value (`TBL`), and four 4-register table lookups per 64 bytes for values of up to 8 bytes; strings of 33 to 64 bytes copied as two pairs of 16-byte vectors; `memmove` for blocks |
-| WebAssembly with SIMD (.NET 10) | the 16-byte shuffle per value (`PackedSimd`, `i8x16.swizzle`) |
+| Arm64 | AdvSimd: two-register table lookups that write such tuples and pairs with padding as whole 16-byte vectors from an aligned destination; otherwise the 16-byte shuffle per value (`TBL`), and four 4-register table lookups per 64 bytes for values of up to 8 bytes; strings of 33 to 64 bytes copied as two pairs of 16-byte vectors; `memmove` for blocks |
+| WebAssembly with SIMD (.NET 10) | two swizzles per 16-byte vector for such tuples and pairs with padding, as on Arm64; otherwise the 16-byte shuffle per value (`PackedSimd`, `i8x16.swizzle`) |
 | Arm32; Unity (Mono, IL2CPP), .NET Framework and .NET Core 3.0 to .NET 7 | no hardware intrinsics: blocks through `memmove`, rearranged values one at a time |
 
 Strings in the [one-byte form](#binary-format) are narrowed when written and widened when read with 16-byte vectors, and 32-byte ones where AVX2 is available, on every CPU that accelerates them, in the net8.0 and net10.0 builds; the netstandard builds convert four chars at a time.
