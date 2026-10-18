@@ -5,7 +5,7 @@ description: "Use Nino from browser JavaScript or TypeScript: compile your [Nino
 icon: Globe
 ---
 
-**Can I use Nino from JavaScript or TypeScript?** Yes, in the browser, by running Nino itself there. Build the client-side serialization as a small .NET `browser-wasm` app that references Nino and your `[NinoType]` types, expose a few functions to JavaScript with `[JSExport]`, and call them from your JavaScript or TypeScript front end. Nino does not generate TypeScript or JavaScript code yet (TypeScript code generation is planned for [4.0.0-rc.6](/en/docs/v4/changelog#400-rc6)), and this setup does not need it: the browser runs the same C# types and the same generated formatters as your server, so there is no second schema to keep in sync and the bytes are identical.
+**Can I use Nino from JavaScript or TypeScript?** Yes, in the browser, by running Nino itself there. Build the client-side serialization as a small .NET `browser-wasm` app that references Nino and your `[NinoType]` types, expose a few functions to JavaScript with `[JSExport]`, and call them from your JavaScript or TypeScript front end. Nino does not generate TypeScript or JavaScript code, and this setup does not need it: the browser runs the same C# types and the same generated formatters as your server, so there is no second schema to keep in sync and the bytes are identical.
 
 This guide builds that setup end to end: a shared order type, an export surface, a page that loads it, and requests over `fetch` and WebSocket to an ASP.NET Core server. Every snippet comes from a project that was built with the .NET 10 SDK and run in headless Chromium.
 
@@ -209,7 +209,7 @@ dotnet publish Shop.Browser -c Release
 
 ### Type the exports in TypeScript
 
-`getAssemblyExports` returns `any`. Since Nino does not generate TypeScript yet, write the shape of your exports by hand, next to `OrderCodec.cs`, and update it when the C# signatures change:
+`getAssemblyExports` returns `any`. Since Nino does not generate TypeScript, write the shape of your exports by hand, next to `OrderCodec.cs`, and update it when the C# signatures change:
 
 ```ts title="order-codec.d.ts"
 export interface OrderCodec {
@@ -251,7 +251,7 @@ const replyBytes = new Uint8Array(await reply.arrayBuffer());
 codec.GetCustomer(replyBytes);
 ```
 
-The server deserializes and answers with the same `Order` type. Nino has no ASP.NET Core MVC input or output formatter yet (planned for [4.0.0-rc.6](/en/docs/v4/changelog#400-rc6)), so the endpoint reads and writes the body itself:
+The server deserializes and answers with the same `Order` type. Nino has no ASP.NET Core MVC input or output formatter, so the endpoint reads and writes the body itself:
 
 ```csharp title="Program.cs (ASP.NET Core)"
 app.MapPost("/orders", async (HttpRequest request) =>
@@ -298,7 +298,7 @@ On the server side, read and write WebSocket messages as in [WebSocket and UDP](
 
 ### When something else fits better
 
-- **MemoryPack** generates TypeScript classes (`[GenerateTypeScript]`) that read and write its format directly in JavaScript, so the browser downloads no .NET runtime. Nino's own TypeScript code generation is planned for [4.0.0-rc.6](/en/docs/v4/changelog#400-rc6). If a small bundle matters more than one shared schema and Nino's features, see [Nino vs MemoryPack](/en/docs/v4/vs-memorypack).
+- **MemoryPack** generates TypeScript classes (`[GenerateTypeScript]`) that read and write its format directly in JavaScript, so the browser downloads no .NET runtime. If a small bundle matters more than one shared schema and Nino's features, see [Nino vs MemoryPack](/en/docs/v4/vs-memorypack).
 - **A JSON API** is simpler for public APIs, small payloads, or front ends owned by teams outside .NET. Keep Nino between your .NET services.
 - **Protocol Buffers or MessagePack** suit data that programs in several languages read; Nino's format is defined by C# types only.
 - **Blazor WebAssembly** apps already run .NET in the browser: reference Nino from the Blazor project and call it directly, with no `[JSExport]` layer.

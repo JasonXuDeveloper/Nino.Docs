@@ -1,6 +1,6 @@
 ---
 title: Limitations
-description: "What to know before choosing Nino v4: it needs its source generator, cannot read v3 data, is positional by default, leaves out System.Type on purpose, and has no TypeScript generation or ASP.NET Core MVC formatters yet."
+description: "What to know before choosing Nino v4: it needs its source generator, cannot read v3 data, is positional by default, leaves out System.Type on purpose, and has no TypeScript generation or ASP.NET Core MVC formatters."
 icon: TriangleAlert
 ---
 
@@ -12,7 +12,7 @@ What to know before choosing Nino v4, and the limitations of earlier versions th
 - **Positional by default.** A bare `[NinoType]` is the fastest format but does not survive member changes. For data you store or exchange across versions, choose `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` before writing any: see [Evolving Your Data](/en/docs/v4/evolving-data).
 - **Contiguous memory only.** Nino reads from a `ReadOnlySpan<byte>` and writes to an `IBufferWriter<byte>`; there are no `Stream` or `ReadOnlySequence<byte>` overloads. See [Multi-Segment Data](/en/docs/v4/basic#multi-segment-data).
 - **Some types have no built-in formatter.** `System.Type` is left out on purpose (data that names the types to create is a deserialization attack), as are delegates, non-generic collections and engine classes other than Unity's `AnimationCurve`, `Gradient` and `RectOffset`. See [Supported Types](/en/docs/v4/types#not-supported); a [custom formatter](/en/docs/v4/custom-formatters) can add any of them.
-- **No TypeScript code generation or ASP.NET Core MVC formatters yet.** Both are planned for [4.0.0-rc.6](/en/docs/v4/changelog#400-rc6). Browser clients can run the same C# types on .NET WebAssembly today: see [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
+- **No TypeScript code generation or ASP.NET Core MVC formatters.** Browser clients can run the same C# types on .NET WebAssembly, and an ASP.NET Core endpoint reads and writes the body with `NinoDeserializer` and `NinoSerializer`: see [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
 
 ## Platform Notes
 
