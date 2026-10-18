@@ -16,6 +16,7 @@ Nino runs on .NET Standard 2.0 and later, Unity 2022.3+ (Mono and IL2CPP) and Go
 | Unity | 2022.3 and later, Mono and IL2CPP, every player platform |
 | Godot | Godot 4 .NET projects (.NET 8 from Godot 4.4, .NET 6 before) |
 | Hot update | HybridCLR, with no initialization call |
+| Trimming and Native AOT | annotated in the `net8.0` and `net10.0` builds ([details](#trimming-and-native-aot)) |
 
 **Every target writes identical bytes.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` each use the best primitives available to them ([SIMD](#simd), `[UnsafeAccessor]` on .NET 8+), and the test suite checks the same golden payloads against each build. Data written by a .NET 10 server can be read by a Unity IL2CPP client on a 32-bit Android phone, and the other way round.
 
@@ -148,6 +149,15 @@ See [Unity and HybridCLR](/en/docs/v4/advanced/unity) for project setup and IL2C
 Generated registries are discovered lazily: the first time Nino meets a type of an assembly, or an unknown type id while reading, it finds that assembly's registry. A hot-update assembly loaded with `Assembly.Load` therefore needs **no initialization call**, and its types (including subtypes of base classes in AOT assemblies) are found on first use.
 
 Generated code avoids forwarding facades on purpose: interpreters such as HybridCLR's and Mono's do not inline, so every extra call layer would cost real time there.
+
+## Trimming and Native AOT [#trimming-and-native-aot]
+
+The `net8.0` and `net10.0` builds of `Nino.Core` are marked `IsTrimmable` and `IsAotCompatible`, and the trim and AOT analyzers check every build, so publishing with `PublishTrimmed` or `PublishAot` gives no warnings from Nino. A project targeting .NET 8 or later gets one of these builds.
+
+- **Native AOT** (and any runtime that cannot compile code): Nino uses only the formatters the generator wrote. Every type you serialize must therefore appear in code the generator sees, as a member type or as the type argument of a `Serialize` or `Deserialize` call. A type that only exists at run time fails with an error that names it, never with wrong data.
+- **Trimmed apps on a JIT** keep the run-time path that builds formatters for such types; what it needs from the trimmer is annotated.
+
+The generator writes the same formatters for IL2CPP, which is why Nino needs no reflection there either. See [Unity and HybridCLR](/en/docs/v4/advanced/unity#il2cpp).
 
 ## Unloading Assemblies
 

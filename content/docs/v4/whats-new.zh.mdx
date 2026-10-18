@@ -1,12 +1,12 @@
 ---
 title: v4 新特性
-description: "Nino v4 的变化：重写的运行时与增量源生成器，新增 keyed 成员、引用追踪、对象池和 26 条分析器规则，构建也快得多。"
+description: "Nino v4 相对 v3 新增的全部内容（截至 4.0.0-rc.5）：重写的运行时与增量源生成器、键控与版本容错类型、引用追踪、对象池、更多内置类型，以及各平台一致的字节。"
 icon: Sparkles
 ---
 
-import { Cpu, GitBranch, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound } from 'lucide-react';
+import { Cpu, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes } from 'lucide-react';
 
-Nino v4 重写了运行时和源生成器。运行速度超过 v3 和 MemoryPack，构建速度大幅提升，并新增了键控成员、引用追踪、对象池和分析器。
+Nino v4 重写了运行时和源生成器。运行速度超过 v3 和 MemoryPack，构建速度大幅提升，并新增了键控与版本容错类型、引用追踪、对象池、分析器以及大量内置类型。本页按领域介绍截至 **4.0.0-rc.5** 已发布的全部 v4 内容；每个版本各自改了什么，见[更新日志](/zh/docs/v4/changelog)。
 
 <Callout type="warn">
 
@@ -14,7 +14,38 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 
 </Callout>
 
-## 序列化比 v3 更快 [#faster-than-v3]
+## 概览 [#at-a-glance]
+
+<Cards>
+  <Card icon={<Zap />} title="运行更快，构建也更快" href="/zh/docs/v4/perf">
+    比 v3 和 MemoryPack 更快，在 .NET 8 SDK 及以上使用拦截器，源生成器真正增量。
+  </Card>
+  <Card icon={<KeyRound />} title="数据可以演进" href="/zh/docs/v4/evolving-data">
+    `NinoFormat.VersionTolerant` 可以追加成员，`NinoFormat.Keyed` 可以重排、删除和插入成员，每个类型的布局都会作为元数据发布。
+  </Card>
+  <Card icon={<Share2 />} title="对象图" href="/zh/docs/v4/reference-tracking">
+    `trackReferences: true` 保留共享引用和循环引用；多态无需标签；对象图嵌套多深都可以。
+  </Card>
+  <Card icon={<Boxes />} title="更多类型" href="/zh/docs/v4/types">
+    `BigInteger`、`Uri`、`Memory<T>`、`ILookup`、所有不可变集合、Unity 的 `AnimationCurve` 等，还可以添加你自己的格式化器。
+  </Card>
+  <Card icon={<Recycle />} title="低 GC 与对象池" href="/zh/docs/v4/pooling">
+    反序列化到已有对象中，新对象从 `[NinoPooled]` 对象池中取，被丢弃的实例全部回收。
+  </Card>
+  <Card icon={<Layers />} title="线程安全" href="/zh/docs/v4/performance#thread-safety">
+    所有 API 都可以并发调用，不需要加锁；热路径从不写共享内存。
+  </Card>
+  <Card icon={<Cpu />} title="各平台字节一致" href="/zh/docs/v4/platforms">
+    从 `netstandard2.0` 到 `net10.0`，CoreCLR、Mono 和 IL2CPP，64 位和 32 位，x64 和 Arm64；支持裁剪和 Native AOT。
+  </Card>
+  <Card icon={<ShieldCheck />} title="分析器 NINO001–NINO026" href="/zh/docs/v4/analyzers">
+    写代码时就报告错误，许多都带一键代码修复。
+  </Card>
+</Cards>
+
+## 性能 [#performance]
+
+### 比 v3 更快 [#faster-than-v3]
 
 对比基准是 v3 API 的最后一个版本 **3.3.13**（3.9.x 是测试 v4 功能的过渡版本），在同一台机器上与 v4 先后运行。
 
@@ -22,138 +53,100 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 
 类的序列化明显更快，反序列化与 v3 一样快或略快，非托管结构体数组两者持平。原因分析见 [v3 与 v4 对比](/zh/docs/v4/v3-vs-v4#runtime)。
 
-## 构建更快 [#faster-to-build]
+### 比 MemoryPack 更快 [#faster-than-memorypack]
 
-v3 的生成器会把每个子类型的代码内联到它的每个多态基类中，而且每敲一次键都要重新生成全部类型。v4 每个类型只生成一个文件，只生成一次，之后只重新生成你改动的部分。
-
-<BenchmarkChart chart="compile" lang="zh" />
-
-项目越大，差距越明显。330 个和 1,100 个类型的具体数字及测量方法，见[构建时间与生成代码](/zh/docs/v4/perf#build-time-and-generated-code)。
-
-## 比 MemoryPack 更快 [#faster-than-memorypack]
-
-在同一轮测试中与 MemoryPack 对比。序列化时 Nino 明显领先（最高快 <BenchValue k="serialize.max" />）；反序列化类和多态对象图时也领先（最高快 <BenchValue k="deserialize.max" />）；非托管值的数组两者相差不大，都只做一次 `memcpy`。
+在同一轮测试中与 MemoryPack 对比。序列化时 Nino 明显领先（最高快 <BenchValue k="serialize.max" />）；反序列化类和多态对象图时也领先（最高快 <BenchValue k="deserialize.max" />）；非托管值的数组两者持平，都只做一次 `memcpy`。
 
 <BenchSource lang="zh" />
 
 <BenchmarkChart chart={['serialize', 'deserialize']} lang="zh" />
 
-### 反序列化到已有对象 [#deserialize-into-existing-objects]
+通过 `ref` 反序列化到你已有的对象中、新实例从 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池中取时，比 MemoryPack 的覆盖模式最高**快 <BenchValue k="reuse.max" />**，在池化路径上每次调用只分配 **0 B**（见[池化测试结果](/zh/docs/v4/perf#pooling)）。两个库序列化时都不分配内存，数据大小也基本相同（`SimpleClass`：Nino <BenchValue k="payload.v4" /> 字节，MemoryPack <BenchValue k="payload.memorypack" /> 字节）。另请阅读[完整对比](/zh/docs/v4/vs-memorypack)，包括 [MemoryPack 仍然领先的地方](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)。
 
-v4 新增：通过 `ref` 反序列化到你已有的对象中，需要新实例时从 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池中取。与 MemoryPack 的覆盖模式相比，Nino 最高**快 <BenchValue k="reuse.max" />**；在池化路径上每次调用只分配 **0 B**，而 MemoryPack 每次调用都要分配（见[池化测试结果](/zh/docs/v4/perf#pooling)）。
+### 构建更快 [#faster-to-build]
 
-两个库序列化时都不分配内存，数据大小也基本相同（`SimpleClass`：Nino <BenchValue k="payload.v4" /> 字节，MemoryPack <BenchValue k="payload.memorypack" /> 字节）。另请阅读[与 MemoryPack 的完整对比](/zh/docs/v4/vs-memorypack)（包括 [MemoryPack 仍然领先的地方](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)），全部测量结果见[基准测试](/zh/docs/v4/perf)。
+v3 的生成器会把每个子类型的代码内联到它的每个多态基类中，而且每敲一次键都要重新生成全部类型。v4 每个类型只生成一个文件，只生成一次，之后只重新生成你改动的部分。
 
-## 功能一览 [#what-you-get]
+<BenchmarkChart chart="compile" lang="zh" />
 
-<Cards>
-  <Card icon={<Zap />} title="拦截器" href="/zh/docs/v4/performance#interceptors">
-    在 Roslyn 4.8+（.NET 8 SDK 及以上）下，类型已知的调用会直达生成的格式化器。始终开启；Unity（使用 Roslyn 4.3 版本）和更旧的编译器走常规路径，写出的字节相同。
-  </Card>
-  <Card icon={<KeyRound />} title="键控成员与版本容错" href="/zh/docs/v4/evolving-data">
-    `format: NinoFormat.Keyed` 允许调整顺序、删除和插入成员；`format: NinoFormat.VersionTolerant` 允许追加成员，每个对象只多 4 字节。
-  </Card>
-  <Card icon={<Share2 />} title="引用追踪" href="/zh/docs/v4/reference-tracking">
-    开启 `trackReferences: true` 后，共享引用和循环引用都能原样读回，每个被追踪的对象只多 4 字节。
-  </Card>
-  <Card icon={<ShieldCheck />} title="分析器 NINO001–NINO026" href="/zh/docs/v4/analyzers">
-    写代码时就报告错误，许多都带一键代码修复。
-  </Card>
-  <Card icon={<Recycle />} title="低 GC 与对象池" href="/zh/docs/v4/pooling">
-    复用反序列化直接填充已有对象，`[NinoPooled]` 负责池化其余对象，被丢弃的实例都会回收。
-  </Card>
-  <Card icon={<Layers />} title="线程安全" href="/zh/docs/v4/performance#thread-safety">
-    所有 API 都可以并发调用，不需要加锁；热路径从不写共享内存。
-  </Card>
-  <Card icon={<Cpu />} title="各平台字节一致" href="/zh/docs/v4/platforms">
-    `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出的字节相同，在 CoreCLR、Mono、IL2CPP 以及 64 位和 32 位平台上都一样。
-  </Card>
-  <Card icon={<GitBranch />} title="真正的增量生成" href="/zh/docs/v4/v3-vs-v4">
-    每个类型一个文件；修改一个类型只重新生成这个类型。
-  </Card>
-</Cards>
+项目越大，差距越明显：见[构建时间与生成代码](/zh/docs/v4/perf#build-time-and-generated-code)。
 
-## 亮点 [#highlights]
+### 速度从哪里来 [#where-the-speed-comes-from]
 
-先逐项展开上面每张卡片的细节，再列出其他较小的变化。
+- **拦截器**：在 Roslyn 4.8+（.NET 8 SDK 及以上）下，类型已知的 `NinoSerializer`/`NinoDeserializer` 调用会在编译期直接改写为调用生成的格式化器。始终开启；Unity（使用生成器的 Roslyn 4.3 版本）和更旧的编译器走常规路径，写出的字节相同。参见[拦截器](/zh/docs/v4/performance#interceptors)。
+- **JIT 和 AOT 编译器能内联的结构体格式化器**；小型类的主体也会内联到容纳它们的集合循环中。参见[可内联的结构体格式化器](/zh/docs/v4/performance#struct-formatters-inlined)。
+- **整块处理，而不是逐个循环**：非托管 `[NinoType]` 结构体及其数组和列表按原始内存拷贝。由这类元素组成的 `Stack<T>`、`Queue<T>` 和声明为接口的集合也一样；`DateTimeOffset` 的数组和列表，以及由非托管值组成的值元组和 `KeyValuePair` 的数组和列表也整块处理，内存与字节不一致时用 SIMD 重排。参见[非托管数据按原始内存处理](/zh/docs/v4/performance#raw-memory-for-unmanaged-data)和[集合类型](/zh/docs/v4/types#collection-types)。
+- **每种集合走它自己的内部结构**：`SortedSet<T>`、`SortedDictionary<TKey, TValue>`、`SortedList<TKey, TValue>`、`LinkedList<T>`、并发集合和不可变集合，都通过它们的字段、构造函数和批量方法读写，而不是逐个元素循环。这些字段在不同运行时（.NET Framework 和 Mono）上不同，所以布局会在启动时检查一次，不匹配时改用公开 API。参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
+- **CPU 有 SIMD 就用**：AVX-512 上用 64 字节向量和掩码拷贝，AVX2 上用 32 字节向量，Arm64 上用查表指令，.NET 10 的 WebAssembly SIMD 上用字节重排。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
+- **固定大小的类型**直接写进大小正好的 `byte[]`；`NinoSerializer.GetFixedSize<T>()` 返回这个大小。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
+- **在 x64 和 Arm64 上测量**：每个版本都会在 x64 和 GitHub 的 Arm64 运行器上跑基准测试；见[基准测试](/zh/docs/v4/perf)。
 
-<Accordions type="multiple">
-<Accordion title="拦截器" id="interceptors">
+这些都不会改变字节：每条路径写出的内容都与普通路径相同。
 
-在 Roslyn 4.8+（.NET 8 SDK 及以上）下，类型已知的 `NinoSerializer`/`NinoDeserializer` 调用会在编译期直接改写为调用生成的格式化器（没有虚调用）。始终开启，无需配置；旧版编译器走常规路径，写出的字节相同。参见[拦截器](/zh/docs/v4/performance#interceptors)。
+## 数据演进与对象图 [#data-and-object-graphs]
 
-</Accordion>
-<Accordion title="键控成员与版本容错" id="evolve-your-data">
+- **用一个选项决定格式**：`[NinoType(format: ...)]` 接收一个 `NinoFormat`。`Positional`（默认值）最快；`VersionTolerant` 允许向最末端的派生类型追加成员，嵌套多深都可以，每个对象多 4 字节，旧代码会跳过它不认识的成员；`Keyed` 按成员名的哈希写入成员，因此层次结构中的任何类都可以重排、删除和插入成员。在项目中定义 `WEAK_VERSION_TOLERANCE`，会把该项目中 `Positional` 的类型变为 `VersionTolerant`。参见[数据演进](/zh/docs/v4/evolving-data)。
+- **布局元数据**：生成器把每个 `[NinoType]` 的写入方式记录为 `[assembly: NinoTypeLayout]`，包括每个按原始内存拷贝的值的大小和字段偏移，工具可以借此比较两次构建的布局，在发布前发现字节的变化。参见[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)。
+- **类型改名**后，用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name) 仍能读取旧数据；键控成员改名也一样。
+- **引用追踪**：`[NinoType(trackReferences: true)]` 保留共享引用和循环引用：同一个对象被引用多次时只写一次，读回后仍是同一个实例，每个被追踪的对象只多 4 字节。参见[引用追踪](/zh/docs/v4/reference-tracking)。
+- **无需标签的多态**：类型 ID 是类型名的哈希，任何非 sealed 的类或接口都可以作为基类型，其他程序集（插件、热更新）中的子类型会被自动找到。参见[多态](/zh/docs/v4/polymorphism)。
+- **深层对象图**：嵌套超过 128 层的对象会推迟到较浅的层级再写入和读取，因此无论递归类型嵌套多深，还是遇到恶意数据，都不会栈溢出。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
+- **恶意输入**：每个长度在分配内存之前都会与剩余字节数比对，截断的数据会抛出异常，而不会越界读取。参见[无效数据](/zh/docs/v4/basic#invalid-data)。
 
-- **按需开启的版本容错**：`[NinoType(format: NinoFormat.VersionTolerant)]` 允许向最末端的派生类型追加成员，嵌套多深都可以；旧代码会跳过它不认识的成员。
-- **键控成员**：`[NinoType(format: NinoFormat.Keyed)]` 按成员名的哈希写入成员，因此可以调整顺序、删除和插入。
+## 定义类型 [#defining-types]
 
-参见[数据演进](/zh/docs/v4/evolving-data)。
+- **私有成员**：使用 `containNonPublicMembers`；在 .NET 8 及以上通过 `[UnsafeAccessor]` 访问，无需 `partial`（泛型类型除外）。参见[私有成员](/zh/docs/v4/defining-types#private-members)。
+- **构造函数、record 和 `required` 成员**：Nino 调用合适的构造函数，或标记了 `[NinoConstructor]` 的那个。参见[自定义构造函数](/zh/docs/v4/constructors)。
+- **UTF-8 字符串**：用 [`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 按成员指定；默认仍为 UTF-16。
+- **子类型继承 `[NinoType]`**：子类型自动从基类或接口继承该特性；泛型类型可以用作成员、元素和顶层值。参见[定义类型](/zh/docs/v4/defining-types)。
 
-</Accordion>
-<Accordion title="引用追踪" id="reference-tracking">
+## 支持的类型 [#supported-types]
 
-`[NinoType(trackReferences: true)]` 保留共享引用和循环引用：同一个对象被引用多次时只写一次，读回后仍是同一个实例，每个被追踪的对象只多 4 字节。参见[引用追踪](/zh/docs/v4/reference-tracking)。
+- **日常代码中的 BCL 类型**：`BigInteger`、`Uri`、`Version`、`StringBuilder`、`BitArray`、`CultureInfo`、`TimeZoneInfo`、`Lazy<T>`、`Memory<T>`、`ReadOnlyMemory<T>` 和 `ReadOnlySequence<T>`，此外还有基元类型、枚举、字符串、`Nullable<T>`、元组、`KeyValuePair`、`DateTimeOffset` 和 `nint`。`System.Type` 有意不支持。参见[其他内置类型](/zh/docs/v4/types#other-built-in-types)。
+- **所有 BCL 集合**：任意维数的数组、`List<T>`、`HashSet<T>`、`Queue<T>`、`Stack<T>`、`LinkedList<T>`、有序集合和并发集合、`BlockingCollection<T>`、`PriorityQueue<TElement, TPriority>`（.NET 8 及以上）、`ObservableCollection<T>`、只读包装（`ReadOnlyCollection<T>`、`ReadOnlyObservableCollection<T>`、`ReadOnlyDictionary<TKey, TValue>`）、`ILookup<TKey, TElement>`、`IGrouping<TKey, TElement>` 以及各集合接口。参见[集合类型](/zh/docs/v4/types#collection-types)。
+- **所有不可变集合**：安装可选的 `Nino.Immutable` 包即可，从 `ImmutableArray<T>` 到 `ImmutableSortedDictionary<TKey, TValue>`，各自写出与对应可变集合相同的字节。参见[不可变集合](/zh/docs/v4/types#immutable-collections)。
+- **你自己的集合**：派生自 `List<T>`、`Dictionary<TKey, TValue>` 等，或实现了 `ICollection<T>`、`IDictionary<TKey, TValue>`、`IProducerConsumerCollection<T>` 的类型，无需任何特性。参见[自定义集合](/zh/docs/v4/types#user-collections)。
+- **Unity 的 `AnimationCurve`、`Gradient` 和 `RectOffset`**：Unity 包附带 `Nino.UnityTypes.dll`，其中包含它们的格式化器。Unity 和 Godot 的结构体（`Vector3`、`Quaternion` 等）按原始内存拷贝。参见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)。
+- **可扩展的格式化器**：用 `[assembly: NinoFormatter(typeof(MyFormatter<,>))]` 教 Nino 处理一个新类型（你自己的或第三方的）。类型参数和元素格式化器会自动推断（`[NinoRaw]` 把类型参数限定为按原始字节处理的类型），生成的代码直接调用它，Nino 自带的 BCL 格式化器也是这样声明的。`[NinoCustomFormatter]` 改变单个成员的编码方式。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
 
-</Accordion>
-<Accordion title="分析器 NINO001–NINO026" id="analyzers">
+## 内存分配与对象池 [#allocation-and-pooling]
 
-写代码时就报告错误（NINO001–NINO026），许多都带一键修复。参见[诊断列表](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)。
-
-</Accordion>
-<Accordion title="低 GC 与对象池" id="reuse-instead-of-allocate">
-
-- **复用反序列化**：`NinoDeserializer.Deserialize(data, ref value)` 原地填充已有的对象、列表、数组和字典。
+- **复用反序列化**：`NinoDeserializer.Deserialize(data, ref value)` 原地填充已有的对象、列表、数组和字典，文本未变的字符串会保留原实例。
 - **池化反序列化**：给类加上 `[NinoPooled]`，Nino 就会把数据反序列化到你用 `ReturnToPool()` 归还的实例中，并复用实例里的列表、数组和字典。被丢弃的实例（数据为 `null`、列表变短、类型改变）会交给用 `NinoSettings.SetRecycler<T>` 注册的处理器；没有注册时，回到各自的池。
 - **`[NinoFactory]` 工厂方法**让 Nino 从你自己的对象池中获取新实例。
 
 参见[复用反序列化与对象池](/zh/docs/v4/pooling)。
 
-</Accordion>
-<Accordion title="线程安全" id="thread-safe">
+## API [#api]
 
-`NinoSerializer` 和 `NinoDeserializer` 的所有方法都可以并发调用，不需要加锁。注册表无锁、采用写时复制，暂存缓冲区每个线程各一份，热路径从不写共享内存，因此线程之间不会争抢缓存行。参见[线程安全](/zh/docs/v4/performance#thread-safety)。
+- **两个入口**：`NinoSerializer.Serialize` 写入 `byte[]`、`IBufferWriter<byte>`（例如 `PipeWriter`）或 `Writer`；`NinoDeserializer.Deserialize` 从 `ReadOnlySpan<byte>` 或 `Reader` 读取。每个 `Serialize` 重载都以 `in T` 接收值，从字段读出的结构体写入时不会先复制一份。参见[序列化与反序列化](/zh/docs/v4/basic)。
+- **`NinoArrayBufferWriter`**：可复用的缓冲区，让序列化不分配内存；用 `new NinoArrayBufferWriter(initialCapacity, pool)` 还能从你自己的 `ArrayPool<byte>` 租用数组。参见[复用缓冲区](/zh/docs/v4/basic#reusing-a-buffer)。
+- **`Writer` 与 `Reader`**：在一个缓冲区里写入多个值再依次读回，也是自定义格式化器使用的 API。参见 [Writer 与 Reader](/zh/docs/v4/custom-formatters#writer-and-reader)。
+- **用于运行时类型的装箱 API**：`SerializeBoxed(value, type)` 和 `DeserializeBoxed(data, type)` 用于只能以 `Type` 形式得知的类型，写出的内容与 `Serialize<T>` 完全相同。有共同 `[NinoType]` 基类型的类型，用 `Serialize<TBase>` 更快。参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
+- **无需初始化**：生成的注册表会自行注册并按需查找；`NinoSettings`、`NinoPolymorphic.Register<T>()` 和 `NinoRegistry.EnsureInitialized` 都是可选的。参见[启动时](/zh/docs/v4/start#at-startup)。
 
-</Accordion>
-<Accordion title="各平台字节一致" id="runs-everywhere">
+## 平台 [#platforms]
 
-- **处处同一格式**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出完全相同的字节，数据在 CoreCLR、Mono、IL2CPP 之间以及 64 位和 32 位平台之间通用。
-- **无需初始化调用**：生成的注册表在用到时才查找，所以热更新程序集（HybridCLR）直接可用。
+- **处处同一格式**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出完全相同的字节，数据在 CoreCLR、Mono、IL2CPP 之间，64 位和 32 位之间，x64 和 Arm64 之间通用。在运行时内存布局不一致的地方（`Nullable<T>`、元组、`decimal`、32 位对齐），Nino 自己定义字节而不是拷贝内存，并清零填充字节，所以相等的值总是序列化为相同的字节。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+- **裁剪与 Native AOT**：Nino.Core 带有相应标注，用 `PublishTrimmed` 和 `PublishAot` 发布时 Nino 不会产生警告。参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
+- **Unity 2022.3+**：从 OpenUPM 安装，包内附带源生成器和 `Nino.UnityTypes.dll`。参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)。
+- **HybridCLR 热更新**无需初始化调用，**Godot 4** 以普通 NuGet 包安装。参见 [HybridCLR 与热更新](/zh/docs/v4/platforms#hybridclr-and-hot-update)和 [Godot](/zh/docs/v4/platforms#godot)。
 - **程序集可卸载**：可回收 `AssemblyLoadContext` 中的程序集能随上下文一起卸载，Nino 会清除相关缓存（.NET 8 及以上自动完成；.NET Core 3.0 到 .NET 7 需调用 `NinoRegistry.Remove`）。参见[卸载程序集](/zh/docs/v4/platforms#unloading-assemblies)。
-- **Unity**：源生成器随包附带，无需另外安装。`AnimationCurve`、`Gradient` 和 `RectOffset` 也能序列化（参见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)）。
+- **浏览器**：JavaScript 和 TypeScript 客户端在 .NET WebAssembly 上运行你的类型，读写相同的字节。参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)。
 
-</Accordion>
-<Accordion title="真正的增量生成" id="incremental-generator">
+## 工具 [#tooling]
 
 - **真正的增量源生成器**：每个 `[NinoType]` 一个文件，模型可判等（equatable），不再扫描整个 Compilation。改一个类型只重新生成这个类型；不改变模型的修改（例如注释、方法体）不会触发任何重新生成。
 - **生成的代码大幅减少**：集合、字符串、可空类型、元组等内置类型，都在 `Nino.Core` 里以泛型格式化器的形式统一实现；生成器只为你的 `[NinoType]` 生成代码。
+- **26 条分析器规则**（NINO001–NINO026）在写代码时就报告错误，例如不支持的成员类型、缺少 `partial`、一个类型上有两个 `[NinoFormerName]`，许多都带一键代码修复。参见[分析器诊断](/zh/docs/v4/analyzers)。
 
-</Accordion>
-<Accordion title="运行时代码更快" id="faster-to-run">
+## 已移除 [#removed]
 
-- **JIT/AOT 编译器能内联结构体格式化器**；非托管 `[NinoType]` 结构体及其数组和列表直接拷贝原始内存；除了结果对象本身，不产生任何分配。[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)直接写进大小正好的 `byte[]`。
-- **深层对象图**：嵌套超过 128 层的对象会推迟到较浅的层级再写入和读取，因此无论递归类型嵌套多深，还是遇到恶意数据，都不会栈溢出。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
+- `[NinoExplicitOrder]`：改用 `[NinoType(false)]` 配合 `[NinoMember(index)]`。
+- beta 中的 `Serialize(object)`：现为 `SerializeBoxed`。
+- 用 `NinoFormatterCache<T>.Register<TFormatter>()` 在运行时注册格式化器：请用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明。
 
-</Accordion>
-<Accordion title="更多类型，自由扩展" id="more-types-your-way">
-
-- **自定义集合**：派生自 `List<T>`、`HashSet<T>`、`Dictionary<TKey, TValue>` 等的类型，无需任何特性。
-- **更多内置类型**：目标框架为 .NET 8 及以上的项目中的 `PriorityQueue<TElement, TPriority>`，`BigInteger`、`Uri`、`Version`、`Lazy<T>`、`Memory<T>`、`ILookup<,>`、`BlockingCollection<T>` 等 BCL 类型，以及通过 `Nino.Immutable` 包支持的所有不可变集合（见[支持的类型](/zh/docs/v4/types)）。
-- **可扩展的格式化器**：用 `[assembly: NinoFormatter(typeof(MyFormatter<,>))]` 教 Nino 处理一个新类型（你自己的或第三方的）。类型参数和元素格式化器会自动推断，生成的代码直接调用它，运行时也使用同一份注册。Nino 自带的 BCL 格式化器也是这样声明的。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
-- **子类型继承 `[NinoType]`**：子类型自动从基类或接口继承该特性。
-
-</Accordion>
-<Accordion title="精简而明确的 API" id="a-small-explicit-api">
-
-- **用一个选项决定格式**：`[NinoType(format: ...)]` 接收一个 `NinoFormat`（`Positional`，即默认值；`VersionTolerant`；`Keyed`）。在项目中定义 `WEAK_VERSION_TOLERANCE`，会把该项目中 `Positional` 的类型变为 `VersionTolerant`。参见[数据演进](/zh/docs/v4/evolving-data)。
-- **固定大小的类型**：如果一个类型的每个值都占用相同的字节数，`NinoSerializer.Serialize(value)` 会直接按最终大小分配结果，`NinoSerializer.GetFixedSize<T>()` 返回这个大小。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
-- **布局元数据**：每个 `[NinoType]` 的二进制布局都记录在程序集元数据里（`[assembly: NinoTypeLayout]`），可用于兼容性检查和版本对比。参见[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)。
-- **使用自己的缓冲区**：`new NinoArrayBufferWriter(initialCapacity, pool)` 从你提供的 `ArrayPool<byte>` 租用数组。参见[复用缓冲区](/zh/docs/v4/basic#reusing-a-buffer)。
-- **用于运行时类型的装箱 API**：`SerializeBoxed(value, type)` 和 `DeserializeBoxed(data, type)` 用于只能以 `Type` 形式得知、并且没有共同 `[NinoType]` 基类型的类型，写出的内容与 `Serialize<T>` 完全相同。消息分派、插件和工具则应给类型一个共同的 `[NinoType]` 基类型，调用 `Serialize<TBase>`/`Deserialize<TBase>`，更快，也不分配内存；参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
-- **已移除**：`[NinoExplicitOrder]`（改用 `[NinoType(false)]` 配合 `[NinoMember(index)]`）、beta 中的 `Serialize(object)`（现为 `SerializeBoxed`），以及用 `NinoFormatterCache<T>.Register<TFormatter>()` 在运行时注册格式化器（请用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明）。参见[从 v3 迁移](/zh/docs/v4/migration)。
-
-</Accordion>
-</Accordions>
+参见[从 v3 迁移](/zh/docs/v4/migration)和[从 v4 beta 升级](/zh/docs/v4/migration#upgrading-from-a-v4-beta)。
 
 ## 快速示例 [#quick-example]
 
@@ -180,6 +173,7 @@ packet.ReturnToPool();                                                 // return
 ## 了解更多 [#learn-more]
 
 <Cards>
+  <Card title="更新日志" href="/zh/docs/v4/changelog" description="每个 v4 版本的变化，最新的在前。" />
   <Card title="快速开始" href="/zh/docs/v4/start" description="安装 Nino v4，序列化第一个类型。" />
   <Card title="从 v3 迁移" href="/zh/docs/v4/migration" description="逐步升级，附修改前后的代码。" />
   <Card title="设计文档" href="https://github.com/JasonXuDeveloper/Nino/blob/main/docs/v4-design.md" description="v4 的架构与二进制格式。" />

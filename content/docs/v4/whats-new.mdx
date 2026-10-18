@@ -1,12 +1,12 @@
 ---
 title: "What's New in v4"
-description: "What changed in Nino v4: a rewritten runtime and incremental source generator, keyed members, reference tracking, object pools, 26 analyzer rules and much faster builds."
+description: "Everything Nino v4 adds over v3, through 4.0.0-rc.5: a rewritten runtime and incremental generator, keyed and version-tolerant types, reference tracking, pooling, many more built-in types, and the same bytes on every platform."
 icon: Sparkles
 ---
 
-import { Cpu, GitBranch, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound } from 'lucide-react';
+import { Cpu, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes } from 'lucide-react';
 
-Nino v4 rewrites the runtime and the source generator. It runs faster than v3 and MemoryPack, builds much faster, and adds keyed members, reference tracking, object pools and analyzers.
+Nino v4 rewrites the runtime and the source generator. It runs faster than v3 and MemoryPack, builds much faster, and adds keyed and version-tolerant types, reference tracking, object pools, analyzers and many more built-in types. This page covers all of v4 as released through **4.0.0-rc.5**, grouped by area; the [Changelog](/en/docs/v4/changelog) lists what each release changed.
 
 <Callout type="warn">
 
@@ -14,7 +14,38 @@ The v4 binary format is **not compatible** with v3 or the earlier v4 betas/previ
 
 </Callout>
 
-## Serializes Faster than v3 [#faster-than-v3]
+## At a Glance [#at-a-glance]
+
+<Cards>
+  <Card icon={<Zap />} title="Faster to run and to build" href="/en/docs/v4/perf">
+    Faster than v3 and MemoryPack, interceptors on the .NET 8 SDK and later, and a truly incremental generator.
+  </Card>
+  <Card icon={<KeyRound />} title="Data that evolves" href="/en/docs/v4/evolving-data">
+    `NinoFormat.VersionTolerant` appends members, `NinoFormat.Keyed` reorders, removes and inserts them, and the layout of every type is published as metadata.
+  </Card>
+  <Card icon={<Share2 />} title="Object graphs" href="/en/docs/v4/reference-tracking">
+    Shared references and cycles with `trackReferences: true`, polymorphism without tags, and object graphs of any depth.
+  </Card>
+  <Card icon={<Boxes />} title="Many more types" href="/en/docs/v4/types">
+    `BigInteger`, `Uri`, `Memory<T>`, `ILookup`, every immutable collection, Unity's `AnimationCurve` and more, plus your own formatters.
+  </Card>
+  <Card icon={<Recycle />} title="Low GC and pooling" href="/en/docs/v4/pooling">
+    Deserialize into the objects you already have, take new ones from `[NinoPooled]` pools, and recycle every dropped instance.
+  </Card>
+  <Card icon={<Layers />} title="Thread safe" href="/en/docs/v4/performance#thread-safety">
+    Every API can be called concurrently without locks; no hot path writes shared memory.
+  </Card>
+  <Card icon={<Cpu />} title="Identical bytes everywhere" href="/en/docs/v4/platforms">
+    `netstandard2.0` to `net10.0`, CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, x64 and Arm64; trimming and Native AOT included.
+  </Card>
+  <Card icon={<ShieldCheck />} title="Analyzers NINO001–NINO026" href="/en/docs/v4/analyzers">
+    Mistakes reported while you type, many with a one-click code fix.
+  </Card>
+</Cards>
+
+## Performance [#performance]
+
+### Faster than v3 [#faster-than-v3]
 
 The baseline is v3 **3.3.13**, the last release of the v3 API (the 3.9.x releases were test builds of v4 features), run back to back with v4 on the same machine.
 
@@ -22,140 +53,102 @@ The baseline is v3 **3.3.13**, the last release of the v3 API (the 3.9.x release
 
 Serializing classes is clearly faster, deserializing is as fast as v3 or a little faster, and arrays of unmanaged structs are on par. Why: [v3 vs v4](/en/docs/v4/v3-vs-v4#runtime).
 
-## Faster to Build
+### Faster than MemoryPack [#faster-than-memorypack]
 
-The v3 generator inlined the body of every subtype into each polymorphic base and re-emitted every type on every keystroke. v4 emits one file per type, once, and re-generates only what you edit.
-
-<BenchmarkChart chart="compile" lang="en" />
-
-The larger the project, the bigger the gap. The numbers for 330 and 1,100 types, and how they were measured: [Build Time and Generated Code](/en/docs/v4/perf#build-time-and-generated-code).
-
-## Faster than MemoryPack
-
-Measured against MemoryPack in the same run. Nino wins clearly when serializing (up to <BenchValue k="serialize.max" />), leads on classes and polymorphic graphs when deserializing (up to <BenchValue k="deserialize.max" />), and is close on arrays of unmanaged values, where both do a single `memcpy`.
+Measured against MemoryPack in the same run. Nino wins clearly when serializing (up to <BenchValue k="serialize.max" />), leads on classes and polymorphic graphs when deserializing (up to <BenchValue k="deserialize.max" />), and is on par on arrays of unmanaged values, where both do a single `memcpy`.
 
 <BenchSource lang="en" />
 
 <BenchmarkChart chart={['serialize', 'deserialize']} lang="en" />
 
-### Deserialize into Existing Objects
+Deserializing by `ref` into the objects you already have, with new instances taken from [`[NinoPooled]`](/en/docs/v4/pooling) pools, is up to **<BenchValue k="reuse.max" /> faster** than MemoryPack's overwrite mode and allocates **0 B** per call on the pooled paths ([pooling results](/en/docs/v4/perf#pooling)). Neither library allocates when serializing, and payloads are about the same size (`SimpleClass`: <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack). See the [full comparison](/en/docs/v4/vs-memorypack), including [where MemoryPack is still ahead](/en/docs/v4/vs-memorypack#where-memorypack-is-ahead).
 
-New in v4: deserialize by `ref` into the objects you already have, with any new instances taken from [`[NinoPooled]`](/en/docs/v4/pooling) pools. Against MemoryPack's overwrite mode, Nino is up to **<BenchValue k="reuse.max" /> faster**, and on the pooled paths it allocates **0 B** per call, while MemoryPack allocates on every call ([pooling results](/en/docs/v4/perf#pooling)).
+### Faster to Build [#faster-to-build]
 
-Neither library allocates when serializing, and payloads are about the same size (`SimpleClass`: <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack). Read the [full comparison with MemoryPack](/en/docs/v4/vs-memorypack), including [where MemoryPack is still ahead](/en/docs/v4/vs-memorypack#where-memorypack-is-ahead), and every measurement on [Benchmarks](/en/docs/v4/perf).
+The v3 generator inlined the body of every subtype into each polymorphic base and re-emitted every type on every keystroke. v4 emits one file per type, once, and re-generates only what you edit.
 
-## What You Get
+<BenchmarkChart chart="compile" lang="en" />
 
-<Cards>
-  <Card icon={<Zap />} title="Interceptors" href="/en/docs/v4/performance#interceptors">
-    On Roslyn 4.8+ (the .NET 8 SDK and later), calls with a known type go straight to the generated formatter. Always on; Unity (which uses the Roslyn 4.3 build) and older compilers use the regular path and write the same bytes.
-  </Card>
-  <Card icon={<KeyRound />} title="Keyed members and versioning" href="/en/docs/v4/evolving-data">
-    `format: NinoFormat.Keyed` lets you reorder, remove and insert members; `format: NinoFormat.VersionTolerant` lets you append them, at 4 bytes per object.
-  </Card>
-  <Card icon={<Share2 />} title="Reference tracking" href="/en/docs/v4/reference-tracking">
-    With `trackReferences: true`, shared references and cycles survive a round trip, at 4 bytes per tracked object.
-  </Card>
-  <Card icon={<ShieldCheck />} title="Analyzers NINO001–NINO026" href="/en/docs/v4/analyzers">
-    Mistakes reported while you type, many with a one-click code fix.
-  </Card>
-  <Card icon={<Recycle />} title="Low GC and pooling" href="/en/docs/v4/pooling">
-    Reuse deserialization fills the objects you already have, `[NinoPooled]` pools the rest, and every dropped instance is recycled.
-  </Card>
-  <Card icon={<Layers />} title="Thread safe" href="/en/docs/v4/performance#thread-safety">
-    Every API can be called concurrently without locks; no hot path writes shared memory.
-  </Card>
-  <Card icon={<Cpu />} title="Identical bytes everywhere" href="/en/docs/v4/platforms">
-    `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` write the same bytes, on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit.
-  </Card>
-  <Card icon={<GitBranch />} title="Truly incremental generator" href="/en/docs/v4/v3-vs-v4">
-    One file per type; editing a type re-generates that type only.
-  </Card>
-</Cards>
+The larger the project, the bigger the gap: [Build Time and Generated Code](/en/docs/v4/perf#build-time-and-generated-code).
 
-## Highlights
+### Where the Speed Comes From [#where-the-speed-comes-from]
 
-The details behind each card, followed by the smaller changes.
+- **Interceptors**: on Roslyn 4.8+ (the .NET 8 SDK and later), each `NinoSerializer`/`NinoDeserializer` call with a known type is redirected at compile time to the generated formatter. Always on; Unity (the generator's Roslyn 4.3 build) and older compilers take the regular path and write the same bytes. See [Interceptors](/en/docs/v4/performance#interceptors).
+- **Struct formatters the JIT and AOT compilers inline**, and the bodies of small classes inlined into the loops of the collections that hold them. See [Struct Formatters, Inlined](/en/docs/v4/performance#struct-formatters-inlined).
+- **One block instead of a loop**: unmanaged `[NinoType]` structs, and arrays and lists of them, are copied as raw memory. So are `Stack<T>`, `Queue<T>` and collections declared as interfaces of such elements, and arrays and lists of `DateTimeOffset`, value tuples and `KeyValuePair`s of unmanaged values, whose bytes are rearranged with SIMD where their memory differs. See [Raw Memory for Unmanaged Data](/en/docs/v4/performance#raw-memory-for-unmanaged-data) and [Collection Types](/en/docs/v4/types#collection-types).
+- **Each collection through its own internals**: `SortedSet<T>`, `SortedDictionary<TKey, TValue>`, `SortedList<TKey, TValue>`, `LinkedList<T>`, the concurrent collections and the immutable collections are written and read through their fields, constructors and bulk methods instead of an element-by-element loop. Where those fields differ between runtimes (.NET Framework and Mono), the layout is checked once at startup and the public API is used when it does not match. See [Collection internals](/en/docs/v4/platforms#portable-by-design).
+- **SIMD on every CPU that has it**: 64-byte vectors and masked copies with AVX-512, 32-byte vectors with AVX2, table lookups on Arm64, and byte shuffles with WebAssembly SIMD on .NET 10. See [SIMD by Platform](/en/docs/v4/platforms#simd).
+- **Fixed-size types** are written straight into a `byte[]` of their exact size; `NinoSerializer.GetFixedSize<T>()` returns it. See [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
+- **Measured on x64 and Arm64**: each release is benchmarked on x64 and on GitHub's Arm64 runners; see [Benchmarks](/en/docs/v4/perf).
 
-<Accordions type="multiple">
-<Accordion title="Interceptors" id="interceptors">
+None of these change the bytes: every path writes what the plain path writes.
 
-On Roslyn 4.8+ (the .NET 8 SDK and later), `NinoSerializer`/`NinoDeserializer` calls with a known type are redirected at compile time to the generated formatter (no virtual call). Always on, nothing to configure; older compilers use the regular path, with the same bytes. See [Interceptors](/en/docs/v4/performance#interceptors).
+## Evolving Data and Object Graphs [#data-and-object-graphs]
 
-</Accordion>
-<Accordion title="Keyed members and versioning" id="evolve-your-data">
+- **One option for the format**: `[NinoType(format: ...)]` takes a `NinoFormat`. `Positional` (the default) is the fastest; `VersionTolerant` lets you append members to the most derived type at any nesting depth, at 4 bytes per object, and old code skips the members it does not know; `Keyed` writes members by name hash, so they can be reordered, removed and inserted in any class of a hierarchy. Defining `WEAK_VERSION_TOLERANCE` in a project turns its `Positional` types into `VersionTolerant` ones. See [Evolving Your Data](/en/docs/v4/evolving-data).
+- **Layout metadata**: the generator records how each `[NinoType]` is written as an `[assembly: NinoTypeLayout]`, including the size and field offsets of every value copied as raw memory, so tools can compare layouts between builds and catch a change in the bytes before it ships. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata).
+- **Renamed types** keep their data with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name), and so do renamed keyed members.
+- **Reference tracking**: `[NinoType(trackReferences: true)]` keeps shared references and cycles: an object reached twice is written once and read back as one instance, at 4 bytes per tracked object. See [Reference Tracking](/en/docs/v4/reference-tracking).
+- **Polymorphism without tags**: type ids are hashes of type names, any non-sealed class or interface can be a base, and subtypes in other assemblies (plugins, hot updates) are found on their own. See [Polymorphism](/en/docs/v4/polymorphism).
+- **Deep object graphs**: objects nested more than 128 levels deep are deferred, then written and read from a shallower level, so recursive types of any depth, and hostile data, cannot overflow the stack. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
+- **Hostile input**: every length is checked against the bytes left before anything is allocated, and truncated data throws instead of reading past the end. See [Invalid Data](/en/docs/v4/basic#invalid-data).
 
-- **Opt-in version tolerance**: `[NinoType(format: NinoFormat.VersionTolerant)]` lets you append members to the most derived type, at any nesting depth, and old code skips the members it does not know.
-- **Keyed members**: `[NinoType(format: NinoFormat.Keyed)]` writes members by name hash, so they can be reordered, removed and inserted.
+## Defining Types [#defining-types]
 
-See [Evolving Your Data](/en/docs/v4/evolving-data).
+- **Private members** with `containNonPublicMembers`: on .NET 8 and later they are reached through `[UnsafeAccessor]` without `partial` (except in generic types). See [Private Members](/en/docs/v4/defining-types#private-members).
+- **Constructors, records and `required` members**: Nino calls the constructor that fits, or the one marked `[NinoConstructor]`. See [Constructors](/en/docs/v4/constructors).
+- **UTF-8 strings** per member with [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding); UTF-16 stays the default.
+- **Subtypes inherit `[NinoType]`** from their base class or interface, and generic types work as members, elements and top-level values. See [Defining Types](/en/docs/v4/defining-types).
 
-</Accordion>
-<Accordion title="Reference tracking" id="reference-tracking">
+## Supported Types [#supported-types]
 
-`[NinoType(trackReferences: true)]` keeps shared references and cycles: an object reached twice is written once and read back as one instance, at 4 bytes per tracked object. See [Reference Tracking](/en/docs/v4/reference-tracking).
+- **The BCL types of everyday code**: `BigInteger`, `Uri`, `Version`, `StringBuilder`, `BitArray`, `CultureInfo`, `TimeZoneInfo`, `Lazy<T>`, `Memory<T>`, `ReadOnlyMemory<T>` and `ReadOnlySequence<T>`, besides primitives, enums, strings, `Nullable<T>`, tuples, `KeyValuePair`, `DateTimeOffset` and `nint`. `System.Type` is left out on purpose. See [Other Built-in Types](/en/docs/v4/types#other-built-in-types).
+- **Every BCL collection**: arrays of any rank, `List<T>`, `HashSet<T>`, `Queue<T>`, `Stack<T>`, `LinkedList<T>`, the sorted and concurrent collections, `BlockingCollection<T>`, `PriorityQueue<TElement, TPriority>` (.NET 8 and later), `ObservableCollection<T>`, the read-only wrappers (`ReadOnlyCollection<T>`, `ReadOnlyObservableCollection<T>`, `ReadOnlyDictionary<TKey, TValue>`), `ILookup<TKey, TElement>`, `IGrouping<TKey, TElement>` and the collection interfaces. See [Collection Types](/en/docs/v4/types#collection-types).
+- **Every immutable collection** with the optional `Nino.Immutable` package, from `ImmutableArray<T>` to `ImmutableSortedDictionary<TKey, TValue>`, each with the bytes of its mutable counterpart. See [Immutable Collections](/en/docs/v4/types#immutable-collections).
+- **Your own collections**: types derived from `List<T>`, `Dictionary<TKey, TValue>` and friends, or implementing `ICollection<T>`, `IDictionary<TKey, TValue>` or `IProducerConsumerCollection<T>`, without attributes. See [User Collections](/en/docs/v4/types#user-collections).
+- **Unity's `AnimationCurve`, `Gradient` and `RectOffset`**: the Unity package ships `Nino.UnityTypes.dll` with their formatters. Unity's and Godot's structs (`Vector3`, `Quaternion`...) are copied as raw memory. See [Unity Classes](/en/docs/v4/advanced/unity#unity-classes).
+- **Pluggable formatters**: `[assembly: NinoFormatter(typeof(MyFormatter<,>))]` teaches Nino a new type, yours or a third-party one. Type arguments and element formatters are inferred (`[NinoRaw]` restricts a parameter to raw types), generated code calls it directly, and Nino's own BCL formatters are declared the same way. `[NinoCustomFormatter]` changes the encoding of one member. See [Custom Formatters](/en/docs/v4/custom-formatters).
 
-</Accordion>
-<Accordion title="Analyzers NINO001–NINO026" id="analyzers">
+## Allocation and Pooling [#allocation-and-pooling]
 
-Mistakes are reported while you type (NINO001–NINO026), many with a one-click fix. See the [diagnostics list](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md).
-
-</Accordion>
-<Accordion title="Low GC and pooling" id="reuse-instead-of-allocate">
-
-- **Reuse deserialization**: `NinoDeserializer.Deserialize(data, ref value)` populates existing objects, lists, arrays and dictionaries in place.
+- **Reuse deserialization**: `NinoDeserializer.Deserialize(data, ref value)` fills existing objects, lists, arrays and dictionaries in place, and keeps a string whose text is unchanged.
 - **Pooled deserialization**: mark a class `[NinoPooled]` and Nino deserializes into instances you hand back with `ReturnToPool()`, reusing their lists, arrays and dictionaries. Dropped instances (the payload is `null`, a list shrinks, the type changes) go to a handler registered with `NinoSettings.SetRecycler<T>`, or else back to their pool.
 - **`[NinoFactory]` factories** let Nino take new instances from your own pools.
 
 See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 
-</Accordion>
-<Accordion title="Thread safe" id="thread-safe">
+## API [#api]
 
-Every `NinoSerializer` and `NinoDeserializer` method can be called concurrently without locks. Registries are lock-free and copy-on-write, scratch buffers are per thread, and no hot path writes shared memory, so threads never contend for a cache line. See [Thread Safety](/en/docs/v4/performance#thread-safety).
+- **Two entry points**: `NinoSerializer.Serialize` to a `byte[]`, an `IBufferWriter<byte>` (a `PipeWriter`, for example) or a `Writer`, and `NinoDeserializer.Deserialize` from a `ReadOnlySpan<byte>` or a `Reader`. Every `Serialize` overload takes the value as `in T`, so a struct read from a field is written without a copy. See [Serialize and Deserialize](/en/docs/v4/basic).
+- **`NinoArrayBufferWriter`**: a reusable buffer that makes serializing allocation-free, and with `new NinoArrayBufferWriter(initialCapacity, pool)` rents its arrays from your own `ArrayPool<byte>`. See [Reusing a Buffer](/en/docs/v4/basic#reusing-a-buffer).
+- **`Writer` and `Reader`** write several values into one buffer and read them back, and are the API of custom formatters. See [Writer and Reader](/en/docs/v4/custom-formatters#writer-and-reader).
+- **A boxed API for runtime types**: `SerializeBoxed(value, type)` and `DeserializeBoxed(data, type)` write exactly what `Serialize<T>` writes, for types known only as a `Type`. Types with a common `[NinoType]` base are faster through `Serialize<TBase>`. See [Runtime Types](/en/docs/v4/basic#runtime-types).
+- **No initialization**: generated registries register themselves and are found lazily; `NinoSettings`, `NinoPolymorphic.Register<T>()` and `NinoRegistry.EnsureInitialized` are optional. See [At Startup](/en/docs/v4/start#at-startup).
 
-</Accordion>
-<Accordion title="Identical bytes everywhere" id="runs-everywhere">
+## Platforms [#platforms]
 
-- **One format everywhere**: `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` produce identical bytes, and data is portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit.
-- **No init calls**: generated registries are found lazily, so hot-update assemblies (HybridCLR) just work.
-- **Unloadable assemblies**: an assembly in a collectible `AssemblyLoadContext` unloads with it; Nino clears what it cached for it (on its own on .NET 8 and later; on .NET Core 3.0 to .NET 7, call `NinoRegistry.Remove`). See [Unloading Assemblies](/en/docs/v4/platforms#unloading-assemblies).
-- **Unity**: the generator ships in the package; there is nothing else to install. `AnimationCurve`, `Gradient` and `RectOffset` are serialized too (see [Unity Classes](/en/docs/v4/advanced/unity#unity-classes)).
+- **One format everywhere**: `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` write identical bytes, portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, x64 and Arm64. Nino defines its bytes instead of copying memory where runtimes disagree (`Nullable<T>`, tuples, `decimal`, 32-bit alignment) and zeroes padding, so equal values serialize to equal bytes. See [Platforms and Binary Format](/en/docs/v4/platforms).
+- **Trimming and Native AOT**: Nino.Core is annotated for both, so `PublishTrimmed` and `PublishAot` give no warnings from Nino. See [Trimming and Native AOT](/en/docs/v4/platforms#trimming-and-native-aot).
+- **Unity 2022.3+** from OpenUPM, with the generator and `Nino.UnityTypes.dll` in the package. See [Unity and HybridCLR](/en/docs/v4/advanced/unity).
+- **HybridCLR hot update** without an initialization call, and **Godot 4** as a regular NuGet package. See [HybridCLR and Hot Update](/en/docs/v4/platforms#hybridclr-and-hot-update) and [Godot](/en/docs/v4/platforms#godot).
+- **Unloadable assemblies**: an assembly in a collectible `AssemblyLoadContext` unloads with it; Nino clears what it cached for it, on its own on .NET 8 and later, through `NinoRegistry.Remove` on .NET Core 3.0 to .NET 7. See [Unloading Assemblies](/en/docs/v4/platforms#unloading-assemblies).
+- **Browsers**: JavaScript and TypeScript clients read and write the same bytes by running your types on .NET WebAssembly. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
 
-</Accordion>
-<Accordion title="Truly incremental generator" id="incremental-generator">
+## Tooling [#tooling]
 
 - **Truly incremental source generator**: one file per `[NinoType]`, equatable models, no whole-compilation scans. Editing a type re-generates only that type, and an edit that changes no model (a comment, a method body) re-generates nothing.
-- **Much less generated code**: collections, strings, nullables, tuples and other built-in types are implemented once in `Nino.Core` as generic formatters; the generator only emits code for your `[NinoType]`s.
+- **Much less generated code**: collections, strings, nullables, tuples and the other built-in types are implemented once in `Nino.Core` as generic formatters; the generator only emits code for your `[NinoType]`s.
+- **26 analyzer rules** (NINO001–NINO026) report mistakes while you type, such as an unsupported member type, a missing `partial` or two `[NinoFormerName]`s on one type, many with a one-click code fix. See [Analyzer Diagnostics](/en/docs/v4/analyzers).
 
-</Accordion>
-<Accordion title="Faster runtime code" id="faster-to-run">
+## Removed [#removed]
 
-- **Struct formatters that the JIT/AOT compiler inlines**, raw memory copies for unmanaged `[NinoType]` structs and their arrays and lists, and no allocations beyond the result objects. [Fixed-size types](/en/docs/v4/performance#fixed-size-types) are written straight into a `byte[]` of their exact size.
-- **Deep object graphs**: objects nested more than 128 levels deep are deferred, then written and read from a shallower level, so recursive types of any depth, and hostile data, cannot overflow the stack. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
+- `[NinoExplicitOrder]`: use `[NinoType(false)]` with `[NinoMember(index)]`.
+- The betas' `Serialize(object)`: now `SerializeBoxed`.
+- Run-time formatter registration with `NinoFormatterCache<T>.Register<TFormatter>()`: declare formatters with `[assembly: NinoFormatter]` or `[NinoCustomFormatter]`.
 
-</Accordion>
-<Accordion title="More types, your way" id="more-types-your-way">
+See [Migrating from v3](/en/docs/v4/migration) and [Upgrading from a v4 Beta](/en/docs/v4/migration#upgrading-from-a-v4-beta).
 
-- **User collections**: types derived from `List<T>`, `HashSet<T>`, `Dictionary<TKey, TValue>` and friends, without attributes.
-- **More built-in types**: `PriorityQueue<TElement, TPriority>` in projects targeting .NET 8 or later, BCL types such as `BigInteger`, `Uri`, `Version`, `Lazy<T>`, `Memory<T>`, `ILookup<,>` and `BlockingCollection<T>`, and every immutable collection with the `Nino.Immutable` package (see [Supported Types](/en/docs/v4/types)).
-- **Pluggable formatters**: `[assembly: NinoFormatter(typeof(MyFormatter<,>))]` teaches Nino a new type (yours or a third-party one). Type arguments and element formatters are inferred, generated code calls it directly, and the runtime uses the same registration. Nino's own BCL formatters are declared the same way. See [Custom Formatters](/en/docs/v4/custom-formatters).
-- **Subtypes inherit `[NinoType]`** from their base class or interface.
-
-</Accordion>
-<Accordion title="A small, explicit API" id="a-small-explicit-api">
-
-- **One option for the format**: `[NinoType(format: ...)]` takes a `NinoFormat` (`Positional`, the default, `VersionTolerant` or `Keyed`). Defining `WEAK_VERSION_TOLERANCE` in a project turns its `Positional` types into `VersionTolerant` ones. See [Evolving Your Data](/en/docs/v4/evolving-data).
-- **Fixed-size types**: `NinoSerializer.Serialize(value)` of a type whose values always take the same number of bytes allocates the result at its final size, and `NinoSerializer.GetFixedSize<T>()` returns that size. See [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
-- **Layout metadata**: how each `[NinoType]` is written is recorded in the assembly's metadata (`[assembly: NinoTypeLayout]`), for compatibility checks and diffs between builds. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata).
-- **Your own buffers**: `new NinoArrayBufferWriter(initialCapacity, pool)` rents from your `ArrayPool<byte>`. See [Reusing a Buffer](/en/docs/v4/basic#reusing-a-buffer).
-- **A boxed API for runtime types**: `SerializeBoxed(value, type)` and `DeserializeBoxed(data, type)` serialize a type known only as a `Type` when the types share no common `[NinoType]` base, writing exactly what `Serialize<T>` writes. For message dispatch, plugins and tools, give the types a common `[NinoType]` base and call `Serialize<TBase>`/`Deserialize<TBase>`, which is faster and allocation-free; see [Runtime Types](/en/docs/v4/basic#runtime-types).
-- **Removed**: `[NinoExplicitOrder]` (use `[NinoType(false)]` with `[NinoMember(index)]`), the betas' `Serialize(object)` (now `SerializeBoxed`) and run-time formatter registration with `NinoFormatterCache<T>.Register<TFormatter>()` (declare formatters with `[assembly: NinoFormatter]` or `[NinoCustomFormatter]`). See [Migrating from v3](/en/docs/v4/migration).
-
-</Accordion>
-</Accordions>
-
-## Quick Example
+## Quick Example [#quick-example]
 
 ```csharp
 [NinoType, NinoPooled]
@@ -177,9 +170,10 @@ var packet = NinoDeserializer.Deserialize<Packet>(buffer.WrittenSpan); // reuses
 packet.ReturnToPool();                                                 // returning it twice throws
 ```
 
-## Learn More
+## Learn More [#learn-more]
 
 <Cards>
+  <Card title="Changelog" href="/en/docs/v4/changelog" description="What each v4 release changed, newest first." />
   <Card title="Quick Start" href="/en/docs/v4/start" description="Install Nino v4 and serialize your first type." />
   <Card title="Migrating from v3" href="/en/docs/v4/migration" description="Step-by-step upgrade, with before/after code." />
   <Card title="Design document" href="https://github.com/JasonXuDeveloper/Nino/blob/main/docs/v4-design.md" description="The v4 architecture and binary format." />
