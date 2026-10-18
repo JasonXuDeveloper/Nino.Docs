@@ -120,7 +120,7 @@ v4 新增：通过 `ref` 反序列化到你已有的对象中，需要新实例�
 - **处处同一格式**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出完全相同的字节，数据在 CoreCLR、Mono、IL2CPP 之间以及 64 位和 32 位平台之间通用。
 - **无需初始化调用**：生成的注册表在用到时才查找，所以热更新程序集（HybridCLR）直接可用。
 - **程序集可卸载**：可回收 `AssemblyLoadContext` 中的程序集能随上下文一起卸载，Nino 会清除相关缓存（.NET 8 及以上自动完成；.NET Core 3.0 到 .NET 7 需调用 `NinoRegistry.Remove`）。参见[卸载程序集](/zh/docs/v4/platforms#unloading-assemblies)。
-- **Unity**：源生成器随包附带，无需另外安装。
+- **Unity**：源生成器随包附带，无需另外安装。`AnimationCurve`、`Gradient` 和 `RectOffset` 也能序列化（参见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)）。
 
 </Accordion>
 <Accordion title="真正的增量生成" id="incremental-generator">
@@ -138,7 +138,7 @@ v4 新增：通过 `ref` 反序列化到你已有的对象中，需要新实例�
 <Accordion title="更多类型，自由扩展" id="more-types-your-way">
 
 - **自定义集合**：派生自 `List<T>`、`HashSet<T>`、`Dictionary<TKey, TValue>` 等的类型，无需任何特性。
-- **更多内置类型**：.NET 6+ 上的 `PriorityQueue<TElement, TPriority>`，以及通过 `Nino.Immutable` 包支持的 `ImmutableArray<T>` / `ImmutableList<T>`。
+- **更多内置类型**：目标框架为 .NET 8 及以上的项目中的 `PriorityQueue<TElement, TPriority>`，`BigInteger`、`Uri`、`Version`、`Lazy<T>`、`Memory<T>`、`ILookup<,>`、`BlockingCollection<T>` 等 BCL 类型，以及通过 `Nino.Immutable` 包支持的所有不可变集合（见[支持的类型](/zh/docs/v4/types)）。
 - **可扩展的格式化器**：用 `[assembly: NinoFormatter(typeof(MyFormatter<,>))]` 教 Nino 处理一个新类型（你自己的或第三方的）。类型参数和元素格式化器会自动推断，生成的代码直接调用它，运行时也使用同一份注册。Nino 自带的 BCL 格式化器也是这样声明的。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
 - **子类型继承 `[NinoType]`**：子类型自动从基类或接口继承该特性。
 

@@ -270,7 +270,7 @@ namespace MyApp.Protocol
 - 格式不是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，也没有自定义成员格式化器；
 - 每个实例字段都参与序列化，而且这些字段本身也按原始字节写入（不是 `Nullable<T>`、元组、`nint`、`DateTimeOffset`，也不是非原始内存的 `[NinoType]` 结构体）。
 
-否则逐个成员写入。无论哪种情况，只要所有成员都是非托管值或这样的结构体，它就是[固定大小的](/zh/docs/v4/performance#fixed-size-types)：`NinoSerializer.Serialize(value)` 会把它直接写进大小正好的 `byte[]`。
+否则逐个成员写入。无论哪种情况，只要它是按位置格式（既不是版本容错也不是键控），并且所有成员都是原始值或这样的结构体，它就是[固定大小的](/zh/docs/v4/performance#fixed-size-types)：`NinoSerializer.Serialize(value)` 会把它直接写进大小正好的 `byte[]`。
 
 ```csharp
 [NinoType]

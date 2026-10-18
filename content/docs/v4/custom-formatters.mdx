@@ -4,6 +4,8 @@ description: "Write a Nino formatter for a member ([NinoCustomFormatter]) or a t
 icon: Puzzle
 ---
 
+<AnchorRedirect map={{ 'example-memory': '/en/docs/v4/types#collection-types' }} />
+
 Nino has formatters for the [built-in types](/en/docs/v4/types) and generates one for every `[NinoType]`. Write your own to encode one member differently (a varint, a fixed-point number) or to serialize a type Nino does not know (a third-party collection, a type from another library).
 
 A formatter is a **struct** implementing `INinoFormatter<T>`:
@@ -168,48 +170,64 @@ Nino binds each type parameter of a registered formatter when it meets a type th
 
 Other constraints keep their C# meaning (`class`, `struct`, `unmanaged`, `new()`).
 
-### Example: `Memory<T>` [#example-memory]
+### Example: A Generic Type From Another Library [#example-grid]
 
-Nino has no built-in formatter for `Memory<T>`. This one handles a `Memory<T>` of any raw element type: it writes a length and one block, the same bytes as a `T[]`, and reads into the current memory when the length matches, so [reuse deserialization](/en/docs/v4/pooling) allocates nothing:
+`Grid<T>` below stands for a type from a library you cannot add `[NinoType]` to. This formatter handles a `Grid<T>` of any raw element type: it writes the width and the cells as one block, and reads into the current grid when its size matches, so [reuse deserialization](/en/docs/v4/pooling) allocates nothing:
 
-```csharp title="MemoryFormatter.cs"
+```csharp title="GridFormatter.cs"
 using System.Runtime.CompilerServices;
 
-[assembly: NinoFormatter(typeof(MemoryFormatter<>))]
+// From a library you cannot annotate:
+//   public sealed class Grid<T> { public Grid(int width, int height); public int Width { get; } public T[] Cells { get; } }
 
-/// Memory<T> of raw elements: a length, then one block (the same bytes as a T[]).
-public struct MemoryFormatter<[NinoRaw] T> : INinoFormatter<Memory<T>>
+[assembly: NinoFormatter(typeof(GridFormatter<>))]
+
+/// Grid<T> of raw cells: the width (-1 for null), then the cells as a T[] (a length, then one block).
+public struct GridFormatter<[NinoRaw] T> : INinoFormatter<Grid<T>>
     where T : unmanaged
 {
-    public void Serialize(Memory<T> value, ref Writer writer) =>
-        writer.Write<T>(value.Span);                         // length, then one block copy
-
-    public void Deserialize(ref Memory<T> value, ref Reader reader)
+    public void Serialize(Grid<T> value, ref Writer writer)
     {
-        int length = reader.ReadLength(Unsafe.SizeOf<T>()); // checked against the bytes left; -1 for null
-        if (length <= 0)
+        if (value == null)
         {
-            value = default;
+            writer.Write(-1);
             return;
         }
 
-        if (value.Length != length)
-            value = new T[length];                           // reuse the current memory when the length matches
-        reader.ReadUnmanagedRaw(value.Span);                 // one block copy // [!code highlight]
+        writer.Write(value.Width);
+        writer.Write<T>(value.Cells.AsSpan());                     // length, then one block copy
+    }
+
+    public void Deserialize(ref Grid<T> value, ref Reader reader)
+    {
+        int width = reader.Read<int>();
+        if (width < 0)
+        {
+            value = null;
+            return;
+        }
+
+        int length = reader.ReadLength(Unsafe.SizeOf<T>());     // checked against the bytes left
+        if (width == 0 ? length != 0 : length % width != 0)
+            throw new InvalidOperationException("Not a grid.");
+        if (value == null || value.Cells.Length != length || value.Width != width)
+            value = new Grid<T>(width, width == 0 ? 0 : length / width); // reuse the grid when its size matches
+        reader.ReadUnmanagedRaw(value.Cells.AsSpan());          // one block copy // [!code highlight]
     }
 }
 
 [NinoType]
-public sealed class AudioChunk
+public sealed class Level
 {
-    public long Position;
-    public Memory<float> Samples;   // uses MemoryFormatter<float>
+    public string Name;
+    public Grid<byte> Tiles;        // uses GridFormatter<byte>
+    public Grid<Vector2> Flow;      // uses GridFormatter<Vector2>
 }
 ```
 
-- `[NinoRaw]` binds `T` only to types Nino copies as raw bytes: `Memory<float>` and `Memory<Vector3>` use this formatter, while a `Memory<string>` member still has no formatter (NINO007).
+- `[NinoRaw]` binds `T` only to types Nino copies as raw bytes: `Grid<byte>` and `Grid<Vector2>` use this formatter, while a `Grid<string>` member has no formatter (NINO007).
 - `Writer.Write<T>(ReadOnlySpan<T>)` and `Reader.ReadUnmanagedRaw<T>(Span<T>)` copy the elements as one block, and convert them field by field on a runtime whose layout differs from the canonical one.
-- The bytes are those of a `T[]`, so a member can change between `float[]` and `Memory<float>` without changing the format; a `null` array reads back as empty memory.
+- `ReadLength` throws when the bytes left cannot hold that many cells, so corrupt data cannot make the formatter allocate a huge grid.
 
 ## Writer and Reader
 
@@ -258,6 +276,6 @@ Always read exactly what you wrote, in the same order: the bytes carry no schema
 ## Next Steps
 
 <Cards>
-  <Card title="Analyzer Diagnostics" href="/en/docs/v4/analyzers">Every diagnostic, NINO001 to NINO025, and how to fix it.</Card>
+  <Card title="Analyzer Diagnostics" href="/en/docs/v4/analyzers">Every diagnostic, NINO001 to NINO026, and how to fix it.</Card>
   <Card title="Performance Guide" href="/en/docs/v4/performance">How Nino gets its speed, and how to keep your code on the fast paths.</Card>
 </Cards>

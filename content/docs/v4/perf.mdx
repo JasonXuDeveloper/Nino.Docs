@@ -33,16 +33,15 @@ Absolute times depend on the machine; compare the ratios. For features rather th
 
 | | |
 | --- | --- |
-| CPU | Intel Xeon 2.10 GHz, 4 cores, AVX-512 (runtime and build time) |
-| OS | Ubuntu 24.04 |
+| Machine | Runtime: the GitHub-hosted `ubuntu-26.04` runners of the release's benchmark run; the exact CPU is listed under [All Measurements](#results). Build time: Intel Xeon 2.10 GHz, 4 cores, AVX-512 |
 | Runtime | .NET 10.0.13 (SDK 10.0.402), server GC |
-| Harness | BenchmarkDotNet 0.15.2, 5 warm-up and 15 measured iterations, every benchmark class in one run |
+| Harness | BenchmarkDotNet 0.15.8, 5 warm-up and 15 measured iterations; the benchmark classes run in parallel on four runners, with a class's Nino and MemoryPack cases always on the same runner |
 | Projects | [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.Benchmark) (runtime), [`src/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.GeneratorBenchmark) (build time) |
 
 - **Serialize** benchmarks write into a buffer writer that is created once and reset before each call (`NinoArrayBufferWriter` for Nino, `ArrayBufferWriter<byte>` for the others), so they measure the serializer, not array allocation.
 - **Deserialize** benchmarks read bytes that each serializer wrote at startup, and create new objects on every call.
 - **Reuse** benchmarks deserialize into objects that already exist: Nino by `ref` and from `[NinoPooled]` pools, MemoryPack with its overwrite mode.
-- **v3** runs the same `SimpleTest` built against Nino 3.3.13 from NuGet, directly before the v4 run on the same machine. MemoryPack runs in both, so the difference between its two times shows how much the machine itself varied. The note under each v3 chart names the run its numbers come from.
+- **v3** runs the same `SimpleTest` built against Nino 3.3.13 from NuGet, directly before the v4 `SimpleTest` run on the same runner. MemoryPack runs in both, so the difference between its two times shows how much the machine itself varied. The note under each v3 chart names the run its numbers come from.
 
 The code of every benchmark is in [Benchmark Code](#benchmark-code).
 
@@ -112,6 +111,16 @@ Three more benchmark classes compare features that change how a type is written,
 
 <ExtraRuntimeTables lang="en" />
 
+### Common Types, Collections and BCL Types [#common-types-and-collections]
+
+Three more classes were added after v4.0.0-rc.4; their rows appear in [All Measurements](#results) once a release's report includes them:
+
+- **Common types** ([`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/CommonTypesTest.cs)): data shaped like that of common applications, `List<Player>` (100), `List<Order>` (100), `List<Shape>` (1,000 through an abstract base), a `TreeNode` tree (1,365 nodes), `InventoryItem[1000]` (a padded struct) and `Dictionary<string, string>` (1,000).
+- **Collections** ([`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/CollectionsTest.cs)): collections of the base class library, 1,000 elements each: `List<(int, long)>`, `KeyValuePair<int, int>[]`, `HashSet<int>`, `Queue<int>`, `LinkedList<int>`, `SortedList<int, int>` and `ConcurrentDictionary<int, int>`.
+- **BCL types** ([`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/BclTypesTest.cs)): the other base class library types both libraries have formatters for: `BigInteger` (3^1000), `Uri`, `Version`, `StringBuilder` (1,000 chars), `BitArray` (1,000 bits), `CultureInfo`, `TimeZoneInfo`, `Lazy<string>`, and with 1,000 elements `Memory<int>`, `ReadOnlySequence<int>`, `ReadOnlyCollection<int>`, `ILookup<int, int>`, `BlockingCollection<int>` and the immutable collections of `Nino.Immutable` (`ImmutableHashSet`, `ImmutableSortedSet`, `ImmutableQueue`, `ImmutableStack`, `ImmutableDictionary`, `ImmutableSortedDictionary`).
+
+All three serialize to a reused buffer writer and deserialize into new instances.
+
 ### Not Measured Yet [#not-measured-yet]
 
 - **Keyed types** have no runtime benchmark. Their cost (a key and a length per member, and a key check per member when reading) is described in [Evolving Your Data](/en/docs/v4/evolving-data).
@@ -168,7 +177,7 @@ v3's compile time grows much faster than the number of types: 3.3× the types to
 
 ## Benchmark Code [#benchmark-code]
 
-The types and methods behind each table, from [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.Benchmark), trimmed of `using` lines and repeated cases. Every class runs with `[ShortRunJob(RuntimeMoniker.Net10_0)]`, `[GcServer(true)]` and `[MemoryDiagnoser]`; the types carry the attributes of each serializer they are measured with.
+The types and methods behind each table, from [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.Benchmark), trimmed of `using` lines and repeated cases. Every class runs with `[NinoJob]` (BenchmarkDotNet's `ShortRun` job on .NET 10; the published run sets the iteration counts on the command line), `[GcServer(true)]` and `[MemoryDiagnoser]`; the types carry the attributes of each serializer they are measured with.
 
 ### SimpleTest [#simpletest]
 
@@ -882,7 +891,7 @@ public FixedClass MemoryPackDeserializeFixedClass() =>
 From a clone of the [Nino repository](https://github.com/JasonXuDeveloper/Nino), with the .NET 10 SDK and Python 3:
 
 ```shell
-# runtime, as published: v3 3.3.13, then the full v4 suite (about 40 minutes)
+# runtime, as published: v3 3.3.13, then the full v4 suite (about 35 minutes)
 benchmarks/run.sh
 
 # runtime, v4 only, a subset
@@ -896,5 +905,5 @@ dotnet run -c Release --project src/Nino.GeneratorBenchmark -- 30 8
 ```
 
 - `benchmarks/run.sh` builds `benchmarks/v3` (the same `SimpleTest` against Nino 3.3.13 from NuGet) and runs it directly before v4. It prints **v4 vs v3** for each case.
-- Every release runs the same protocol in CI, on one runner, and publishes the result in the release notes: the Performance Report, and a **v3 3.3.13 vs v4 (same machine)** section. This site takes its runtime numbers from the newest v4 release that has them.
+- Every release runs the same protocol in CI, with the benchmark classes split over four runners (v3 runs directly before `SimpleTest` on its runner), and publishes the result in the release notes: the Performance Report, and a **v3 3.3.13 vs v4 (same machine)** section. This site takes its runtime numbers from the newest v4 release that has them.
 - `benchmarks/members` takes `SimpleClass` apart member by member, against v3 and v4, to find which member makes a case slower. See the [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks).

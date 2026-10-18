@@ -46,7 +46,8 @@ Unmanaged values are copied as raw memory:
 
 - primitives, enums, `DateTime`, `Guid`, `Vector3` and other unmanaged structs;
 - consecutive unmanaged members of a `[NinoType]`, written as **one block** with one bounds check;
-- arrays and `List<T>` of unmanaged elements: **one block copy** of the whole collection;
+- arrays, `List<T>`, `Stack<T>`, `Queue<T>`, `ImmutableArray<T>` and collections declared as interfaces (`IList<T>`, `IEnumerable<T>`, ...) of unmanaged elements: **one block copy** of the whole collection;
+- arrays and lists of value tuples and `KeyValuePair`s of unmanaged values: one block, rearranged into the written order with [SIMD](/en/docs/v4/platforms#simd) where the CPU allows;
 - a `[NinoType]` struct that qualifies as raw (see [Structs](/en/docs/v4/defining-types#structs)), alone or in arrays and lists.
 
 Padding bytes are zeroed on write, so equal values always produce equal bytes, even when the struct sits in memory that was never cleared (an `ArrayPool` array, `stackalloc` under `[SkipLocalsInit]`). Nino finds the padding at runtime, the first time it writes the type: it reads the field offsets once, and the result becomes a JIT-time constant, so a struct without padding pays nothing for the check. Arrays of padded structs are copied through a SIMD mask in the same pass, which costs a little more than a plain `memcpy`.

@@ -17,7 +17,7 @@ Nino 支持 .NET Standard 2.0 及以上、Unity 2022.3+（Mono 和 IL2CPP）以�
 | Godot | Godot 4 .NET 项目（4.4 起为 .NET 8，之前为 .NET 6） |
 | 热更新 | HybridCLR，无需初始化调用 |
 
-**所有目标写出的字节完全相同。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 各自使用该平台上最好的底层实现（向量化拷贝，.NET 8+ 上的 `[UnsafeAccessor]`），测试套件会用同一组标准样本数据校验每个版本。.NET 10 服务器写出的数据，32 位 Android 手机上的 Unity IL2CPP 客户端可以直接读取，反过来也一样。
+**所有目标写出的字节完全相同。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 各自使用该平台上最好的底层实现（[SIMD](#simd)，.NET 8+ 上的 `[UnsafeAccessor]`），测试套件会用同一组标准样本数据校验每个版本。.NET 10 服务器写出的数据，32 位 Android 手机上的 Unity IL2CPP 客户端可以直接读取，反过来也一样。
 
 ## 二进制格式 [#binary-format]
 
@@ -80,7 +80,7 @@ CoreCLR 和 Unity 2021.3+ 的布局是 `bool hasValue; T value;`，而旧版 Mon
 </Accordion>
 <Accordion title={<><code>ValueTuple</code> 与 <code>KeyValuePair</code></>} value="tuple">
 
-`ValueTuple` 在 .NET 上是 `LayoutKind.Auto`，CoreCLR 可能调整它的字段顺序，而 Mono 按声明顺序排列。Nino 总是逐个成员写入元组和 `KeyValuePair`，从不直接拷贝内存。
+`ValueTuple` 在 .NET 上是 `LayoutKind.Auto`，CoreCLR 可能调整它的字段顺序，而 Mono 按声明顺序排列。Nino 总是按声明顺序逐项写入元组和 `KeyValuePair`，从不直接拷贝内存。各项都是原始值的元组和键值对，其数组和列表仍按整块处理：运行时的内存布局与字节一致时（启动时检查一次）直接拷贝内存，否则在 CPU 支持时用 [SIMD 重排](#simd)，再不行就逐项处理。每条路径写出的字节都相同。
 
 </Accordion>
 <Accordion title={<><code>decimal</code>、<code>DateTimeOffset</code>、<code>nint</code></>} value="bcl">
@@ -103,11 +103,31 @@ CoreCLR 和 Unity 2021.3+ 的布局是 `bool hasValue; T value;`，而旧版 Mon
 不支持。在大端序主机上构造 `Writer` 或 `Reader` 会抛出 `PlatformNotSupportedException`，Nino 不会按错误的字节序读写。目前 .NET 和 Unity 运行的所有平台都是小端序。
 
 </Accordion>
+<Accordion title="集合的内部字段" value="collection-layouts">
+
+Nino 直接读写 `List<T>`、`Stack<T>`、`Queue<T>`、`SortedList<TKey, TValue>`、`SortedSet<T>` 和 `SortedDictionary<TKey, TValue>` 的字段，而这些字段的布局因运行时而异（.NET Framework 和 Mono 多一个 `_syncRoot` 字段）。每种布局在启动时用内容已知的实例检查一次；布局无法识别的集合改走它的公共方法。两种方式写出的字节相同。（在 .NET 8 及以上，`List<T>` 通过 `CollectionsMarshal` 访问。）
+
+</Accordion>
 </Accordions>
+
+## 各平台的 SIMD [#simd]
+
+`Nino.Core` 的 net8.0 和 net10.0 版本会在 CPU 支持时使用硬件指令集，不支持时回退到可移植的代码。每条路径写出的字节都相同：测试会在关闭 AVX-512、关闭全部 SIMD 的情况下以及在 Arm64 上运行。
+
+| 平台 | Nino 使用的指令 |
+| --- | --- |
+| 支持 AVX-512 的 x64 | 64 字节到 8 KB 的块用 64 字节向量拷贝；用 AVX-512 VBMI 字节置换，每次 64 字节地重排由原始值组成、内存布局与字节不同的元组和 `KeyValuePair`；用 512 位掩码拷贝清零填充字节 |
+| 支持 AVX2 的 x64 | 256 字节到 4 KB 的块用 32 字节向量拷贝（.NET 偏好 256 位向量的 AVX-512 CPU 也是如此）；不超过 16 字节的这类元组和键值对，每个值用一次 SSSE3 16 字节重排 |
+| 支持 SSSE3 的 x64 | 每个值一次 16 字节重排；块用 `memmove` 拷贝 |
+| Arm64 | AdvSimd：每个值一次 16 字节重排（`TBL`），不超过 8 字节的值每 64 字节用四次 4 寄存器查表；33 到 64 字节的字符串用两对 16 字节向量拷贝；块用 `memmove` 拷贝 |
+| 支持 SIMD 的 WebAssembly（.NET 10） | 每个值一次 16 字节重排（`PackedSimd`，`i8x16.swizzle`） |
+| Arm32；Unity（Mono、IL2CPP）、.NET Framework 以及 .NET Core 3.0 到 .NET 7 | 不使用硬件指令集：块用 `memmove` 拷贝，需要重排的值逐个处理 |
+
+Unity、.NET Framework 以及 .NET Core 3.0 到 .NET 7 使用 `netstandard2.0`/`netstandard2.1` 版本，其中没有硬件指令集代码。在所有平台上，64 位运行时会内联拷贝不超过 32 字节的块（大多数字符串）；填充字节在支持 AVX-512 时用 512 位向量清零，否则在运行时加速 `Vector<T>` 时用它清零，再不行就每次 8 字节。
 
 ## Unity [#unity]
 
-- 从 [OpenUPM](/zh/docs/v4/start#unity-project) 安装。包中含有 `Nino.Core.dll` 和源生成器（`Nino.Generator.dll`，已标记为 `RoslynAnalyzer`），以及 `System.Buffers`、`System.Memory` 和 `System.Runtime.CompilerServices.Unsafe`。
+- 从 [OpenUPM](/zh/docs/v4/start#unity-project) 安装。包中含有 `Nino.Core.dll` 和源生成器（`Nino.Generator.dll`，已标记为 `RoslynAnalyzer`）、`Nino.UnityTypes.dll`（[`AnimationCurve`、`Gradient` 和 `RectOffset`](/zh/docs/v4/advanced/unity#unity-classes) 的格式化器），以及 `System.Buffers`、`System.Memory` 和 `System.Runtime.CompilerServices.Unsafe`。
 - Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员或标了 `[NinoPooled]` 的类型必须是 `partial`（NINO002，提供代码修复）。
 - Unity 包附带的是源生成器的 Roslyn 4.3 版本，所以调用不会被拦截，而是走常规路径，写出的字节相同。
 - 生成的注册表标记了 `[RuntimeInitializeOnLoadMethod]`（编辑器中还有 `[InitializeOnLoadMethod]`），会在启动时运行，也不会被 IL2CPP 裁剪掉。

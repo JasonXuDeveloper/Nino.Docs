@@ -176,7 +176,7 @@ private static async ValueTask FillAsync(Stream stream, byte[] buffer, int count
 
 `async` 方法只有在真正等待 I/O 时才会分配状态机；`ReadAsync` 每帧返回一个新值（`async` 方法不能带 `ref` 参数）。不允许分配内存的循环，请用同步的 `TryRead` 或 [`PipeReader`](/zh/docs/v4/advanced/networking#reading-frames)。
 
-`Fill` 和 `FillAsync` 在所有目标上都能用；在 .NET 7 及以上，也可以换成 `Stream.ReadAtLeast` / `ReadExactlyAsync`。`stream.Write(span)`、`WriteAsync(memory)` 和 `ReadAsync(memory)` 需要 .NET Standard 2.1（Unity 2021.2 及以上满足）；只面向 .NET Standard 2.0 时，改用 `byte[]` 重载，写入的数组用 `MemoryMarshal.TryGetArray(buffer.WrittenMemory, out var segment)` 取出。
+`Fill` 和 `FillAsync` 在所有目标上都能用；在 .NET 7 及以上，也可以换成 `Stream.ReadAtLeast` / `ReadExactlyAsync`。`stream.Write(span)`、`WriteAsync(memory)` 和 `ReadAsync(memory)` 需要 .NET Standard 2.1，Nino 支持的所有 Unity 版本（2022.3 及以上）都满足；只面向 .NET Standard 2.0 时，改用 `byte[]` 重载，写入的数组用 `MemoryMarshal.TryGetArray(buffer.WrittenMemory, out var segment)` 取出。
 
 使用 `System.IO.Pipelines` 时，直接序列化到 `PipeWriter`（它就是 `IBufferWriter<byte>`），再从 `PipeReader` 中读取帧。完整的读取循环参见[读取帧](/zh/docs/v4/advanced/networking#reading-frames)，它解码每一帧的方式与下面的工具方法相同。
 

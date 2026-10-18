@@ -33,7 +33,7 @@ icon: Swords
 
 <Callout type="info" title="非托管结构体数组">
 
-两个库都把这类数组整块拷贝，所以两者持平。反序列化 `Vector4[10000]` 时每次调用都要在大对象堆上分配一个 160 KB 的数组，这一项测到的主要是第 2 代垃圾回收，结果每次运行都有波动；拷贝本身在两个库中都只是一次 `memcpy`。
+两个库都把这类数组整块拷贝，所以两者持平。反序列化 `Vector4[10000]` 这一项测到的主要是结果数组的垃圾回收，结果每次运行都有波动；参见[反序列化（新实例）](/zh/docs/v4/perf#deserialize-new-instances)。
 
 </Callout>
 
@@ -86,17 +86,16 @@ icon: Swords
 | 序列化回调 | ✅ 在调用前后执行自己的钩子（[示例](/zh/docs/v4/advanced/streams#callbacks)） | ✅ `[MemoryPackOnSerializing]` 等四个 |
 | 自定义格式化器 | ✅ 结构体格式化器，可内联；`[assembly: NinoFormatter]` 绑定泛型类型 | ✅ `MemoryPackFormatter<T>`，通过 Provider 注册 |
 | 压缩 | ✅ 用 `System.IO.Compression` 压缩输出（[示例](/zh/docs/v4/advanced/streams#compression)） | ✅ `BrotliCompressor`、`[BrotliFormatter]` |
-| TypeScript 代码生成 | ❌ 浏览器客户端在 .NET WebAssembly 上运行同一套 C# 类型（[指南](/zh/docs/v4/advanced/browser)） | ✅ `[GenerateTypeScript]` |
-| ASP.NET Core MVC 格式化器 | ❌ | ✅ `MemoryPack.AspNetCoreMvcFormatter` |
+| TypeScript 代码生成 | ❌ 计划在 [4.0.0-rc.6](/zh/docs/v4/changelog#400-rc6) 提供；目前浏览器客户端在 .NET WebAssembly 上运行同一套 C# 类型（[指南](/zh/docs/v4/advanced/browser)） | ✅ `[GenerateTypeScript]` |
+| ASP.NET Core MVC 格式化器 | ❌ 计划在 [4.0.0-rc.6](/zh/docs/v4/changelog#400-rc6) 提供 | ✅ `MemoryPack.AspNetCoreMvcFormatter` |
 | 默认字符串编码 | UTF-16，可按成员使用 `[NinoUtf8]` | UTF-8，可选 UTF-16 |
 
 ## MemoryPack 仍然领先的地方 [#where-memorypack-is-ahead]
 
 坦白说，以下功能 MemoryPack 支持，Nino v4 不支持：
 
-- **更多内置类型。** MemoryPack 可以序列化 `BigInteger`、`Uri`、`Version`、`StringBuilder`、`Type`、`BitArray`、`CultureInfo`、`TimeZoneInfo`、`Lazy<T>`、`Memory<T>`、`ReadOnlyMemory<T>`、`ReadOnlySequence<T>`、`ReadOnlyCollection<T>`、`ReadOnlyObservableCollection<T>`、`ILookup<,>`、`IGrouping<,>`、`BlockingCollection<T>` 以及所有不可变集合。Nino 都不支持（不可变集合中只通过 `Nino.Immutable` 支持 `ImmutableArray<T>` 和 `ImmutableList<T>`）。*变通方法：*写一个[自定义格式化器](/zh/docs/v4/custom-formatters)，或者用一个可序列化的成员做转换（`Uri` 存成 `string`，`BigInteger` 存成 `byte[]`）。
-- **Unity 的类。** `MemoryPack.Unity` 可以序列化 `AnimationCurve`、`Gradient` 和 `RectOffset`。Nino 支持 Unity 的非托管结构体（`Vector3`、`Quaternion`、`Color32`……），但不支持 Unity 的类。*变通方法：*自定义格式化器。
-- **TypeScript 与 ASP.NET Core。** MemoryPack 可以生成 TypeScript 读写代码，并提供 MVC 输入/输出格式化器。Nino 两者都没有。*替代方案：* 对于浏览器客户端，把客户端的序列化部分构建成 .NET `browser-wasm` 应用，再通过 `[JSExport]` 从 JavaScript 调用；它与服务端共用 C# 类型、写出相同的字节，代价是浏览器要下载 .NET 运行时。参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)。
+- **`Type` 值。** MemoryPack 可以序列化 `System.Type`；Nino 有意不支持：由数据指定要创建的类型，是一种广为人知的反序列化攻击手段。MemoryPack 列出的其他内置类型（`BigInteger`、`Uri`、`Lazy<T>`、`Memory<T>`、`ILookup<,>`、所有不可变集合等）从 4.0.0-rc.5 起 [Nino 也都内置支持](/zh/docs/v4/types#other-built-in-types)，`MemoryPack.Unity` 支持的 Unity 类（`AnimationCurve`、`Gradient`、`RectOffset`）也一样（参见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)）。*变通方法：*自己保存类型 ID 或名称，再映射到你允许的类型。
+- **TypeScript 与 ASP.NET Core。** MemoryPack 可以生成 TypeScript 读写代码，并提供 MVC 输入/输出格式化器。Nino 目前两者都没有，都计划在 [4.0.0-rc.6](/zh/docs/v4/changelog#400-rc6) 提供。*替代方案：* 对于浏览器客户端，把客户端的序列化部分构建成 .NET `browser-wasm` 应用，再通过 `[JSExport]` 从 JavaScript 调用；它与服务端共用 C# 类型、写出相同的字节，代价是浏览器要下载 .NET 运行时。参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)。
 - **依赖注入与选项。** MemoryPack 的每次调用都可以传入 `MemoryPackSerializerOptions`（字符串编码、`IServiceProvider`）。Nino 没有按调用传入的选项：设置要么是进程级的（`NinoSettings`），要么是标在类型上的特性。
 
 流、异步 I/O、`ReadOnlySequence<byte>` 输入、序列化回调和压缩不在这个列表里：它们都只需在 Nino 的 `IBufferWriter<byte>` 和 `ReadOnlySpan<byte>` API 之上写几行代码。可以直接复制的写法参见[流、异步、回调与压缩](/zh/docs/v4/advanced/streams)。
@@ -127,7 +126,7 @@ MemoryPack 写入 1 字节的 Union 标签（超过 249 时 3 字节），Nino �
     在 .NET 服务器、Unity 或 Godot 上高频序列化消息、缓存值、存储的记录或应用状态；需要不用标签表的多态、可演进的数据、共享引用，或借助池化做到零 GC；或者需要 Unity、IL2CPP 与服务器之间字节完全一致。
   </Card>
   <Card title="适合选 MemoryPack 的情况">
-    需要生成的 TypeScript 读写代码（浏览器客户端不带 .NET 运行时）、ASP.NET Core MVC 格式化器、按调用设置的选项，或者需要开箱即用地支持上面列出的 BCL 类型和 Unity 类。
+    需要生成的 TypeScript 读写代码（浏览器客户端不带 .NET 运行时）、ASP.NET Core MVC 格式化器（Nino 计划在 [4.0.0-rc.6](/zh/docs/v4/changelog#400-rc6) 提供这两项）、按调用设置的选项，或者需要 `System.Type` 值。
   </Card>
 </Cards>
 

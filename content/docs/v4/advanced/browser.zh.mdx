@@ -5,7 +5,7 @@ description: "在浏览器的 JavaScript 或 TypeScript 中使用 Nino：把 [Ni
 icon: Globe
 ---
 
-**能在 JavaScript 或 TypeScript 中使用 Nino 吗？** 可以在浏览器中使用，做法是让 Nino 本身在浏览器里运行。把客户端的序列化部分构建成一个引用 Nino 和你的 `[NinoType]` 类型的小型 .NET `browser-wasm` 应用，用 `[JSExport]` 向 JavaScript 暴露几个函数，再在 JavaScript 或 TypeScript 前端中调用它们。Nino 不生成 TypeScript 或 JavaScript 代码，也不需要生成：浏览器运行的是与服务端相同的 C# 类型和相同的生成格式化器，因此没有第二份 schema 需要同步，字节也完全相同。
+**能在 JavaScript 或 TypeScript 中使用 Nino 吗？** 可以在浏览器中使用，做法是让 Nino 本身在浏览器里运行。把客户端的序列化部分构建成一个引用 Nino 和你的 `[NinoType]` 类型的小型 .NET `browser-wasm` 应用，用 `[JSExport]` 向 JavaScript 暴露几个函数，再在 JavaScript 或 TypeScript 前端中调用它们。Nino 目前不生成 TypeScript 或 JavaScript 代码（TypeScript 代码生成计划在 [4.0.0-rc.6](/zh/docs/v4/changelog#400-rc6) 提供），这种做法也不需要它：浏览器运行的是与服务端相同的 C# 类型和相同的生成格式化器，因此没有第二份 schema 需要同步，字节也完全相同。
 
 本指南完整搭建这一方案：一个共享的订单类型、一组导出函数、一个加载它们的页面，以及通过 `fetch` 和 WebSocket 与 ASP.NET Core 服务端的通信。所有代码片段都来自一个用 .NET 10 SDK 构建、并在无头 Chromium 中实际运行过的项目。
 
@@ -209,7 +209,7 @@ dotnet publish Shop.Browser -c Release
 
 ### 在 TypeScript 中为导出函数声明类型 [#type-the-exports-in-typescript]
 
-`getAssemblyExports` 返回 `any`。由于 Nino 不生成 TypeScript，请手写导出函数的类型声明，放在 `OrderCodec.cs` 旁边，C# 签名变化时同步更新：
+`getAssemblyExports` 返回 `any`。由于 Nino 目前不生成 TypeScript，请手写导出函数的类型声明，放在 `OrderCodec.cs` 旁边，C# 签名变化时同步更新：
 
 ```ts title="order-codec.d.ts"
 export interface OrderCodec {
@@ -251,7 +251,7 @@ const replyBytes = new Uint8Array(await reply.arrayBuffer());
 codec.GetCustomer(replyBytes);
 ```
 
-服务端用同一个 `Order` 类型反序列化并应答：
+服务端用同一个 `Order` 类型反序列化并应答。Nino 目前还没有 ASP.NET Core MVC 输入/输出格式化器（计划在 [4.0.0-rc.6](/zh/docs/v4/changelog#400-rc6) 提供），所以接口自己读写请求体：
 
 ```csharp title="Program.cs (ASP.NET Core)"
 app.MapPost("/orders", async (HttpRequest request) =>
@@ -298,7 +298,7 @@ socket.onmessage = (e) => {
 
 ### 其他方案更合适的情况 [#when-something-else-fits-better]
 
-- **MemoryPack** 可以生成 TypeScript 类（`[GenerateTypeScript]`），直接在 JavaScript 中读写它的格式，浏览器无需下载 .NET 运行时。如果小体积比统一 schema 和 Nino 的功能更重要，参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)。
+- **MemoryPack** 可以生成 TypeScript 类（`[GenerateTypeScript]`），直接在 JavaScript 中读写它的格式，浏览器无需下载 .NET 运行时。Nino 自己的 TypeScript 代码生成计划在 [4.0.0-rc.6](/zh/docs/v4/changelog#400-rc6) 提供。如果小体积比统一 schema 和 Nino 的功能更重要，参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)。
 - **JSON API** 更适合公开 API、小负载，或由 .NET 以外的团队维护的前端。Nino 仍可用于你的 .NET 服务之间。
 - **Protocol Buffers 或 MessagePack** 适合需要被多种语言读取的数据；Nino 的格式只由 C# 类型定义。
 - **Blazor WebAssembly** 应用本来就在浏览器中运行 .NET：直接在 Blazor 项目中引用并调用 Nino 即可，不需要 `[JSExport]` 这一层。

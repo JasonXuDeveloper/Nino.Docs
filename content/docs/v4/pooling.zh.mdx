@@ -17,7 +17,7 @@ icon: Recycle
 `NinoDeserializer.Deserialize(data, ref value)`（自己创建 `Reader` 时用 `Deserialize(ref value, ref reader)`）会原地填充已有的值：
 
 - **目标为 `null`：** 创建新实例，来源见[实例从哪里来](#where-instances-come-from)。
-- **已有实例且类型匹配：** 原地填充。列表和数组按索引复用元素；字典按键合并（每个值读入该键当前对应的值中，数据中没有的键会被删除）。
+- **已有实例且类型匹配：** 原地填充。列表和数组按索引复用元素，长度与数据相同的 `Memory<T>` 也一样（读入它的数组）；字典按键合并（每个值读入该键当前对应的值中，数据中没有的键会被删除）。
 - **字符串：** 已有实例或池化实例中的字符串（成员、列表和数组的元素、字典里已有键的值）与数据内容相同时会直接保留，只有内容变化的字符串才读成新实例。`[NinoUtf8]` 字符串只有文本为 ASCII 时才会保留，非 ASCII 的 UTF-8 文本每次都解码成新字符串。
 - **需要重新创建的类型**（标记了 `[NinoConstructor]`，或成员在构造后无法再赋值：构造函数参数、`init` 属性、只读属性或 `readonly` 字段）：创建新实例，旧实例被丢弃。参见[重新创建的类型](/zh/docs/v4/constructors#re-created-types)。
 

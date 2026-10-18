@@ -17,7 +17,7 @@ Nino runs on .NET Standard 2.0 and later, Unity 2022.3+ (Mono and IL2CPP) and Go
 | Godot | Godot 4 .NET projects (.NET 8 from Godot 4.4, .NET 6 before) |
 | Hot update | HybridCLR, with no initialization call |
 
-**Every target writes identical bytes.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` each use the best primitives available to them (vectorized copies, `[UnsafeAccessor]` on .NET 8+), and the test suite checks the same golden payloads against each build. Data written by a .NET 10 server can be read by a Unity IL2CPP client on a 32-bit Android phone, and the other way round.
+**Every target writes identical bytes.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` each use the best primitives available to them ([SIMD](#simd), `[UnsafeAccessor]` on .NET 8+), and the test suite checks the same golden payloads against each build. Data written by a .NET 10 server can be read by a Unity IL2CPP client on a 32-bit Android phone, and the other way round.
 
 ## Binary Format
 
@@ -80,7 +80,7 @@ CoreCLR and Unity 2021.3+ store `bool hasValue; T value;`, while old Mono (Unity
 </Accordion>
 <Accordion title={<><code>ValueTuple</code> and <code>KeyValuePair</code></>} value="tuple">
 
-`ValueTuple` is `LayoutKind.Auto` on .NET, so CoreCLR may reorder its fields, while Mono lays them out sequentially. Nino always writes tuples and `KeyValuePair` member by member, never as raw memory.
+`ValueTuple` is `LayoutKind.Auto` on .NET, so CoreCLR may reorder its fields, while Mono lays them out sequentially. Nino always writes a tuple or `KeyValuePair` as its items in declaration order, never as its memory. Arrays and lists of tuples and pairs whose items are all raw are still moved as one block: copied as memory where the runtime's layout matches the bytes (checked once at startup), otherwise rearranged with [SIMD shuffles](#simd) where the CPU has them, else item by item. The bytes are the same on every path.
 
 </Accordion>
 <Accordion title={<><code>decimal</code>, <code>DateTimeOffset</code>, <code>nint</code></>} value="bcl">
@@ -103,11 +103,31 @@ Code that builds structs in uninitialized memory (`SkipLocalsInit`, `stackalloc`
 Not supported. Constructing a `Writer` or `Reader` on a big-endian host throws `PlatformNotSupportedException`, so Nino never writes or reads bytes in the wrong order. Every platform .NET and Unity run on today is little-endian.
 
 </Accordion>
+<Accordion title="Collection internals" value="collection-layouts">
+
+Nino reads and writes the fields of `List<T>`, `Stack<T>`, `Queue<T>`, `SortedList<TKey, TValue>`, `SortedSet<T>` and `SortedDictionary<TKey, TValue>` directly, and their layouts differ between runtimes (.NET Framework and Mono add a `_syncRoot` field). Each layout is checked once at startup against instances whose contents are known; a collection whose layout is not recognized goes through its public methods. Either way it writes the same bytes. (On .NET 8 and later, `List<T>` goes through `CollectionsMarshal`.)
+
+</Accordion>
 </Accordions>
+
+## SIMD by Platform [#simd]
+
+The net8.0 and net10.0 builds of `Nino.Core` use hardware intrinsics where the CPU has them, and fall back to portable code where it does not. Every path writes the same bytes: the tests run with AVX-512 and with all SIMD turned off, and on Arm64.
+
+| Platform | What Nino uses |
+| --- | --- |
+| x64 with AVX-512 | 64-byte vector copies for blocks of 64 bytes to 8 KB; AVX-512 VBMI byte permutes that rearrange tuples and `KeyValuePair`s of raw items, whose memory differs from their bytes, 64 bytes at a time; 512-bit masked copies that zero padding |
+| x64 with AVX2 | 32-byte vector copies for blocks of 256 bytes to 4 KB (also on AVX-512 CPUs where .NET prefers 256-bit vectors); an SSSE3 16-byte shuffle per value for such tuples and pairs of up to 16 bytes |
+| x64 with SSSE3 | the 16-byte shuffle per value; `memmove` for blocks |
+| Arm64 | AdvSimd: the 16-byte shuffle per value (`TBL`), and four 4-register table lookups per 64 bytes for values of up to 8 bytes; strings of 33 to 64 bytes copied as two pairs of 16-byte vectors; `memmove` for blocks |
+| WebAssembly with SIMD (.NET 10) | the 16-byte shuffle per value (`PackedSimd`, `i8x16.swizzle`) |
+| Arm32; Unity (Mono, IL2CPP), .NET Framework and .NET Core 3.0 to .NET 7 | no hardware intrinsics: blocks through `memmove`, rearranged values one at a time |
+
+Unity and .NET Framework, as well as .NET Core 3.0 to .NET 7, use the `netstandard2.0`/`netstandard2.1` builds, which contain no intrinsics. On every platform, blocks of up to 32 bytes (most strings) are copied inline on 64-bit runtimes, and padding is masked with 512-bit vectors on AVX-512, otherwise with `Vector<T>` where the runtime accelerates it, else 8 bytes at a time.
 
 ## Unity
 
-- Install from [OpenUPM](/en/docs/v4/start#unity-project). The package ships `Nino.Core.dll` and the generator (`Nino.Generator.dll`, labelled `RoslynAnalyzer`), plus `System.Buffers`, `System.Memory` and `System.Runtime.CompilerServices.Unsafe`.
+- Install from [OpenUPM](/en/docs/v4/start#unity-project). The package ships `Nino.Core.dll` and the generator (`Nino.Generator.dll`, labelled `RoslynAnalyzer`), `Nino.UnityTypes.dll` (formatters for [`AnimationCurve`, `Gradient` and `RectOffset`](/en/docs/v4/advanced/unity#unity-classes)), plus `System.Buffers`, `System.Memory` and `System.Runtime.CompilerServices.Unsafe`.
 - Unity compiles against .NET Standard: there is no `[UnsafeAccessor]`, so a type with serialized non-public members or `[NinoPooled]` must be `partial` (NINO002, with a code fix).
 - The package ships the generator's Roslyn 4.3 build, so calls are not intercepted. They use the regular path and write the same bytes.
 - Generated registries carry `[RuntimeInitializeOnLoadMethod]` (and `[InitializeOnLoadMethod]` in the editor), which runs them at startup and keeps them from being stripped by IL2CPP.

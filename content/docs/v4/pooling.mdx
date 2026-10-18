@@ -17,7 +17,7 @@ Deserializing a class normally allocates a new object graph on every call. With 
 `NinoDeserializer.Deserialize(data, ref value)` (or `Deserialize(ref value, ref reader)` with your own `Reader`) populates an existing value in place:
 
 - **`null` target:** a new instance is created; see [Where Instances Come From](#where-instances-come-from).
-- **Existing instance of the right type:** populated in place. Lists and arrays reuse their elements by index; dictionaries are merged by key (each value is read into the value its key already maps to, and keys missing from the data are removed).
+- **Existing instance of the right type:** populated in place. Lists and arrays reuse their elements by index, and so does a `Memory<T>` whose length matches the data (its array is read into); dictionaries are merged by key (each value is read into the value its key already maps to, and keys missing from the data are removed).
 - **Strings** in an existing or pooled instance (members, list and array elements, values of keys already in a dictionary) are kept when the data holds the same text; only a string whose text changed is read into a new one. A `[NinoUtf8]` string is kept only when its text is ASCII: non-ASCII UTF-8 text is decoded into a new string every time.
 - **Re-created types** (a `[NinoConstructor]`, or members that cannot be assigned after construction: constructor parameters, `init`-only, get-only or `readonly` members) get a new instance, and the old one is dropped. See [Re-created Types](/en/docs/v4/constructors#re-created-types).
 

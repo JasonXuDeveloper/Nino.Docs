@@ -1,6 +1,6 @@
 ---
 title: Supported Types
-description: "Every type Nino can serialize: primitives, strings, tuples, collections, immutable collections and your own collection types."
+description: "Every type Nino can serialize: primitives, strings, tuples, BCL types such as BigInteger and Uri, collections, immutable collections and your own collection types."
 icon: Shapes
 ---
 
@@ -15,7 +15,7 @@ icon: Shapes
   }}
 />
 
-This page lists the types Nino serializes out of the box. Any of them can be the value you pass to `NinoSerializer.Serialize`, a member of a `[NinoType]`, or an element of a collection, nested as deep as you like.
+This page lists the types Nino serializes out of the box. Any of them can be the value you pass to `NinoSerializer.Serialize`, a member of a `[NinoType]`, or an element of a collection, nested as deep as you like. The BCL classes (`BigInteger` to `Lazy<T>`), `Memory<T>`, `ReadOnlyMemory<T>`, `ReadOnlySequence<T>`, `BlockingCollection<T>`, `ILookup`, `IGrouping`, the read-only collections and the immutable collections other than `ImmutableArray<T>` and `ImmutableList<T>` are built in since 4.0.0-rc.5.
 
 <Callout type="idea">
 
@@ -39,6 +39,8 @@ A few unmanaged types have their own portable format instead of raw bytes:
 - `nint`/`nuint`: always 8 bytes
 - `Nullable<T>`, `ValueTuple<...>`, `KeyValuePair<TKey, TValue>`: written member by member, because their memory layout differs between runtimes (see [Portable by Design](/en/docs/v4/platforms#portable-by-design))
 
+Arrays and lists of `DateTimeOffset`, and of value tuples and `KeyValuePair`s whose items are all raw, are still written and read as one block: only the bytes of each value follow the portable format.
+
 <Callout type="info">
 
 The raw layout is the canonical 64-bit layout. On runtimes that lay a struct out differently (for example 32-bit platforms), Nino converts field by field, so every platform reads and writes the same bytes.
@@ -53,18 +55,20 @@ The raw layout is the canonical 64-bit layout. On runtimes that lay a struct out
 - `Nullable<T>` (`T?`) of any serializable `T`
 - `ValueTuple` and `Tuple` with 1 to 7 elements
 - `KeyValuePair<TKey, TValue>`
+- `BigInteger` (its two's-complement bytes), `Version`, `Uri` (its original string, read back relative or absolute), `StringBuilder` (the bytes of a `string`), `BitArray`, `CultureInfo` (its name) and `TimeZoneInfo` (its id, plus its serialized form, adjustment rules included, for a custom zone; a system zone reads back as the reading machine's zone of that id)
+- `Lazy<T>`: its value, which serializing creates if it was not yet; read back as an already created `Lazy<T>`
 - `object`: a member declared as `object` can hold any `[NinoType]` instance (class or struct), written with its type id so the runtime type is preserved. Other values (an `int`, a `List<T>`) cannot be written through `object`; serializing one throws.
 
 ### Collection Types
 
 Nino supports the following collections, as long as their elements are serializable:
-- `T[]`, multi-dimensional arrays `T[,]`, `T[,,]`, `T[,,,]`, and `ArraySegment<T>`
+- `T[]`, multi-dimensional arrays `T[,]`, `T[,,]`, `T[,,,]`, `ArraySegment<T>`, `Memory<T>`, `ReadOnlyMemory<T>` and `ReadOnlySequence<T>` (all with the bytes of a `T[]`)
 - `List<T>`, `HashSet<T>`, `Queue<T>`, `Stack<T>`, `LinkedList<T>`, `SortedSet<T>`
 - `Dictionary<TKey, TValue>`, `SortedDictionary<TKey, TValue>`, `SortedList<TKey, TValue>`
-- `ConcurrentDictionary<TKey, TValue>`, `ConcurrentQueue<T>`, `ConcurrentStack<T>`, `ConcurrentBag<T>`
-- `PriorityQueue<TElement, TPriority>` (.NET 6 and later; not on .NET Standard or Unity)
-- `ImmutableArray<T>` and `ImmutableList<T>` with the [`Nino.Immutable`](#immutable-collections) package
-- Collection interfaces and `ReadOnlyDictionary<TKey, TValue>` (see the table below)
+- `ConcurrentDictionary<TKey, TValue>`, `ConcurrentQueue<T>`, `ConcurrentStack<T>`, `ConcurrentBag<T>`, `BlockingCollection<T>`
+- `PriorityQueue<TElement, TPriority>` (projects targeting .NET 8 or later, which use the `net8.0`/`net10.0` build of Nino; not on .NET Standard, so not in Unity)
+- every collection of `System.Collections.Immutable` with the [`Nino.Immutable`](#immutable-collections) package
+- Collection interfaces, `ILookup<TKey, TElement>`, `IGrouping<TKey, TElement>` and the read-only wrappers (see the table below)
 - Any other class implementing `ICollection<T>`, `IDictionary<TKey, TValue>` or `IProducerConsumerCollection<T>`
 
 A member declared as one of these types is read back as a concrete collection:
@@ -75,8 +79,13 @@ A member declared as one of these types is read back as a concrete collection:
 | `ISet<T>`, `IReadOnlySet<T>` (.NET 8+) | `HashSet<T>` |
 | `IDictionary<TKey, TValue>`, `IReadOnlyDictionary<TKey, TValue>` | `Dictionary<TKey, TValue>` |
 | `ReadOnlyDictionary<TKey, TValue>` | a new `ReadOnlyDictionary<TKey, TValue>` over a `Dictionary<TKey, TValue>` |
+| `ReadOnlyCollection<T>` | a new `ReadOnlyCollection<T>` over an array of the elements |
+| `ReadOnlyObservableCollection<T>` | a new `ReadOnlyObservableCollection<T>` over an `ObservableCollection<T>` |
+| `ILookup<TKey, TElement>` | a lookup that keeps the groupings in order and finds them with the default comparer, as `ToLookup` does |
+| `IGrouping<TKey, TElement>` | a grouping over an array of its elements |
+| `BlockingCollection<T>` | a new, unbounded `BlockingCollection<T>` (over a `ConcurrentQueue<T>`) holding a snapshot of the elements |
 
-A collection interface writes its elements one by one, which for most element types gives the same bytes as a `List<T>`. Nullable raw elements are the exception: an `int?[]` or `List<int?>` writes every element in a fixed stride (the has-value flag, padding, then the value, 8 bytes for `int?`), while a member declared as `IList<int?>`, `ICollection<int?>` or `IEnumerable<int?>` writes each element as a single `int?` (1 byte for `null`, 5 bytes otherwise). Changing a member between the two kinds changes the format.
+A member declared as a collection interface writes the same bytes as a `List<T>` of its elements for most element types (raw elements as one block). Nullable raw elements are the exception: an `int?[]` or `List<int?>` writes every element in a fixed stride (the has-value flag, padding, then the value, 8 bytes for `int?`), while a member declared as `IList<int?>`, `ICollection<int?>` or `IEnumerable<int?>` writes each element as a single `int?` (1 byte for `null`, 5 bytes otherwise). Changing a member between the two kinds changes the format.
 
 <Callout type="info">
 
@@ -89,7 +98,7 @@ Collections can be nested freely, for example:
 
 ### Immutable Collections
 
-`ImmutableArray<T>` and `ImmutableList<T>` live in a separate package, so projects that don't use `System.Collections.Immutable` don't depend on it:
+`ImmutableArray<T>`, `ImmutableList<T>`, `ImmutableHashSet<T>`, `ImmutableSortedSet<T>`, `ImmutableQueue<T>`, `ImmutableStack<T>`, `ImmutableDictionary<TKey, TValue>` and `ImmutableSortedDictionary<TKey, TValue>` live in a separate package, so projects that don't use `System.Collections.Immutable` don't depend on it:
 
 ```shell
 dotnet add package Nino.Immutable --prerelease
@@ -106,7 +115,7 @@ public sealed class Article
 }
 ```
 
-Other immutable collections (`ImmutableDictionary`, `ImmutableHashSet`...) are not built in; write a [custom formatter](/en/docs/v4/custom-formatters) for them.
+Each writes the bytes of its mutable counterpart (`List<T>`, `HashSet<T>`, `SortedSet<T>`, `Queue<T>`, `Stack<T>`, `Dictionary<TKey, TValue>`, `SortedDictionary<TKey, TValue>`), so a member can change between the two without changing the format. Sets and dictionaries are read with the default comparer, and the same key or element twice in the data throws an `InvalidOperationException`, as for a `HashSet<T>`.
 
 ### User Collections
 
@@ -119,7 +128,7 @@ public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 ```
 
 - Nino creates a collection only when the member or element that holds it is `null`: through a public static [`[NinoFactory]`](/en/docs/v4/pooling#creating-instances-with-ninofactory) factory method if the type declares one (for example to take it from a pool), otherwise through a public constructor callable without arguments.
-- Collections are filled through the public collection API (`Add`/`Clear`, the dictionary indexer, `Enqueue`, `Push`, `TryAdd`). Subclasses of `List<T>`, `HashSet<T>` and `Dictionary<TKey, TValue>` are filled through the base type, so members hidden with `new` are not called.
+- Collections are filled through the public collection API (`Add`/`Clear`, the dictionary indexer, `Enqueue`, `Push`, `TryAdd`). Types derived from the runtime's own collections (`List<T>`, `HashSet<T>`, `Dictionary<TKey, TValue>`, `Stack<T>`, `Queue<T>`, and the sorted, linked and concurrent collections) are written and filled through the base type's own methods or fields, so members hidden with `new` are not called.
 - If the collection type is also a `[NinoType]`, its elements are written first and then its own serialized members.
 - The declared type decides what is created: a `List<OrderLine>` member holding an `OrderLines` is read back as a `List<OrderLine>`.
 - Collections are values: the same collection instance in two members is written twice and read back as two instances.
@@ -138,11 +147,11 @@ Deserializing into a collection whose `IsReadOnly` is `true` throws an `InvalidO
 These have no formatter; a member of such a type is skipped with warning NINO007 (mark it `[NinoIgnore]`, or give it a [custom formatter](/en/docs/v4/custom-formatters)):
 
 - delegates, `Task`, pointers and other runtime-only types;
-- `Memory<T>`, `ReadOnlyMemory<T>` (use `T[]` or `ArraySegment<T>`, or register a formatter like the [`Memory<T>` example](/en/docs/v4/custom-formatters#example-memory)), and `Span<T>`, which cannot be a member of a class anyway;
-- non-generic collections (`ArrayList`, `Hashtable`) and `ReadOnlyCollection<T>`;
+- `Span<T>` and `ReadOnlySpan<T>`, which cannot be a member of a class anyway;
+- `Type`, on purpose: data that names the types to create is a well-known deserialization attack. Store a type id or name of your own and map it to the types you allow;
+- non-generic collections (`ArrayList`, `Hashtable`);
 - collections Nino cannot create or fill: an abstract collection class (`abstract class Bag : ICollection<int>`), a collection without a public constructor callable without arguments or a [`[NinoFactory]`](/en/docs/v4/pooling#creating-instances-with-ninofactory) method, a struct collection (`struct Ring : IList<int>`), and a type implementing `ICollection<T>` for two different `T`;
-- other BCL classes such as `BigInteger`, `Uri`, `Version`, `StringBuilder`, `Type` and `Lazy<T>`, and immutable collections other than `ImmutableArray<T>` and `ImmutableList<T>`;
-- Unity and Godot **classes** (`AnimationCurve`, `Gradient`, `Node`, `Resource`...); their unmanaged structs are supported.
+- Unity and Godot **classes** (`Texture2D`, `ScriptableObject`, `Node`, `Resource`...), except Unity's `AnimationCurve`, `Gradient` and `RectOffset` ([Unity Classes](/en/docs/v4/advanced/unity#unity-classes)); their unmanaged structs are supported.
 
 ## Your Own Types
 

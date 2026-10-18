@@ -33,7 +33,7 @@ Measured with BenchmarkDotNet, both libraries in the same run. Bars show time re
 
 <Callout type="info" title="Arrays of unmanaged structs">
 
-Both libraries copy these as one block, so they are on par. Deserializing `Vector4[10000]` allocates a 160 KB array on the large object heap per call, so that case mostly measures gen-2 garbage collections and varies between runs; the copy itself is one `memcpy` in both.
+Both libraries copy these as one block, so they are on par. The `Vector4[10000]` deserialize case mostly measures garbage collection of the result array and varies between runs; see [Deserialize (New Instances)](/en/docs/v4/perf#deserialize-new-instances).
 
 </Callout>
 
@@ -86,17 +86,16 @@ Every case with its numbers, the polymorphic and pooled runs, and the benchmark 
 | Serialization callbacks | ✅ your own hooks around the call ([example](/en/docs/v4/advanced/streams#callbacks)) | ✅ `[MemoryPackOnSerializing]` and three more |
 | Custom formatters | ✅ struct formatters, inlined; `[assembly: NinoFormatter]` binds generic types | ✅ `MemoryPackFormatter<T>`, provider registration |
 | Compression | ✅ `System.IO.Compression` over the output ([example](/en/docs/v4/advanced/streams#compression)) | ✅ `BrotliCompressor`, `[BrotliFormatter]` |
-| TypeScript code generation | ❌ browser clients run the same C# types on .NET WebAssembly ([guide](/en/docs/v4/advanced/browser)) | ✅ `[GenerateTypeScript]` |
-| ASP.NET Core MVC formatters | ❌ | ✅ `MemoryPack.AspNetCoreMvcFormatter` |
+| TypeScript code generation | ❌ planned for [4.0.0-rc.6](/en/docs/v4/changelog#400-rc6); today browser clients run the same C# types on .NET WebAssembly ([guide](/en/docs/v4/advanced/browser)) | ✅ `[GenerateTypeScript]` |
+| ASP.NET Core MVC formatters | ❌ planned for [4.0.0-rc.6](/en/docs/v4/changelog#400-rc6) | ✅ `MemoryPack.AspNetCoreMvcFormatter` |
 | Default string encoding | UTF-16, `[NinoUtf8]` per member | UTF-8, option for UTF-16 |
 
 ## Where MemoryPack Is Ahead
 
 To put it plainly, MemoryPack does these things and Nino v4 does not:
 
-- **More built-in types.** MemoryPack serializes `BigInteger`, `Uri`, `Version`, `StringBuilder`, `Type`, `BitArray`, `CultureInfo`, `TimeZoneInfo`, `Lazy<T>`, `Memory<T>`, `ReadOnlyMemory<T>`, `ReadOnlySequence<T>`, `ReadOnlyCollection<T>`, `ReadOnlyObservableCollection<T>`, `ILookup<,>`, `IGrouping<,>`, `BlockingCollection<T>` and every immutable collection. Nino has none of these (it has `ImmutableArray<T>` and `ImmutableList<T>` through `Nino.Immutable`). *Workaround:* a [custom formatter](/en/docs/v4/custom-formatters), or a serializable member that converts (`string` for `Uri`, `byte[]` for `BigInteger`).
-- **Unity class types.** `MemoryPack.Unity` serializes `AnimationCurve`, `Gradient` and `RectOffset`. Nino handles Unity's unmanaged structs (`Vector3`, `Quaternion`, `Color32`...) but no Unity classes. *Workaround:* a custom formatter.
-- **TypeScript and ASP.NET Core.** MemoryPack generates TypeScript readers and writers and provides MVC input/output formatters. Nino has neither. *Workaround:* for browser clients, build the client-side serialization as a .NET `browser-wasm` app and call it from JavaScript through `[JSExport]`; it shares your C# types and writes the same bytes, but ships the .NET runtime to the browser. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
+- **`Type` values.** MemoryPack serializes `System.Type`; Nino does not, on purpose: data that names the types to create is a well-known deserialization attack. Every other built-in type MemoryPack lists (`BigInteger`, `Uri`, `Lazy<T>`, `Memory<T>`, `ILookup<,>`, every immutable collection...) is [built into Nino too](/en/docs/v4/types#other-built-in-types) since 4.0.0-rc.5, and so are the Unity classes of `MemoryPack.Unity` (`AnimationCurve`, `Gradient`, `RectOffset`; see [Unity Classes](/en/docs/v4/advanced/unity#unity-classes)). *Workaround:* store a type id or name of your own and map it to the types you allow.
+- **TypeScript and ASP.NET Core.** MemoryPack generates TypeScript readers and writers and provides MVC input/output formatters. Nino has neither yet; both are planned for [4.0.0-rc.6](/en/docs/v4/changelog#400-rc6). *Workaround:* for browser clients, build the client-side serialization as a .NET `browser-wasm` app and call it from JavaScript through `[JSExport]`; it shares your C# types and writes the same bytes, but ships the .NET runtime to the browser. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
 - **Dependency injection and options.** MemoryPack passes `MemoryPackSerializerOptions` (string encoding, an `IServiceProvider`) through every call. Nino has no per-call options: its settings are either process-wide (`NinoSettings`) or per-type attributes.
 
 Streams, async I/O, `ReadOnlySequence<byte>` input, serialization callbacks and compression are not on this list: each takes a few lines on top of Nino's `IBufferWriter<byte>` and `ReadOnlySpan<byte>` APIs. See [Streams, Async, Callbacks and Compression](/en/docs/v4/advanced/streams) for ready-to-copy helpers.
@@ -127,7 +126,7 @@ The cost is 3 more bytes per polymorphic value. See [Polymorphism](/en/docs/v4/p
     You serialize messages, cached values, stored records or application state at a high rate, on .NET servers, Unity or Godot; you need polymorphism without tag tables, data that evolves, shared references, or zero GC through pooling; or you need identical bytes across Unity, IL2CPP and servers.
   </Card>
   <Card title="Choose MemoryPack when">
-    You need generated TypeScript readers and writers (a browser client without the .NET runtime), ASP.NET Core MVC formatters, per-call options, or the BCL and Unity class types listed above out of the box.
+    You need generated TypeScript readers and writers (a browser client without the .NET runtime), ASP.NET Core MVC formatters (both planned for Nino [4.0.0-rc.6](/en/docs/v4/changelog#400-rc6)), per-call options, or `System.Type` values.
   </Card>
 </Cards>
 

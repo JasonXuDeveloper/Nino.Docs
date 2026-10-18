@@ -120,7 +120,7 @@ Every `NinoSerializer` and `NinoDeserializer` method can be called concurrently 
 - **One format everywhere**: `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` produce identical bytes, and data is portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit.
 - **No init calls**: generated registries are found lazily, so hot-update assemblies (HybridCLR) just work.
 - **Unloadable assemblies**: an assembly in a collectible `AssemblyLoadContext` unloads with it; Nino clears what it cached for it (on its own on .NET 8 and later; on .NET Core 3.0 to .NET 7, call `NinoRegistry.Remove`). See [Unloading Assemblies](/en/docs/v4/platforms#unloading-assemblies).
-- **Unity**: the generator ships in the package; there is nothing else to install.
+- **Unity**: the generator ships in the package; there is nothing else to install. `AnimationCurve`, `Gradient` and `RectOffset` are serialized too (see [Unity Classes](/en/docs/v4/advanced/unity#unity-classes)).
 
 </Accordion>
 <Accordion title="Truly incremental generator" id="incremental-generator">
@@ -138,7 +138,7 @@ Every `NinoSerializer` and `NinoDeserializer` method can be called concurrently 
 <Accordion title="More types, your way" id="more-types-your-way">
 
 - **User collections**: types derived from `List<T>`, `HashSet<T>`, `Dictionary<TKey, TValue>` and friends, without attributes.
-- **More built-in types**: `PriorityQueue<TElement, TPriority>` on .NET 6+, and `ImmutableArray<T>` / `ImmutableList<T>` with the `Nino.Immutable` package.
+- **More built-in types**: `PriorityQueue<TElement, TPriority>` in projects targeting .NET 8 or later, BCL types such as `BigInteger`, `Uri`, `Version`, `Lazy<T>`, `Memory<T>`, `ILookup<,>` and `BlockingCollection<T>`, and every immutable collection with the `Nino.Immutable` package (see [Supported Types](/en/docs/v4/types)).
 - **Pluggable formatters**: `[assembly: NinoFormatter(typeof(MyFormatter<,>))]` teaches Nino a new type (yours or a third-party one). Type arguments and element formatters are inferred, generated code calls it directly, and the runtime uses the same registration. Nino's own BCL formatters are declared the same way. See [Custom Formatters](/en/docs/v4/custom-formatters).
 - **Subtypes inherit `[NinoType]`** from their base class or interface.
 

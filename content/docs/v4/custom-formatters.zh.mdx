@@ -4,6 +4,8 @@ description: "为某个成员（[NinoCustomFormatter]）或 Nino 不支持的类
 icon: Puzzle
 ---
 
+<AnchorRedirect map={{ 'example-memory': '/zh/docs/v4/types#collection-types' }} />
+
 Nino 为[内置类型](/zh/docs/v4/types)提供了格式化器，并为每个 `[NinoType]` 生成一个。想换一种方式编码某个成员（变长整数、定点数），或者要序列化 Nino 不认识的类型（第三方集合、其他库里的类型）时，就自己写一个格式化器。
 
 格式化器是实现了 `INinoFormatter<T>` 的**结构体**：
@@ -168,48 +170,64 @@ Nino 遇到一个格式化器能处理的类型时，会这样绑定格式化器
 
 其他约束保持 C# 原有的含义（`class`、`struct`、`unmanaged`、`new()`）。
 
-### 示例：`Memory<T>` [#example-memory]
+### 示例：其他库中的泛型类型 [#example-grid]
 
-Nino 没有内置 `Memory<T>` 的格式化器。下面这个格式化器支持元素为任意原始类型的 `Memory<T>`：写入长度和一整块数据，字节与 `T[]` 完全相同；读取时如果长度不变，就直接读进现有的内存，所以[复用反序列化](/zh/docs/v4/pooling)不会分配内存：
+下面的 `Grid<T>` 代表一个来自其他库、无法加上 `[NinoType]` 的类型。这个格式化器支持元素为任意原始类型的 `Grid<T>`：写入宽度，再把所有格子作为一整块写入；读取时如果大小不变，就直接读进现有的网格，所以[复用反序列化](/zh/docs/v4/pooling)不会分配内存：
 
-```csharp title="MemoryFormatter.cs"
+```csharp title="GridFormatter.cs"
 using System.Runtime.CompilerServices;
 
-[assembly: NinoFormatter(typeof(MemoryFormatter<>))]
+// From a library you cannot annotate:
+//   public sealed class Grid<T> { public Grid(int width, int height); public int Width { get; } public T[] Cells { get; } }
 
-/// Memory<T> of raw elements: a length, then one block (the same bytes as a T[]).
-public struct MemoryFormatter<[NinoRaw] T> : INinoFormatter<Memory<T>>
+[assembly: NinoFormatter(typeof(GridFormatter<>))]
+
+/// Grid<T> of raw cells: the width (-1 for null), then the cells as a T[] (a length, then one block).
+public struct GridFormatter<[NinoRaw] T> : INinoFormatter<Grid<T>>
     where T : unmanaged
 {
-    public void Serialize(Memory<T> value, ref Writer writer) =>
-        writer.Write<T>(value.Span);                         // length, then one block copy
-
-    public void Deserialize(ref Memory<T> value, ref Reader reader)
+    public void Serialize(Grid<T> value, ref Writer writer)
     {
-        int length = reader.ReadLength(Unsafe.SizeOf<T>()); // checked against the bytes left; -1 for null
-        if (length <= 0)
+        if (value == null)
         {
-            value = default;
+            writer.Write(-1);
             return;
         }
 
-        if (value.Length != length)
-            value = new T[length];                           // reuse the current memory when the length matches
-        reader.ReadUnmanagedRaw(value.Span);                 // one block copy // [!code highlight]
+        writer.Write(value.Width);
+        writer.Write<T>(value.Cells.AsSpan());                     // length, then one block copy
+    }
+
+    public void Deserialize(ref Grid<T> value, ref Reader reader)
+    {
+        int width = reader.Read<int>();
+        if (width < 0)
+        {
+            value = null;
+            return;
+        }
+
+        int length = reader.ReadLength(Unsafe.SizeOf<T>());     // checked against the bytes left
+        if (width == 0 ? length != 0 : length % width != 0)
+            throw new InvalidOperationException("Not a grid.");
+        if (value == null || value.Cells.Length != length || value.Width != width)
+            value = new Grid<T>(width, width == 0 ? 0 : length / width); // reuse the grid when its size matches
+        reader.ReadUnmanagedRaw(value.Cells.AsSpan());          // one block copy // [!code highlight]
     }
 }
 
 [NinoType]
-public sealed class AudioChunk
+public sealed class Level
 {
-    public long Position;
-    public Memory<float> Samples;   // uses MemoryFormatter<float>
+    public string Name;
+    public Grid<byte> Tiles;        // uses GridFormatter<byte>
+    public Grid<Vector2> Flow;      // uses GridFormatter<Vector2>
 }
 ```
 
-- `[NinoRaw]` 只把 `T` 绑定到 Nino 按原始字节拷贝的类型：`Memory<float>`、`Memory<Vector3>` 会用这个格式化器，而 `Memory<string>` 成员仍然没有格式化器（NINO007）。
+- `[NinoRaw]` 只把 `T` 绑定到 Nino 按原始字节拷贝的类型：`Grid<byte>`、`Grid<Vector2>` 会用这个格式化器，而 `Grid<string>` 成员没有格式化器（NINO007）。
 - `Writer.Write<T>(ReadOnlySpan<T>)` 和 `Reader.ReadUnmanagedRaw<T>(Span<T>)` 把元素作为一整块拷贝；如果运行时的内存布局与规范布局不同，会逐字段转换。
-- 写出的字节与 `T[]` 相同，所以成员在 `float[]` 和 `Memory<float>` 之间切换不会改变格式；`null` 数组读回来是空的 `Memory<T>`。
+- 剩余字节放不下这么多格子时，`ReadLength` 会抛出异常，所以损坏的数据不会让格式化器分配一个巨大的网格。
 
 ## Writer 与 Reader [#writer-and-reader]
 
@@ -258,6 +276,6 @@ NinoDeserializer.Deserialize(ref owner, ref reader);
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="分析器诊断" href="/zh/docs/v4/analyzers">NINO001 到 NINO025 每条诊断的含义和修复方法。</Card>
+  <Card title="分析器诊断" href="/zh/docs/v4/analyzers">NINO001 到 NINO026 每条诊断的含义和修复方法。</Card>
   <Card title="性能指南" href="/zh/docs/v4/performance">Nino 为什么快，以及怎样让你的代码留在快速路径上。</Card>
 </Cards>

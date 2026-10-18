@@ -16,7 +16,7 @@ import {
   HomeUseCases,
   homeFaq,
 } from '@/components/home-sections';
-import { headlineSerialize } from '@/lib/benchmarks';
+import { build, headlineSerialize } from '@/lib/benchmarks';
 import { cn } from '@/lib/cn';
 import { getLocale, type Locale } from '@/lib/i18n';
 import { baseOptions } from '@/lib/layout.shared';
@@ -24,6 +24,9 @@ import { homeMeta } from '@/lib/seo';
 import { githubUrl } from '@/lib/site';
 import { latestVersion } from '@/lib/versions';
 import type { Route } from './+types/home';
+
+/** v4's generated source against v3's (generator benchmark, `build` in src/lib/benchmarks.ts) */
+const generatedSourceRatio = build[0].ratio;
 
 interface Highlight {
   icon: typeof Cpu;
@@ -77,7 +80,7 @@ const copy: Record<
       {
         icon: Hammer,
         label: 'Incremental generator',
-        text: 'One file per type and 14× less code than v3; editing a type re-generates only that type.',
+        text: `One file per type and ${generatedSourceRatio}× less code than v3; editing a type re-generates only that type.`,
       },
       {
         icon: Globe,
@@ -119,7 +122,7 @@ const copy: Record<
       {
         icon: Hammer,
         label: '增量生成器',
-        text: '每个类型一个文件，生成的代码只有 v3 的 1/14；修改一个类型只重新生成这个类型。',
+        text: `每个类型一个文件，生成的代码只有 v3 的 1/${generatedSourceRatio}；修改一个类型只重新生成这个类型。`,
       },
       {
         icon: Globe,

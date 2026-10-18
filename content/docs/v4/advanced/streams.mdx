@@ -176,7 +176,7 @@ private static async ValueTask FillAsync(Stream stream, byte[] buffer, int count
 
 An `async` method allocates its state machine only when it actually waits for I/O, and `ReadAsync` returns a new value per frame (an `async` method cannot take a `ref` parameter); for a loop that must not allocate, use the synchronous `TryRead` or a [`PipeReader`](/en/docs/v4/advanced/networking#reading-frames).
 
-`Fill` and `FillAsync` run on every target; on .NET 7 and later, `Stream.ReadAtLeast` and `ReadExactlyAsync` do the same. `stream.Write(span)`, `WriteAsync(memory)` and `ReadAsync(memory)` need .NET Standard 2.1 (Unity 2021.2 and later have it); on .NET Standard 2.0 only, use the `byte[]` overloads, getting the written array with `MemoryMarshal.TryGetArray(buffer.WrittenMemory, out var segment)`.
+`Fill` and `FillAsync` run on every target; on .NET 7 and later, `Stream.ReadAtLeast` and `ReadExactlyAsync` do the same. `stream.Write(span)`, `WriteAsync(memory)` and `ReadAsync(memory)` need .NET Standard 2.1, which every Unity version Nino supports (2022.3 and later) has; on .NET Standard 2.0 only, use the `byte[]` overloads, getting the written array with `MemoryMarshal.TryGetArray(buffer.WrittenMemory, out var segment)`.
 
 With `System.IO.Pipelines`, serialize straight into the `PipeWriter` (it is an `IBufferWriter<byte>`) and read frames from the `PipeReader`; see [Reading Frames](/en/docs/v4/advanced/networking#reading-frames) for the complete loop, which decodes each frame the same way as the helper below.
 

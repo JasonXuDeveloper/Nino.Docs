@@ -54,14 +54,14 @@ Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 ## Nino 能序列化什么 [#what-nino-serializes]
 
 - **你自己的类型**：标记了 `[NinoType]` 的类、结构体、记录、接口和泛型类型，支持[私有成员](/zh/docs/v4/defining-types#private-members)、[自定义构造函数](/zh/docs/v4/constructors)和[类型改名](/zh/docs/v4/defining-types#former-name)。详见[定义类型](/zh/docs/v4/defining-types)。
-- **内置类型**：基元类型、枚举、字符串、`Nullable<T>`、元组、数组、BCL 集合、你自己的集合类型；安装 `Nino.Immutable` 后还支持 `ImmutableArray<T>` 和 `ImmutableList<T>`。详见[支持的类型](/zh/docs/v4/types)。
+- **内置类型**：基元类型、枚举、字符串、`Nullable<T>`、元组、数组、BCL 集合、`BigInteger`、`Uri`、`Memory<T>` 等 BCL 类型、你自己的集合类型；安装 `Nino.Immutable` 后还支持所有不可变集合。详见[支持的类型](/zh/docs/v4/types)。
 - **其他类型**：用[自定义格式化器](/zh/docs/v4/custom-formatters)支持，可以只用于某个成员，也可以用于整个类型。
 
 ## 什么时候不适合 [#when-not-to-use-it]
 
 - **需要人类可读的格式。** Nino 输出的是二进制。需要人工查看或编辑的文件，请用 JSON、YAML 或 TOML。
-- **数据要给其他语言读取。** 格式由你的 C# 类型决定，没有 schema 文件，也没有其他语言的代码生成器。要和非 .NET 程序通信，请用 Protocol Buffers、FlatBuffers 或 MessagePack。
-- **需要自动生成 TypeScript 代码或 ASP.NET Core MVC 格式化器。** Nino 两者都不生成。浏览器客户端仍可以在 .NET WebAssembly 上运行你的 Nino 类型：参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)以及 [MemoryPack 领先的地方](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)。
+- **数据要给其他语言读取。** 格式由你的 C# 类型决定，没有 schema 文件，也没有其他语言的代码生成器（TypeScript 代码生成计划在 [4.0.0-rc.6](/zh/docs/v4/changelog#400-rc6) 提供）。要和非 .NET 程序通信，请用 Protocol Buffers、FlatBuffers 或 MessagePack。
+- **需要自动生成 TypeScript 代码或 ASP.NET Core MVC 格式化器。** Nino 目前两者都不生成，都计划在 [4.0.0-rc.6](/zh/docs/v4/changelog#400-rc6) 提供。在此之前，浏览器客户端可以在 .NET WebAssembly 上运行你的 Nino 类型：参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)以及 [MemoryPack 领先的地方](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)。
 - **必须直接读取 Nino v3 的数据。** v4 采用了全新的二进制格式，旧数据需要转换一次。参见[从 v3 迁移](/zh/docs/v4/migration#converting-v3-data)。
 
 ## 从这里开始 [#start-here]

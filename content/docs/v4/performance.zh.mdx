@@ -46,7 +46,8 @@ static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 
 - 基元类型、枚举、`DateTime`、`Guid`、`Vector3` 和其他非托管结构体；
 - `[NinoType]` 中连续的非托管成员，作为**一整块**写入，只做一次边界检查；
-- 非托管元素的数组和 `List<T>`：整个集合**一次拷贝**；
+- 非托管元素的数组、`List<T>`、`Stack<T>`、`Queue<T>`、`ImmutableArray<T>` 以及声明为接口（`IList<T>`、`IEnumerable<T>` 等）的集合：整个集合**一次拷贝**；
+- 由非托管值组成的值元组和 `KeyValuePair` 的数组和列表：作为一整块处理，CPU 支持时用 [SIMD](/zh/docs/v4/platforms#simd) 重排成写入的顺序；
 - 满足原始内存条件的 `[NinoType]` 结构体（参见[结构体](/zh/docs/v4/defining-types#structs)），无论单独出现还是在数组、列表中。
 
 写入时会把填充字节清零，所以相等的值总是产生相同的字节，即使结构体位于从未清零的内存中（`ArrayPool` 租来的数组、`[SkipLocalsInit]` 下的 `stackalloc`）。Nino 在运行时第一次写入某个类型时识别填充：只读取一次字段偏移，结果会成为 JIT 期常量，所以没有填充的结构体不会为这项检查付出任何开销。带填充的结构体数组会在同一趟拷贝中用 SIMD 掩码处理，比普通 `memcpy` 略慢。
