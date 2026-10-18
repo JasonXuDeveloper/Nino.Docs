@@ -106,7 +106,7 @@ icon: Swords
 - **`BigInteger`。** 它的格式化器在 255 字节的栈缓冲区上写的是 `temp.Slice(written)`，本意是 `temp.Slice(0, written)`：写出的是缓冲区未使用的尾部，而不是这个值。任何 255 字节以内的 `BigInteger`（包括 `3^10`）读回来都是另一个值，在所有运行时上都是如此；更大的值走另一条路径，可以正确往返。
 - **.NET 10 上的 `BitArray`。** 它的格式化器把 `BitArray` 强转为 `{ int[] m_array; int m_length }`，这是 .NET 8 上的布局。.NET 10 的 `BitArray` 改为保存 `byte[] _array`，于是 MemoryPack 写出错误的字节，读取时会破坏堆内存并导致进程崩溃。
 
-- **跨运行时的非托管元组。** MemoryPack 把非托管值（包括 `(int, long)`）按内存原样拷贝。`ValueTuple` 是 `LayoutKind.Auto`：CoreCLR 把 `long` 排在前面，Mono 按声明顺序排列。所以在 .NET 上写出的 `(1, 2L)`（`02000000 00000000 01000000 00000000`，最后 4 字节是填充）在 Mono 上读回来（用 Mono 6.8 实测）是 `(2, 1)`，填充字节也会把内存里残留的内容原样写出。基准中的 `(int, long)` 列表只在 .NET 上往返。
+- **跨运行时的非托管元组。** MemoryPack 把非托管值（包括 `(int, long)`）按内存原样拷贝。`ValueTuple` 是 `LayoutKind.Auto`：CoreCLR 把 `long` 排在前面，Mono 按声明顺序排列。所以在 .NET 上写出的 `(1, 2L)`（`02000000 00000000 01000000 00000000`，最后 4 字节是填充）在 Mono 上读回来（用 Mono 6.8 实测）是 `(2, 1)`，Unity 也是如此，它的 Mono 和 IL2CPP 后端都这样排列元组；填充字节也会把内存里残留的内容原样写出。基准中的 `(int, long)` 列表只在 .NET 上往返。
 
 Nino 把 `BigInteger` 写成它的二进制补码字节，`BitArray` 通过公开 API 读写，元组按声明顺序写出各项且不带填充（`(int, long)` 为 12 字节），都不依赖运行时的私有布局。参见[其他内置类型](/zh/docs/v4/types#other-built-in-types)和[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
 
