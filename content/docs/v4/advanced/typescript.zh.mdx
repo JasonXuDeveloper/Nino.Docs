@@ -119,7 +119,7 @@ public struct OrderLine
 }
 ```
 
-构建写入 `ts/Shop.Contracts.ts` 的内容（节选，省略了函数）：
+构建写入 `ts/Shop.Contracts.ts` 的内容（节选，省略了大部分函数）：
 
 ```ts title="ts/Shop.Contracts.ts"
 export const OrderStatus = {
@@ -146,8 +146,31 @@ export class Order {
   lines: OrderLine[] | null = null;
 }
 
-export const OrderCodec: NinoCodec<Order | null> = types.codec<Order>([1504254414]);
-export const OrderLineCodec: NinoCodec<OrderLine> = { read: readOrderLine, write: writeOrderLine };
+function readOrderLine(r: NinoReader, at: number): OrderLine {
+  const v = new OrderLine();
+  v.productId = r.view.getInt32(at, true);
+  v.quantity = r.view.getInt32(at + 4, true);
+  v.unitPrice = r.view.getFloat64(at + 8, true);
+  return v;
+}
+
+export const OrderCodec: NinoCodec<Order | null> = {
+  read: (r) => {
+    const id = r.i32();
+    switch (id) {
+      case 0:
+        return null;
+      case 1504254414:
+        return readOrder(r);
+    }
+    throw types.unreadable(id);
+  },
+  write: (w, v) => { /* null, or the type id of v.constructor, then its members */ },
+};
+export const OrderLineCodec: NinoCodec<OrderLine> = {
+  read: (r) => readOrderLine(r, r.take(16)),
+  write: (w, v) => writeOrderLine(w, w.reserve(16), v),
+};
 ```
 
 每个成员的初始值就是 .NET 中的默认值（`0`、`null`、`DateTime.MinValue`）。`Order` 是版本容错类型，所以它的读取函数和 .NET 中一样：读到旧版本写出的成员末尾就停止，并跳过新版本多出的成员。

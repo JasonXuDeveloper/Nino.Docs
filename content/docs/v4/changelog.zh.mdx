@@ -26,6 +26,12 @@ icon: RotateCcwClock
 
 - **含 Latin-1 字符串的数据更小**，序列化和反序列化时间与之前相同：基准测试中，`Orders` 从 30,848 字节降到 26,126 字节，`Players` 从 45,124 降到 39,164，`Tree` 从 40,676 降到 31,258，现在都比 MemoryPack 的更小（27,990、43,364 和 32,623）。参见[基准测试](/zh/docs/v4/perf)。
 - **带填充的元组和键值对序列化更快**：值元组、`KeyValuePair` 以及其他内存中有填充的原始值组成的数组和列表，先对齐目标地址，再按整向量写出它们的字节（AVX-512 VBMI、AVX2、Arm64，以及 .NET 10 上的 WebAssembly）：在一台 AVX-512 Xeon 上，1,000 个 `(int, long)` 从 228 ns 降到 154 ns，MemoryPack 为 166 ns。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
+- **读取时向量对齐存储**：把带填充的原始值读入已有的列表或数组，以及转换非 Latin-1 文本时，现在按对齐地址整向量存储：反序列化到已有的 1,000 项 `List<(int, long)>` 从 255 ns 降到 207 ns，1,000 字符的非 Latin-1 字符串读取快约 8%（AVX-512 Xeon）。
+- **TypeScript 编解码更快**：生成的代码在同一块缓冲区里按偏移读写连续的定长成员，`nino.ts` 用 Node（以及 Bun、Deno）的原生方法读写文本，浏览器中用 `TextDecoder` 和 `TextEncoder`。在 Node 中，1,000 条玩家记录序列化从 2.07 ms 降到 1.15 ms，反序列化从 1.92 ms 降到 1.17 ms；文本为主的记录快 6.8 倍和 11 倍，数值数组快 2 到 5 倍。参见 [TypeScript 客户端](/zh/docs/v4/advanced/typescript)。
+
+### 修复 [#fixes-3]
+
+- **TypeScript：以 U+FEFF 开头的 `[NinoUtf8]` 字符串**不再反序列化失败：`TextDecoder` 把这个字符当作字节序标记丢掉了。参见 [TypeScript 客户端](/zh/docs/v4/advanced/typescript)。
 
 ## 4.0.0-rc.5
 

@@ -119,7 +119,7 @@ public struct OrderLine
 }
 ```
 
-What the build writes to `ts/Shop.Contracts.ts` (an excerpt; the functions are left out):
+What the build writes to `ts/Shop.Contracts.ts` (an excerpt; most functions are left out):
 
 ```ts title="ts/Shop.Contracts.ts"
 export const OrderStatus = {
@@ -146,8 +146,31 @@ export class Order {
   lines: OrderLine[] | null = null;
 }
 
-export const OrderCodec: NinoCodec<Order | null> = types.codec<Order>([1504254414]);
-export const OrderLineCodec: NinoCodec<OrderLine> = { read: readOrderLine, write: writeOrderLine };
+function readOrderLine(r: NinoReader, at: number): OrderLine {
+  const v = new OrderLine();
+  v.productId = r.view.getInt32(at, true);
+  v.quantity = r.view.getInt32(at + 4, true);
+  v.unitPrice = r.view.getFloat64(at + 8, true);
+  return v;
+}
+
+export const OrderCodec: NinoCodec<Order | null> = {
+  read: (r) => {
+    const id = r.i32();
+    switch (id) {
+      case 0:
+        return null;
+      case 1504254414:
+        return readOrder(r);
+    }
+    throw types.unreadable(id);
+  },
+  write: (w, v) => { /* null, or the type id of v.constructor, then its members */ },
+};
+export const OrderLineCodec: NinoCodec<OrderLine> = {
+  read: (r) => readOrderLine(r, r.take(16)),
+  write: (w, v) => writeOrderLine(w, w.reserve(16), v),
+};
 ```
 
 Each member starts at the value .NET gives it by default (`0`, `null`, `DateTime.MinValue`). Since `Order` is version tolerant, its reader stops at the end of the members an older version wrote and skips those of a newer one, as in .NET.

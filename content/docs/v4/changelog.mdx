@@ -26,6 +26,12 @@ Not released yet.
 
 - **Smaller payloads with Latin-1 strings**, with the same serialize and deserialize times as before: in the benchmark, `Orders` shrinks from 30,848 to 26,126 bytes, `Players` from 45,124 to 39,164 and `Tree` from 40,676 to 31,258, now smaller than MemoryPack's (27,990, 43,364 and 32,623). See [Benchmarks](/en/docs/v4/perf).
 - **Tuples and pairs with padding serialize faster**: arrays and lists of value tuples, `KeyValuePair`s and other raw values whose memory has padding are written as whole vectors of their bytes from an aligned destination (AVX-512 VBMI, AVX2, Arm64 and WebAssembly on .NET 10): 1,000 `(int, long)` in 154 ns instead of 228 ns on an AVX-512 Xeon, against 166 ns for MemoryPack. See [SIMD by Platform](/en/docs/v4/platforms#simd).
+- **Aligned vector stores when reading**: reading padded raw values into an existing list or array, and converting non-Latin-1 text, now stores whole vectors at aligned addresses: deserializing into an existing `List<(int, long)>` of 1,000 items takes 207 ns instead of 255 ns, and 1,000-char non-Latin-1 strings read about 8% faster (AVX-512 Xeon).
+- **Faster TypeScript codecs**: generated code reads and writes runs of fixed-size members at offsets in one buffer, and `nino.ts` reads and writes text with Node's (Bun's, Deno's) native methods or `TextDecoder` and `TextEncoder` in browsers. In Node, 1,000 player records serialize in 1.15 ms instead of 2.07 ms and deserialize in 1.17 ms instead of 1.92 ms, text-heavy records 6.8 and 11 times faster, and arrays of numbers 2 to 5 times faster. See [TypeScript Clients](/en/docs/v4/advanced/typescript).
+
+### Fixes [#fixes-3]
+
+- **TypeScript: `[NinoUtf8]` strings starting with U+FEFF** no longer fail to deserialize: `TextDecoder` dropped the char as a byte order mark. See [TypeScript Clients](/en/docs/v4/advanced/typescript).
 
 ## 4.0.0-rc.5
 
