@@ -26,6 +26,12 @@ icon: RotateCcwClock
 - **新建的非托管值或原始结构体 `List<T>`**，大小在 6 KB 及以上时，其底层数组不再先清零再复制元素，和数组的做法一致：10,000 个 `int` 的列表反序列化快约 15%。参见[集合类型](/zh/docs/v4/types#collection-types)。
 - **`ImmutableArray<T>` 和 `ImmutableList<T>`**（`Nino.Immutable`）改为通过数组读写：`ImmutableArray` 直接包装读入的数组，不再复制；`ImmutableList` 从数组一次建好。1,000 个元素的 `ImmutableArray<int>` 序列化快 13 倍、反序列化快 8 倍，1,000 个元素的 `ImmutableList<int>` 反序列化快 3.6 倍。写出的字节不变。参见[不可变集合](/zh/docs/v4/types#immutable-collections)。
 - **由非托管值组成的值元组和 `KeyValuePair` 的数组与列表**（如 `(int, int)[]`、`List<(int, long)>`）改为整块读写：值的内存与写出的字节一致时直接按内存复制，否则用 SIMD 字节重排（SSSE3、Arm64、AVX-512 VBMI）每次处理 16 或 64 字节。1,000 个 `(int, int)` 或 `KeyValuePair<int, int>` 序列化快 16 到 19 倍，反序列化快 2.5 到 3 倍；1,000 个元素的 `List<(int, long)>` 序列化快 5.4 倍，反序列化快 2 倍。写出的字节不变。参见[其他内置类型](/zh/docs/v4/types#other-built-in-types)。
+- **`SortedSet<T>`、`SortedDictionary<TKey, TValue>`、`SortedList<TKey, TValue>`、`LinkedList<T>` 和 `ConcurrentDictionary<TKey, TValue>`**（及其派生类型）改为通过它们自己的字段和方法读写，不再走通用的集合循环：有序集合和有序字典先读成数组，再一次建好平衡树；有序列表在键按其比较器有序时直接读进键数组和值数组。1,000 个 `int` 或 `int` 键值对时，`SortedList` 反序列化快 5.5 倍、序列化快 1.4 倍，`SortedSet` 序列化和反序列化都快 2 倍，`SortedDictionary` 序列化快 1.9 倍、反序列化快 1.5 倍，`ConcurrentDictionary` 序列化快 1.3 倍。写出的字节不变，重复键和 null 键仍抛出同样的异常。参见[集合类型](/zh/docs/v4/types#collection-types)。
+- **更多 CPU 用上 SIMD**：在没有 AVX-512 的 x64 CPU 上（AVX2，大多数台式机），256 字节到 4 KB 的块改用 32 字节向量复制：256 字节从 6.3 ns 降到 3.9 ns，2,500 字节从 36.3 ns 降到 24.6 ns。在 Arm64 上，8 字节以内的值元组、`KeyValuePair` 和原始结构体的数组与列表改用查表指令每次重排 64 字节，与 x64 上的 AVX-512 VBMI 相同；在 .NET 10 上，16 字节的字节重排也支持 WebAssembly SIMD。写出的字节不变。
+
+### 修复 [#fixes-2]
+
+- **.NET Framework 和 Mono 上的 `List<T>`**：Nino.Core 的 netstandard 版本按 .NET 的字段位置读写 `List<T>`，但 .NET Framework 和 Mono 的 `List<T>` 多一个字段，导致列表被写成空列表，读入的列表也会损坏。现在 Nino 直接读写字段的每种集合（`List<T>`、`Stack<T>`、`Queue<T>`、`SortedList<TKey, TValue>`、`SortedSet<T>`、`SortedDictionary<TKey, TValue>`）都会在启动时用一个内容已知的实例核对一次布局；布局不符的运行时改用公开方法读写。这些快速路径现在在 .NET Framework 和 Mono 上同样生效。参见[集合类型](/zh/docs/v4/types#collection-types)。
 
 ## 4.0.0-rc.4
 
