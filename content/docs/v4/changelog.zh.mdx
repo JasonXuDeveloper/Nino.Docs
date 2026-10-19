@@ -18,6 +18,11 @@ icon: RotateCcwClock
 - **元素定长的多维数组按块处理**：元组、`DateTimeOffset` 及其他定长元素组成的 `T[,]`、`T[,,]`、`T[,,,]`，与一维数组一样按块写入和读取：`(int, long)[50, 20]` 反序列化到已有数组从 1.3 µs 降到 140 ns，序列化从 3 µs 降到 1.5 到 1.7 µs；`DateTimeOffset[50, 20]` 序列化从 2.5 µs 降到 1.7 µs。列表和数组也不再清零或搬运读取时会被覆盖的槽位。
 - **并发栈和包、优先队列、哈希集合**：元素定长的 `ConcurrentStack<T>` 和 `ConcurrentBag<T>` 整块写入（1,000 个 int 从 5.4 到 5.7 µs 降到 4.4 到 4.5 µs）；1,000 个元素的 `PriorityQueue<int, int>` 反序列化从 4.7 µs 降到 3.5 µs；元素不是原始值（如 `int?`）的 `HashSet` 序列化快 5% 到 10%。
 - **可空成员只做一次边界检查**：`int?`、`long?`、`double?`、`DateTime?` 等原始值的可空类型，读取时标志字节和值一起检查：100 个各含四个此类成员的结构体组成的数组，反序列化从 1,050 到 1,100 ns 降到 590 到 615 ns。
+- **没有专门路径的集合**：`Collection<T>`、`ObservableCollection<T>` 和自定义的 `ICollection<T>` 类型写入时，写入器在枚举器的调用之间保留在寄存器中：1,000 个元素的 `ObservableCollection<int>` 序列化从 4.3 到 5.1 µs 降到 2.7 到 2.9 µs。
+- **`ImmutableStack<T>`**（Nino.Immutable）序列化不再先填充并反转一个列表：快约一倍（1,000 个 int 从 8.2 到 9.5 µs 降到 4.3 到 4.8 µs），且不分配内存。参见[不可变集合](/zh/docs/v4/types#immutable-collections)。
+- **版本容错类型**：相邻的一组原始成员在数据完整时作为一个块读取，只做一次检查（旧版本写的数据走逐个成员的路径）：100 个含六个相邻原始成员的对象快约 20%。键控类型把每个成员的键和区域长度一起预留（序列化快约 3%），`[NinoPooled]` 类型从对象池租用时内联（反序列化快约 3%）。参见[版本容错](/zh/docs/v4/evolving-data#version-tolerance)。
+- **Unity 的 `AnimationCurve` 和 `Gradient`**（Nino.UnityTypes）整块写入和读取：8 个关键帧的 `AnimationCurve` 序列化快约 3.5 倍（约 490 ns 降到 140 ns），反序列化快约 1.3 倍；`Gradient` 读写都快约 8%。参见 [Unity 类](/zh/docs/v4/advanced/unity#unity-classes)。
+- **原始元素组成的 `Memory<T>` 和 `ReadOnlyMemory<T>`** 反序列化快 5% 到 10%，其数组和普通数组一样不清零分配。
 
 ### 修复 [#fixes-4]
 
