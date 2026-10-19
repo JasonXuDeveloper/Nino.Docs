@@ -61,13 +61,14 @@ export type Arch = 'x64' | 'arm64';
 export const archLabels: Record<Arch, string> = { x64: 'x64', arm64: 'Arm64' };
 
 /**
- * Below a third of a clock cycle, a time cannot be told apart from
- * BenchmarkDotNet's empty-method overhead. v4 under it against a measurable
+ * Below about three clock cycles, times cannot be told apart: a 40-byte
+ * struct read measured anywhere from 0.05 to 0.8 ns in Nino and MemoryPack
+ * alike, once BenchmarkDotNet subtracts its empty-method overhead. v4 under it against a measurable
  * time is faster, too fast to measure: no ratio, which would only reflect the
  * floor. Both under it is on par. Nino's benchmarks/readme.py and
  * benchmarks/v3/compare.py use the same floor.
  */
-export const FLOOR_NS = 0.1;
+export const FLOOR_NS = 1;
 
 function digits(value: number) {
   if (value >= 100) return Math.round(value).toLocaleString('en-US');
