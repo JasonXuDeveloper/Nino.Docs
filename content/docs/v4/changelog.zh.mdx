@@ -30,6 +30,7 @@ icon: RotateCcwClock
 
 ### 修复 [#fixes-3]
 
+- **Unity：引用了带 internal `ModuleInitializerAttribute` 的库**（如 ZLinq 的 netstandard 版本）时不再编译失败：生成器曾在注册表中引用这个 polyfill（错误 CS0122 "'ModuleInitializerAttribute' is inaccessible due to its protection level"）。现在只有程序集能访问某个初始化特性时才会使用它，Unity 照旧通过 `[RuntimeInitializeOnLoadMethod]` 注册。参见 [Unity](/zh/docs/v4/advanced/unity)。
 - **TypeScript：以 U+FEFF 开头的 `[NinoUtf8]` 字符串**不再反序列化失败：`TextDecoder` 把这个字符当作字节序标记丢掉了。参见 [TypeScript 客户端](/zh/docs/v4/advanced/typescript)。
 
 ## 4.0.0-rc.5
