@@ -7,6 +7,13 @@ icon: RotateCcwClock
 
 What changed from one v4 release to the next, newest first. For everything v4 changed since v3, see [What's New in v4](/en/docs/v4/whats-new). Each GitHub release also lists every commit it contains.
 
+## 4.0.0-rc.7
+
+### Performance [#performance-2]
+
+- **Collections written straight into their array**: `NinoSerializer.Serialize(value)` of an array or list of fixed-size elements (unmanaged values, `DateTimeOffset`s, tuples and raw structs) allocates an array of exactly its bytes and writes into it, without the pooled scratch buffer and the copy out of it: 1,000 `(int, long)` in about 1.7 µs instead of 1.85 µs on an AVX-512 Xeon, and 1.9 µs instead of 2.6 µs on CPUs without AVX2. See [Allocation](/en/docs/v4/performance#allocation).
+- **Tuples and pairs with padding faster without AVX-512**: arrays and lists of value tuples, `KeyValuePair`s and other padded raw values are written and read a group at a time, each 16-byte lane of a vector shuffled from at most two 16-byte windows (AVX2, SSSE3, Arm64 `TBL`, WebAssembly SIMD on .NET 10). On a Xeon with AVX-512 turned off, 1,000 `(int, long)` deserialize into an existing list in 460 to 550 ns instead of 850 ns and serialize in 310 to 360 ns instead of 330 to 370 ns; with SSSE3 only they serialize in 415 to 500 ns instead of 790 to 890 ns. See [SIMD by Platform](/en/docs/v4/platforms#simd).
+
 ## 4.0.0-rc.6
 
 ### Wire Format [#wire-format-2]

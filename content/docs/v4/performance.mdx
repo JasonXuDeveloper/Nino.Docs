@@ -139,6 +139,7 @@ A `string`, an array or collection, a class, a `T?`, a tuple, `DateTimeOffset` o
 ## Allocation
 
 - **Serializing allocates nothing** except the `byte[]` you ask for. Serialize into a reused `NinoArrayBufferWriter` (or any `IBufferWriter<byte>`) and a call allocates 0 B.
+- **The `byte[]` is exactly the bytes**: where the size is known before writing (fixed-size values, and arrays and lists of fixed-size elements), Nino allocates it at that size and writes straight into it; other values are written into a pooled scratch buffer and copied out once.
 - **Deserializing allocates only the result objects**, and even those can be reused: deserialize into an existing instance with `ref`, and take new instances from `[NinoPooled]` pools. Reusing instances allocates 0 B, apart from strings whose text changed: an unchanged string is kept, and only changed text is read into a new instance (non-ASCII `[NinoUtf8]` text always is). See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 - By default a string whose chars are all at most U+00FF is written in one byte a char and other text as UTF-16, each in one pass that narrows, widens or copies the chars. `[NinoUtf8]` has to transcode, and a non-empty string carries a 4-byte byte count after its char count; it is smaller only for text that is mostly ASCII with a few wider chars ([Binary Format](/en/docs/v4/platforms#binary-format)).
 
