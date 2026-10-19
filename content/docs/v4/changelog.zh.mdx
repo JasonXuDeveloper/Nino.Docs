@@ -13,6 +13,11 @@ icon: RotateCcwClock
 
 - **集合直接写入大小正好的数组**：对元素定长的数组和列表（非托管值、`DateTimeOffset`、元组和原始结构体）调用 `NinoSerializer.Serialize(value)` 时，直接分配大小正好的数组并写入，不再经过池化的临时缓冲区再拷贝出来：1,000 个 `(int, long)` 在 AVX-512 Xeon 上约 1.7 µs，之前为 1.85 µs；在不支持 AVX2 的 CPU 上约 1.9 µs，之前为 2.6 µs。参见[内存分配](/zh/docs/v4/performance#allocation)。
 - **不支持 AVX-512 时，带填充的元组和键值对更快**：值元组、`KeyValuePair` 以及其他带填充的原始值组成的数组和列表，写入和读取都按组处理，向量的每个 16 字节通道由至多两个 16 字节窗口经通道内重排得到（AVX2、SSSE3、Arm64 `TBL`、.NET 10 上的 WebAssembly SIMD）。在关闭 AVX-512 的 Xeon 上，把 1,000 个 `(int, long)` 反序列化到已有列表从 850 ns 降到 460 到 550 ns，序列化从 330 到 370 ns 降到 310 到 360 ns；只有 SSSE3 时，序列化从 790 到 890 ns 降到 415 到 500 ns。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
+- **新建的元组和 `DateTimeOffset` 数组读取更快**：读取时靠向量重排或逐个写值填满的数组和列表，重新改为分配已清零的内存，每次写入不再先从内存读入所在的缓存行；只有一次块拷贝填满的数组仍不清零。在 AVX-512 Xeon、工作站 GC 下，把 1,000 个 `(int, long)` 反序列化为新列表从 2.7 到 2.9 µs 降到 1.5 到 1.7 µs，`DateTimeOffset[1000]` 从 5.0 到 5.6 µs 降到 3.7 到 3.8 µs。
+
+### 修复 [#fixes-4]
+
+- 序列化超过 4 GB 的非托管值 span、超过 1 G 字符的 `StringBuilder` 或超过 2 GB 的 UTF-8 文本时，抛出 `OverflowException`，不再越过缓冲区末尾写入。
 
 ## 4.0.0-rc.6
 

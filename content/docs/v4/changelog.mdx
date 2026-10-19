@@ -13,6 +13,11 @@ What changed from one v4 release to the next, newest first. For everything v4 ch
 
 - **Collections written straight into their array**: `NinoSerializer.Serialize(value)` of an array or list of fixed-size elements (unmanaged values, `DateTimeOffset`s, tuples and raw structs) allocates an array of exactly its bytes and writes into it, without the pooled scratch buffer and the copy out of it: 1,000 `(int, long)` in about 1.7 µs instead of 1.85 µs on an AVX-512 Xeon, and 1.9 µs instead of 2.6 µs on CPUs without AVX2. See [Allocation](/en/docs/v4/performance#allocation).
 - **Tuples and pairs with padding faster without AVX-512**: arrays and lists of value tuples, `KeyValuePair`s and other padded raw values are written and read a group at a time, each 16-byte lane of a vector shuffled from at most two 16-byte windows (AVX2, SSSE3, Arm64 `TBL`, WebAssembly SIMD on .NET 10). On a Xeon with AVX-512 turned off, 1,000 `(int, long)` deserialize into an existing list in 460 to 550 ns instead of 850 ns and serialize in 310 to 360 ns instead of 330 to 370 ns; with SSSE3 only they serialize in 415 to 500 ns instead of 790 to 890 ns. See [SIMD by Platform](/en/docs/v4/platforms#simd).
+- **New arrays of tuples and `DateTimeOffset`s read faster**: arrays and lists that a read fills by vector shuffles or one value at a time are allocated zeroed again, so each store no longer first reads its cache line from memory; only arrays filled by one block copy stay uninitialized. With workstation GC on an AVX-512 Xeon, 1,000 `(int, long)` deserialize into a new list in 1.5 to 1.7 µs instead of 2.7 to 2.9 µs, and a `DateTimeOffset[1000]` in 3.7 to 3.8 µs instead of 5.0 to 5.6 µs.
+
+### Fixes [#fixes-4]
+
+- Serializing a span of unmanaged values past 4 GB, a `StringBuilder` past 1 G chars or UTF-8 text past 2 GB throws `OverflowException` instead of writing past the end of the buffer.
 
 ## 4.0.0-rc.6
 
