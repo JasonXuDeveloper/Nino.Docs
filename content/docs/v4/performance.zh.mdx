@@ -50,7 +50,7 @@ static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 - 由非托管值组成的值元组和 `KeyValuePair` 的数组和列表：作为一整块处理，CPU 支持时用 [SIMD](/zh/docs/v4/platforms#simd) 重排成写入的顺序；
 - 满足原始内存条件的 `[NinoType]` 结构体（参见[结构体](/zh/docs/v4/defining-types#structs)），无论单独出现还是在数组、列表中。
 
-写入时会把填充字节清零，所以相等的值总是产生相同的字节，即使结构体位于从未清零的内存中（`ArrayPool` 租来的数组、`[SkipLocalsInit]` 下的 `stackalloc`）。Nino 在运行时第一次写入某个类型时识别填充：只读取一次字段偏移，结果会成为 JIT 期常量，所以没有填充的结构体不会为这项检查付出任何开销。带填充的结构体数组会在同一趟拷贝中用 SIMD 掩码处理，比普通 `memcpy` 略慢。
+写入时会把填充字节清零，所以相等的值总是产生相同的字节，即使结构体位于从未清零的内存中（`ArrayPool` 租来的数组、`[SkipLocalsInit]` 下的 `stackalloc`）。Nino 在运行时第一次写入某个类型时识别填充：只读取一次字段偏移，结果会成为 JIT 期常量，所以没有填充的结构体不会为这项检查付出任何开销。带填充的结构体数组会在同一趟拷贝中用 SIMD 掩码处理，比普通 `memcpy` 多一点开销。
 
 ### 结构体布局 [#struct-layout]
 
@@ -94,7 +94,7 @@ public partial struct PackedSample // 12 bytes, no padding
 
 <Callout type="info">
 
-原始布局以 64 位平台的规范布局为准。在结构体布局不同的运行时上（32 位平台、旧版 Mono），Nino 会逐个字段转换成相同的字节，数据依然可移植，只是速度稍慢。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+原始布局以 64 位平台的规范布局为准。在结构体布局不同的运行时上（32 位平台、旧版 Mono），Nino 会逐个字段转换成相同的字节，数据依然可移植，只是会有一些速度上的代价。参见[平台与二进制格式](/zh/docs/v4/platforms)。
 
 </Callout>
 
@@ -132,7 +132,7 @@ int size = NinoSerializer.GetFixedSize<SensorReading>();  // 22
 `string`、数组或集合、类、`T?`、元组、`DateTimeOffset` 或 `nint` 成员都会让类型的大小不固定。按原始内存写入的结构体（参见[原始内存](#raw-memory-for-unmanaged-data)）同样是固定大小的，并且本来就直接拷贝到大小正好的数组中；这条路径把同样的做法扩展到了不能按原始内存写入的结构体（有被忽略的字段、嵌套了结构体）和密封类。
 
 - **自动生效。** 在 Roslyn 4.8+ 上，[拦截器](#interceptors)会把固定大小类型的 `Serialize(value)` 导向这条路径；没有拦截器时（Unity、泛型代码、旧编译器），常规调用经过一次检查后也走这条路径，而优化后的代码会把这次检查折叠成常量。
-- 只有返回 `byte[]` 的 `Serialize(value)` 走这条路径。序列化到 `IBufferWriter<byte>` 或 `Writer`，以及固定大小类型的数组和列表，仍按原来的方式写入。
+- 只有返回 `byte[]` 的 `Serialize(value)` 走这条路径。序列化到 `IBufferWriter<byte>` 或 `Writer` 仍按原来的方式写入。元素整块写入的数组和列表（非托管值、原始结构体、元组、`DateTimeOffset`）也直接写入大小正好的数组（见[内存分配](#allocation)）；其他固定大小类型的数组和列表走常规路径。
 - 值为 `null` 的密封类写出 1 字节的 null 标志；其他值都正好占 `GetFixedSize<T>()` 字节。
 - `NinoSerializer.GetFixedSize<T>()` 对固定大小的类型和原始值返回其大小，对其他类型返回 `-1`。可以用它来确定缓冲区大小，或在启动时检查消息的大小。
 

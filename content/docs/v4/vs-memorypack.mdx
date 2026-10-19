@@ -26,14 +26,14 @@ Measured with BenchmarkDotNet, both libraries in the same run. Bars show time re
 | | Nino v4 vs MemoryPack |
 | --- | --- |
 | Serialize | **<BenchValue k="serialize.min" />–<BenchValue k="serialize.max" /> faster** where Nino leads; the gap is smallest on arrays of unmanaged structs, which both copy as one block (see the chart for each case) |
-| Deserialize | **<BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" /> faster** where Nino leads; on par on arrays of unmanaged structs, which both copy as one block (see below) |
+| Deserialize | **<BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" /> faster** where Nino leads; at least on par on arrays of unmanaged structs, which both copy as one block (see below) |
 | Deserialize into existing / pooled instances | **0 B** allocated, up to **<BenchValue k="reuse.max" /> faster** than MemoryPack's overwrite mode |
 | Allocations when serializing | 0 B for both |
 | Payload size | About the same for `SimpleClass`: <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack. Strings depend on the text: ASCII takes one byte a char in both; other Latin-1 text and CJK text are smaller in Nino (one byte and two bytes a char, against two and three in UTF-8); mostly-ASCII text with a few wider chars is smaller in UTF-8, which Nino writes with `[NinoUtf8]` |
 
 <Callout type="info" title="Arrays of unmanaged structs">
 
-Both libraries copy these as one block, so they are on par. The `Vector4[10000]` deserialize case mostly measures garbage collection of the result array and varies between runs; see [Deserialize (New Instances)](/en/docs/v4/perf#deserialize-new-instances).
+Both libraries copy these as one block, so they are at least on par. The `Vector4[10000]` deserialize case mostly measures garbage collection of the result array and varies between runs; see [Deserialize (New Instances)](/en/docs/v4/perf#deserialize-new-instances).
 
 </Callout>
 

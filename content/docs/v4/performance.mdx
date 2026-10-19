@@ -132,7 +132,7 @@ A type is fixed-size when it is:
 A `string`, an array or collection, a class, a `T?`, a tuple, `DateTimeOffset` or `nint` member makes a type variable-size. A struct written as raw memory (see [Raw Memory](#raw-memory-for-unmanaged-data)) is fixed-size too, and has always been copied straight into an array of its size; this path extends the same treatment to structs that are not raw (an ignored field, a nested struct) and to sealed classes.
 
 - **Automatic.** On Roslyn 4.8+ the [interceptor](#interceptors) routes `Serialize(value)` of a fixed-size type to this path; without interceptors (Unity, generic code, older compilers) the regular call takes the same path after a check that optimized code reduces to a constant.
-- Only `Serialize(value)`, which returns a `byte[]`, takes this path. Serializing into an `IBufferWriter<byte>` or a `Writer`, and arrays or lists of fixed-size types, work as before.
+- Only `Serialize(value)`, which returns a `byte[]`, takes this path. Serializing into an `IBufferWriter<byte>` or a `Writer` works as before. Arrays and lists whose elements are written as one block (unmanaged values, raw structs, tuples, `DateTimeOffset`) are written straight into an array of their size too (see [Allocation](#allocation)); arrays and lists of other fixed-size types take the regular path.
 - A `null` sealed class is written as its 1-byte null flag; every other value takes exactly `GetFixedSize<T>()` bytes.
 - `NinoSerializer.GetFixedSize<T>()` returns the size for a fixed-size type or a raw value, and `-1` for any other type. Use it to size buffers or to check a message's size at startup.
 

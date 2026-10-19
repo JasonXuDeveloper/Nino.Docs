@@ -26,14 +26,14 @@ icon: Swords
 | | Nino v4 对比 MemoryPack |
 | --- | --- |
 | 序列化 | Nino 领先的用例中**快 <BenchValue k="serialize.min" />–<BenchValue k="serialize.max" />**；差距最小的是非托管结构体数组，两者都是整块拷贝（各用例见图表） |
-| 反序列化 | Nino 领先的用例中**快 <BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" />**；非托管结构体数组两者持平，都是整块拷贝（见下文） |
+| 反序列化 | Nino 领先的用例中**快 <BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" />**；非托管结构体数组两者至少持平，都是整块拷贝（见下文） |
 | 反序列化到已有 / 池化实例 | 分配 **0 B**，最高比 MemoryPack 的覆盖模式**快 <BenchValue k="reuse.max" />** |
 | 序列化时的内存分配 | 两者都是 0 B |
 | 数据大小 | `SimpleClass` 基本相同：在 Nino 中为 <BenchValue k="payload.v4" /> 字节，在 MemoryPack 中为 <BenchValue k="payload.memorypack" /> 字节。字符串取决于文本内容：ASCII 在两者中都是每个字符一个字节；ASCII 以外的 Latin-1 文本和中日韩文本在 Nino 中更小（每个字符一个和两个字节，UTF-8 则是两个和三个）；以 ASCII 为主、夹杂少量更宽字符的文本用 UTF-8 更小，Nino 可以用 `[NinoUtf8]` 写成 UTF-8 |
 
 <Callout type="info" title="非托管结构体数组">
 
-两个库都把这类数组整块拷贝，所以两者持平。反序列化 `Vector4[10000]` 这一项测到的主要是结果数组的垃圾回收，结果每次运行都有波动；参见[反序列化（新实例）](/zh/docs/v4/perf#deserialize-new-instances)。
+两个库都把这类数组整块拷贝，所以两者至少持平。反序列化 `Vector4[10000]` 这一项测到的主要是结果数组的垃圾回收，结果每次运行都有波动；参见[反序列化（新实例）](/zh/docs/v4/perf#deserialize-new-instances)。
 
 </Callout>
 

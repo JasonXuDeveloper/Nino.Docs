@@ -61,7 +61,7 @@ Serializing classes is clearly faster, deserializing is as fast as v3 or a littl
 
 ### Faster than MemoryPack [#faster-than-memorypack]
 
-Measured against MemoryPack in the same run. Nino wins clearly when serializing (up to <BenchValue k="serialize.max" />), leads on classes and polymorphic graphs when deserializing (up to <BenchValue k="deserialize.max" />), and is on par on arrays of unmanaged values, where both do a single `memcpy`.
+Measured against MemoryPack in the same run. Nino wins clearly when serializing (up to <BenchValue k="serialize.max" />), leads on classes and polymorphic graphs when deserializing (up to <BenchValue k="deserialize.max" />), and is at least on par on arrays of unmanaged values, where both do a single `memcpy`.
 
 <BenchSource lang="en" />
 
@@ -109,7 +109,7 @@ None of these change the bytes: every path writes what the plain path writes.
 ## Supported Types [#supported-types]
 
 - **The BCL types of everyday code**: `BigInteger`, `Uri`, `Version`, `StringBuilder`, `BitArray`, `CultureInfo`, `TimeZoneInfo`, `Lazy<T>`, `Memory<T>`, `ReadOnlyMemory<T>` and `ReadOnlySequence<T>`, besides primitives, enums, strings, `Nullable<T>`, tuples, `KeyValuePair`, `DateTimeOffset` and `nint`. `System.Type` is left out on purpose. See [Other Built-in Types](/en/docs/v4/types#other-built-in-types).
-- **Every BCL collection**: arrays of any rank, `List<T>`, `HashSet<T>`, `Queue<T>`, `Stack<T>`, `LinkedList<T>`, the sorted and concurrent collections, `BlockingCollection<T>`, `PriorityQueue<TElement, TPriority>` (.NET 8 and later), `ObservableCollection<T>`, the read-only wrappers (`ReadOnlyCollection<T>`, `ReadOnlyObservableCollection<T>`, `ReadOnlyDictionary<TKey, TValue>`), `ILookup<TKey, TElement>`, `IGrouping<TKey, TElement>` and the collection interfaces. See [Collection Types](/en/docs/v4/types#collection-types).
+- **Every BCL collection**: arrays of rank 1 to 4, `List<T>`, `HashSet<T>`, `Queue<T>`, `Stack<T>`, `LinkedList<T>`, the sorted and concurrent collections, `BlockingCollection<T>`, `PriorityQueue<TElement, TPriority>` (.NET 8 and later), `ObservableCollection<T>`, the read-only wrappers (`ReadOnlyCollection<T>`, `ReadOnlyObservableCollection<T>`, `ReadOnlyDictionary<TKey, TValue>`), `ILookup<TKey, TElement>`, `IGrouping<TKey, TElement>` and the collection interfaces. See [Collection Types](/en/docs/v4/types#collection-types).
 - **Every immutable collection** with the optional `Nino.Immutable` package, from `ImmutableArray<T>` to `ImmutableSortedDictionary<TKey, TValue>`, each with the bytes of its mutable counterpart. See [Immutable Collections](/en/docs/v4/types#immutable-collections).
 - **Your own collections**: types derived from `List<T>`, `Dictionary<TKey, TValue>` and friends, or implementing `ICollection<T>`, `IDictionary<TKey, TValue>` or `IProducerConsumerCollection<T>`, without attributes. See [User Collections](/en/docs/v4/types#user-collections).
 - **Unity's `AnimationCurve`, `Gradient` and `RectOffset`**: the Unity package ships `Nino.UnityTypes.dll` with their formatters. Unity's and Godot's structs (`Vector3`, `Quaternion`...) are copied as raw memory. See [Unity Classes](/en/docs/v4/advanced/unity#unity-classes).

@@ -38,7 +38,7 @@ All multi-byte values are **little-endian** and written unaligned. Positional ty
 | Array or list of unmanaged `T` | length, then one block of elements |
 | Other collections | length, then each element |
 | Dictionary | length, then key/value pairs |
-| `T[,]` and higher ranks | each dimension's length, then elements in row-major order |
+| `T[,]`, `T[,,]`, `T[,,,]` | each dimension's length, then elements in row-major order |
 
 A default string picks its form per string. When every char is at most U+00FF (ASCII and Latin-1: English, digits, identifiers, keys, Western European text), it is written in one byte a char after the header `~length` (`-length - 1`): `"Ada"` is `FC FF FF FF` `41 64 61`. Any other text is written as UTF-16 after its length: `"名字"` is `02 00 00 00` `0D 54 57 5B`. Both forms carry the length in chars, so the reader allocates the string at its final length and widens or copies the chars into it in one pass. A `StringBuilder` is always written in the UTF-16 form, which the same reader reads.
 
@@ -124,14 +124,14 @@ The net8.0 and net10.0 builds of `Nino.Core` use hardware intrinsics where the C
 | --- | --- |
 | x64 with AVX-512 | 64-byte vector copies with aligned stores for blocks of 129 bytes to 8 KB; byte permutes (AVX-512 VBMI) for tuples and `KeyValuePair`s of raw items, whose memory differs from their bytes: where their memory has padding, two-source permutes write them as whole 64-byte vectors from an aligned destination (16 `(int, long)` in three), of 4-byte words where each is a whole word of memory (AVX-512F, no VBMI needed), otherwise of bytes (VBMI), and read the same way, each 64-byte vector of memory stored at an aligned address; other such items 64 bytes at a time (VBMI); 512-bit masked copies that zero padding |
 | x64 with AVX2 | blocks of 33 to 128 bytes copied inline as two or four overlapping 32-byte vectors (with AVX-512 too); 32-byte vector copies with aligned stores for blocks of 256 bytes to 4 KB (also on AVX-512 CPUs where .NET prefers 256-bit vectors); such tuples and pairs with padding moved a group at a time, written and read: each 16-byte lane of a 32-byte vector shuffled (`vpshufb`) from at most two 16-byte windows of the source, loads shared across a group's vectors and lanes far apart joined by one lane permute (`vperm2i128`), stores on 32-byte boundaries where the values allow; otherwise an SSSE3 16-byte shuffle per value for such tuples and pairs of up to 16 bytes |
-| x64 with SSSE3 | such tuples and pairs with padding moved a group of 16-byte vectors at a time, each two shuffles (`pshufb`) ORed; otherwise the 16-byte shuffle per value; `memmove` for blocks |
+| x64 with SSSE3 | such tuples and pairs with padding moved a group of 16-byte vectors at a time, each two shuffles (`pshufb`) ORed; otherwise the 16-byte shuffle per value; blocks of 33 to 64 bytes copied inline as four 16-byte moves; `memmove` for larger blocks |
 | Arm64 | AdvSimd: two-register table lookups (`TBL`) that move such tuples and pairs with padding a group of 16-byte vectors at a time, written and read; otherwise the 16-byte shuffle per value (`TBL`), and four 4-register table lookups per 64 bytes for values of up to 8 bytes; blocks of 33 to 64 bytes copied inline as four 16-byte moves; `memmove` for larger blocks |
 | WebAssembly with SIMD (.NET 10) | two swizzles per 16-byte vector for such tuples and pairs with padding, written and read a group at a time as on SSSE3; otherwise the 16-byte shuffle per value (`PackedSimd`, `i8x16.swizzle`) |
-| Arm32; Unity (Mono, IL2CPP), .NET Framework and .NET Core 3.0 to .NET 7 | no hardware intrinsics: blocks through `memmove`, rearranged values one at a time |
+| Arm32; Unity (Mono, IL2CPP), .NET Framework and .NET Core 3.0 to .NET 7 | no hardware intrinsics: blocks over 64 bytes through `memmove` (up to 64 inline on 64-bit runtimes), rearranged values one at a time |
 
 Strings in the [one-byte form](#binary-format) are narrowed when written and widened when read with 16-byte vectors, and 32-byte ones where AVX2 is available, on every CPU that accelerates them, in the net8.0 and net10.0 builds; the netstandard builds convert four chars at a time.
 
-Unity and .NET Framework, as well as .NET Core 3.0 to .NET 7, use the `netstandard2.0`/`netstandard2.1` builds, which contain no intrinsics. On every platform, blocks of up to 64 bytes (most strings) are copied inline on 64-bit runtimes, a value read into a new array of 2 KB or more is copied with `memmove` (whose `rep movsb` on x64 writes fresh cache lines without reading them first), and padding is masked with 512-bit vectors on AVX-512, otherwise with `Vector<T>` where the runtime accelerates it, else 8 bytes at a time.
+Unity and .NET Framework, as well as .NET Core 3.0 to .NET 7, use the `netstandard2.0`/`netstandard2.1` builds, which contain no intrinsics. On every platform, blocks of up to 64 bytes (most strings) are copied inline on 64-bit runtimes, raw values read in blocks of 2 KB or more (into new or existing arrays) are copied with `memmove` (whose `rep movsb` on x64 writes fresh cache lines without reading them first), and padding is masked with 512-bit vectors on AVX-512, otherwise with `Vector<T>` where the runtime accelerates it, else 8 bytes at a time.
 
 ## Unity
 
