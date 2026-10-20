@@ -133,7 +133,7 @@ Where a group copy stores to aligned addresses, the unaligned start and end of t
 
 Strings in the [one-byte form](#binary-format) are narrowed when written and widened when read with 16-byte vectors, and 32-byte ones where AVX2 is available, on every CPU that accelerates them, in the net8.0 and net10.0 builds; the netstandard builds convert four chars at a time.
 
-Unity and .NET Framework, as well as .NET Core 3.0 to .NET 7, use the `netstandard2.0`/`netstandard2.1` builds, which contain no intrinsics. On every platform, blocks of up to 64 bytes (most strings) are copied inline on 64-bit runtimes, raw values read in blocks of 2 KB or more (into new or existing arrays) are copied with `memmove` (whose `rep movsb` on x64 writes fresh cache lines without reading them first), and padding is masked with 512-bit vectors on AVX-512, otherwise with `Vector<T>` where the runtime accelerates it, else 8 bytes at a time.
+Unity and .NET Framework, as well as .NET Core 3.0 to .NET 7, use the `netstandard2.0`/`netstandard2.1` builds, which contain no intrinsics. On every platform, blocks of up to 64 bytes (most strings) are copied inline on 64-bit runtimes, raw values read in blocks of 6 KB or more (into new or existing arrays) are copied with `memmove` (whose `rep movsb` on x64 writes fresh cache lines without reading them first), and padding is masked with 512-bit vectors on AVX-512, otherwise with `Vector<T>` where the runtime accelerates it, else 8 bytes at a time.
 
 ## Unity
 
