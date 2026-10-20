@@ -9,8 +9,6 @@ icon: RotateCcwClock
 
 ## 4.0.0-rc.7
 
-尚未发布。
-
 ### 性能 [#performance-2]
 
 - **集合直接写入大小正好的数组**：对元素定长的数组和列表（非托管值、`DateTimeOffset`、元组和原始结构体）调用 `NinoSerializer.Serialize(value)` 时，直接分配大小正好的数组并写入，不再经过池化的临时缓冲区再拷贝出来：1,000 个 `(int, long)` 在 AVX-512 Xeon 上约 1.7 µs，之前为 1.85 µs；在不支持 AVX2 的 CPU 上约 1.9 µs，之前为 2.6 µs。参见[内存分配](/zh/docs/v4/performance#allocation)。
