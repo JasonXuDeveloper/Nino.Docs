@@ -23,7 +23,8 @@ icon: RotateCcwClock
 - **`ImmutableStack<T>`**（Nino.Immutable）序列化不再先填充并反转一个列表：快约一倍（1,000 个 int 从 8.2 到 9.5 µs 降到 4.3 到 4.8 µs），且不分配内存。参见[不可变集合](/zh/docs/v4/types#immutable-collections)。
 - **版本容错类型**：相邻的一组原始成员在数据完整时作为一个块读取，只做一次检查（旧版本写的数据走逐个成员的路径）：100 个含六个相邻原始成员的对象快约 20%。键控类型把每个成员的键和区域长度一起预留（序列化快约 3%）。参见[版本容错](/zh/docs/v4/evolving-data#version-tolerance)。
 - **Unity 的 `AnimationCurve` 和 `Gradient`**（Nino.UnityTypes）整块写入和读取：8 个关键帧的 `AnimationCurve` 序列化快约 3.5 倍（约 490 ns 降到 140 ns），反序列化快约 1.3 倍；`Gradient` 读写都快约 8%。参见 [Unity 类](/zh/docs/v4/advanced/unity#unity-classes)。
-- **原始元素组成的 `Memory<T>` 和 `ReadOnlyMemory<T>`** 反序列化快 5% 到 10%，其数组和普通数组一样不清零分配。
+- **原始元素组成的 `Memory<T>` 和 `ReadOnlyMemory<T>`** 的数组和普通数组一样分配：从 6 KB 起不清零。
+- **2 到 6 KB 的新数组改为清零分配**：读取时一次块拷贝填满的数组，只在 6 KB 及以上才不清零分配，这时省下的清零开销才大于代价；更小的数组用运行时的不清零分配反而更慢。在 GitHub 的 x64 和 Arm64 机器上，1,000 个 int 的 `ReadOnlyCollection<T>`、`ReadOnlySequence<T>` 等集合反序列化快约 10% 到 15%。
 
 ### 修复 [#fixes-4]
 
