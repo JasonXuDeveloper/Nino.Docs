@@ -129,6 +129,8 @@ The net8.0 and net10.0 builds of `Nino.Core` use hardware intrinsics where the C
 | WebAssembly with SIMD (.NET 10) | two swizzles per 16-byte vector for such tuples and pairs with padding, written and read a group at a time as on SSSE3; otherwise the 16-byte shuffle per value (`PackedSimd`, `i8x16.swizzle`) |
 | Arm32; Unity (Mono, IL2CPP), .NET Framework and .NET Core 3.0 to .NET 7 | no hardware intrinsics: blocks over 64 bytes through `memmove` (up to 64 inline on 64-bit runtimes), rearranged values one at a time |
 
+Where a group copy stores to aligned addresses, the unaligned start and end of the output are covered by whole groups that overlap the rest, so its speed does not depend on where the output buffer starts.
+
 Strings in the [one-byte form](#binary-format) are narrowed when written and widened when read with 16-byte vectors, and 32-byte ones where AVX2 is available, on every CPU that accelerates them, in the net8.0 and net10.0 builds; the netstandard builds convert four chars at a time.
 
 Unity and .NET Framework, as well as .NET Core 3.0 to .NET 7, use the `netstandard2.0`/`netstandard2.1` builds, which contain no intrinsics. On every platform, blocks of up to 64 bytes (most strings) are copied inline on 64-bit runtimes, raw values read in blocks of 2 KB or more (into new or existing arrays) are copied with `memmove` (whose `rep movsb` on x64 writes fresh cache lines without reading them first), and padding is masked with 512-bit vectors on AVX-512, otherwise with `Vector<T>` where the runtime accelerates it, else 8 bytes at a time.

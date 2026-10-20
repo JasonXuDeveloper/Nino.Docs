@@ -40,6 +40,15 @@ Every formatter is a struct, and element formatters are type parameters (`ListFo
 
 The one indirection left is your own call, such as `NinoSerializer.Serialize(value)`: unless it is intercepted, it finds the formatter of `T` through `NinoFormatterCache<T>` (a static generic field, the formatter cache).
 
+## Machine Code Kept Lean [#machine-code]
+
+Because a top-level call inlines the whole formatter chain into one method, the JIT has one inlining budget for all of it. Nino keeps that budget for the path your data takes:
+
+- **Rare paths are calls.** Vector loops of large block copies, element-by-element loops, the copy of a raw read, strings that are not Latin-1 and recycling are separate, non-inlined methods, so a `SimpleClass` read does not carry the code of a 512-bit copy loop it never runs. Checks that would take several helper calls are one `static readonly` field, which the JIT reads as a constant.
+- **No checks that can never fail.** Element loops (array and list fallbacks, in-place reads, padding masks, pools, reference tables, immutable collections) walk a reference to the elements instead of indexing, so there is no bounds check per element and no covariance check when storing into an array of a reference type. Block sizes are JIT-time constants, so dividing by them is a shift. Length overflow checks stay: one per call, they guard against malicious input.
+
+Nino's repository checks this on every change to a read or write path: `benchmarks/asm.py compare` lists each method whose machine code changed against a base commit, so a change cannot slow down types it does not touch unnoticed.
+
 ## Raw Memory for Unmanaged Data
 
 Unmanaged values are copied as raw memory:
