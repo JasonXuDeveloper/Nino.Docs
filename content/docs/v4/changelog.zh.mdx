@@ -9,18 +9,20 @@ icon: RotateCcwClock
 
 ## 4.0.0-rc.7
 
+尚未发布。
+
 ### 性能 [#performance-2]
 
 - **集合直接写入大小正好的数组**：对元素定长的数组和列表（非托管值、`DateTimeOffset`、元组和原始结构体）调用 `NinoSerializer.Serialize(value)` 时，直接分配大小正好的数组并写入，不再经过池化的临时缓冲区再拷贝出来：1,000 个 `(int, long)` 在 AVX-512 Xeon 上约 1.7 µs，之前为 1.85 µs；在不支持 AVX2 的 CPU 上约 1.9 µs，之前为 2.6 µs。参见[内存分配](/zh/docs/v4/performance#allocation)。
 - **不支持 AVX-512 时，带填充的元组和键值对更快**：值元组、`KeyValuePair` 以及其他带填充的原始值组成的数组和列表，写入和读取都按组处理，向量的每个 16 字节通道由至多两个 16 字节窗口经通道内重排得到（AVX2、SSSE3、Arm64 `TBL`、.NET 10 上的 WebAssembly SIMD）。在关闭 AVX-512 的 Xeon 上，把 1,000 个 `(int, long)` 反序列化到已有列表从 850 ns 降到 460 到 550 ns，序列化从 330 到 370 ns 降到 310 到 360 ns；只有 SSSE3 时，序列化从 790 到 890 ns 降到 415 到 500 ns。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
 - **新建的元组和 `DateTimeOffset` 数组读取更快**：读取时靠向量重排或逐个写值填满的数组和列表，重新改为分配已清零的内存，每次写入不再先从内存读入所在的缓存行；只有一次块拷贝填满的数组仍不清零。在 AVX-512 Xeon、工作站 GC 下，把 1,000 个 `(int, long)` 反序列化为新列表从 2.7 到 2.9 µs 降到 1.5 到 1.7 µs，`DateTimeOffset[1000]` 从 5.0 到 5.6 µs 降到 3.7 到 3.8 µs。
-- **33 到 128 字节的拷贝、以及原始值读入已有数组更快**：33 到 64 字节的块在所有 64 位 CPU 上用相互重叠的向量内联拷贝，65 到 128 字节在支持 AVX2 时用四个 32 字节向量内联拷贝，不再调用 `memmove`；原始值组成的数组、列表和字符串在 2 KB 以下的读取也用同样的拷贝（2 KB 及以上仍用 `memmove`）：250 个 int 读入已有数组从 23.5 ns 降到 15 到 18 ns，30 个 int 从 12 ns 降到 7 到 10 ns，44 到 60 个字符的非 Latin-1 字符串快约 10%（AVX-512 Xeon，开启或关闭 AVX-512 均如此）。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
+- **33 到 128 字节的拷贝更快**：33 到 64 字节的块在所有 64 位 CPU 上用相互重叠的向量内联拷贝，65 到 128 字节在支持 AVX2 时用四个 32 字节向量内联拷贝，不再调用 `memmove`；原始值组成的数组、列表和字符串在 2 KB 以下的读取也用同样的拷贝（2 KB 及以上仍用 `memmove`）。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
 - **元素定长的多维数组按块处理**：元组、`DateTimeOffset` 及其他定长元素组成的 `T[,]`、`T[,,]`、`T[,,,]`，与一维数组一样按块写入和读取：`(int, long)[50, 20]` 反序列化到已有数组从 1.3 µs 降到 140 ns，序列化从 3 µs 降到 1.5 到 1.7 µs；`DateTimeOffset[50, 20]` 序列化从 2.5 µs 降到 1.7 µs。列表和数组也不再清零或搬运读取时会被覆盖的槽位。
-- **并发栈和包、优先队列、哈希集合**：元素定长的 `ConcurrentStack<T>` 和 `ConcurrentBag<T>` 整块写入（1,000 个 int 从 5.4 到 5.7 µs 降到 4.4 到 4.5 µs）；1,000 个元素的 `PriorityQueue<int, int>` 反序列化从 4.7 µs 降到 3.5 µs；元素不是原始值（如 `int?`）的 `HashSet` 序列化快 5% 到 10%。
+- **并发栈和包、优先队列**：元素定长的 `ConcurrentStack<T>` 和 `ConcurrentBag<T>` 整块写入（1,000 个 int 从 5.4 到 5.7 µs 降到 4.4 到 4.5 µs）；1,000 个元素的 `PriorityQueue<int, int>` 反序列化从 4.7 µs 降到 3.5 µs。
 - **可空成员只做一次边界检查**：`int?`、`long?`、`double?`、`DateTime?` 等原始值的可空类型，读取时标志字节和值一起检查：100 个各含四个此类成员的结构体组成的数组，反序列化从 1,050 到 1,100 ns 降到 590 到 615 ns。
 - **没有专门路径的集合**：`Collection<T>`、`ObservableCollection<T>` 和自定义的 `ICollection<T>` 类型写入时，写入器在枚举器的调用之间保留在寄存器中：1,000 个元素的 `ObservableCollection<int>` 序列化从 4.3 到 5.1 µs 降到 2.7 到 2.9 µs。
 - **`ImmutableStack<T>`**（Nino.Immutable）序列化不再先填充并反转一个列表：快约一倍（1,000 个 int 从 8.2 到 9.5 µs 降到 4.3 到 4.8 µs），且不分配内存。参见[不可变集合](/zh/docs/v4/types#immutable-collections)。
-- **版本容错类型**：相邻的一组原始成员在数据完整时作为一个块读取，只做一次检查（旧版本写的数据走逐个成员的路径）：100 个含六个相邻原始成员的对象快约 20%。键控类型把每个成员的键和区域长度一起预留（序列化快约 3%），`[NinoPooled]` 类型从对象池租用时内联（反序列化快约 3%）。参见[版本容错](/zh/docs/v4/evolving-data#version-tolerance)。
+- **版本容错类型**：相邻的一组原始成员在数据完整时作为一个块读取，只做一次检查（旧版本写的数据走逐个成员的路径）：100 个含六个相邻原始成员的对象快约 20%。键控类型把每个成员的键和区域长度一起预留（序列化快约 3%）。参见[版本容错](/zh/docs/v4/evolving-data#version-tolerance)。
 - **Unity 的 `AnimationCurve` 和 `Gradient`**（Nino.UnityTypes）整块写入和读取：8 个关键帧的 `AnimationCurve` 序列化快约 3.5 倍（约 490 ns 降到 140 ns），反序列化快约 1.3 倍；`Gradient` 读写都快约 8%。参见 [Unity 类](/zh/docs/v4/advanced/unity#unity-classes)。
 - **原始元素组成的 `Memory<T>` 和 `ReadOnlyMemory<T>`** 反序列化快 5% 到 10%，其数组和普通数组一样不清零分配。
 
