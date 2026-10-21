@@ -244,6 +244,36 @@ const extraCases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
     { name: 'FixedStruct', code: true, key: 'FixedStruct' },
     { name: 'FixedClass', code: true, key: 'FixedClass' },
     { name: 'FixedClass[100]', code: true, key: 'FixedClasses' },
+    {
+      name: 'Subtypes through a non-generic base, 1,000',
+      zh: '经非泛型基类型的子类型，1,000 个',
+      key: 'NonGenericBase',
+    },
+    {
+      name: 'Subtypes of Box<int>, 1,000',
+      zh: 'Box<int> 的子类型，1,000 个',
+      key: 'GenericIntBase',
+    },
+    {
+      name: 'Subtypes of Box<(int, long)>, 1,000',
+      zh: 'Box<(int, long)> 的子类型，1,000 个',
+      key: 'GenericUnmanagedTupleBase',
+    },
+    {
+      name: 'Subtypes of Box<(int, string)>, 1,000',
+      zh: 'Box<(int, string)> 的子类型，1,000 个',
+      key: 'GenericManagedTupleBase',
+    },
+    {
+      name: 'Subtypes of Box<(SealedClass, int)>, 1,000',
+      zh: 'Box<(密封类, int)> 的子类型，1,000 个',
+      key: 'GenericSealedClassTupleBase',
+    },
+    {
+      name: 'Subtypes of Box<(OpenClass, int)>, 1,000',
+      zh: 'Box<(非密封类, int)> 的子类型，1,000 个',
+      key: 'GenericOpenClassTupleBase',
+    },
   ],
   deserialize: [
     {
@@ -256,6 +286,36 @@ const extraCases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
     { name: 'FixedStruct', code: true, key: 'FixedStruct' },
     { name: 'FixedClass', code: true, key: 'FixedClass' },
     { name: 'FixedClass[100]', code: true, key: 'FixedClasses' },
+    {
+      name: 'Subtypes through a non-generic base, 1,000',
+      zh: '经非泛型基类型的子类型，1,000 个',
+      key: 'NonGenericBase',
+    },
+    {
+      name: 'Subtypes of Box<int>, 1,000',
+      zh: 'Box<int> 的子类型，1,000 个',
+      key: 'GenericIntBase',
+    },
+    {
+      name: 'Subtypes of Box<(int, long)>, 1,000',
+      zh: 'Box<(int, long)> 的子类型，1,000 个',
+      key: 'GenericUnmanagedTupleBase',
+    },
+    {
+      name: 'Subtypes of Box<(int, string)>, 1,000',
+      zh: 'Box<(int, string)> 的子类型，1,000 个',
+      key: 'GenericManagedTupleBase',
+    },
+    {
+      name: 'Subtypes of Box<(SealedClass, int)>, 1,000',
+      zh: 'Box<(密封类, int)> 的子类型，1,000 个',
+      key: 'GenericSealedClassTupleBase',
+    },
+    {
+      name: 'Subtypes of Box<(OpenClass, int)>, 1,000',
+      zh: 'Box<(非密封类, int)> 的子类型，1,000 个',
+      key: 'GenericOpenClassTupleBase',
+    },
   ],
 };
 

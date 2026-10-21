@@ -104,13 +104,14 @@ Bytes allocated per call, and the size of one serialized `SimpleClass` (<BenchVa
 
 <BenchmarkChart chart={['allocation', 'payload']} lang="en" />
 
-### Reference Tracking, Version Tolerance and Fixed-Size Types [#more-cases]
+### Reference Tracking, Version Tolerance, Fixed-Size Types and Generic Bases [#more-cases]
 
-Three more benchmark classes compare features that change how a type is written, each against the closest MemoryPack mode:
+Four more benchmark classes compare features that change how a type is written, each against the closest MemoryPack mode:
 
 - **Reference tracking** ([`ReferenceTest`](#referencetest)): a graph of 200 nodes with shared objects and cycles. Nino uses `[NinoType(trackReferences: true)]`, MemoryPack `GenerateType.CircularReference`.
 - **Version tolerance** ([`VersionTolerantTest`](#versiontoleranttest)): `SimpleClass`'s members in a type that can gain members later, alone and as an array of 100. Nino uses `format: NinoFormat.VersionTolerant` (one length per object), MemoryPack `GenerateType.VersionTolerant` (a length per member).
 - **Fixed-size types** ([`FixedSizeTest`](#fixedsizetest)): a 40-byte struct, the same members in a sealed class, and an array of 100 of the classes, through the `byte[]` APIs of both libraries, so allocating the result is part of every call. Deserializing the struct is a single 40-byte copy, about a clock cycle in both.
+- **Generic bases** ([`GenericPolymorphicTest`](#genericpolymorphictest), measured from v4.0.0-rc.7): 1,000 subtypes of eight types in random order, through a non-generic base and through closed instances of a generic base: `Box<int>`, `Box<(int, long)>`, `Box<(int, string)>`, and tuples holding a sealed class and a class with subtypes. MemoryPack's union attribute cannot be put on a generic type, so it gets a `DynamicUnionFormatter` registered for each closed base. Their rows appear once a release's report includes them.
 
 <ExtraRuntimeTables lang="en" />
 
@@ -888,6 +889,41 @@ public FixedClass MemoryPackDeserializeFixedClass() =>
 
 </Tab>
 </Tabs>
+
+### GenericPolymorphicTest [#genericpolymorphictest]
+
+Arrays of 1,000 subtypes of eight types in random order, through a non-generic base and through closed instances of a generic base. MemoryPack's `[MemoryPackUnion]` cannot be put on a generic type (it reports MEMPACK013 or MEMPACK014), so the benchmark registers a `DynamicUnionFormatter` for each closed base; Nino needs nothing beyond `[NinoType]`. The generic rows of the [results above](#more-cases).
+
+```csharp title="GenericPolymorphicTest.cs"
+[NinoType, MemoryPackable]
+[MemoryPackUnion(0, typeof(ProbeA))] // ... ProbeH
+public abstract partial class ProbeBase { public int V; }
+[NinoType, MemoryPackable] public sealed partial class ProbeA : ProbeBase { } // ... ProbeH
+
+[NinoType] public abstract class ProbeBox<T> { public T V; }
+[NinoType, MemoryPackable] public sealed partial class ProbeBoxA : ProbeBox<int> { }                  // ... H
+[NinoType, MemoryPackable] public sealed partial class ProbeTupA : ProbeBox<(int, long)> { }          // ... H
+[NinoType, MemoryPackable] public sealed partial class ProbeStrA : ProbeBox<(int, string)> { }        // ... H
+[NinoType, MemoryPackable] public sealed partial class ProbeScA : ProbeBox<(ProbeSealedItem, int)> { } // ... H
+[NinoType, MemoryPackable] public sealed partial class ProbeOcA : ProbeBox<(ProbeOpenItem, int)> { }   // ... H
+
+// MemoryPack only: one union formatter per closed generic base, with its tags.
+MemoryPackFormatterProvider.Register(new DynamicUnionFormatter<ProbeBox<int>>(
+    (0, typeof(ProbeBoxA)), (1, typeof(ProbeBoxB)), /* ... */ (7, typeof(ProbeBoxH))));
+
+[Benchmark(Baseline = true), BenchmarkCategory("GenericIntBaseSerialize")]
+public int NinoSerializeGenericIntBase()
+{
+    _buffer.ResetWrittenCount();
+    NinoSerializer.Serialize(GenericIntBase, _buffer);
+    return _buffer.WrittenCount;
+}
+
+[Benchmark(Baseline = true), BenchmarkCategory("GenericIntBaseDeserialize")]
+public ProbeBox<int>[] NinoDeserializeGenericIntBase() =>
+    NinoDeserializer.Deserialize<ProbeBox<int>[]>(NinoGenericIntBaseBytes);
+// MemoryPack's methods and the other cases are the same.
+```
 
 ## Reproducing [#reproducing]
 
