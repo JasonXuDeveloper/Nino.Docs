@@ -183,7 +183,7 @@ What is **not** thread safe is the state you own: a `NinoArrayBufferWriter`, a `
 
 ## Polymorphism
 
-A polymorphic value costs a 4-byte type id. For subtypes declared in the same assembly as their base, the generator emits a dispatch chain for writing and a `switch` on the id for reading, so the common case calls the subtype's formatter directly; subtypes from other assemblies, closed generics and tracked types go through a lock-free registry. Seal classes that have no subtypes: a sealed class needs only a 1-byte null flag and no dispatch.
+A polymorphic value costs a 4-byte type id. For subtypes declared in the same assembly as their base, the generator emits a dispatch chain for writing and a `switch` on the id for reading, so the common case calls the subtype's formatter directly; subtypes from other assemblies, generic subtypes and tracked types go through a lock-free registry; a generic base dispatches the subtypes of each of its closed types the same way. Seal classes that have no subtypes: a sealed class needs only a 1-byte null flag and no dispatch.
 
 ## Measuring
 

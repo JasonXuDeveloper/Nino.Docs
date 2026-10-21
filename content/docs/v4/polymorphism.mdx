@@ -99,7 +99,7 @@ public class Derived : Base
 
 A `[NinoType]` interface serializes its own members through the implementing type's members of the same name. A struct read through a member declared as an interface or `object` is boxed.
 
-Generic interfaces and abstract classes (`IRepository<T>`, `abstract class Box<T>`), and abstract classes nested in a generic type, work the same way: `Serialize<Box<int>>(new IntBox())` writes the subtype, and reading checks that the type in the data is one of `Box<int>`'s subtypes.
+Generic interfaces and abstract classes (`IRepository<T>`, `abstract class Box<T>`), and abstract classes nested in a generic type, work the same way: `Serialize<Box<int>>(new IntBox())` writes the subtype, and reading checks that the type in the data is one of `Box<int>`'s subtypes. The type argument can be anything: a primitive, a tuple (`Box<(int, string)>`), a sealed class or a class with subtypes of its own. Each closed base (`Box<int>`, `Box<Order>`) gets the same generated dispatch as a non-generic base, for the subtypes declared in its assembly (see [Dispatch](#dispatch)).
 
 ## How a Polymorphic Value Is Written
 
@@ -137,8 +137,8 @@ Ids are never `0`, which encodes `null`.
 
 Nino uses hybrid dispatch:
 
-- **Generated dispatch** for subtypes declared in the same assembly as their base: writing is a chain of exact type checks and reading is a `switch` on the type id, and both call the subtype's formatter directly.
-- **A lock-free registry** for everything else: subtypes in other assemblies, closed generic types, subtypes read or written through a generic base (`Box<int>` for `abstract class Box<T>`, `IRepository<Order>`), tracked types, and writes in hierarchies with more than 64 subtypes (reading still uses the generated `switch`).
+- **Generated dispatch** for subtypes declared in the same assembly as their base: writing is a chain of exact type checks and reading is a `switch` on the type id, and both call the subtype's formatter directly. A generic base (`abstract class Box<T>`, `IRepository<T>`) has one such dispatch for each closed base its subtypes derive from (`IntBox : Box<int>`), selected by comparing types, which the JIT removes when the type arguments are value types.
+- **A lock-free registry** for everything else: subtypes in other assemblies, generic subtypes (`Leaf<int>` for `class Leaf<T> : Box<T>`), tracked types, and writes in hierarchies with more than 64 subtypes (reading still uses the generated `switch`).
 
 When reading, Nino checks that the type in the data really derives from the declared type; data that names an unrelated type throws instead of being stored.
 

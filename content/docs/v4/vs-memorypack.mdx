@@ -59,6 +59,7 @@ Every case with its numbers, the polymorphic and pooled runs, and the benchmark 
 | **Polymorphism** | | |
 | Abstract classes and interfaces | ✅ | ✅ `[MemoryPackUnion]` |
 | Non-abstract base classes | ✅ | ❌ unions only on interfaces and abstract classes |
+| Generic bases (`Box<T>`, `IRepository<T>`) | ✅ automatic, for any type argument, with the same generated dispatch as a non-generic base | ❌ `[MemoryPackUnion]` on a generic type does not build (MEMPACK013, MEMPACK014); a `DynamicUnionFormatter<T>` registered by hand for each closed type, with its tags |
 | Subtype ids | ✅ automatic (hash of the type name), 4 bytes | ⚠️ explicit tag per subtype, 1 byte (3 above 249) |
 | Subtypes in other assemblies | ✅ automatic | ⚠️ `[MemoryPackUnionFormatter]`; in Unity, registered manually at startup |
 | Hot-update assemblies (HybridCLR) | ✅ found lazily, no init call | — not documented |
@@ -124,7 +125,7 @@ The cost is 3 more bytes per polymorphic value. See [Polymorphism](/en/docs/v4/p
 - **Speed**: up to <BenchValue k="serialize.max" /> faster serialization and up to <BenchValue k="deserialize.max" /> faster deserialization of classes and polymorphic graphs, with the numbers above.
 - **Zero-allocation reuse**: reuse deserialization that fills nested objects, lists and dictionaries in place, `[NinoPooled]` pools, and a recycler for every dropped instance.
 - **Data that changes**: keyed members can be reordered, removed and inserted in any class of a hierarchy, with no order numbers to maintain; old code reads new data in both keyed and version-tolerant types.
-- **Polymorphism without bookkeeping**: no tags, any non-sealed class can be a base, and subtypes in other assemblies and hot-update DLLs are found automatically.
+- **Polymorphism without bookkeeping**: no tags, any non-sealed class can be a base, generic bases (`Box<T>`, `IRepository<T>`) included, and subtypes in other assemblies and hot-update DLLs are found automatically. MemoryPack's union attribute cannot be put on a generic type: each closed type needs a union formatter registered by hand.
 - **Portable, deterministic bytes**: identical on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, with padding zeroed.
 - **Wider reach**: `netstandard2.0`, OpenUPM for Unity, HybridCLR without init calls.
 - **Build time**: one generated file per type and a truly incremental generator.
@@ -134,7 +135,7 @@ The cost is 3 more bytes per polymorphic value. See [Polymorphism](/en/docs/v4/p
 
 <Cards>
   <Card title="Choose Nino when">
-    You serialize messages, cached values, stored records or application state at a high rate, on .NET servers, Unity or Godot; you need polymorphism without tag tables, data that evolves, shared references, or zero GC through pooling; or you need identical bytes across Unity, IL2CPP and servers.
+    You serialize messages, cached values, stored records or application state at a high rate, on .NET servers, Unity or Godot; you need polymorphism without tag tables (generic bases included), data that evolves, shared references, or zero GC through pooling; or you need identical bytes across Unity, IL2CPP and servers.
   </Card>
   <Card title="Choose MemoryPack when">
     You need per-call options (an `IServiceProvider`, the string encoding per call) or `System.Type` values.

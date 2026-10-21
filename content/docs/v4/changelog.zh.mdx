@@ -11,11 +11,16 @@ icon: RotateCcwClock
 
 ### 性能 [#performance-2]
 
+- **经泛型基类型读写的子类型**：通过泛型基类型（`abstract class Box<T>`、`IRepository<T>`、泛型类）读写的值，与通过非泛型基类型一样使用生成的分派，覆盖每个封闭基类型在其程序集中声明的子类型，类型参数可以是任何类型（基元类型、元组、密封类或非密封类）：随机顺序的 1,000 个 `Box<int>` 子类型，序列化从 11.9 µs 降到 3.2 µs，反序列化从 36.6 µs 降到 16.0 µs（AVX-512 Xeon）。参见[分派](/zh/docs/v4/polymorphism#dispatch)。
 - **Arm64 上的小元组**：小的带填充元组组成的数组和列表读写更快：1,000 个 `(byte, int)` 反序列化从 1,123 ns 降到 805 ns，序列化从 422 ns 降到 122 ns；1,000 个 `(short, int)` 分别从 1,103 ns 降到 801 ns、从 200 ns 降到 124 ns（GitHub 的 Arm64 机器）。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
 - **集合直接写入大小正好的数组**：对元素定长的数组和列表（非托管值、`DateTimeOffset`、元组和原始结构体）调用 `NinoSerializer.Serialize(value)` 时，直接分配大小正好的数组并写入，不再经过池化的临时缓冲区再拷贝出来：1,000 个 `(int, long)` 在 AVX-512 Xeon 上约 1.7 µs，之前为 1.85 µs；在不支持 AVX2 的 CPU 上约 1.9 µs，之前为 2.6 µs。参见[内存分配](/zh/docs/v4/performance#allocation)。
 - **不支持 AVX-512 时，带填充的元组和键值对更快**：值元组、`KeyValuePair` 以及其他带填充的原始值组成的数组和列表，写入和读取都按组处理，向量的每个 16 字节通道由至多两个 16 字节窗口经通道内重排得到（AVX2、SSSE3、Arm64 `TBL`、.NET 10 上的 WebAssembly SIMD）。在关闭 AVX-512 的 Xeon 上，把 1,000 个 `(int, long)` 反序列化到已有列表从 850 ns 降到 460 到 550 ns，序列化从 330 到 370 ns 降到 310 到 360 ns；只有 SSSE3 时，序列化从 790 到 890 ns 降到 415 到 500 ns。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
 - **带填充的元组在任何缓冲区对齐下序列化速度一致**：元组、`KeyValuePair` 以及其他带填充的结构体组成的数组和列表，按对齐到输出的向量写入；第一个对齐向量之前和最后一个之后的值原本逐个写入，所以耗时取决于缓冲区起始位置。现在两端各多写一整组值：1,000 个 `(int, long)` 在任何对齐下序列化耗时 122 到 130 ns，原本为 123 到 149 ns（AVX-512 Xeon）。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
-- **新建的元组和 `DateTimeOffset` 数组读取更快**：读取时靠向量重排或逐个写值填满的数组和列表，重新改为分配已清零的内存，每次写入不再先从内存读入所在的缓存行；只有一次块拷贝填满的数组仍不清零。在 AVX-512 Xeon、工作站 GC 下，把 1,000 个 `(int, long)` 反序列化为新列表从 2.7 到 2.9 µs 降到 1.5 到 1.7 µs，`DateTimeOffset[1000]` 从 5.0 到 5.6 µs 降到 3.7 到 3.8 µs。
+- **新建的元组和 `DateTimeOffset` 数组读取更快**：读取时靠向量重排或逐个写值填满的数组和列表，重新改为分配已清零的内存，每次写入不再先从内存读入所在的缓存行；只有一次块拷贝填满的数组仍不清零。在 AVX-512 Xeon、工作站 GC 下，把 1,000 个 `(int, long)` 反序列化为新列表从 2.7 到 2.9 µs 降到 1.5 到 1.7 µs，`DateTimeOffset[1000]` 从 5.0 到 5.6 µs 降到 3.7 到 3.8 µs。这只针对 Intel CPU；在 Arm64 和 AMD CPU 上，写入新缓存行时不会先读入它，因此 6 KB 及以上的这类数组不清零分配，在那里更快。
+- **不支持 AVX-512 时的 5 字节值**：`(byte, int)` 等 5 字节值组成的数组和列表，在 AVX2（每个 32 字节向量 6 个值）和 SSSE3（每 4 个 16 字节向量 12 个值）上按组搬运，不再逐个处理。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
+- **Arm64 上带填充的结构体**：带填充的结构体（元组、`KeyValuePair`）组成的数组和列表，用成对的加载和存储（`ldp`/`stp`）每步拷贝 32 字节，和 C 库的 `memcpy` 一样，不再每次只处理一个 16 字节向量。
+- **`HashSet<T>` 和 `Dictionary<TKey, TValue>`**：原始值组成的集合在没有删除过条目时，直接从内部条目数组用一个循环写出，不再经过枚举器对每个元素的检查。启动时会校验 .NET（64 位和 32 位）、.NET Framework、Mono 和 Unity 的内部布局；其他运行时继续使用枚举器。
+- **32 KB 以内的拷贝不再调用 `memmove`**：8 到 32 KB 的块拷贝（不使用 64 字节向量时为 4 到 16 KB）改用 Nino 的向量循环，不再调用 `memmove`，后者在部分 AMD EPYC CPU 上慢好几倍。
 - **33 到 128 字节的拷贝更快**：33 到 64 字节的块在所有 64 位 CPU 上用相互重叠的向量内联拷贝，65 到 128 字节在支持 AVX2 时用四个 32 字节向量内联拷贝，不再调用 `memmove`；原始值组成的数组、列表和字符串在 6 KB 以下的读取也用同样的拷贝（6 KB 及以上用 `memmove`）。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
 - **元素定长的多维数组按块处理**：元组、`DateTimeOffset` 及其他定长元素组成的 `T[,]`、`T[,,]`、`T[,,,]`，与一维数组一样按块写入和读取：`(int, long)[50, 20]` 反序列化到已有数组从 1.3 µs 降到 140 ns，序列化从 3 µs 降到 1.5 到 1.7 µs；`DateTimeOffset[50, 20]` 序列化从 2.5 µs 降到 1.7 µs。列表和数组也不再清零或搬运读取时会被覆盖的槽位。
 - **并发栈和包、优先队列**：元素定长的 `ConcurrentStack<T>` 和 `ConcurrentBag<T>` 整块写入（1,000 个 int 从 5.4 到 5.7 µs 降到 4.4 到 4.5 µs）；1,000 个元素的 `PriorityQueue<int, int>` 反序列化从 4.7 µs 降到 3.5 µs。
@@ -29,7 +34,7 @@ icon: RotateCcwClock
 
 ### 修复 [#fixes-4]
 
-- 带子类型的泛型抽象类和泛型接口（`abstract class Box<T>`、`IRepository<T>`），以及嵌套在泛型类型里的抽象类，不再导致编译失败：之前在任何格式下生成的格式化器都编译不过。现在它们的子类型通过注册表读写，数据中的类型不是其子类型时会抛出异常（[#203](https://github.com/JasonXuDeveloper/Nino/pull/203)）。参见[接口与抽象类](/zh/docs/v4/polymorphism#interfaces-and-abstract-classes)。
+- 带子类型的泛型抽象类和泛型接口（`abstract class Box<T>`、`IRepository<T>`），以及嵌套在泛型类型里的抽象类，不再导致编译失败：之前在任何格式下生成的格式化器都编译不过。现在它们的子类型和非泛型基类型的子类型一样读写（见[分派](/zh/docs/v4/polymorphism#dispatch)），数据中的类型不是其子类型时会抛出异常（[#203](https://github.com/JasonXuDeveloper/Nino/pull/203)）。参见[接口与抽象类](/zh/docs/v4/polymorphism#interfaces-and-abstract-classes)。
 - 嵌套在泛型类里的类（`Holder<long>.Base`）在其他程序集中有子类型时，第一次序列化不再栈溢出。参见[其他程序集中的子类型](/zh/docs/v4/polymorphism#subtypes-in-other-assemblies)。
 - 生成器无法生成某个类型的格式化器时，构建会报一个指明类型和原因的错误，而不是在生成代码里报一堆错误。
 - 序列化超过 4 GB 的非托管值 span、超过 1 G 字符的 `StringBuilder` 或超过 2 GB 的 UTF-8 文本时，抛出 `OverflowException`，不再越过缓冲区末尾写入。
