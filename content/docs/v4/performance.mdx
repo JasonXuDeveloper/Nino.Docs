@@ -44,7 +44,7 @@ The one indirection left is your own call, such as `NinoSerializer.Serialize(val
 
 Because a top-level call inlines the whole formatter chain into one method, the JIT has one inlining budget for all of it. Nino keeps that budget for the path your data takes:
 
-- **Rare paths are calls.** Vector loops of large block copies, element-by-element loops, the copy of a raw read, strings that are not Latin-1 and recycling are separate, non-inlined methods, so a `SimpleClass` read does not carry the code of a 512-bit copy loop it never runs. Checks that would take several helper calls are one `static readonly` field, which the JIT reads as a constant.
+- **Rare paths are calls.** Vector loops of large block copies, element-by-element loops, the copy of a raw read, strings that are not Latin-1 and recycling are separate, non-inlined methods, so a `SimpleClass` read does not carry the code of a 512-bit copy loop it never runs. Checks that would take several helper calls are one `static readonly` field, which the JIT reads as a constant. Small helpers on these paths are marked `AggressiveInlining`: in a large method the JIT may leave even a call whose arguments are constants as a call.
 - **No checks that can never fail.** Element loops (array and list fallbacks, in-place reads, padding masks, pools, reference tables, immutable collections) walk a reference to the elements instead of indexing, so there is no bounds check per element and no covariance check when storing into an array of a reference type. Block sizes are JIT-time constants, so dividing by them is a shift. Length overflow checks stay: one per call, they guard against malicious input.
 
 Nino's repository checks this on every change to a read or write path: `benchmarks/asm.py compare` lists each method whose machine code changed against a base commit, so a change cannot slow down types it does not touch unnoticed.
@@ -56,6 +56,7 @@ Unmanaged values are copied as raw memory:
 - primitives, enums, `DateTime`, `Guid`, `Vector3` and other unmanaged structs;
 - consecutive unmanaged members of a `[NinoType]`, written as **one block** with one bounds check;
 - arrays, `List<T>`, `Stack<T>`, `Queue<T>`, `ImmutableArray<T>` and collections declared as interfaces (`IList<T>`, `IEnumerable<T>`, ...) of unmanaged elements: **one block copy** of the whole collection;
+- `HashSet<T>` and `Dictionary<TKey, TValue>` of unmanaged elements: one reservation, the elements written in one loop over the collection's own entries (see "Collection internals" in [Portable by Design](/en/docs/v4/platforms#portable-by-design));
 - arrays and lists of value tuples and `KeyValuePair`s of unmanaged values: one block, rearranged into the written order with [SIMD](/en/docs/v4/platforms#simd) where the CPU allows;
 - a `[NinoType]` struct that qualifies as raw (see [Structs](/en/docs/v4/defining-types#structs)), alone or in arrays and lists.
 

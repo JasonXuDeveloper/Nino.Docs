@@ -44,7 +44,7 @@ static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 
 顶层调用会把整条格式化器链内联进一个方法，JIT 对这一切只有一份内联预算。Nino 把这份预算留给你的数据真正走的路径：
 
-- **罕见路径是函数调用。** 大块拷贝的向量循环、逐元素循环、原始读取的拷贝、不是 Latin-1 的字符串以及回收都是单独的、不内联的方法，所以读取一个 `SimpleClass` 不会带上它永远用不到的 512 位拷贝循环的代码。需要多次调用辅助方法的检查合并为一个 `static readonly` 字段，JIT 把它当作常量读取。
+- **罕见路径是函数调用。** 大块拷贝的向量循环、逐元素循环、原始读取的拷贝、不是 Latin-1 的字符串以及回收都是单独的、不内联的方法，所以读取一个 `SimpleClass` 不会带上它永远用不到的 512 位拷贝循环的代码。需要多次调用辅助方法的检查合并为一个 `static readonly` 字段，JIT 把它当作常量读取。这些路径上的小辅助方法都标记为 `AggressiveInlining`：在很大的方法里，即使参数都是常量，JIT 也可能不内联它。
 - **没有不可能失败的检查。** 元素循环（数组和列表的回退路径、原地读取、填充掩码、池、引用表、不可变集合）用指向元素的引用遍历而不是下标，所以每个元素都没有边界检查，向引用类型数组存值时也没有协变检查。块大小是 JIT 期常量，除以它只是一次移位。长度溢出检查保留：每次调用一次，用来防御恶意输入。
 
 Nino 仓库在每次修改读写路径时都会检查这一点：`benchmarks/asm.py compare` 列出与基准提交相比机器码有变化的每个方法，所以一项修改不会在不知不觉中拖慢它没有触及的类型。
@@ -56,6 +56,7 @@ Nino 仓库在每次修改读写路径时都会检查这一点：`benchmarks/asm
 - 基元类型、枚举、`DateTime`、`Guid`、`Vector3` 和其他非托管结构体；
 - `[NinoType]` 中连续的非托管成员，作为**一整块**写入，只做一次边界检查；
 - 非托管元素的数组、`List<T>`、`Stack<T>`、`Queue<T>`、`ImmutableArray<T>` 以及声明为接口（`IList<T>`、`IEnumerable<T>` 等）的集合：整个集合**一次拷贝**；
+- 由非托管元素组成的 `HashSet<T>` 和 `Dictionary<TKey, TValue>`：一次预留空间，在一个循环里直接遍历集合自身的 entries 数组写出元素（参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)中的“集合的内部字段”）；
 - 由非托管值组成的值元组和 `KeyValuePair` 的数组和列表：作为一整块处理，CPU 支持时用 [SIMD](/zh/docs/v4/platforms#simd) 重排成写入的顺序；
 - 满足原始内存条件的 `[NinoType]` 结构体（参见[结构体](/zh/docs/v4/defining-types#structs)），无论单独出现还是在数组、列表中。
 
