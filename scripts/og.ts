@@ -14,6 +14,7 @@
  * redraws public/og.png.
  */
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import sharp from 'sharp';
@@ -255,7 +256,13 @@ export async function writeCards(
   fallback: string,
 ) {
   const fonts = await loadFonts(cards);
+  // A card drawn before with the same text, fonts and drawing code is copied from the cache: a build redraws only
+  // the cards whose page title or description changed.
+  const code = await fs.readFile(new URL(import.meta.url), 'utf8');
+  const cardsDir = path.join(cacheDir, 'cards');
+  await fs.mkdir(cardsDir, { recursive: true });
   let drawn = 0;
+  let cached = 0;
   let copied = 0;
   const queue = [...cards];
   async function worker() {
@@ -265,7 +272,18 @@ export async function writeCards(
       const set = fonts[card.lang];
       try {
         if (!set) throw new Error('no font');
-        await fs.writeFile(target, await drawCard(card, set));
+        const key = createHash('sha256')
+          .update(JSON.stringify([card, set[400] ?? '', set[700] ?? '', code]))
+          .digest('hex');
+        const hit = path.join(cardsDir, `${key}.png`);
+        try {
+          await fs.copyFile(hit, target);
+          cached++;
+          continue;
+        } catch {}
+        const png = await drawCard(card, set);
+        await fs.writeFile(target, png);
+        await fs.writeFile(hit, png);
         drawn++;
       } catch (error) {
         if (set) console.warn(`[og] ${card.url}: ${(error as Error).message}`);
@@ -276,7 +294,7 @@ export async function writeCards(
   }
   await Promise.all(Array.from({ length: 4 }, worker));
   console.log(
-    `[og] ${drawn} social cards drawn${copied ? `, ${copied} use the default card` : ''}`,
+    `[og] ${drawn} social cards drawn, ${cached} from the cache${copied ? `, ${copied} use the default card` : ''}`,
   );
 }
 

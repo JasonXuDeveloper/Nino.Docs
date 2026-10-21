@@ -498,7 +498,7 @@ async function main() {
 
   const moved = await flattenPages(outDir);
 
-  const tasks: Promise<void>[] = [
+  const tasks: Promise<unknown>[] = [
     write('sitemap.xml', sitemap()),
     write('robots.txt', robots()),
   ];
@@ -518,15 +518,19 @@ async function main() {
   // Markdown next to each page (/en/docs/v4/start.md), for LLMs and the
   // "Copy Markdown" page action; .mdx is the older URL of the same file.
   for (const page of source.getPages()) {
-    const markdown = await markdownOf(page);
     tasks.push(
-      write(`${markdownPath(page.url).slice(1)}`, markdown),
-      write(`${page.url.slice(1)}.mdx`, markdown),
+      markdownOf(page).then((markdown) =>
+        Promise.all([
+          write(`${markdownPath(page.url).slice(1)}`, markdown),
+          write(`${page.url.slice(1)}.mdx`, markdown),
+        ]),
+      ),
     );
   }
 
+  // The social cards are independent of everything above: draw them meanwhile.
+  tasks.push(writeCards(cards(), outDir, path.resolve('public/og.png')));
   await Promise.all(tasks);
-  await writeCards(cards(), outDir, path.resolve('public/og.png'));
 
   console.log(
     `Wrote static files to ${path.relative('.', outDir)} (${moved} pages moved to .html)`,
