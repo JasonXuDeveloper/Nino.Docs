@@ -12,7 +12,7 @@ icon: RotateCcwClock
 ### 性能 [#performance-2]
 
 - **经泛型基类型读写的子类型**：通过泛型基类型（`abstract class Box<T>`、`IRepository<T>`、泛型类）读写的值，与通过非泛型基类型一样使用生成的分派，覆盖每个封闭基类型在其程序集中声明的子类型，类型参数可以是任何类型（基元类型、元组、密封类或非密封类）：随机顺序的 1,000 个 `Box<int>` 子类型，序列化从 11.9 µs 降到 3.2 µs，反序列化从 36.6 µs 降到 16.0 µs（AVX-512 Xeon）。参见[分派](/zh/docs/v4/polymorphism#dispatch)。
-- **Arm64 上的小元组**：小的带填充元组组成的数组和列表读写更快：1,000 个 `(byte, int)` 反序列化从 1,123 ns 降到 805 ns，序列化从 422 ns 降到 122 ns；1,000 个 `(short, int)` 分别从 1,103 ns 降到 801 ns、从 200 ns 降到 124 ns（GitHub 的 Arm64 机器）。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
+- **Arm64 上的小元组**：小的带填充元组组成的数组和列表读写更快：1,000 个 `(byte, int)` 反序列化从 1,123 ns 降到 805 ns，序列化从 422 ns 降到 122 ns；1,000 个 `(short, int)` 分别从 1,103 ns 降到 801 ns、从 200 ns 降到 124 ns；基准测试的 `TupleList` 用例分别从 1,815 ns 降到 1,415 ns、从 375 ns 降到 219 ns（GitHub 的 Arm64 机器）。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
 - **集合直接写入大小正好的数组**：对元素定长的数组和列表（非托管值、`DateTimeOffset`、元组和原始结构体）调用 `NinoSerializer.Serialize(value)` 时，直接分配大小正好的数组并写入，不再经过池化的临时缓冲区再拷贝出来：1,000 个 `(int, long)` 在 AVX-512 Xeon 上约 1.7 µs，之前为 1.85 µs；在不支持 AVX2 的 CPU 上约 1.9 µs，之前为 2.6 µs。参见[内存分配](/zh/docs/v4/performance#allocation)。
 - **不支持 AVX-512 时，带填充的元组和键值对更快**：值元组、`KeyValuePair` 以及其他带填充的原始值组成的数组和列表，写入和读取都按组处理，向量的每个 16 字节通道由至多两个 16 字节窗口经通道内重排得到（AVX2、SSSE3、Arm64 `TBL`、.NET 10 上的 WebAssembly SIMD）。在关闭 AVX-512 的 Xeon 上，把 1,000 个 `(int, long)` 反序列化到已有列表从 850 ns 降到 460 到 550 ns，序列化从 330 到 370 ns 降到 310 到 360 ns；只有 SSSE3 时，序列化从 790 到 890 ns 降到 415 到 500 ns。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
 - **带填充的元组在任何缓冲区对齐下序列化速度一致**：元组、`KeyValuePair` 以及其他带填充的结构体组成的数组和列表，按对齐到输出的向量写入；第一个对齐向量之前和最后一个之后的值原本逐个写入，所以耗时取决于缓冲区起始位置。现在两端各多写一整组值：1,000 个 `(int, long)` 在任何对齐下序列化耗时 122 到 130 ns，原本为 123 到 149 ns（AVX-512 Xeon）。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
