@@ -28,6 +28,8 @@ icon: RotateCcwClock
 
 ### 修复 [#fixes-4]
 
+- 带子类型的泛型抽象类和泛型接口（`abstract class Box<T>`、`IRepository<T>`），以及嵌套在泛型类型里的抽象类，不再导致编译失败：之前在任何格式下生成的格式化器都编译不过。现在它们的子类型通过注册表读写，数据中的类型不是其子类型时会抛出异常（[#203](https://github.com/JasonXuDeveloper/Nino/pull/203)）。参见[接口与抽象类](/zh/docs/v4/polymorphism#interfaces-and-abstract-classes)。
+- 生成器无法生成某个类型的格式化器时，构建会报一个指明类型和原因的错误，而不是在生成代码里报一堆错误。
 - 序列化超过 4 GB 的非托管值 span、超过 1 G 字符的 `StringBuilder` 或超过 2 GB 的 UTF-8 文本时，抛出 `OverflowException`，不再越过缓冲区末尾写入。
 
 ## 4.0.0-rc.6
