@@ -133,7 +133,7 @@ public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 ```
 
 - Nino 只在存放集合的成员或元素为 `null` 时才创建集合：如果类型声明了公共静态的 [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) 工厂方法（比如从池中取实例），就调用它，否则调用能无参调用的公共构造函数。
-- 集合通过公开的集合 API 填充（`Add`/`Clear`、字典索引器、`Enqueue`、`Push`、`TryAdd`）。派生自运行时自带集合（`List<T>`、`HashSet<T>`、`Dictionary<TKey, TValue>`、`Stack<T>`、`Queue<T>`，以及有序、链表和并发集合）的类型，通过基类型自己的方法或字段写入和填充，所以用 `new` 隐藏的成员不会被调用。
+- 集合通过公开的集合 API 填充（`Add`/`Clear`、字典索引器、`Enqueue`、`Push`、`TryAdd`）。派生自运行时自带集合（`List<T>`、`HashSet<T>`、`Dictionary<TKey, TValue>`、`Stack<T>`、`Queue<T>`，以及有序、链表和并发集合）的类型，通过基类型自己的方法或字段写入和填充，所以用 `new` 隐藏的成员不会被调用。Nino 自己新建的、由原始值组成的 `HashSet<T>` 或 `Dictionary<TKey, TValue>`，在运行时布局可识别时直接通过内部条目填充（见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)中的“集合的内部字段”），内容与通过 `Add` 填充相同。
 - 如果集合类型本身也是 `[NinoType]`，先写元素，再写它自己的序列化成员。
 - 创建什么由声明类型决定：一个声明为 `List<OrderLine>` 的成员即使存放的是 `OrderLines`，读回来也是 `List<OrderLine>`。
 - 集合按值处理：同一个集合实例出现在两个成员中，会写入两次，读回来是两个实例。

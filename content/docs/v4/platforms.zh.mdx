@@ -113,7 +113,7 @@ CoreCLR 和 Unity 2021.3+ 的布局是 `bool hasValue; T value;`，而旧版 Mon
 
 Nino 直接读写 `List<T>`、`Stack<T>`、`Queue<T>`、`SortedList<TKey, TValue>`、`SortedSet<T>` 和 `SortedDictionary<TKey, TValue>` 的字段，而这些字段的布局因运行时而异（.NET Framework 和 Mono 多一个 `_syncRoot` 字段）。每种布局在启动时用内容已知的实例检查一次；布局无法识别的集合改走它的公共方法。两种方式写出的字节相同。（在 .NET 8 及以上，`List<T>` 通过 `CollectionsMarshal` 访问。）
 
-由非托管元素组成的 `HashSet<T>` 和 `Dictionary<TKey, TValue>`，在没有删除过元素时直接从它们的 entries 数组写出。可识别的布局有三种（.NET 5 及以上的 64 位和 32 位；.NET Framework、Mono 和 Unity），每种都在启动时用一个删除了元素又重新填入的集合检查。删除过元素的集合，或运行时的布局无法识别（例如布局不同的 IL2CPP 版本）时，改走枚举器，写出的字节相同。
+由非托管元素组成的 `HashSet<T>` 和 `Dictionary<TKey, TValue>`，在没有删除过元素时直接从它们的 entries 数组写出。可识别的布局有三种（.NET 5 及以上的 64 位和 32 位；.NET Framework、Mono 和 Unity），每种都在启动时用一个删除了元素又重新填入的集合检查。删除过元素的集合，或运行时的布局无法识别（例如布局不同的 IL2CPP 版本）时，改走枚举器，写出的字节相同。读取时新建的集合或字典（默认比较器）反过来以同样方式填充：按 `Add` 的写法直接写入条目和桶。运行时的哈希方式（哈希码是否截成 31 位、空桶存什么）在启动时确定：填充一个集合，再用公开 API 检查它；都不通过时，以及 netstandard2.0 构建里的集合（没有 `EnsureCapacity` 来预设容量），每个元素都经过 `Add`。
 
 </Accordion>
 </Accordions>
