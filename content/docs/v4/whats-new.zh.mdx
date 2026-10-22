@@ -1,12 +1,12 @@
 ---
 title: v4 新特性
-description: "Nino v4 相对 v3 新增的全部内容：重写的运行时与增量源生成器、键控与版本容错类型、引用追踪、对象池、更多内置类型、各平台一致的字节、ASP.NET Core 格式化器，以及生成的 TypeScript。"
+description: "Nino v4 相对 v3 新增的全部内容：重写的运行时与增量源生成器、键控与版本容错类型、引用追踪、对象池、可安全读取不可信数据、更多内置类型、各平台一致的字节、ASP.NET Core 格式化器，以及生成的 TypeScript。"
 icon: Sparkles
 ---
 
-import { Cpu, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes, Server, Globe } from 'lucide-react';
+import { Cpu, Recycle, ScanSearch, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes, Server, Globe } from 'lucide-react';
 
-Nino v4 重写了运行时和源生成器。运行速度超过 v3 和 MemoryPack，构建速度大幅提升，并新增了键控与版本容错类型、引用追踪、对象池、分析器以及大量内置类型。本页按领域介绍截至 **4.0.0-rc.5** 已发布的全部 v4 内容，以及 **4.0.0-rc.6** 新增的内容（标为 *rc.6*）；每个版本各自改了什么，见[更新日志](/zh/docs/v4/changelog)。
+Nino v4 重写了运行时和源生成器。运行速度超过 v3 和 MemoryPack，构建速度大幅提升，并新增了键控与版本容错类型、引用追踪、对象池、分析器以及大量内置类型。本页按领域介绍截至 **4.0.0-rc.5** 已发布的全部 v4 内容，以及 **4.0.0-rc.6** 和 **4.0.0-rc.7** 新增的内容（标为 *rc.6* 和 *rc.7*）；每个版本各自改了什么，见[更新日志](/zh/docs/v4/changelog)。
 
 <Callout type="warn">
 
@@ -19,6 +19,9 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 <Cards>
   <Card icon={<Zap />} title="运行更快，构建也更快" href="/zh/docs/v4/perf">
     比 v3 和 MemoryPack 更快，在 .NET 8 SDK 及以上使用拦截器，源生成器真正增量。
+  </Card>
+  <Card icon={<ShieldCheck />} title="可读取不可信数据" href="/zh/docs/v4/whats-new#untrusted-data">
+    伪造的字节无法让进程崩溃、无法分配与自身大小不成比例的内存，也无法创建你没有声明的类型；所有无效输入都抛出同一种异常。
   </Card>
   <Card icon={<KeyRound />} title="数据可以演进" href="/zh/docs/v4/evolving-data">
     `NinoFormat.VersionTolerant` 可以追加成员，`NinoFormat.Keyed` 可以重排、删除和插入成员，每个类型的布局都会作为元数据发布。
@@ -38,7 +41,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
   <Card icon={<Cpu />} title="各平台字节一致" href="/zh/docs/v4/platforms">
     从 `netstandard2.0` 到 `net10.0`，CoreCLR、Mono 和 IL2CPP，64 位和 32 位，x64 和 Arm64；支持裁剪和 Native AOT。
   </Card>
-  <Card icon={<ShieldCheck />} title="分析器 NINO001–NINO026" href="/zh/docs/v4/analyzers">
+  <Card icon={<ScanSearch />} title="分析器 NINO001–NINO026" href="/zh/docs/v4/analyzers">
     写代码时就报告错误，许多都带一键代码修复。
   </Card>
   <Card icon={<Server />} title="ASP.NET Core（rc.6）" href="/zh/docs/v4/advanced/aspnetcore">
@@ -89,6 +92,18 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 
 这些都不会改变字节：每条路径写出的内容都与普通路径相同。
 
+## 不可信数据 [#untrusted-data]
+
+Nino v4 本来就是为读取不可信来源的数据而设计的：网络对端的消息、用户交给你的文件、请求体。针对读取器伪造的数据无法让进程崩溃，无法越过输入末尾读取，无法分配与自身大小不成比例的内存，也无法让 Nino 创建你没有声明的类型。在 *rc.7* 中，我们用 fuzz 和手工构造的数据检验了每个内置类型，发现的问题都已修复（见[更新日志](/zh/docs/v4/changelog)）。
+
+- **数据里没有类型名**：多态值是类型 id，只能是所声明类型已注册的子类型之一；回引用必须指向已读取、且符合该位置类型的对象。`System.Type` 有意不支持。
+- **分配有上限**：每个长度在分配内存之前都会与剩余字节数比对；从 *rc.7* 起，一个集合在读到元素之前最多预先分配剩余字节数的 16 倍，更大的数量随元素实际读出再扩容。
+- **栈用量有上限**：嵌套超过 128 层的对象会推迟到较浅的层级再读取；从 *rc.7* 起，无法推迟的类型（包含自身的 struct、由构造函数创建的类型）最多 512 层，并在途中检查栈空间。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
+- **只有一种异常**（*rc.7*）：所有无效输入都抛出消息以 `Nino:` 开头的 `InvalidOperationException`，包括类型本身拒绝的值（格式错误的 `Uri`、未知的区域性、为 null 的字典键），原始异常作为 `InnerException`。在数据进入的地方一个 `catch` 就够了。
+- **不留下未初始化内存**（*rc.7*）：读取到已有值失败时，不会在其中留下未初始化内存的数组。
+
+值本身不做校验（负数的血量会照原样读出），字节里也不带 schema，所以请检查你的逻辑依赖的值，并在缓冲之前限制消息大小。Nino 检查什么、哪些仍需你的代码负责，见[无效数据](/zh/docs/v4/basic#invalid-data)；与 MemoryPack（建议只用于可信数据）的对比，见[不可信输入](/zh/docs/v4/vs-memorypack#untrusted-input)。
+
 ## 数据演进与对象图 [#data-and-object-graphs]
 
 - **用一个选项决定格式**：`[NinoType(format: ...)]` 接收一个 `NinoFormat`。`Positional`（默认值）最快；`VersionTolerant` 允许向最末端的派生类型追加成员，嵌套多深都可以，每个对象多 4 字节，旧代码会跳过它不认识的成员；`Keyed` 按成员名的哈希写入成员，因此层次结构中的任何类都可以重排、删除和插入成员。在项目中定义 `WEAK_VERSION_TOLERANCE`，会把该项目中 `Positional` 的类型变为 `VersionTolerant`。参见[数据演进](/zh/docs/v4/evolving-data)。
@@ -97,7 +112,6 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 - **引用追踪**：`[NinoType(trackReferences: true)]` 保留共享引用和循环引用：同一个对象被引用多次时只写一次，读回后仍是同一个实例，每个被追踪的对象只多 4 字节。参见[引用追踪](/zh/docs/v4/reference-tracking)。
 - **无需标签的多态**：类型 ID 是类型名的哈希，任何非 sealed 的类或接口都可以作为基类型，其他程序集（插件、热更新）中的子类型会被自动找到。参见[多态](/zh/docs/v4/polymorphism)。
 - **深层对象图**：嵌套超过 128 层的对象会推迟到较浅的层级再写入和读取，因此无论递归类型嵌套多深，还是遇到恶意数据，都不会栈溢出。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
-- **恶意输入**：每个长度在分配内存之前都会与剩余字节数比对，截断的数据会抛出异常，而不会越界读取。参见[无效数据](/zh/docs/v4/basic#invalid-data)。
 
 ## 定义类型 [#defining-types]
 
@@ -143,6 +157,7 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 - **处处同一格式**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出完全相同的字节，数据在 CoreCLR、Mono、IL2CPP 之间，64 位和 32 位之间，x64 和 Arm64 之间通用。在运行时内存布局不一致的地方（`Nullable<T>`、元组、`decimal`、32 位对齐），Nino 自己定义字节而不是拷贝内存，并清零填充字节，所以相等的值总是序列化为相同的字节。参见[平台与二进制格式](/zh/docs/v4/platforms)。
 - **裁剪与 Native AOT**：Nino.Core 带有相应标注，用 `PublishTrimmed` 和 `PublishAot` 发布时 Nino 不会产生警告。参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
 - **Unity 2022.3+**：从 OpenUPM 安装，包内附带源生成器和 `Nino.UnityTypes.dll`。参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)。
+- **Unity 中的代码修复**（*rc.7*）：Unity 包附带分析器的代码修复，Rider 和 Visual Studio 提供与 .NET 项目相同的快速修复。参见[分析器诊断](/zh/docs/v4/analyzers)。
 - **HybridCLR 热更新**无需初始化调用，**Godot 4** 以普通 NuGet 包安装。参见 [HybridCLR 与热更新](/zh/docs/v4/platforms#hybridclr-and-hot-update)和 [Godot](/zh/docs/v4/platforms#godot)。
 - **程序集可卸载**：可回收 `AssemblyLoadContext` 中的程序集能随上下文一起卸载，Nino 会清除相关缓存（.NET 8 及以上自动完成；.NET Core 3.0 到 .NET 7 需调用 `NinoRegistry.Remove`）。参见[卸载程序集](/zh/docs/v4/platforms#unloading-assemblies)。
 

@@ -1,12 +1,12 @@
 ---
 title: "What's New in v4"
-description: "Everything Nino v4 adds over v3: a rewritten runtime and incremental generator, keyed and version-tolerant types, reference tracking, pooling, many more built-in types, the same bytes on every platform, ASP.NET Core formatters and generated TypeScript."
+description: "Everything Nino v4 adds over v3: a rewritten runtime and incremental generator, keyed and version-tolerant types, reference tracking, pooling, safe reads of untrusted data, many more built-in types, the same bytes on every platform, ASP.NET Core formatters and generated TypeScript."
 icon: Sparkles
 ---
 
-import { Cpu, Recycle, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes, Server, Globe } from 'lucide-react';
+import { Cpu, Recycle, ScanSearch, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes, Server, Globe } from 'lucide-react';
 
-Nino v4 rewrites the runtime and the source generator. It runs faster than v3 and MemoryPack, builds much faster, and adds keyed and version-tolerant types, reference tracking, object pools, analyzers and many more built-in types. This page covers all of v4 as released through **4.0.0-rc.5**, grouped by area, plus what **4.0.0-rc.6** adds (marked *rc.6*); the [Changelog](/en/docs/v4/changelog) lists what each release changed.
+Nino v4 rewrites the runtime and the source generator. It runs faster than v3 and MemoryPack, builds much faster, and adds keyed and version-tolerant types, reference tracking, object pools, analyzers and many more built-in types. This page covers all of v4 as released through **4.0.0-rc.5**, grouped by area, plus what **4.0.0-rc.6** and **4.0.0-rc.7** add (marked *rc.6* and *rc.7*); the [Changelog](/en/docs/v4/changelog) lists what each release changed.
 
 <Callout type="warn">
 
@@ -19,6 +19,9 @@ The v4 binary format is **not compatible** with v3 or the earlier v4 betas/previ
 <Cards>
   <Card icon={<Zap />} title="Faster to run and to build" href="/en/docs/v4/perf">
     Faster than v3 and MemoryPack, interceptors on the .NET 8 SDK and later, and a truly incremental generator.
+  </Card>
+  <Card icon={<ShieldCheck />} title="Safe for untrusted data" href="/en/docs/v4/whats-new#untrusted-data">
+    Crafted bytes cannot crash the process, allocate out of proportion to their size or create a type you did not declare; every invalid input throws one exception.
   </Card>
   <Card icon={<KeyRound />} title="Data that evolves" href="/en/docs/v4/evolving-data">
     `NinoFormat.VersionTolerant` appends members, `NinoFormat.Keyed` reorders, removes and inserts them, and the layout of every type is published as metadata.
@@ -38,7 +41,7 @@ The v4 binary format is **not compatible** with v3 or the earlier v4 betas/previ
   <Card icon={<Cpu />} title="Identical bytes everywhere" href="/en/docs/v4/platforms">
     `netstandard2.0` to `net10.0`, CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, x64 and Arm64; trimming and Native AOT included.
   </Card>
-  <Card icon={<ShieldCheck />} title="Analyzers NINO001–NINO026" href="/en/docs/v4/analyzers">
+  <Card icon={<ScanSearch />} title="Analyzers NINO001–NINO026" href="/en/docs/v4/analyzers">
     Mistakes reported while you type, many with a one-click code fix.
   </Card>
   <Card icon={<Server />} title="ASP.NET Core (rc.6)" href="/en/docs/v4/advanced/aspnetcore">
@@ -89,6 +92,18 @@ The larger the project, the bigger the gap: [Build Time and Generated Code](/en/
 
 None of these change the bytes: every path writes what the plain path writes.
 
+## Untrusted Data [#untrusted-data]
+
+Nino v4 is built to read data from sources you do not trust: messages from a network peer, files a user hands you, request bodies. Data crafted against a reader cannot crash the process, read past the end of the input, allocate out of proportion to its size or make Nino create a type you did not declare. For *rc.7*, fuzzed and hand-crafted payloads were run against every built-in type, and what they found is fixed (see the [Changelog](/en/docs/v4/changelog)).
+
+- **No type names in the data**: a polymorphic value is a type id, which can only be one of the declared type's registered subtypes, and a back reference must point to an object already read, of the slot's type. `System.Type` is left out on purpose.
+- **Bounded allocation**: every length is checked against the bytes left before anything is allocated, and since *rc.7* a collection allocates ahead of its elements at most 16 times the bytes left in the input; a larger count is grown into as elements are actually read.
+- **Bounded stack**: objects nested more than 128 levels deep are deferred and read from a shallow level; since *rc.7* what cannot be deferred (structs that hold themselves, types built by their constructor) is limited to 512 levels, with the stack checked on the way. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
+- **One exception** (*rc.7*): every invalid input throws an `InvalidOperationException` whose message starts with `Nino:`, including a value its own type rejects (a malformed `Uri`, an unknown culture, a null dictionary key), with the original exception as `InnerException`. One `catch` where the data comes in is enough.
+- **No stale memory** (*rc.7*): a failed read into an existing value never leaves an array of uninitialized memory in it.
+
+Values themselves are not validated (a negative health reads as it is written), and the bytes carry no schema, so check what your logic depends on and cap the size of a message before you buffer it. See [Invalid Data](/en/docs/v4/basic#invalid-data) for what Nino checks and what stays your code's job, and [Untrusted Input](/en/docs/v4/vs-memorypack#untrusted-input) for how this compares with MemoryPack, which recommends itself for trusted data only.
+
 ## Evolving Data and Object Graphs [#data-and-object-graphs]
 
 - **One option for the format**: `[NinoType(format: ...)]` takes a `NinoFormat`. `Positional` (the default) is the fastest; `VersionTolerant` lets you append members to the most derived type at any nesting depth, at 4 bytes per object, and old code skips the members it does not know; `Keyed` writes members by name hash, so they can be reordered, removed and inserted in any class of a hierarchy. Defining `WEAK_VERSION_TOLERANCE` in a project turns its `Positional` types into `VersionTolerant` ones. See [Evolving Your Data](/en/docs/v4/evolving-data).
@@ -97,7 +112,6 @@ None of these change the bytes: every path writes what the plain path writes.
 - **Reference tracking**: `[NinoType(trackReferences: true)]` keeps shared references and cycles: an object reached twice is written once and read back as one instance, at 4 bytes per tracked object. See [Reference Tracking](/en/docs/v4/reference-tracking).
 - **Polymorphism without tags**: type ids are hashes of type names, any non-sealed class or interface can be a base, and subtypes in other assemblies (plugins, hot updates) are found on their own. See [Polymorphism](/en/docs/v4/polymorphism).
 - **Deep object graphs**: objects nested more than 128 levels deep are deferred, then written and read from a shallower level, so recursive types of any depth, and hostile data, cannot overflow the stack. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
-- **Hostile input**: every length is checked against the bytes left before anything is allocated, and truncated data throws instead of reading past the end. See [Invalid Data](/en/docs/v4/basic#invalid-data).
 
 ## Defining Types [#defining-types]
 
@@ -143,6 +157,7 @@ See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 - **One format everywhere**: `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` write identical bytes, portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, x64 and Arm64. Nino defines its bytes instead of copying memory where runtimes disagree (`Nullable<T>`, tuples, `decimal`, 32-bit alignment) and zeroes padding, so equal values serialize to equal bytes. See [Platforms and Binary Format](/en/docs/v4/platforms).
 - **Trimming and Native AOT**: Nino.Core is annotated for both, so `PublishTrimmed` and `PublishAot` give no warnings from Nino. See [Trimming and Native AOT](/en/docs/v4/platforms#trimming-and-native-aot).
 - **Unity 2022.3+** from OpenUPM, with the generator and `Nino.UnityTypes.dll` in the package. See [Unity and HybridCLR](/en/docs/v4/advanced/unity).
+- **Code fixes in Unity** (*rc.7*): the Unity package includes the analyzer's code fixes, so Rider and Visual Studio offer the same quick fixes as in a .NET project. See [Analyzer Diagnostics](/en/docs/v4/analyzers).
 - **HybridCLR hot update** without an initialization call, and **Godot 4** as a regular NuGet package. See [HybridCLR and Hot Update](/en/docs/v4/platforms#hybridclr-and-hot-update) and [Godot](/en/docs/v4/platforms#godot).
 - **Unloadable assemblies**: an assembly in a collectible `AssemblyLoadContext` unloads with it; Nino clears what it cached for it, on its own on .NET 8 and later, through `NinoRegistry.Remove` on .NET Core 3.0 to .NET 7. See [Unloading Assemblies](/en/docs/v4/platforms#unloading-assemblies).
 
