@@ -9,6 +9,10 @@ icon: RotateCcwClock
 
 ## 4.0.0-rc.7
 
+### 新功能 [#new-5]
+
+- **Unity 中的代码修复**：Unity 包现在带有 `Nino.Generator.CodeFixes.dll`，Rider 和 Visual Studio 中对 Nino 分析器警告提供与 NuGet 项目相同的快速修复（加上 `partial`、无参构造函数、对象池钩子等）。参见[分析器诊断](/zh/docs/v4/analyzers)。
+
 ### 性能 [#performance-2]
 
 - **经泛型基类型读写的子类型**：通过泛型基类型（`abstract class Box<T>`、`IRepository<T>`、泛型类）读写的值，与通过非泛型基类型一样使用生成的分派，覆盖每个封闭基类型在其程序集中声明的子类型，类型参数可以是任何类型（基元类型、元组、密封类或非密封类）：随机顺序的 1,000 个 `Box<int>` 子类型，序列化从 11.9 µs 降到 3.2 µs，反序列化从 36.6 µs 降到 16.0 µs（AVX-512 Xeon）。参见[分派](/zh/docs/v4/polymorphism#dispatch)。

@@ -20,7 +20,7 @@ Install Nino from [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.ni
 openupm add com.jasonxudeveloper.nino
 ```
 
-The package contains `Nino.Core.dll`, the source generator `Nino.Generator.dll` (labelled `RoslynAnalyzer`, so Unity runs it on your scripts), `Nino.UnityTypes.dll` (formatters for the [Unity classes](#unity-classes) below), and the `System.Buffers`, `System.Memory` and `System.Runtime.CompilerServices.Unsafe` assemblies Nino.Core needs.
+The package contains `Nino.Core.dll`, the source generator `Nino.Generator.dll` (labelled `RoslynAnalyzer`, so Unity runs it on your scripts), its code fixes `Nino.Generator.CodeFixes.dll` (for Rider and Visual Studio), `Nino.UnityTypes.dll` (formatters for the [Unity classes](#unity-classes) below), and the `System.Buffers`, `System.Memory` and `System.Runtime.CompilerServices.Unsafe` assemblies Nino.Core needs.
 
 </Step>
 <Step>
@@ -53,7 +53,7 @@ public class PlayerState
 
 ## What Differs from .NET
 
-- **`partial` is required for private members.** Unity compiles against .NET Standard, which has no `[UnsafeAccessor]`, so a type that serializes non-public members (or is `[NinoPooled]`) must be `partial`, and so must every type that contains it. The analyzer reports this as NINO002. The code fix that adds `partial` ships only in the NuGet package, so in Unity add it yourself.
+- **`partial` is required for private members.** Unity compiles against .NET Standard, which has no `[UnsafeAccessor]`, so a type that serializes non-public members (or is `[NinoPooled]`) must be `partial`, and so must every type that contains it. The analyzer reports this as NINO002. The code fix that adds `partial` works in Rider and Visual Studio as well; in other editors, add it yourself.
 - **No interceptors.** The Unity package ships the generator's Roslyn 4.3 build, the oldest compiler Unity supports, so calls use the regular path. The bytes are identical, and the difference is a few nanoseconds per call.
 - **Same bytes as .NET.** Data written by a .NET server can be read by a Unity client and the other way round, including 32-bit IL2CPP players and old Mono runtimes. See [Platforms and Binary Format](/en/docs/v4/platforms).
 
@@ -169,7 +169,7 @@ Check that the assembly references `Nino.Core.dll` (Auto Referenced, or listed u
 </Accordion>
 <Accordion title="error NINO002: Type must be partial">
 
-The type serializes private members, or is `[NinoPooled]`, and Unity has no `[UnsafeAccessor]`. Make the type and every type containing it `partial`. The Unity package has no code fixes, so this is done by hand.
+The type serializes private members, or is `[NinoPooled]`, and Unity has no `[UnsafeAccessor]`. Make the type and every type containing it `partial` (the code fix does this in Rider and Visual Studio).
 
 </Accordion>
 <Accordion title="Data from an older build cannot be read">
