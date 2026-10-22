@@ -137,8 +137,10 @@ public sealed class Connection : IDisposable
 
 ## 不可信的输入 [#untrusted-input]
 
-- Nino 在分配内存之前会检查每个长度是否超出剩余字节；无论数据嵌套多深，栈的用量都有上限；它只会创建派生自声明类型的类型。无效数据会抛出消息以 `Nino:` 开头的 `InvalidOperationException`：在边界处捕获它，把输入当作坏数据处理。参见[无效数据](/zh/docs/v4/basic#invalid-data)。
-- 字节里不带 schema，所以 Nino 分辨不出按另一个布局兼容的类型写出的数据。请自己为数据加上版本，并在缓冲一个帧之前限制它的大小（参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）。
+- Nino 本来就是为读取不可信数据而设计的：分配内存之前会检查每个长度是否超出剩余字节（一个集合在读到元素之前最多预先分配剩余字节数的 16 倍），无论数据嵌套多深栈的用量都有上限，只会创建派生自声明类型的类型。所有无效输入都会抛出消息以 `Nino:` 开头的 `InvalidOperationException`：在边界处捕获它，把输入当作坏数据处理。参见[无效数据](/zh/docs/v4/basic#invalid-data)。
+- 在缓冲之前限制帧或请求的大小（参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）：一次读取的分配量相对于输入是有界的。
+- 校验你的逻辑依赖的值，就像对待被用户改过的存档：Nino 检查的是数据的结构，而不是它的含义。
+- 字节里不带 schema，所以 Nino 分辨不出按另一个布局兼容的类型写出的数据。请自己为数据加上版本。
 
 ## 项目配置 [#project-setup]
 

@@ -8,7 +8,7 @@ import {
   Globe,
   Hammer,
   Recycle,
-  Server,
+  ShieldCheck,
   Zap,
 } from 'lucide-react';
 import { Link } from 'react-router';
@@ -66,6 +66,11 @@ const copy: Record<
         text: 'Formatters are generated at compile time, so Nino runs on IL2CPP, NativeAOT and HybridCLR.',
       },
       {
+        icon: ShieldCheck,
+        label: 'Safe for untrusted data',
+        text: 'Crafted bytes cannot crash the process, allocate out of proportion or name a type to create: they throw one exception.',
+      },
+      {
         icon: Recycle,
         label: 'Zero allocation',
         text: 'Serialize into a reused buffer without garbage; deserialize into existing objects and pooled instances.',
@@ -97,13 +102,8 @@ const copy: Record<
       },
       {
         icon: FileCode,
-        label: 'TypeScript',
-        text: 'Nino.TypeScript generates codecs for your [NinoType]s after each build: browsers and Node read and write the same bytes.',
-      },
-      {
-        icon: Server,
-        label: 'ASP.NET Core',
-        text: 'Nino.AspNetCore reads and writes application/x-nino bodies for MVC and Minimal APIs, straight from the request and response pipes.',
+        label: 'TypeScript and ASP.NET Core',
+        text: 'Nino.TypeScript generates codecs for your [NinoType]s after each build; Nino.AspNetCore reads and writes application/x-nino bodies for MVC and Minimal APIs.',
       },
     ],
     older: 'Older versions:',
@@ -121,6 +121,11 @@ const copy: Record<
         icon: Cpu,
         label: '零反射',
         text: '格式化器在编译期生成，所以 IL2CPP、NativeAOT 与 HybridCLR 都能直接使用。',
+      },
+      {
+        icon: ShieldCheck,
+        label: '可读取不可信数据',
+        text: '伪造的字节无法让进程崩溃，无法分配不成比例的内存，也无法指定要创建的类型：只会抛出同一种异常。',
       },
       {
         icon: Recycle,
@@ -154,13 +159,8 @@ const copy: Record<
       },
       {
         icon: FileCode,
-        label: 'TypeScript',
-        text: 'Nino.TypeScript 在每次构建后为你的 [NinoType] 生成编解码代码，浏览器和 Node 读写的是同样的字节。',
-      },
-      {
-        icon: Server,
-        label: 'ASP.NET Core',
-        text: 'Nino.AspNetCore 为 MVC 和 Minimal API 读写 application/x-nino 请求体，直接对接请求和响应管道。',
+        label: 'TypeScript 与 ASP.NET Core',
+        text: 'Nino.TypeScript 在每次构建后为你的 [NinoType] 生成编解码代码；Nino.AspNetCore 为 MVC 和 Minimal API 读写 application/x-nino 请求体。',
       },
     ],
     older: '旧版本：',

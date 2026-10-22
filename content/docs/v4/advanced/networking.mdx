@@ -166,7 +166,7 @@ public static class FrameReader
 
 <Callout type="info">
 
-Nino validates every length inside the payload against the bytes left before allocating, so a malicious frame cannot make it allocate a huge array, and truncated data throws instead of reading past the end. Still cap the frame size yourself, as above, so a peer cannot make the pipe buffer gigabytes. Deeply nested payloads cannot overflow the server's stack either: objects nested more than 128 levels deep are deferred and read from a shallower level. See [Invalid Data](/en/docs/v4/basic#invalid-data) and [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
+Nino validates every length inside the payload against the bytes left before allocating, and a collection allocates ahead of its elements at most 16 times the bytes left, so a malicious frame cannot make it allocate out of proportion to its size; truncated data throws instead of reading past the end. Still cap the frame size yourself, as above, so a peer cannot make the pipe buffer gigabytes. Deeply nested payloads cannot overflow the server's stack either: objects nested more than 128 levels deep are deferred and read from a shallower level, and what cannot be deferred is limited to 512 levels. See [Invalid Data](/en/docs/v4/basic#invalid-data) and [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
 
 </Callout>
 
