@@ -1,0 +1,262 @@
+---
+title: Godot
+seoTitle: "Godot 4 C# Serialization: Save Games and Networking – Nino v4 Docs"
+description: "Set up Nino in a Godot 4 .NET project, copy Godot's math structs as raw memory, store ids instead of nodes, write save games under user://, send messages through Godot's multiplayer API, and rebuild in the editor."
+icon: Joystick
+---
+
+Nino supports Godot 4 .NET projects as a regular NuGet package. This guide covers installation, what works as in any .NET project, Godot's structs and classes, save games, networking, rebuilding in the editor and exports.
+
+## Setup
+
+<Steps>
+<Step>
+
+### Install the package
+
+A Godot 4 C# project is a regular .NET project built with `Godot.NET.Sdk` (targeting .NET 8 from Godot 4.4, .NET 6 in 4.0–4.3). Add Nino to its `.csproj`:
+
+```shell
+# in the folder with your Godot project's .csproj
+dotnet add package Nino --prerelease
+```
+
+Then build the project (from Godot's **Build** button, your IDE or `dotnet build`). The `Nino` package brings in the runtime and the source generator.
+
+</Step>
+<Step>
+
+### Mark your types
+
+```csharp title="PlayerState.cs"
+using Godot;
+using Nino.Core;
+
+[NinoType]
+public sealed class PlayerState
+{
+    public string Name;
+    public Vector3 Position;      // Godot's structs are unmanaged: written as raw memory
+    public Quaternion Rotation;
+    public Color[] Palette;       // one block copy
+}
+```
+
+</Step>
+</Steps>
+
+## What Works as in Any .NET Project [#what-works]
+
+- **The generator and the analyzers** run on every build, whether Godot or your IDE starts it, and the analyzers' code fixes work in your IDE.
+- **Interceptors** run when the project is built with the .NET 8 SDK or later (required from Godot 4.4): calls whose type is known at the call site go straight to the generated formatter. See [Interceptors](/en/docs/v4/performance#interceptors).
+- **`partial`**: a project that targets .NET 8 reaches private members through `[UnsafeAccessor]`, so a type needs `partial` only when it is generic. On .NET 6 (Godot 4.0–4.3), every type that serializes non-public members must be `partial` (NINO002). `[NinoPooled]` classes are always `partial`.
+- **No initialization call.** Generated registries register themselves and are found on first use.
+- **Everything else in these docs applies**: [formats](/en/docs/v4/evolving-data), [polymorphism](/en/docs/v4/polymorphism), [reuse deserialization and pooling](/en/docs/v4/pooling), the [zero-allocation patterns](/en/docs/v4/advanced/zero-allocation). The bytes are the same as on a .NET server or a Unity client.
+
+## Godot's Structs [#godot-structs]
+
+Godot's math structs (`Vector2`, `Vector3`, `Vector2I`, `Vector3I`, `Quaternion`, `Basis`, `Transform2D`, `Transform3D`, `Color`, `Rect2`, `Aabb`, ...) are unmanaged, so Nino copies them as raw memory with no formatter: one copy for a value, one block for an array or `List<T>` of them. A struct of your own made of them is raw as well, and [fixed-size](/en/docs/v4/performance#fixed-size-types).
+
+<Callout type="warn">
+
+In a Godot build with double precision (`real_t` = `double`), these structs hold `double` fields (except `Color`, which always holds `float`s), so their layout differs from the default single-precision build. Data containing them that one build writes cannot be read by the other. For data shared between the two, use your own structs or primitive fields.
+
+</Callout>
+
+## Nodes and Resources [#nodes-and-resources]
+
+Godot's classes (`Node` and everything derived from it, `Resource`, `StringName`, `NodePath`, ...) are engine objects, not data: Nino does not serialize them, and a member of such a type is skipped with warning NINO007. Declare collections in your types as .NET collections (`T[]`, `List<T>`, `Dictionary<TKey, TValue>`) rather than the `Godot.Collections` types, and store what you need to rebuild an object instead of the object itself:
+
+- for a node, your own id and the values that matter (position, health), plus the scene to instantiate it from;
+- for a resource, its path (`ResourcePath`), to load it again with `GD.Load<T>`;
+- for a `StringName` or `NodePath`, a `string`.
+
+```csharp title="Enemy.cs"
+using Godot;
+using Nino.Core;
+
+[NinoType(format: NinoFormat.VersionTolerant)]
+public sealed class EnemySave
+{
+    public int Id;            // your own id, the same in every session
+    public string Scene;      // the scene to instantiate again, e.g. "res://enemies/goblin.tscn"
+    public Vector3 Position;
+    public int Health;
+}
+
+public partial class Enemy : CharacterBody3D
+{
+    public int Id;
+    public int Health;
+
+    public EnemySave Save() => new EnemySave
+    {
+        Id = Id,
+        Scene = SceneFilePath,
+        Position = GlobalPosition,
+        Health = Health,
+    };
+
+    public static Enemy Load(EnemySave save, Node parent)
+    {
+        var enemy = GD.Load<PackedScene>(save.Scene).Instantiate<Enemy>();
+        enemy.Id = save.Id;
+        enemy.Health = save.Health;
+        parent.AddChild(enemy);
+        enemy.GlobalPosition = save.Position;
+        return enemy;
+    }
+}
+```
+
+To serialize a class you cannot change (one from a library), write a [custom formatter](/en/docs/v4/custom-formatters).
+
+## Save Games [#save-games]
+
+A save outlives the build that wrote it, so give every type in it a format that survives changes: `NinoFormat.VersionTolerant` when you only append members, `NinoFormat.Keyed` when you also reorder or remove them (see [Evolving Your Data](/en/docs/v4/evolving-data#choosing)). Write it under `user://`, Godot's per-user data folder, with Godot's `FileAccess`:
+
+```csharp title="SaveFile.cs"
+using System.Collections.Generic;
+using System.IO;
+using Godot;
+using Nino.Core;
+using FileAccess = Godot.FileAccess;
+
+[NinoType(format: NinoFormat.VersionTolerant)]
+public sealed class SaveGame
+{
+    public int Level;
+    public List<EnemySave> Enemies;
+}
+
+public static class SaveFile
+{
+    private const string SavePath = "user://save.dat";
+
+    public static void Write(SaveGame save)
+    {
+        byte[] bytes = NinoSerializer.Serialize(save);
+        using var file = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write)
+            ?? throw new IOException($"Cannot write {SavePath}: {FileAccess.GetOpenError()}");
+        file.StoreBuffer(bytes);
+    }
+
+    public static SaveGame Read() =>
+        FileAccess.FileExists(SavePath)
+            ? NinoDeserializer.Deserialize<SaveGame>(FileAccess.GetFileAsBytes(SavePath))
+            : null;
+}
+```
+
+`System.IO` works too, with the folder's real path: `File.WriteAllBytes(ProjectSettings.GlobalizePath(SavePath), bytes)`. Either way:
+
+- Put a header with a magic number and a format version in front of the data, so a later build knows what it reads: [Add a File Header](/en/docs/v4/advanced/persistence#add-a-file-header).
+- Write to a temporary file and replace the save only once it is complete, so a crash during a save does not destroy the last one: [Write Safely](/en/docs/v4/advanced/persistence#write-safely).
+- Data that does not change between builds (level data exported from your tools) can stay positional, which is smaller and faster.
+
+## Networking [#networking]
+
+Godot's multiplayer API takes `byte[]` arguments. Serialize a message with `NinoSerializer.Serialize(value)`, which returns an array of exactly the data's size, and read it on the other side into the previous message with `ref`:
+
+```csharp title="StateSync.cs"
+using System.Collections.Generic;
+using Godot;
+using Nino.Core;
+
+[NinoType]
+public struct EntityState         // unmanaged: copied as raw memory
+{
+    public int Id;
+    public Vector3 Position;
+    public Quaternion Rotation;
+}
+
+[NinoType]
+public sealed class WorldState
+{
+    public long Tick;
+    public List<EntityState> Entities;   // one block copy
+}
+
+public partial class StateSync : Node
+{
+    private WorldState _latest;          // filled in place by every packet
+
+    // On the server: send the state to every peer.
+    public void Broadcast(WorldState state) =>
+        Rpc(MethodName.ReceiveState, NinoSerializer.Serialize(state)); // [!code highlight]
+
+    // On the clients: the packet arrives as a byte[].
+    [Rpc(MultiplayerApi.RpcMode.Authority, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered)]
+    private void ReceiveState(byte[] data)
+    {
+        NinoDeserializer.Deserialize(data, ref _latest); // [!code highlight]
+        Apply(_latest);
+    }
+
+    private void Apply(WorldState state) { /* move the nodes */ }
+}
+```
+
+- Godot's lower-level APIs take and return `byte[]` too: `SceneMultiplayer.SendBytes` and its `PeerPacket` signal, `PacketPeer.PutPacket` and `GetPacket`. A `StreamPeer` (TCP) is a stream of bytes, so put a length in front of each message: see [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream).
+- Reading into `_latest` reuses the same `WorldState` and its list on every packet, so Nino allocates nothing once warmed up; see [Handle Messages Without Allocating](/en/docs/v4/best-practices#zero-gc-messages).
+- Clients and servers that are updated separately need `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` messages: see [Rolling Upgrades](/en/docs/v4/advanced/networking#rolling-upgrades). Peers running the same build can keep messages positional.
+- For a polymorphic message type, send the base class (`Serialize<Message>(...)`) and read it as the base: [Polymorphism](/en/docs/v4/polymorphism).
+
+## Rebuilding in the Editor [#editor-reload]
+
+When you rebuild while the editor is open, Godot unloads the project's assembly and loads the new build. A library that keeps a reference into the old assembly can keep it from unloading. Nino does not ([#199](https://github.com/JasonXuDeveloper/Nino/issues/199)):
+
+- **Godot 4.4 and later (.NET 8):** the project gets Nino.Core's `net8.0` build. When the load context of an assembly with generated Nino code starts unloading, Nino clears everything it cached for that assembly: its registry, the formatters, type ids and raw memory layouts of its types, its polymorphic subtypes and its `[assembly: NinoFormatter]` registrations. There is nothing to do.
+- **Godot 4.0–4.3 (.NET 6):** the project gets the `netstandard2.1` build, which cannot see `AssemblyLoadContext`. `NinoRegistry.Remove(assembly)` does the same cleanup; call it when the context unloads:
+
+```csharp title="NinoReload.cs"
+using System.Runtime.Loader;
+using Nino.Core;
+
+public static class NinoReload
+{
+    /// <summary>Call once at startup: removes this assembly from Nino when its load context unloads.</summary>
+    public static void Register()
+    {
+        var assembly = typeof(NinoReload).Assembly;
+        var context = AssemblyLoadContext.GetLoadContext(assembly);
+        if (context is { IsCollectible: true })
+            context.Unloading += _ => NinoRegistry.Remove(assembly);
+    }
+}
+```
+
+A formatter that the project declares for a type of **another** assembly (an `[assembly: NinoFormatter]` for a library's type) stays registered once Nino has used it; put such formatters in that library. Details: [Unloading Assemblies](/en/docs/v4/platforms#unloading-assemblies).
+
+## Exports [#exports]
+
+- An exported game runs the same Nino code as the editor, and Nino writes the same bytes on every runtime, CPU and pointer size: saves and messages move between desktop and mobile builds of your game, and to a .NET server. See [Platforms and Binary Format](/en/docs/v4/platforms).
+- If an export is trimmed or compiled with Native AOT, every type you serialize must appear in code the generator sees, as a member type or as the type argument of a `Serialize` or `Deserialize` call: see [Trimming and Native AOT](/en/docs/v4/platforms#trimming-and-native-aot).
+- A double-precision build writes Godot's structs differently: see [Godot's Structs](#godot-structs).
+
+## Frame-Time Tips [#frame-time-tips]
+
+- **No GC spikes from network or replay data:** read each tick into the previous tick's object with `ref`, and mark the classes you create in bulk (projectiles, events) `[NinoPooled]`. See [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation).
+- **Reuse one `NinoArrayBufferWriter`** per sender when the bytes go to a span (a file, a socket you own) instead of allocating a `byte[]` each frame. Godot's own APIs take a `byte[]`: there, `Serialize(value)` allocates one of exactly the data's size.
+- **Keep bulk data unmanaged:** arrays of `Vector3`, `Color` or your own unmanaged `[NinoType]` structs are one memory copy.
+
+## Troubleshooting
+
+<Accordions type="single">
+<Accordion title="error NINO002: Type must be partial">
+
+The type serializes private members and the project targets .NET 6 (Godot 4.0–4.3), or the type is generic or `[NinoPooled]`. Make the type and every type containing it `partial` (the code fix does this in Rider and Visual Studio).
+
+</Accordion>
+<Accordion title="warning NINO007 on a Node or Resource member">
+
+Nino does not serialize Godot's classes. Store an id, a path or the values you need instead, as in [Nodes and Resources](#nodes-and-resources), or mark the member `[NinoIgnore]`.
+
+</Accordion>
+<Accordion title="Data from an older build cannot be read">
+
+Nino's default format is positional: changing a type's members breaks old data. Use `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` for saves and other stored data. See [Evolving Your Data](/en/docs/v4/evolving-data). Data written by a double-precision build cannot be read by a single-precision one if it contains Godot's structs.
+
+</Accordion>
+</Accordions>

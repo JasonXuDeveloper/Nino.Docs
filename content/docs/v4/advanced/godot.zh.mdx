@@ -1,0 +1,262 @@
+---
+title: Godot
+seoTitle: "Godot 4 C# 序列化：存档与联网 – Nino v4 文档"
+description: "在 Godot 4 .NET 项目中配置 Nino，把 Godot 的数学结构体按原始内存拷贝，存 ID 而不是节点，把存档写到 user:// 下，通过 Godot 的多人联机 API 发送消息，以及在编辑器中重新构建。"
+icon: Joystick
+---
+
+Nino 以普通 NuGet 包的形式支持 Godot 4 的 .NET 项目。本指南介绍安装、哪些用法与其他 .NET 项目相同、Godot 的结构体和类、存档、联网、在编辑器中重新构建以及导出。
+
+## 配置 [#setup]
+
+<Steps>
+<Step>
+
+### 安装包 [#install-the-package]
+
+Godot 4 的 C# 项目就是用 `Godot.NET.Sdk` 构建的普通 .NET 项目（Godot 4.4 起目标框架为 .NET 8，4.0–4.3 为 .NET 6）。把 Nino 加到它的 `.csproj` 中：
+
+```shell
+# in the folder with your Godot project's .csproj
+dotnet add package Nino --prerelease
+```
+
+然后构建项目（Godot 的 **Build** 按钮、IDE 或 `dotnet build` 均可）。`Nino` 包会带上运行时和源生成器。
+
+</Step>
+<Step>
+
+### 标记你的类型 [#mark-your-types]
+
+```csharp title="PlayerState.cs"
+using Godot;
+using Nino.Core;
+
+[NinoType]
+public sealed class PlayerState
+{
+    public string Name;
+    public Vector3 Position;      // Godot 的结构体是非托管类型：按原始内存写入
+    public Quaternion Rotation;
+    public Color[] Palette;       // 一次块拷贝
+}
+```
+
+</Step>
+</Steps>
+
+## 与其他 .NET 项目相同的部分 [#what-works]
+
+- **源生成器和分析器**在每次构建时运行，无论构建是由 Godot 还是 IDE 发起；分析器的代码修复在 IDE 中可用。
+- 用 .NET 8 或更高版本的 SDK 构建时（Godot 4.4 起必须如此），**拦截器**会生效：调用处类型已知的调用直达生成的格式化器。参见[拦截器](/zh/docs/v4/performance#interceptors)。
+- **`partial`**：目标为 .NET 8 的项目通过 `[UnsafeAccessor]` 访问私有成员，只有泛型类型才需要 `partial`。目标为 .NET 6 时（Godot 4.0–4.3），每个序列化非公共成员的类型都必须声明为 `partial`（NINO002）。`[NinoPooled]` 类则始终要声明为 `partial`。
+- **不需要初始化调用。** 生成的注册表会自行注册，并在第一次使用时被找到。
+- **文档中的其他内容同样适用**：[格式](/zh/docs/v4/evolving-data)、[多态](/zh/docs/v4/polymorphism)、[复用反序列化与对象池](/zh/docs/v4/pooling)、[零分配模式](/zh/docs/v4/advanced/zero-allocation)。写出的字节与 .NET 服务器或 Unity 客户端上的完全相同。
+
+## Godot 的结构体 [#godot-structs]
+
+Godot 的数学结构体（`Vector2`、`Vector3`、`Vector2I`、`Vector3I`、`Quaternion`、`Basis`、`Transform2D`、`Transform3D`、`Color`、`Rect2`、`Aabb` 等）都是非托管类型，Nino 不需要格式化器，直接按原始内存拷贝：单个值一次拷贝，它们的数组或 `List<T>` 一次块拷贝。由它们组成的自定义结构体同样按原始内存拷贝，并且是[固定大小的](/zh/docs/v4/performance#fixed-size-types)。
+
+<Callout type="warn">
+
+在双精度版本的 Godot 中（`real_t` 为 `double`），这些结构体的字段是 `double`（`Color` 除外，它始终是 `float`），布局与默认的单精度版本不同。含有它们的数据，一个版本写出的，另一个版本读不了。需要在两者之间共享的数据，请改用自己的结构体或基元字段。
+
+</Callout>
+
+## 节点与资源 [#nodes-and-resources]
+
+Godot 的类（`Node` 及其所有派生类、`Resource`、`StringName`、`NodePath` 等）是引擎对象，不是数据：Nino 不序列化它们，这类类型的成员会被跳过，并给出 NINO007 警告。类型中的集合请声明为 .NET 集合（`T[]`、`List<T>`、`Dictionary<TKey, TValue>`），而不是 `Godot.Collections` 中的类型；也不要保存对象本身，而是保存重建它所需的东西：
+
+- 节点：你自己的 ID 和要紧的值（位置、生命值），以及用来实例化它的场景；
+- 资源：它的路径（`ResourcePath`），之后用 `GD.Load<T>` 重新加载；
+- `StringName` 或 `NodePath`：存成 `string`。
+
+```csharp title="Enemy.cs"
+using Godot;
+using Nino.Core;
+
+[NinoType(format: NinoFormat.VersionTolerant)]
+public sealed class EnemySave
+{
+    public int Id;            // 你自己的 ID，每次会话都相同
+    public string Scene;      // 用来重新实例化的场景，例如 "res://enemies/goblin.tscn"
+    public Vector3 Position;
+    public int Health;
+}
+
+public partial class Enemy : CharacterBody3D
+{
+    public int Id;
+    public int Health;
+
+    public EnemySave Save() => new EnemySave
+    {
+        Id = Id,
+        Scene = SceneFilePath,
+        Position = GlobalPosition,
+        Health = Health,
+    };
+
+    public static Enemy Load(EnemySave save, Node parent)
+    {
+        var enemy = GD.Load<PackedScene>(save.Scene).Instantiate<Enemy>();
+        enemy.Id = save.Id;
+        enemy.Health = save.Health;
+        parent.AddChild(enemy);
+        enemy.GlobalPosition = save.Position;
+        return enemy;
+    }
+}
+```
+
+要序列化无法修改的类（来自某个库），请编写[自定义格式化器](/zh/docs/v4/custom-formatters)。
+
+## 存档 [#save-games]
+
+存档的寿命比写出它的版本更长，所以存档中的每个类型都要用能承受修改的格式：只追加成员时用 `NinoFormat.VersionTolerant`，还要调整顺序或删除成员时用 `NinoFormat.Keyed`（参见[数据演进](/zh/docs/v4/evolving-data#choosing)）。用 Godot 的 `FileAccess` 把它写到 `user://` 下，即 Godot 为每个用户提供的数据目录：
+
+```csharp title="SaveFile.cs"
+using System.Collections.Generic;
+using System.IO;
+using Godot;
+using Nino.Core;
+using FileAccess = Godot.FileAccess;
+
+[NinoType(format: NinoFormat.VersionTolerant)]
+public sealed class SaveGame
+{
+    public int Level;
+    public List<EnemySave> Enemies;
+}
+
+public static class SaveFile
+{
+    private const string SavePath = "user://save.dat";
+
+    public static void Write(SaveGame save)
+    {
+        byte[] bytes = NinoSerializer.Serialize(save);
+        using var file = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write)
+            ?? throw new IOException($"Cannot write {SavePath}: {FileAccess.GetOpenError()}");
+        file.StoreBuffer(bytes);
+    }
+
+    public static SaveGame Read() =>
+        FileAccess.FileExists(SavePath)
+            ? NinoDeserializer.Deserialize<SaveGame>(FileAccess.GetFileAsBytes(SavePath))
+            : null;
+}
+```
+
+也可以用 `System.IO`，配合这个目录的真实路径：`File.WriteAllBytes(ProjectSettings.GlobalizePath(SavePath), bytes)`。无论用哪种方式：
+
+- 在数据前面加上带魔数和格式版本号的文件头，让以后的版本知道自己读的是什么：参见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)。
+- 先写入临时文件，写完之后再替换存档，这样保存过程中崩溃也不会毁掉上一份存档：参见[安全写入](/zh/docs/v4/advanced/persistence#write-safely)。
+- 不会随版本变化的数据（从你的工具导出的关卡数据）可以保持按位置格式，更小也更快。
+
+## 联网 [#networking]
+
+Godot 的多人联机 API 接受 `byte[]` 参数。用 `NinoSerializer.Serialize(value)` 序列化消息，它返回大小正好等于数据的数组；在另一端用 `ref` 读入上一条消息：
+
+```csharp title="StateSync.cs"
+using System.Collections.Generic;
+using Godot;
+using Nino.Core;
+
+[NinoType]
+public struct EntityState         // 非托管：按原始内存拷贝
+{
+    public int Id;
+    public Vector3 Position;
+    public Quaternion Rotation;
+}
+
+[NinoType]
+public sealed class WorldState
+{
+    public long Tick;
+    public List<EntityState> Entities;   // 一次块拷贝
+}
+
+public partial class StateSync : Node
+{
+    private WorldState _latest;          // 每个数据包都原地填充它
+
+    // 服务器端：把状态发送给每个对端。
+    public void Broadcast(WorldState state) =>
+        Rpc(MethodName.ReceiveState, NinoSerializer.Serialize(state)); // [!code highlight]
+
+    // 客户端：数据包以 byte[] 的形式到达。
+    [Rpc(MultiplayerApi.RpcMode.Authority, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered)]
+    private void ReceiveState(byte[] data)
+    {
+        NinoDeserializer.Deserialize(data, ref _latest); // [!code highlight]
+        Apply(_latest);
+    }
+
+    private void Apply(WorldState state) { /* 移动节点 */ }
+}
+```
+
+- Godot 更底层的 API 同样接收和返回 `byte[]`：`SceneMultiplayer.SendBytes` 及其 `PeerPacket` 信号，`PacketPeer.PutPacket` 和 `GetPacket`。`StreamPeer`（TCP）是一个字节流，所以要在每条消息前加上长度：参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)。
+- 读入 `_latest` 会在每个数据包上复用同一个 `WorldState` 及其列表，预热之后 Nino 不再分配内存；参见[处理消息时不分配内存](/zh/docs/v4/best-practices#zero-gc-messages)。
+- 客户端和服务器分开更新时，消息要用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`：参见[滚动升级](/zh/docs/v4/advanced/networking#rolling-upgrades)。运行同一版本的对端可以让消息保持按位置格式。
+- 多态的消息类型，按基类发送（`Serialize<Message>(...)`），也按基类读取：参见[多态](/zh/docs/v4/polymorphism)。
+
+## 在编辑器中重新构建 [#editor-reload]
+
+编辑器打开时重新构建，Godot 会卸载项目的程序集并加载新的构建。如果某个库持有指向旧程序集的引用，就可能让它无法卸载。Nino 不会这样（[#199](https://github.com/JasonXuDeveloper/Nino/issues/199)）：
+
+- **Godot 4.4 及以上（.NET 8）：** 项目得到的是 Nino.Core 的 `net8.0` 版本。当一个含有 Nino 生成代码的程序集的加载上下文开始卸载时，Nino 会清除它为该程序集缓存的一切：注册表，其中类型的格式化器、类型 ID 和原始内存布局，多态子类型，以及它的 `[assembly: NinoFormatter]` 注册。你什么都不用做。
+- **Godot 4.0–4.3（.NET 6）：** 项目得到的是 `netstandard2.1` 版本，它看不到 `AssemblyLoadContext`。`NinoRegistry.Remove(assembly)` 完成同样的清理；在上下文卸载时调用它：
+
+```csharp title="NinoReload.cs"
+using System.Runtime.Loader;
+using Nino.Core;
+
+public static class NinoReload
+{
+    /// <summary>启动时调用一次：本程序集的加载上下文卸载时，把它从 Nino 中移除。</summary>
+    public static void Register()
+    {
+        var assembly = typeof(NinoReload).Assembly;
+        var context = AssemblyLoadContext.GetLoadContext(assembly);
+        if (context is { IsCollectible: true })
+            context.Unloading += _ => NinoRegistry.Remove(assembly);
+    }
+}
+```
+
+项目为**其他**程序集的类型声明的格式化器（为某个库的类型写的 `[assembly: NinoFormatter]`），一旦被 Nino 用过就会一直保持注册；这类格式化器请放在那个库中。详见[卸载程序集](/zh/docs/v4/platforms#unloading-assemblies)。
+
+## 导出 [#exports]
+
+- 导出的游戏运行的 Nino 代码与编辑器中相同，Nino 在每种运行时、CPU 和指针宽度上写出的字节都相同：存档和消息可以在游戏的桌面版和移动版之间互通，也可以发给 .NET 服务器。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+- 如果导出时做了裁剪或用 Native AOT 编译，你序列化的每个类型都必须出现在生成器能看到的代码中，作为成员类型，或作为 `Serialize`、`Deserialize` 调用的类型参数：参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
+- 双精度版本写出的 Godot 结构体与单精度版本不同：参见 [Godot 的结构体](#godot-structs)。
+
+## 帧时间优化 [#frame-time-tips]
+
+- **网络或回放数据不引起 GC 尖峰：** 用 `ref` 把每个 tick 读入上一个 tick 的对象，批量创建的类（投射物、事件）标记为 `[NinoPooled]`。参见[零分配模式](/zh/docs/v4/advanced/zero-allocation)。
+- 字节要送到 span（文件、你自己的套接字）时，**每个发送方复用一个 `NinoArrayBufferWriter`**，而不是每帧分配一个 `byte[]`。Godot 自己的 API 需要 `byte[]`：这时 `Serialize(value)` 分配一个大小正好等于数据的数组。
+- **批量数据保持非托管：** `Vector3`、`Color` 或你自己的非托管 `[NinoType]` 结构体的数组只需一次内存拷贝。
+
+## 故障排查 [#troubleshooting]
+
+<Accordions type="single">
+<Accordion title="error NINO002: Type must be partial">
+
+该类型序列化了私有成员，而项目的目标是 .NET 6（Godot 4.0–4.3）；或者该类型是泛型类型或 `[NinoPooled]`。把该类型及包含它的每个类型都声明为 `partial`（在 Rider 和 Visual Studio 中，代码修复会帮你完成）。
+
+</Accordion>
+<Accordion title="Node 或 Resource 成员上的 NINO007 警告">
+
+Nino 不序列化 Godot 的类。改为保存 ID、路径或你需要的值，参见[节点与资源](#nodes-and-resources)，或者给该成员加上 `[NinoIgnore]`。
+
+</Accordion>
+<Accordion title="旧版本的数据读不出来">
+
+Nino 默认是按位置格式：修改类型的成员会让旧数据无法读取。存档和其他要保存的数据请用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`。参见[数据演进](/zh/docs/v4/evolving-data)。如果数据中含有 Godot 的结构体，双精度版本写出的数据单精度版本读不了。
+
+</Accordion>
+</Accordions>

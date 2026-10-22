@@ -1,6 +1,6 @@
 ---
 title: 高性能序列化
-description: "如何让 Nino 跑出最快速度，以及每条热路径的开销：缓冲区写入器、Writer 与 Reader、复用反序列化、对象池、原始结构体、格式、密封类与多态类型、集合、字符串，以及如何测量。"
+description: "影响 Nino 速度的每一个手段，何时使用、代价是什么：缓冲区写入器、大小精确的数组、Writer 与 Reader、复用反序列化、对象池、原始与固定大小的结构体、格式、密封类与多态类型、集合、字符串、自定义格式化器、启动，以及如何测量。"
 icon: Gauge
 ---
 
@@ -10,9 +10,32 @@ icon: Gauge
   }}
 />
 
-`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 本身已经很快，但每次调用都要为结果分配内存。本页先讲解让序列化和反序列化都降到**每次调用 0 B** 的机制（每种调用写到哪里、从哪里读、有什么开销），再介绍你自己的类型中哪些选择能让调用保持快速：格式、密封类与多态类、集合和字符串，最后是如何测量。
+`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 本身已经很快，但每次调用都要为结果分配内存。本页先讲解让序列化和反序列化都降到**每次调用 0 B** 的机制（每种调用写到哪里、从哪里读、有什么开销），再介绍你自己的类型中哪些选择能让调用保持快速：格式、密封类与多态类、集合、字符串和自定义格式化器，最后是启动和如何测量。[下表](#levers)把所有手段列在一处。
 
 基于这些机制、可以直接复制的做法和检查清单见[零分配模式](/zh/docs/v4/advanced/zero-allocation)；内部实现（内联的格式化器、结构体布局）见[性能指南](/zh/docs/v4/performance)。
+
+## 手段一览 [#levers]
+
+| 手段 | 适用场景 | 代价 |
+| --- | --- | --- |
+| [复用的 `NinoArrayBufferWriter`](#serialize-into-a-reused-buffer) | 不止序列化一次 | 数组由持有者一直占用；每个线程或连接一个缓冲区 |
+| [调用方的 `IBufferWriter<byte>`](#serialize-into-any-ibufferwriter) | 传输层直接给你一个（管道、Kestrel） | 向它拷贝一次 |
+| [`Serialize(value)` 得到大小精确的 `byte[]`](#exact-size-arrays) | 某个 API 需要 `byte[]` | 每次调用分配一次 |
+| [`Writer` 与 `Reader`](#several-values-back-to-back) | 多个值共用一个缓冲区 | 每条消息调用一次 `Flush` 和 `ReleaseReferences` |
+| [直接从已有内存反序列化](#deserialize-from-the-memory-you-have) | 任何时候 | 无 |
+| [复用反序列化（`ref`）](#deserialize-into-existing-objects) | 结构相同的消息，逐条处理 | 实例由你持有，每次读取都会改变它 |
+| [`[NinoPooled]`](#pool-what-you-create) 与[池容量](#pool-sizes) | 高频创建、保留或丢弃的实例 | 类必须是 `sealed partial`，自己持有的实例要 `ReturnToPool()`，池占用内存 |
+| [非托管结构体及其布局](#keep-bulk-data-raw) | 批量数据和热数据 | 布局是格式的一部分 |
+| [固定大小的类型与 `GetFixedSize<T>()`](#exact-size-arrays) | 记录、槽位和大小精确的缓冲区 | 只能有非托管成员 |
+| [按位置格式](#choose-the-cheapest-format) | 由同一版本写入和读取的数据 | 数据不能改变结构 |
+| [只在需要处开启 `trackReferences`](#choose-the-cheapest-format) | 共享的对象或环 | 每个被追踪的对象 4 字节和一次查找 |
+| [密封类](#sealed-and-polymorphic) | 没有子类型的类 | 无 |
+| [共同的 `[NinoType]` 基类](#sealed-and-polymorphic) | 多态值 | 每个值 4 字节的类型 ID |
+| [原始元素的数组和列表](#collections) | 热路径上的集合 | 无 |
+| [默认的字符串编码](#strings) | 几乎所有情况；以 ASCII 为主、夹杂少量更宽字符的文本用 `[NinoUtf8]` | `[NinoUtf8]`：一次转码和 4 字节 |
+| [整块拷贝的自定义格式化器](#custom-formatters) | Nino 不认识的类型 | 带自定义格式化器的成员让它的类型不再按原始内存拷贝、不再是固定大小 |
+| [提前注册与预热](#startup) | 第一条消息也必须快 | 启动时间 |
+| [拦截器](#per-call-overhead) | 项目用 .NET 8 SDK 或更高版本构建 | 无 |
 
 ## 序列化到复用的缓冲区 [#serialize-into-a-reused-buffer]
 
@@ -30,6 +53,7 @@ public ReadOnlySpan<byte> Encode(Quote quote)
 ```
 
 - **开销：** 数组增长到位之后，每次调用 0 B；增长时从池中租用更大的数组，`Dispose()` 时归还。
+- 预先按最大的消息设定大小（构造函数的 `initialCapacity`，或 `EnsureCapacity(sizeHint)`），热路径上就不会再增长。要序列化到你自己管理的数组（固定的套接字缓冲区）中，传入你自己的 `ArrayPool<byte>`：参见[复用缓冲区](/zh/docs/v4/basic#reusing-a-buffer)。
 - `ResetWrittenCount()` 复用同一个数组，所以 `WrittenSpan` 只在下一次重置之前有效：先拷贝或发送。
 - 缓冲区不是线程安全的。每个线程、连接或编码器各用一个；[编码器与线程静态缓冲区的做法](/zh/docs/v4/advanced/zero-allocation#reuse-one-buffer)给出了这两种写法。
 
@@ -70,6 +94,24 @@ await pipeWriter.FlushAsync();
 - **开销：** 往写入器的内存拷贝一次；0 B。原始值（非托管结构体、基元类型）不经过暂存缓冲区，直接写进写入器的 span。
 - 只有 `NinoArrayBufferWriter` 是直接写入的。需要在写完之后回填字节时（例如长度前缀，参见[分帧](/zh/docs/v4/advanced/networking#frame-the-stream)），请使用它。
 - 要序列化到你已有的内存里（环形缓冲区的槽位、预先分配的发送缓冲区），用一个很小的 `IBufferWriter<byte>` 包住它：见[写入你自己的内存](/zh/docs/v4/advanced/zero-allocation#write-into-memory-you-own)。
+
+## 需要 `byte[]` 的时候 [#exact-size-arrays]
+
+有些 API 接收一个 `byte[]` 并保留它：缓存客户端、消息代理、游戏引擎的网络调用。`NinoSerializer.Serialize(value)` 返回的数组大小正好等于数据，是得到它的最便宜的方式：
+
+- **固定大小的类型**（只由非托管成员组成的结构体和密封类），以及**元素整块拷贝的数组和列表**，会直接写进按最终大小分配的数组：不经过暂存缓冲区，也没有拷贝。
+- 其他值先写入每个线程的暂存缓冲区，再拷贝出来一次，和对你自己的缓冲区调用 `ToArray()` 一样。
+- **开销：** 每次调用都分配这个数组。如果字节只需要送到一个 span（套接字、管道、文件），改为序列化到复用的缓冲区。
+
+`NinoSerializer.GetFixedSize<T>()` 返回固定大小类型的字节数，其他类型返回 `-1`。用它来确定槽位和记录的大小，或者在启动时检查热点记录（例如批量写入示例中的 [`Tick`](/zh/docs/v4/advanced/zero-allocation#batches)）在修改之后是否仍是固定大小：
+
+```csharp
+// 给 Tick 加上一个字符串或列表，它就不再是固定大小，它的记录也就无法再按下标定位。
+if (NinoSerializer.GetFixedSize<Tick>() < 0)
+    throw new InvalidOperationException("Tick is no longer fixed-size.");
+```
+
+固定大小的密封类的 `null` 实例写成 1 字节；其他每个值都正好占 `GetFixedSize<T>()` 字节。什么样的类型是固定大小的：见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
 
 ## 直接从已有内存反序列化 [#deserialize-from-the-memory-you-have]
 
@@ -160,11 +202,15 @@ telemetryEvent.ReturnToPool(); // its List<double> stays attached and is reused 
 </Step>
 </Steps>
 
+### 池容量 [#pool-sizes]
+
 如果默认容量（共享栈 256 个，另外每个线程最多 64 个）不合适，可以在启动时调整：
 
 ```csharp
 NinoSettings.SetPoolMaxRetained<TelemetryEvent>(4096);
 ```
+
+上限越大，两次高峰之间留存的实例越多，而且会在进程的整个生命周期内占用内存；上限越小，超出池容量的高峰就要为放不下的部分分配内存。`NinoSettings.DefaultPoolMaxRetained` 设置之后创建的每个池的上限。两者都要在任何线程第一次调用之前设置：参见[设置](/zh/docs/v4/pooling#settings)。
 
 <Callout type="idea">
 
@@ -198,7 +244,7 @@ public sealed class SampleBlock
 - `NinoFormat.VersionTolerant`、`NinoFormat.Keyed` 和自定义成员格式化器都会关闭该结构体的原始内存拷贝。
 - 只由非托管成员组成的结构体或密封类是[固定大小的](/zh/docs/v4/performance#fixed-size-types)：`NinoSerializer.Serialize(value)` 会把它直接写进大小正好的 `byte[]`，不经过暂存缓冲区，也没有拷贝。固定大小的记录还可以在文件或共享内存中按下标定位：见[固定大小的记录](/zh/docs/v4/advanced/zero-allocation#fixed-size-records)。
 
-结构体的填充字节如何影响这条路径，见[结构体布局](/zh/docs/v4/performance#struct-layout)。
+**热路径上的结构体布局不留填充。** 没有填充的结构体是一次普通的块拷贝；有填充的结构体要经过一个把空隙清零的掩码拷贝，开销稍高；声明为 `[StructLayout(LayoutKind.Auto)]` 的结构体根本不按原始内存拷贝，而是逐个字段写入。把字段按从大到小排列，或设置 `Pack`，就能去掉填充。两者都会改变字节，所以要在保存数据之前定好布局。参见[结构体布局](/zh/docs/v4/performance#struct-layout)。
 
 ### 确定性的字节 [#deterministic-bytes]
 
@@ -245,6 +291,27 @@ Nino 在类的值前面写什么，取决于存放它的位置的声明类型（
 
 - 默认编码下，所有字符都不超过 U+00FF 的文本每个字符写一个字节，其他文本按 UTF-16 写出，都只需一遍。`[NinoUtf8]` 要做转码，还要多写 4 字节的字节数，只有以 ASCII 为主、夹杂少量更宽字符的文本才划算（参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)）。
 - 复用反序列化会保留内容没有变化的字符串，所以稳定的文本（名称、键、类似枚举的代码）每条消息不产生任何开销；`[NinoUtf8]` 字符串只有在内容是 ASCII 时才会保留。
+
+## 热路径上的自定义格式化器 [#custom-formatters]
+
+[自定义格式化器](/zh/docs/v4/custom-formatters)是一个结构体，Nino 直接调用它，JIT 会把它内联，和生成的格式化器一样。让它也走同样的快速路径：
+
+- **连续的非托管数据整块拷贝**：`Writer.Write<T>(ReadOnlySpan<T>)` 一次拷贝写出长度和全部元素；`WriteUnmanagedRaw` / `ReadUnmanagedRaw` 不带长度，直接读写你已有的内存。泛型格式化器的元素参数标上 `[NinoRaw]`，它就只会绑定到 Nino 按原始字节拷贝的类型（[示例](/zh/docs/v4/custom-formatters#example-grid)）。
+- **读入当前的值。** `Deserialize(ref T value, ref Reader reader)` 收到的是调用方持有的实例：结构合适时就填充它，并用 `reader.ReadString(current)` 保留它的字符串，文本没变时它直接返回 `current` 本身。这样复用反序列化经过你的类型时仍然是 0 B。
+- **分配之前先检查长度**：用 `ReadLength(minElementSize)`，剩余字节容纳不下那么多元素时它会抛出异常。
+- **开销：** 成员上的 `[NinoCustomFormatter]` 会让它所在的类型不再按原始内存拷贝，也不再是固定大小。热点结构体尽量使用内置的成员类型。
+
+`Writer` 和 `Reader` 提供的方法见 [Writer 与 Reader](/zh/docs/v4/custom-formatters#writer-and-reader)。
+
+## 启动与第一次调用 [#startup]
+
+每个类型的第一次调用要付出之后的调用不再有的开销：Nino 要找到该类型的格式化器（在它所在程序集的生成注册表中，注册表在 Nino 第一次需要时加载；在 JIT 上，生成器没有见过的类型，例如只在运行时出现的集合，要通过反射构建格式化器），JIT 要编译代码，`[NinoPooled]` 类型还要运行它的 `OnNinoPoolWarmup()`。要让这些开销不落在第一条消息上：
+
+- 对运行时加载的程序集（插件、热更新）调用 `NinoRegistry.EnsureInitialized(assembly)`，或者调用 `NinoRegistry.EnsureAllInitialized()` 处理所有已加载的程序集，提前加载注册表。两者都是可选的：注册表本来就会在第一次使用时加载。
+- 在启动阶段或加载界面中，把每个热点类型的一个典型值序列化、反序列化一次。这会构建它们的格式化器、填满它们的对象池，并让你的缓冲区增长到工作时的大小。
+- 在这两步之前配置好 `NinoSettings`。
+
+**开销：** 启动时间，以及对象池现在持有的实例所占的内存。预热调用运行的是未经优化的 Tier-0 代码，所以它不能代替[测量](#measure)之前的预热。
 
 ## 每次调用的固定开销 [#per-call-overhead]
 

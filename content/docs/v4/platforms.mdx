@@ -149,11 +149,11 @@ See [Unity and HybridCLR](/en/docs/v4/advanced/unity) for project setup and IL2C
 
 ## Godot
 
-- Godot 4 C# projects are regular .NET projects (`Godot.NET.Sdk`, targeting .NET 8 from Godot 4.4 and .NET 6 before). Install with `dotnet add package Nino --prerelease`; see [Godot Project](/en/docs/v4/start#godot-project).
-- Built with the .NET 8 SDK or later (required from Godot 4.4), the source generator, the analyzers and the interceptors all run. A project that targets .NET 8 also reaches private members through `[UnsafeAccessor]` without `partial` (except in generic types); on .NET 6 such types must be `partial` (NINO002). `[NinoPooled]` classes are always `partial`.
-- Godot's math structs (`Vector2`, `Vector3`, `Quaternion`, `Transform3D`, `Color`, ...) are unmanaged and are copied as raw memory.
-- In a Godot build with double precision (`real_t` = `double`), these structs hold `double` fields, so their layout differs from the default single-precision build. Data containing Godot math types written by one build cannot be read by the other; use your own structs or primitive fields for data shared between the two.
-- Serialize your own data types; Godot objects such as `Node` and `Resource` are engine objects and are not serialized.
+- Godot 4 C# projects are regular .NET projects (`Godot.NET.Sdk`, targeting .NET 8 from Godot 4.4 and .NET 6 before): install Nino from NuGet. The generator, the analyzers and, with the .NET 8 SDK, the interceptors run as in any .NET project; on .NET 6, types with serialized non-public members must be `partial`.
+- Godot's math structs (`Vector3`, `Transform3D`, `Color`, ...) are copied as raw memory. Their layout differs in double-precision builds, so data containing them cannot move between a double-precision and a single-precision build.
+- Engine objects (`Node`, `Resource`) are not serialized: store ids, paths or values instead.
+
+See [Godot](/en/docs/v4/advanced/godot) for setup, save games, networking and rebuilding in the editor.
 
 ## HybridCLR and Hot Update
 

@@ -1,6 +1,6 @@
 ---
 title: High-Performance Serialization
-description: "How to get the most speed out of Nino, and what each hot path costs: buffer writers, Writer and Reader, reuse deserialization, pools, raw structs, formats, sealed and polymorphic types, collections, strings and how to measure."
+description: "Every lever for Nino's speed, when to use it and what it costs: buffer writers, exact-size arrays, Writer and Reader, reuse deserialization, pools, raw and fixed-size structs, formats, sealed and polymorphic types, collections, strings, custom formatters, startup and measuring."
 icon: Gauge
 ---
 
@@ -10,9 +10,32 @@ icon: Gauge
   }}
 />
 
-`NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)` are already fast, but each call allocates its result. This page explains the mechanisms that take both directions down to **0 B per call** (where each call writes, what it reads from, what it costs), then the choices in your own types that keep calls fast: formats, sealed and polymorphic classes, collections and strings, and how to measure.
+`NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)` are already fast, but each call allocates its result. This page explains the mechanisms that take both directions down to **0 B per call** (where each call writes, what it reads from, what it costs), then the choices in your own types that keep calls fast: formats, sealed and polymorphic classes, collections, strings and custom formatters, then startup and how to measure. The [table below](#levers) lists every lever in one place.
 
 For copy-paste recipes built on these mechanisms, and the checklist, see [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation); for the internals (inlined formatters, struct layout), see the [Performance Guide](/en/docs/v4/performance).
+
+## Levers at a Glance [#levers]
+
+| Lever | Use it when | What it costs |
+| --- | --- | --- |
+| [A reused `NinoArrayBufferWriter`](#serialize-into-a-reused-buffer) | you serialize more than once | the array, held by its owner; one buffer per thread or connection |
+| [The caller's `IBufferWriter<byte>`](#serialize-into-any-ibufferwriter) | the transport hands you one (pipes, Kestrel) | one copy into it |
+| [`Serialize(value)` into an exact-size `byte[]`](#exact-size-arrays) | an API needs a `byte[]` | one allocation per call |
+| [`Writer` and `Reader`](#several-values-back-to-back) | several values share one buffer | `Flush` and `ReleaseReferences` once per message |
+| [Deserializing from the memory you have](#deserialize-from-the-memory-you-have) | always | nothing |
+| [Reuse deserialization (`ref`)](#deserialize-into-existing-objects) | messages of the same shape, one at a time | you keep the instance, and it changes with every read |
+| [`[NinoPooled]`](#pool-what-you-create) and [pool sizes](#pool-sizes) | instances created, kept or dropped at a high rate | `sealed partial` classes, a `ReturnToPool()` per instance you own, memory the pools hold |
+| [Unmanaged structs and their layout](#keep-bulk-data-raw) | bulk and hot data | the layout is part of the format |
+| [Fixed-size types and `GetFixedSize<T>()`](#exact-size-arrays) | records, slots and exact buffers | only unmanaged members |
+| [The positional format](#choose-the-cheapest-format) | data written and read by the same build | the data cannot change shape |
+| [`trackReferences` only where needed](#choose-the-cheapest-format) | shared objects or cycles | 4 bytes and a lookup per tracked object |
+| [Sealed classes](#sealed-and-polymorphic) | classes without subtypes | nothing |
+| [A common `[NinoType]` base](#sealed-and-polymorphic) | polymorphic values | a 4-byte type id per value |
+| [Arrays and lists of raw elements](#collections) | collections on hot paths | nothing |
+| [The default string encoding](#strings) | almost always; `[NinoUtf8]` for mostly-ASCII text with a few wider chars | `[NinoUtf8]`: a transcode and 4 bytes |
+| [Custom formatters that copy blocks](#custom-formatters) | types Nino does not know | a member with one is no longer raw or fixed-size |
+| [Early registration and a warm-up](#startup) | the first message must be fast | startup time |
+| [Interceptors](#per-call-overhead) | the project builds with the .NET 8 SDK or later | nothing |
 
 ## Serialize into a Reused Buffer
 
@@ -30,6 +53,7 @@ public ReadOnlySpan<byte> Encode(Quote quote)
 ```
 
 - **Cost:** 0 B per call once the array has grown; growth rents a larger array from the pool, and `Dispose()` returns it.
+- Size it for your largest message up front (the constructor's `initialCapacity`, or `EnsureCapacity(sizeHint)`), so it never grows on the hot path. To serialize into arrays you manage (pinned socket buffers), pass your own `ArrayPool<byte>`: see [Reusing a Buffer](/en/docs/v4/basic#reusing-a-buffer).
 - `ResetWrittenCount()` reuses the same array, so `WrittenSpan` is only valid until the next reset: copy or send it first.
 - A buffer is not thread safe. Give each thread, connection or encoder its own; the [encoder and thread-static buffer recipes](/en/docs/v4/advanced/zero-allocation#reuse-one-buffer) show both.
 
@@ -70,6 +94,24 @@ await pipeWriter.FlushAsync();
 - **Cost:** one copy into the writer's memory; 0 B. A raw value (an unmanaged struct, a primitive) skips the scratch buffer and is written straight into the writer's span.
 - Only a `NinoArrayBufferWriter` is written in place. Use one when you need to patch bytes after writing (a length prefix, see [framing](/en/docs/v4/advanced/networking#frame-the-stream)).
 - To serialize into memory you already own (a ring-buffer slot, a pre-allocated send buffer), wrap it in a small `IBufferWriter<byte>`: see [Write into Memory You Own](/en/docs/v4/advanced/zero-allocation#write-into-memory-you-own).
+
+## When You Need a `byte[]` [#exact-size-arrays]
+
+Some APIs take a `byte[]` and keep it: a cache client, a message broker, a game engine's network call. `NinoSerializer.Serialize(value)` returns one of exactly the data's size, and is the cheapest way to get it:
+
+- **Fixed-size types** (structs and sealed classes made only of unmanaged members) and **arrays and lists whose elements are copied as one block** are written straight into an array allocated at their final size: no scratch buffer and no copy.
+- Other values are written into a per-thread scratch buffer and copied out once, as `ToArray()` on a buffer of your own would.
+- **Cost:** the array, on every call. When the bytes only have to reach a span (a socket, a pipe, a file), serialize into a reused buffer instead.
+
+`NinoSerializer.GetFixedSize<T>()` returns the size of a fixed-size type, and `-1` for every other type. Use it to size slots and records, or to check at startup that a hot record, such as the [`Tick`](/en/docs/v4/advanced/zero-allocation#batches) of the batch recipe, is still fixed-size after a change:
+
+```csharp
+// A string or a list added to Tick would make it variable-size, and its records could no longer be indexed.
+if (NinoSerializer.GetFixedSize<Tick>() < 0)
+    throw new InvalidOperationException("Tick is no longer fixed-size.");
+```
+
+A `null` instance of a fixed-size sealed class is written as 1 byte; every other value takes exactly `GetFixedSize<T>()` bytes. What makes a type fixed-size: [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
 
 ## Deserialize from the Memory You Have
 
@@ -160,11 +202,15 @@ Returning an instance twice throws `InvalidOperationException`. An instance that
 </Step>
 </Steps>
 
+### Pool Sizes [#pool-sizes]
+
 Size the pools at startup if the defaults (256 in the shared stack, plus up to 64 per thread) do not fit:
 
 ```csharp
 NinoSettings.SetPoolMaxRetained<TelemetryEvent>(4096);
 ```
+
+A larger limit keeps more instances alive between bursts, for the life of the process; with a smaller one, a burst larger than the pool allocates what does not fit. `NinoSettings.DefaultPoolMaxRetained` sets the limit of every pool created afterwards. Set both before the first call on any thread: see [Settings](/en/docs/v4/pooling#settings).
 
 <Callout type="idea">
 
@@ -198,7 +244,7 @@ public sealed class SampleBlock
 - `NinoFormat.VersionTolerant`, `NinoFormat.Keyed` and custom member formatters turn raw copying off for that struct.
 - A struct or sealed class made only of unmanaged members is [fixed-size](/en/docs/v4/performance#fixed-size-types): `NinoSerializer.Serialize(value)` writes it straight into a `byte[]` of its size, with no scratch buffer or copy. Records of a fixed size can also be addressed by index in a file or shared memory: see [Fixed-Size Records](/en/docs/v4/advanced/zero-allocation#fixed-size-records).
 
-How the padding of a struct affects this path: [Struct Layout](/en/docs/v4/performance#struct-layout).
+**Lay out hot structs without padding.** A struct without padding is a plain block copy; one with padding is copied through a mask that zeroes the gaps, which costs a little more; a struct declared `[StructLayout(LayoutKind.Auto)]` is not raw at all and is written field by field. Order the fields largest first, or set `Pack` to remove the padding. Both change the bytes, so settle the layout before you store data. See [Struct Layout](/en/docs/v4/performance#struct-layout).
 
 ### Deterministic Bytes
 
@@ -245,6 +291,27 @@ What Nino writes in front of a class value depends on the declared type of its s
 
 - The default encoding writes text whose chars are all at most U+00FF in one byte a char and other text as UTF-16, each in one pass. `[NinoUtf8]` costs a transcode and a 4-byte byte count, and pays off only for text that is mostly ASCII with a few wider chars ([String Encoding](/en/docs/v4/defining-types#string-encoding)).
 - Reuse deserialization keeps a string whose text did not change, so stable text (names, keys, enum-like codes) costs nothing per message; a `[NinoUtf8]` string is kept only when its text is ASCII.
+
+## Custom Formatters on Hot Paths [#custom-formatters]
+
+A [custom formatter](/en/docs/v4/custom-formatters) is a struct that Nino calls directly and the JIT inlines, like a generated one. Keep it on the same fast paths:
+
+- **Copy unmanaged runs as one block**: `Writer.Write<T>(ReadOnlySpan<T>)` writes a length and the elements in one copy, and `WriteUnmanagedRaw` / `ReadUnmanagedRaw` move them without a length into memory you already have. Mark a generic formatter's element parameter `[NinoRaw]` so it is bound only to types Nino copies as raw bytes ([example](/en/docs/v4/custom-formatters#example-grid)).
+- **Read into the current value.** `Deserialize(ref T value, ref Reader reader)` receives the instance the caller holds: fill it when its shape fits, and keep its strings with `reader.ReadString(current)`, which returns `current` itself when the text is unchanged. Reuse deserialization then stays at 0 B through your type.
+- **Check lengths before allocating** with `ReadLength(minElementSize)`, which throws when the bytes left cannot hold that many elements.
+- **Cost:** a `[NinoCustomFormatter]` on a member means its type is no longer copied as raw memory and is no longer fixed-size. Give hot structs built-in member types where you can.
+
+The methods `Writer` and `Reader` offer: [Writer and Reader](/en/docs/v4/custom-formatters#writer-and-reader).
+
+## Startup and the First Call [#startup]
+
+The first call for each type pays costs that later calls do not: Nino finds the type's formatter (in the generated registry of its assembly, loaded the first time Nino needs it; on a JIT, a type the generator did not see, such as a collection that only appears at run time, gets a formatter built through reflection), the JIT compiles the code, and a `[NinoPooled]` type runs its `OnNinoPoolWarmup()`. To keep these off the first message:
+
+- Call `NinoRegistry.EnsureInitialized(assembly)` for an assembly you load at run time (a plugin, a hot update), or `NinoRegistry.EnsureAllInitialized()` for every loaded assembly, to load the registries now. Both are optional: registries load on first use anyway.
+- Serialize and deserialize one representative value of each hot type during startup or a loading screen. That builds their formatters, fills their pools and grows your buffers to their working size.
+- Configure `NinoSettings` before either.
+
+**Cost:** startup time, and the memory of the instances the pools now hold. Warm-up calls run unoptimized Tier-0 code, so they do not replace warming up before you [measure](#measure).
 
 ## Per-Call Overhead [#per-call-overhead]
 

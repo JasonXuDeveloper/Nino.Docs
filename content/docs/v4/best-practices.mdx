@@ -1,10 +1,111 @@
 ---
 title: Best Practices
-description: "The choices to make before Nino data ships: the format of each type, sealed classes and common bases, buffers and reuse, stored data, untrusted input and project setup."
+description: "Handling messages without allocating, then the choices to make before Nino data ships: the format of each type, sealed classes and common bases, buffers and reuse, stored data, untrusted input and project setup."
 icon: ListChecks
 ---
 
-Nino works with its defaults, and most of what follows is optional. These are the decisions that are hard to change once data has been written, and the habits that keep calls fast. Each one links to the page that explains it.
+Nino works with its defaults, and most of what follows is optional. The first section is the practice that matters most on a hot path: handling messages without allocating. The rest are the decisions that are hard to change once data has been written, and the habits that keep calls fast. Each one links to the page that explains it.
+
+## Handle Messages Without Allocating [#zero-gc-messages]
+
+A loop that sends and receives messages at a high rate (network packets, game ticks, a queue consumer) should allocate nothing per message once it is warmed up, so the garbage collector never runs because of it. Nino can do both directions at 0 B; the recipe has three parts.
+
+### Writing [#writing-messages]
+
+- **Keep one `NinoArrayBufferWriter` per thread or connection**, call `ResetWrittenCount()` before each message, and send `WrittenSpan` before the next reset. Nino writes into it in place, and once the array has grown to your largest message, serializing allocates nothing. A buffer is not thread safe, so never share one between threads. See [Reuse One Buffer per Owner](/en/docs/v4/advanced/zero-allocation#reuse-one-buffer).
+- **Or serialize into the caller's `IBufferWriter<byte>`** (a `PipeWriter`, Kestrel's response body): one copy into its memory, and 0 B. See [Serialize into Any IBufferWriter](/en/docs/v4/advanced/high-performance#serialize-into-any-ibufferwriter).
+- **Call `Serialize(value)` only when an API needs a `byte[]`.** It allocates that array every time (of exactly the data's size).
+
+### Reading [#reading-messages]
+
+- **Deserialize from the memory the bytes arrived in**: a slice of your receive buffer, not a copy in a new `byte[]`.
+- **When you handle each message before the next one arrives, deserialize with `ref` into the previous instance.** Nino fills the same object, its nested objects and its lists in place. See [Reuse What You Deserialize](/en/docs/v4/advanced/zero-allocation#reuse-what-you-deserialize).
+- **When you keep messages, or hand them to another thread, mark their classes `[NinoPooled]`.** `Deserialize<T>` then takes each instance from the type's pool. The code that finishes with a message calls `ReturnToPool()` on it, once, and only when nothing else uses it. Classes that Nino creates at a high rate inside a message (the elements of a list that grows) are worth pooling too. See [Built-in Pools](/en/docs/v4/pooling#ninopooled).
+
+### Types [#message-types]
+
+- **Keep hot data in unmanaged structs**, alone or in arrays and `List<T>`s: they are copied as raw memory, a list of them as one block. Order their fields, or set `Pack`, so that they have no padding. See [Struct Layout](/en/docs/v4/performance#struct-layout).
+- **Let strings stay the same.** Reading into an existing instance keeps a string whose text did not change, and only changed text allocates a new string. Carry values that change with every message as numbers, enums or ids, not text. A non-ASCII `[NinoUtf8]` string is decoded into a new string every time.
+- **Use `List<T>` for counts that vary.** A list keeps its capacity on reuse; an array is reused only when its length is unchanged.
+- **Keep `object` and the boxed API out of messages.** An `object` member boxes value types and dispatches through the global registry; `SerializeBoxed` and `DeserializeBoxed` find the formatter by `Type`. Declare members as their own types, or as a common `[NinoType]` base, and seal the classes that have no subtypes.
+
+### Example [#zero-gc-example]
+
+A game server sends each client its state over a connected UDP socket. Each message is a `StateUpdate`, and every entity in it is an unmanaged struct:
+
+```csharp title="StateUpdate.cs"
+using System.Collections.Generic;
+using System.Linq;
+using Nino.Core;
+
+[NinoType]
+public struct EntityState                // unmanaged: copied as raw memory
+{
+    public int Id;
+    public float X, Y, Z;
+    public uint Flags;
+}
+
+[NinoType, NinoPooled]
+public sealed partial class StateUpdate
+{
+    public long Tick;
+    public string Zone;                  // kept on reuse while its text is unchanged
+    public List<EntityState> Entities;   // one block copy; keeps its capacity on reuse
+
+    private static partial IEnumerable<StateUpdate> OnNinoPoolWarmup() =>
+        Enumerable.Range(0, 32).Select(_ => new StateUpdate { Entities = new List<EntityState>(256) });
+
+    private partial void OnNinoPoolReturn() { }
+}
+```
+
+One `Connection` per client owns a send buffer and a receive buffer. The send path serializes into the reused buffer; the receive path reads each datagram into the last message, or, for a consumer on another thread, into an instance from the pool:
+
+```csharp title="Connection.cs"
+using System;
+using System.Collections.Concurrent;
+using System.Net.Sockets;
+using Nino.Core;
+
+public sealed class Connection : IDisposable
+{
+    private readonly Socket _socket;                                // a connected UDP socket
+    private readonly NinoArrayBufferWriter _send = new(16 * 1024);  // one per connection
+    private readonly byte[] _receive = new byte[64 * 1024];         // one per connection
+    private StateUpdate _latest;                                    // filled in place by every datagram
+
+    public Connection(Socket socket) => _socket = socket;
+
+    // Send: 0 B once the buffer has grown to the largest message.
+    public void Send(StateUpdate update)
+    {
+        _send.ResetWrittenCount();
+        NinoSerializer.Serialize(update, _send); // [!code highlight]
+        _socket.Send(_send.WrittenSpan);
+    }
+
+    // Receive and handle now: the same StateUpdate every time.
+    public void ReceiveAndApply(Action<StateUpdate> apply)
+    {
+        int received = _socket.Receive(_receive);
+        NinoDeserializer.Deserialize(_receive.AsSpan(0, received), ref _latest); // [!code highlight]
+        apply(_latest);
+    }
+
+    // Receive for another thread: each message is its own instance, from the pool.
+    // The consumer calls update.ReturnToPool() when it is done with it.
+    public void ReceiveInto(ConcurrentQueue<StateUpdate> inbox)
+    {
+        int received = _socket.Receive(_receive);
+        inbox.Enqueue(NinoDeserializer.Deserialize<StateUpdate>(_receive.AsSpan(0, received))); // [!code highlight]
+    }
+
+    public void Dispose() => _send.Dispose();   // returns the send buffer's array to its pool
+}
+```
+
+Once warmed up, Nino allocates nothing in `Send`, `ReceiveAndApply` or `ReceiveInto`: the entity list is reused with its capacity, the zone name is kept while it does not change, and pooled `StateUpdate`s come back with their lists attached. Pin it with an [allocation test](/en/docs/v4/advanced/zero-allocation#verify-it), and see [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation) for batches, framed streams and memory you own, and [Reuse Deserialization and Pooling](/en/docs/v4/pooling) for the exact rules of reuse.
 
 ## Designing Types [#designing-types]
 
@@ -20,8 +121,7 @@ Nino works with its defaults, and most of what follows is optional. These are th
 ## Calling Nino [#calling-nino]
 
 - **Read with the type you wrote with.** Serialize a polymorphic value as its base (`Serialize<TBase>`) and read it with `Deserialize<TBase>`; use the [boxed API](/en/docs/v4/basic#the-boxed-api) only for a type known only as a `Type` at run time.
-- **Keep one `NinoArrayBufferWriter` per thread or owner** and reset it before each use; it is not thread safe. See [Reusing a Buffer](/en/docs/v4/basic#reusing-a-buffer).
-- **Deserialize hot messages into the previous result with `ref`**, and mark classes created at a high rate `[NinoPooled]`. Return a pooled instance once, and only when nothing else uses it. See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
+- **Reuse buffers and instances on hot paths**, as in [Handle Messages Without Allocating](#zero-gc-messages).
 - **End a `Writer` or `Reader` you create yourself** with `Flush()` and `ReleaseReferences()` (a reader with `ReleaseReferences()`), once per logical message. See [Several Values in One Buffer](/en/docs/v4/basic#several-values-in-one-buffer).
 - **Configure `NinoSettings` at startup**, before the first call on any thread: its values are read without synchronization. See [Settings](/en/docs/v4/pooling#settings).
 
