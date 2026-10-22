@@ -53,6 +53,9 @@ icon: RotateCcwClock
 - 生成器无法生成某个类型的格式化器时，构建会报一个指明类型和原因的错误，而不是在生成代码里报一堆错误。
 - 序列化超过 4 GB 的非托管值 span、超过 1 G 字符的 `StringBuilder` 或超过 2 GB 的 UTF-8 文本时，抛出 `OverflowException`，不再越过缓冲区末尾写入。
 - 代码修复（实现 `[NinoPooled]` 钩子、添加或移除特性）沿用所编辑文件的换行符：之前在 Windows 上会往使用 LF 换行的文件里插入 CRLF 行。参见[诊断列表](/zh/docs/v4/analyzers#diagnostics)。
+- **不可信数据**：针对读取器伪造的数据不会再让进程崩溃：之前，一个通过列表、可空类型或接口成员包含自身的结构体，嵌套几千层就会栈溢出；现在和嵌套超过 512 层的对象一样抛出异常。参见[无效数据](/zh/docs/v4/basic#invalid-data)。
+- 读入已有值（`Deserialize(data, ref value)`）失败时，原始类型元素的数组、列表或 `Memory<T>` 不会再留下一个装着未初始化内存的数组；`StringBuilder` 的长度和多维数组的各维度会先和数据比对再分配（之前 4 字节的 `StringBuilder` 数据会分配 2 GB）。
+- 无效的 `Version`、`Uri`、`CultureInfo`、`TimeZoneInfo`、`DateTimeOffset` 值和字典的 null 键，抛出 Nino 的 `InvalidOperationException`（原异常放在 `InnerException` 里），不再抛出 BCL 的异常；所有无效输入都能用同一种方式捕获，[Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 也会返回 400 而不是 500。
 
 ## 4.0.0-rc.6
 

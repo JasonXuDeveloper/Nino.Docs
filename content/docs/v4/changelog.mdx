@@ -53,6 +53,9 @@ What changed from one v4 release to the next, newest first. For everything v4 ch
 - When the generator cannot emit a type's formatter, the build fails with one error that names the type and the cause, instead of errors inside generated code.
 - Serializing a span of unmanaged values past 4 GB, a `StringBuilder` past 1 G chars or UTF-8 text past 2 GB throws `OverflowException` instead of writing past the end of the buffer.
 - Code fixes (implementing the `[NinoPooled]` hooks, adding or removing an attribute) keep the line breaks of the file they edit: on Windows they inserted CRLF lines into files with LF line breaks. See [Diagnostics](/en/docs/v4/analyzers#diagnostics).
+- **Untrusted data**: data crafted against a reader can no longer crash the process: a struct that holds itself through a list, a nullable or an interface member, nested thousands deep, overflowed the stack; it now throws like any object nested more than 512 deep. See [Invalid Data](/en/docs/v4/basic#invalid-data).
+- A failed read into an existing value (`Deserialize(data, ref value)`) of an array, list or `Memory<T>` of raw elements no longer leaves an array of uninitialized memory in it, and a `StringBuilder` length or a multi-dimensional array's dimensions are checked against the data before allocating (a 4-byte `StringBuilder` payload allocated 2 GB).
+- Invalid `Version`, `Uri`, `CultureInfo`, `TimeZoneInfo` and `DateTimeOffset` values and null dictionary keys throw Nino's `InvalidOperationException` (the original exception as its `InnerException`) instead of the BCL's exceptions, so every invalid input is caught the same way and [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) answers it with 400 instead of 500.
 
 ## 4.0.0-rc.6
 
