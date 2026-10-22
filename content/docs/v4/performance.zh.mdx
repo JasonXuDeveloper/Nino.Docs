@@ -4,6 +4,8 @@ description: "Nino v4 的速度从何而来，怎样保持：拦截器、原始�
 icon: Zap
 ---
 
+<AnchorRedirect map={{ buffers: '/zh/docs/v4/advanced/zero-allocation#what-allocates' }} />
+
 Nino 不用任何调优就很快。本页介绍它的内部机制，帮你让类型和调用始终留在快速路径上。实测数据见[基准测试](/zh/docs/v4/perf)，如何在自己的代码中用好这些路径，见[高性能序列化](/zh/docs/v4/advanced/high-performance)和[零分配模式](/zh/docs/v4/advanced/zero-allocation)中的做法。
 
 ## 拦截器 [#interceptors]
@@ -153,16 +155,7 @@ int size = NinoSerializer.GetFixedSize<SensorReading>();  // 22
 - **反序列化只分配结果对象**，而这些对象也可以复用：用 `ref` 反序列化到已有实例，新实例从 `[NinoPooled]` 对象池中取。复用实例时分配 0 B，只有内容变化的字符串例外：内容不变的字符串会直接保留，变化的文本才读成新实例（非 ASCII 的 `[NinoUtf8]` 文本总是读成新实例）。参见[复用反序列化与对象池](/zh/docs/v4/pooling)。
 - 默认情况下，所有字符都不超过 U+00FF 的字符串每个字符写一个字节，其他文本按 UTF-16 写出，都只需一遍收窄、扩宽或复制字符。`[NinoUtf8]` 要做转码，非空字符串在字符数之后还要多写 4 字节的字节数；只有以 ASCII 为主、夹杂少量更宽字符的文本，用它才更小（参见[二进制格式](/zh/docs/v4/platforms#binary-format)）。
 
-## 缓冲区 [#buffers]
-
-| 写入目标 | 过程 |
-| --- | --- |
-| `NinoSerializer.Serialize(value)` | 写入池化的暂存缓冲区，再拷贝到一个大小正好的新 `byte[]`。[固定大小的类型](#fixed-size-types)则直接写入一个大小正好的 `byte[]`。 |
-| `NinoArrayBufferWriter` | **直接写入**。数组租自 `ArrayPool<byte>.Shared`；用 `ResetWrittenCount()` 复用。 |
-| 其他 `IBufferWriter<byte>`（`ArrayBufferWriter<byte>`、`PipeWriter` 等） | 先写入每个线程各自的[暂存缓冲区](/zh/docs/v4/basic#terms)，再一次性拷贝到目标写入器。 |
-| `ref Writer` | 直接写入该 writer 所属的 `NinoArrayBufferWriter`，可以连续写入多个值。 |
-
-读取方面，`NinoDeserializer` 接受 `ReadOnlySpan<byte>`：直接传入你已有内存的切片即可（池化数组、管道分段、内存映射文件），无需拷贝。
+每种写入目标是直接写入、还是先写入线程独享的[暂存缓冲区](/zh/docs/v4/basic#terms)再拷贝一次，以及每种调用分配什么，见[哪些调用会分配内存](/zh/docs/v4/advanced/zero-allocation#what-allocates)。读取方面，`NinoDeserializer` 接受 `ReadOnlySpan<byte>`：直接传入你已有内存的切片即可（池化数组、管道分段、内存映射文件），无需拷贝。
 
 ## 线程安全 [#thread-safety]
 

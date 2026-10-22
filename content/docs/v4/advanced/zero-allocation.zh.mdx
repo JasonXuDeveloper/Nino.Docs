@@ -11,7 +11,7 @@ icon: Leaf
 
 | 调用 | 分配 |
 | --- | --- |
-| `NinoSerializer.Serialize(value)` | 返回的 `byte[]`（[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)正好按大小分配） |
+| `NinoSerializer.Serialize(value)` | 返回的 `byte[]`，大小正好等于数据：[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)以及元素大小固定的数组或列表直接写入其中，其他值从线程级暂存缓冲区拷贝出来 |
 | `NinoSerializer.Serialize(value, bufferWriter)` | 不分配；`NinoArrayBufferWriter` 直接写入，其他 `IBufferWriter<byte>` 从线程级暂存缓冲区拷贝一次 |
 | `NinoSerializer.Serialize(value, ref writer)` | 不分配 |
 | `NinoDeserializer.Deserialize<T>(span)` | 返回的对象：数据里的类实例、集合和字符串；只含非托管成员的结构体不分配 |
@@ -345,5 +345,6 @@ static void Encode(NinoArrayBufferWriter buffer, Quote quote)
 - [ ] 高频创建和丢弃的类标记为 `[NinoPooled]`。
 - [ ] 批量数据放在非托管结构体的数组或列表中；按下标访问的记录是非托管结构体，大小用 `GetFixedSize<T>()` 确定。
 - [ ] 没有子类型的类声明为 `sealed`（1 字节头部，无需分派）。
+- [ ] 热路径上的类型保持按位置格式，除非数据要跨版本保留；只有被共享的类型才追踪引用（参见[格式](/zh/docs/v4/advanced/high-performance#choose-the-cheapest-format)）。
 - [ ] 项目用 .NET 8 SDK 或更高版本编译，以启用[拦截器](/zh/docs/v4/performance#interceptors)。
 - [ ] 有一个测试把热路径钉在 0 B。

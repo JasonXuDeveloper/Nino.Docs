@@ -1,12 +1,12 @@
 ---
 title: 常见问题
 seoTitle: "Nino 常见问题：高性能 C# / .NET 二进制序列化库"
-description: "关于 Nino 的简短回答：它是什么、如何安装、支持哪些平台、有多快，以及什么时候该选别的方案。"
+description: "关于 Nino 的简短回答：它是什么、如何安装、支持哪些平台、有多快、什么时候该选别的方案，以及最常见的错误如何解决。"
 icon: CircleQuestionMark
 faq: true
 ---
 
-关于 Nino 最常被问到的问题，每个回答都附有详细页面的链接。
+关于 Nino 最常被问到的问题，每个回答都附有详细页面的链接。最后几个问题讲的是最常遇到的错误和意外情况。
 
 ## Nino 是什么？ [#what-is-nino]
 
@@ -65,3 +65,29 @@ Nino.Core 的 net8.0 和 net10.0 版本还带有裁剪和 Native AOT 标注：�
 ## 什么时候不该用 Nino？ [#when-should-i-not-use-nino]
 
 当数据需要人来阅读或编辑时（请用 JSON、YAML 或 TOML），或者需要由 C#、JavaScript、TypeScript 以外语言的程序读取时：格式由你的 C# 类型定义，没有 schema 文件，也没有面向这些语言的生成器，这种情况请使用 Protocol Buffers、FlatBuffers 或 MessagePack。JavaScript 和 TypeScript 客户端可以通过[生成的 TypeScript](/zh/docs/v4/advanced/typescript) 或 [.NET WebAssembly](/zh/docs/v4/advanced/browser) 使用 Nino。参见[局限性](/zh/docs/v4/limit)。
+
+## 为什么 Nino 提示某个类型没有格式化器？ [#no-formatter]
+
+`Nino: no formatter for T` 表示 Nino 不知道如何写入 `T`。给它加上 `[NinoType]`，或者用 [`[assembly: NinoFormatter]`](/zh/docs/v4/custom-formatters#for-a-type-assembly-ninoformatter) 为它声明格式化器（也可以在成员上用 [`[NinoCustomFormatter]`](/zh/docs/v4/custom-formatters#for-one-member)）。如果是成员的类型，分析器在你写代码时就会报告（NINO007）。此外，声明该类型的项目里也必须运行源生成器：在那个项目中安装 `Nino` 包；在 Unity 中让它所在的程序集引用 `Nino.Core`。
+
+在 Native AOT 下，错误信息会说明运行时无法在运行时构建格式化器：只有源生成器见过的封闭类型才有格式化器。请在某个 `[NinoType]` 成员或某次 `Serialize`/`Deserialize` 调用中写出这个确切的类型。参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
+
+## 为什么读取时报错说某个类型 ID 不是已注册的子类型？ [#unknown-type-id]
+
+数据里记录的类型，读取方在声明类型之下找不到。常见原因：子类型所在的程序集还没有加载（先加载它即可，不需要注册）；类型改名或移动了命名空间却没有加 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)；或者数据是按另一个声明类型写入的。进程只读取、从不写出的封闭泛型子类型，需要在启动时调用 `NinoPolymorphic.Register<T>()`。如果是*写入*时报错说某个类型不是已注册的子类型，说明这个运行时类型不是 `[NinoType]`：它的基类设置了 `allowInheritance: false`（NINO003），或者它所在的程序集没有运行源生成器。参见[其他程序集中的子类型](/zh/docs/v4/polymorphism#subtypes-in-other-assemblies)。
+
+## 为什么序列化时报错说对象图中有环？ [#cycle]
+
+某个对象通过成员又引用回了自己，而没有任何类型追踪引用，写入就会无休止地进行下去。把环上的类型标记为 [`trackReferences: true`](/zh/docs/v4/reference-tracking)。报错说某个类型嵌套超过 512 层时也一样处理；此外，通过构造函数创建或按值比较的类无法延迟写入，所以深度递归的类型要提供无参构造函数和可赋值的成员。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
+
+## 为什么旧数据读不出来了，或者读出的值不对？ [#old-data]
+
+只写 `[NinoType]` 时是按位置格式：增加、删除或调整成员顺序都会改变字节，此时读取旧数据会抛出异常（`unexpected end of data`、`invalid length`），更糟的是读出错误的值，因为字节里不带 schema。需要保存的数据，在写入之前就选用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`；在版本容错的继承层次中，只往没有子类的类末尾追加成员。要在 CI 中发现格式变化，可以比较每次构建的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)。参见[数据演进](/zh/docs/v4/evolving-data)。
+
+## 为什么我的调用没有被拦截？ [#not-intercepted]
+
+拦截器需要 Roslyn 4.8 或更高版本（.NET 8 SDK 及以上）；Unity 使用 Roslyn 4.3 版本，从不拦截。泛型代码中的调用、针对其他程序集中声明的 `[NinoType]` 的调用，以及针对原始值的调用，都有意走常规路径。如果项目自己设置了 `InterceptorsNamespaces`，请在原值后追加，而不是替换它。无论是否拦截，写出的字节都相同。参见[拦截器](/zh/docs/v4/performance#interceptors)。
+
+## 为什么我的热路径还在分配内存？ [#still-allocates]
+
+依次检查：序列化到复用的 `NinoArrayBufferWriter`（或其他 `IBufferWriter<byte>`），而不是调用会返回新 `byte[]` 的 `Serialize(value)`；用 `ref` 反序列化到已有的值；自己创建的 `Writer` 或 `Reader` 最后调用了 `ReleaseReferences()`；数组长度保持不变（数量会变化时用 `List<T>`）；Nino 需要新建的类标记了 `[NinoPooled]`；并且是在预热之后才测量。内容变化的文本总会产生新字符串。参见[哪些调用会分配内存](/zh/docs/v4/advanced/zero-allocation#what-allocates)和[检查清单](/zh/docs/v4/advanced/zero-allocation#checklist)。

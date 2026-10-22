@@ -11,7 +11,7 @@ A recipe book for hot paths that must not allocate: message loops, market data a
 
 | Call | Allocates |
 | --- | --- |
-| `NinoSerializer.Serialize(value)` | the returned `byte[]` (exactly sized for a [fixed-size type](/en/docs/v4/performance#fixed-size-types)) |
+| `NinoSerializer.Serialize(value)` | the returned `byte[]`, of exactly the data's size: written in place for a [fixed-size type](/en/docs/v4/performance#fixed-size-types) and for an array or list of fixed-size elements, otherwise copied out of a per-thread scratch buffer |
 | `NinoSerializer.Serialize(value, bufferWriter)` | nothing; a `NinoArrayBufferWriter` is written in place, any other `IBufferWriter<byte>` gets one copy from a per-thread scratch buffer |
 | `NinoSerializer.Serialize(value, ref writer)` | nothing |
 | `NinoDeserializer.Deserialize<T>(span)` | the objects it returns: the class instances, collections and strings in the data; nothing for a struct made of unmanaged members |
@@ -345,5 +345,6 @@ static void Encode(NinoArrayBufferWriter buffer, Quote quote)
 - [ ] Classes created and dropped at a high rate are `[NinoPooled]`.
 - [ ] Bulk data is kept in arrays or lists of unmanaged structs; indexed records are unmanaged structs, sized with `GetFixedSize<T>()`.
 - [ ] Classes that have no subtypes are sealed (1-byte header, no dispatch).
+- [ ] Hot types stay positional unless their data must outlive a release, and only shared types track references ([formats](/en/docs/v4/advanced/high-performance#choose-the-cheapest-format)).
 - [ ] The project builds with the .NET 8 SDK or later, to get [interceptors](/en/docs/v4/performance#interceptors).
 - [ ] A test pins the hot path at 0 B.

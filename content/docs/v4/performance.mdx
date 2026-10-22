@@ -4,6 +4,8 @@ description: "How Nino v4 gets its speed, and what you can do to keep it: interc
 icon: Zap
 ---
 
+<AnchorRedirect map={{ buffers: '/en/docs/v4/advanced/zero-allocation#what-allocates' }} />
+
 Nino is fast with no tuning at all. This page explains what happens under the hood, so you can keep your types and calls on the fast paths. For measurements, see [Benchmarks](/en/docs/v4/perf); for how to use these paths in your own code, see [High-Performance Serialization](/en/docs/v4/advanced/high-performance) and the recipes in [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation).
 
 ## Interceptors
@@ -153,16 +155,7 @@ A `string`, an array or collection, a class, a `T?`, a tuple, `DateTimeOffset` o
 - **Deserializing allocates only the result objects**, and even those can be reused: deserialize into an existing instance with `ref`, and take new instances from `[NinoPooled]` pools. Reusing instances allocates 0 B, apart from strings whose text changed: an unchanged string is kept, and only changed text is read into a new instance (non-ASCII `[NinoUtf8]` text always is). See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 - By default a string whose chars are all at most U+00FF is written in one byte a char and other text as UTF-16, each in one pass that narrows, widens or copies the chars. `[NinoUtf8]` has to transcode, and a non-empty string carries a 4-byte byte count after its char count; it is smaller only for text that is mostly ASCII with a few wider chars ([Binary Format](/en/docs/v4/platforms#binary-format)).
 
-## Buffers
-
-| Destination | What happens |
-| --- | --- |
-| `NinoSerializer.Serialize(value)` | Writes into a pooled scratch buffer, then copies into a new `byte[]` of the exact size. A [fixed-size type](#fixed-size-types) is written straight into a `byte[]` of its size instead. |
-| `NinoArrayBufferWriter` | Written **in place**. Pooled from `ArrayPool<byte>.Shared`; reuse it with `ResetWrittenCount()`. |
-| Any other `IBufferWriter<byte>` (`ArrayBufferWriter<byte>`, `PipeWriter`...) | Written into a per-thread [scratch buffer](/en/docs/v4/basic#terms), then copied once into the writer. |
-| `ref Writer` | Written in place into the writer's `NinoArrayBufferWriter`. Lets you write several values back to back. |
-
-On the reading side, `NinoDeserializer` takes a `ReadOnlySpan<byte>`: pass a slice of whatever memory you already have (a pooled array, a pipe segment, a memory-mapped file) without copying it.
+Where each destination writes (in place, or through a per-thread [scratch buffer](/en/docs/v4/basic#terms) and one copy) and what each call allocates is listed in [What Allocates](/en/docs/v4/advanced/zero-allocation#what-allocates). On the reading side, `NinoDeserializer` takes a `ReadOnlySpan<byte>`: pass a slice of whatever memory you already have (a pooled array, a pipe segment, a memory-mapped file) without copying it.
 
 ## Thread Safety
 

@@ -140,7 +140,7 @@ Unity、.NET Framework 以及 .NET Core 3.0 到 .NET 7 使用 `netstandard2.0`/`
 ## Unity [#unity]
 
 - 从 [OpenUPM](/zh/docs/v4/start#unity-project) 安装。包中含有 `Nino.Core.dll` 和源生成器（`Nino.Generator.dll`，已标记为 `RoslynAnalyzer`）、`Nino.UnityTypes.dll`（[`AnimationCurve`、`Gradient` 和 `RectOffset`](/zh/docs/v4/advanced/unity#unity-classes) 的格式化器），以及 `System.Buffers`、`System.Memory` 和 `System.Runtime.CompilerServices.Unsafe`。
-- Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员或标了 `[NinoPooled]` 的类型必须是 `partial`（NINO002，提供代码修复）。
+- Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员或标了 `[NinoPooled]` 的类型必须是 `partial`（NINO002）。代码修复只随 NuGet 包提供，所以要手动加上 `partial`。
 - Unity 包附带的是源生成器的 Roslyn 4.3 版本，所以调用不会被拦截，而是走常规路径，写出的字节相同。
 - 生成的注册表标记了 `[RuntimeInitializeOnLoadMethod]`（编辑器中还有 `[InitializeOnLoadMethod]`），会在启动时运行，也不会被 IL2CPP 裁剪掉。
 - `Vector3`、`Quaternion`、`Matrix4x4` 等 Unity 类型是非托管类型，按原始内存写入。
@@ -150,7 +150,7 @@ Unity、.NET Framework 以及 .NET Core 3.0 到 .NET 7 使用 `netstandard2.0`/`
 ## Godot [#godot]
 
 - Godot 4 的 C# 项目就是普通的 .NET 项目（`Godot.NET.Sdk`，Godot 4.4 起目标框架为 .NET 8，之前为 .NET 6）。用 `dotnet add package Nino --prerelease` 安装，参见 [Godot 项目](/zh/docs/v4/start#godot-project)。
-- 用 .NET 8 及以上的 SDK 编译时（Godot 4.4 起必须如此），源生成器、分析器和拦截器都会运行。目标框架为 .NET 8 的项目还会通过 `[UnsafeAccessor]` 访问私有成员，无需 `partial`（泛型类型除外）；目标为 .NET 6 时，这类类型必须声明为 `partial`（NINO002）。
+- 用 .NET 8 及以上的 SDK 编译时（Godot 4.4 起必须如此），源生成器、分析器和拦截器都会运行。目标框架为 .NET 8 的项目还会通过 `[UnsafeAccessor]` 访问私有成员，无需 `partial`（泛型类型除外）；目标为 .NET 6 时，这类类型必须声明为 `partial`（NINO002）。`[NinoPooled]` 类则始终要声明为 `partial`。
 - Godot 的数学结构体（`Vector2`、`Vector3`、`Quaternion`、`Transform3D`、`Color` 等）是非托管类型，按原始内存拷贝。
 - 在双精度版本的 Godot 中（`real_t` 为 `double`），这些结构体的字段是 `double`，布局与默认的单精度版本不同。含有 Godot 数学类型的数据，一个版本写出的，另一个版本读不了；需要在两者之间共享的数据，请改用自己的结构体或基元字段。
 - 请序列化你自己的数据类型；`Node`、`Resource` 等是引擎对象，Nino 不序列化它们。

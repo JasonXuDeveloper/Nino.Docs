@@ -140,7 +140,7 @@ Unity and .NET Framework, as well as .NET Core 3.0 to .NET 7, use the `netstanda
 ## Unity
 
 - Install from [OpenUPM](/en/docs/v4/start#unity-project). The package ships `Nino.Core.dll` and the generator (`Nino.Generator.dll`, labelled `RoslynAnalyzer`), `Nino.UnityTypes.dll` (formatters for [`AnimationCurve`, `Gradient` and `RectOffset`](/en/docs/v4/advanced/unity#unity-classes)), plus `System.Buffers`, `System.Memory` and `System.Runtime.CompilerServices.Unsafe`.
-- Unity compiles against .NET Standard: there is no `[UnsafeAccessor]`, so a type with serialized non-public members or `[NinoPooled]` must be `partial` (NINO002, with a code fix).
+- Unity compiles against .NET Standard: there is no `[UnsafeAccessor]`, so a type with serialized non-public members or `[NinoPooled]` must be `partial` (NINO002). The code fixes ship only in the NuGet package, so add `partial` by hand.
 - The package ships the generator's Roslyn 4.3 build, so calls are not intercepted. They use the regular path and write the same bytes.
 - Generated registries carry `[RuntimeInitializeOnLoadMethod]` (and `[InitializeOnLoadMethod]` in the editor), which runs them at startup and keeps them from being stripped by IL2CPP.
 - Unity types such as `Vector3`, `Quaternion` and `Matrix4x4` are unmanaged and are written as raw memory.
@@ -150,7 +150,7 @@ See [Unity and HybridCLR](/en/docs/v4/advanced/unity) for project setup and IL2C
 ## Godot
 
 - Godot 4 C# projects are regular .NET projects (`Godot.NET.Sdk`, targeting .NET 8 from Godot 4.4 and .NET 6 before). Install with `dotnet add package Nino --prerelease`; see [Godot Project](/en/docs/v4/start#godot-project).
-- Built with the .NET 8 SDK or later (required from Godot 4.4), the source generator, the analyzers and the interceptors all run. A project that targets .NET 8 also reaches private members through `[UnsafeAccessor]` without `partial` (except in generic types); on .NET 6 such types must be `partial` (NINO002).
+- Built with the .NET 8 SDK or later (required from Godot 4.4), the source generator, the analyzers and the interceptors all run. A project that targets .NET 8 also reaches private members through `[UnsafeAccessor]` without `partial` (except in generic types); on .NET 6 such types must be `partial` (NINO002). `[NinoPooled]` classes are always `partial`.
 - Godot's math structs (`Vector2`, `Vector3`, `Quaternion`, `Transform3D`, `Color`, ...) are unmanaged and are copied as raw memory.
 - In a Godot build with double precision (`real_t` = `double`), these structs hold `double` fields, so their layout differs from the default single-precision build. Data containing Godot math types written by one build cannot be read by the other; use your own structs or primitive fields for data shared between the two.
 - Serialize your own data types; Godot objects such as `Node` and `Resource` are engine objects and are not serialized.

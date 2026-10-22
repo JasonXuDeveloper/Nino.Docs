@@ -96,7 +96,7 @@ openupm add com.jasonxudeveloper.nino
 
 包里同时带有 `Nino.Core.dll` 和源生成器（`Nino.Generator.dll`，已标记为 `RoslynAnalyzer`），以及 `Nino.UnityTypes.dll`（[Unity 的 `AnimationCurve`、`Gradient` 和 `RectOffset`](/zh/docs/v4/advanced/unity#unity-classes) 的格式化器），不需要再装别的东西。这是源生成器的 Roslyn 4.3 版本，对应 Unity 支持的最低编译器版本，所以 Unity 中的调用不会被[拦截](/zh/docs/v4/performance#interceptors)，而是走常规路径，写出的字节完全相同。
 
-Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`。因此，序列化非公开成员（或使用 `[NinoPooled]`）的类型必须声明为 `partial`，包含它的外层类型也一样。分析器会报告 NINO002 并提供修复。
+Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`。因此，序列化非公开成员（或使用 `[NinoPooled]`）的类型必须声明为 `partial`，包含它的外层类型也一样。分析器会报告 NINO002；代码修复只随 NuGet 包提供，所以在 Unity 中需要手动加上 `partial`。
 
 <Callout type="warn">
 
@@ -121,12 +121,7 @@ dotnet add package Nino --prerelease
 
 然后构建项目（Godot 的 **Build** 按钮、IDE 或 `dotnet build` 均可）。
 
-- 源生成器和分析器始终生效；用 .NET 8 及以上的 SDK 构建时，[拦截器](/zh/docs/v4/performance#interceptors)也会生效。
-- 在 .NET 8 上，`[UnsafeAccessor]` 可以访问私有成员，所以类型不必声明为 `partial`（泛型类型除外）。在 .NET 6 上（Godot 4.0–4.3），含有需序列化私有成员的类型必须声明为 `partial`。`[NinoPooled]` 类则始终要声明为 `partial`。
-- Godot 的数学结构体（`Vector2`、`Vector3`、`Quaternion`、`Transform3D`、`Color` 等）都是非托管类型，和其他非托管结构体一样按原始内存拷贝。
-- 要序列化的是你自己的数据类和结构体。`Node`、`Resource` 等 Godot 对象是引擎对象而不是数据，Nino 不会序列化它们。
-
-详见[平台](/zh/docs/v4/platforms#godot)。
+源生成器和分析器与在其他 .NET 项目中一样生效，用 .NET 8 及以上的 SDK 构建时[拦截器](/zh/docs/v4/performance#interceptors)也会生效。Godot 的数学结构体按原始内存拷贝，`Node`、`Resource` 等引擎对象则不会被序列化。哪些类型需要声明 `partial`、双精度构建要注意什么，参见[平台](/zh/docs/v4/platforms#godot)。
 
 ## 第一次序列化 [#first-serialization]
 
@@ -204,5 +199,6 @@ Nino 不需要任何初始化调用：生成的代码会自行注册，之后加
   <Card title="序列化与反序列化" href="/zh/docs/v4/basic">全部重载：缓冲区写入器、Span、`Writer`/`Reader`、装箱值。</Card>
   <Card title="定义类型" href="/zh/docs/v4/defining-types">选择成员和顺序，私有成员、记录、泛型。</Card>
   <Card title="支持的类型" href="/zh/docs/v4/types">基元类型、字符串、元组、集合，以及你自己的集合类型。</Card>
+  <Card title="最佳实践" href="/zh/docs/v4/best-practices">数据发布之前要做的选择：格式、密封类、缓冲区、复用。</Card>
   <Card title="进阶指南" href="/zh/docs/v4/advanced">热路径、网络与 RPC、ASP.NET Core、TypeScript 客户端、消息队列、缓存、持久化和 Unity 的完整实践方案。</Card>
 </Cards>

@@ -1,6 +1,6 @@
 ---
 title: High-Performance Serialization
-description: "How Nino's hot paths work and what each one costs: buffer writers and the scratch buffer, Writer and Reader, reuse deserialization, pools, raw structs, interceptors, thread safety and how to measure."
+description: "How to get the most speed out of Nino, and what each hot path costs: buffer writers, Writer and Reader, reuse deserialization, pools, raw structs, formats, sealed and polymorphic types, collections, strings and how to measure."
 icon: Gauge
 ---
 
@@ -10,7 +10,7 @@ icon: Gauge
   }}
 />
 
-`NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)` are already fast, but each call allocates its result. This page explains the mechanisms that take both directions down to **0 B per call**: where each call writes, what it reads from, what it costs, and how to measure it.
+`NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)` are already fast, but each call allocates its result. This page explains the mechanisms that take both directions down to **0 B per call** (where each call writes, what it reads from, what it costs), then the choices in your own types that keep calls fast: formats, sealed and polymorphic classes, collections and strings, and how to measure.
 
 For copy-paste recipes built on these mechanisms, and the checklist, see [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation); for the internals (inlined formatters, struct layout), see the [Performance Guide](/en/docs/v4/performance).
 
@@ -211,18 +211,48 @@ ulong hash = XxHash64.HashToUInt64(buffer.WrittenSpan); // System.IO.Hashing
 if (hash != lastHash) { Send(buffer.WrittenSpan); lastHash = hash; }
 ```
 
+## Choose the Cheapest Format [#choose-the-cheapest-format]
+
+Each `[NinoType]` picks its [format](/en/docs/v4/evolving-data) and whether it tracks references. Every option beyond the default costs bytes and time on every value of the type, so give it only to the types that need it:
+
+| Option | Extra bytes | Extra work |
+| --- | --- | --- |
+| Positional (a bare `[NinoType]`) | none | none: raw structs are copied as memory, and [fixed-size types](/en/docs/v4/performance#fixed-size-types) are written straight into their `byte[]` |
+| `format: NinoFormat.VersionTolerant` | 4 per object | one length per object; the type is no longer raw or fixed-size |
+| `format: NinoFormat.Keyed` | 8 per member, plus 4 per object | a key and a length per member, and a key check per member when reading; the type is no longer raw or fixed-size |
+| `trackReferences: true` | 4 per tracked object | an identity lookup per tracked object, plus a small fixed cost per top-level call |
+
+- Keep messages and caches that are written and read by the same build positional, and give version tolerance or keys only to the data that outlives a release: see [Choosing](/en/docs/v4/evolving-data#choosing).
+- Track references only on the types that are actually shared or form cycles: in the [organization chart](/en/docs/v4/reference-tracking), only `Department` is tracked, and `Employee` pays nothing. Tree-shaped data needs no tracking, however deep it is.
+- Prefer the per-type `format` to `WEAK_VERSION_TOLERANCE`: the symbol makes every positional type of the project version-tolerant, so its structs are no longer copied as raw memory.
+
+## Seal Classes, and Dispatch Through a Base [#sealed-and-polymorphic]
+
+What Nino writes in front of a class value depends on the declared type of its slot ([How a Polymorphic Value Is Written](/en/docs/v4/polymorphism#how-a-polymorphic-value-is-written)):
+
+- **Seal classes that have no subtypes.** A sealed class costs a 1-byte null flag and no dispatch; a class that is not sealed costs a 4-byte type id and a type check, even when it has no subtype.
+- **Dispatch through a common `[NinoType]` base.** For subtypes declared in the base's assembly, generated code writes through a chain of exact type checks and reads through a `switch` on the type id, calling each subtype's formatter directly. Subtypes from other assemblies, generic subtypes, tracked types, and writes in hierarchies of more than 64 subtypes go through a lock-free registry instead ([Dispatch](/en/docs/v4/polymorphism#dispatch)).
+- **Keep `object` and the boxed API off hot paths.** A slot declared as `object` dispatches through the global registry of every `[NinoType]`, and `SerializeBoxed`/`DeserializeBoxed` find the formatter by `Type` and box value types ([Runtime Types](/en/docs/v4/basic#runtime-types)).
+
+## Choose Collections That Copy as Blocks [#collections]
+
+- **Bulk data in arrays and lists of raw elements.** A `T[]` or `List<T>` of unmanaged values or raw structs is one block copy, and so are arrays and lists of value tuples and `KeyValuePair`s of raw items (rearranged with [SIMD](/en/docs/v4/platforms#simd) where the CPU allows). The full list is in [Raw Memory for Unmanaged Data](/en/docs/v4/performance#raw-memory-for-unmanaged-data).
+- **`List<T>` for counts that vary.** Reuse deserialization fills a list in place and keeps its capacity; an array is reused only when the new data has the same length. A dictionary is merged by key.
+- **Declare the type you want created.** A member declared as `IList<T>`, `IEnumerable<T>` or `IReadOnlyList<T>` is read back as a `List<T>`, `ISet<T>` as a `HashSet<T>`, `IDictionary<TKey, TValue>` as a `Dictionary<TKey, TValue>` ([Collection Types](/en/docs/v4/types#collection-types)). Nullable raw elements are one block only in an array or a `List<T?>`: declared as an interface, each element is written on its own.
+- **Collections are values.** The same collection in two members is written twice; reference tracking covers `[NinoType]` classes, not collections.
+
+## Strings [#strings]
+
+- The default encoding writes text whose chars are all at most U+00FF in one byte a char and other text as UTF-16, each in one pass. `[NinoUtf8]` costs a transcode and a 4-byte byte count, and pays off only for text that is mostly ASCII with a few wider chars ([String Encoding](/en/docs/v4/defining-types#string-encoding)).
+- Reuse deserialization keeps a string whose text did not change, so stable text (names, keys, enum-like codes) costs nothing per message; a `[NinoUtf8]` string is kept only when its text is ASCII.
+
 ## Per-Call Overhead [#per-call-overhead]
 
-Once nothing allocates, what is left is a few nanoseconds per call, which matters most when small values are serialized in a tight loop:
-
-- **Interceptors.** Built with Roslyn 4.8 or later (the .NET 8 SDK and later), calls whose type is known at the call site go straight to the generated formatter, without the formatter cache lookup and its virtual call. Calls inside generic code, calls for `[NinoType]`s declared in another assembly, and Unity projects (which use the Roslyn 4.3 build) take the regular path, with the same bytes. See [Interceptors](/en/docs/v4/performance#interceptors).
-- **Sealed classes.** A polymorphic value costs a 4-byte type id and a dispatch; a sealed class needs only a 1-byte null flag and no dispatch. Seal classes that have no subtypes. See [Polymorphism](/en/docs/v4/performance#polymorphism).
+Once nothing allocates, what is left is a few nanoseconds per call, which matters most when small values are serialized in a tight loop. Build with Roslyn 4.8 or later (the .NET 8 SDK and later): calls whose type is known at the call site then go straight to the generated formatter, without the formatter cache lookup and its virtual call. Calls inside generic code, calls for `[NinoType]`s declared in another assembly, and Unity projects (which use the Roslyn 4.3 build) take the regular path, with the same bytes. See [Interceptors](/en/docs/v4/performance#interceptors).
 
 ## Thread Safety [#thread-safety]
 
-Every `NinoSerializer` and `NinoDeserializer` method is safe to call concurrently without locks: scratch buffers and reference-tracking tables are per thread, and a nested call on the same thread gets its own.
-
-What is **not** thread safe is the state you own: a `NinoArrayBufferWriter`, a `Writer` or `Reader`, and the objects you deserialize into. That is why every recipe keeps one buffer per thread or per owner. Set `NinoSettings` values at startup, before the first call on any thread. Details: [Thread Safety](/en/docs/v4/performance#thread-safety).
+Every `NinoSerializer` and `NinoDeserializer` method is safe to call concurrently without locks, but the state you own is not: a `NinoArrayBufferWriter`, a `Writer` or `Reader`, and the objects you deserialize into. That is why every recipe keeps one buffer per thread or per owner. Details: [Thread Safety](/en/docs/v4/performance#thread-safety).
 
 ## Measure [#measure]
 

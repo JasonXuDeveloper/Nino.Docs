@@ -1,12 +1,12 @@
 ---
 title: FAQ
 seoTitle: "Nino FAQ: High-Performance Binary Serializer for C# and .NET"
-description: "Short answers about Nino: what it is, how to install it, which platforms it supports, how fast it is and when to use something else."
+description: "Short answers about Nino: what it is, how to install it, which platforms it supports, how fast it is, when to use something else, and how to fix the errors people run into most."
 icon: CircleQuestionMark
 faq: true
 ---
 
-Short answers to the questions people ask most about Nino, each with a link to the full page.
+Short answers to the questions people ask most about Nino, each with a link to the full page. The last ones cover the errors and surprises people run into most.
 
 ## What is Nino?
 
@@ -66,3 +66,28 @@ Yes, with [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) (4.0.0-rc.6 and lat
 
 When people need to read or edit the data (use JSON, YAML or TOML), or when a program in a language other than C#, JavaScript or TypeScript must read it: the format is defined by your C# types, with no schema file and no generator for those languages, so use Protocol Buffers, FlatBuffers or MessagePack for that. JavaScript and TypeScript clients use Nino through [generated TypeScript](/en/docs/v4/advanced/typescript) or [.NET WebAssembly](/en/docs/v4/advanced/browser). See [Limitations](/en/docs/v4/limit).
 
+## Why does Nino say there is no formatter for a type? [#no-formatter]
+
+`Nino: no formatter for T` means Nino does not know how to write `T`. Mark it `[NinoType]`, or declare a formatter for it with [`[assembly: NinoFormatter]`](/en/docs/v4/custom-formatters#for-a-type-assembly-ninoformatter) (or [`[NinoCustomFormatter]`](/en/docs/v4/custom-formatters#for-one-member) on the member). For a member, the analyzer already reports this as you type (NINO007). The generator must also run in the project that declares the type: install the `Nino` package there, and in Unity let its assembly reference `Nino.Core`.
+
+Under Native AOT the message says the runtime cannot build formatters at run time: only the closed types the generator saw exist. Name the exact type in a `[NinoType]` member or a `Serialize`/`Deserialize` call. See [Trimming and Native AOT](/en/docs/v4/platforms#trimming-and-native-aot).
+
+## Why does reading throw that a type id is not a registered subtype? [#unknown-type-id]
+
+The data names a type the reader cannot find under the declared type. Usually the subtype lives in an assembly that is not loaded yet (load it first; there is nothing to register), the type was renamed or moved without [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name), or the data was written for another declared type. A closed generic subtype that the process only reads needs `NinoPolymorphic.Register<T>()` at startup. When *writing* throws that a type is not a registered subtype, the runtime type is not a `[NinoType]`: its base sets `allowInheritance: false` (NINO003), or the generator does not run in its assembly. See [Subtypes in Other Assemblies](/en/docs/v4/polymorphism#subtypes-in-other-assemblies).
+
+## Why does serializing throw that the object graph has a cycle? [#cycle]
+
+An object refers back to itself through its members, and nothing tracks references, so it would be written forever. Mark the types on the cycle [`trackReferences: true`](/en/docs/v4/reference-tracking). The same goes for an error that a type is nested more than 512 objects deep: classes created by their constructor or compared by value cannot be deferred, so give a deeply recursive type a parameterless constructor and settable members. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
+
+## Why does old data no longer deserialize, or come back with wrong values? [#old-data]
+
+A bare `[NinoType]` is positional: adding, removing or reordering members changes the bytes, and reading older data then throws (`unexpected end of data`, `invalid length`) or, worse, returns wrong values, since the bytes carry no schema. Give stored data `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` before writing any, and in a version-tolerant hierarchy append members only to the classes without subclasses. To catch a change in CI, compare the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) of each build. See [Evolving Your Data](/en/docs/v4/evolving-data).
+
+## Why are my calls not intercepted? [#not-intercepted]
+
+Interceptors need Roslyn 4.8 or later (the .NET 8 SDK and later); Unity uses the Roslyn 4.3 build and never intercepts. Calls inside generic code, calls for `[NinoType]`s declared in another assembly and calls for raw values take the regular path on purpose. If your project sets `InterceptorsNamespaces` itself, append to it instead of replacing it. Either way the bytes are the same. See [Interceptors](/en/docs/v4/performance#interceptors).
+
+## Why does my hot path still allocate? [#still-allocates]
+
+Check, in order: you serialize into a reused `NinoArrayBufferWriter` (or another `IBufferWriter<byte>`) rather than calling `Serialize(value)`, which returns a new `byte[]`; you deserialize into an existing value with `ref`; a `Writer` or `Reader` you create yourself ends with `ReleaseReferences()`; arrays keep the same length (use `List<T>` for counts that vary); the classes Nino has to create are `[NinoPooled]`; and you measure after warming up. Text that changes is always a new string. See [What Allocates](/en/docs/v4/advanced/zero-allocation#what-allocates) and the [checklist](/en/docs/v4/advanced/zero-allocation#checklist).

@@ -96,7 +96,7 @@ openupm add com.jasonxudeveloper.nino
 
 The package ships `Nino.Core.dll` together with the source generator (`Nino.Generator.dll`, labelled as a `RoslynAnalyzer`) and `Nino.UnityTypes.dll`, the formatters for [Unity's `AnimationCurve`, `Gradient` and `RectOffset`](/en/docs/v4/advanced/unity#unity-classes), so nothing else has to be installed. This is the generator's Roslyn 4.3 build, which matches the oldest compiler Unity supports, so calls are not [intercepted](/en/docs/v4/performance#interceptors) in Unity. They take the regular path and write the same bytes.
 
-Unity compiles against .NET Standard, which has no `[UnsafeAccessor]`. A type that serializes non-public members (or uses `[NinoPooled]`) must therefore be declared `partial`, and so must every type that contains it. The analyzer reports this (NINO002) and offers a fix.
+Unity compiles against .NET Standard, which has no `[UnsafeAccessor]`. A type that serializes non-public members (or uses `[NinoPooled]`) must therefore be declared `partial`, and so must every type that contains it. The analyzer reports this (NINO002); the code fixes ship only in the NuGet package, so add `partial` by hand in Unity.
 
 <Callout type="warn">
 
@@ -121,12 +121,7 @@ dotnet add package Nino --prerelease
 
 Then build the project (from Godot's **Build** button, your IDE or `dotnet build`).
 
-- The source generator and the analyzers always run; the [interceptors](/en/docs/v4/performance#interceptors) run when the .NET 8 SDK or later builds the project.
-- On .NET 8, `[UnsafeAccessor]` reaches private members, so their types need not be `partial` (except generic types). On .NET 6 (Godot 4.0–4.3), a type with serialized private members must be `partial`. `[NinoPooled]` classes are always `partial`.
-- Godot's math structs (`Vector2`, `Vector3`, `Quaternion`, `Transform3D`, `Color`, ...) are unmanaged, so they are copied as raw memory like any other unmanaged struct.
-- Serialize your own data classes and structs. Godot objects such as `Node` and `Resource` are engine objects, not data, and Nino does not serialize them.
-
-See [Platforms](/en/docs/v4/platforms#godot) for details.
+The generator and the analyzers run as in any .NET project, and the [interceptors](/en/docs/v4/performance#interceptors) run on the .NET 8 SDK and later. Godot's math structs are copied as raw memory, while engine objects such as `Node` and `Resource` are not serialized. When a type needs `partial`, and what to watch for in double-precision builds: [Platforms](/en/docs/v4/platforms#godot).
 
 ## First Serialization
 
@@ -204,5 +199,6 @@ Custom formatters need no call either: they are declared with attributes ([Custo
   <Card title="Serialize and Deserialize" href="/en/docs/v4/basic">Every overload: buffer writers, spans, `Writer`/`Reader`, boxed values.</Card>
   <Card title="Defining Types" href="/en/docs/v4/defining-types">Choose members, order, private members, records, generics.</Card>
   <Card title="Supported Types" href="/en/docs/v4/types">Primitives, strings, tuples, collections and your own collections.</Card>
+  <Card title="Best Practices" href="/en/docs/v4/best-practices">The choices to make before your data ships: format, sealing, buffers, reuse.</Card>
   <Card title="Advanced Guides" href="/en/docs/v4/advanced">Complete patterns for hot paths, networking and RPC, ASP.NET Core, TypeScript clients, message queues, caching, persistence and Unity.</Card>
 </Cards>

@@ -1,0 +1,54 @@
+---
+title: 最佳实践
+description: "Nino 数据发布之前要做的选择：每个类型的格式、密封类与共同基类、缓冲区与复用、持久保存的数据、不可信的输入，以及项目配置。"
+icon: ListChecks
+---
+
+Nino 用默认设置就能工作，下面的大多数建议都是可选的。它们是数据写出之后就很难再改的决定，以及让调用保持快速的习惯。每一条都链接到详细说明它的页面。
+
+## 设计类型 [#designing-types]
+
+- **在保存或发送任何数据之前，先为每个类型选定格式。** 由同一版本写入和读取的数据保持按位置格式（只写 `[NinoType]`）；只会追加成员的数据用 `NinoFormat.VersionTolerant`；要经过许多版本编辑的文档和配置用 `NinoFormat.Keyed`。之后再改变类型的格式，已有的数据就读不出来了。参见[数据演进](/zh/docs/v4/evolving-data#choosing)。
+- **在版本容错的继承层次中，只往没有子类的类追加成员。** 往基类追加的成员会让所有子类的成员错位。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
+- **没有子类型的类声明为 `sealed`。** 密封类只需 1 字节的 null 标记；未密封的类要写 4 字节的类型 ID，还要做一次类型检查。参见[多态](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)。
+- **给多态类型一个共同的 `[NinoType]` 基类或接口**，成员和调用都声明为这个基类，而不是 `object`。参见[通过共同基类分派](/zh/docs/v4/polymorphism#dispatching-through-a-common-base)。
+- **只给被共享或构成环的类型开启引用追踪。** 树形数据不需要追踪。参见[引用追踪](/zh/docs/v4/reference-tracking#when-to-use-it)。
+- **热路径上的结构体保持非托管，并在保存之前定好它的布局。** 原始结构体按内存拷贝，所以字段顺序、`Pack` 和 `Size` 都是格式的一部分。参见[结构体](/zh/docs/v4/defining-types#structs)和[结构体布局](/zh/docs/v4/performance#struct-layout)。
+- **热路径上读取的类型，提供无参构造函数和可赋值的成员。** 通过构造函数创建的类型（位置记录、`init` 或只读成员）每次读取都会重新创建，无法池化，也无法追踪引用。参见[重新创建的类型](/zh/docs/v4/constructors#re-created-types)。
+- **不是数据的东西不要写。** 缓存和派生状态用 `[NinoIgnore]` 排除；要记录类型时存你自己的 ID，而不是 `System.Type`，Nino 有意不序列化它。参见[不支持的类型](/zh/docs/v4/types#not-supported)。
+
+## 调用 Nino [#calling-nino]
+
+- **用写入时的类型来读取。** 多态值按基类序列化（`Serialize<TBase>`），再用 `Deserialize<TBase>` 读取；[装箱 API](/zh/docs/v4/basic#the-boxed-api) 只用于运行时才以 `Type` 形式得知的类型。
+- **每个线程或归属方持有一个 `NinoArrayBufferWriter`**，每次使用前重置；它不是线程安全的。参见[复用缓冲区](/zh/docs/v4/basic#reusing-a-buffer)。
+- **热点消息用 `ref` 反序列化到上一次的结果中**，高频创建的类标记为 `[NinoPooled]`。池化的实例只归还一次，而且要在没有别处使用它之后。参见[复用反序列化与对象池](/zh/docs/v4/pooling)。
+- **自己创建的 `Writer` 或 `Reader` 要收尾**：每条逻辑消息结束时调用 `Flush()` 和 `ReleaseReferences()`（`Reader` 调用 `ReleaseReferences()`）。参见[一个缓冲区中的多个值](/zh/docs/v4/basic#several-values-in-one-buffer)。
+- **在启动时配置 `NinoSettings`**，早于任何线程上的第一次调用：它的值在读取时不做同步。参见[设置](/zh/docs/v4/pooling#settings)。
+
+这些选择在速度上的影响，参见[高性能序列化](/zh/docs/v4/advanced/high-performance)。
+
+## 保存与交换的数据 [#stored-data]
+
+- **在保存的数据前面加上你自己的文件头**：一个魔数和一个格式版本号，让以后的版本知道自己读的是什么。参见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)。
+- **改名时使用 `[NinoFormerName]`。** 用在类型上，它保留已有数据使用的类型 ID；用在键控类型的成员上，它继续读取旧名称。参见[曾用名](/zh/docs/v4/defining-types#former-name)。
+- **在版本之间检查布局。** 在 CI 中把每次构建的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)与上一个版本比较，并在测试中保留旧的数据（[测试旧文件](/zh/docs/v4/advanced/persistence#test-old-files)）。
+- **谨慎修改字符串编码和集合的声明。** 增加或去掉 `[NinoUtf8]`，或者把可空元素的列表在数组、`List<T?>` 与接口之间改来改去，都会改变字节。参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)和[集合类型](/zh/docs/v4/types#collection-types)。
+- **两端分别升级时，只用容错的格式。** 客户端和服务器分开发布时，消息要用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`。参见[网络层](/zh/docs/v4/advanced/networking)。
+
+## 不可信的输入 [#untrusted-input]
+
+- Nino 在分配内存之前会检查每个长度是否超出剩余字节；无论数据嵌套多深，栈的用量都有上限；它只会创建派生自声明类型的类型。无效数据会抛出消息以 `Nino:` 开头的 `InvalidOperationException`：在边界处捕获它，把输入当作坏数据处理。参见[无效数据](/zh/docs/v4/basic#invalid-data)。
+- 字节里不带 schema，所以 Nino 分辨不出按另一个布局兼容的类型写出的数据。请自己为数据加上版本，并在缓冲一个帧之前限制它的大小（参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）。
+
+## 项目配置 [#project-setup]
+
+- **每个声明了 `[NinoType]` 的项目都要安装 `Nino`**，源生成器才会在那里运行。在 Unity 中，每个声明了这些类型的程序集定义都要引用 `Nino.Core`。参见[快速开始](/zh/docs/v4/start)。
+- **用 .NET 8 SDK 或更高版本构建**，以启用[拦截器](/zh/docs/v4/performance#interceptors)。如果项目自己设置了 `InterceptorsNamespaces`，请在原值后追加。
+- **不要忽略分析器的警告。** NINO006 和 NINO007 意味着某个成员的值被丢弃或跳过。参见[分析器诊断](/zh/docs/v4/analyzers)。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="高性能序列化" href="/zh/docs/v4/advanced/high-performance">如何让 Nino 跑出最快速度，以及每条热路径的开销。</Card>
+  <Card title="常见问题" href="/zh/docs/v4/faq">简短的回答，以及最常见错误的解决办法。</Card>
+</Cards>

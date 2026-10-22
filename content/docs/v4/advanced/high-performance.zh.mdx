@@ -1,6 +1,6 @@
 ---
 title: 高性能序列化
-description: "Nino 热路径的工作机制与各自的开销：缓冲区写入器与暂存缓冲区、Writer 与 Reader、复用反序列化、对象池、原始结构体、拦截器、线程安全，以及如何测量。"
+description: "如何让 Nino 跑出最快速度，以及每条热路径的开销：缓冲区写入器、Writer 与 Reader、复用反序列化、对象池、原始结构体、格式、密封类与多态类型、集合、字符串，以及如何测量。"
 icon: Gauge
 ---
 
@@ -10,7 +10,7 @@ icon: Gauge
   }}
 />
 
-`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 本身已经很快，但每次调用都要为结果分配内存。本页讲解让序列化和反序列化都降到**每次调用 0 B** 的机制：每种调用写到哪里、从哪里读、有什么开销，以及如何测量。
+`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 本身已经很快，但每次调用都要为结果分配内存。本页先讲解让序列化和反序列化都降到**每次调用 0 B** 的机制（每种调用写到哪里、从哪里读、有什么开销），再介绍你自己的类型中哪些选择能让调用保持快速：格式、密封类与多态类、集合和字符串，最后是如何测量。
 
 基于这些机制、可以直接复制的做法和检查清单见[零分配模式](/zh/docs/v4/advanced/zero-allocation)；内部实现（内联的格式化器、结构体布局）见[性能指南](/zh/docs/v4/performance)。
 
@@ -211,18 +211,48 @@ ulong hash = XxHash64.HashToUInt64(buffer.WrittenSpan); // System.IO.Hashing
 if (hash != lastHash) { Send(buffer.WrittenSpan); lastHash = hash; }
 ```
 
+## 选择开销最小的格式 [#choose-the-cheapest-format]
+
+每个 `[NinoType]` 都要选定自己的[格式](/zh/docs/v4/evolving-data)，以及是否追踪引用。默认之外的每个选项，都会让这个类型的每个值多花字节和时间，所以只给真正需要的类型使用：
+
+| 选项 | 额外字节 | 额外工作 |
+| --- | --- | --- |
+| 按位置（只写 `[NinoType]`） | 无 | 无：原始结构体按内存拷贝，[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)直接写进它的 `byte[]` |
+| `format: NinoFormat.VersionTolerant` | 每个对象 4 字节 | 每个对象一个长度；该类型不再按原始内存拷贝，也不再是固定大小 |
+| `format: NinoFormat.Keyed` | 每个成员 8 字节，外加每个对象 4 字节 | 每个成员一个键和一个长度，读取时每个成员要检查一次键；该类型不再按原始内存拷贝，也不再是固定大小 |
+| `trackReferences: true` | 每个被追踪的对象 4 字节 | 每个被追踪的对象一次身份查找，外加每次顶层调用一点固定开销 |
+
+- 由同一版本写入和读取的消息和缓存保持按位置格式；只有要跨版本保留的数据才用版本容错或键控成员，参见[如何选择](/zh/docs/v4/evolving-data#choosing)。
+- 只给真正被共享、或者构成环的类型开启引用追踪：在[组织结构图](/zh/docs/v4/reference-tracking)的例子里，只有 `Department` 被追踪，`Employee` 不付出任何开销。树形数据不论多深都不需要追踪。
+- 优先使用按类型设置的 `format`，而不是 `WEAK_VERSION_TOLERANCE`：这个符号会把项目里所有按位置格式的类型都变成版本容错，其中的结构体也就不再按原始内存拷贝。
+
+## 密封类，以及通过基类分派 [#sealed-and-polymorphic]
+
+Nino 在类的值前面写什么，取决于存放它的位置的声明类型（参见[多态值如何写入](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)）：
+
+- **没有子类型的类声明为 `sealed`。** 密封类只需 1 字节的 null 标记，无需分派；未密封的类即使没有任何子类型，也要写 4 字节的类型 ID 并做一次类型检查。
+- **通过共同的 `[NinoType]` 基类分派。** 对于与基类声明在同一程序集中的子类型，生成的代码写入时依次做精确的类型检查，读取时按类型 ID `switch`，直接调用各子类型的格式化器。来自其他程序集的子类型、泛型子类型、开启引用追踪的类型，以及子类型超过 64 个的层次结构在写入时，则改走无锁的注册表（参见[分派](/zh/docs/v4/polymorphism#dispatch)）。
+- **热路径上不要用 `object` 和装箱 API。** 声明为 `object` 的位置要通过包含所有 `[NinoType]` 的全局注册表分派；`SerializeBoxed`/`DeserializeBoxed` 按 `Type` 查找格式化器，还要对值类型装箱（参见[运行时类型](/zh/docs/v4/basic#runtime-types)）。
+
+## 选择能整块拷贝的集合 [#collections]
+
+- **批量数据放进原始元素的数组和列表。** 非托管值或原始结构体的 `T[]`、`List<T>` 只需一次整块拷贝；元素全是原始值的值元组和 `KeyValuePair` 的数组和列表也一样（CPU 支持时用 [SIMD](/zh/docs/v4/platforms#simd) 重排）。完整列表见[非托管数据按原始内存拷贝](/zh/docs/v4/performance#raw-memory-for-unmanaged-data)。
+- **数量会变化时用 `List<T>`。** 复用反序列化会就地填充列表并保留它的容量；数组只有在新数据长度相同时才会被复用。字典按键合并。
+- **声明你希望创建的类型。** 声明为 `IList<T>`、`IEnumerable<T>` 或 `IReadOnlyList<T>` 的成员读回来是 `List<T>`，`ISet<T>` 读回来是 `HashSet<T>`，`IDictionary<TKey, TValue>` 读回来是 `Dictionary<TKey, TValue>`（参见[集合类型](/zh/docs/v4/types#collection-types)）。可空原始元素只有放在数组或 `List<T?>` 中才整块写入；声明为接口时，每个元素单独写入。
+- **集合是值。** 同一个集合出现在两个成员中会被写两次；引用追踪只覆盖 `[NinoType]` 类，不覆盖集合。
+
+## 字符串 [#strings]
+
+- 默认编码下，所有字符都不超过 U+00FF 的文本每个字符写一个字节，其他文本按 UTF-16 写出，都只需一遍。`[NinoUtf8]` 要做转码，还要多写 4 字节的字节数，只有以 ASCII 为主、夹杂少量更宽字符的文本才划算（参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)）。
+- 复用反序列化会保留内容没有变化的字符串，所以稳定的文本（名称、键、类似枚举的代码）每条消息不产生任何开销；`[NinoUtf8]` 字符串只有在内容是 ASCII 时才会保留。
+
 ## 每次调用的固定开销 [#per-call-overhead]
 
-不再分配内存之后，剩下的就是每次调用几纳秒的开销；在紧凑的循环里序列化小值时，这部分最明显：
-
-- **拦截器。** 用 Roslyn 4.8 或更高版本（.NET 8 SDK 及以上）编译时，调用处类型已知的调用会直达生成的格式化器，省去格式化器缓存的查找和那次虚调用。泛型代码中的调用、在其他程序集中声明的 `[NinoType]`，以及 Unity 项目（使用 Roslyn 4.3 版本）走常规路径，写出的字节相同。参见[拦截器](/zh/docs/v4/performance#interceptors)。
-- **密封类。** 多态值要多写 4 字节的类型 ID，还要做一次分派；密封类只需 1 字节的 null 标记，无需分派。没有子类型的类请声明为 `sealed`。参见[多态](/zh/docs/v4/performance#polymorphism)。
+不再分配内存之后，剩下的就是每次调用几纳秒的开销；在紧凑的循环里序列化小值时，这部分最明显。用 Roslyn 4.8 或更高版本（.NET 8 SDK 及以上）编译，调用处类型已知的调用就会直达生成的格式化器，省去格式化器缓存的查找和那次虚调用。泛型代码中的调用、在其他程序集中声明的 `[NinoType]`，以及 Unity 项目（使用 Roslyn 4.3 版本）走常规路径，写出的字节相同。参见[拦截器](/zh/docs/v4/performance#interceptors)。
 
 ## 线程安全 [#thread-safety]
 
-`NinoSerializer` 和 `NinoDeserializer` 的所有方法都可以并发调用，不需要加锁：暂存缓冲区和引用追踪表都是每个线程各自一份，同一线程上的嵌套调用也会拿到自己的一份。
-
-你自己持有的状态则**不是**线程安全的：`NinoArrayBufferWriter`、`Writer` 或 `Reader`，以及你反序列化进去的对象。所以每种做法都让每个线程或每个归属方各持有一个缓冲区。`NinoSettings` 的值要在启动时设置好，早于任何线程上的第一次调用。详见[线程安全](/zh/docs/v4/performance#thread-safety)。
+`NinoSerializer` 和 `NinoDeserializer` 的所有方法都可以并发调用，不需要加锁；但你自己持有的状态不是线程安全的：`NinoArrayBufferWriter`、`Writer` 或 `Reader`，以及你反序列化进去的对象。所以每种做法都让每个线程或每个归属方各持有一个缓冲区。详见[线程安全](/zh/docs/v4/performance#thread-safety)。
 
 ## 测量 [#measure]
 

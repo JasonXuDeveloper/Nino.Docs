@@ -41,7 +41,7 @@ byte[] bytes = NinoSerializer.Serialize(order);
 
 ### 复用缓冲区 [#reusing-a-buffer]
 
-`Serialize<T>(value)` 每次都会为结果分配一个 `byte[]`。对于[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)，这个数组按最终大小分配，数据直接写进去；其他值先写入线程独享的暂存缓冲区，再拷贝出来。想做到零分配，就序列化到一个自己长期持有的缓冲区里。
+`Serialize<T>(value)` 每次都会为结果分配一个 `byte[]`。对于[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)，以及元素大小固定的数组或列表，这个数组按最终大小分配，数据直接写进去；其他值先写入线程独享的暂存缓冲区，再拷贝出来。想做到零分配，就序列化到一个自己长期持有的缓冲区里。
 
 `NinoArrayBufferWriter` 是 Nino 自带的 `IBufferWriter<byte>`，底层数组默认租自 `ArrayPool<byte>.Shared`（也可以传入你自己的池），Nino 会**直接写入**其中。换成其他 `IBufferWriter<byte>`（.NET 的 `ArrayBufferWriter<byte>`、`PipeWriter`、包装 `Stream` 的写入器），最后会多一次拷贝。
 

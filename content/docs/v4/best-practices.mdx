@@ -1,0 +1,54 @@
+---
+title: Best Practices
+description: "The choices to make before Nino data ships: the format of each type, sealed classes and common bases, buffers and reuse, stored data, untrusted input and project setup."
+icon: ListChecks
+---
+
+Nino works with its defaults, and most of what follows is optional. These are the decisions that are hard to change once data has been written, and the habits that keep calls fast. Each one links to the page that explains it.
+
+## Designing Types [#designing-types]
+
+- **Choose each type's format before you store or send anything.** Keep data written and read by the same build positional (a bare `[NinoType]`), give data you only add members to `NinoFormat.VersionTolerant`, and give documents and configuration that are edited over many releases `NinoFormat.Keyed`. Changing a type's format later makes its existing data unreadable. See [Evolving Your Data](/en/docs/v4/evolving-data#choosing).
+- **In a version-tolerant hierarchy, append members only to the classes without subclasses.** A member appended to a base class shifts the members of every subclass. See [Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class).
+- **Seal classes that have no subtypes.** A sealed class costs a 1-byte null flag; one that is not sealed costs a 4-byte type id and a type check. See [Polymorphism](/en/docs/v4/polymorphism#how-a-polymorphic-value-is-written).
+- **Give polymorphic types a common `[NinoType]` base class or interface**, and declare members and calls as that base rather than `object`. See [Dispatching Through a Common Base](/en/docs/v4/polymorphism#dispatching-through-a-common-base).
+- **Track references only on the types that are shared or form cycles.** Tree-shaped data needs no tracking. See [Reference Tracking](/en/docs/v4/reference-tracking#when-to-use-it).
+- **Keep hot structs unmanaged, and settle their layout before you store them.** A raw struct is copied as its memory, so its field order, `Pack` and `Size` are part of the format. See [Structs](/en/docs/v4/defining-types#structs) and [Struct Layout](/en/docs/v4/performance#struct-layout).
+- **Give types read on hot paths a parameterless constructor and settable members.** Types built through a constructor (positional records, `init`-only or get-only members) are re-created on every read, and cannot be pooled or tracked. See [Re-created Types](/en/docs/v4/constructors#re-created-types).
+- **Leave out what is not data.** `[NinoIgnore]` caches and derived state, and store an id of your own instead of a `System.Type`, which Nino does not serialize on purpose. See [Not Supported](/en/docs/v4/types#not-supported).
+
+## Calling Nino [#calling-nino]
+
+- **Read with the type you wrote with.** Serialize a polymorphic value as its base (`Serialize<TBase>`) and read it with `Deserialize<TBase>`; use the [boxed API](/en/docs/v4/basic#the-boxed-api) only for a type known only as a `Type` at run time.
+- **Keep one `NinoArrayBufferWriter` per thread or owner** and reset it before each use; it is not thread safe. See [Reusing a Buffer](/en/docs/v4/basic#reusing-a-buffer).
+- **Deserialize hot messages into the previous result with `ref`**, and mark classes created at a high rate `[NinoPooled]`. Return a pooled instance once, and only when nothing else uses it. See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
+- **End a `Writer` or `Reader` you create yourself** with `Flush()` and `ReleaseReferences()` (a reader with `ReleaseReferences()`), once per logical message. See [Several Values in One Buffer](/en/docs/v4/basic#several-values-in-one-buffer).
+- **Configure `NinoSettings` at startup**, before the first call on any thread: its values are read without synchronization. See [Settings](/en/docs/v4/pooling#settings).
+
+For the speed side of these choices, see [High-Performance Serialization](/en/docs/v4/advanced/high-performance).
+
+## Stored and Exchanged Data [#stored-data]
+
+- **Put your own header in front of stored data**: a magic number and a format version, so a later build can tell what it reads. See [Add a File Header](/en/docs/v4/advanced/persistence#add-a-file-header).
+- **Rename with `[NinoFormerName]`.** On a type, it keeps the type id that existing data uses; on a member of a keyed type, it keeps reading the old name. See [Former Name](/en/docs/v4/defining-types#former-name).
+- **Check layouts between releases.** Compare the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) of each build with the last release's in CI, and keep old payloads in your tests ([Test Old Files](/en/docs/v4/advanced/persistence#test-old-files)).
+- **Change string encodings and collection declarations deliberately.** Adding or removing `[NinoUtf8]`, or changing a nullable list between an array or `List<T?>` and an interface, changes the bytes. See [String Encoding](/en/docs/v4/defining-types#string-encoding) and [Collection Types](/en/docs/v4/types#collection-types).
+- **Upgrade peers at different times only with a tolerant format.** Clients and servers that roll out separately need `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` messages. See [Network Layer](/en/docs/v4/advanced/networking).
+
+## Untrusted Input [#untrusted-input]
+
+- Nino checks every length against the bytes left before allocating, keeps its stack bounded however deep the data is nested, and only creates types that derive from the declared type. Invalid data throws an `InvalidOperationException` whose message starts with `Nino:`: catch it at the boundary and treat the input as bad. See [Invalid Data](/en/docs/v4/basic#invalid-data).
+- The bytes carry no schema, so Nino cannot tell data written for another type with a compatible layout. Version your payloads, and bound the size of a frame before you buffer it (see [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream)).
+
+## Project Setup [#project-setup]
+
+- **Install `Nino` in every project that declares `[NinoType]`s**, so the generator runs there. In Unity, keep `Nino.Core` referenced by each assembly definition that declares them. See [Quick Start](/en/docs/v4/start).
+- **Build with the .NET 8 SDK or later** to get [interceptors](/en/docs/v4/performance#interceptors). If the project sets `InterceptorsNamespaces` itself, append to it.
+- **Keep the analyzer's warnings visible.** NINO006 and NINO007 mean a member's value is dropped or skipped. See [Analyzer Diagnostics](/en/docs/v4/analyzers).
+
+## Next Steps
+
+<Cards>
+  <Card title="High-Performance Serialization" href="/en/docs/v4/advanced/high-performance">How to get the most speed out of Nino, and what each hot path costs.</Card>
+  <Card title="FAQ" href="/en/docs/v4/faq">Short answers, and fixes for the errors people run into most.</Card>
+</Cards>
