@@ -110,7 +110,7 @@ A browser or Node client uses the codecs that [Nino.TypeScript](/en/docs/v4/adva
 
 - **Requests** are read from the request's `PipeReader`. With a `Content-Length`, the reader waits for the whole body at once instead of waking on every segment. A body that arrives in one segment is deserialized where it lies; only a body split across segments is copied, once, into a buffer rented from `ArrayPool<byte>.Shared` and returned after reading.
 - **Responses** are serialized straight into the response's `PipeWriter`, with no intermediate `byte[]`.
-- **No allocations of its own.** The content type is checked on the header's characters instead of being parsed, the async readers take pooled state machines, and a flush that completes at once returns a cached task. Nino's tests measure zero bytes allocated for reading a request body and for writing a response, around a value that itself deserializes without allocating.
+- **No allocations of its own.** The content type is checked on the header's characters instead of being parsed, a body already in the pipe (the common case: small bodies arrive with the headers) is read without an async method, one that has not fully arrived is awaited by an async method whose state machine comes from a pool, and a flush that completes at once returns a cached task. Nino's tests measure zero bytes allocated for reading a request body and for writing a response, around a value that itself deserializes without allocating.
 - **The whole body is buffered before it is read.** Nino deserializes a complete value, so a request body is held in the pipe until it has fully arrived; ASP.NET Core's request body size limit (Kestrel's `MaxRequestBodySize`) bounds it as for any other body.
 
 ## Next Steps [#next-steps]
