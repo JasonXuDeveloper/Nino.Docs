@@ -36,11 +36,11 @@ icon: ChartColumn
 | 机器 | 运行时：发布时基准测试所用的 GitHub 托管 `ubuntu-26.04` 运行器，具体 CPU 见[全部测量结果](#results)。构建时间：Intel Xeon 2.10 GHz，4 核，AVX-512 |
 | 运行时 | .NET 10.0.13（SDK 10.0.402），服务器 GC |
 | 测试框架 | BenchmarkDotNet 0.15.8，每个用例在 3 个进程中各做 5 次预热、15 次测量，取三者的平均（只用一个进程时，一个 12 ns 的用例最多会偏差 13%）；各基准测试类在每种架构的五台运行器上并行运行，同一个用例的 Nino 和 MemoryPack 总在同一台运行器上 |
-| 项目 | [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.Benchmark)（运行时），[`src/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.GeneratorBenchmark)（构建时间） |
+| 项目 | [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)（运行时），[`src/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.GeneratorBenchmark)（构建时间） |
 
 - **序列化**测试写入一个只创建一次、每次调用前重置的缓冲区写入器（Nino 用 `NinoArrayBufferWriter`，其他库用 `ArrayBufferWriter<byte>`），因此测的是序列化本身，而不是数组分配。每个库用的都是它能原地写入的写入器：写入其他 `IBufferWriter<byte>` 时，Nino 先写入池化的缓冲区再整体复制过去，比这些表格多一次复制。
 - **反序列化**测试读取各个库在启动时写好的字节，每次调用都创建新对象。
-- **先验证**：基准测试运行前，`--verify`（[`Verify.cs`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/Verify.cs)）会跑一遍每个用例，检查每个序列化用例写出的字节数与载荷一致，并逐层比较各个库读回的值是否相同。测试数据使用固定种子，每次运行序列化的都是同样的值。
+- **先验证**：基准测试运行前，`--verify`（[`Verify.cs`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Verify.cs)）会跑一遍每个用例，检查每个序列化用例写出的字节数与载荷一致，并逐层比较各个库读回的值是否相同。测试数据使用固定种子，每次运行序列化的都是同样的值。
 - **1 ns 以下**（约三个时钟周期）的耗时无法区分：读取一个 40 字节的结构体，在扣除 BenchmarkDotNet 的空方法开销后，两个库测出来都在 0.05 到 0.8 ns 之间。两边都低于 1 ns 记为持平；Nino 低于 1 ns 而另一方可测时，记为更快（快到测不出），不给倍数。相差 5% 以内同样记为持平。
 - **复用**测试反序列化到已经存在的对象中：Nino 通过 `ref` 和 `[NinoPooled]` 对象池，MemoryPack 用它的覆盖模式。
 - **v3** 运行的是同一个 `SimpleTest`，但编译时引用的是 NuGet 上的 Nino 3.3.13，在同一台运行器上、紧接在 v4 的 `SimpleTest` 之前运行一次。两次运行都包含 MemoryPack，它前后两次耗时的差别就是机器本身的波动。每张 v3 图表下方都注明了数据来自哪次运行。
@@ -119,9 +119,9 @@ Nino 把数据反序列化到已有的对象图中（[复用反序列化](/zh/do
 
 自 v4.0.0-rc.5 起又测量了三个测试类，结果在[全部测量结果](#results)中：
 
-- **常用类型**（[`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/CommonTypesTest.cs)）：形态接近常见应用的数据，`List<Player>`（100 个）、`List<Order>`（100 个）、`List<Shape>`（1,000 个，声明为抽象基类）、一棵 `TreeNode` 树（1,365 个节点）、`InventoryItem[1000]`（带填充的结构体）和 `Dictionary<string, string>`（1,000 项）。
-- **集合**（[`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/CollectionsTest.cs)）：基础类库中的集合，各 1,000 个元素：`List<(int, long)>`、`KeyValuePair<int, int>[]`、`HashSet<int>`、`Queue<int>`、`LinkedList<int>`、`SortedList<int, int>` 和 `ConcurrentDictionary<int, int>`。
-- **BCL 类型**（[`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/src/Nino.Benchmark/BclTypesTest.cs)）：两个库都有格式化器的其他基础类库类型：`BigInteger`（3^1000）、`Uri`、`Version`、`StringBuilder`（1,000 个字符）、`BitArray`（1,000 位）、`CultureInfo`、`TimeZoneInfo`、`Lazy<string>`，以及各 1,000 个元素的 `Memory<int>`、`ReadOnlySequence<int>`、`ReadOnlyCollection<int>`、`ILookup<int, int>`、`BlockingCollection<int>` 和 `Nino.Immutable` 中的不可变集合（`ImmutableHashSet`、`ImmutableSortedSet`、`ImmutableQueue`、`ImmutableStack`、`ImmutableDictionary`、`ImmutableSortedDictionary`）。`TimeZoneInfo` 这一项测的更多是设计差异而不是速度：Nino 按 id 写入系统时区，读取时取系统缓存的时区；MemoryPack 每次都写入并解析时区完整的序列化字符串。`BigInteger` 和 `BitArray` 只测 Nino：MemoryPack 1.21.4 无法正确往返它们（参见[基准测试中发现的 MemoryPack 问题](/zh/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)）。
+- **常用类型**（[`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/CommonTypesTest.cs)）：形态接近常见应用的数据，`List<Player>`（100 个）、`List<Order>`（100 个）、`List<Shape>`（1,000 个，声明为抽象基类）、一棵 `TreeNode` 树（1,365 个节点）、`InventoryItem[1000]`（带填充的结构体）和 `Dictionary<string, string>`（1,000 项）。
+- **集合**（[`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/CollectionsTest.cs)）：基础类库中的集合，各 1,000 个元素：`List<(int, long)>`、`KeyValuePair<int, int>[]`、`HashSet<int>`、`Queue<int>`、`LinkedList<int>`、`SortedList<int, int>` 和 `ConcurrentDictionary<int, int>`。
+- **BCL 类型**（[`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/BclTypesTest.cs)）：两个库都有格式化器的其他基础类库类型：`BigInteger`（3^1000）、`Uri`、`Version`、`StringBuilder`（1,000 个字符）、`BitArray`（1,000 位）、`CultureInfo`、`TimeZoneInfo`、`Lazy<string>`，以及各 1,000 个元素的 `Memory<int>`、`ReadOnlySequence<int>`、`ReadOnlyCollection<int>`、`ILookup<int, int>`、`BlockingCollection<int>` 和 `Nino.Immutable` 中的不可变集合（`ImmutableHashSet`、`ImmutableSortedSet`、`ImmutableQueue`、`ImmutableStack`、`ImmutableDictionary`、`ImmutableSortedDictionary`）。`TimeZoneInfo` 这一项测的更多是设计差异而不是速度：Nino 按 id 写入系统时区，读取时取系统缓存的时区；MemoryPack 每次都写入并解析时区完整的序列化字符串。`BigInteger` 和 `BitArray` 只测 Nino：MemoryPack 1.21.4 无法正确往返它们（参见[基准测试中发现的 MemoryPack 问题](/zh/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)）。
 
 三者都序列化到复用的缓冲区写入器，并反序列化为新实例。
 
@@ -181,7 +181,7 @@ v3 的编译时间比类型数量增长得快得多：类型数量是原来的 3
 
 ## 基准测试代码 [#benchmark-code]
 
-每张表背后的类型和方法，来自 [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/src/Nino.Benchmark)，省略了 `using` 语句和重复的用例。每个测试类都带有 `[NinoJob]`（.NET 10 上 BenchmarkDotNet 的 `ShortRun` 作业，正式运行时在命令行上设置迭代次数）、`[GcServer(true)]` 和 `[MemoryDiagnoser]`；类型上带有参与对比的各个序列化库所需的特性。
+每张表背后的类型和方法，来自 [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)，省略了 `using` 语句和重复的用例。每个测试类都带有 `[NinoJob]`（.NET 10 上 BenchmarkDotNet 的 `ShortRun` 作业，正式运行时在命令行上设置迭代次数）、`[GcServer(true)]` 和 `[MemoryDiagnoser]`；类型上带有参与对比的各个序列化库所需的特性。
 
 ### SimpleTest [#simpletest]
 
