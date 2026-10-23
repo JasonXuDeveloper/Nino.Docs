@@ -7,6 +7,37 @@ icon: RotateCcwClock
 
 这里按从新到旧的顺序，列出 v4 各版本之间的变化。v4 相对 v3 的全部变化见 [v4 新特性](/zh/docs/v4/whats-new)。每个 GitHub Release 也会列出它包含的全部提交。
 
+## 4.0.0-rc.8
+
+### 二进制格式 [#wire-format-3]
+
+- **8 项及以上的元组**：类型为 8 项及以上 `ValueTuple` 的成员（或元素）现在会被写出，各项按顺序写入，与较短的元组相同；之前会被跳过并报 NINO007 警告，什么也不写。参见[其他内置类型](/zh/docs/v4/types#other-built-in-types)。
+- **运行时绑定的可空原始 `[NinoType]` 结构体**：由运行时构建格式化器的原始 `[NinoType]` 结构体（没有生成代码引用、按 `Type` 或装箱序列化的类型），其 `T?[]` 和其他 `T?` 序列现在按生成代码使用的固定步长写入，两边可以互相读取对方的字节。这类格式化器以前写出的数据需要重新写入。
+- **32 位 x86**：类型为结构体（不是 `[NinoType]`）、且在较小字段之后含有 `TimeOnly`、`Complex`、`Int128` 或 `UInt128` 的成员，现在和 64 位运行时一样按规范布局写入，不再写出 x86 上的内存。参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
+
+### 新功能 [#new-6]
+
+- **NINO027**：泛型类型上的 `[NinoFormerName]`，如果该类型会带类型 ID 写入（通过基类、接口或 `object`），会报这个警告：它的每个实例化都会得到同一个 ID 而冲突。参见[诊断](/zh/docs/v4/analyzers#diagnostics)。
+- **Go 和 Rust 运行时**：放在 Nino 仓库中（尚未发布为包），读写 Nino 的二进制格式，包括深层嵌套、版本容错和键控类型，并用与 .NET 相同的一致性语料测试。Go 通过 `nino.Marshal` 和 `nino.Unmarshal` 映射带标签的结构体（`nino:"0"`、`nino:"Name"`），并对照类型用 `NinoLayout()` 声明的布局检查（[runtimes/go](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go)）；Rust 提供 `#[derive(NinoRead, NinoWrite)]` 和 `#[nino(...)]` 属性，在编译时对照发布的布局检查，另有可选的 `serde` 功能，且不含 unsafe 代码（[runtimes/rust](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust)）。
+
+### 修复 [#fixes-5]
+
+- **不可信数据**：嵌套包含自身的集合类型（`class Tree : List<Tree>`）超过深度限制的数据，现在抛出 `InvalidOperationException`，不再栈溢出；运行时为这类类型构建格式化器时也不再栈溢出。参见[无效数据](/zh/docs/v4/basic#invalid-data)。
+- **不可信数据**：再次读到同一个未知类型 ID（损坏、恶意或过期的数据）时，不再每次都搜索所有注册表和已加载的程序集；声明该 ID 的程序集一加载或注册就能找到。参见[其他程序集中的子类型](/zh/docs/v4/polymorphism#subtypes-in-other-assemblies)。
+- 用 `NinoRegistry.Remove` 移除的程序集（或其可回收 `AssemblyLoadContext` 卸载时移除的程序集），不会再因为之后读到未知类型 ID 而被重新注册，导致无法卸载；另一个程序集卸载后紧接着加载的程序集，按类型 ID 读取时能被找到。参见[卸载程序集](/zh/docs/v4/platforms#unloading-assemblies)。
+- 使用 Nino.AspNetCore 时，类型经过 MVC 格式化器的可回收 `AssemblyLoadContext` 可以再次卸载。参见 [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)。
+- 在 NativeAOT 下，不是 `[NinoType]` 的泛型非托管结构体按原始值序列化，与 JIT 和生成代码一致，不再因为没有格式化器而失败。
+- 对值类型调用 `NinoSerializer.SerializeBoxed(null, type)` 抛出 `ArgumentNullException`，不再是 `NullReferenceException`。
+- 在大端主机上，通过顶层调用序列化的原始值、原始值数组和定长类型，与其他类型一样被拒绝，不再按主机字节序写出。
+- Nino.Core 之外不能再继承 `NinoSubtypeHandler`，也不能调用 `NinoPolymorphic<TBase>.Register(NinoSubtypeHandler)`：只有生成的注册代码会添加多态子类型。
+- 从 alpha 键数量为 -1 的数据反序列化 Unity `Gradient` 时，抛出 Nino 的 `InvalidOperationException`，不再是 `OverflowException`。参见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)。
+- 项目中两个 `[NinoType]` 的名称只有大小写不同（`RawS` 和 `Raws`）时，重新能得到生成代码；之前生成器报 CS8785 失败，什么也不生成。
+- 通过 `using` 别名或 `using static` 写的顶层 `NinoSerializer`/`NinoDeserializer` 调用会被拦截，其格式化器也会为 AOT 注册，与写出类名的调用相同。
+- 在 IDE 中修改 `[assembly: NinoFormatter(...)]` 注册后，使用它的生成格式化器会随之更新，不再保留旧的直到下次重新构建。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
+- 源生成器不再在内存中保留已关闭项目的缓存模型和语法树，这些曾让 IDE（和构建服务器）在长时间使用中内存不断增长。
+- `Half`、`Rune`、`DateOnly`、`TimeOnly`、`Index`、`Range`、`Complex`、`Int128`、`UInt128` 以及可空值数组的已发布布局（`NinoTypeLayoutAttribute`）现在显示 Nino 写出的字节，而不是引用程序集中的占位字段。参见[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)。
+- **TypeScript**：嵌套超过 128 层类体的值（链表、树）的读写与 .NET 逐字节一致，深层嵌套或伪造的数据抛出 `NinoError`，不再栈溢出；字节不是 UTF-8 的 `[NinoUtf8]` 字符串抛出 `NinoError`，不再是 `TypeError`。参见 [TypeScript](/zh/docs/v4/advanced/typescript)。
+
 ## 4.0.0-rc.7
 
 ### 新功能 [#new-5]
@@ -44,7 +75,7 @@ icon: RotateCcwClock
 - **池里还没有归还过实例时读取 `[NinoPooled]` 类型**：从没放入过实例的池，取实例时只读一个字段就返回，不再为发现本线程的栈是空的而访问线程局部字段（并调用一次方法）。只对部分读取使用池的程序，以及线程局部字段开销最大的 Unity 和 IL2CPP，受益最多。基准测试中池化节点的反序列化在 GitHub 的 x64 runner（EPYC 7763）上从 205 ns 降到 156 ns，在 Arm64 runner（Neoverse-N2）上从 193 ns 降到 145 ns。参见[内置对象池](/zh/docs/v4/pooling#ninopooled)。
 - **`ImmutableStack<T>`**（Nino.Immutable）序列化不再先填充并反转一个列表，且不分配内存：1,000 个 int 在 GitHub 的 Arm64 runner（Neoverse-N2）上从 4.5 µs 降到 2.7 µs，在 x64 runner（EPYC 7763）上从 3.1 µs 降到 2.9 µs。参见[不可变集合](/zh/docs/v4/types#immutable-collections)。
 - **版本容错类型**：相邻的一组原始成员在数据完整时作为一个块读取，只做一次检查（旧版本写的数据走逐个成员的路径）：基准测试中版本容错类组成的数组，在 GitHub 的 x64 runner（EPYC 7763）上反序列化从 57.3 µs 降到 49.8 µs。键控类型把每个成员的键和区域长度一起预留。参见[版本容错](/zh/docs/v4/evolving-data#version-tolerance)。
-- **Unity 的 `AnimationCurve` 和 `Gradient`**（Nino.UnityTypes）一次预留所需字节，读取时每段关键帧只做一次边界检查，而不是每个值一次。参见 [Unity 类](/zh/docs/v4/advanced/unity#unity-classes)。
+- **Unity 的 `AnimationCurve` 和 `Gradient`**（Nino.UnityTypes）一次预留所需字节，读取时每段关键帧只做一次边界检查，而不是每个值一次。参见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)。
 - **原始元素组成的 `Memory<T>` 和 `ReadOnlyMemory<T>`** 的数组和普通数组一样分配：从 6 KB 起不清零。
 - **2 到 6 KB 的新数组改为清零分配**：读取时一次块拷贝填满的数组，只在 6 KB 及以上才不清零分配，这时省下的清零开销才大于代价；更小的数组用运行时的不清零分配反而更慢。1,000 个 int 反序列化为 `ReadOnlyCollection<T>` 或 `ReadOnlySequence<T>`，在 GitHub 的 x64 runner（EPYC 7763）上从 348 ns 降到 257 和 264 ns，在 Arm64 runner（Neoverse-N2）上从 416 和 423 ns 降到 364 和 363 ns；反序列化为 `Memory<T>` 在 x64 上从 312 ns 降到 262 ns。
 

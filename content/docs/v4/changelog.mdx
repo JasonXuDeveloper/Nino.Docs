@@ -7,6 +7,37 @@ icon: RotateCcwClock
 
 What changed from one v4 release to the next, newest first. For everything v4 changed since v3, see [What's New in v4](/en/docs/v4/whats-new). Each GitHub release also lists every commit it contains.
 
+## 4.0.0-rc.8
+
+### Wire Format [#wire-format-3]
+
+- **Tuples of eight items or more**: a member (or element) whose type is a `ValueTuple` of eight items or more is now written, every item in order as for shorter tuples, where it was skipped with warning NINO007 and wrote nothing. See [Other Built-in Types](/en/docs/v4/types#other-built-in-types).
+- **Nullable raw `[NinoType]` structs bound at run time**: `T?[]` and other `T?` sequences of a raw `[NinoType]` struct whose formatter the runtime builds (types no generated code names, serialized by `Type` or boxed) are written at the fixed stride generated code uses, so either side reads the other's bytes. Payloads such a formatter wrote before must be rewritten.
+- **32-bit x86**: a member whose type is a struct (not a `[NinoType]`) holding a `TimeOnly`, `Complex`, `Int128` or `UInt128` after a smaller field is written in the canonical layout, as on 64-bit runtimes, instead of its x86 memory. See [Portable by Design](/en/docs/v4/platforms#portable-by-design).
+
+### New [#new-6]
+
+- **NINO027**: a warning for `[NinoFormerName]` on a generic type that is written with a type id (through a base class, an interface or `object`): every instantiation would take the same id and collide. See [Diagnostics](/en/docs/v4/analyzers#diagnostics).
+- **Go and Rust runtimes** in the Nino repository (not yet published as packages) read and write Nino's binary format, deep nesting, version-tolerant and keyed types included, and are tested against the same conformance corpus as .NET. Go maps tagged structs (`nino:"0"`, `nino:"Name"`) with `nino.Marshal` and `nino.Unmarshal`, checked against the layout a type declares with `NinoLayout()` ([runtimes/go](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go)); Rust has `#[derive(NinoRead, NinoWrite)]` with `#[nino(...)]` attributes, checked against a published layout at compile time, an optional `serde` feature, and no unsafe code ([runtimes/rust](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust)).
+
+### Fixes [#fixes-5]
+
+- **Untrusted data**: data that nests a collection type holding itself (`class Tree : List<Tree>`) deeper than the depth limit throws `InvalidOperationException` instead of overflowing the stack, and the runtime-built formatter of such a type no longer overflows the stack while it is created. See [Invalid Data](/en/docs/v4/basic#invalid-data).
+- **Untrusted data**: reading the same unknown type id again (corrupt, hostile or stale data) no longer searches every registry and loaded assembly each time; the id is found as soon as an assembly declaring it is loaded or registered. See [Subtypes in Other Assemblies](/en/docs/v4/polymorphism#subtypes-in-other-assemblies).
+- An assembly removed with `NinoRegistry.Remove` (or by its collectible `AssemblyLoadContext` unloading) is no longer registered again by a later read of an unknown type id, which kept it from unloading; an assembly loaded right after another one unloaded is found by reads by type id. See [Unloading Assemblies](/en/docs/v4/platforms#unloading-assemblies).
+- With Nino.AspNetCore, a collectible `AssemblyLoadContext` whose types went through the MVC formatters can unload again. See [ASP.NET Core](/en/docs/v4/advanced/aspnetcore).
+- Under NativeAOT, generic unmanaged structs that are not `[NinoType]`s serialize as raw values, as with the JIT and in generated code, instead of failing for lack of a formatter.
+- `NinoSerializer.SerializeBoxed(null, type)` for a value type throws `ArgumentNullException` instead of a `NullReferenceException`.
+- On a big-endian host, raw values, arrays of them and fixed-size types serialized through the top-level calls are rejected like every other type, instead of being written in the host's byte order.
+- `NinoSubtypeHandler` can no longer be subclassed, nor `NinoPolymorphic<TBase>.Register(NinoSubtypeHandler)` called, outside Nino.Core: only generated registrations add polymorphic subtypes.
+- Deserializing a Unity `Gradient` from data with -1 as its alpha key count throws Nino's `InvalidOperationException` instead of `OverflowException`. See [Unity Classes](/en/docs/v4/advanced/unity#unity-classes).
+- Projects with two `[NinoType]`s whose names differ only by case (`RawS` and `Raws`) get their generated code again; the generator failed with CS8785 and added none.
+- Top-level `NinoSerializer`/`NinoDeserializer` calls written through a `using` alias or `using static` are intercepted and their formatters registered for AOT, like calls that name the class.
+- Editing an `[assembly: NinoFormatter(...)]` registration in the IDE updates the generated formatters that use it, instead of keeping the old ones until the next rebuild. See [Custom Formatters](/en/docs/v4/custom-formatters).
+- The source generator no longer keeps the cached models and syntax trees of closed projects in memory, which grew the IDE's (and build servers') memory over a long session.
+- The published layouts (`NinoTypeLayoutAttribute`) of `Half`, `Rune`, `DateOnly`, `TimeOnly`, `Index`, `Range`, `Complex`, `Int128`, `UInt128` and arrays of nullable values show the bytes Nino writes instead of the placeholders of reference assemblies. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata).
+- **TypeScript**: values nested deeper than 128 class bodies (linked lists, trees) are read and written byte for byte as .NET does, and deeply nested or forged data throws a `NinoError` instead of overflowing the stack; a `[NinoUtf8]` string whose bytes are not UTF-8 throws a `NinoError` instead of a `TypeError`. See [TypeScript](/en/docs/v4/advanced/typescript).
+
 ## 4.0.0-rc.7
 
 ### New [#new-5]
