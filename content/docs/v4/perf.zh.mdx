@@ -36,7 +36,7 @@ icon: ChartColumn
 | 机器 | 运行时：发布时基准测试所用的 GitHub 托管 `ubuntu-26.04` 运行器，具体 CPU 见[全部测量结果](#results)。构建时间：Intel Xeon 2.10 GHz，4 核，AVX-512 |
 | 运行时 | .NET 10.0.13（SDK 10.0.402），服务器 GC |
 | 测试框架 | BenchmarkDotNet 0.15.8，每个用例在 3 个进程中各做 5 次预热、15 次测量，取三者的平均（只用一个进程时，一个 12 ns 的用例最多会偏差 13%）；各基准测试类在每种架构的五台运行器上并行运行，同一个用例的 Nino 和 MemoryPack 总在同一台运行器上 |
-| 项目 | [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)（运行时），[`src/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.GeneratorBenchmark)（构建时间） |
+| 项目 | [`benchmarks/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)（运行时），[`benchmarks/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.GeneratorBenchmark)（构建时间） |
 
 - **序列化**测试写入一个只创建一次、每次调用前重置的缓冲区写入器（Nino 用 `NinoArrayBufferWriter`，其他库用 `ArrayBufferWriter<byte>`），因此测的是序列化本身，而不是数组分配。每个库用的都是它能原地写入的写入器：写入其他 `IBufferWriter<byte>` 时，Nino 先写入池化的缓冲区再整体复制过去，比这些表格多一次复制。
 - **反序列化**测试读取各个库在启动时写好的字节，每次调用都创建新对象。
@@ -181,7 +181,7 @@ v3 的编译时间比类型数量增长得快得多：类型数量是原来的 3
 
 ## 基准测试代码 [#benchmark-code]
 
-每张表背后的类型和方法，来自 [`src/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)，省略了 `using` 语句和重复的用例。每个测试类都带有 `[NinoJob]`（.NET 10 上 BenchmarkDotNet 的 `ShortRun` 作业，正式运行时在命令行上设置迭代次数）、`[GcServer(true)]` 和 `[MemoryDiagnoser]`；类型上带有参与对比的各个序列化库所需的特性。
+每张表背后的类型和方法，来自 [`benchmarks/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)，省略了 `using` 语句和重复的用例。每个测试类都带有 `[NinoJob]`（.NET 10 上 BenchmarkDotNet 的 `ShortRun` 作业，正式运行时在命令行上设置迭代次数）、`[GcServer(true)]` 和 `[MemoryDiagnoser]`；类型上带有参与对比的各个序列化库所需的特性。
 
 ### SimpleTest [#simpletest]
 
@@ -934,13 +934,13 @@ public ProbeBox<int>[] NinoDeserializeGenericIntBase() =>
 benchmarks/run.sh
 
 # runtime, v4 only, a subset
-dotnet run -c Release --project src/Nino.Benchmark -- --filter '*SimpleTest*' --launchCount 3 --warmupCount 5 --iterationCount 15
+dotnet run -c Release --project benchmarks/Nino.Benchmark -- --filter '*SimpleTest*' --launchCount 3 --warmupCount 5 --iterationCount 15
 
 # reference tracking, version tolerance and fixed-size types
-dotnet run -c Release --project src/Nino.Benchmark -- --filter '*ReferenceTest*' '*VersionTolerantTest*' '*FixedSizeTest*'
+dotnet run -c Release --project benchmarks/Nino.Benchmark -- --filter '*ReferenceTest*' '*VersionTolerantTest*' '*FixedSizeTest*'
 
 # build time and generated code (N = 30, 8 derived classes per root)
-dotnet run -c Release --project src/Nino.GeneratorBenchmark -- 30 8
+dotnet run -c Release --project benchmarks/Nino.GeneratorBenchmark -- 30 8
 ```
 
 - `benchmarks/run.sh` 会构建 `benchmarks/v3`（引用 NuGet 上 Nino 3.3.13 的同一个 `SimpleTest`），在 v4 之前紧接着运行一次，然后逐个用例输出 **v4 对比 v3**。
