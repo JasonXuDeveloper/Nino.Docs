@@ -237,7 +237,7 @@ A deferred object is created and stored in its member or collection element as s
 - classes created by their **constructor** (positional records, init-only or read-only members), since there is no instance until their members are read;
 - classes **compared by value** (records, classes that override `GetHashCode` or implement `IComparable`), since a `HashSet<T>`, dictionary key or sorted collection could hold one before its members are read.
 
-A graph of such classes nested deeper than [`NinoSettings.MaxDepth`](/en/docs/v4/security#limits) (512 levels by default) throws: an `InvalidOperationException` when it is serialized, a `NinoDataException` when such data is read. Give a deeply recursive type a parameterless constructor and settable members.
+A graph of such classes nested deeper than [`NinoSettings.MaxDepth`](/en/docs/v4/security#limits) (512 levels by default) throws, counting the open bodies of structs that hold themselves around them too, on both sides: an `InvalidOperationException` when it is serialized, a `NinoDataException` when such data is read. Give a deeply recursive type a parameterless constructor and settable members.
 
 ## Invalid Data
 

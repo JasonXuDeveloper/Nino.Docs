@@ -98,12 +98,12 @@ NinoSettings.MaxCollectionLength = 100_000; // 我们的消息都不会更多
 
 ## 哈希洪泛 [#hash-flooding]
 
-精心构造、全部落在同一个哈希桶中的键，会让每次插入都扫描它之前的所有键，于是填充这样一个字典所需的时间与其大小的平方成正比。在任何模式下，从数据中读到的键如果在其哈希桶中遇到超过 `MaxHashCollisions`（默认 100）个键，就抛出 `NinoDataException`。这适用于 `Dictionary<TKey, TValue>`、`HashSet<T>`、查找表（`ILookup`），以及 Nino.Immutable 中的 `ImmutableDictionary<TKey, TValue>` 和 `ImmutableHashSet<T>`（在这两者中，指超过这么多个键有相同的哈希码）。
+精心构造、全部落在同一个哈希桶中的键，会让每次插入都扫描它之前的所有键，于是填充这样一个字典所需的时间与其大小的平方成正比。在任何模式下，从数据中读到的键如果在其哈希桶中遇到超过 `MaxHashCollisions`（默认 100）个键，就抛出 `NinoDataException`。这适用于 `Dictionary<TKey, TValue>`、`HashSet<T>`、查找表（`ILookup`）、`ConcurrentDictionary<TKey, TValue>`，以及 Nino.Immutable 中的 `ImmutableDictionary<TKey, TValue>` 和 `ImmutableHashSet<T>`（在这两者中，指超过这么多个键有相同的哈希码）。
 
 - Nino 自己填充新表时，计数没有额外开销，因为它本来就要遍历哈希桶来查找重复键；由表自己添加键时（读入已有集合），Nino 在添加之后遍历新键所在的桶。
 - 哈希码合理的键，每个桶大约只有一个键。哈希码较差的键（例如没有自己的 `GetHashCode` 的结构体键）可以调高这个限制。
-- 字符串键交给那些在 100 次冲突后会自行改用随机化比较器的表处理（.NET 的 `Dictionary` 和 `HashSet`，以及 .NET Framework 的 `Dictionary`）。
-- 不覆盖 `ConcurrentDictionary<TKey, TValue>`：它不公开自己的桶。
+- 字符串键交给那些在 100 次冲突后会自行改用随机化比较器的表处理（.NET 的 `Dictionary`、`HashSet` 和 `ConcurrentDictionary`，以及 .NET Framework 的 `Dictionary` 和 `ConcurrentDictionary`）。
+- `ConcurrentDictionary<TKey, TValue>` 不公开自己的桶：Nino 通过为每个运行时（.NET、.NET Framework、Mono 和 Unity）声明、并在启动时检查的布局找到它们，在构建新字典时为每个键所在的桶计数，读入已有字典时则在每次添加之后遍历该桶。没有匹配的布局时，由字典的构造函数填充，不计数。
 
 ## 不可信模式 [#untrusted-mode]
 

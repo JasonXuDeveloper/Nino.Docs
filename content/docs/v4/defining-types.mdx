@@ -319,6 +319,8 @@ public record struct Pair<TKey, TValue>(TKey Key, TValue Value);
 
 A generic `[NinoType]` gets one formatter per definition, not one per closed type. Type arguments must be serializable (`Box<int>`, `Box<List<string>>`, `Box<Order>`). The generator registers every closed type the compilation names (member types, base types, type arguments of `NinoSerializer`/`NinoDeserializer` calls), so AOT platforms have the instantiations they need; the runtime closes the rest on first use.
 
+A closed generic `[NinoType]` struct is written by its definition's formatter wherever it appears: as a member, an element, a type argument or at the top level. A field of a type parameter makes it member by member whatever the arguments, so `Pair<int, int>` above is written member by member, never copied as raw memory.
+
 <Callout type="warn">
 
 A closed generic type that a process only **reads** polymorphically (by type id) and never names or writes must be registered at startup: `NinoPolymorphic.Register<Box<int>>()`. This only matters for instantiations created by reflection or in another assembly.

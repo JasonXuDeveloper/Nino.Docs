@@ -237,7 +237,7 @@ var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
 - 由**构造函数**创建的类（位置记录、init-only 或只读成员），因为成员读完之前还没有实例；
 - **按值比较**的类（记录、重写了 `GetHashCode` 或实现了 `IComparable` 的类），因为 `HashSet<T>`、字典的键或有序集合可能会在成员读取之前就持有它。
 
-由这两种类组成的对象图，嵌套超过 [`NinoSettings.MaxDepth`](/zh/docs/v4/security#limits)（默认 512 层）就会抛出异常：序列化时抛出 `InvalidOperationException`，读取这样的数据时抛出 `NinoDataException`。需要深度递归的类型，请给它无参构造函数和可赋值的成员。
+由这两种类组成的对象图，嵌套超过 [`NinoSettings.MaxDepth`](/zh/docs/v4/security#limits)（默认 512 层）就会抛出异常，写出和读取时都把外围包含自身的结构体中尚未结束的主体计算在内：序列化时抛出 `InvalidOperationException`，读取这样的数据时抛出 `NinoDataException`。需要深度递归的类型，请给它无参构造函数和可赋值的成员。
 
 ## 无效数据 [#invalid-data]
 

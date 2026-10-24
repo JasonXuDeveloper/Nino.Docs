@@ -98,12 +98,12 @@ The pool and recycler settings of `NinoSettings` are described in [Pooling](/en/
 
 ## Hash Flooding [#hash-flooding]
 
-Keys built to share one hash bucket make every insert scan all the keys before it, so a dictionary of such keys takes time quadratic in its size to fill. In every mode, a key read from the data that finds more than `MaxHashCollisions` keys (default 100) in its bucket throws `NinoDataException`, in a `Dictionary<TKey, TValue>`, `HashSet<T>`, lookup (`ILookup`) and, with Nino.Immutable, an `ImmutableDictionary<TKey, TValue>` or `ImmutableHashSet<T>` (there: more than that many keys with one hash code).
+Keys built to share one hash bucket make every insert scan all the keys before it, so a dictionary of such keys takes time quadratic in its size to fill. In every mode, a key read from the data that finds more than `MaxHashCollisions` keys (default 100) in its bucket throws `NinoDataException`, in a `Dictionary<TKey, TValue>`, `HashSet<T>`, lookup (`ILookup`), `ConcurrentDictionary<TKey, TValue>` and, with Nino.Immutable, an `ImmutableDictionary<TKey, TValue>` or `ImmutableHashSet<T>` (there: more than that many keys with one hash code).
 
 - The count is free where Nino fills a new table itself, since it walks the bucket anyway to find duplicates; where the table adds a key itself (a collection read into an existing one), Nino walks the new key's bucket after the add.
 - Keys with a reasonable hash code hold about one key per bucket. Raise the limit for keys whose hash codes are poor, such as a struct key without its own `GetHashCode`.
-- String keys are left to the tables that switch to a randomized comparer after 100 collisions on their own (.NET's `Dictionary` and `HashSet`, .NET Framework's `Dictionary`).
-- `ConcurrentDictionary<TKey, TValue>` is not covered: it keeps its buckets to itself.
+- String keys are left to the tables that switch to a randomized comparer after 100 collisions on their own (.NET's `Dictionary`, `HashSet` and `ConcurrentDictionary`, .NET Framework's `Dictionary` and `ConcurrentDictionary`).
+- A `ConcurrentDictionary<TKey, TValue>` keeps its buckets to itself: Nino finds them through a layout declared for each runtime (.NET, .NET Framework, Mono and Unity) and checked at startup, counts each key's bucket as it builds a new dictionary, and walks the bucket after each add when it reads into an existing one. Where no layout matches, the dictionary's constructor fills it, uncounted.
 
 ## Untrusted Mode [#untrusted-mode]
 
