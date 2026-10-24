@@ -1,0 +1,85 @@
+---
+title: Go
+seoTitle: "Nino in Go: Read and Write Nino Data from Go Services – Nino v4 Docs"
+description: "The Go runtime in Nino's repository (package nino) reads and writes the bytes Nino writes in .NET, from code nino-gen generates or from Go structs mapped with nino struct tags, with no panics on any input."
+icon: Braces
+---
+
+The Go runtime (module `github.com/JasonXuDeveloper/Nino/runtimes/go`, package `nino`) reads and writes Nino's [wire format](/en/docs/v4/wire-format): a Go service exchanges the same bytes as your .NET code. It needs Go 1.22 or later and has no dependencies outside the standard library. It lives in Nino's repository ([runtimes/go](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go)) and is tested against the same conformance corpus as .NET, TypeScript and Rust.
+
+```shell
+go get github.com/JasonXuDeveloper/Nino/runtimes/go
+```
+
+There are two ways to give Go types their codecs:
+
+- **Generated code**: [nino-gen](/en/docs/v4/advanced/codegen#go) writes a Go struct and read and write functions for every `[NinoType]` of a built assembly. No reflection; the fastest path.
+- **Struct tags**: map Go structs you write yourself with a `nino` tag, the way `encoding/json` maps them, and call `nino.Marshal` and `nino.Unmarshal`.
+
+## Generated Code [#generated-code]
+
+```shell
+nino-gen --assembly bin/Release/net8.0/MyGame.Shared.dll --lang go --out ./protocol --package protocol
+```
+
+```go
+data, err := nino.Serialize(player, protocol.WritePlayer)      // a new slice
+buf, err = nino.Append(buf[:0], player, protocol.WritePlayer)  // appends; no allocation when buf has room
+player, err := nino.Deserialize(data, protocol.ReadPlayer)      // bytes after the value are ignored, as in .NET
+player, err := nino.DeserializeExact(data, protocol.ReadPlayer) // ... or rejected
+```
+
+Each `[NinoType]` gets a `ReadX` and `WriteX` function. A sealed class is a `*X` (nil for null), a struct an `X`, and a slot that holds several types (an abstract class, an interface, a class that is not sealed) an interface with one implementation per allowed type. The generated structs carry `nino` tags and `NinoLayout()` as well, so the struct-tag path below reads and writes them too.
+
+## Struct Tags [#struct-tags]
+
+```go
+type Monster struct {
+	Health int32   `nino:"Health"`
+	Name   *string `nino:"Name,former=Title"`
+	Items  []int32 `nino:"Items"`
+	Cache  string  `nino:"-"`
+}
+
+func (Monster) NinoLayout() string { // what .NET publishes for the type, or a part of it
+	return "format=Keyed; header=NullFlag"
+}
+
+data, err := nino.Marshal(m)          // m is a *Monster: a sealed class
+err = nino.Unmarshal(data, &m)        // *m is left unchanged on any error
+err = nino.UnmarshalExact(data, &m)   // ... and bytes after the value are an error
+data, err = nino.MarshalAs[Animal](a) // a polymorphic root, written behind its type id
+```
+
+| Tag | Meaning |
+| --- | --- |
+| `nino:"0"`, `nino:"1"`, ... | The member's position, for positional and version-tolerant types: 0 to n-1, no gaps, no repeats. |
+| `nino:"Name"` | A member of a keyed type, by its C# name. |
+| `nino:"-"` | A Go-only field: not read or written. |
+| `,utf8` | A `[NinoUtf8]` string. |
+| `,former=Old` | A former name of a keyed member, once per name. |
+
+A type declares its .NET shape with a `NinoLayout() string` method: the [layout](/en/docs/v4/evolving-data#layout-metadata) .NET publishes for it (`format=`, `header=`, `typeId=`, `deferrable=`, `members=`), or a subset of its parts. With `members=`, the tags are checked against it: the number of members, each field's encoding and the keys. Polymorphic types are registered once with `nino.Register`, and a slot only reads the registered types that implement its interface.
+
+Anything the wire format cannot express (an `int` field, which has no fixed size, an `omitempty`, a type with `trackReferences=true`) is a `*nino.TagError` naming the field, returned before a byte is read or written. A plan is built once per type and cached; marshalling then takes a few times as long as generated code, and is still faster than `encoding/json`. The full tag reference and the Go type for each encoding are in the runtime's [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go#struct-tags).
+
+## Guarantees [#guarantees]
+
+The reader takes untrusted input, as the .NET reader does ([Untrusted Data](/en/docs/v4/security)):
+
+- **No panics.** Reading never panics on any input and never reads outside the data, by construction rather than `recover`. Errors are sticky: after the first failure every read returns zeros, so every loop ends.
+- **Bounded memory.** Every length is checked against the bytes left before anything is allocated, with the same caps as .NET.
+- **Bounded depth.** Class bodies deeper than 128 are deferred exactly as .NET defers them, so the bytes match and the stack stays bounded; what cannot be deferred fails past 512.
+- **Restricted polymorphism.** A type id is accepted only if it names a type allowed in that slot; nothing is looked up by name.
+- **One error type.** Every failure is a `*nino.Error` (`Code`, `Offset`, `Detail`; `errors.Is(err, nino.ErrTooDeep)` ...), and `Deserialize` returns the zero value with it, never part of a value.
+- **Strict bytes.** It rejects what .NET rejects in every mode (bools and presence bytes other than 0 or 1, keyed members that leave bytes, malformed sections of deferred bodies, a key repeated in a map or set), and also bytes .NET accepts outside [untrusted mode](/en/docs/v4/security#untrusted-mode) or always: `DateTime` ticks past `DateTime.MaxValue`, invalid `decimal`s, out-of-range `DateOnly` and `TimeOnly`, bools inside raw structs other than 0 or 1, a key repeated in a keyed body, non-minimal `BigInteger`s.
+
+Writing a value into a reused buffer allocates nothing.
+
+## Strings [#strings]
+
+Strings in the default encoding are read into Go strings as WTF-8: UTF-8, except that an unpaired surrogate (which a .NET string may hold) keeps a 3-byte form, so writing the string back gives the same code units. `Reader.UTF16` returns the code units themselves. `[NinoUtf8]` strings are strict UTF-8.
+
+## Not Supported [#not-supported]
+
+Reference tracking (`trackReferences: true`) is not implemented, as in TypeScript. The struct-tag path also rejects multi-dimensional arrays, groupings, `BitArray`, `TimeZoneInfo`, custom formatters and `[NinoType]` collections with members; generated code covers what [nino-gen generates](/en/docs/v4/advanced/codegen#not-generated).

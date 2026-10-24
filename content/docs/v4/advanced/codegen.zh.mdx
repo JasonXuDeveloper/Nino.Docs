@@ -1,0 +1,95 @@
+---
+title: 用 nino-gen 生成其他语言
+seoTitle: "nino-gen：从 .NET 程序集生成 TypeScript、Go 和 Rust 编解码器 – Nino v4 文档"
+description: "命令行工具 nino-gen（NuGet 包 Nino.Codegen）把构建好的 .NET 程序集中的 [NinoType] 写成 TypeScript、Go 或 Rust 类型，其编解码器读写的字节与 .NET 中 Nino 写出的相同。"
+icon: SquareTerminal
+---
+
+**nino-gen** 是一个 .NET 工具（NuGet 包 **Nino.Codegen**），把构建好的程序集中的 `[NinoType]` 写成 **TypeScript**、**Go** 或 **Rust**：每个 `[NinoType]` 一个类型，其编解码器读写的字节与 .NET 中 Nino 写出的完全相同。它只读取生成器在每个编译的程序集中发布的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)，所以不需要源代码、项目或运行任何代码：只需要构建好的 `.dll` 和它引用的程序集。
+
+```shell
+dotnet tool install -g Nino.Codegen --prerelease
+nino-gen --assembly bin/Release/net8.0/MyGame.Shared.dll --lang go --out ../server/protocol
+```
+
+这个工具需要 .NET 8 或更高版本。如果要在 .NET 构建中生成 TypeScript，[Nino.TypeScript](/zh/docs/v4/advanced/typescript) 包会在每次编译后运行同一套代码；nino-gen 适合你自己运行，比如在脚本或 CI 步骤中，以及生成其他语言。
+
+## 选项 [#options]
+
+```text
+nino-gen --assembly <dll> --lang ts|go|rust --out <dir> [--references <file>] [--name <file name>]
+  ts:   [--names camel|keep] [--import-extension <.js|.ts|.mjs|.mts>] [--runtime <module>]
+  go:   [--package <name>] [--tags json,yaml] [--tag-names camel|snake|original]
+  rust: [--serde] [--serde-names camel|snake|original] [--strings string|wide]
+```
+
+| 选项 | 含义 |
+| --- | --- |
+| `--assembly` | 构建好的程序集。生成它的 `[NinoType]`，以及它用到的、被引用程序集中的 `[NinoType]`。 |
+| `--lang` | `ts`（或 `typescript`）、`go` 或 `rust`。 |
+| `--out` | 输出目录。文件只在文本变化时才写入，所以监视器和增量构建不会看到变化。 |
+| `--references` | 一个文件，每行一个程序集路径，用于解析引用。`.dll` 所在目录和正在运行的 .NET 总会被搜索。 |
+| `--name` | 生成文件的名字：默认为 `<Assembly>.ts`、`nino_types.go` 或 `nino_types.rs`。 |
+| `--names`（ts） | `camel`（默认）或 `keep`：属性名。 |
+| `--import-extension`（ts） | 导入运行时时使用的扩展名，用于需要扩展名的 ESM 解析器。 |
+| `--runtime`（ts） | 从这个模块导入运行时，而不是在代码旁边写出 `nino.ts`。 |
+| `--package`（go） | 包名；默认取程序集名中的字母和数字并转为小写。 |
+| `--tags`（go） | 写在 `nino` 之后的结构体标签，按顺序：默认 `json,yaml`，为空则不写。 |
+| `--tag-names`（go） | 这些标签如何命名成员：`camel`（默认）、`snake` 或 `original`。 |
+| `--serde`（rust） | 加上 `#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]`，并为每个字段重命名。 |
+| `--serde-names`（rust） | serde 名字：`camel`（默认，与 `System.Text.Json` 的命名一致）、`snake` 或 `original`。 |
+| `--strings`（rust） | `string`（默认）：C# 字符串为 `String`，含未配对代理项的字符串读取失败。`wide`：`nino::WideString`，保留任何 UTF-16。 |
+
+被跳过的类型会报告为 `nino-gen : warning NINOGEN002: ...` 并说明原因；无效参数或工具无法读取的程序集报告为 `nino-gen : error NINOGEN001: ...`，退出码为 1。
+
+## TypeScript [#typescript]
+
+`--lang ts` 写出 `<Assembly>.ts` 和 `nino.ts`，与 Nino.TypeScript 在构建后写出的文件相同，API 也相同。参见 [TypeScript 客户端](/zh/docs/v4/advanced/typescript)。
+
+## Go [#go]
+
+`--lang go` 为 [Go 运行时](/zh/docs/v4/advanced/go)写出 `nino_types.go`。每个 `[NinoType]` 得到：
+
+- 一个结构体，字段先带 `nino` 标签（成员的位置，键控类型中则是 C# 成员名），然后是 `--tags`：``Health int32 `nino:"Health" json:"health" yaml:"health"` ``；
+- `NinoLayout()`，返回 .NET 为这个类型发布的布局；`NinoTypeName()`；可以按类型 ID 写出的类还有 `NinoTypeID()`；
+- 与运行时手写示例形状相同的 `ReadX` 和 `WriteX` 函数：每段连续的定长成员只做一次边界检查，不用反射。
+
+枚举是带常量的具名整数类型。可以容纳多种类型的槽位是一个接口，每个允许的类型一个实现。辅助类型命名为 `NinoTuple2`……`NinoGrid`；名字以 `Nino` 开头的用户类型会加上 `Type` 后缀，简单名相同的两个类型会加上命名空间前缀。
+
+```go
+data, err := nino.Serialize(player, protocol.WritePlayer)
+player, err := nino.Deserialize(data, protocol.ReadPlayer)
+```
+
+## Rust [#rust]
+
+`--lang rust` 为 [Rust 运行时](/zh/docs/v4/advanced/rust)（crate `nino-serialization`，库名 `nino`）写出 `nino_types.rs`。编解码器完整写出（每个类型实现 `NinoRead`、`NinoWrite`、`NinoReadBody` 和 `NinoWriteBody`），而不是 `#[derive]` 属性，所以代码既不需要 derive crate，也不需要构建它。每个类型都有 `TYPE_ID`、`NINO_TYPE_NAME` 和 `NINO_LAYOUT` 常量。容纳多种类型的槽位是一个枚举 `<Base>Ref`，每个允许的类型一个装箱变体；`object` 槽位是 `AnyObject`。映射和集合是 `IndexMap` 和 `IndexSet`，所以要打开运行时的 `indexmap` 功能（使用 `--serde` 时还要打开 `serde`）。
+
+生成的文件请关闭 rustfmt 后引入：
+
+```rust title="lib.rs"
+#[rustfmt::skip]
+#[path = "nino_types.rs"]
+mod protocol;
+```
+
+```rust
+let bytes = nino::serialize(&player)?;
+let back: protocol::Player = nino::deserialize_exact(&bytes)?;
+```
+
+## 不会生成的内容 [#not-generated]
+
+nino-gen 会跳过目标语言无法表达的类型以及包含它们的类型，并给出警告：
+
+- **泛型类型**：只有泛型类型的定义有发布的布局，`Box<int>` 没有，所以开放和封闭的泛型类型在任何语言中都不会生成，允许它们的槽位也不会；
+- 带 [`trackReferences: true`](/zh/docs/v4/reference-tracking) 的类型；
+- **本身是集合的 `[NinoType]`**（派生自 `List<T>` 的类）；如果其元素可以生成，这样的集合仍会作为元素类型生成；
+- TypeScript 中，[Nino.TypeScript 不支持的内容](/zh/docs/v4/advanced/typescript#not-supported)；
+- Rust 中，键或元素无法在 Rust 中哈希的映射和集合（`f32`、`f64` 以及包含它们的类型）、带填充的原始元组，以及序列之外的可空原始值。
+
+在 Go 和 Rust 中，`HashSet<string>` 的元素和字典的键是非 null 的字符串，因为 .NET 从不在那里写出 null 键。
+
+## 如何测试 [#tests]
+
+nino-gen 为一致性语料中的类型生成的 TypeScript、Go 和 Rust 代码提交在 Nino 的仓库中，并在各语言中用语料运行：每个有效用例都要读出并逐字节写回，每个恶意用例和截断前缀都要被拒绝。工具本身的说明见 [docs/codegen.md](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/codegen.md)。

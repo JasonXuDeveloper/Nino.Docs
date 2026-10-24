@@ -178,7 +178,7 @@ public sealed class BlobCache<TKey, TValue>
 | --- | --- | --- |
 | 容错类型 | [`format: NinoFormat.VersionTolerant`](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）或 [`format: NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)（任意修改） | 条目需要在部署后继续可用。 |
 | 带版本的键 | 在键里加上结构版本（`profile:v2:42`），类型变化时递增 | 类型的变化超出了上面两个选项的范围，或者缓存重新填充的代价很低。 |
-| 失败即未命中 | 捕获无效数据抛出的 `InvalidOperationException`，删除该条目，再从数据源加载 | 始终启用，作为前两种做法之上的兜底。 |
+| 失败即未命中 | 捕获无效数据抛出的 `NinoDataException`，删除该条目，再从数据源加载 | 始终启用，作为前两种做法之上的兜底。 |
 
 兜底不能替代前两种做法：按布局兼容的另一个类型写入的字节，可能不报错就被反序列化出来。
 

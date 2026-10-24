@@ -137,7 +137,8 @@ For the speed side of these choices, see [High-Performance Serialization](/en/do
 
 ## Untrusted Input [#untrusted-input]
 
-- Nino is built to read untrusted data: it checks every length against the bytes left before allocating (a collection allocates at most 16 times the bytes left ahead of its elements), keeps its stack bounded however deep the data is nested, and only creates types that derive from the declared type. Every invalid input throws an `InvalidOperationException` whose message starts with `Nino:`: catch it at the boundary and treat the input as bad. See [Invalid Data](/en/docs/v4/basic#invalid-data).
+- Nino is built to read untrusted data: it checks every length against the bytes left before allocating (a collection allocates at most 16 times the bytes left ahead of its elements), keeps its stack bounded however deep the data is nested, and only creates types that derive from the declared type. Every invalid input throws a `NinoDataException` (an `InvalidOperationException`) whose message starts with `Nino:`: catch it at the boundary and treat the input as bad. See [Untrusted Data](/en/docs/v4/security).
+- For data from outside, set `NinoSettings.Untrusted = true` at startup, before the first Nino call: it hashes common key types with a per-process secret, checks the values of raw structs and rejects bytes after the value. Lower `NinoSettings.MaxCollectionLength` if no valid message holds that many elements. See [Limits](/en/docs/v4/security#limits).
 - Cap the size of a frame or request before you buffer it (see [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream)): what a read allocates is bounded relative to its input.
 - Validate the values your logic depends on, as with a save file a user has edited: Nino checks the structure of the data, not what it means.
 - The bytes carry no schema, so Nino cannot tell data written for another type with a compatible layout. Version your payloads.

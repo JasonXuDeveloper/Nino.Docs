@@ -31,7 +31,7 @@ Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 ## 为什么选 Nino [#why-nino]
 
 - **快。** 在同一轮测试中与 MemoryPack 相比，Nino 序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象图最高快 <BenchValue k="deserialize.max" />；非托管结构体数组两者都是整块拷贝，性能至少持平。详见[基准测试](/zh/docs/v4/perf)。
-- **可以读取不可信数据。** 来自网络对端或用户文件的数据，无法让进程崩溃，无法分配与自身大小不成比例的内存，也无法让 Nino 创建你没有声明的类型：所有无效输入都抛出同一种 `InvalidOperationException`。详见[无效数据](/zh/docs/v4/basic#invalid-data)。
+- **可以读取不可信数据。** 来自网络对端或用户文件的数据，无法让进程崩溃，无法分配与自身大小不成比例的内存，也无法让 Nino 创建你没有声明的类型：所有无效输入都抛出同一种 `NinoDataException`。详见[不可信数据](/zh/docs/v4/security)。
 - **热路径零 GC。** [序列化到复用的缓冲区](/zh/docs/v4/basic#reusing-a-buffer)时不分配内存；[反序列化到已有对象或池化实例](/zh/docs/v4/pooling)时同样不分配：内容不变的字符串会直接保留，只有内容变化的文本才读成新字符串。
 - **一切在编译期完成。** 源生成器为每个类型生成一个格式化器，所以 IL2CPP、NativeAOT 和 HybridCLR 都能直接使用。用 .NET 8 SDK 及以上版本编译时，[拦截器](/zh/docs/v4/performance#interceptors)会把每次调用直接转给对应的格式化器。生成器是增量的：改一个类型只重新生成这个类型，生成的代码编译起来也比 v3 快得多（参见[构建时间](/zh/docs/v4/v3-vs-v4#build-time-and-generated-code)）。
 - **多态无需标签。** 声明为基类或接口的值，读回来仍是它的实际类型。类型 ID 是类型名的哈希，不用维护标签表；其他程序集里的子类型，Nino 也能自己找到。详见[多态](/zh/docs/v4/polymorphism)。

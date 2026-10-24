@@ -1,0 +1,126 @@
+---
+title: Untrusted Data
+seoTitle: "Reading Untrusted Data Safely: Limits, NinoDataException and Untrusted Mode – Nino v4 Docs"
+description: "What Nino checks when it reads data from a network peer or a user's file: one NinoDataException for invalid input, the bytes it rejects, the depth, length and hash-collision limits in NinoSettings, and NinoSettings.Untrusted."
+icon: ShieldCheck
+---
+
+Nino is built to read data from sources you do not trust: messages from a network peer, files a user hands you, request bodies. This page lists what every read checks, the limits you can tighten in `NinoSettings`, the extra checks of `NinoSettings.Untrusted`, and what stays your code's job.
+
+## Guarantees [#guarantees]
+
+Whatever the bytes, a read:
+
+- **never reads past the input**, or past the region or keyed entry it is in;
+- **allocates in proportion to the input**: every length is checked against the bytes left, at the fewest bytes an element takes, before anything is allocated, and a collection allocates ahead of its elements at most 16 times the bytes left (16 KB at least); a larger count is grown into as elements are actually read;
+- **keeps its stack bounded**: objects nested more than 128 levels deep are read later from a shallow level, and everything else that nests (types built by their constructor or compared by value, structs and collections that hold themselves) stops at [`NinoSettings.MaxDepth`](#limits), with the thread's stack checked on the way (see [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs));
+- **creates only the types you declared**: the data holds type ids, never type names, a polymorphic value must be one of the declared type's registered subtypes, and a back reference must point to an object already read, of the slot's type;
+- **bounds the work per key** of the dictionaries and sets it fills ([hash flooding](#hash-flooding));
+- **throws one exception type**, [`NinoDataException`](#ninodataexception), for all of it.
+
+## NinoDataException [#ninodataexception]
+
+Every check that rejects data throws `NinoDataException` (namespace `Nino.Core`), with a message that starts with `Nino:`. A value its own type rejects while it is created (a malformed `Uri`, an unknown culture or time zone, a `DateTimeOffset` out of range, a null dictionary key) is reported the same way, with the original exception as `InnerException`. Catch it where the data comes in:
+
+```csharp title="Receive.cs"
+try
+{
+    var message = NinoDeserializer.Deserialize<Message>(payload);
+    Handle(message);
+}
+catch (NinoDataException e)
+{
+    // The payload is not valid Nino data for Message: drop it, log it, close the connection.
+    log.Warn($"Bad message from {peer}: {e.Message}");
+}
+```
+
+`NinoDataException` derives from `InvalidOperationException`, which Nino threw for invalid data up to 4.0.0-rc.7, so a `catch (InvalidOperationException)` still catches it. Mistakes of the caller keep their own types: a null argument, a type with no formatter, deserializing into a read-only collection, a [setting changed too late](#limits). So does a failure while **serializing** (an object graph with an untracked cycle, or nested deeper than `MaxDepth`), which throws `InvalidOperationException`: that object is yours, not invalid data. [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) answers an invalid body with 400.
+
+## What Is Rejected [#what-is-rejected]
+
+In every mode, `NinoDataException` is thrown for:
+
+- data that ends early, and a length or count that is negative (other than `-1` for null) or larger than the bytes left can hold;
+- a collection longer than [`MaxCollectionLength`](#limits);
+- an unknown type id, or one that is not a subtype of the declared type, and an invalid back reference;
+- data nested deeper than [`MaxDepth`](#limits);
+- the same key twice in a dictionary, `HashSet<T>` or lookup that the read fills from empty, and a key that finds more than [`MaxHashCollisions`](#hash-flooding) keys in its hash bucket;
+- a `bool`, null flag or has-value byte other than `0` or `1` (Nino writes only those two);
+- a keyed member whose entry holds more bytes than its value, and a member that runs past the end of its region;
+- a version-tolerant or keyed region whose section of deferred bodies does not match the region (its offset or its entries);
+- a `[NinoUtf8]` string whose bytes are not valid UTF-8 or do not match its char and byte counts.
+
+A `bool` inside a raw struct or tuple is copied with the struct's bytes, unchecked, unless [`Untrusted`](#untrusted-mode) is set.
+
+## Limits [#limits]
+
+These static members of `NinoSettings` (namespace `Nino.Core`) bound what a read may take:
+
+<TypeTable
+  type={{
+    MaxDepth: {
+      description: 'How deep objects may nest in data being read or written: class bodies, plus structs and collections that can hold themselves. Class bodies past 128 levels that Nino can create before reading their members are deferred and need no limit; this bounds everything else. At least 128. Too deep throws NinoDataException when reading and InvalidOperationException when writing.',
+      type: 'int',
+      default: '512',
+    },
+    MaxCollectionLength: {
+      description: 'The most elements (or key/value pairs) one collection or array in the data may claim; a longer one throws NinoDataException before anything is allocated for it. For a multi-dimensional array, the total element count. Every length is already checked against the bytes left, so lower it only to bound the memory a valid but large payload may take.',
+      type: 'int',
+      default: 'int.MaxValue',
+    },
+    MaxHashCollisions: {
+      description: 'The most keys a key read from the data may find in its hash bucket when Nino adds it to a hash table it fills; more throws NinoDataException. At least 1. See Hash Flooding.',
+      type: 'int',
+      default: '100',
+    },
+    Untrusted: {
+      description: 'Adds the checks that cost time on every read: seeded hashing of common key types, range checks of values copied as raw bytes, and rejecting bytes after the value. See Untrusted Mode.',
+      type: 'bool',
+      default: 'false',
+    },
+  }}
+/>
+
+<Callout type="warn" title="Set them before first use">
+
+The read and write paths take these four as constants: they are frozen the first time Nino uses one of them, and setting one afterwards throws `InvalidOperationException`. Set them at startup, before the first serialization or deserialization on any thread. A value out of range (`MaxDepth` below 128, a negative `MaxCollectionLength`, `MaxHashCollisions` below 1) throws `ArgumentOutOfRangeException`.
+
+</Callout>
+
+```csharp title="Program.cs"
+// At startup, before any Nino call.
+NinoSettings.Untrusted = true;              // data comes from clients
+NinoSettings.MaxCollectionLength = 100_000; // no message of ours holds more
+```
+
+The pool and recycler settings of `NinoSettings` are described in [Pooling](/en/docs/v4/pooling#settings).
+
+## Hash Flooding [#hash-flooding]
+
+Keys built to share one hash bucket make every insert scan all the keys before it, so a dictionary of such keys takes time quadratic in its size to fill. In every mode, a key read from the data that finds more than `MaxHashCollisions` keys (default 100) in its bucket throws `NinoDataException`, in a `Dictionary<TKey, TValue>`, `HashSet<T>`, lookup (`ILookup`) and, with Nino.Immutable, an `ImmutableDictionary<TKey, TValue>` or `ImmutableHashSet<T>` (there: more than that many keys with one hash code).
+
+- The count is free where Nino fills a new table itself, since it walks the bucket anyway to find duplicates; where the table adds a key itself (a collection read into an existing one), Nino walks the new key's bucket after the add.
+- Keys with a reasonable hash code hold about one key per bucket. Raise the limit for keys whose hash codes are poor, such as a struct key without its own `GetHashCode`.
+- String keys are left to the tables that switch to a randomized comparer after 100 collisions on their own (.NET's `Dictionary` and `HashSet`, .NET Framework's `Dictionary`).
+- `ConcurrentDictionary<TKey, TValue>` is not covered: it keeps its buckets to itself.
+
+## Untrusted Mode [#untrusted-mode]
+
+`NinoSettings.Untrusted = true` adds the checks that cost time on every read, which trusted data does not need. With it off (the default) none of them costs anything: the read paths test it as a constant. On:
+
+- **Seeded hashing.** The dictionaries and hash sets Nino creates (also for `IDictionary`, `ISet` and lookups) hash integer, `char`, `Guid` and `string` keys with a comparer keyed by a secret drawn once per process (SipHash-1-3), so keys cannot be chosen to collide at all. Their `Comparer` is not the default one, but equality is the same. Collections you pass in keep their comparer; other key types, and `ImmutableDictionary` and `ImmutableHashSet`, rely on `MaxHashCollisions`.
+- **Values copied as bytes are checked** as their own constructors would check them, also inside raw structs and tuples: a `bool` other than 0 or 1, a `DateTime` past `DateTime.MaxValue`, a `decimal` with flag bits other than the sign or a scale above 28, a `DateOnly` or `TimeOnly` out of range. Enums are not checked: any value of the underlying type is valid (flags combine, and a newer version may add members). `TimeSpan`, `Guid`, `char` and the numbers have no invalid values.
+- **Bytes after the value** are invalid data for the APIs that take the whole payload as a span or array (`NinoDeserializer.Deserialize` and the generated overloads). Reading from a `Reader` you create leaves the rest to you, so several values can still be read from one buffer.
+
+## What Stays Your Job [#what-stays-your-job]
+
+Nino checks the structure of the data, not what it means, as with a save file a user has edited:
+
+- **Values.** A value read in full is whatever the data says: a negative health, an enum value with no name. Constructors and setters run with those values. Validate what your logic depends on.
+- **The type.** The bytes carry no schema, so data written for a **different** type with a compatible layout reads without error. Version your payloads yourself (see [Evolving Your Data](/en/docs/v4/evolving-data) and the [file header](/en/docs/v4/advanced/persistence#add-a-file-header) pattern); `Deserialize<object>` accepts any registered type.
+- **The size of a message.** Allocation is bounded relative to the input, so bound the input: cap the size of a frame or request before you buffer it (see [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream)). Elements that really are in the data cost their size in memory: a large version-tolerant struct whose members are all left out takes 4 bytes on the wire.
+
+## Other Languages [#other-languages]
+
+The readers for [TypeScript](/en/docs/v4/advanced/typescript#untrusted-data), [Go](/en/docs/v4/advanced/go#guarantees) and [Rust](/en/docs/v4/advanced/rust#guarantees) make the same checks: bounds and lengths before allocating, depth counted as .NET counts it, type ids limited to the types a slot allows, and strict bytes. Each throws or returns one error type of its own. Go and Rust also reject some bytes .NET accepts outside untrusted mode, such as out-of-range dates and decimals. The rules every reader follows are in the [wire format](/en/docs/v4/wire-format#validation).

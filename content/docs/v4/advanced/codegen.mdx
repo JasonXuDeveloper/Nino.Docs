@@ -1,0 +1,95 @@
+---
+title: nino-gen for Other Languages
+seoTitle: "nino-gen: Generate TypeScript, Go and Rust Codecs from a .NET Assembly – Nino v4 Docs"
+description: "The nino-gen command-line tool (NuGet package Nino.Codegen) writes the [NinoType]s of a built .NET assembly as TypeScript, Go or Rust types with codecs that read and write the bytes Nino writes in .NET."
+icon: SquareTerminal
+---
+
+**nino-gen** is a .NET tool (the NuGet package **Nino.Codegen**) that writes the `[NinoType]`s of a built assembly in **TypeScript**, **Go** or **Rust**: one type per `[NinoType]`, with codecs that read and write exactly the bytes Nino writes in .NET. It reads nothing but the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) the generator publishes in every assembly it compiles, so it needs no source code, no project and no running code: only the built `.dll` and the assemblies it references.
+
+```shell
+dotnet tool install -g Nino.Codegen --prerelease
+nino-gen --assembly bin/Release/net8.0/MyGame.Shared.dll --lang go --out ../server/protocol
+```
+
+The tool runs on .NET 8 or later. For TypeScript inside a .NET build, the [Nino.TypeScript](/en/docs/v4/advanced/typescript) package runs the same code after each compile; nino-gen is for running it yourself, from a script or a CI step, and for the other languages.
+
+## Options [#options]
+
+```text
+nino-gen --assembly <dll> --lang ts|go|rust --out <dir> [--references <file>] [--name <file name>]
+  ts:   [--names camel|keep] [--import-extension <.js|.ts|.mjs|.mts>] [--runtime <module>]
+  go:   [--package <name>] [--tags json,yaml] [--tag-names camel|snake|original]
+  rust: [--serde] [--serde-names camel|snake|original] [--strings string|wide]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--assembly` | The built assembly. Its `[NinoType]`s are generated, and those of referenced assemblies that it uses. |
+| `--lang` | `ts` (or `typescript`), `go` or `rust`. |
+| `--out` | The directory to write to. A file is written only when its text changes, so watchers and incremental builds see no change. |
+| `--references` | A file with one assembly path per line to resolve references from. The `.dll`'s directory and the running .NET are searched anyway. |
+| `--name` | The generated file's name: `<Assembly>.ts`, `nino_types.go` or `nino_types.rs` by default. |
+| `--names` (ts) | `camel` (default) or `keep`: the property names. |
+| `--import-extension` (ts) | The extension of the import of the runtime, for ESM resolvers that need one. |
+| `--runtime` (ts) | Import the runtime from this module instead of writing `nino.ts` next to the code. |
+| `--package` (go) | The package name; by default the assembly name's letters and digits, lower-cased. |
+| `--tags` (go) | The struct tags written after `nino`, in order: `json,yaml` by default, empty for none. |
+| `--tag-names` (go) | How those tags name a member: `camel` (default), `snake` or `original`. |
+| `--serde` (rust) | Adds `#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]` and a rename per field. |
+| `--serde-names` (rust) | The serde names: `camel` (default, as `System.Text.Json` names them), `snake` or `original`. |
+| `--strings` (rust) | `string` (default): C# strings are `String`, and a string with an unpaired surrogate fails to read. `wide`: `nino::WideString`, which keeps any UTF-16. |
+
+A type that is left out is reported as `nino-gen : warning NINOGEN002: ...` with the reason; invalid arguments or an assembly the tool cannot read are `nino-gen : error NINOGEN001: ...`, with exit code 1.
+
+## TypeScript [#typescript]
+
+`--lang ts` writes `<Assembly>.ts` and `nino.ts`, the same files Nino.TypeScript writes after a build, with the same API. See [TypeScript Clients](/en/docs/v4/advanced/typescript).
+
+## Go [#go]
+
+`--lang go` writes `nino_types.go` for the [Go runtime](/en/docs/v4/advanced/go). For every `[NinoType]`:
+
+- a struct whose fields carry the `nino` tag first (the member's position, or its C# name in a keyed type), then the `--tags`: ``Health int32 `nino:"Health" json:"health" yaml:"health"` ``;
+- `NinoLayout()`, returning the layout .NET publishes for the type, `NinoTypeName()`, and `NinoTypeID()` on the classes that can be written behind a type id;
+- `ReadX` and `WriteX` functions in the shape the runtime's hand-written samples use: one bounds check per run of fixed-size members, no reflection.
+
+Enums are named integer types with constants. A slot that holds several types is an interface with one implementation per allowed type. Helper types are named `NinoTuple2`, ..., `NinoGrid`; a user type whose name starts with `Nino` gets a `Type` suffix, and two types with the same simple name are prefixed with their namespace.
+
+```go
+data, err := nino.Serialize(player, protocol.WritePlayer)
+player, err := nino.Deserialize(data, protocol.ReadPlayer)
+```
+
+## Rust [#rust]
+
+`--lang rust` writes `nino_types.rs` for the [Rust runtime](/en/docs/v4/advanced/rust) (crate `nino-serialization`, library `nino`). The codecs are written out in full (`NinoRead`, `NinoWrite`, `NinoReadBody` and `NinoWriteBody` for each type), not as `#[derive]` attributes, so the code needs neither the derive crate nor its build. Each type gets `TYPE_ID`, `NINO_TYPE_NAME` and `NINO_LAYOUT` constants. A slot holding several types is an enum `<Base>Ref` with a boxed variant per allowed type, and an `object` slot is `AnyObject`. Maps and sets are `IndexMap` and `IndexSet`, so turn on the runtime's `indexmap` feature (and `serde` for `--serde`).
+
+Include the file with rustfmt off, since it is generated:
+
+```rust title="lib.rs"
+#[rustfmt::skip]
+#[path = "nino_types.rs"]
+mod protocol;
+```
+
+```rust
+let bytes = nino::serialize(&player)?;
+let back: protocol::Player = nino::deserialize_exact(&bytes)?;
+```
+
+## What Is Not Generated [#not-generated]
+
+nino-gen leaves out, with a warning, every type its language cannot express, and the types that hold one:
+
+- **generic types**: only a generic type's definition has a published layout, not `Box<int>`, so neither open nor closed generic types are generated, in any language, nor slots that allow one;
+- types with [`trackReferences: true`](/en/docs/v4/reference-tracking);
+- **`[NinoType]`s that are collections** themselves (a class deriving from `List<T>`); such a collection is still generated as an element type when its elements can be;
+- in TypeScript, what [Nino.TypeScript leaves out](/en/docs/v4/advanced/typescript#not-supported);
+- in Rust, maps and sets whose key or element Rust cannot hash (`f32`, `f64` and types containing them), raw tuples with padding, and nullable raw values outside sequences.
+
+In Go and Rust, the elements of a `HashSet<string>` and the keys of a dictionary are non-null strings, since .NET never writes a null key there.
+
+## How It Is Tested [#tests]
+
+The TypeScript, Go and Rust code nino-gen writes for the conformance corpus's types is committed in Nino's repository and run against the corpus in each language: every valid case is read and written back byte for byte, and every malicious case and truncated prefix is rejected. The tool itself is described in [docs/codegen.md](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/codegen.md).

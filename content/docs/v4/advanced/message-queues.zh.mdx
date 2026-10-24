@@ -218,7 +218,7 @@ public sealed class SampleConsumer
 
 - 每个事件类型都设为 [`NinoFormat.VersionTolerant`](/zh/docs/v4/evolving-data#version-tolerance)（追加字段）或 [`NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)（任意修改）。这样消费者会跳过不认识的字段，旧消息中缺少的字段保留构造函数或字段初始化器给出的值。
 - 在 `NinoFormat.VersionTolerant` 的继承体系中，只向具体的事件类（`OrderPlaced` 等）追加成员，不要加到 `OrderEvent` 上：追加到基类的成员会把每个子类的成员往后挤。如果基类需要新成员，请改用 `NinoFormat.Keyed`。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
-- 消费者收到不认识的事件**类型**时无法读取：反序列化会抛出 `InvalidOperationException`（未知的类型 ID）。先部署消费者，再部署会产生新事件类型的生产者；或者把新类型放到新的主题里。
+- 消费者收到不认识的事件**类型**时无法读取：反序列化会抛出 `NinoDataException`（未知的类型 ID）。先部署消费者，再部署会产生新事件类型的生产者；或者把新类型放到新的主题里。
 - 在同一次部署内就会被消费掉的消息（几秒内清空的任务队列）用[按位置](/zh/docs/v4/evolving-data#positional)的类型（不带参数的 `[NinoType]`）即可。它们的字节会随成员的每次改动而变化。
 
 文件中的追加日志（基于本地存储的事件溯源）见[追加日志](/zh/docs/v4/advanced/persistence#append-only-logs)。

@@ -92,7 +92,7 @@ public sealed class Invoice : Document
 - **版本 2 读取版本 1 的数据：** `Revision` 读到的是 `CustomerId` 的字节；数据在 `CustomerId` 之前就结束了，`CustomerId` 像其他缺少的成员一样保留原有的值（新建的 `Invoice` 中为 `0`）。
 - **版本 1 读取版本 2 的数据：** `CustomerId` 读到的是 `Revision` 的字节，真正的 `CustomerId` 被当作未知的尾部成员跳过。
 
-这里两个成员类型相同，所以只是值错了。类型不同时，字节会被当作另一种类型来读：结果是错误的值，或抛出 `InvalidOperationException`。编译期不会报告这种错误，因为生成器只能看到代码的一个版本。
+这里两个成员类型相同，所以只是值错了。类型不同时，字节会被当作另一种类型来读：结果是错误的值，或抛出 `NinoDataException`。编译期不会报告这种错误，因为生成器只能看到代码的一个版本。
 
 `Document` 自身的实例不受影响（`Revision` 是它们的最后一个成员），受影响的是所有子类的数据。因此只向继承体系最底层的类追加成员，例如密封的消息类。所有子类都需要的成员，就分别加到每个子类里；或者把整个继承体系改成 [`NinoFormat.Keyed`](#keyed-members)，这样任何一层的类都可以添加成员。
 
@@ -138,13 +138,13 @@ public class UserProfile
 
 ## 布局元数据 [#layout-metadata]
 
-生成器会在程序集元数据里为每个 `[NinoType]` 记录一条 `[assembly: NinoTypeLayout]`，说明这个类型是怎么写出的：格式、主体前面的头（结构体是 `None`，密封类是 `NullFlag`，其他是 `TypeId`）、是否跟踪引用、是否按原始内存整体拷贝、类型 ID，以及按写入顺序排列的成员。做数据兼容检查的工具（CI 里的 schema 检查、两次构建的对比、迁移工具）直接读这些信息就行，不用自己再实现一遍 Nino 的规则：
+生成器会在程序集元数据里为每个 `[NinoType]` 记录一条 `[assembly: NinoTypeLayout]`，说明这个类型是怎么写出的：格式、主体前面的头（结构体是 `None`，密封类是 `NullFlag`，其他是 `TypeId`）、是否跟踪引用、是否按原始内存整体拷贝、类型 ID、嵌套过深时主体是否[延迟](/zh/docs/v4/basic#deep-object-graphs)（`deferrable`，其他语言的读取器需要它），以及按写入顺序排列的成员。做数据兼容检查的工具（CI 里的 schema 检查、两次构建的对比、迁移工具）直接读这些信息就行，不用自己再实现一遍 Nino 的规则：
 
 ```csharp
 foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutAttribute>())
     Console.WriteLine($"{layout.Type}: {layout}");
 
-// Game.Move: format=Positional; header=None; trackReferences=false; raw=true; typeId=0x…;
+// Game.Move: format=Positional; header=None; trackReferences=false; raw=true; typeId=0x…; deferrable=false;
 //            members=raw(8){VelocityX:float@0:raw(4),VelocityY:float@4:raw(4)}
 ```
 

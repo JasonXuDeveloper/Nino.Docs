@@ -218,7 +218,7 @@ A message written today may be consumed next month, by code that did not exist w
 
 - Make every event type [`NinoFormat.VersionTolerant`](/en/docs/v4/evolving-data#version-tolerance) (append fields) or [`NinoFormat.Keyed`](/en/docs/v4/evolving-data#keyed-members) (any change). A consumer then skips fields it does not know, and a field missing from an old message keeps the value its constructor or initializer gives it.
 - In a `NinoFormat.VersionTolerant` hierarchy, append members only to the concrete events (`OrderPlaced`, ...), never to `OrderEvent`: a member appended to the base class shifts the members of every subclass. If the base needs a new member, use `NinoFormat.Keyed`. See [Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class).
-- A consumer that receives an event **type** it does not know cannot read it: deserializing throws an `InvalidOperationException` (unknown type id). Deploy consumers before the producers that emit a new event type, or put new types on a new topic.
+- A consumer that receives an event **type** it does not know cannot read it: deserializing throws a `NinoDataException` (unknown type id). Deploy consumers before the producers that emit a new event type, or put new types on a new topic.
 - [Positional](/en/docs/v4/evolving-data#positional) types (bare `[NinoType]`) are fine for messages that are consumed within a deployment (a work queue drained in seconds). Their bytes change with every member change.
 
 For an append-only log in a file (event sourcing on local storage), see [Append-Only Logs](/en/docs/v4/advanced/persistence#append-only-logs).

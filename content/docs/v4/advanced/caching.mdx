@@ -178,7 +178,7 @@ A shared cache outlives the process that wrote it: during a rolling deployment, 
 | --- | --- | --- |
 | Tolerant types | [`format: NinoFormat.VersionTolerant`](/en/docs/v4/evolving-data#version-tolerance) (append members) or [`format: NinoFormat.Keyed`](/en/docs/v4/evolving-data#keyed-members) (any change) | Entries should survive the deployment. |
 | Versioned keys | Put a schema version in the key (`profile:v2:42`) and bump it when the type changes | The type changes in ways the options above do not cover, or the cache is cheap to refill. |
-| Treat failures as misses | Catch the `InvalidOperationException` that invalid data throws, delete the entry and load from the source | Always, as a safety net on top of either approach. |
+| Treat failures as misses | Catch the `NinoDataException` that invalid data throws, delete the entry and load from the source | Always, as a safety net on top of either approach. |
 
 The safety net does not replace the other two: bytes written for a different type with a compatible layout can deserialize without an error.
 

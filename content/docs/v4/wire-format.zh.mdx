@@ -1,0 +1,62 @@
+---
+title: 二进制格式
+seoTitle: "Nino v4 二进制格式：规范概览 – Nino v4 文档"
+description: "Nino v4 写出的字节概览：没有信封的小端序值、两种字符串编码、按规范布局写出的原始结构体、集合、对象头与类型 ID、三种格式、延迟主体，以及每个读取器都要做的检查。逐字节的规范在 Nino 的仓库中。"
+icon: Binary
+---
+
+Nino 的二进制格式在 Nino 仓库的 [docs/spec/wire-format.md](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md) 中逐字节规定。它是其他语言读取器和写入器的契约：[TypeScript](/zh/docs/v4/advanced/typescript)、[Go](/zh/docs/v4/advanced/go) 和 [Rust](/zh/docs/v4/advanced/rust) 运行时都依据它构建，并用 .NET Nino 写出的同一份一致性语料测试。本页是概览；确切的规则、以十六进制转储给出的完整示例，以及布局元数据的语法都在规范中。
+
+在 C# 中使用 Nino 不需要了解这些：生成器会替你写出并读取这些字节。
+
+## 约定 [#conventions]
+
+- **小端序，不对齐。** 所有多字节值都是小端序，每个值紧接在上一个值之后。线上唯一的填充位于原始结构体内部和原始数组的可空元素内部，写为零。.NET 实现拒绝在大端主机上运行。
+- **没有信封。** 一段数据就是顶层值按其声明类型的编码，后面跟着可能有的延迟主体。没有魔数、版本、长度或类型描述：如何读取字节只由声明类型决定。值之后的字节默认被忽略，在[不可信模式](/zh/docs/v4/security#untrusted-mode)下被拒绝。
+- **定长整数。** 没有变长整数。长度和数量是 `int32`，`-1` 表示 null；密封类和可空值带一个存在字节（`0` 或 `1`）。
+- **版本。** 格式随 Nino 的主版本变化：v4 不读取 v3 的数据。v4 之内对字节的改动会在[更新日志](/zh/docs/v4/changelog)的“二进制格式”中说明。给类型添加成员由各类型的[版本容错和键控格式](/zh/docs/v4/evolving-data)处理，不靠格式版本。
+
+## 值 [#values]
+
+- **基元类型**（`bool`、整数、`float`、`double`、`Half`、`char`、枚举）就是它们的字节。`nint` 和 `nuint` 在所有平台上都是 8 字节。`Int128` 和 `UInt128` 先写低 64 位，再写高 64 位。
+- **BCL 值**：`decimal`、`Guid`、`DateTime`、`TimeSpan`、`DateOnly`、`TimeOnly` 等大小固定；`DateTimeOffset` 是 UTC 刻度加偏移分钟数（10 字节）。`BigInteger`、`Version`、`BitArray`、`Uri` 和其他变长值有各自的编码。
+- **字符串**有两种编码，按成员选择。默认编码是一个头 `h` 加上文本：`-1` 为 null，`0` 为空，负的 `h` 表示 `~h` 个每字符一字节的 Latin-1 字符（每个字符都不超过 U+00FF 时写这种形式），正的 `h` 表示 `h` 个 UTF-16 码元。`[NinoUtf8]` 成员写字符数、字节数和 UTF-8 字节。参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)。
+
+## 原始值 [#raw-values]
+
+非托管值（基元类型、枚举、不是 `[NinoType]` 的非托管结构体，或符合条件的 `[NinoType]` 结构体）按**规范布局**作为一整块写出：即 64 位 CoreCLR 给它的布局，每个字段按自然对齐（`decimal` 对齐到 8，`Int128` 对齐到 16），填充写为零。每个运行时写出的字节都相同：自身布局不同时（32 位平台，Mono 和 IL2CPP 上的部分结构体），Nino 逐字段转换。`Nullable<T>`、`ValueTuple`、`KeyValuePair` 和 `DateTimeOffset` 从不按原始值写出，而是逐项写出。参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
+
+## 集合 [#collections]
+
+- **序列**（数组、列表、集合、队列、栈、`Memory<T>`、不可变序列，以及你自己写的集合）是一个 `int32` 数量（`-1` 为 null），然后是各元素。原始元素是一整块 `数量 × 大小` 字节。栈从底到顶写出。
+- **映射**是一个数量，然后是每个键和值。有序映射按键的顺序写出；哈希映射按枚举顺序写出，读取器不能依赖这个顺序。
+- **原始 `T` 的 `T?[]` 和 `List<T?>`** 使用固定步长：一个 has-value 字节，填充到 `T` 的对齐，然后是 `T`（为 null 时全为零）。声明为接口的成员（`IList<int?>`）则把每个元素作为单独的 `T?` 写出。
+- **元组和键值对**按顺序写出各项；`Tuple<...>`、`T?` 和 `Lazy<T>` 前面有一个存在字节。多维数组先写每一维的长度，再按行优先顺序写元素。
+
+## 对象 [#objects]
+
+`[NinoType]` 值由其声明类型决定的**头**加上它的**主体**组成：
+
+| 声明类型 | 头 |
+| --- | --- |
+| 结构体 | 无 |
+| 密封类 | 存在字节：`0` 为 null，`1` 为有值 |
+| 其他类、接口、`object` | 运行时类型的 `int32` 类型 ID，`0` 为 null |
+
+- **类型 ID** 是类型全名（或其 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)）按 UTF-16 码元计算的 32 位 FNV-1a 哈希，所以数据中从不包含类型名，读取器也只接受它在该槽位已知的子类型。参见[多态](/zh/docs/v4/polymorphism)。
+- **按位置**的主体是整个继承层次的成员，按顺序、从根类开始，不带长度和名字。
+- **版本容错**的主体是一个 `int32` 长度，然后是各成员：旧版本的读取器跳过不认识的成员，新版本给缺少的成员赋默认值。
+- **键控**的主体是一个 `int32` 长度，然后每个成员一个 `(int32 键, int32 长度, 值)` 条目，键是成员名的 FNV-1a 哈希。条目可以任意顺序，未知的键被跳过。
+- **引用追踪**（`trackReferences: true`）把头换成一个 `int32`：`0` 为 null，`-1` 为新对象，`n > 0` 为指向第 `n` 个已读对象的回引用。参见[引用追踪](/zh/docs/v4/reference-tracking)。
+
+## 深层嵌套 [#deep-nesting]
+
+每个读取器都必须实现延迟，否则读不了超过 128 个节点的链表。当已有 128 个类主体打开、又要打开一个类主体时，**可延迟**的类型只写出头而不写主体：对象进入队列，主体稍后从较浅的位置写出，位于顶层值之后；如果在版本容错或键控区域内，则写在最外层区域末尾的一个段中。Nino 能在读取成员之前创建的类型是可延迟的；布局元数据会发布这一点（`deferrable=true|false`）。浅于 128 层的数据在线上没有任何额外内容。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
+
+## 布局元数据 [#layout-metadata]
+
+对每个 `[NinoType]`，生成器都以 `[assembly: NinoTypeLayout(...)]` 发布它的写法：格式、头、类型 ID、是否为原始值、是否追踪引用、是否可延迟，以及每个成员的名字、类型和编码（`raw(4)`、`string`、`seq(...)`、`map(K,V)`、`type(T)` ……）。规范给出了它的语法。其他语言的代码生成器（例如 [nino-gen](/zh/docs/v4/advanced/codegen)）只读取这份元数据。参见[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)。
+
+## 校验 [#validation]
+
+规范列出了读取不可信数据的读取器必须做的检查，以及 .NET 读取器对每一项的处理：边界；分配之前把长度与剩余字节比较；`bool` 和存在字节为 0 或 1；严格的 UTF-8；区域和键控条目被恰好填满；类型 ID 仅限声明类型的子类型；回引用；重复键与哈希洪泛；深度；值的范围；尾随数据。.NET 的做法和相关设置见[不可信数据](/zh/docs/v4/security)。

@@ -16,9 +16,10 @@ Nino.TypeScript 需要 Nino **4.0.0-rc.6** 或更高版本：它读取的是生�
 ## 工作原理 [#how-it-works]
 
 - **基于构建出的程序集。** 一个 MSBuild 目标在 `CoreCompile` 之后运行，在独立进程中启动 `nino-ts` 工具。工具读取该程序集及其引用的每个程序集上的 `[assembly: NinoTypeLayout]` 特性，不加载这些程序集，因此与项目的目标框架无关。
-- **与格式化器同一份布局。** 生成器用生成类型格式化器的同一个模型写出布局，因此 TypeScript 读写成员的顺序、编码和格式与 .NET 代码一致。Nino 的测试先在 .NET 中序列化一个包含所有受支持成员种类的样例，再在 Node 中读取并写回、逐字节比较，检查 .NET 能读取 TypeScript 创建的值，并用 `tsc --strict` 编译生成的代码。
+- **与格式化器同一份布局。** 生成器用生成类型格式化器的同一个模型写出布局，因此 TypeScript 读写成员的顺序、编码和格式与 .NET 代码一致。Nino 的测试先在 .NET 中序列化一个包含所有受支持成员种类的样例，再在 Node 中读取并写回、逐字节比较，检查 .NET 能读取 TypeScript 创建的值，并用 `tsc --strict --noUnusedLocals --noUnusedParameters` 编译生成的代码。
 - **构建未变时不打扰。** 每个文件只在文本变化时才写入，监视器和增量 TypeScript 构建不会看到变化；只有程序集、它的引用、工具或选项变化时，工具才会重新运行。IDE 的设计时构建不会运行它。以前写出、现在不再写出的文件（比如程序集改名后）会被删除。
 - **一个版本一份运行时。** 包版本一旦改变 `nino.ts`，就会重写它，并在 `ninoVersion` 中记下版本号。
+- **也可以在命令行生成。** [nino-gen](/zh/docs/v4/advanced/codegen)（`nino-gen --lang ts`）从构建好的程序集写出同样的两个文件，适合脚本或 CI 步骤，它还能生成 Go 和 Rust 代码。
 
 ## 配置 [#setup]
 
@@ -232,13 +233,28 @@ WebSocket 的用法相同：发送 `serialize` 的结果，设置 `binaryType = 
 - **`deserialize(codec, bytes)`** 从一个 `Uint8Array`（Node 的 `Buffer` 也可以）中读取一个值。
 - 每个类型 `X` 都有 **`XCodec`**：按 .NET 为其声明类型写出的头读写这个值。结构体没有头（`NinoCodec<X>`），密封类有空标记（`NinoCodec<X | null>`），非密封类和接口有类型 ID，所以 `AnimalCodec` 能读写 `Animal` 的任何生成子类型，与 `Serialize<Animal>` 一样。
 - **`NinoWriter` 和 `NinoReader`** 把多个值写进一个缓冲区并按顺序读回，相当于 .NET 中的 `Writer` 和 `Reader`：先 `codec.write(writer, value)`，再 `writer.toBytes()`；读取时 `codec.read(new NinoReader(bytes))`。
-- 数据不是所读类型的有效值时（数据被截断、长度超出末尾、未知的类型 ID），以及值无法写出时，抛出 **`NinoError`**。
+- 数据不是所读类型的有效值时（数据被截断、长度超出末尾、未知的类型 ID，以及[不可信数据](#untrusted-data)中的其他检查），以及值无法写出时，抛出 **`NinoError`**。
 
 <Callout type="warn" title="多态的值要用 new 创建">
 
 按类型 ID 写出的值（声明为非密封类、接口或 `object` 的成员）是按它的构造函数查找类型的，所以必须是生成类的实例：要用 `new Cat()`，而不是形状相同的对象字面量。对象字面量会抛出 `NinoError`（`Object is not a type that can be written here`）。
 
 </Callout>
+
+## 不可信数据 [#untrusted-data]
+
+`nino.ts` 中的读取器与 .NET、[Go](/zh/docs/v4/advanced/go#guarantees) 和 [Rust](/zh/docs/v4/advanced/rust#guarantees) 的读取器一样，按不可信输入处理数据：不是所读类型有效值的数据会抛出 `NinoError`，不会抛出其他异常，也不会越界读取、无限制地递归，或分配超出数据所含内容的内存。
+
+- 每次读取都检查边界；长度或数量在分配任何内存之前，先与剩余字节数比较。
+- 嵌套超过 128 层的类主体会像 .NET 一样被延迟，深层数据只占用有限的栈；不能延迟的主体，以及包含自身的结构体，超过 512 层就失败。
+- 按类型 ID 写出的槽位只接受该处允许的类型的 ID。
+- 映射读入 `Map`，从不读入普通对象，所以 `__proto__` 这样的键只是数据。
+- `bool` 和存在字节必须是 0 或 1，`[NinoUtf8]` 字符串必须是给定字符数的严格 UTF-8。
+- 超出其区域末尾的成员、值没有填满条目的已知键控成员，以及格式错误的延迟主体段，都会像 .NET 一样被拒绝。
+- 映射或集合中重复的键或元素会被拒绝，与 .NET 的字典和集合一致。键按 `Map` 和 `Set` 的方式比较：数字、`bigint`、字符串、布尔值和 `null` 按值比较。读成对象的键（读成 `Date` 的 `DateTime`、结构体、元组）以及只有小数位数不同的 `decimal` 不参与比较，这样的映射或集合会保留两个条目。
+- 值之后的字节不读取，与 .NET 的默认行为一致。
+
+.NET 读取器检查什么，见[不可信数据](/zh/docs/v4/security)。
 
 ## 类型映射 [#type-mapping]
 

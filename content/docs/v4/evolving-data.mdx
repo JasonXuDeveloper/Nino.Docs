@@ -92,7 +92,7 @@ public sealed class Invoice : Document
 - **Version 2 reads version 1 data:** `Revision` gets the bytes of `CustomerId`, and the data ends before `CustomerId`, which keeps its value like any missing member (`0` in a new `Invoice`).
 - **Version 1 reads version 2 data:** `CustomerId` gets the bytes of `Revision`, and the real `CustomerId` is skipped as an unknown trailing member.
 
-Here the two members have the same type, so the values are merely wrong. When the types differ, the bytes are misread as another type, and the result is wrong values or an `InvalidOperationException`. Nothing reports the mistake at compile time, because the generator only ever sees one version of your code.
+Here the two members have the same type, so the values are merely wrong. When the types differ, the bytes are misread as another type, and the result is wrong values or a `NinoDataException`. Nothing reports the mistake at compile time, because the generator only ever sees one version of your code.
 
 Instances of `Document` itself are not affected (`Revision` is their last member); the data of every subclass is. So append members only to the classes at the bottom of a hierarchy, such as sealed message classes. Put a member that every subclass needs into each subclass, or make the hierarchy [`NinoFormat.Keyed`](#keyed-members), where members can be added to any class.
 
@@ -138,13 +138,13 @@ public class UserProfile
 
 ## Layout Metadata
 
-For every `[NinoType]`, the generator records how the type is written in the assembly's metadata, as an `[assembly: NinoTypeLayout]`: the format, the header in front of the body (`None` for a struct, `NullFlag` for a sealed class, `TypeId` otherwise), whether references are tracked, whether the type is a raw struct, its type id, and its members in the order they are written. Tools that check data compatibility (a schema check in CI, a diff between two builds, a migration tool) can read it instead of re-implementing Nino's rules:
+For every `[NinoType]`, the generator records how the type is written in the assembly's metadata, as an `[assembly: NinoTypeLayout]`: the format, the header in front of the body (`None` for a struct, `NullFlag` for a sealed class, `TypeId` otherwise), whether references are tracked, whether the type is a raw struct, its type id, whether a body nested too deep is [deferred](/en/docs/v4/basic#deep-object-graphs) (`deferrable`, which readers in other languages need), and its members in the order they are written. Tools that check data compatibility (a schema check in CI, a diff between two builds, a migration tool) can read it instead of re-implementing Nino's rules:
 
 ```csharp
 foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutAttribute>())
     Console.WriteLine($"{layout.Type}: {layout}");
 
-// Game.Move: format=Positional; header=None; trackReferences=false; raw=true; typeId=0x…;
+// Game.Move: format=Positional; header=None; trackReferences=false; raw=true; typeId=0x…; deferrable=false;
 //            members=raw(8){VelocityX:float@0:raw(4),VelocityY:float@4:raw(4)}
 ```
 

@@ -137,7 +137,8 @@ public sealed class Connection : IDisposable
 
 ## 不可信的输入 [#untrusted-input]
 
-- Nino 本来就是为读取不可信数据而设计的：分配内存之前会检查每个长度是否超出剩余字节（一个集合在读到元素之前最多预先分配剩余字节数的 16 倍），无论数据嵌套多深栈的用量都有上限，只会创建派生自声明类型的类型。所有无效输入都会抛出消息以 `Nino:` 开头的 `InvalidOperationException`：在边界处捕获它，把输入当作坏数据处理。参见[无效数据](/zh/docs/v4/basic#invalid-data)。
+- Nino 本来就是为读取不可信数据而设计的：分配内存之前会检查每个长度是否超出剩余字节（一个集合在读到元素之前最多预先分配剩余字节数的 16 倍），无论数据嵌套多深栈的用量都有上限，只会创建派生自声明类型的类型。所有无效输入都会抛出消息以 `Nino:` 开头的 `NinoDataException`（一种 `InvalidOperationException`）：在边界处捕获它，把输入当作坏数据处理。参见[不可信数据](/zh/docs/v4/security)。
+- 读取外部数据时，在启动时、第一次调用 Nino 之前设置 `NinoSettings.Untrusted = true`：它用每个进程的密钥对常见键类型做哈希，检查原始结构体中的值，并拒绝值之后的字节。如果有效消息不会包含那么多元素，就调低 `NinoSettings.MaxCollectionLength`。参见[限制](/zh/docs/v4/security#limits)。
 - 在缓冲之前限制帧或请求的大小（参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）：一次读取的分配量相对于输入是有界的。
 - 校验你的逻辑依赖的值，就像对待被用户改过的存档：Nino 检查的是数据的结构，而不是它的含义。
 - 字节里不带 schema，所以 Nino 分辨不出按另一个布局兼容的类型写出的数据。请自己为数据加上版本。

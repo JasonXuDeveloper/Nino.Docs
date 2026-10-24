@@ -16,9 +16,10 @@ Nino.TypeScript needs Nino **4.0.0-rc.6** or later: it reads the byte encodings 
 ## How It Works [#how-it-works]
 
 - **From the built assembly.** An MSBuild target runs after `CoreCompile` and starts the `nino-ts` tool in its own process. The tool reads the `[assembly: NinoTypeLayout]` attributes of the assembly and of every assembly it references, without loading them, so the project's target framework does not matter.
-- **The same layouts as the formatters.** The generator writes each layout from the same model as the type's formatter, so the TypeScript reads and writes the members in the order, encoding and format the .NET code uses. Nino's tests serialize a sample with every supported kind of member in .NET, read it and write it back in Node and compare the bytes, check that .NET reads values made in TypeScript, and compile the generated code with `tsc --strict`.
+- **The same layouts as the formatters.** The generator writes each layout from the same model as the type's formatter, so the TypeScript reads and writes the members in the order, encoding and format the .NET code uses. Nino's tests serialize a sample with every supported kind of member in .NET, read it and write it back in Node and compare the bytes, check that .NET reads values made in TypeScript, and compile the generated code with `tsc --strict --noUnusedLocals --noUnusedParameters`.
 - **Quiet on unchanged builds.** Each file is written only when its text changes, so watchers and incremental TypeScript builds see no change, and the tool runs again only when the assembly, its references, the tool or the options change. It does not run in the IDE's design-time builds. A file it wrote before and no longer writes (after renaming the assembly) is deleted.
 - **One runtime per version.** `nino.ts` is rewritten whenever the package version changes it, and carries that version in `ninoVersion`.
+- **Also from the command line.** [nino-gen](/en/docs/v4/advanced/codegen) (`nino-gen --lang ts`) writes the same two files from a built assembly, for a script or a CI step, and also generates Go and Rust.
 
 ## Setup [#setup]
 
@@ -232,13 +233,28 @@ A WebSocket works the same way: send the result of `serialize`, set `binaryType 
 - **`deserialize(codec, bytes)`** reads one value from a `Uint8Array` (a Node `Buffer` works too).
 - **`XCodec`** for every type `X`: reads and writes the value with the header .NET writes for its declared type. A struct has none (`NinoCodec<X>`), a sealed class a null flag (`NinoCodec<X | null>`), and a class that is not sealed or an interface a type id, so `AnimalCodec` reads and writes any generated subtype of `Animal`, as `Serialize<Animal>` does.
 - **`NinoWriter` and `NinoReader`** write several values into one buffer and read them back in order, like `Writer` and `Reader` in .NET: `codec.write(writer, value)`, then `writer.toBytes()`; `codec.read(new NinoReader(bytes))`.
-- **`NinoError`** is thrown for data that is not a valid value of the type read (truncated data, a length past the end, an unknown type id) and for values that cannot be written.
+- **`NinoError`** is thrown for data that is not a valid value of the type read (truncated data, a length past the end, an unknown type id, the other checks under [Untrusted Data](#untrusted-data)) and for values that cannot be written.
 
 <Callout type="warn" title="Create polymorphic values with new">
 
 A value written behind a type id (a member declared as a class that is not sealed, an interface or `object`) is looked up by its constructor, so it must be an instance of a generated class: `new Cat()`, not an object literal shaped like one. A literal throws `NinoError` (`Object is not a type that can be written here`).
 
 </Callout>
+
+## Untrusted Data [#untrusted-data]
+
+The reader in `nino.ts` takes untrusted input, as the .NET, [Go](/en/docs/v4/advanced/go#guarantees) and [Rust](/en/docs/v4/advanced/rust#guarantees) readers do: data that is not a value of the type read throws a `NinoError`, never another exception, and never reads out of bounds, recurses without a bound or allocates more than the data holds.
+
+- Every read is bounds-checked, and a length or count is checked against the bytes left before anything is allocated for it.
+- Class bodies nested past 128 are deferred, as in .NET, so deep data costs a bounded stack; bodies that cannot be deferred, and structs that hold themselves, fail past 512.
+- A slot written behind a type id reads only the ids of the types allowed there.
+- Maps are read into `Map`s, never plain objects, so keys such as `__proto__` are data.
+- `bool`s and presence bytes must be 0 or 1, and `[NinoUtf8]` strings strict UTF-8 of the char count given.
+- A member that runs past the end of its region, a known keyed member whose value leaves bytes in its entry, and a malformed section of deferred bodies are rejected, as .NET rejects them.
+- A key or element repeated in a map or set is rejected, as .NET's dictionaries and sets reject it. Keys are compared as `Map` and `Set` compare them: numbers, `bigint`s, strings, booleans and `null` by value. Keys read as objects (a `DateTime` read as a `Date`, structs, tuples) and `decimal`s that differ only in scale are not compared, so such a map or set keeps both entries.
+- Bytes after the value are left unread, as .NET does by default.
+
+See [Untrusted Data](/en/docs/v4/security) for what the .NET reader checks.
 
 ## Type Mapping [#type-mapping]
 

@@ -21,10 +21,11 @@ Nino reads untrusted data by design, and the fast paths keep these guarantees:
 
 - **No type names in the data.** A value is one of the declared type's registered subtypes, chosen by a type id, and a back reference must point to an object already read, of the slot's type. `System.Type` is not serializable, so data can never name a type to create.
 - **Lengths checked before allocating.** Every count is checked against the bytes left, and a collection allocates ahead of its elements at most 16 times the bytes left in the input: a few bytes cannot claim gigabytes.
-- **A bounded stack.** Deeply nested data is read from a shallow level or stops at 512 levels, with the stack checked on the way: it throws instead of overflowing the stack, which would end the process.
-- **One exception.** Every invalid input throws an `InvalidOperationException` whose message starts with `Nino:`, including values their own type rejects, so one `catch` at the boundary handles all of it; [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) answers it with 400.
+- **A bounded stack.** Deeply nested data is read from a shallow level or stops at `NinoSettings.MaxDepth` (512 levels by default), with the stack checked on the way: it throws instead of overflowing the stack, which would end the process.
+- **No hash flooding.** A key that finds more than `NinoSettings.MaxHashCollisions` keys in its hash bucket throws, so crafted keys cannot make filling a dictionary or set quadratic; `NinoSettings.Untrusted` also hashes integer, `char`, `Guid` and `string` keys with a per-process secret.
+- **One exception.** Every invalid input throws a `NinoDataException` (an `InvalidOperationException`) whose message starts with `Nino:`, including values their own type rejects, so one `catch` at the boundary handles all of it; [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) answers it with 400.
 
-We checked these against fuzzed and hand-crafted payloads for every built-in type and every way of declaring one, and fixed what they found in 4.0.0-rc.7. What stays the application's job (the values themselves, the size of a message, versioning) is in [Invalid Data](/en/docs/v4/basic#invalid-data). Nino.TypeScript and Nino.AspNetCore, which carry Nino data across that boundary, stay.
+We checked these against fuzzed and hand-crafted payloads for every built-in type and every way of declaring one, and fixed what they found in 4.0.0-rc.7. What stays the application's job (the values themselves, the size of a message, versioning) is in [Untrusted Data](/en/docs/v4/security#what-stays-your-job). Nino.TypeScript and Nino.AspNetCore, which carry Nino data across that boundary, stay.
 
 ## Performance
 

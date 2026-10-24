@@ -1,11 +1,11 @@
 ---
 title: 概览
 seoTitle: "进阶指南：在真实项目中使用 Nino – Nino v4 文档"
-description: "在真实项目中使用 Nino：热路径、网络与 RPC、ASP.NET Core、TypeScript 与浏览器客户端、消息队列、缓存、持久化与存储，以及 Unity、HybridCLR 与 Godot。"
+description: "在真实项目中使用 Nino：热路径、网络与 RPC、ASP.NET Core、TypeScript、Go、Rust 与浏览器客户端、消息队列、缓存、持久化与存储，以及 Unity、HybridCLR 与 Godot。"
 icon: Map
 ---
 
-import { ArrowDownUp, DatabaseZap, FileCode, Gamepad2, Gauge, Globe, Joystick, Leaf, MessagesSquare, Network, Save, Server } from 'lucide-react';
+import { ArrowDownUp, Braces, Cog, DatabaseZap, FileCode, Gamepad2, Gauge, Globe, Joystick, Leaf, MessagesSquare, Network, Save, Server, SquareTerminal } from 'lucide-react';
 
 <AnchorRedirect
   map={{
@@ -66,9 +66,6 @@ import { ArrowDownUp, DatabaseZap, FileCode, Gamepad2, Gauge, Globe, Joystick, L
   <Card icon={<Server />} title="ASP.NET Core" href="/zh/docs/v4/advanced/aspnetcore">
     `application/x-nino` 请求体与响应：MVC 格式化器，Minimal API 的 `NinoBody<T>` 和 `NinoResults`，直接基于管道读写。
   </Card>
-  <Card icon={<FileCode />} title="TypeScript 客户端" href="/zh/docs/v4/advanced/typescript">
-    每次构建后从 `[NinoType]` 生成的 TypeScript 类和编解码器，用于浏览器和 Node，字节与 .NET 相同。
-  </Card>
   <Card icon={<Globe />} title="浏览器与 JavaScript 客户端" href="/zh/docs/v4/advanced/browser">
     在浏览器中使用同一套 `[NinoType]` 类型：一个带 `[JSExport]` 函数的 .NET WebAssembly 模块，供 JavaScript 或 TypeScript 调用。
   </Card>
@@ -89,6 +86,25 @@ import { ArrowDownUp, DatabaseZap, FileCode, Gamepad2, Gauge, Globe, Joystick, L
   </Card>
 </Cards>
 
+## 其他语言 [#other-languages]
+
+其他语言的客户端和服务依据构建好的程序集中的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)，读写与 .NET 相同的字节。它们共用的格式见[二进制格式](/zh/docs/v4/wire-format)。
+
+<Cards>
+  <Card icon={<FileCode />} title="TypeScript 客户端" href="/zh/docs/v4/advanced/typescript">
+    每次构建后从 `[NinoType]` 生成的 TypeScript 类和编解码器，用于浏览器和 Node，字节与 .NET 相同。
+  </Card>
+  <Card icon={<SquareTerminal />} title="用 nino-gen 生成其他语言" href="/zh/docs/v4/advanced/codegen">
+    命令行工具，从构建好的程序集把你的 `[NinoType]` 写成 TypeScript、Go 或 Rust 类型和编解码器。
+  </Card>
+  <Card icon={<Braces />} title="Go" href="/zh/docs/v4/advanced/go">
+    Go 运行时：生成的编解码器或 `nino` 结构体标签，任何输入都不会 panic。
+  </Card>
+  <Card icon={<Cog />} title="Rust" href="/zh/docs/v4/advanced/rust">
+    Rust 运行时：生成的编解码器或 `#[derive(NinoRead, NinoWrite)]`，不含 unsafe 代码，任何输入都不会 panic。
+  </Card>
+</Cards>
+
 ## 我该看哪篇指南？ [#which-guide-do-i-need]
 
 | 你在构建 | 从这里开始 |
@@ -97,6 +113,7 @@ import { ArrowDownUp, DatabaseZap, FileCode, Gamepad2, Gauge, Globe, Joystick, L
 | .NET 之间不用 `.proto` 文件的 gRPC 服务 | [gRPC](/zh/docs/v4/advanced/networking#grpc) |
 | 接收并返回 Nino 数据的 ASP.NET Core API（MVC 或 Minimal API） | [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore) |
 | 与 Nino 服务端通信的网页或 Node 前端（JavaScript 或 TypeScript） | [TypeScript 客户端](/zh/docs/v4/advanced/typescript)；要直接运行 C# 类型，见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser) |
+| 与 .NET 交换数据的 Go 或 Rust 服务 | [nino-gen](/zh/docs/v4/advanced/codegen)，然后见 [Go](/zh/docs/v4/advanced/go) 或 [Rust](/zh/docs/v4/advanced/rust) |
 | Kafka、RabbitMQ 等消息中间件上的生产者和消费者 | [消息队列与事件流](/zh/docs/v4/advanced/message-queues) |
 | 遥测、指标或行情数据流 | [遥测与行情数据流](/zh/docs/v4/advanced/message-queues#telemetry-and-tick-streams) |
 | Redis 或 `IDistributedCache` 缓存层，或进程内的序列化数据缓存 | [缓存](/zh/docs/v4/advanced/caching) |

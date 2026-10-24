@@ -1,0 +1,62 @@
+---
+title: Wire Format
+seoTitle: "Nino v4 Binary Wire Format: Specification Overview – Nino v4 Docs"
+description: "An overview of the bytes Nino v4 writes: little-endian values with no envelope, the two string encodings, raw structs in a canonical layout, collections, object headers and type ids, the three formats, deferred bodies and the checks every reader makes. The byte-by-byte specification is in Nino's repository."
+icon: Binary
+---
+
+Nino's binary format is specified byte by byte in [docs/spec/wire-format.md](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md), in Nino's repository. It is the contract for readers and writers in other languages: the [TypeScript](/en/docs/v4/advanced/typescript), [Go](/en/docs/v4/advanced/go) and [Rust](/en/docs/v4/advanced/rust) runtimes are built from it and tested against a shared conformance corpus written by .NET Nino. This page is an overview; the specification has the exact rules, worked examples as hex dumps and the grammar of the layout metadata.
+
+You do not need any of this to use Nino from C#: the generator writes and reads these bytes for you.
+
+## Conventions [#conventions]
+
+- **Little-endian, unaligned.** Every multi-byte value is little-endian, and each value starts right after the previous one. The only padding on the wire is inside raw structs and nullable elements of raw arrays, written as zeros. The .NET implementation refuses to run on big-endian hosts.
+- **No envelope.** A payload is the top-level value under its declared type, followed by any deferred bodies. There is no magic number, version, length or type descriptor: the declared type alone decides how the bytes are read. Bytes after the value are ignored by default and rejected in [untrusted mode](/en/docs/v4/security#untrusted-mode).
+- **Fixed-size integers.** There are no variable-length integers. Lengths and counts are `int32`, with `-1` for null; sealed classes and nullable values have a presence byte (`0` or `1`).
+- **Versioning.** The format is versioned with Nino's major version: v4 does not read v3 data. A change to the bytes inside v4 is announced in the [changelog](/en/docs/v4/changelog) under "Wire Format". Adding members to a type is handled per type by the [version-tolerant and keyed formats](/en/docs/v4/evolving-data), not by format versions.
+
+## Values [#values]
+
+- **Primitives** (`bool`, integers, `float`, `double`, `Half`, `char`, enums) are their bytes. `nint` and `nuint` are 8 bytes on every platform. `Int128` and `UInt128` are the low 64 bits, then the high 64 bits.
+- **BCL values**: `decimal`, `Guid`, `DateTime`, `TimeSpan`, `DateOnly`, `TimeOnly` and the like have fixed sizes; `DateTimeOffset` is UTC ticks plus offset minutes (10 bytes). `BigInteger`, `Version`, `BitArray`, `Uri` and the other variable-size values have encodings of their own.
+- **Strings** have two encodings, chosen per member. The default is a header `h` followed by the text: `-1` is null, `0` is empty, a negative `h` is `~h` Latin-1 chars of one byte each (written when every char is at most U+00FF), and a positive one is `h` UTF-16 code units. `[NinoUtf8]` members write the char count, the byte count and the UTF-8 bytes. See [String Encoding](/en/docs/v4/defining-types#string-encoding).
+
+## Raw Values [#raw-values]
+
+An unmanaged value (a primitive, an enum, an unmanaged struct that is not a `[NinoType]`, or a `[NinoType]` struct that qualifies) is written as one block in the **canonical layout**: the layout 64-bit CoreCLR gives it, with each field at its natural alignment (`decimal` aligned to 8, `Int128` to 16) and padding written as zeros. Every runtime writes the same bytes: where its own layout differs (32-bit platforms, Mono and IL2CPP for some structs), Nino converts field by field. `Nullable<T>`, `ValueTuple`, `KeyValuePair` and `DateTimeOffset` are never raw: they are written item by item. See [Portable by Design](/en/docs/v4/platforms#portable-by-design).
+
+## Collections [#collections]
+
+- **Sequences** (arrays, lists, sets, queues, stacks, `Memory<T>`, the immutable sequences, and collections you write yourself) are an `int32` count (`-1` = null), then the elements. Raw elements are one block of `count × size` bytes. Stacks are written bottom to top.
+- **Maps** are a count, then each key and value. Sorted maps are in key order; hash maps in enumeration order, which readers must not depend on.
+- **`T?[]` and `List<T?>` of raw `T`** use a fixed stride: a has-value byte, padding to `T`'s alignment, then `T` (zeros when null). A member declared as an interface (`IList<int?>`) writes each element as a single `T?` instead.
+- **Tuples and pairs** are their items in order; `Tuple<...>`, `T?` and `Lazy<T>` have a presence byte first. Multi-dimensional arrays are each dimension's length, then the elements in row-major order.
+
+## Objects [#objects]
+
+A `[NinoType]` value is a **header** chosen by its declared type, then its **body**:
+
+| Declared type | Header |
+| --- | --- |
+| struct | none |
+| sealed class | presence byte: `0` null, `1` present |
+| other classes, interfaces, `object` | `int32` type id of the runtime type, `0` for null |
+
+- **Type ids** are the 32-bit FNV-1a hash of the type's full name over its UTF-16 code units (or of its [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name)), so the data never holds a type name, and a reader accepts only the subtypes it knows for that slot. See [Polymorphism](/en/docs/v4/polymorphism).
+- **Positional** bodies are the members of the whole hierarchy in order, root first, with no lengths and no names.
+- **Version-tolerant** bodies are an `int32` length, then the members: a reader of an older version skips members it does not know, and a newer one gives missing members their default.
+- **Keyed** bodies are an `int32` length, then one `(int32 key, int32 length, value)` entry per member, where the key is the FNV-1a hash of the member's name. Entries may come in any order, and unknown keys are skipped.
+- **Reference tracking** (`trackReferences: true`) replaces the header with an `int32`: `0` null, `-1` a new object, `n > 0` a back reference to the `n`th object read. See [Reference Tracking](/en/docs/v4/reference-tracking).
+
+## Deep Nesting [#deep-nesting]
+
+Every reader must implement deferral, or it cannot read a linked list of more than 128 nodes. When a class body is about to open with 128 class bodies already open, a **deferrable** type writes its header but not its body: the object is queued and its body is written later, from a shallow point, after the top-level value, or, inside a version-tolerant or keyed region, in a section at the end of the outermost region. A type is deferrable when Nino can create it before reading its members; the layout metadata publishes it (`deferrable=true|false`). Data shallower than 128 has nothing extra on the wire. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
+
+## Layout Metadata [#layout-metadata]
+
+For every `[NinoType]`, the generator publishes how it is written as `[assembly: NinoTypeLayout(...)]`: the format, header, type id, whether it is raw, tracked or deferrable, and each member's name, type and encoding (`raw(4)`, `string`, `seq(...)`, `map(K,V)`, `type(T)`, ...). The specification gives its grammar. Code generators for other languages, such as [nino-gen](/en/docs/v4/advanced/codegen), read only this metadata. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata).
+
+## Validation [#validation]
+
+The specification lists the checks a reader of untrusted data must make, and what the .NET reader does for each: bounds; lengths checked against the bytes left before allocating; `bool` and presence bytes of 0 or 1; strict UTF-8; regions and keyed entries filled exactly; type ids limited to the declared type's subtypes; back references; duplicate keys and hash flooding; depth; value ranges; trailing data. For what .NET does and the settings involved, see [Untrusted Data](/en/docs/v4/security).

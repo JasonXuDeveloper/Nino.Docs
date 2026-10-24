@@ -6,7 +6,7 @@ icon: Sparkles
 
 import { Cpu, Recycle, ScanSearch, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes, Server, Globe } from 'lucide-react';
 
-Nino v4 rewrites the runtime and the source generator. It runs faster than v3 and MemoryPack, builds much faster, and adds keyed and version-tolerant types, reference tracking, object pools, analyzers and many more built-in types. This page covers all of v4 as released through **4.0.0-rc.5**, grouped by area, plus what **4.0.0-rc.6** and **4.0.0-rc.7** add (marked *rc.6* and *rc.7*); the [Changelog](/en/docs/v4/changelog) lists what each release changed.
+Nino v4 rewrites the runtime and the source generator. It runs faster than v3 and MemoryPack, builds much faster, and adds keyed and version-tolerant types, reference tracking, object pools, analyzers and many more built-in types. This page covers all of v4 as released through **4.0.0-rc.5**, grouped by area, plus what **4.0.0-rc.6**, **4.0.0-rc.7** and **4.0.0-rc.8** add (marked *rc.6*, *rc.7* and *rc.8*); the [Changelog](/en/docs/v4/changelog) lists what each release changed.
 
 <Callout type="warn">
 
@@ -98,11 +98,12 @@ Nino v4 is built to read data from sources you do not trust: messages from a net
 
 - **No type names in the data**: a polymorphic value is a type id, which can only be one of the declared type's registered subtypes, and a back reference must point to an object already read, of the slot's type. `System.Type` is left out on purpose.
 - **Bounded allocation**: every length is checked against the bytes left before anything is allocated, and since *rc.7* a collection allocates ahead of its elements at most 16 times the bytes left in the input; a larger count is grown into as elements are actually read.
-- **Bounded stack**: objects nested more than 128 levels deep are deferred and read from a shallow level; since *rc.7* what cannot be deferred (structs that hold themselves, types built by their constructor) is limited to 512 levels, with the stack checked on the way. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
-- **One exception** (*rc.7*): every invalid input throws an `InvalidOperationException` whose message starts with `Nino:`, including a value its own type rejects (a malformed `Uri`, an unknown culture, a null dictionary key), with the original exception as `InnerException`. One `catch` where the data comes in is enough.
+- **Bounded stack**: objects nested more than 128 levels deep are deferred and read from a shallow level; since *rc.7* what cannot be deferred (structs that hold themselves, types built by their constructor) is limited to 512 levels (`NinoSettings.MaxDepth` since *rc.8*), with the stack checked on the way. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
+- **One exception** (*rc.7*): every invalid input throws one exception type whose message starts with `Nino:`, including a value its own type rejects (a malformed `Uri`, an unknown culture, a null dictionary key), with the original exception as `InnerException`. Since *rc.8* it is `NinoDataException`, an `InvalidOperationException`. One `catch` where the data comes in is enough.
+- **Strict bytes and limits** (*rc.8*): bytes Nino never writes (a `bool` or null flag other than 0 or 1, a keyed member with bytes left, a malformed section of deferred bodies) are rejected; keys built to collide in a hash table throw (`NinoSettings.MaxHashCollisions`); `NinoSettings.MaxDepth` and `MaxCollectionLength` tighten the limits, and `NinoSettings.Untrusted` adds the checks that cost time on every read. See [Untrusted Data](/en/docs/v4/security).
 - **No stale memory** (*rc.7*): a failed read into an existing value never leaves an array of uninitialized memory in it.
 
-Values themselves are not validated (a negative health reads as it is written), and the bytes carry no schema, so check what your logic depends on and cap the size of a message before you buffer it. See [Invalid Data](/en/docs/v4/basic#invalid-data) for what Nino checks and what stays your code's job, and [Untrusted Input](/en/docs/v4/vs-memorypack#untrusted-input) for how this compares with MemoryPack, which recommends itself for trusted data only.
+Values themselves are not validated (a negative health reads as it is written), and the bytes carry no schema, so check what your logic depends on and cap the size of a message before you buffer it. See [Untrusted Data](/en/docs/v4/security) for what Nino checks and what stays your code's job, and [Untrusted Input](/en/docs/v4/vs-memorypack#untrusted-input) for how this compares with MemoryPack, which recommends itself for trusted data only.
 
 ## Evolving Data and Object Graphs [#data-and-object-graphs]
 
@@ -150,6 +151,7 @@ See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 
 - **ASP.NET Core** (*rc.6*): the `Nino.AspNetCore` package adds MVC input and output formatters (`AddNinoFormatters()`) and Minimal API bodies (`NinoBody<T>`) and results (`NinoResults`) for `application/x-nino`, read and written straight from the request and response pipes. See [ASP.NET Core](/en/docs/v4/advanced/aspnetcore).
 - **TypeScript clients** (*rc.6*): the `Nino.TypeScript` package generates TypeScript classes, enums and codecs for your `[NinoType]`s after each build, with the `nino.ts` runtime, so browsers and Node read and write exactly the bytes .NET writes. See [TypeScript Clients](/en/docs/v4/advanced/typescript).
+- **Go, Rust and nino-gen** (*rc.8*): Go and Rust runtimes in Nino's repository read and write the same bytes, and the `nino-gen` tool (`Nino.Codegen`) writes your `[NinoType]`s as TypeScript, Go or Rust from a built assembly. See [nino-gen](/en/docs/v4/advanced/codegen), [Go](/en/docs/v4/advanced/go) and [Rust](/en/docs/v4/advanced/rust).
 - **.NET in the browser**: your types themselves can also run on .NET WebAssembly. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
 
 ## Platforms [#platforms]

@@ -25,7 +25,7 @@ Nino runs on .NET Standard 2.0 and later, Unity 2022.3+ (Mono and IL2CPP) and Go
 
 ## Binary Format
 
-All multi-byte values are **little-endian** and written unaligned. Positional types carry no schema and no field names: the generated code knows the layout.
+This section is a short summary; the [Wire Format](/en/docs/v4/wire-format) page and the specification it links to have the details. All multi-byte values are **little-endian** and written unaligned. Positional types carry no schema and no field names: the generated code knows the layout.
 
 | Value | Encoding |
 | --- | --- |
@@ -44,7 +44,7 @@ A default string picks its form per string. When every char is at most U+00FF (A
 
 A `[NinoUtf8]` string starts with the string's length in UTF-16 chars (`string.Length`): `-1` for `null`, `0` for an empty string, and nothing follows either. A non-empty `[NinoUtf8]` string then carries its length in bytes, followed by exactly that many UTF-8 bytes. An unpaired surrogate is written as U+FFFD, which is one char as well, so the char count always matches the string that is read back.
 
-The reader allocates the string at its final length and transcodes exactly the given bytes into it in one pass; the next value starts right after them. It throws `InvalidOperationException` when:
+The reader allocates the string at its final length and transcodes exactly the given bytes into it in one pass; the next value starts right after them. It throws `NinoDataException` when:
 
 - the byte count is larger than the bytes left;
 - the char count does not match the decoded bytes;
@@ -72,7 +72,7 @@ The body after the header depends on the type's format:
 
 A `trackReferences` type adds an `int32` reference header (`0` = null, `n > 0` = the n-th object already written, `-1` = a new object, followed by its usual encoding). See [Evolving Your Data](/en/docs/v4/evolving-data) and [Reference Tracking](/en/docs/v4/reference-tracking).
 
-Every length read from a payload is validated against the bytes left before anything is allocated, so malformed or hostile input cannot trigger huge allocations, and truncated data throws instead of reading past the end.
+Every length read from a payload is validated against the bytes left before anything is allocated, so malformed or hostile input cannot trigger huge allocations, and truncated data throws instead of reading past the end. See [Untrusted Data](/en/docs/v4/security).
 
 ## Portable by Design
 
