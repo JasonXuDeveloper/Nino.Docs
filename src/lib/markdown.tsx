@@ -13,6 +13,7 @@ import {
   ExtraRuntimeTables,
   ResultsTable,
   ReuseTable,
+  RuntimesTables,
   RuntimeTable,
 } from '@/components/bench-data';
 import { chartProps } from '@/components/charts/benchmark-charts';
@@ -213,6 +214,10 @@ function markdownComponents(lang: Locale, pageUrl: string) {
     ReuseTable(props: ComponentProps<typeof ReuseTable>) {
       asMarkdown();
       return ReuseTable({ ...props, markdown: true });
+    },
+    RuntimesTables(props: ComponentProps<typeof RuntimesTables>) {
+      asMarkdown();
+      return RuntimesTables({ ...props, markdown: true });
     },
     ResultsTable(props: ComponentProps<typeof ResultsTable>) {
       asMarkdown();

@@ -18,9 +18,21 @@
  * so the same rules (FLOOR_NS, on par, ratios) apply to both; `arm64` is null
  * until a release has that section. Comparisons with v3 are x64 only.
  *
+ * MessagePack (MessagePack-CSharp) and protobuf-net: the `MessagePack…` and
+ * `Protobuf…` rows of the same reports, in releases since they joined the
+ * benchmark; a case a library cannot express has no row. `libraries` lists the
+ * ones a dataset has, so pages show their columns only when the synced release
+ * measured them. Every comparison (MemoryPack, MessagePack, protobuf-net)
+ * goes through `versus()`, with the same FLOOR_NS and on-par rules.
+ *
+ * Runtimes outside .NET (Go, Rust, TypeScript): src/data/bench-runtimes.json
+ * (`runtimes` below), synced from the runtime sections of the same release.
+ *
  * Build time (source generator, v3 3.3.13 vs v4): static, from
  * docs/v4-benchmarks.md in the Nino repository; it is not in the release report.
  */
+
+import benchRuntimes from '@/data/bench-runtimes.json';
 import benchV3 from '@/data/bench-v3-runtime.json';
 import bench from '@/data/bench-v4.json';
 import benchArm64 from '@/data/bench-v4-arm64.json';
@@ -103,6 +115,33 @@ function ratioOf(slower: number, faster: number) {
 /* Runtime                                                             */
 /* ------------------------------------------------------------------ */
 
+/** The .NET serializers besides Nino and MemoryPack, by their method prefix */
+export type OtherLib = 'messagepack' | 'protobuf';
+
+export const otherLibs: { key: OtherLib; prefix: string; label: string }[] = [
+  { key: 'messagepack', prefix: 'MessagePack', label: 'MessagePack' },
+  { key: 'protobuf', prefix: 'Protobuf', label: 'protobuf-net' },
+];
+
+/** Nino against one other serializer in one case */
+export interface Versus {
+  time: Measure;
+  /** Other time / Nino time; undefined = on par (or tooFast); < 1 = the other is ahead */
+  ratio?: number;
+  /** Nino under FLOOR_NS, the other above it: faster, too fast to measure */
+  tooFast?: boolean;
+}
+
+/** The one rule for every comparison: FLOOR_NS, then on par within 5% */
+export function versus(nino: Measure, other: Measure): Versus {
+  const unmeasured = nino.ns < FLOOR_NS;
+  return {
+    time: other,
+    ratio: unmeasured ? undefined : ratioOf(other.ns, nino.ns),
+    tooFast: unmeasured && other.ns >= FLOOR_NS,
+  };
+}
+
 export interface RuntimeCase {
   /** Benchmark case; `code` cases are type names and render in monospace */
   name: string;
@@ -121,6 +160,8 @@ export interface RuntimeCase {
   /** v4 under FLOOR_NS in V3_RUNTIME, v3 above it: faster than v3, too fast to measure */
   v3TooFast?: boolean;
   v3?: Measure;
+  /** MessagePack and protobuf-net, for the cases they can express */
+  others: Partial<Record<OtherLib, Versus>>;
   /** Marked * in the tables: re-run with more iterations (local snapshot only) */
   rerun?: boolean;
   /** Dominated by gen-2 GC of a 160 KB array (see the footnote) */
@@ -396,7 +437,15 @@ export interface BenchDataset {
   /** True when every serialize case allocated 0 B in both libraries */
   serializeAllocatesNothing: boolean;
   /** Bytes written for one SimpleClass */
-  payload: { name: string; v4: number | null; memorypack: number | null };
+  payload: {
+    name: string;
+    v4: number | null;
+    memorypack: number | null;
+    messagepack: number | null;
+    protobuf: number | null;
+  };
+  /** MessagePack and protobuf-net, when the report has any of their rows */
+  libraries: OtherLib[];
 }
 
 type V3Rows = (typeof V3_RUNTIME)['rows'];
@@ -417,13 +466,19 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
     const memorypack = measure(`MemoryPack${verb}${info.key}`);
     if (!v4 || !memorypack || !nino) return [];
     const v3Row = v3[`${op}:${info.key}`];
-    const unmeasured = v4.ns < FLOOR_NS;
+    const { ratio, tooFast } = versus(v4, memorypack);
+    const others: RuntimeCase['others'] = {};
+    for (const lib of otherLibs) {
+      const time = measure(`${lib.prefix}${verb}${info.key}`);
+      if (time) others[lib.key] = versus(v4, time);
+    }
     const result: RuntimeCase = {
       ...info,
       v4,
       memorypack,
-      ratio: unmeasured ? undefined : ratioOf(memorypack.ns, v4.ns),
-      tooFast: unmeasured && memorypack.ns >= FLOOR_NS,
+      ratio,
+      tooFast,
+      others,
       rerun: nino.rerun,
     };
     if (v3Row) {
@@ -489,7 +544,15 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
       v4: rows.get('NinoSerializeSimpleClass')?.payloadBytes ?? null,
       memorypack:
         rows.get('MemoryPackSerializeSimpleClass')?.payloadBytes ?? null,
+      messagepack:
+        rows.get('MessagePackSerializeSimpleClass')?.payloadBytes ?? null,
+      protobuf: rows.get('ProtobufSerializeSimpleClass')?.payloadBytes ?? null,
     },
+    libraries: otherLibs
+      .filter((lib) =>
+        file.rows.some((row) => row.method.startsWith(lib.prefix)),
+      )
+      .map((lib) => lib.key),
   };
 }
 
@@ -579,6 +642,155 @@ export const bestReuse = x64.reuse.reduce<ReuseCase | undefined>(
  */
 export const formatRatio = (value: number) => `${value.toFixed(2)}×`;
 export const formatBuildRatio = (value: number) => `${value}×`;
+
+/* ------------------------------------------------------------------ */
+/* Runtimes outside .NET                                               */
+/* ------------------------------------------------------------------ */
+
+export type RuntimeLang = 'go' | 'rust' | 'typescript';
+
+interface RuntimeCellData {
+  value: number;
+  spread?: string;
+}
+
+/** The shape of src/data/bench-runtimes.json (scripts/sync-benchmarks.ts, RuntimesFile) */
+interface RuntimesFile {
+  origin: 'release' | 'fixture' | 'none';
+  tag: string;
+  url: string;
+  publishedAt: string | null;
+  languages: {
+    lang: RuntimeLang;
+    tag: string;
+    environment: string | null;
+    serializers: string[];
+    rows: {
+      case: string;
+      operation: string;
+      kind: 'time' | 'size' | 'allocs';
+      cells: Partial<Record<string, RuntimeCellData>>;
+    }[];
+  }[];
+}
+
+/** Column labels of each language's serializers (as the reports name them); Nino's generated code first */
+const runtimeLabels: Record<RuntimeLang, Record<string, string>> = {
+  go: {
+    Nino: 'Nino',
+    NinoTags: 'Nino (tags)',
+    Protobuf: 'Protobuf',
+    MessagePack: 'MessagePack',
+    JSON: 'encoding/json',
+    Gob: 'gob',
+  },
+  rust: {
+    nino: 'Nino',
+    prost: 'Protobuf (prost)',
+    'rmp-serde': 'MessagePack (rmp-serde)',
+    bincode: 'bincode',
+    postcard: 'postcard',
+    serde_json: 'serde_json',
+  },
+  typescript: {
+    Nino: 'Nino',
+    Protobuf: 'Protobuf (protobuf-es)',
+    MessagePack: 'MessagePack (msgpackr)',
+    JSON: 'JSON',
+  },
+};
+
+/** The column every other serializer is compared with: the code nino-gen generates */
+const runtimeNino: Record<RuntimeLang, string> = {
+  go: 'Nino',
+  rust: 'nino',
+  typescript: 'Nino',
+};
+
+export interface RuntimeTableCell {
+  /** As shown: "7.45 µs ±2%", "28.5 KiB", "0" */
+  text: string;
+  /** Times of the serializers other than Nino: Nino against this one */
+  vs?: Versus;
+}
+
+export interface RuntimeLangTable {
+  lang: RuntimeLang;
+  tag: string;
+  environment: string | null;
+  /** Keys as in the report, with their labels; `nino` marks Nino's columns (Go also has its struct tags) */
+  columns: { key: string; label: string; nino: boolean }[];
+  rows: {
+    case: string;
+    operation: string;
+    kind: 'time' | 'size' | 'allocs';
+    cells: Partial<Record<string, RuntimeTableCell>>;
+  }[];
+}
+
+/** A size as the reports print it: "640 B", "28.5 KiB" */
+function formatRuntimeSize(bytes: number) {
+  return bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KiB` : `${bytes} B`;
+}
+
+const runtimesFile = benchRuntimes as unknown as RuntimesFile;
+
+/** Where the runtime sections come from; `origin: 'none'` until a release has one */
+export const runtimesSource: BenchSourceInfo = {
+  origin: runtimesFile.origin,
+  tag: runtimesFile.tag,
+  url: runtimesFile.url,
+  publishedAt: runtimesFile.publishedAt,
+  environment: null,
+};
+
+/** One table per language the synced release has, in the order Go, Rust, TypeScript */
+export const runtimes: RuntimeLangTable[] = runtimesFile.languages.map(
+  (section) => {
+    const ninoKey = runtimeNino[section.lang];
+    const labels = runtimeLabels[section.lang];
+    return {
+      lang: section.lang,
+      tag: section.tag,
+      environment: section.environment,
+      columns: section.serializers.map((key) => ({
+        key,
+        label: labels[key] ?? key,
+        nino: key.toLowerCase().startsWith('nino'),
+      })),
+      rows: section.rows.map((row) => {
+        const ninoCell = row.cells[ninoKey];
+        const cells: Partial<Record<string, RuntimeTableCell>> = {};
+        for (const [key, cell] of Object.entries(row.cells)) {
+          if (!cell) continue;
+          if (row.kind === 'size') {
+            cells[key] = { text: formatRuntimeSize(cell.value) };
+            continue;
+          }
+          if (row.kind === 'allocs') {
+            cells[key] = { text: cell.value.toLocaleString('en-US') };
+            continue;
+          }
+          const text = `${formatTime(cell.value)}${cell.spread ? ` ${cell.spread}` : ''}`;
+          const compared =
+            ninoCell && !key.toLowerCase().startsWith('nino')
+              ? versus(
+                  { text: formatTime(ninoCell.value), ns: ninoCell.value },
+                  { text: formatTime(cell.value), ns: cell.value },
+                )
+              : undefined;
+          cells[key] = { text, vs: compared };
+        }
+        return {
+          case: row.case,
+          operation: row.operation,
+          kind: row.kind,
+          cells,
+        };
+      }),
+    };
+  },
+);
 
 /* ------------------------------------------------------------------ */
 /* Build time                                                          */

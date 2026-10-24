@@ -2,6 +2,11 @@
  * MDX components that print the v4 runtime benchmarks from src/lib/benchmarks.ts
  * (synced from the release report), so no page types those numbers in.
  *
+ * The .NET tables compare Nino with MemoryPack, and with MessagePack and
+ * protobuf-net in a column each once the synced release measured them ("—"
+ * for a case a library cannot express). RuntimesTables prints the Go, Rust and
+ * TypeScript benchmarks of the same release.
+ *
  * Once the synced data has an Arm64 report, every table of Nino against
  * MemoryPack shows x64 and Arm64 in tabs (`ArchTabs`), each with the source line
  * of its run; without it, the x64 table alone, as before. Values in prose
@@ -18,13 +23,18 @@ import {
   formatRatio,
   formatTime,
   isOnPar,
+  otherLibs,
   payload,
   type RuntimeCase,
+  type RuntimeLang,
   ratioRange,
   reuse,
   reuseSpeedup,
   runtime,
+  runtimes,
+  runtimesSource,
   sourceNote,
+  type Versus,
   x64,
 } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
@@ -117,6 +127,31 @@ function ratioCell(ratio: number | undefined, zh: boolean, tooFast?: boolean) {
   return '—';
 }
 
+/**
+ * After a time of another serializer: how many times faster Nino is, as in the
+ * ratio columns ("on par" within 5%, nothing when Nino is not ahead: the times
+ * show it).
+ */
+function versusNote(vs: Versus | undefined, zh: boolean) {
+  if (!vs) return null;
+  let text: string | null = null;
+  if (vs.tooFast) text = zh ? 'Nino 快到测不出' : 'Nino too fast to measure';
+  else if (vs.ratio === undefined) text = zh ? '持平' : 'on par';
+  else if (vs.ratio > 1) text = `${vs.ratio.toFixed(2)}×`;
+  if (!text) return null;
+  return <span className="text-fd-muted-foreground"> · {text}</span>;
+}
+
+function versusLegend(zh: boolean, nino: string) {
+  return (
+    <p className="text-sm text-fd-muted-foreground">
+      {zh
+        ? `时间后的 “· 2.00×” 表示该用例中 ${nino} 比这个序列化器快多少倍；相差 5% 以内为持平；只有时间表示 ${nino} 在该用例中没有领先。`
+        : `“· 2.00×” after a time: how many times faster ${nino} is than that serializer in that case; within 5% is on par; a time alone means ${nino} is not ahead there.`}
+    </p>
+  );
+}
+
 /** Where the numbers come from, with a link to the release or the local report */
 export function BenchSource({ lang = 'en', markdown }: ArchProps) {
   const zh = lang === 'zh';
@@ -152,6 +187,17 @@ export function RuntimeTable({
   });
 }
 
+/** A MessagePack or protobuf-net time, or "—" for a case the library cannot express */
+function otherCell(vs: Versus | undefined, zh: boolean) {
+  if (!vs) return '—';
+  return (
+    <>
+      {vs.time.text}
+      {versusNote(vs, zh)}
+    </>
+  );
+}
+
 function runtimeTable(
   ds: BenchDataset,
   op: Op,
@@ -169,47 +215,71 @@ function runtimeTable(
     );
   const withV3 = rows.some((row) => row.vsV3 !== undefined);
   const rerun = rows.some((row) => row.rerun);
+  // MessagePack and protobuf-net: a column each when the report measured the
+  // library and it can express at least one case of this table
+  const others = otherLibs.filter(
+    (lib) =>
+      ds.libraries.includes(lib.key) && rows.some((row) => row.others[lib.key]),
+  );
   return (
     <>
-      <table>
-        <thead>
-          <tr>
-            <th>{zh ? '用例' : 'Case'}</th>
-            <th className="text-right">v4</th>
-            <th className="text-right">MemoryPack</th>
-            <th className="text-right">
-              {zh ? 'v4 对比 MemoryPack' : 'v4 vs MemoryPack'}
-            </th>
-            {withV3 && (
-              <th className="text-right">{zh ? 'v4 对比 v3' : 'v4 vs v3'}</th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.key}>
-              <td>
-                {caseName(row, zh)}
-                {row.rerun && ' *'}
-              </td>
-              <td className="text-right tabular-nums">{row.v4.text}</td>
-              <td className="text-right tabular-nums">{row.memorypack.text}</td>
-              <td className="text-right tabular-nums">
-                {ratioCell(row.ratio, zh, row.tooFast)}
-              </td>
+      <div className="relative overflow-auto prose-no-margin my-6">
+        <table>
+          <thead>
+            <tr>
+              <th>{zh ? '用例' : 'Case'}</th>
+              <th className="text-right">v4</th>
+              <th className="text-right">MemoryPack</th>
+              <th className="text-right">
+                {zh ? 'v4 对比 MemoryPack' : 'v4 vs MemoryPack'}
+              </th>
+              {others.map((lib) => (
+                <th key={lib.key} className="text-right">
+                  {lib.label}
+                </th>
+              ))}
               {withV3 && (
-                <td className="text-right tabular-nums">
-                  {row.v3TooFast
-                    ? ratioCell(undefined, zh, true)
-                    : row.vsV3 === undefined
-                      ? '—'
-                      : ratioCell(isOnPar(row.vsV3) ? undefined : row.vsV3, zh)}
-                </td>
+                <th className="text-right">{zh ? 'v4 对比 v3' : 'v4 vs v3'}</th>
               )}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.key}>
+                <td>
+                  {caseName(row, zh)}
+                  {row.rerun && ' *'}
+                </td>
+                <td className="text-right tabular-nums">{row.v4.text}</td>
+                <td className="text-right tabular-nums">
+                  {row.memorypack.text}
+                </td>
+                <td className="text-right tabular-nums">
+                  {ratioCell(row.ratio, zh, row.tooFast)}
+                </td>
+                {others.map((lib) => (
+                  <td key={lib.key} className="text-right tabular-nums">
+                    {otherCell(row.others[lib.key], zh)}
+                  </td>
+                ))}
+                {withV3 && (
+                  <td className="text-right tabular-nums">
+                    {row.v3TooFast
+                      ? ratioCell(undefined, zh, true)
+                      : row.vsV3 === undefined
+                        ? '—'
+                        : ratioCell(
+                            isOnPar(row.vsV3) ? undefined : row.vsV3,
+                            zh,
+                          )}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {others.length > 0 && versusLegend(zh, 'v4')}
       {rerun && (
         <p className="text-sm text-fd-muted-foreground">
           {zh
@@ -371,6 +441,126 @@ function resultsTable(ds: BenchDataset, zh: boolean, tabbed: boolean) {
           ))}
         </tbody>
       </table>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Runtimes outside .NET                                               */
+/* ------------------------------------------------------------------ */
+
+const runtimeNames: Record<RuntimeLang, string> = {
+  go: 'Go',
+  rust: 'Rust',
+  typescript: 'TypeScript',
+};
+
+const operationNames: Record<string, { en: string; zh: string }> = {
+  serialize: { en: 'serialize', zh: '序列化' },
+  deserialize: { en: 'deserialize', zh: '反序列化' },
+  'serialize allocs': { en: 'serialize allocs', zh: '序列化分配次数' },
+  'deserialize allocs': { en: 'deserialize allocs', zh: '反序列化分配次数' },
+  size: { en: 'size', zh: '大小' },
+};
+
+/**
+ * The runtime benchmarks of Go, Rust and TypeScript (src/data/bench-runtimes.json,
+ * synced from the newest v4 release): one table per language, or the one
+ * `only` names. A note stands in for them until a release has these sections.
+ */
+export function RuntimesTables({
+  lang = 'en',
+  only,
+}: {
+  lang?: Locale;
+  only?: RuntimeLang;
+  /** Accepted for the Markdown copy (src/lib/markdown.tsx); the output is the same */
+  markdown?: boolean;
+}) {
+  const zh = lang === 'zh';
+  const tables = runtimes.filter((t) => !only || t.lang === only);
+  if (tables.length === 0)
+    return (
+      <p className="text-sm text-fd-muted-foreground">
+        {zh
+          ? '这些基准测试已经在 Nino 的仓库中，每个版本的发布流程都会运行它们，但目前发布的报告还没有包含它们。等某个版本的发布报告包含它们后，结果会显示在这里。'
+          : "These benchmarks are in Nino's repository and run for every release, but the published reports do not include them yet. Their results appear here once a release report does."}
+      </p>
+    );
+  const date = runtimesSource.publishedAt?.slice(0, 10);
+  return (
+    <>
+      {tables.map((table) => {
+        const nino = table.columns.find((c) => c.nino)?.label ?? 'Nino';
+        const source = [`Nino ${table.tag}`, date, table.environment].filter(
+          Boolean,
+        );
+        return (
+          <Fragment key={table.lang}>
+            {!only && (
+              <p>
+                <strong>{runtimeNames[table.lang]}</strong>
+              </p>
+            )}
+            <div className="relative overflow-auto prose-no-margin my-6">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{zh ? '用例' : 'Case'}</th>
+                    <th>{zh ? '操作' : 'Operation'}</th>
+                    {table.columns.map((column) => (
+                      <th key={column.key} className="text-right">
+                        {column.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {table.rows.map((row) => (
+                    <tr key={`${row.case}:${row.operation}`}>
+                      <td>
+                        <code>{row.case}</code>
+                      </td>
+                      <td>
+                        {operationNames[row.operation]?.[zh ? 'zh' : 'en'] ??
+                          row.operation}
+                      </td>
+                      {table.columns.map((column) => {
+                        const cell = row.cells[column.key];
+                        return (
+                          <td
+                            key={column.key}
+                            className="text-right tabular-nums"
+                          >
+                            {cell ? (
+                              <>
+                                {cell.text}
+                                {versusNote(cell.vs, zh)}
+                              </>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {versusLegend(zh, nino)}
+            <p className="text-sm text-fd-muted-foreground">
+              <a
+                href={runtimesSource.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {zh ? `${source.join('；')}。` : `${source.join('; ')}.`}
+              </a>
+            </p>
+          </Fragment>
+        );
+      })}
     </>
   );
 }

@@ -39,6 +39,16 @@ function seriesFor(zh: boolean) {
   return {
     v4: { key: 'v4', label: 'Nino v4', color: 'var(--nino-chart-v4)' },
     mp: { key: 'mp', label: 'MemoryPack', color: 'var(--nino-chart-other)' },
+    msgpack: {
+      key: 'msgpack',
+      label: 'MessagePack',
+      color: 'var(--nino-chart-other-strong)',
+    },
+    protobuf: {
+      key: 'protobuf',
+      label: 'protobuf-net',
+      color: 'var(--nino-chart-faint)',
+    },
     v3: {
       key: 'v3',
       label: 'Nino v3 (3.3.13)',
@@ -376,21 +386,33 @@ function payloadChart(
   const v4 = payload.v4;
   const mp = payload.memorypack;
   if (v4 === null || mp === null) return null;
+  // MessagePack and protobuf-net once the report has their SimpleClass rows:
+  // four bars of bytes stay readable (the time charts keep MemoryPack only)
+  const sizes = [
+    { series: s.v4, bytes: v4 },
+    { series: s.mp, bytes: mp },
+    { series: s.msgpack, bytes: payload.messagepack },
+    { series: s.protobuf, bytes: payload.protobuf },
+  ].filter(
+    (entry): entry is { series: ChartSeries; bytes: number } =>
+      entry.bytes !== null,
+  );
   return {
     title: zh ? '载荷大小' : 'Payload size',
     subtitle: zh
       ? '序列化一个 SimpleClass 写出的字节数。'
       : 'Bytes written for one SimpleClass.',
-    series: [s.v4, s.mp],
+    series: sizes.map((entry) => entry.series),
     rows: [
       {
         label: payload.name,
         code: true,
-        values: { v4: v4, mp: mp },
-        text: {
-          v4: formatBytes(v4),
-          mp: formatBytes(mp),
-        },
+        values: Object.fromEntries(
+          sizes.map((entry) => [entry.series.key, entry.bytes]),
+        ),
+        text: Object.fromEntries(
+          sizes.map((entry) => [entry.series.key, formatBytes(entry.bytes)]),
+        ),
       },
     ],
     axisLabel: zh ? '字节' : 'Bytes',
@@ -398,10 +420,8 @@ function payloadChart(
     footnotes: tabbed ? [sourceNote(zh, ds, true)] : undefined,
     table: {
       caption: zh ? '数据表' : 'Data table',
-      head: zh
-        ? ['用例', 'Nino v4', 'MemoryPack']
-        : ['Case', 'Nino v4', 'MemoryPack'],
-      rows: [[payload.name, formatBytes(v4), formatBytes(mp)]],
+      head: [zh ? '用例' : 'Case', ...sizes.map((entry) => entry.series.label)],
+      rows: [[payload.name, ...sizes.map((entry) => formatBytes(entry.bytes))]],
     },
   };
 }

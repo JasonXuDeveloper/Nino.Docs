@@ -16,6 +16,7 @@ import {
   ExtraRuntimeTables,
   ResultsTable,
   ReuseTable,
+  RuntimesTables,
   RuntimeTable,
 } from '@/components/bench-data';
 import { BenchmarkChart } from '@/components/charts';
@@ -39,6 +40,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     ExtraRuntimeTables,
     ResultsTable,
     ReuseTable,
+    RuntimesTables,
     RuntimeTable,
     CountUp,
     File,

@@ -10,24 +10,38 @@
  *   ubuntu-24.04-arm runners, a table in the Performance Report's format) into
  *   src/data/bench-v4-arm64.json, from the same release. When the body is too
  *   long for it (GitHub's limit), report.yml attaches the section to the release
- *   as arm64-benchmark.md instead, and it is read from there.
+ *   as arm64-benchmark.md instead, and it is read from there;
+ * - the sections of the runtimes outside .NET ("🐹 Go runtime benchmark",
+ *   "🦀 Rust runtime benchmark", "🌐 TypeScript runtime benchmark", written by
+ *   Nino's benchmarks/runtimes_report.py after every other section) into
+ *   src/data/bench-runtimes.json, from the same release.
+ *
+ * The Performance Report and the Arm64 section have a row per method, and every
+ * row is kept: since MessagePack (MessagePack-CSharp) and protobuf-net joined
+ * the .NET benchmark, their `MessagePack…` and `Protobuf…` rows too. Releases
+ * before that lack them; `requiredMethods` never asks for them.
  *
  *   bun scripts/sync-benchmarks.ts                       # newest v4.* release with a report
  *   bun scripts/sync-benchmarks.ts --fixture <file.md>   # parse a release body from a file
- *   bun scripts/sync-benchmarks.ts --fixture <file> --out <file.json> [--out-v3 <file.json>] [--out-arm64 <file.json>]
+ *   bun scripts/sync-benchmarks.ts --fixture <file> --out <file.json> [--out-v3 <file.json>] [--out-arm64 <file.json>] [--out-runtimes <file.json>]
  *
  * Fixtures: scripts/fixtures/release-body.md (made-up numbers, the methods the
  * site requires), release-body-v3.md (with the v3 section),
  * release-body-new.md (a sample of the ReferenceTest, VersionTolerantTest and
  * FixedSizeTest rows; its numbers are noise, only its format matters) and
  * release-body-arm64.md (release-body-new.md plus an Arm64 section whose
- * numbers are a copy of its x64 ones: for parser tests only).
+ * numbers are a copy of its x64 ones: for parser tests only) and
+ * release-body-libraries.md (release-body-arm64.md plus MessagePack and
+ * protobuf-net rows and the three runtime sections, with invented numbers: for
+ * parser tests only).
  *
  * Runs before every build. It never fails the build: on any error (network,
  * rate limit, no matching release, a table it cannot read) it prints a warning
  * and leaves the committed JSON as it is. A release without the v3 or the
  * Arm64 section (or whose Arm64 table lacks a method the site shows) keeps the
- * committed src/data/bench-v3-runtime.json or src/data/bench-v4-arm64.json.
+ * committed src/data/bench-v3-runtime.json or src/data/bench-v4-arm64.json; a
+ * release without any runtime section keeps src/data/bench-runtimes.json (a
+ * language whose table it cannot read is left out, with a warning).
  * Set GITHUB_TOKEN to raise the API rate limit.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -46,6 +60,10 @@ const arm64DataFile = fileURLToPath(
   new URL('../src/data/bench-v4-arm64.json', import.meta.url),
 );
 
+const runtimesDataFile = fileURLToPath(
+  new URL('../src/data/bench-runtimes.json', import.meta.url),
+);
+
 /** Heading of the v3 section in the release body (report.yml's V3_HEADING) */
 export const v3Heading = 'v3 3.3.13 vs v4 (same machine)';
 
@@ -57,6 +75,18 @@ export const arm64Heading = '## 📊 Arm64 benchmark';
 
 /** The release asset that holds the Arm64 section (report.yml's ARM64_ASSET) */
 export const arm64Asset = 'arm64-benchmark.md';
+
+/**
+ * Headings of the runtimes outside .NET (Nino's benchmarks/runtimes_report.py,
+ * HEADINGS), in the order the site shows them.
+ */
+export const runtimeHeadings = {
+  go: '## 🐹 Go runtime benchmark',
+  rust: '## 🦀 Rust runtime benchmark',
+  typescript: '## 🌐 TypeScript runtime benchmark',
+} as const;
+
+export type RuntimeLang = keyof typeof runtimeHeadings;
 
 export interface BenchRow {
   method: string;
@@ -95,6 +125,44 @@ export interface V3RuntimeFile {
   note: string | null;
   /** Mean times in ns, keyed "serialize:SimpleClass" (case keys of src/lib/benchmarks.ts) */
   rows: Record<string, { v3Ns: number; v4Ns: number }>;
+}
+
+/** One serializer's value in a runtime row: ns (time), bytes (size) or a count (allocs) */
+export interface RuntimeCell {
+  value: number;
+  /** As printed: "±2%" (a time's spread), absent when the report gives none */
+  spread?: string;
+}
+
+/** A row of a runtime section: one case and operation, a cell per serializer that has one */
+export interface RuntimeRow {
+  case: string;
+  operation: string;
+  kind: 'time' | 'size' | 'allocs';
+  cells: Record<string, RuntimeCell>;
+}
+
+/** One language's section */
+export interface RuntimeSection {
+  lang: RuntimeLang;
+  tag: string;
+  /** The machine (Go: CPU and OS) or runtime (TypeScript: Node and tinybench) the section names, if any */
+  environment: string | null;
+  /** Column order of the report: Nino first */
+  serializers: string[];
+  rows: RuntimeRow[];
+}
+
+/**
+ * src/data/bench-runtimes.json. `origin: 'none'` (no languages, empty tag and
+ * url) is the committed file before any release had a runtime section.
+ */
+export interface RuntimesFile {
+  origin: 'release' | 'fixture' | 'none';
+  tag: string;
+  url: string;
+  publishedAt: string | null;
+  languages: RuntimeSection[];
 }
 
 interface Release {
@@ -317,6 +385,119 @@ export function parseV3Section(body: string) {
   return { rows, runs, environment: environmentOf(section, false) };
 }
 
+/** "28.5 KiB", "640 B" (runtimes_report.py's sizes) -> bytes */
+function parseRuntimeSize(text: string): number | null {
+  const match = /^([\d,]*\.?\d+)\s*(B|KiB|MiB)$/.exec(clean(text));
+  if (!match) return null;
+  const scale = { B: 1, KiB: 1024, MiB: 1024 ** 2 }[match[2] as 'B'];
+  return Math.round(number(match[1]) * scale);
+}
+
+/** "7.45 μs ±2%", "1.23 ms ±0.4% (813/s)", "151.2 ns" -> ns and the spread */
+function parseRuntimeTime(text: string): RuntimeCell | null {
+  const match = /^(.+?)\s*(±\s*[\d.]+\s*%)?\s*(\([^)]*\/s\))?$/.exec(
+    clean(text),
+  );
+  const ns = match ? parseTime(match[1]) : null;
+  if (!match || ns === null) return null;
+  const cell: RuntimeCell = { value: Math.round(ns * 1e4) / 1e4 };
+  if (match[2]) cell.spread = match[2].replace(/\s+/g, '');
+  return cell;
+}
+
+/** The machine or runtime a section's introduction names */
+function runtimeEnvironment(lang: RuntimeLang, section: string) {
+  if (lang === 'go') {
+    const machine = /\bon ([^`]+?)\. Allocations/.exec(section)?.[1];
+    return machine && machine !== 'a GitHub runner' ? machine : null;
+  }
+  if (lang === 'typescript') {
+    const node = /\bin Node (v[\d.]+)/.exec(section)?.[1];
+    const tinybench = /\btinybench ([\d.]+)/.exec(section)?.[1];
+    if (!node) return null;
+    return tinybench ? `Node ${node}, tinybench ${tinybench}` : `Node ${node}`;
+  }
+  return null;
+}
+
+/**
+ * One runtime section: its first table with Case (or Scenario) and Operation
+ * columns, a column per serializer. Returns null when the body has none;
+ * throws when the section has no table in that format (the TypeScript table of
+ * releases before tinybench compared with JSON only, in another format).
+ */
+export function parseRuntimeSection(
+  body: string,
+  lang: RuntimeLang,
+  tag: string,
+): RuntimeSection | null {
+  const start = body.indexOf(runtimeHeadings[lang]);
+  if (start < 0) return null;
+  const section = sectionFrom(body, start);
+  for (const table of tables(section)) {
+    if (table.length < 3 || !isSeparator(table[1])) continue;
+    const header = table[0];
+    const name = column(header, 'Case', 'Scenario');
+    const operation = column(header, 'Operation');
+    if (name !== 0 || operation !== 1 || header.length < 3) continue;
+    const serializers = header.slice(2);
+    const rows: RuntimeRow[] = [];
+    for (const row of table.slice(2)) {
+      const op = row[operation] ?? '';
+      if (!row[name] || !op) continue;
+      const kind =
+        op === 'size' ? 'size' : op.endsWith('allocs') ? 'allocs' : 'time';
+      const cells: Record<string, RuntimeCell> = {};
+      serializers.forEach((serializer, i) => {
+        const text = row[i + 2] ?? '';
+        if (!text || text === '-' || text === '—') return;
+        const cell =
+          kind === 'time'
+            ? parseRuntimeTime(text)
+            : kind === 'size'
+              ? (() => {
+                  const bytes = parseRuntimeSize(text);
+                  return bytes === null ? null : { value: bytes };
+                })()
+              : /^\d+$/.test(clean(text).replace(/,/g, ''))
+                ? { value: number(text) }
+                : null;
+        if (cell) cells[serializer] = cell;
+      });
+      if (Object.keys(cells).length > 0)
+        rows.push({ case: row[name], operation: op, kind, cells });
+    }
+    if (rows.length === 0) continue;
+    return {
+      lang,
+      tag,
+      environment: runtimeEnvironment(lang, section),
+      serializers,
+      rows,
+    };
+  }
+  throw new Error(
+    `the ${lang} runtime section has no table with Case and Operation columns`,
+  );
+}
+
+/**
+ * Every runtime section of a body that can be read; a section that cannot is
+ * left out with a warning.
+ */
+export function parseRuntimeSections(body: string, tag: string) {
+  const sections: RuntimeSection[] = [];
+  for (const lang of Object.keys(runtimeHeadings) as RuntimeLang[]) {
+    try {
+      const section = parseRuntimeSection(body, lang, tag);
+      if (section) sections.push(section);
+    } catch (error) {
+      console.warn(`[benchmarks] warning: ${message(error)}; left out`);
+    }
+  }
+  return sections;
+}
+
 /**
  * Every method the site shows (src/lib/benchmarks.ts). A report without all of
  * them is not used: the site keeps one consistent run instead of mixing runs.
@@ -433,6 +614,14 @@ function summary(file: BenchFile) {
 
 function v3Summary(file: V3RuntimeFile) {
   return `${Object.keys(file.rows).length} v3 cases (${file.runs} v3 runs) from ${file.tag} (${file.origin})`;
+}
+
+function runtimesSummary(file: RuntimesFile) {
+  if (file.origin === 'none') return 'no data yet';
+  const langs = file.languages
+    .map((l) => `${l.lang} (${l.rows.length} rows)`)
+    .join(', ');
+  return `${langs} from ${file.tag} (${file.origin})`;
 }
 
 function write(out: string, data: unknown) {
@@ -556,6 +745,36 @@ async function syncArm64(release: Release, out: string | undefined) {
   }
 }
 
+/**
+ * The runtime sections of the release the .NET numbers came from; keeps the
+ * committed file when it has none.
+ */
+function syncRuntimes(release: Release, out: string | undefined) {
+  const kept = () => {
+    const file = JSON.parse(
+      readFileSync(runtimesDataFile, 'utf8'),
+    ) as RuntimesFile;
+    return `keeping src/data/bench-runtimes.json (${runtimesSummary(file)})`;
+  };
+  try {
+    const languages = parseRuntimeSections(
+      release.body ?? '',
+      release.tag_name,
+    );
+    if (languages.length === 0) {
+      console.warn(
+        `[benchmarks] ${release.tag_name} has no runtime section; ${kept()}`,
+      );
+      return;
+    }
+    const file: RuntimesFile = { ...releaseOrigin(release), languages };
+    write(out ?? runtimesDataFile, file);
+    console.log(`[benchmarks] synced runtimes: ${runtimesSummary(file)}`);
+  } catch (error) {
+    console.warn(`[benchmarks] warning: ${message(error)}; ${kept()}`);
+  }
+}
+
 /** Fixture mode: every section the file has, written to --out* or printed */
 function fixture(path: string) {
   const body = readFileSync(path, 'utf8');
@@ -592,6 +811,12 @@ function fixture(path: string) {
     warnMissing("fixture's Arm64 section", file.rows);
     output('--out-arm64', file, `Arm64: ${summary(file)}`);
   } else console.log('[benchmarks] fixture has no Arm64 section');
+
+  const languages = parseRuntimeSections(body, fixtureOrigin.tag);
+  if (languages.length > 0) {
+    const file: RuntimesFile = { ...fixtureOrigin, languages };
+    output('--out-runtimes', file, `runtimes: ${runtimesSummary(file)}`);
+  } else console.log('[benchmarks] fixture has no runtime section');
 }
 
 async function main() {
@@ -615,10 +840,11 @@ async function main() {
     // Only from the release the v4 numbers came from, so the site never mixes releases.
     syncV3(release, argument('--out-v3'));
     await syncArm64(release, argument('--out-arm64'));
+    syncRuntimes(release, argument('--out-runtimes'));
   } catch (error) {
     const kept = JSON.parse(readFileSync(dataFile, 'utf8')) as BenchFile;
     console.warn(
-      `[benchmarks] warning: ${message(error)}; keeping src/data/bench-v4.json (${summary(kept)}), src/data/bench-v3-runtime.json and src/data/bench-v4-arm64.json`,
+      `[benchmarks] warning: ${message(error)}; keeping src/data/bench-v4.json (${summary(kept)}), src/data/bench-v3-runtime.json, src/data/bench-v4-arm64.json and src/data/bench-runtimes.json`,
     );
   }
 }
