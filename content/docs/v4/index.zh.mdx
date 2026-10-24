@@ -46,7 +46,7 @@ Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 | --- | --- |
 | [网络与 RPC](/zh/docs/v4/advanced/networking) | 直接序列化到 `PipeWriter` 等 `IBufferWriter<byte>`，从 `ReadOnlySpan<byte>` 读取，消息对象池化复用；多态消息不需要操作码表。 |
 | [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore) | 在 MVC 和 Minimal API 中读写 `application/x-nino` 请求体与响应，直接从请求和响应管道读写（Nino.AspNetCore）。 |
-| [浏览器与 Node](/zh/docs/v4/advanced/typescript) | 每次构建后从你的类型生成 TypeScript 类和编解码器（Nino.TypeScript），读写的字节与 .NET 相同。 |
+| [TypeScript、Go 与 Rust](/zh/docs/v4/advanced/codegen) | 每次构建后从你的类型为浏览器、Node、Go 和 Rust 生成类型和编解码器（Nino.Codegen），读写的字节与 .NET 相同。 |
 | [消息队列与事件流](/zh/docs/v4/advanced/message-queues) | 负载紧凑，事件继承体系按真实类型读回，非托管记录的批次整块拷贝。 |
 | [缓存](/zh/docs/v4/advanced/caching) | 写入 Redis 或 `IDistributedCache` 的值体积小，Nino 自身每次调用不分配内存，类型跨多次部署仍然可读。 |
 | [持久化](/zh/docs/v4/advanced/persistence) | 文件、键值存储和日志：键控类型和版本容错类型经得起版本更新，引用追踪完整保留对象图。 |
@@ -63,7 +63,7 @@ Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 ## 什么时候不适合 [#when-not-to-use-it]
 
 - **需要人类可读的格式。** Nino 输出的是二进制。需要人工查看或编辑的文件，请用 JSON、YAML 或 TOML。
-- **数据要给其他语言（Go、Java、Python、Rust 等）的程序读取。** 格式由你的 C# 类型决定，没有 schema 文件，也没有这些语言的代码生成器，请用 Protocol Buffers、FlatBuffers 或 MessagePack。JavaScript 和 TypeScript 例外：[Nino.TypeScript](/zh/docs/v4/advanced/typescript) 可以从你的类型生成 TypeScript 编解码器，这些类型本身也能在浏览器中通过 [.NET WebAssembly](/zh/docs/v4/advanced/browser) 运行。
+- **数据要给其他语言（Java、Python、C++ 等）的程序读取。** 格式由你的 C# 类型决定，没有 schema 文件，也没有这些语言的代码生成器，请用 Protocol Buffers、FlatBuffers 或 MessagePack。TypeScript、JavaScript、Go 和 Rust 例外：[Nino.Codegen](/zh/docs/v4/advanced/codegen) 可以从你的类型生成它们的编解码器，这些类型本身也能在浏览器中通过 [.NET WebAssembly](/zh/docs/v4/advanced/browser) 运行。
 - **必须直接读取 Nino v3 的数据。** v4 采用了全新的二进制格式，旧数据需要转换一次。参见[从 v3 迁移](/zh/docs/v4/migration#converting-v3-data)。
 
 ## 从这里开始 [#start-here]

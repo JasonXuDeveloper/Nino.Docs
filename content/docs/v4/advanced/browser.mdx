@@ -5,7 +5,7 @@ description: "Use Nino from browser JavaScript or TypeScript: compile your [Nino
 icon: Globe
 ---
 
-**Can I use Nino from JavaScript or TypeScript?** Yes, in two ways: with the TypeScript codecs that [Nino.TypeScript](/en/docs/v4/advanced/typescript) generates from your types, or by running Nino itself in the browser, which this guide covers. Build the client-side serialization as a small .NET `browser-wasm` app that references Nino and your `[NinoType]` types, expose a few functions to JavaScript with `[JSExport]`, and call them from your JavaScript or TypeScript front end. This setup needs no generated TypeScript: the browser runs the same C# types and the same generated formatters as your server, so there is no second schema to keep in sync and the bytes are identical. Choose Nino.TypeScript instead when the browser should not download the .NET runtime.
+**Can I use Nino from JavaScript or TypeScript?** Yes, in two ways: with the TypeScript codecs that [Nino.Codegen](/en/docs/v4/advanced/codegen#typescript) generates from your types, or by running Nino itself in the browser, which this guide covers. Build the client-side serialization as a small .NET `browser-wasm` app that references Nino and your `[NinoType]` types, expose a few functions to JavaScript with `[JSExport]`, and call them from your JavaScript or TypeScript front end. This setup needs no generated TypeScript: the browser runs the same C# types and the same generated formatters as your server, so there is no second schema to keep in sync and the bytes are identical. Choose Nino.TypeScript instead when the browser should not download the .NET runtime.
 
 This guide builds that setup end to end: a shared order type, an export surface, a page that loads it, and requests over `fetch` and WebSocket to an ASP.NET Core server. Every snippet comes from a project that was built with the .NET 10 SDK and run in headless Chromium.
 
@@ -295,7 +295,7 @@ On the server side, read and write WebSocket messages as in [WebSocket and UDP](
 
 ### When something else fits better
 
-- **Nino.TypeScript** generates TypeScript classes and codecs from your `[NinoType]`s after each build, so the browser reads and writes the same bytes without downloading a .NET runtime. Use it when a small bundle and a fast start matter more than the features it leaves out (reference tracking, generic types; see [Not Supported](/en/docs/v4/advanced/typescript#not-supported)).
+- **Nino.Codegen** generates TypeScript classes and codecs from your `[NinoType]`s after each build, so the browser reads and writes the same bytes without downloading a .NET runtime. Use it when a small bundle and a fast start matter more than the features it leaves out (reference tracking, generic types; see [What TypeScript Leaves Out](/en/docs/v4/advanced/codegen#not-supported)).
 - **A JSON API** is simpler for public APIs, small payloads, or front ends owned by teams outside .NET. Keep Nino between your .NET services.
 - **Protocol Buffers or MessagePack** suit data that programs in several languages read; Nino's format is defined by C# types only.
 - **Blazor WebAssembly** apps already run .NET in the browser: reference Nino from the Blazor project and call it directly, with no `[JSExport]` layer.

@@ -47,8 +47,8 @@ The v4 binary format is **not compatible** with v3 or the earlier v4 betas/previ
   <Card icon={<Server />} title="ASP.NET Core (rc.6)" href="/en/docs/v4/advanced/aspnetcore">
     `Nino.AspNetCore`: MVC input and output formatters and Minimal API bodies and results for `application/x-nino`, without allocating per request.
   </Card>
-  <Card icon={<Globe />} title="TypeScript for browsers and Node (rc.6)" href="/en/docs/v4/advanced/typescript">
-    `Nino.TypeScript` generates classes and codecs for your `[NinoType]`s after each build, reading and writing the same bytes as .NET.
+  <Card icon={<Globe />} title="TypeScript, Go and Rust (rc.6, rc.8)" href="/en/docs/v4/advanced/codegen">
+    `Nino.Codegen` generates types and codecs for your `[NinoType]`s after each build, reading and writing the same bytes as .NET.
   </Card>
 </Cards>
 
@@ -116,7 +116,7 @@ Values themselves are not validated (a negative health reads as it is written), 
 
 ## Defining Types [#defining-types]
 
-- **Private members** with `containNonPublicMembers`: on .NET 8 and later they are reached through `[UnsafeAccessor]` without `partial` (except in generic types). See [Private Members](/en/docs/v4/defining-types#private-members).
+- **Private members** with `containNonPublicMembers`: on .NET 8 and later they are reached through `[UnsafeAccessor]` without `partial` (generic types: .NET 9 and later, since rc.8). See [Private Members](/en/docs/v4/defining-types#private-members).
 - **Constructors, records and `required` members**: Nino calls the constructor that fits, or the one marked `[NinoConstructor]`. See [Constructors](/en/docs/v4/constructors).
 - **Compact strings** (*rc.6*): text whose chars are all at most U+00FF (ASCII, Latin-1) is written in one byte a char, other text as UTF-16. [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) writes UTF-8 per member.
 - **Subtypes inherit `[NinoType]`** from their base class or interface, and generic types work as members, elements and top-level values. See [Defining Types](/en/docs/v4/defining-types).
@@ -150,8 +150,8 @@ See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
 ## Web and ASP.NET Core [#web-and-aspnet-core]
 
 - **ASP.NET Core** (*rc.6*): the `Nino.AspNetCore` package adds MVC input and output formatters (`AddNinoFormatters()`) and Minimal API bodies (`NinoBody<T>`) and results (`NinoResults`) for `application/x-nino`, read and written straight from the request and response pipes. See [ASP.NET Core](/en/docs/v4/advanced/aspnetcore).
-- **TypeScript clients** (*rc.6*): the `Nino.TypeScript` package generates TypeScript classes, enums and codecs for your `[NinoType]`s after each build, with the `nino.ts` runtime, so browsers and Node read and write exactly the bytes .NET writes. See [TypeScript Clients](/en/docs/v4/advanced/typescript).
-- **Go, Rust and nino-gen** (*rc.8*): Go and Rust runtimes in Nino's repository read and write the same bytes, and the `nino-gen` tool (`Nino.Codegen`) writes your `[NinoType]`s as TypeScript, Go or Rust from a built assembly. See [nino-gen](/en/docs/v4/advanced/codegen), [Go](/en/docs/v4/advanced/go) and [Rust](/en/docs/v4/advanced/rust).
+- **TypeScript clients** (*rc.6*): the `Nino.TypeScript` package generates TypeScript classes, enums and codecs for your `[NinoType]`s after each build, with the `nino.ts` runtime, so browsers and Node read and write exactly the bytes .NET writes. See [TypeScript](/en/docs/v4/advanced/codegen#typescript); since rc.8 the package is Nino.Codegen.
+- **Go, Rust and nino-gen** (*rc.8*): Go and Rust runtimes in Nino's repository read and write the same bytes, and Nino.Codegen (after each build) or the `nino-gen` tool (Nino.Codegen.Tool, from a built assembly) writes your `[NinoType]`s as TypeScript, Go or Rust. See [TypeScript, Go and Rust](/en/docs/v4/advanced/codegen), [Go](/en/docs/v4/advanced/codegen#go) and [Rust](/en/docs/v4/advanced/codegen#rust).
 - **.NET in the browser**: your types themselves can also run on .NET WebAssembly. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
 
 ## Platforms [#platforms]

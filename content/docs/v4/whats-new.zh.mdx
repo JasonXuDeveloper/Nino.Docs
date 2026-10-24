@@ -47,8 +47,8 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
   <Card icon={<Server />} title="ASP.NET Core（rc.6）" href="/zh/docs/v4/advanced/aspnetcore">
     `Nino.AspNetCore`：用于 `application/x-nino` 的 MVC 输入输出格式化器，以及 Minimal API 的请求体和结果，每个请求不分配内存。
   </Card>
-  <Card icon={<Globe />} title="浏览器与 Node 的 TypeScript（rc.6）" href="/zh/docs/v4/advanced/typescript">
-    `Nino.TypeScript` 在每次构建后为你的 `[NinoType]` 生成类和编解码器，读写的字节与 .NET 相同。
+  <Card icon={<Globe />} title="TypeScript、Go 与 Rust（rc.6、rc.8）" href="/zh/docs/v4/advanced/codegen">
+    `Nino.Codegen` 在每次构建后为你的 `[NinoType]` 生成类型和编解码器，读写的字节与 .NET 相同。
   </Card>
 </Cards>
 
@@ -116,7 +116,7 @@ Nino v4 本来就是为读取不可信来源的数据而设计的：网络对端
 
 ## 定义类型 [#defining-types]
 
-- **私有成员**：使用 `containNonPublicMembers`；在 .NET 8 及以上通过 `[UnsafeAccessor]` 访问，无需 `partial`（泛型类型除外）。参见[私有成员](/zh/docs/v4/defining-types#private-members)。
+- **私有成员**：使用 `containNonPublicMembers`；在 .NET 8 及以上通过 `[UnsafeAccessor]` 访问，无需 `partial`（泛型类型需 .NET 9 及以上，自 rc.8 起）。参见[私有成员](/zh/docs/v4/defining-types#private-members)。
 - **构造函数、record 和 `required` 成员**：Nino 调用合适的构造函数，或标记了 `[NinoConstructor]` 的那个。参见[自定义构造函数](/zh/docs/v4/constructors)。
 - **紧凑的字符串**（*rc.6*）：所有字符都不超过 U+00FF（ASCII、Latin-1）的文本每个字符写一个字节，其他文本按 UTF-16 写出。[`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 可按成员写成 UTF-8。
 - **子类型继承 `[NinoType]`**：子类型自动从基类或接口继承该特性；泛型类型可以用作成员、元素和顶层值。参见[定义类型](/zh/docs/v4/defining-types)。
@@ -150,8 +150,8 @@ Nino v4 本来就是为读取不可信来源的数据而设计的：网络对端
 ## Web 与 ASP.NET Core [#web-and-aspnet-core]
 
 - **ASP.NET Core**（*rc.6*）：`Nino.AspNetCore` 包提供用于 `application/x-nino` 的 MVC 输入输出格式化器（`AddNinoFormatters()`），以及 Minimal API 的请求体（`NinoBody<T>`）和结果（`NinoResults`），直接基于请求和响应管道读写。参见 [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)。
-- **TypeScript 客户端**（*rc.6*）：`Nino.TypeScript` 包在每次构建后为你的 `[NinoType]` 生成 TypeScript 类、枚举和编解码器，并附带 `nino.ts` 运行时，浏览器和 Node 读写的字节与 .NET 完全相同。参见 [TypeScript 客户端](/zh/docs/v4/advanced/typescript)。
-- **Go、Rust 与 nino-gen**（*rc.8*）：Nino 仓库中的 Go 和 Rust 运行时读写同样的字节，`nino-gen` 工具（`Nino.Codegen`）从构建好的程序集把你的 `[NinoType]` 写成 TypeScript、Go 或 Rust。参见 [nino-gen](/zh/docs/v4/advanced/codegen)、[Go](/zh/docs/v4/advanced/go) 和 [Rust](/zh/docs/v4/advanced/rust)。
+- **TypeScript 客户端**（*rc.6*）：`Nino.TypeScript` 包在每次构建后为你的 `[NinoType]` 生成 TypeScript 类、枚举和编解码器，并附带 `nino.ts` 运行时，浏览器和 Node 读写的字节与 .NET 完全相同。参见 [TypeScript](/zh/docs/v4/advanced/codegen#typescript)；自 rc.8 起这个包是 Nino.Codegen。
+- **Go、Rust 与 nino-gen**（*rc.8*）：Nino 仓库中的 Go 和 Rust 运行时读写同样的字节，Nino.Codegen（每次构建后）或 `nino-gen` 工具（Nino.Codegen.Tool，基于构建好的程序集）把你的 `[NinoType]` 写成 TypeScript、Go 或 Rust。参见 [TypeScript、Go 与 Rust](/zh/docs/v4/advanced/codegen)、[Go](/zh/docs/v4/advanced/codegen#go) 和 [Rust](/zh/docs/v4/advanced/codegen#rust)。
 - **浏览器中的 .NET**：你的类型本身也可以运行在 .NET WebAssembly 上。参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)。
 
 ## 平台 [#platforms]

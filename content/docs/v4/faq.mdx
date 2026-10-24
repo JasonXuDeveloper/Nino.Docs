@@ -14,7 +14,7 @@ Nino is a general-purpose, high-performance binary serializer for C# and .NET. Y
 
 ## How do I install Nino?
 
-In a .NET or Godot project, run `dotnet add package Nino --prerelease` (v4 is still a prerelease: without the flag NuGet installs the stable 3.9.x, a test build of v4 features that is not compatible with v4); the `Nino` package brings in the runtime (`Nino.Serialization`) and the source generator (`Nino.Generator`). In Unity, install `com.jasonxudeveloper.nino` from OpenUPM (`openupm add com.jasonxudeveloper.nino`), which includes the generator. Optional packages add immutable collections (`Nino.Immutable`), ASP.NET Core bodies (`Nino.AspNetCore`) and generated TypeScript (`Nino.TypeScript`). See [Quick Start](/en/docs/v4/start).
+In a .NET or Godot project, run `dotnet add package Nino --prerelease` (v4 is still a prerelease: without the flag NuGet installs the stable 3.9.x, a test build of v4 features that is not compatible with v4); the `Nino` package brings in the runtime (`Nino.Serialization`) and the source generator (`Nino.Generator`). In Unity, install `com.jasonxudeveloper.nino` from OpenUPM (`openupm add com.jasonxudeveloper.nino`), which includes the generator. Optional packages add immutable collections (`Nino.Immutable`), ASP.NET Core bodies (`Nino.AspNetCore`) and generated TypeScript, Go or Rust (`Nino.Codegen`). See [Quick Start](/en/docs/v4/start).
 
 ## Which platforms and .NET versions does Nino support?
 
@@ -56,7 +56,7 @@ No. v4 has a new binary format and cannot read data written by v3 or by the v4 b
 
 ## Can I use Nino from JavaScript or TypeScript?
 
-Yes. [Nino.TypeScript](/en/docs/v4/advanced/typescript) (4.0.0-rc.6 and later) generates TypeScript classes, enums and codecs for your `[NinoType]`s after each build, with the `nino.ts` runtime, so browsers and Node read and write exactly the bytes .NET writes, without the .NET runtime. It leaves out generic types, reference tracking and a few built-in types ([Not Supported](/en/docs/v4/advanced/typescript#not-supported)). For those, run the C# types themselves in the browser: a .NET `browser-wasm` app that references Nino, called from JavaScript through `[JSExport]`, at the cost of downloading the .NET runtime. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
+Yes. [Nino.Codegen](/en/docs/v4/advanced/codegen#typescript) generates TypeScript classes, enums and codecs for your `[NinoType]`s after each build, with the `nino.ts` runtime, so browsers and Node read and write exactly the bytes .NET writes, without the .NET runtime. It leaves out generic types, reference tracking and a few built-in types ([What TypeScript Leaves Out](/en/docs/v4/advanced/codegen#not-supported)). For those, run the C# types themselves in the browser: a .NET `browser-wasm` app that references Nino, called from JavaScript through `[JSExport]`, at the cost of downloading the .NET runtime. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
 
 ## Can ASP.NET Core read and write Nino bodies?
 
@@ -64,7 +64,7 @@ Yes, with [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) (4.0.0-rc.6 and lat
 
 ## When should I not use Nino?
 
-When people need to read or edit the data (use JSON, YAML or TOML), or when a program in a language other than C#, JavaScript or TypeScript must read it: the format is defined by your C# types, with no schema file and no generator for those languages, so use Protocol Buffers, FlatBuffers or MessagePack for that. JavaScript and TypeScript clients use Nino through [generated TypeScript](/en/docs/v4/advanced/typescript) or [.NET WebAssembly](/en/docs/v4/advanced/browser). See [Limitations](/en/docs/v4/limit).
+When people need to read or edit the data (use JSON, YAML or TOML), or when a program in a language other than C#, TypeScript, JavaScript, Go or Rust must read it: the format is defined by your C# types, with no schema file and no generator for those languages, so use Protocol Buffers, FlatBuffers or MessagePack for that. JavaScript, TypeScript, Go and Rust programs use Nino through [generated code](/en/docs/v4/advanced/codegen), and browsers can also run the C# types on [.NET WebAssembly](/en/docs/v4/advanced/browser). See [Limitations](/en/docs/v4/limit).
 
 ## Why does Nino say there is no formatter for a type? [#no-formatter]
 

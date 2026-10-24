@@ -142,7 +142,7 @@ And it skips:
 - **explicit interface implementations** (`int IHasId.Id { get; set; }`), which generated code cannot name. A `[NinoType]` interface serializes its members through the implementing type's members of the same name;
 - members whose type Nino cannot serialize (delegates, `Task`, pointers...), reported as warning NINO007.
 
-An `override` counts as the member it overrides and is collected once. A member that hides a base member with `new` is a separate member: both are serialized, the base one first. When the hidden base member is not public, generated code can only reach it through `[UnsafeAccessor]` (.NET 8+, non-generic types); otherwise it is skipped with warning NINO022.
+An `override` counts as the member it overrides and is collected once. A member that hides a base member with `new` is a separate member: both are serialized, the base one first. When the hidden base member is not public, generated code can only reach it through `[UnsafeAccessor]` (.NET 8+; in generic types .NET 9+, as below); otherwise it is skipped with warning NINO022.
 
 ### Ignoring a Member
 
@@ -205,8 +205,8 @@ public partial class Account
 }
 ```
 
-- On .NET 8 and later, generated code reaches private members through `[UnsafeAccessor]` (except in generic types).
-- Before .NET 8 (including .NET Standard and Unity), and in generic types, it uses an accessor generated **inside** the type, so the type and every type containing it must be `partial` (NINO002, with a code fix).
+- On .NET 8 and later, generated code reaches private members through `[UnsafeAccessor]`; in generic types, on .NET 9 and later (the compilation defines `NET9_0_OR_GREATER`).
+- Before that (.NET Standard, .NET Framework and Unity; generic types on .NET 8), it uses an accessor generated **inside** the type, so the type and every type containing it must be `partial` (NINO002, with a code fix). So does a generic type on .NET 9+ that serializes a non-public member of a generic base whose type arguments are not its own first type parameters in order: `class D<T> : Base<List<T>>` or `Base<int>` needs `partial`, `class D<T, U> : Base<T>` does not.
 - A non-public `[NinoMember]` without `containNonPublicMembers` is an error (NINO009).
 - Private members of a base class are never part of a subtype.
 

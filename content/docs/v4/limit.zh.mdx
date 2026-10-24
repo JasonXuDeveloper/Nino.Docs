@@ -12,7 +12,7 @@ icon: TriangleAlert
 - **默认按位置存储。** 不带参数的 `[NinoType]` 最快，但成员一改，旧数据就读不了。需要保存或跨版本交换的数据，请在写入之前选好 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`：参见[数据演进](/zh/docs/v4/evolving-data)。
 - **只支持连续内存。** Nino 从 `ReadOnlySpan<byte>` 读取，写入 `IBufferWriter<byte>`；没有 `Stream` 或 `ReadOnlySequence<byte>` 重载。参见[多段数据](/zh/docs/v4/basic#multi-segment-data)。
 - **部分类型没有内置格式化器。** `System.Type` 是有意不支持的（由数据指定要创建的类型是一种反序列化攻击手段），委托、非泛型集合，以及 Unity 的 `AnimationCurve`、`Gradient`、`RectOffset` 之外的引擎类也没有。参见[支持的类型](/zh/docs/v4/types#not-supported)；用[自定义格式化器](/zh/docs/v4/custom-formatters)可以支持其中任何一种。
-- **生成的 TypeScript 覆盖大多数类型，但不是全部。** [Nino.TypeScript](/zh/docs/v4/advanced/typescript) 会跳过泛型类型、带引用跟踪的类型、`[NinoType]` 集合，以及多维数组、`DateTimeOffset` 或自定义格式化器等成员，并给出构建警告（[不支持的情况](/zh/docs/v4/advanced/typescript#not-supported)）。需要它们的浏览器客户端可以在 [.NET WebAssembly](/zh/docs/v4/advanced/browser) 上运行 C# 类型。
+- **生成的 TypeScript 覆盖大多数类型，但不是全部。** [Nino.Codegen](/zh/docs/v4/advanced/codegen#not-generated) 会跳过泛型类型、带引用跟踪的类型、`[NinoType]` 集合，以及多维数组、`DateTimeOffset` 或自定义格式化器等成员，并给出构建警告（[TypeScript 不支持的内容](/zh/docs/v4/advanced/codegen#not-supported)）。需要它们的浏览器客户端可以在 [.NET WebAssembly](/zh/docs/v4/advanced/browser) 上运行 C# 类型。
 
 ## 平台说明 [#platform-notes]
 
@@ -58,7 +58,7 @@ v4 已解决：派生自 `List<T>`、`Dictionary<TKey, TValue>` 等类型，或�
 </Accordion>
 <Accordion value="resolved-8" title={<>无法序列化非公开的字段和属性</>}>
 
-自 v3.0.6 起，可以用 `containNonPublicMembers` 解决。在 .NET 8 及以上，除泛型类型外不需要 `partial`；.NET 8 之前类型必须是 `partial`。
+自 v3.0.6 起，可以用 `containNonPublicMembers` 解决。在 .NET 8 及以上不需要 `partial`（泛型类型需 .NET 9 及以上）；在此之前类型必须是 `partial`。
 
 </Accordion>
 <Accordion value="resolved-9" title={<>多态的非托管结构体转换为接口后，序列化结果与转换前不同</>}>

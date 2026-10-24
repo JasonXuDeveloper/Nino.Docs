@@ -25,7 +25,7 @@ Nino reads untrusted data by design, and the fast paths keep these guarantees:
 - **No hash flooding.** A key that finds more than `NinoSettings.MaxHashCollisions` keys in its hash bucket throws, so crafted keys cannot make filling a dictionary or set quadratic; `NinoSettings.Untrusted` also hashes integer, `char`, `Guid` and `string` keys with a per-process secret.
 - **One exception.** Every invalid input throws a `NinoDataException` (an `InvalidOperationException`) whose message starts with `Nino:`, including values their own type rejects, so one `catch` at the boundary handles all of it; [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) answers it with 400.
 
-We checked these against fuzzed and hand-crafted payloads for every built-in type and every way of declaring one, and fixed what they found in 4.0.0-rc.7. What stays the application's job (the values themselves, the size of a message, versioning) is in [Untrusted Data](/en/docs/v4/security#what-stays-your-job). Nino.TypeScript and Nino.AspNetCore, which carry Nino data across that boundary, stay.
+We checked these against fuzzed and hand-crafted payloads for every built-in type and every way of declaring one, and fixed what they found in 4.0.0-rc.7. What stays the application's job (the values themselves, the size of a message, versioning) is in [Untrusted Data](/en/docs/v4/security#what-stays-your-job). Nino.Codegen's TypeScript, Go and Rust readers and Nino.AspNetCore, which carry Nino data across that boundary, stay.
 
 ## Performance
 
@@ -66,7 +66,7 @@ Every case with its numbers, the polymorphic and pooled runs, and the benchmark 
 | Same bytes on every runtime and CPU | ✅ canonical layout, converted on 32-bit and old Mono | ⚠️ unmanaged structs are copied as laid out in memory |
 | Deterministic output (padding zeroed) | ✅ | ❌ padding is copied as is |
 | **Defining types** | | |
-| `partial` required | ⚠️ only for `[NinoPooled]` classes, and for non-public members before .NET 8 or in generic types | ✅ always |
+| `partial` required | ⚠️ only for `[NinoPooled]` classes, and for non-public members before .NET 8 (generic types: before .NET 9) | ✅ always |
 | Private members | ✅ `containNonPublicMembers` | ✅ `[MemoryPackInclude]` |
 | Constructors, records, `required` members | ✅ | ✅ |
 | User collection types | ✅ automatic (`List<T>`, `Dictionary<,>` subclasses, `ICollection<T>`...) | ⚠️ `[MemoryPackable(GenerateType.Collection)]` per type |
@@ -102,7 +102,7 @@ Every case with its numbers, the polymorphic and pooled runs, and the benchmark 
 | Custom formatters | ✅ struct formatters, inlined; `[assembly: NinoFormatter]` binds generic types | ✅ `MemoryPackFormatter<T>`, provider registration |
 | Compression | ✅ `System.IO.Compression` over the output ([example](/en/docs/v4/advanced/streams#compression)) | ✅ `BrotliCompressor`, `[BrotliFormatter]` |
 | Untrusted input | ✅ by design ([Invalid Data](/en/docs/v4/basic#invalid-data)) | ❌ trusted data only, per its README |
-| TypeScript code generation | ✅ [Nino.TypeScript](/en/docs/v4/advanced/typescript), after each build from the layout metadata; structs, `decimal`, keyed and version-tolerant types included | ⚠️ `[GenerateTypeScript]`, classes only, from inside the source generator, to be removed in its next release ([comparison](/en/docs/v4/advanced/typescript#compared-with-memorypack)) |
+| TypeScript code generation | ✅ [Nino.Codegen](/en/docs/v4/advanced/codegen#typescript) (also Go and Rust), after each build from the layout metadata; structs, `decimal`, keyed and version-tolerant types included | ⚠️ `[GenerateTypeScript]`, classes only, from inside the source generator, to be removed in its next release ([comparison](/en/docs/v4/advanced/codegen#compared-with-memorypack)) |
 | ASP.NET Core | ✅ [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore): MVC formatters, Minimal API `NinoBody<T>` and `NinoResults` | ✅ `MemoryPack.AspNetCoreMvcFormatter` |
 | Default string encoding | one byte a char when every char is at most U+00FF, else UTF-16; `[NinoUtf8]` per member | UTF-8, option for UTF-16 |
 
@@ -145,7 +145,7 @@ The cost is 3 more bytes per polymorphic value. See [Polymorphism](/en/docs/v4/p
 - **Portable, deterministic bytes**: identical on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, with padding zeroed.
 - **Wider reach**: `netstandard2.0`, OpenUPM for Unity, HybridCLR without init calls.
 - **Build time**: one generated file per type and a truly incremental generator.
-- **TypeScript from the layouts**: [Nino.TypeScript](/en/docs/v4/advanced/typescript) runs after the build and reads the same layouts the C# formatters are generated from, so structs, `char`, `decimal`, 64-bit enums, keyed and version-tolerant types are covered and the runtime is updated with the package. MemoryPack writes its TypeScript from inside the source generator, for classes only, and will remove it in its next release; see the [comparison](/en/docs/v4/advanced/typescript#compared-with-memorypack).
+- **TypeScript from the layouts**: [Nino.Codegen](/en/docs/v4/advanced/codegen) runs after the build and reads the same layouts the C# formatters are generated from, so structs, `char`, `decimal`, 64-bit enums, keyed and version-tolerant types are covered and the runtime is updated with the package. MemoryPack writes its TypeScript from inside the source generator, for classes only, and will remove it in its next release; see the [comparison](/en/docs/v4/advanced/codegen#compared-with-memorypack).
 
 ## When to Choose Which
 

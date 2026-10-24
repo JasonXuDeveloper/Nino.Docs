@@ -15,7 +15,7 @@ Nino 的分析器随源生成器一起发布（`Nino.Generator` 包和 Unity 包
 | ID | 级别 | 问题 | 处理方式 | 代码修复 |
 | --- | --- | --- | --- | :---: |
 | [NINO001](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino001) | 错误 | 生成代码无法引用该类型（它不是 `public`/`internal`，或者是 `static` 类或 `ref struct`） | 把该类型及其外层类型改为 `public` 或 `internal` | ✅ |
-| [NINO002](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino002) | 错误 | 类型必须是 `partial`：它要序列化非公开成员（.NET 8 之前，或在泛型类型中），或者标了 `[NinoPooled]` | 把该类型及其外层类型声明为 `partial` | ✅ |
+| [NINO002](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino002) | 错误 | 类型必须是 `partial`：它要序列化的非公开成员需要通过类型内部的访问器访问（.NET 8 之前；泛型类型在 .NET 9 之前，或成员来自类型参数不同的泛型基类），或者标了 `[NinoPooled]` | 把该类型及其外层类型声明为 `partial` | ✅ |
 | [NINO003](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino003) | 警告 | 基类设置了 `allowInheritance: false`，子类型不会按自身类型序列化 | 给子类型加上 `[NinoType]` | ✅ |
 
 ### 实例创建 [#construction]
@@ -40,7 +40,7 @@ Nino 的分析器随源生成器一起发布（`Nino.Generator` 包和 Unity 包
 | [NINO011](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino011) | 警告 | `autoCollect: false` 时 `[NinoIgnore]` 是多余的 | 移除它 | ✅ |
 | [NINO012](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino012) | 错误 | 成员同时标记了 `[NinoMember]` 和 `[NinoIgnore]` | 移除其中一个或两个 | ✅ |
 | [NINO013](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino013) | 错误 | `[NinoMember]` 索引重复 | 改用下一个空闲索引 | ✅ |
-| [NINO022](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino022) | 警告 | 基类中被 `new` 隐藏的非公开成员无法访问，会被跳过 | 重命名其中一个成员，或改为公共成员 |  |
+| [NINO022](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino022) | 警告 | 基类中被 `new` 隐藏的非公开成员无法访问（通过 `[UnsafeAccessor]` 可以访问：.NET 8+，泛型类型 .NET 9+），会被跳过 | 重命名其中一个成员，或改为公共成员 |  |
 | [NINO023](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino023) | 错误 | 结构体没有任何成员参与序列化：会被写成 0 字节，由它组成的集合无法读回 | 至少序列化一个成员，或设为 `VersionTolerant` 或 `Keyed` |  |
 
 ### 格式与引用 [#formats-and-references]
@@ -68,6 +68,19 @@ Nino 的分析器随源生成器一起发布（`Nino.Generator` 包和 Unity 包
 | ID | 级别 | 问题 | 处理方式 | 代码修复 |
 | --- | --- | --- | --- | :---: |
 | [NINO020](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino020) | 错误 | `[assembly: NinoFormatter]` 注册无效，会被忽略 | 注册一个只实现一次 `INinoFormatter<P>`、且没有嵌套在泛型类型中的结构体：泛型结构体以开放泛型定义（`typeof(F<,>)`）传入，所有类型参数都要能推断；非泛型结构体直接传入（`typeof(F)`） |  |
+
+### 其他语言的代码生成 [#code-generation]
+
+把你的类型写成 TypeScript、Go 或 Rust 的 [Nino.Codegen 和 nino-gen](/zh/docs/v4/advanced/codegen#diagnostics) 在构建中报告自己的 ID，不经过分析器：
+
+| ID | 严重级别 | 问题 | 处理方式 |
+| --- | --- | --- | --- |
+| NINOGEN001 | 错误 | 参数或 `<NinoCodegen>` 元数据无效（未知选项、重复给出或属于其他语言的选项、不被接受的值），或无法读取程序集 | 修正选项或项 |
+| NINOGEN002 | 警告 | 某个类型因目标语言无法表达而被跳过 | 见[不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated) |
+| NINOGEN003 | 警告 | 项目设置了 Nino.TypeScript 的 `NinoTypeScript*` 属性 | 改为声明 `<NinoCodegen>` 项（[迁移](/zh/docs/v4/advanced/codegen#from-ninotypescript)） |
+| NINOGEN004 | 警告 | 项目引用了 Nino.Codegen，却没有声明 `<NinoCodegen>` 项 | 添加一项，或把 `NinoCodegenEnabled` 设为 `false` |
+
+Nino.TypeScript 的 `NINOTS001` 和 `NINOTS002`（直到 4.0.0-rc.7）现在是 `NINOGEN001` 和 `NINOGEN002`。
 
 ## 修改严重级别 [#changing-severities]
 

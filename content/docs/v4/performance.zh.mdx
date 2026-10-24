@@ -60,7 +60,8 @@ Nino 仓库在每次修改读写路径时都会检查这一点：`benchmarks/asm
 - 非托管元素的数组、`List<T>`、`Stack<T>`、`Queue<T>`、`ImmutableArray<T>` 以及声明为接口（`IList<T>`、`IEnumerable<T>` 等）的集合：整个集合**一次拷贝**；
 - 由非托管元素组成的 `HashSet<T>` 和 `Dictionary<TKey, TValue>`：一次预留空间，在一个循环里直接遍历集合自身的 entries 数组写出元素（参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)中的“集合的内部字段”）；
 - 由非托管值组成的值元组和 `KeyValuePair` 的数组和列表：作为一整块处理，CPU 支持时用 [SIMD](/zh/docs/v4/platforms#simd) 重排成写入的顺序；
-- 满足原始内存条件的 `[NinoType]` 结构体（参见[结构体](/zh/docs/v4/defining-types#structs)），无论单独出现还是在数组、列表中。
+- 满足原始内存条件的 `[NinoType]` 结构体（参见[结构体](/zh/docs/v4/defining-types#structs)），无论单独出现还是在数组、列表中；
+- 大小固定但不满足原始内存条件的 `[NinoType]` 结构体（含值元组或 `KeyValuePair` 成员、`LayoutKind.Auto`、自动属性，或内含这样的结构体）的数组、列表和 span：它的生成格式化器也按块读写它，每个成员位于固定偏移，所以整个集合只做一次边界检查，并在 .NET 8+ 上走元组的向量路径（没有 SIMD 时是一个循环），而不是逐个值处理。条件是每个成员都是原始值、由原始值组成的元组或键值对，或另一个这样的结构体，并且都能就地赋值（没有 `[NinoConstructor]` 或仅 `init` 的成员）；可空成员不是固定大小。写出的字节不变。
 
 写入时会把填充字节清零，所以相等的值总是产生相同的字节，即使结构体位于从未清零的内存中（`ArrayPool` 租来的数组、`[SkipLocalsInit]` 下的 `stackalloc`）。Nino 在运行时第一次写入某个类型时识别填充：只读取一次字段偏移，结果会成为 JIT 期常量，所以没有填充的结构体不会为这项检查付出任何开销。带填充的结构体数组会在同一趟拷贝中用 SIMD 掩码处理，比普通 `memcpy` 多一点开销。
 
@@ -73,7 +74,7 @@ Nino 仓库在每次修改读写路径时都会检查这一点：`benchmarks/asm
 | 调整字段顺序，使其不需要填充（`int, int, DateTime`） | 普通的整块拷贝 |
 | 给 `int, DateTime` 加上 `[StructLayout(LayoutKind.Sequential, Pack = 4)]` | 对更小的结构体（12 字节而不是 16 字节）整块拷贝：最快，数据也最小 |
 | 字段之间有空隙（`int, DateTime`：`int` 之后有 4 字节） | 整块拷贝，并用掩码清掉填充 |
-| `[StructLayout(LayoutKind.Auto)]` | **不按原始内存写入**：运行时可能重排字段，所以 Nino 逐个字段写入，耗时是整块拷贝的好几倍 |
+| `[StructLayout(LayoutKind.Auto)]` | **不按原始内存写入**：运行时可能重排字段，所以 Nino 逐个字段写入，耗时是整块拷贝的好几倍；但它的数组和列表仍按块读写（见上文） |
 
 ```csharp title="Layouts.cs"
 [NinoType]

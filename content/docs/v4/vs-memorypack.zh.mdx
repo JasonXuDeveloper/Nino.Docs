@@ -25,7 +25,7 @@ Nino 在设计上就能读取不可信数据，快路径也守住了这些保证
 - **没有哈希洪泛。** 某个键在其哈希桶中遇到超过 `NinoSettings.MaxHashCollisions` 个键就会抛出异常，所以构造的键无法让填充字典或集合的时间变成平方级；`NinoSettings.Untrusted` 还会用每个进程的密钥对整数、`char`、`Guid` 和 `string` 键做哈希。
 - **只有一种异常。** 所有无效输入，包括被类型自身拒绝的值，都抛出消息以 `Nino:` 开头的 `NinoDataException`（一种 `InvalidOperationException`），在边界处一个 `catch` 就能处理；[Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 会返回 400。
 
-我们用变异 fuzz 和手工构造的数据，针对每个内置类型和每种类型声明方式检验了这些保证，发现的问题都已在 4.0.0-rc.7 修复。仍需应用自己负责的部分（值本身、消息大小、版本）见[无效数据](/zh/docs/v4/basic#invalid-data)。跨越这一边界传递 Nino 数据的 Nino.TypeScript 和 Nino.AspNetCore 会继续保留。
+我们用变异 fuzz 和手工构造的数据，针对每个内置类型和每种类型声明方式检验了这些保证，发现的问题都已在 4.0.0-rc.7 修复。仍需应用自己负责的部分（值本身、消息大小、版本）见[无效数据](/zh/docs/v4/basic#invalid-data)。跨越这一边界传递 Nino 数据的 Nino.Codegen（TypeScript、Go 和 Rust 读取器）和 Nino.AspNetCore 会继续保留。
 
 ## 性能 [#performance]
 
@@ -66,7 +66,7 @@ Nino 在设计上就能读取不可信数据，快路径也守住了这些保证
 | 所有运行时和 CPU 上字节相同 | ✅ 规范布局，在 32 位和旧版 Mono 上转换 | ⚠️ 非托管结构体按内存布局原样拷贝 |
 | 确定性输出（填充清零） | ✅ | ❌ 填充原样拷贝 |
 | **定义类型** | | |
-| 需要 `partial` | ⚠️ 只有 `[NinoPooled]` 类，以及在 .NET 8 之前或泛型类型中序列化非公开成员时需要 | ✅ 总是需要 |
+| 需要 `partial` | ⚠️ 只有 `[NinoPooled]` 类，以及在 .NET 8 之前（泛型类型：.NET 9 之前）序列化非公开成员时需要 | ✅ 总是需要 |
 | 私有成员 | ✅ `containNonPublicMembers` | ✅ `[MemoryPackInclude]` |
 | 构造函数、记录、`required` 成员 | ✅ | ✅ |
 | 自定义集合类型 | ✅ 自动（`List<T>`、`Dictionary<,>` 子类、`ICollection<T>`……） | ⚠️ 每个类型需要 `[MemoryPackable(GenerateType.Collection)]` |
@@ -102,7 +102,7 @@ Nino 在设计上就能读取不可信数据，快路径也守住了这些保证
 | 自定义格式化器 | ✅ 结构体格式化器，可内联；`[assembly: NinoFormatter]` 绑定泛型类型 | ✅ `MemoryPackFormatter<T>`，通过 Provider 注册 |
 | 压缩 | ✅ 用 `System.IO.Compression` 压缩输出（[示例](/zh/docs/v4/advanced/streams#compression)） | ✅ `BrotliCompressor`、`[BrotliFormatter]` |
 | 不可信输入 | ✅ 设计目标（[无效数据](/zh/docs/v4/basic#invalid-data)） | ❌ 按其 README，仅用于可信数据 |
-| TypeScript 代码生成 | ✅ [Nino.TypeScript](/zh/docs/v4/advanced/typescript)，每次构建后基于布局元数据生成；支持结构体、`decimal`、键控和版本容错类型 | ⚠️ `[GenerateTypeScript]`，只支持类，在源生成器内部生成，将在下个版本移除（[对比](/zh/docs/v4/advanced/typescript#compared-with-memorypack)） |
+| TypeScript 代码生成 | ✅ [Nino.Codegen](/zh/docs/v4/advanced/codegen#typescript)（也支持 Go 和 Rust），每次构建后基于布局元数据生成；支持结构体、`decimal`、键控和版本容错类型 | ⚠️ `[GenerateTypeScript]`，只支持类，在源生成器内部生成，将在下个版本移除（[对比](/zh/docs/v4/advanced/codegen#compared-with-memorypack)） |
 | ASP.NET Core | ✅ [Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore)：MVC 格式化器，Minimal API 的 `NinoBody<T>` 和 `NinoResults` | ✅ `MemoryPack.AspNetCoreMvcFormatter` |
 | 默认字符串编码 | 所有字符都不超过 U+00FF 时每个字符一个字节，否则 UTF-16；可按成员使用 `[NinoUtf8]` | UTF-8，可选 UTF-16 |
 
@@ -145,7 +145,7 @@ MemoryPack 写入 1 字节的 Union 标签（超过 249 时 3 字节），Nino �
 - **可移植、确定的字节**：在 CoreCLR、Mono、IL2CPP 以及 64 位和 32 位平台上完全相同，填充字节清零。
 - **适用范围更广**：支持 `netstandard2.0`，Unity 有 OpenUPM 包，HybridCLR 无需初始化调用。
 - **构建时间**：每个类型一个生成文件，源生成器是真正增量的。
-- **基于布局生成 TypeScript**：[Nino.TypeScript](/zh/docs/v4/advanced/typescript) 在构建之后运行，读取的正是生成 C# 格式化器所依据的布局，因此支持结构体、`char`、`decimal`、64 位枚举、键控和版本容错类型，运行时也随包一起更新。MemoryPack 在源生成器内部写出 TypeScript，只支持类，并将在下个版本移除；参见[对比](/zh/docs/v4/advanced/typescript#compared-with-memorypack)。
+- **基于布局生成 TypeScript**：[Nino.Codegen](/zh/docs/v4/advanced/codegen) 在构建之后运行，读取的正是生成 C# 格式化器所依据的布局，因此支持结构体、`char`、`decimal`、64 位枚举、键控和版本容错类型，运行时也随包一起更新。MemoryPack 在源生成器内部写出 TypeScript，只支持类，并将在下个版本移除；参见[对比](/zh/docs/v4/advanced/codegen#compared-with-memorypack)。
 
 ## 如何选择 [#when-to-choose-which]
 

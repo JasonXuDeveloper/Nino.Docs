@@ -51,7 +51,7 @@ In every mode, `NinoDataException` is thrown for:
 - a version-tolerant or keyed region whose section of deferred bodies does not match the region (its offset or its entries);
 - a `[NinoUtf8]` string whose bytes are not valid UTF-8 or do not match its char and byte counts.
 
-A `bool` inside a raw struct or tuple is copied with the struct's bytes, unchecked, unless [`Untrusted`](#untrusted-mode) is set.
+A `bool` field inside a raw struct is copied with the struct's bytes, unchecked, unless [`Untrusted`](#untrusted-mode) is set. The `bool` items of value tuples and `KeyValuePair`s are checked in every mode, also in arrays and lists read as blocks.
 
 ## Limits [#limits]
 
@@ -123,4 +123,4 @@ Nino checks the structure of the data, not what it means, as with a save file a 
 
 ## Other Languages [#other-languages]
 
-The readers for [TypeScript](/en/docs/v4/advanced/typescript#untrusted-data), [Go](/en/docs/v4/advanced/go#guarantees) and [Rust](/en/docs/v4/advanced/rust#guarantees) make the same checks: bounds and lengths before allocating, depth counted as .NET counts it, type ids limited to the types a slot allows, and strict bytes. Each throws or returns one error type of its own. Go and Rust also reject some bytes .NET accepts outside untrusted mode, such as out-of-range dates and decimals. The rules every reader follows are in the [wire format](/en/docs/v4/wire-format#validation).
+The [TypeScript, Go and Rust readers](/en/docs/v4/advanced/codegen#untrusted-data) make the same checks: bounds and lengths before allocating, depth counted as .NET counts it, type ids limited to the types a slot allows, and strict bytes. Each throws or returns one error type of its own. Go and Rust also reject some bytes .NET accepts outside untrusted mode, such as out-of-range dates and decimals. The rules every reader follows are in the [wire format](/en/docs/v4/wire-format#validation).

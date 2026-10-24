@@ -129,9 +129,9 @@ const text: Record<
       },
       {
         icon: FileCode,
-        title: 'Browsers and Node',
-        text: 'TypeScript classes and codecs generated from your [NinoType]s after each build (Nino.TypeScript), with the same bytes as .NET.',
-        href: 'advanced/typescript',
+        title: 'TypeScript, Go and Rust',
+        text: 'TypeScript, Go and Rust types and codecs generated from your [NinoType]s after each build (Nino.Codegen), with the same bytes as .NET.',
+        href: 'advanced/codegen',
       },
       {
         icon: MessagesSquare,
@@ -186,7 +186,7 @@ const text: Record<
       {
         question: 'Which platforms does Nino support?',
         answer:
-          'The runtime targets netstandard2.0, netstandard2.1, net8.0 and net10.0, so it runs on .NET Framework 4.6.1+, .NET Core, .NET 5–10 and NativeAOT, as well as Unity 2022.3 and later (Mono, IL2CPP, HybridCLR) and Godot 4. Every platform, 64-bit or 32-bit, writes the same bytes. Nino.AspNetCore reads and writes ASP.NET Core bodies, and Nino.TypeScript generates TypeScript codecs that read and write the same bytes in browsers and Node.',
+          'The runtime targets netstandard2.0, netstandard2.1, net8.0 and net10.0, so it runs on .NET Framework 4.6.1+, .NET Core, .NET 5–10 and NativeAOT, as well as Unity 2022.3 and later (Mono, IL2CPP, HybridCLR) and Godot 4. Every platform, 64-bit or 32-bit, writes the same bytes. Nino.AspNetCore reads and writes ASP.NET Core bodies, and Nino.Codegen generates TypeScript, Go and Rust codecs that read and write the same bytes in browsers, Node, Go and Rust.',
         href: 'platforms',
       },
       {
@@ -259,9 +259,9 @@ const text: Record<
       },
       {
         icon: FileCode,
-        title: '浏览器与 Node',
-        text: '每次构建后为你的 [NinoType] 生成 TypeScript 类和编解码器（Nino.TypeScript），字节与 .NET 相同。',
-        href: 'advanced/typescript',
+        title: 'TypeScript、Go 与 Rust',
+        text: '每次构建后为你的 [NinoType] 生成 TypeScript、Go 和 Rust 类型与编解码器（Nino.Codegen），字节与 .NET 相同。',
+        href: 'advanced/codegen',
       },
       {
         icon: MessagesSquare,
@@ -316,7 +316,7 @@ const text: Record<
       {
         question: 'Nino 支持哪些平台？',
         answer:
-          '运行时面向 netstandard2.0、netstandard2.1、net8.0 和 net10.0，因此可运行于 .NET Framework 4.6.1+、.NET Core、.NET 5–10 与 NativeAOT，也支持 Unity 2022.3 及以上（Mono、IL2CPP、HybridCLR）和 Godot 4。所有平台，无论 64 位还是 32 位，写出的字节都相同。Nino.AspNetCore 负责在 ASP.NET Core 中读写请求体与响应，Nino.TypeScript 生成的 TypeScript 编解码器让浏览器和 Node 读写相同的字节。',
+          '运行时面向 netstandard2.0、netstandard2.1、net8.0 和 net10.0，因此可运行于 .NET Framework 4.6.1+、.NET Core、.NET 5–10 与 NativeAOT，也支持 Unity 2022.3 及以上（Mono、IL2CPP、HybridCLR）和 Godot 4。所有平台，无论 64 位还是 32 位，写出的字节都相同。Nino.AspNetCore 负责在 ASP.NET Core 中读写请求体与响应，Nino.Codegen 生成的 TypeScript、Go 和 Rust 编解码器让浏览器、Node、Go 和 Rust 读写相同的字节。',
         href: 'platforms',
       },
       {

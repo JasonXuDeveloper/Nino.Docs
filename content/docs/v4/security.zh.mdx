@@ -51,7 +51,7 @@ catch (NinoDataException e)
 - 延迟主体段（其偏移或条目）与所在区域不符的版本容错或键控区域；
 - 字节不是有效 UTF-8、或与字符数和字节数不符的 `[NinoUtf8]` 字符串。
 
-原始结构体或元组中的 `bool` 随结构体的字节一起复制，不做检查，除非开启了 [`Untrusted`](#untrusted-mode)。
+原始结构体中的 `bool` 字段随结构体的字节一起复制，不做检查，除非开启了 [`Untrusted`](#untrusted-mode)。值元组和 `KeyValuePair` 中的 `bool` 项在任何模式下都会检查，按块读取的数组和列表也一样。
 
 ## 限制 [#limits]
 
@@ -123,4 +123,4 @@ Nino 检查数据的结构，而不是数据的含义，就像对待用户编辑
 
 ## 其他语言 [#other-languages]
 
-[TypeScript](/zh/docs/v4/advanced/typescript#untrusted-data)、[Go](/zh/docs/v4/advanced/go#guarantees) 和 [Rust](/zh/docs/v4/advanced/rust#guarantees) 的读取器做同样的检查：在分配之前检查边界和长度，按 .NET 的方式计算深度，类型 ID 仅限槽位允许的类型，并严格检查字节。它们各自只抛出或返回一种错误类型。Go 和 Rust 还会拒绝一些 .NET 在不可信模式之外接受的字节，例如超出范围的日期和 decimal。所有读取器遵循的规则见[二进制格式](/zh/docs/v4/wire-format#validation)。
+[TypeScript、Go 和 Rust 的读取器](/zh/docs/v4/advanced/codegen#untrusted-data)做同样的检查：在分配之前检查边界和长度，按 .NET 的方式计算深度，类型 ID 仅限槽位允许的类型，并严格检查字节。它们各自只抛出或返回一种错误类型。Go 和 Rust 还会拒绝一些 .NET 在不可信模式之外接受的字节，例如超出范围的日期和 decimal。所有读取器遵循的规则见[二进制格式](/zh/docs/v4/wire-format#validation)。

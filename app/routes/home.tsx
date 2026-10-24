@@ -102,8 +102,8 @@ const copy: Record<
       },
       {
         icon: FileCode,
-        label: 'TypeScript and ASP.NET Core',
-        text: 'Nino.TypeScript generates codecs for your [NinoType]s after each build; Nino.AspNetCore reads and writes application/x-nino bodies for MVC and Minimal APIs.',
+        label: 'TypeScript, Go, Rust and ASP.NET Core',
+        text: 'Nino.Codegen generates TypeScript, Go or Rust codecs for your [NinoType]s after each build; Nino.AspNetCore reads and writes application/x-nino bodies for MVC and Minimal APIs.',
       },
     ],
     older: 'Older versions:',
@@ -160,7 +160,7 @@ const copy: Record<
       {
         icon: FileCode,
         label: 'TypeScript 与 ASP.NET Core',
-        text: 'Nino.TypeScript 在每次构建后为你的 [NinoType] 生成编解码代码；Nino.AspNetCore 为 MVC 和 Minimal API 读写 application/x-nino 请求体。',
+        text: 'Nino.Codegen 在每次构建后为你的 [NinoType] 生成 TypeScript、Go 或 Rust 编解码代码；Nino.AspNetCore 为 MVC 和 Minimal API 读写 application/x-nino 请求体。',
       },
     ],
     older: '旧版本：',

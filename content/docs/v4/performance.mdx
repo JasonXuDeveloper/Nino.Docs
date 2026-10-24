@@ -60,7 +60,8 @@ Unmanaged values are copied as raw memory:
 - arrays, `List<T>`, `Stack<T>`, `Queue<T>`, `ImmutableArray<T>` and collections declared as interfaces (`IList<T>`, `IEnumerable<T>`, ...) of unmanaged elements: **one block copy** of the whole collection;
 - `HashSet<T>` and `Dictionary<TKey, TValue>` of unmanaged elements: one reservation, the elements written in one loop over the collection's own entries (see "Collection internals" in [Portable by Design](/en/docs/v4/platforms#portable-by-design));
 - arrays and lists of value tuples and `KeyValuePair`s of unmanaged values: one block, rearranged into the written order with [SIMD](/en/docs/v4/platforms#simd) where the CPU allows;
-- a `[NinoType]` struct that qualifies as raw (see [Structs](/en/docs/v4/defining-types#structs)), alone or in arrays and lists.
+- a `[NinoType]` struct that qualifies as raw (see [Structs](/en/docs/v4/defining-types#structs)), alone or in arrays and lists;
+- arrays, lists and spans of a `[NinoType]` struct of fixed size that is not raw (a value tuple or `KeyValuePair` member, `LayoutKind.Auto`, auto-properties, another such struct inside): its generated formatter also reads and writes it as a block, each member at a constant offset, so the collection takes one bounds check and the vector paths of tuples on .NET 8+ (a loop without SIMD) instead of one value at a time. This needs every member to be a raw value, a tuple or pair of them, or another such struct, all assignable in place (no `[NinoConstructor]` or `init`-only members); a nullable member is not fixed-size. The bytes are the same.
 
 Padding bytes are zeroed on write, so equal values always produce equal bytes, even when the struct sits in memory that was never cleared (an `ArrayPool` array, `stackalloc` under `[SkipLocalsInit]`). Nino finds the padding at runtime, the first time it writes the type: it reads the field offsets once, and the result becomes a JIT-time constant, so a struct without padding pays nothing for the check. Arrays of padded structs are copied through a SIMD mask in the same pass, which costs a little more than a plain `memcpy`.
 
@@ -73,7 +74,7 @@ How you declare a hot struct decides which path it takes:
 | Fields ordered so that nothing needs padding (`int, int, DateTime`) | plain block copy |
 | `[StructLayout(LayoutKind.Sequential, Pack = 4)]` on `int, DateTime` | plain block copy of a smaller struct (12 bytes instead of 16): the fastest and the smallest payload |
 | Fields with gaps (`int, DateTime`: 4 bytes after the `int`) | block copy with the padding masked out |
-| `[StructLayout(LayoutKind.Auto)]` | **not raw**: the runtime may reorder the fields, so Nino writes them one by one, at several times the cost |
+| `[StructLayout(LayoutKind.Auto)]` | **not raw**: the runtime may reorder the fields, so Nino writes them one by one, at several times the cost; arrays and lists of it are still read and written as blocks (see above) |
 
 ```csharp title="Layouts.cs"
 [NinoType]

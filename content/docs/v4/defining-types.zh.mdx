@@ -142,7 +142,7 @@ public NinoTypeAttribute(
 - **显式接口实现**（`int IHasId.Id { get; set; }`），因为生成代码无法通过名称访问它。`[NinoType]` 接口的成员会通过实现类型中同名的成员来序列化；
 - 类型无法序列化的成员（委托、`Task`、指针等），并报告警告 NINO007。
 
-`override` 成员和它重写的成员算作同一个，只收集一次。用 `new` 隐藏基类成员时，两者是不同的成员，都会序列化，基类的在前。如果被隐藏的基类成员不是公共的，生成代码只能通过 `[UnsafeAccessor]` 访问它（.NET 8+，且限于非泛型类型）；否则会跳过该成员并报告警告 NINO022。
+`override` 成员和它重写的成员算作同一个，只收集一次。用 `new` 隐藏基类成员时，两者是不同的成员，都会序列化，基类的在前。如果被隐藏的基类成员不是公共的，生成代码只能通过 `[UnsafeAccessor]` 访问它（.NET 8+；泛型类型需 .NET 9+，见下文）；否则会跳过该成员并报告警告 NINO022。
 
 ### 忽略成员 [#ignoring-a-member]
 
@@ -205,8 +205,8 @@ public partial class Account
 }
 ```
 
-- 在 .NET 8 及以上版本，生成代码通过 `[UnsafeAccessor]` 访问私有成员（泛型类型除外）。
-- 在 .NET 8 之前（包括 .NET Standard 和 Unity）以及泛型类型中，生成代码会在类型**内部**生成访问器，所以该类型及其所有外层类型都必须声明为 `partial`（NINO002，提供代码修复）。
+- 在 .NET 8 及以上版本，生成代码通过 `[UnsafeAccessor]` 访问私有成员；泛型类型需要 .NET 9 及以上（编译定义了 `NET9_0_OR_GREATER`）。
+- 在此之前（.NET Standard、.NET Framework 和 Unity；.NET 8 上的泛型类型），生成代码会在类型**内部**生成访问器，所以该类型及其所有外层类型都必须声明为 `partial`（NINO002，提供代码修复）。在 .NET 9+ 上，如果泛型类型要序列化泛型基类的非公开成员，而基类的类型参数不是它自己按顺序排列的前几个类型参数，也需要 `partial`：`class D<T> : Base<List<T>>` 或 `Base<int>` 需要，`class D<T, U> : Base<T>` 不需要。
 - 没有设置 `containNonPublicMembers` 却给非公开成员标记 `[NinoMember]`，会报错（NINO009）。
 - 基类的私有成员永远不属于子类型。
 
