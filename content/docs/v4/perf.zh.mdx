@@ -1,7 +1,7 @@
 ---
 title: 基准测试
-seoTitle: "基准测试：Nino 对比 MemoryPack 与 v3 – Nino v4 文档"
-description: "Nino v4 与 v3（3.3.13）和 MemoryPack 1.21.4 的构建时间与运行时基准测试，以及复现方法。"
+seoTitle: "基准测试：Nino 对比 MemoryPack、MessagePack、protobuf-net 与 v3 – Nino v4 文档"
+description: "Nino v4 与 v3（3.3.13）、MemoryPack 1.21.4、MessagePack 3.1.12 和 protobuf-net 3.4.30 的构建时间与运行时基准测试，以及复现方法。"
 icon: ChartColumn
 ---
 
@@ -25,9 +25,9 @@ icon: ChartColumn
 | --- | --- | --- |
 | [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | .NET 上使用广泛、速度最快的二进制序列化库，和 Nino 一样基于源生成器 | 运行时性能，同一次 BenchmarkDotNet 运行：[序列化](#serialize-to-a-reused-buffer-writer)、[反序列化](#deserialize-new-instances)、[多态对象图](#polymorphism)、[复用实例](#pooling)、[引用追踪、版本容错和固定大小的类型](#more-cases) |
 | Nino v3 **3.3.13** | v3 API 的最后一个版本，也就是你升级之前所用的版本 | 运行时性能，与 v4 在同一台机器上背靠背测量（运行时表格中的 **v4 对比 v3** 列），以及[构建时间](#build-time-and-generated-code) |
-| [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) | .NET 中最常用的二进制格式 | 运行时性能，仅 `SimpleTest` 和 `PolymorphicTest`，只在本地运行 Nino 的 `benchmarks/run.sh` 时测量：发布的报告不包含它 |
+| [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) **3.1.12** 和 [protobuf-net](https://github.com/protobuf-net/protobuf-net) **3.4.30** | .NET 中最常用的二进制格式，以及 .NET 中最常用的 Protocol Buffers 库 | 运行时性能，同一次 BenchmarkDotNet 运行，覆盖格式能写出相同数据的每个用例：运行时表格中各占一列，[全部测量结果](#results)中各占若干行（参见 [MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)）。它们加入基准测试之前的发布报告没有这些行，表格这时只显示 Nino 和 MemoryPack |
 
-绝对耗时取决于机器，请比较倍数。功能而非速度方面的对比，参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)和 [v3 与 v4 对比](/zh/docs/v4/v3-vs-v4)。
+绝对耗时取决于机器，请比较倍数。Go、Rust 和 TypeScript 中的 Nino 对比 Protocol Buffers、MessagePack 和各语言常用序列化库的结果，参见[其他语言的基准测试](/zh/docs/v4/perf-runtimes)。功能而非速度方面的对比，参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)和 [v3 与 v4 对比](/zh/docs/v4/v3-vs-v4)。
 
 ## 测量方法 [#setup]
 
@@ -35,7 +35,7 @@ icon: ChartColumn
 | --- | --- |
 | 机器 | 运行时：发布时基准测试所用的 GitHub 托管 `ubuntu-26.04` 运行器，具体 CPU 见[全部测量结果](#results)。构建时间：Intel Xeon 2.10 GHz，4 核，AVX-512 |
 | 运行时 | .NET 10.0.13（SDK 10.0.402），服务器 GC |
-| 测试框架 | BenchmarkDotNet 0.15.8，每个用例在 3 个进程中各做 5 次预热、15 次测量，取三者的平均（只用一个进程时，一个 12 ns 的用例最多会偏差 13%）；各基准测试类在每种架构的五台运行器上并行运行，同一个用例的 Nino 和 MemoryPack 总在同一台运行器上 |
+| 测试框架 | BenchmarkDotNet 0.15.8，每个用例在 3 个进程中各做 5 次预热、15 次测量，取三者的平均（只用一个进程时，一个 12 ns 的用例最多会偏差 13%）；各基准测试类在每种架构的十台运行器上并行运行，同一个用例的所有序列化库总在同一台运行器上 |
 | 项目 | [`benchmarks/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)（运行时），[`benchmarks/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.GeneratorBenchmark)（构建时间） |
 
 - **序列化**测试写入一个只创建一次、每次调用前重置的缓冲区写入器（Nino 用 `NinoArrayBufferWriter`，其他库用 `ArrayBufferWriter<byte>`），因此测的是序列化本身，而不是数组分配。每个库用的都是它能原地写入的写入器：写入其他 `IBufferWriter<byte>` 时，Nino 先写入池化的缓冲区再整体复制过去，比这些表格多一次复制。
@@ -43,6 +43,7 @@ icon: ChartColumn
 - **先验证**：基准测试运行前，`--verify`（[`Verify.cs`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Verify.cs)）会跑一遍每个用例，检查每个序列化用例写出的字节数与载荷一致，并逐层比较各个库读回的值是否相同。测试数据使用固定种子，每次运行序列化的都是同样的值。
 - **1 ns 以下**（约三个时钟周期）的耗时无法区分：读取一个 40 字节的结构体，在扣除 BenchmarkDotNet 的空方法开销后，两个库测出来都在 0.05 到 0.8 ns 之间。两边都低于 1 ns 记为持平；Nino 低于 1 ns 而另一方可测时，记为更快（快到测不出），不给倍数。相差 5% 以内同样记为持平。
 - **复用**测试反序列化到已经存在的对象中：Nino 通过 `ref` 和 `[NinoPooled]` 对象池，MemoryPack 用它的覆盖模式。
+- **MessagePack 与 protobuf-net** 通过相同的类型读写与 Nino、MemoryPack 相同的值，各自使用其文档推荐的最快 API；参见 [MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)。
 - **v3** 运行的是同一个 `SimpleTest`，但编译时引用的是 NuGet 上的 Nino 3.3.13，在同一台运行器上、紧接在 v4 的 `SimpleTest` 之前运行一次。两次运行都包含 MemoryPack，它前后两次耗时的差别就是机器本身的波动。每张 v3 图表下方都注明了数据来自哪次运行。
 - **Arm64**：发布时的基准测试还会以相同设置在 GitHub 的 Arm64 运行器（`ubuntu-24.04-arm`）上运行同样的基准测试类。等某个版本的发布报告包含这些结果后，Nino 对比 MemoryPack 的运行时表格和图表会在 **x64** 旁边多出一个 **Arm64** 标签页，你选择的标签页会同时切换全站所有基准测试表格和图表。两种运行器不同，请在同一架构内比较 Nino 与 MemoryPack，不要跨架构比较耗时。与 v3 的对比只有 x64。
 
@@ -52,7 +53,7 @@ icon: ChartColumn
 
 ## 运行时结果 [#runtime]
 
-柱条表示相对于 MemoryPack（1.0）的耗时，越短越快。悬停或聚焦柱条可查看具体数值。
+柱条表示相对于 MemoryPack（1.0）的耗时，越短越快。悬停或聚焦柱条可查看具体数值。图表对比的是 Nino 与 MemoryPack；同步的报告包含 MessagePack 和 protobuf-net 后，它们出现在表格中：时间后的 “· 2.00×” 表示该用例中 Nino 快多少倍，“—” 表示该库无法表达这个用例。
 
 ### 序列化（到复用的缓冲区写入器） [#serialize-to-a-reused-buffer-writer]
 
@@ -100,13 +101,13 @@ Nino 把数据反序列化到已有的对象图中（[复用反序列化](/zh/do
 
 ### 内存分配与载荷大小 [#allocations-and-payload-size]
 
-每次调用分配的字节数，以及一个 `SimpleClass` 序列化后的大小（Nino 为 <BenchValue k="payload.v4" /> 字节，MemoryPack 为 <BenchValue k="payload.memorypack" /> 字节）。所有序列化库在序列化时都不分配内存。从 4.0.0-rc.6 起，所有字符都不超过 U+00FF 的文本由 Nino 按每个字符一个字节写出（[二进制格式](/zh/docs/v4/platforms#binary-format)），所以在更早版本上测得的、含这类字符串的数据，比 rc.6 写出的更大；这里的大小来自[测量方法](#setup)下注明的版本。
+每次调用分配的字节数，以及一个 `SimpleClass` 序列化后的大小（Nino 为 <BenchValue k="payload.v4" /> 字节，MemoryPack 为 <BenchValue k="payload.memorypack" /> 字节；报告包含 MessagePack 和 protobuf-net 后，图中也会显示它们）。所有序列化库在序列化时都不分配内存。从 4.0.0-rc.6 起，所有字符都不超过 U+00FF 的文本由 Nino 按每个字符一个字节写出（[二进制格式](/zh/docs/v4/platforms#binary-format)），所以在更早版本上测得的、含这类字符串的数据，比 rc.6 写出的更大；这里的大小来自[测量方法](#setup)下注明的版本。
 
 <BenchmarkChart chart={['allocation', 'payload']} lang="zh" />
 
 ### 引用追踪、版本容错、固定大小的类型和泛型基类型 [#more-cases]
 
-另有四个基准测试类，比较的是会改变类型写入方式的功能，各自对照 MemoryPack 中最接近的模式：
+另有四个基准测试类，比较的是会改变类型写入方式的功能，各自对照 MemoryPack 中最接近的模式，并在 MessagePack 和 protobuf-net 能写出相同数据时对照它们（两者都不支持引用追踪）：
 
 - **引用追踪**（[`ReferenceTest`](#referencetest)）：一张 200 个节点的对象图，带共享对象和环。Nino 使用 `[NinoType(trackReferences: true)]`，MemoryPack 使用 `GenerateType.CircularReference`。
 - **版本容错**（[`VersionTolerantTest`](#versiontoleranttest)）：把 `SimpleClass` 的成员放进一个以后还能添加成员的类型，单个对象和 100 个的数组各测一次。Nino 使用 `format: NinoFormat.VersionTolerant`（每个对象一个长度），MemoryPack 使用 `GenerateType.VersionTolerant`（每个成员一个长度）。
@@ -124,6 +125,25 @@ Nino 把数据反序列化到已有的对象图中（[复用反序列化](/zh/do
 - **BCL 类型**（[`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/BclTypesTest.cs)）：两个库都有格式化器的其他基础类库类型：`BigInteger`（3^1000）、`Uri`、`Version`、`StringBuilder`（1,000 个字符）、`BitArray`（1,000 位）、`CultureInfo`、`TimeZoneInfo`、`Lazy<string>`，以及各 1,000 个元素的 `Memory<int>`、`ReadOnlySequence<int>`、`ReadOnlyCollection<int>`、`ILookup<int, int>`、`BlockingCollection<int>` 和 `Nino.Immutable` 中的不可变集合（`ImmutableHashSet`、`ImmutableSortedSet`、`ImmutableQueue`、`ImmutableStack`、`ImmutableDictionary`、`ImmutableSortedDictionary`）。`TimeZoneInfo` 这一项测的更多是设计差异而不是速度：Nino 按 id 写入系统时区，读取时取系统缓存的时区；MemoryPack 每次都写入并解析时区完整的序列化字符串。`BigInteger` 和 `BitArray` 只测 Nino：MemoryPack 1.21.4 无法正确往返它们（参见[基准测试中发现的 MemoryPack 问题](/zh/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)）。
 
 三者都序列化到复用的缓冲区写入器，并反序列化为新实例。
+
+### MessagePack 与 protobuf-net [#messagepack-and-protobuf-net]
+
+MessagePack 3（MessagePack-CSharp）和 protobuf-net 3 通过相同的类型读写与 Nino、MemoryPack 相同的值：`[MessagePackObject]` 配合整数 `[Key]`，子类型用 `[Union]`；`[ProtoContract]` 配合 `[ProtoMember]` 和 `[ProtoInclude]`。
+
+- **MessagePack** 用 `MessagePackSerializer.Serialize(IBufferWriter<byte>, value)` 序列化到复用的 `ArrayBufferWriter<byte>`，用 `Deserialize<T>(ReadOnlyMemory<byte>)` 反序列化，使用默认选项，其解析器会采用 MessagePack 源生成器在编译时为基准测试类型写出的格式化器。不可变集合通过 `ImmutableCollectionResolver`（MessagePack.ImmutableCollection 包）处理。
+- **protobuf-net** 用 `Serializer.Serialize(Stream, value)` 序列化到复用的 `MemoryStream`，用 `Serializer.Deserialize<T>(ReadOnlySpan<byte>)` 反序列化，使用默认的运行时模型，它在第一次使用某个类型时为其编译序列化器。它的流写入器是它最快的写入方式：它的 `IBufferWriter<byte>` 写入器在写入每条嵌套消息之前要先测量其大小。`FixedSizeTest` 测的是返回 `byte[]` 的 API：protobuf-net 没有这种 API，所以先写入复用的流，再把字节复制到新数组。
+
+某个库无法用相同数据表达的用例，就没有对应的方法，绝不会换成其他数据来测；表格中它的单元格为 “—”：
+
+| 测试类 | 没有 MessagePack | 没有 protobuf-net |
+| --- | --- | --- |
+| `ReferenceTest` | 不支持引用追踪：无法写出共享对象和环 | 同上（protobuf-net 3 没有实现 `AsReference`） |
+| `PooledTest`、`PooledGraphTest` | 覆盖和池化用例：它只能读出新实例 | 同上：反序列化到已有实例时是合并（向其列表追加），而不是覆盖 |
+| `GenericPolymorphicTest` | 五个泛型基类型：它的 Union 是基类型上的特性，无法按类型参数指定不同的子类型 | — |
+| `CommonTypesTest` | — | `Tree`：protobuf 无法区分空列表和没有列表，叶子节点的空子列表读回来是 null |
+| `BclTypesTest` | `CultureInfo`、`TimeZoneInfo`、`BlockingCollection<T>`：它会抛出异常 | 除 `Uri` 和不可变集合以外的全部：protobuf-net 没有其他类型的序列化器 |
+
+不同格式写出的内容不同，载荷大小能看出这一点：MessagePack 把 `Guid` 写成 36 个字符的字符串，把 `DateTime` 写成 UTC 时间戳；protobuf-net 为类层次结构的每一层嵌套一条消息，并把 `DateTime` 写成单独的一条消息。
 
 ### 尚未测量 [#not-measured-yet]
 
@@ -930,7 +950,7 @@ public ProbeBox<int>[] NinoDeserializeGenericIntBase() =>
 克隆 [Nino 仓库](https://github.com/JasonXuDeveloper/Nino)，准备好 .NET 10 SDK 和 Python 3：
 
 ```shell
-# runtime, as published: v3 3.3.13, then the full v4 suite (about three and a half hours)
+# runtime, as published: v3 3.3.13, then the full v4 suite (about six hours)
 benchmarks/run.sh
 
 # runtime, v4 only, a subset
@@ -944,5 +964,6 @@ dotnet run -c Release --project benchmarks/Nino.GeneratorBenchmark -- 30 8
 ```
 
 - `benchmarks/run.sh` 会构建 `benchmarks/v3`（引用 NuGet 上 Nino 3.3.13 的同一个 `SimpleTest`），在 v4 之前紧接着运行一次，然后逐个用例输出 **v4 对比 v3**。
-- 每次发布时，CI 都按同样的流程运行，各基准测试类分布在每种架构的五台运行器上（v3 在 `SimpleTest` 所在的运行器上、紧接在它之前运行），并把结果写进发布说明：Performance Report，以及 **v3 3.3.13 vs v4 (same machine)** 一节。本站的运行时数据取自包含这些数据的最新 v4 版本。
+- 每次发布时，CI 都按同样的流程运行，各基准测试类分布在每种架构的十台运行器上（v3 在 `SimpleTest` 所在的运行器上、紧接在它之前运行），并把结果写进发布说明：Performance Report，以及 **v3 3.3.13 vs v4 (same machine)** 一节。本站的运行时数据取自包含这些数据的最新 v4 版本。
+- Go、Rust 和 TypeScript 的基准测试在同一个发布流程中运行；运行方法见[其他语言的基准测试](/zh/docs/v4/perf-runtimes#reproducing)。
 - `benchmarks/members` 把 `SimpleClass` 按成员逐个拆开，分别对比 v3 和 v4，用来找出某个用例的时间花在哪个成员上。参见 [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks)。

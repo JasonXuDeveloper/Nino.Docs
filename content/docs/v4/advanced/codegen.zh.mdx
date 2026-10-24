@@ -5,6 +5,8 @@ description: "Nino.Codegen 在每次构建后（或用 nino-gen 工具从构建�
 icon: Languages
 ---
 
+<AnchorRedirect map={{ 'compared-with-json': '/zh/docs/v4/advanced/codegen#performance' }} />
+
 Nino 可以把你的 `[NinoType]` 写成 **TypeScript**、**Go** 或 **Rust**：每个 `[NinoType]` 一个类型，其编解码器读写的字节与 .NET 中 Nino 写出的完全相同。浏览器、Node 服务端、Go 服务或 Rust 程序由此与你的 .NET 代码交换相同的字节，不需要 .NET 运行时。生成器是 **nino-gen**，它有两个包，选项相同，输出也相同：
 
 - **Nino.Codegen**，构建包：引用它的项目每次编译之后，按项目中的 `<NinoCodegen>` 项写出代码（[在构建中生成](#setup)）。
@@ -427,66 +429,11 @@ WebSocket 的用法相同：发送 `serialize` 的结果，设置 `binaryType = 
 
 除了[所有语言都不会生成的内容](#not-generated)，TypeScript 还会跳过编码暂时没有 TypeScript 形式的成员：多维数组、`DateTimeOffset`、`BigInteger`、`Version`、`BitArray`、`TimeZoneInfo`、`Uri`、`CultureInfo`、`StringBuilder`、`Memory<T>`、`ReadOnlyMemory<T>`、`ReadOnlySequence<T>`、`PriorityQueue<TElement, TPriority>`、`ILookup` 和 `IGrouping`、超过 7 项的元组，以及由 Nino.Core 以外的格式化器写出的成员：[自定义格式化器](/zh/docs/v4/custom-formatters)、`Nino.Immutable` 的不可变集合，以及 Unity 的 `AnimationCurve`、`Gradient` 和 `RectOffset`。包含它们的类型也会被跳过，并给出警告 NINOGEN002。
 
-### 与 JSON 对比 [#compared-with-json]
+### 性能 [#performance]
 
-在相同数据上，生成的 TypeScript（基于 `nino.ts` 的读写代码，运行在 JavaScript 中，不是 .NET 中的 Nino）与 `JSON.stringify` 和 `JSON.parse` 的对比，用 Nino 仓库中的 [`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench) 测得：
+每次发布都会用 Nino 仓库中的 [`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench)，在 Node 中、相同数据上，对比生成的 TypeScript 与 Protocol Buffers（protobuf-es）、MessagePack（msgpackr）和 `JSON`。每个场景的值都由 .NET 中的 Nino 写出，计时之前每个值都必须读出再写回，得到完全相同的字节。JSON 拿到的是普通 JSON 数据（64 位整数为字符串，映射为对象），`JSON.parse` 的结果也不转换回 `bigint` 或 `Map`，所以 JSON 做的工作比生成的读取代码少。测量方法以及 Go 和 Rust 的基准测试见[其他语言的基准测试](/zh/docs/v4/perf-runtimes)。
 
-- 每个场景的值都由 .NET 中的 Nino 写出。计时之前，每个值都先在 TypeScript 中读取再写回，必须得到与 .NET 写出的完全相同的字节。
-- JSON 拿到的是同样的值，形式为普通 JSON 数据：64 位整数为字符串，映射为对象。`JSON.parse` 的结果不会再转换回 `bigint` 或 `Map`，所以 JSON 做的工作比生成的读取函数少，后者要构建带类型的值。
-- 时间是遍历一个场景所有值一次所用的毫秒数，各取 15 次采样的中位数。JSON ÷ Nino TS 表示生成的 TypeScript 快多少倍；低于 1× 时 JSON 更快。
-- 机器：4 vCPU 的云虚拟机（Intel Xeon @ 2.10GHz），Node 22.22.0 和无头 Chromium 141（Playwright）。
-
-<Tabs groupId="ts-runtime" persist items={['Node 22', 'Chromium 141']}>
-<Tab value="Node 22">
-
-| 场景 | Nino TS 序列化 (ms) | `JSON.stringify` (ms) | JSON ÷ Nino TS | Nino TS 反序列化 (ms) | `JSON.parse` (ms) | JSON ÷ Nino TS |
-| --- | --: | --: | --: | --: | --: | --: |
-| Player ×1000 | 0.318 | 1.56 | 4.9× | 0.469 | 1.78 | 3.8× |
-| Zoo 50 × 100 只按类型 ID 写出的动物 | 0.225 | 0.45 | 2.0× | 0.192 | 0.96 | 5.0× |
-| OrderBook 100 × 50 个订单 | 0.384 | 1.69 | 4.4× | 0.459 | 1.97 | 4.3× |
-| Article ×200（长文本） | 0.125 | 1.59 | 12.7× | 0.128 | 0.38 | 3.0× |
-| Mesh 20 × (2 × 500 个 `Vec3`、1,500 个 `int`) | 0.278 | 12.2 | 43.8× | 0.418 | 10.0 | 24.0× |
-| Samples 20 × (3 × 1,000 个数字) | 0.244 | 6.27 | 25.7× | 0.112 | 5.16 | 46.1× |
-| Lookup 50 × (2 个各含 100 个短字符串的映射) | 0.385 | 1.12 | 2.9× | 0.710 | 0.50 | 0.7× |
-| Event ×1000（64 位整数） | 0.119 | 0.37 | 3.1× | 0.156 | 0.53 | 3.4× |
-
-</Tab>
-<Tab value="Chromium 141">
-
-| 场景 | Nino TS 序列化 (ms) | `JSON.stringify` (ms) | JSON ÷ Nino TS | Nino TS 反序列化 (ms) | `JSON.parse` (ms) | JSON ÷ Nino TS |
-| --- | --: | --: | --: | --: | --: | --: |
-| Player ×1000 | 0.425 | 0.68 | 1.6× | 0.303 | 1.06 | 3.5× |
-| Zoo 50 × 100 只按类型 ID 写出的动物 | 0.327 | 0.26 | 0.8× | 0.145 | 0.74 | 5.1× |
-| OrderBook 100 × 50 个订单 | 0.688 | 0.89 | 1.3× | 0.419 | 1.47 | 3.5× |
-| Article ×200（长文本） | 0.808 | 0.24 | 0.3× | 0.320 | 0.64 | 2.0× |
-| Mesh 20 × (2 × 500 个 `Vec3`、1,500 个 `int`) | 0.398 | 3.94 | 9.9× | 0.496 | 4.32 | 8.7× |
-| Samples 20 × (3 × 1,000 个数字) | 0.528 | 2.06 | 3.9× | 0.116 | 1.74 | 15.0× |
-| Lookup 50 × (2 个各含 100 个短字符串的映射) | 0.677 | 0.95 | 1.4× | 0.689 | 0.34 | 0.5× |
-| Event ×1000（64 位整数） | 0.115 | 0.31 | 2.7× | 0.111 | 0.38 | 3.4× |
-
-</Tab>
-</Tabs>
-
-数据大小在两个运行时中相同（JSON 按 UTF-8 计算）：
-
-| 场景 | Nino TS (KiB) | JSON (KiB) |
-| --- | --: | --: |
-| Player ×1000 | 130 | 285 |
-| Zoo 50 × 100 只按类型 ID 写出的动物 | 86 | 161 |
-| OrderBook 100 × 50 个订单 | 254 | 551 |
-| Article ×200（长文本） | 435 | 434 |
-| Mesh 20 × (2 × 500 个 `Vec3`、1,500 个 `int`) | 352 | 1,514 |
-| Samples 20 × (3 × 1,000 个数字) | 313 | 876 |
-| Lookup 50 × (2 个各含 100 个短字符串的映射) | 185 | 195 |
-| Event ×1000（64 位整数） | 56 | 152 |
-
-有三种情况 JSON 更快：
-
-- **在 Chromium 中序列化长文本。** 浏览器没有原生的 Latin-1 写入方法，所以 `nino.ts` 用 `TextEncoder.encodeInto` 写超过 256 个字符的文本，每个字符约 0.8 ns；而 V8 的 `JSON.stringify` 用 SIMD 复制单字节字符串。Chromium 141 的 `JSON.stringify` 用的 V8 更新，本身也比 Node 22 的快约一倍。
-- **在 Chromium 中序列化 Zoo。** 它由大量很小的对象组成，每个对象都按类型 ID 写出。
-- **反序列化短字符串的映射。** 每个条目都是一个新字符串加一次 `Map.set`，而 `JSON.parse` 构建普通对象，并在原生代码中复用它的键。
-
-`Article` 在两者中的大小差不多：它几乎全是文本，在两种格式中每个字符都大约占一个字节。
+<RuntimesTables lang="zh" only="typescript" />
 
 ### 与 MemoryPack 的 TypeScript 对比 [#compared-with-memorypack]
 
@@ -568,6 +515,8 @@ data, err = nino.MarshalAs[Animal](a) // 多态根，按类型 ID 写出
 ### 字符串 [#go-strings]
 
 默认编码的字符串以 WTF-8 读入 Go 字符串：即 UTF-8，但未配对的代理项（.NET 字符串可能包含）保留为 3 字节形式，所以写回时得到相同的码元。`Reader.UTF16` 返回码元本身。`[NinoUtf8]` 字符串是严格的 UTF-8。
+
+Go 的字符串是 UTF-8，所以按默认编码（Latin-1 或 UTF-16）写入和读取字符串时需要转码，而 Protocol Buffers 和 MessagePack 直接复制原样的 UTF-8 字节；[其他语言的基准测试](/zh/docs/v4/perf-runtimes#strings)中的字符串用例测量了这一点，Rust 也一样。
 
 ## Rust [#rust]
 

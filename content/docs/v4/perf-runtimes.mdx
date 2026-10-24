@@ -1,0 +1,84 @@
+---
+title: Benchmarks in Other Languages
+seoTitle: "Benchmarks in Go, Rust and TypeScript: Nino vs Protocol Buffers and MessagePack – Nino v4 Docs"
+description: "Nino's Go, Rust and TypeScript runtimes against Protocol Buffers, MessagePack and each language's usual serializers: what each benchmark measures, why strings cost more in Go and Rust, and the results of the newest v4 release."
+icon: Languages
+---
+
+Nino reads and writes the same bytes in Go, Rust and TypeScript as in .NET, with code that [Nino.Codegen](/en/docs/v4/advanced/codegen) generates from your C# types. Each of these runtimes has a benchmark of its own in Nino's repository, run with its language's standard tool against Protocol Buffers, MessagePack and the serializers that language usually uses. For the .NET benchmarks (against MemoryPack, MessagePack, protobuf-net and v3), see [Benchmarks](/en/docs/v4/perf).
+
+## What Is Compared [#what-is-compared]
+
+| Language | Timed by | Nino | Protocol Buffers | MessagePack | Also |
+| --- | --- | --- | --- | --- | --- |
+| Go | `testing.B`, summarized by benchstat | codecs in the shape nino-gen generates, and the [struct tags](/en/docs/v4/advanced/codegen#struct-tags) | google.golang.org/protobuf | vmihailenco/msgpack | `encoding/json`, `encoding/gob` |
+| Rust | criterion | codecs in the shape nino-gen generates | prost | rmp-serde | bincode, postcard, serde_json |
+| TypeScript | tinybench, in Node | the code nino-gen generates | protobuf-es | msgpackr | `JSON` |
+
+In every case each serializer gets the same data: the protobuf messages mirror the types field for field, and every serializer is checked to read back what it wrote before anything is timed.
+
+## How It Is Measured [#setup]
+
+Every release runs the three benchmarks on GitHub-hosted `ubuntu-26.04` runners, one runner per language, from the release's own sources, and adds a section for each language to the release notes. This site shows the sections of the newest v4 release that has them.
+
+- Each table has a row per case and operation and a column per serializer, Nino first. Compare the serializers within one table: each language ran once, on its own runner, so times are not comparable across languages or releases.
+- “· 2.00×” after a time says how many times faster Nino's generated code is than that serializer in that case. Within 5% is on par, and a time under 1 ns against a measurable one is faster, too fast to measure, as on the [.NET page](/en/docs/v4/perf#setup). A time alone means Nino is not ahead there.
+- Sizes are the encoded bytes of the case's values.
+
+### Go [#go]
+
+[`runtimes/go/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go/bench) is a module of its own, so the runtime's module keeps no dependencies. Each benchmark is `Benchmark{Serialize,Deserialize}/<case>/<serializer>`, with `b.Loop`, `ReportAllocs` and the encoded size as a metric; the release runs each six times and benchstat reports the median ± its 95% confidence interval, and the allocations per operation.
+
+- **Cases:** the .NET benchmark's `SimpleClass` (`simple-class`), a list of 100 of them (`simple-class-100`), and the two [string cases](#strings).
+- **Serializers:** `Nino`, codecs in the shape nino-gen generates (no reflection); `Nino (tags)`, the same Go types mapped with `nino` struct tags, a plan built once per type; Protocol Buffers (`MarshalAppend` into a reused buffer); MessagePack (one reused encoder); `encoding/json`; and `gob`, with a new encoder and decoder per value, as a one-shot serializer would.
+
+### Rust [#rust]
+
+[`runtimes/rust/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust/bench) uses criterion: a group per case, with the number of values as its throughput and `black_box` on every input and output. Times are criterion's mean estimate ± half its 95% confidence interval.
+
+- **Cases:** a record (`record`), 1,000 records (`records-1000`), 10,000 `i32` (`i32-10000`), 10,000 `f64` (`f64-10000`), and the two [string cases](#strings).
+- **Serializers:** Nino, codecs in the shape the templates generate; Protocol Buffers (prost, with the messages derived in the bench, so it needs no protoc); MessagePack (rmp-serde); bincode; postcard; serde_json.
+
+### TypeScript [#typescript]
+
+[`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench) measures the TypeScript that nino-gen generates from the bench's C# types, timed by [tinybench](https://github.com/tinylibs/tinybench) in Node: a warm-up, then samples for a set time. Times are the mean ± its relative margin of error.
+
+- **Data:** each scenario's values are written by Nino in .NET. Before a scenario is timed, every value is read and written back in TypeScript and must give exactly the bytes .NET wrote, and every protobuf message must read back equal. A task is one pass over all of a scenario's values.
+- **Scenarios:** players, a zoo of animals behind type ids, order books, articles of long text, meshes of vectors and integers, samples of numbers, lookups of two maps of short strings, events with 64-bit integers, and the two [string cases](#strings).
+- **Serializers:** Nino; Protocol Buffers (protobuf-es, code generated from the bench's `.proto`); MessagePack (msgpackr, with standard maps, no msgpackr records), which gets the values Nino read as they are (`bigint`s as 64-bit integers, read back as `bigint`); and `JSON`, which gets them as plain JSON data (64-bit integers as strings, maps as objects) and is not converted back to `bigint`s or `Map`s, so it does less work than the generated readers. Neither MessagePack nor JSON carries the type of a polymorphic value, which Nino and protobuf (a `oneof`) do.
+
+## Strings [#strings]
+
+The string cases are the same in all three languages:
+
+- **ASCII:** 1,000 short ASCII strings, `"string 0"` to `"string 999"`.
+- **Mixed:** 1,000 strings of three kinds in turn: ASCII (`"string i"`), Latin-1 (`"crème brûlée i"`) and other text with a char outside the BMP (`"строка 字符串 🎉 i"`).
+
+Nino's [wire format](/en/docs/v4/wire-format) writes a string the way .NET holds it: as Latin-1, one byte a char, when every char is at most U+00FF, and as UTF-16 otherwise. .NET strings are UTF-16, so writing one is a narrowing copy and reading one a widening copy, both with SIMD; the length is the char count, so a reader can allocate the string before it decodes it.
+
+Go and Rust strings are UTF-8. To write one, Nino's runtimes check it for non-ASCII bytes and transcode it to Latin-1 or UTF-16, and to read one, they transcode it back to UTF-8, while Protocol Buffers, MessagePack, JSON, bincode and postcard write and read the UTF-8 bytes as they are. ASCII is the same bytes in UTF-8 and Latin-1, so the ASCII case shows the formats with little transcoding; the mixed case shows its cost. The sizes differ too: Latin-1 takes one byte for `è`, where UTF-8 takes two, and a UTF-16 string takes two bytes for every char, where UTF-8 takes one for ASCII, two for Cyrillic and three for Chinese. JavaScript strings are UTF-16 (V8 keeps one-byte strings as Latin-1), so in TypeScript it is Protocol Buffers and MessagePack that encode to and decode from UTF-8.
+
+A member marked `[NinoUtf8]` is written as UTF-8 instead (see [String Encoding](/en/docs/v4/defining-types#string-encoding)), which Go and Rust read and write without transcoding; the benchmarks use the default encoding.
+
+## Results [#results]
+
+<RuntimesTables lang="en" />
+
+## Reproducing [#reproducing]
+
+From a clone of the [Nino repository](https://github.com/JasonXuDeveloper/Nino):
+
+```shell
+# Go: six runs, summarized by benchstat
+cd runtimes/go/bench
+go test -run='^$' -bench=. -benchmem -count=6 . | tee bench.txt
+go run golang.org/x/perf/cmd/benchstat@latest bench.txt
+
+# Rust (from runtimes/rust)
+cargo bench -p nino-bench
+
+# TypeScript: needs the .NET 10 SDK and Node 22.18+
+runtimes/typescript/bench/run.sh
+```
+
+`runtimes/typescript/bench/run.sh` runs the TypeScript benchmark in Node and then in headless Chromium, for which it needs Playwright with Chromium; the release notes have the Node run. The options and the release workflow are described in the [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks#runtimes-outside-net). Numbers from your own machine are for comparing changes back to back on it.
