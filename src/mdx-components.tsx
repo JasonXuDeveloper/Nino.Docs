@@ -18,6 +18,8 @@ import {
   ReuseTable,
   RuntimesTables,
   RuntimeTable,
+  UnityHighlights,
+  UnityTables,
 } from '@/components/bench-data';
 import { BenchmarkChart } from '@/components/charts';
 import { handleBlockFeedback } from '@/components/feedback/actions';
@@ -42,6 +44,8 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     ReuseTable,
     RuntimesTables,
     RuntimeTable,
+    UnityHighlights,
+    UnityTables,
     CountUp,
     File,
     Files,

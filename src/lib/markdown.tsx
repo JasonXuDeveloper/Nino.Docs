@@ -15,6 +15,8 @@ import {
   ReuseTable,
   RuntimesTables,
   RuntimeTable,
+  UnityHighlights,
+  UnityTables,
 } from '@/components/bench-data';
 import { chartProps } from '@/components/charts/benchmark-charts';
 import { type ChartId, isArchChart } from '@/components/charts/ids';
@@ -218,6 +220,14 @@ function markdownComponents(lang: Locale, pageUrl: string) {
     RuntimesTables(props: ComponentProps<typeof RuntimesTables>) {
       asMarkdown();
       return RuntimesTables({ ...props, markdown: true });
+    },
+    UnityTables(props: ComponentProps<typeof UnityTables>) {
+      asMarkdown();
+      return UnityTables({ ...props, markdown: true });
+    },
+    UnityHighlights(props: ComponentProps<typeof UnityHighlights>) {
+      asMarkdown();
+      return UnityHighlights({ ...props, markdown: true });
     },
     ResultsTable(props: ComponentProps<typeof ResultsTable>) {
       asMarkdown();

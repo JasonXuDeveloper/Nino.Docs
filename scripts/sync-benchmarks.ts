@@ -14,7 +14,11 @@
  * - the sections of the runtimes outside .NET ("🐹 Go runtime benchmark",
  *   "🦀 Rust runtime benchmark", "🌐 TypeScript runtime benchmark", written by
  *   Nino's benchmarks/runtimes_report.py after every other section) into
- *   src/data/bench-runtimes.json, from the same release.
+ *   src/data/bench-runtimes.json, from the same release;
+ * - the Unity section ("🎮 Unity benchmark (Burst, IL2CPP)": an IL2CPP player
+ *   on GitHub's Linux x64 runner, each case timed without and with the Burst
+ *   kernels, one "### Unity <version>" table per Unity version) into
+ *   src/data/bench-unity.json, from the same release.
  *
  * The Performance Report and the Arm64 section have a row per method, and every
  * row is kept: since MessagePack (MessagePack-CSharp) and protobuf-net joined
@@ -23,7 +27,7 @@
  *
  *   bun scripts/sync-benchmarks.ts                       # newest v4.* release with a report
  *   bun scripts/sync-benchmarks.ts --fixture <file.md>   # parse a release body from a file
- *   bun scripts/sync-benchmarks.ts --fixture <file> --out <file.json> [--out-v3 <file.json>] [--out-arm64 <file.json>] [--out-runtimes <file.json>]
+ *   bun scripts/sync-benchmarks.ts --fixture <file> --out <file.json> [--out-v3 <file.json>] [--out-arm64 <file.json>] [--out-runtimes <file.json>] [--out-unity <file.json>]
  *
  * Fixtures: scripts/fixtures/release-body.md (made-up numbers, the methods the
  * site requires), release-body-v3.md (with the v3 section),
@@ -33,7 +37,8 @@
  * numbers are a copy of its x64 ones: for parser tests only) and
  * release-body-libraries.md (release-body-arm64.md plus MessagePack and
  * protobuf-net rows and the three runtime sections, with invented numbers: for
- * parser tests only).
+ * parser tests only) and release-body-unity.md (release-body-libraries.md plus
+ * a Unity section, with invented numbers: for parser tests only).
  *
  * Runs before every build. It never fails the build: on any error (network,
  * rate limit, no matching release, a table it cannot read) it prints a warning
@@ -41,7 +46,9 @@
  * Arm64 section (or whose Arm64 table lacks a method the site shows) keeps the
  * committed src/data/bench-v3-runtime.json or src/data/bench-v4-arm64.json; a
  * release without any runtime section keeps src/data/bench-runtimes.json (a
- * language whose table it cannot read is left out, with a warning).
+ * language whose table it cannot read is left out, with a warning), and a
+ * release without the Unity section (or with one it cannot read) keeps
+ * src/data/bench-unity.json.
  * Set GITHUB_TOKEN to raise the API rate limit.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -62,6 +69,10 @@ const arm64DataFile = fileURLToPath(
 
 const runtimesDataFile = fileURLToPath(
   new URL('../src/data/bench-runtimes.json', import.meta.url),
+);
+
+const unityDataFile = fileURLToPath(
+  new URL('../src/data/bench-unity.json', import.meta.url),
 );
 
 /** Heading of the v3 section in the release body (report.yml's V3_HEADING) */
@@ -87,6 +98,13 @@ export const runtimeHeadings = {
 } as const;
 
 export type RuntimeLang = keyof typeof runtimeHeadings;
+
+/**
+ * Heading of the Unity section (Nino's release workflow): an IL2CPP player
+ * timed without and with the Burst kernels, a "### Unity <version>" table per
+ * Unity version.
+ */
+export const unityHeading = '## 🎮 Unity benchmark (Burst, IL2CPP)';
 
 export interface BenchRow {
   method: string;
@@ -163,6 +181,36 @@ export interface RuntimesFile {
   url: string;
   publishedAt: string | null;
   languages: RuntimeSection[];
+}
+
+/** One case of a Unity table: median times per call without and with the Burst kernels */
+export interface UnityRow {
+  case: string;
+  operation: string;
+  withoutNs: number;
+  withNs: number;
+}
+
+/** One Unity version's table */
+export interface UnityVersion {
+  /** As the heading names it: "6000.3.27f1" */
+  unity: string;
+  rows: UnityRow[];
+}
+
+/**
+ * src/data/bench-unity.json. `origin: 'none'` (no versions, empty tag and url)
+ * is the committed file before any release had a Unity section. The report's
+ * Speedup column is not kept: src/lib/benchmarks.ts computes it from the times.
+ */
+export interface UnityFile {
+  origin: 'release' | 'fixture' | 'none';
+  tag: string;
+  url: string;
+  publishedAt: string | null;
+  /** The section's description of the run (Unity, player, CPU, Burst, kernels) */
+  environment: string | null;
+  versions: UnityVersion[];
 }
 
 interface Release {
@@ -499,6 +547,73 @@ export function parseRuntimeSections(body: string, tag: string) {
 }
 
 /**
+ * The Unity section: its introduction (the environment, minus the sentence
+ * that explains the columns, which the site explains itself) and one table per
+ * "### Unity <version>" heading, with Case, Operation, Without Burst and With
+ * Burst columns. Returns null when the body has none; throws when it has no
+ * table in that format.
+ */
+export function parseUnitySection(body: string) {
+  const start = body.indexOf(unityHeading);
+  if (start < 0) return null;
+  const section = sectionFrom(body, start);
+  const parts = section.split(/\n###\s+/);
+
+  const intro = parts[0]
+    .slice(unityHeading.length)
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*(<\/?\w+[^>]*>|\|)/.test(line))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const environment =
+    intro
+      .split(/(?<=\.)\s+(?=[A-Z"“])/)
+      .filter((sentence) => !/^Each time\b/.test(sentence))
+      .join(' ')
+      .trim() || null;
+
+  const versions: UnityVersion[] = [];
+  for (const part of parts.slice(1)) {
+    const unity = /^Unity\s+(\S+)/.exec(part)?.[1];
+    if (!unity) continue;
+    const rows: UnityRow[] = [];
+    for (const table of tables(part)) {
+      if (table.length < 3 || !isSeparator(table[1])) continue;
+      const header = table[0];
+      const name = column(header, 'Case');
+      const operation = column(header, 'Operation');
+      const without = column(header, 'Without Burst');
+      const withBurst = column(header, 'With Burst');
+      if (name < 0 || operation < 0 || without < 0 || withBurst < 0) continue;
+      for (const row of table.slice(2)) {
+        const withoutNs = parseTime(row[without] ?? '');
+        const withNs = parseTime(row[withBurst] ?? '');
+        if (
+          !row[name] ||
+          !row[operation] ||
+          withoutNs === null ||
+          withNs === null
+        )
+          continue;
+        rows.push({
+          case: row[name],
+          operation: row[operation],
+          withoutNs: Math.round(withoutNs * 1e4) / 1e4,
+          withNs: Math.round(withNs * 1e4) / 1e4,
+        });
+      }
+    }
+    if (rows.length > 0) versions.push({ unity, rows });
+  }
+  if (versions.length === 0)
+    throw new Error(
+      'the Unity section has no "### Unity <version>" table with Case, Operation, Without Burst and With Burst columns',
+    );
+  return { environment, versions };
+}
+
+/**
  * Every method the site shows (src/lib/benchmarks.ts). A report without all of
  * them is not used: the site keeps one consistent run instead of mixing runs.
  */
@@ -622,6 +737,14 @@ function runtimesSummary(file: RuntimesFile) {
     .map((l) => `${l.lang} (${l.rows.length} rows)`)
     .join(', ');
   return `${langs} from ${file.tag} (${file.origin})`;
+}
+
+function unitySummary(file: UnityFile) {
+  if (file.origin === 'none') return 'no data yet';
+  const versions = file.versions
+    .map((v) => `Unity ${v.unity} (${v.rows.length} rows)`)
+    .join(', ');
+  return `${versions} from ${file.tag} (${file.origin})`;
 }
 
 function write(out: string, data: unknown) {
@@ -775,6 +898,31 @@ function syncRuntimes(release: Release, out: string | undefined) {
   }
 }
 
+/**
+ * The Unity section of the release the .NET numbers came from; keeps the
+ * committed file when it has none or it cannot be read.
+ */
+function syncUnity(release: Release, out: string | undefined) {
+  const kept = () => {
+    const file = JSON.parse(readFileSync(unityDataFile, 'utf8')) as UnityFile;
+    return `keeping src/data/bench-unity.json (${unitySummary(file)})`;
+  };
+  try {
+    const unity = parseUnitySection(release.body ?? '');
+    if (!unity) {
+      console.warn(
+        `[benchmarks] ${release.tag_name} has no "${unityHeading}" section; ${kept()}`,
+      );
+      return;
+    }
+    const file: UnityFile = { ...releaseOrigin(release), ...unity };
+    write(out ?? unityDataFile, file);
+    console.log(`[benchmarks] synced Unity: ${unitySummary(file)}`);
+  } catch (error) {
+    console.warn(`[benchmarks] warning: ${message(error)}; ${kept()}`);
+  }
+}
+
 /** Fixture mode: every section the file has, written to --out* or printed */
 function fixture(path: string) {
   const body = readFileSync(path, 'utf8');
@@ -817,6 +965,12 @@ function fixture(path: string) {
     const file: RuntimesFile = { ...fixtureOrigin, languages };
     output('--out-runtimes', file, `runtimes: ${runtimesSummary(file)}`);
   } else console.log('[benchmarks] fixture has no runtime section');
+
+  const unity = parseUnitySection(body);
+  if (unity) {
+    const file: UnityFile = { ...fixtureOrigin, ...unity };
+    output('--out-unity', file, `Unity: ${unitySummary(file)}`);
+  } else console.log('[benchmarks] fixture has no Unity section');
 }
 
 async function main() {
@@ -841,10 +995,11 @@ async function main() {
     syncV3(release, argument('--out-v3'));
     await syncArm64(release, argument('--out-arm64'));
     syncRuntimes(release, argument('--out-runtimes'));
+    syncUnity(release, argument('--out-unity'));
   } catch (error) {
     const kept = JSON.parse(readFileSync(dataFile, 'utf8')) as BenchFile;
     console.warn(
-      `[benchmarks] warning: ${message(error)}; keeping src/data/bench-v4.json (${summary(kept)}), src/data/bench-v3-runtime.json, src/data/bench-v4-arm64.json and src/data/bench-runtimes.json`,
+      `[benchmarks] warning: ${message(error)}; keeping src/data/bench-v4.json (${summary(kept)}), src/data/bench-v3-runtime.json, src/data/bench-v4-arm64.json, src/data/bench-runtimes.json and src/data/bench-unity.json`,
     );
   }
 }

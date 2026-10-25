@@ -28,11 +28,17 @@
  * Runtimes outside .NET (Go, Rust, TypeScript): src/data/bench-runtimes.json
  * (`runtimes` below), synced from the runtime sections of the same release.
  *
+ * Unity (an IL2CPP player, without and with the Burst kernels):
+ * src/data/bench-unity.json (`unity` below), synced from the Unity section of
+ * the same release. Speedups are computed here from the two times, with the
+ * same FLOOR_NS and on-par rules; the report's own Speedup column is not used.
+ *
  * Build time (source generator, v3 3.3.13 vs v4): static, from
  * docs/v4-benchmarks.md in the Nino repository; it is not in the release report.
  */
 
 import benchRuntimes from '@/data/bench-runtimes.json';
+import benchUnity from '@/data/bench-unity.json';
 import benchV3 from '@/data/bench-v3-runtime.json';
 import bench from '@/data/bench-v4.json';
 import benchArm64 from '@/data/bench-v4-arm64.json';
@@ -791,6 +797,78 @@ export const runtimes: RuntimeLangTable[] = runtimesFile.languages.map(
     };
   },
 );
+
+/* ------------------------------------------------------------------ */
+/* Unity: Burst kernels in an IL2CPP player                            */
+/* ------------------------------------------------------------------ */
+
+/** The shape of src/data/bench-unity.json (scripts/sync-benchmarks.ts, UnityFile) */
+interface UnityFile {
+  origin: 'release' | 'fixture' | 'none';
+  tag: string;
+  url: string;
+  publishedAt: string | null;
+  environment: string | null;
+  versions: {
+    unity: string;
+    rows: {
+      case: string;
+      operation: string;
+      withoutNs: number;
+      withNs: number;
+    }[];
+  }[];
+}
+
+export interface UnityCase {
+  case: string;
+  /** As the report names it: "Serialize", "Deserialize" */
+  operation: string;
+  without: Measure;
+  with: Measure;
+  /**
+   * Without Burst / with Burst, two decimals; undefined when on par (within
+   * 5%) or tooFast; below 1 when the kernels were slower
+   */
+  speedup?: number;
+  /** With Burst under FLOOR_NS, without it above: faster, too fast to measure */
+  tooFast?: boolean;
+}
+
+export interface UnityVersionTable {
+  unity: string;
+  rows: UnityCase[];
+}
+
+const unityFile = benchUnity as unknown as UnityFile;
+
+/** Where the Unity numbers come from; `origin: 'none'` until a release has the section */
+export const unitySource: BenchSourceInfo = {
+  origin: unityFile.origin,
+  tag: unityFile.tag,
+  url: unityFile.url,
+  publishedAt: unityFile.publishedAt,
+  environment: unityFile.environment,
+};
+
+const measure = (ns: number): Measure => ({ text: formatTime(ns), ns });
+
+/** One table per Unity version the synced release measured, in the report's order */
+export const unity: UnityVersionTable[] = unityFile.versions.map((version) => ({
+  unity: version.unity,
+  rows: version.rows.map((row) => {
+    // Burst is the side compared with: the ratio is without / with.
+    const vs = versus(measure(row.withNs), measure(row.withoutNs));
+    return {
+      case: row.case,
+      operation: row.operation,
+      without: measure(row.withoutNs),
+      with: measure(row.withNs),
+      speedup: vs.ratio,
+      tooFast: vs.tooFast,
+    };
+  }),
+}));
 
 /* ------------------------------------------------------------------ */
 /* Build time                                                          */

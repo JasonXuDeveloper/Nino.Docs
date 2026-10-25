@@ -5,7 +5,8 @@
  * The .NET tables compare Nino with MemoryPack, and with MessagePack and
  * protobuf-net in a column each once the synced release measured them ("—"
  * for a case a library cannot express). RuntimesTables prints the Go, Rust and
- * TypeScript benchmarks of the same release.
+ * TypeScript benchmarks of the same release, UnityTables and UnityHighlights
+ * the Unity player's times without and with the Burst kernels.
  *
  * Once the synced data has an Arm64 report, every table of Nino against
  * MemoryPack shows x64 and Arm64 in tabs (`ArchTabs`), each with the source line
@@ -34,10 +35,14 @@ import {
   runtimes,
   runtimesSource,
   sourceNote,
+  type UnityCase,
+  unity,
+  unitySource,
   type Versus,
   x64,
 } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
+import { siteUrl } from '@/lib/site';
 
 type Op = 'serialize' | 'deserialize';
 
@@ -561,6 +566,206 @@ export function RuntimesTables({
           </Fragment>
         );
       })}
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Unity: Burst kernels in an IL2CPP player                            */
+/* ------------------------------------------------------------------ */
+
+const unityOperations: Record<string, { en: string; zh: string }> = {
+  serialize: { en: 'Serialize', zh: '序列化' },
+  deserialize: { en: 'Deserialize', zh: '反序列化' },
+};
+
+function unityOperation(operation: string, zh: boolean) {
+  return (
+    unityOperations[operation.toLowerCase()]?.[zh ? 'zh' : 'en'] ?? operation
+  );
+}
+
+/** Without Burst / with Burst, by the FLOOR_NS and on-par rules */
+function speedupCell(row: UnityCase, zh: boolean) {
+  if (row.tooFast)
+    return (
+      <>
+        <strong>{zh ? '更快' : 'faster'}</strong>
+        {zh ? '（快到测不出）' : ' (too fast to measure)'}
+      </>
+    );
+  if (row.speedup === undefined) return zh ? '持平' : 'on par';
+  const r = formatRatio(row.speedup);
+  if (row.speedup > 1) return <strong>{r}</strong>;
+  return zh ? `${r}（更慢）` : `${r} (slower)`;
+}
+
+/** "Nino v4.0.0-rc.9; 2026-11-01; Unity 6000.3.27f1, IL2CPP player, ..." linked to the release */
+function unitySourceLine(zh: boolean) {
+  const date = unitySource.publishedAt?.slice(0, 10);
+  const parts = [`Nino ${unitySource.tag}`, date, unitySource.environment]
+    .filter(Boolean)
+    .map((part) => String(part).replace(/[.。]$/, ''));
+  return (
+    <p className="text-sm text-fd-muted-foreground">
+      <a href={unitySource.url} target="_blank" rel="noopener noreferrer">
+        {zh ? `${parts.join('；')}。` : `${parts.join('; ')}.`}
+      </a>
+    </p>
+  );
+}
+
+function unityNoData(zh: boolean) {
+  return (
+    <p className="text-sm text-fd-muted-foreground">
+      {zh
+        ? 'Unity 基准测试会在每个版本的发布流程中运行，但目前发布的报告还没有包含它。等某个版本的发布报告包含它后，结果会显示在这里。'
+        : "The Unity benchmark runs in Nino's release workflow, but no published report includes it yet. Its results appear here once a release report does."}
+    </p>
+  );
+}
+
+/**
+ * The Unity benchmark (src/data/bench-unity.json, synced from the newest v4
+ * release): one table per Unity version, times without and with the Burst
+ * kernels and the speedup computed from them. A note stands in for them until
+ * a release has the section.
+ */
+export function UnityTables({
+  lang = 'en',
+}: {
+  lang?: Locale;
+  /** Accepted for the Markdown copy (src/lib/markdown.tsx); the output is the same */
+  markdown?: boolean;
+}) {
+  const zh = lang === 'zh';
+  if (unity.length === 0) return unityNoData(zh);
+  return (
+    <>
+      {unity.map((version) => (
+        <Fragment key={version.unity}>
+          <p>
+            <strong>Unity {version.unity}</strong>
+          </p>
+          <div className="relative overflow-auto prose-no-margin my-6">
+            <table>
+              <thead>
+                <tr>
+                  <th>{zh ? '用例' : 'Case'}</th>
+                  <th>{zh ? '操作' : 'Operation'}</th>
+                  <th className="text-right">
+                    {zh ? '不用 Burst' : 'Without Burst'}
+                  </th>
+                  <th className="text-right">
+                    {zh ? '使用 Burst' : 'With Burst'}
+                  </th>
+                  <th className="text-right">{zh ? '加速' : 'Speedup'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {version.rows.map((row) => (
+                  <tr key={`${row.case}:${row.operation}`}>
+                    <td>
+                      <code>{row.case}</code>
+                    </td>
+                    <td>{unityOperation(row.operation, zh)}</td>
+                    <td className="text-right tabular-nums">
+                      {row.without.text}
+                    </td>
+                    <td className="text-right tabular-nums">{row.with.text}</td>
+                    <td className="text-right tabular-nums">
+                      {speedupCell(row, zh)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Fragment>
+      ))}
+      {unitySourceLine(zh)}
+    </>
+  );
+}
+
+/**
+ * The speedups of the Unity benchmark alone, a column per Unity version, for
+ * the Unity guide; nothing at all until a release has the section.
+ */
+export function UnityHighlights({
+  lang = 'en',
+  markdown,
+}: {
+  lang?: Locale;
+  /** Accepted for the Markdown copy (src/lib/markdown.tsx); the output is the same */
+  markdown?: boolean;
+}) {
+  const zh = lang === 'zh';
+  if (unity.length === 0) return null;
+  // The Markdown copies link absolutely, as src/lib/markdown.tsx does for MDX links.
+  const page = `${markdown ? siteUrl : ''}/${zh ? 'zh' : 'en'}/docs/v4/perf-unity`;
+  const keys: { case: string; operation: string }[] = [];
+  const seen = new Set<string>();
+  for (const version of unity)
+    for (const row of version.rows) {
+      const key = `${row.case}:${row.operation}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      keys.push({ case: row.case, operation: row.operation });
+    }
+  return (
+    <>
+      <div className="relative overflow-auto prose-no-margin my-6">
+        <table>
+          <thead>
+            <tr>
+              <th>{zh ? '用例' : 'Case'}</th>
+              <th>{zh ? '操作' : 'Operation'}</th>
+              {unity.map((version) => (
+                <th key={version.unity} className="text-right">
+                  {zh
+                    ? `加速（Unity ${version.unity}）`
+                    : `Speedup (Unity ${version.unity})`}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {keys.map((key) => (
+              <tr key={`${key.case}:${key.operation}`}>
+                <td>
+                  <code>{key.case}</code>
+                </td>
+                <td>{unityOperation(key.operation, zh)}</td>
+                {unity.map((version) => {
+                  const row = version.rows.find(
+                    (r) => r.case === key.case && r.operation === key.operation,
+                  );
+                  return (
+                    <td key={version.unity} className="text-right tabular-nums">
+                      {row ? speedupCell(row, zh) : '—'}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-sm text-fd-muted-foreground">
+        {zh ? (
+          <>
+            不用 Burst 的时间除以使用 Burst 的时间（相差 5%
+            以内为持平）。两边的时间见 <a href={page}>Unity 基准测试</a>。
+          </>
+        ) : (
+          <>
+            Time without Burst divided by time with it (within 5% is on par).
+            For both times, see the <a href={page}>Unity benchmark</a>.
+          </>
+        )}
+      </p>
+      {unitySourceLine(zh)}
     </>
   );
 }
