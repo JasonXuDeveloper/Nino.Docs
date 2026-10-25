@@ -432,7 +432,7 @@ Besides what [no language gets](#not-generated), TypeScript leaves out members w
 
 ### Performance [#performance]
 
-Every release measures the generated TypeScript against Protocol Buffers (protobuf-es), MessagePack (msgpackr) and `JSON` on the same data, in Node, with [`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench) in Nino's repository. Each scenario's values are written by Nino in .NET, and every value must read and write back to exactly those bytes before anything is timed. JSON gets the values as plain JSON data (64-bit integers as strings, maps as objects) and what `JSON.parse` returns is not converted back to `bigint`s or `Map`s, so JSON does less work than the generated readers. How it is measured, and the Go and Rust benchmarks: [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes).
+Every release measures the generated TypeScript against Protocol Buffers (protobuf-es), MessagePack (msgpackr) and `JSON` on the same data, in Node, with [`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench) in Nino's repository. Each scenario's values are written by Nino in .NET, and every value must read and write back to exactly those bytes before anything is timed. JSON gets the values as plain JSON data (64-bit integers as strings, maps as objects) and what `JSON.parse` returns is not converted back to `bigint`s or `Map`s, so JSON does less work than the generated readers. JSON is timed to and from UTF-8 bytes (`TextEncoder`, `TextDecoder`), as the binary formats are. How it is measured, and the Go and Rust benchmarks: [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes).
 
 <RuntimesTables lang="en" only="typescript" />
 
@@ -522,9 +522,11 @@ A C# `string` member is a `*string` in generated code, so null stays null. A Go 
 
 Go strings are UTF-8, so writing and reading a string in the default encoding (Latin-1 or UTF-16) transcodes it, where Protocol Buffers and MessagePack copy the UTF-8 bytes as they are; the string cases of [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#strings) measure it, in Rust too.
 
+Short strings (up to 128 bytes of UTF-8) are read into a block the reader keeps, up to 2 KiB and never more than the data left can fill: one allocation for many strings. A string you keep keeps its block alive, as a substring keeps its string; `strings.Clone` gives a copy of its own. Likewise the `*string`s generated code reads (`StringPtr`, `Utf8Ptr`) point into a block of up to 32 the reader keeps.
+
 ## Rust [#rust]
 
-The Rust runtime (crate `nino-serialization`, library `nino`) reads and writes Nino's [wire format](/en/docs/v4/wire-format). It has no `unsafe` code (`#![forbid(unsafe_code)]`) and no required dependencies. Until it is published on crates.io, depend on it from Git:
+The Rust runtime (crate `nino-serialization`, library `nino`) reads and writes Nino's [wire format](/en/docs/v4/wire-format). Its reader is safe code; the one module allowed `unsafe` (`#![deny(unsafe_code)]` elsewhere) transcodes strings as they are written, and is tested under Miri on little- and big-endian targets. It has no required dependencies. Until it is published on crates.io, depend on it from Git:
 
 ```toml title="Cargo.toml"
 [dependencies]

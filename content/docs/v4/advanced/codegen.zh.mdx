@@ -432,7 +432,7 @@ WebSocket 的用法相同：发送 `serialize` 的结果，设置 `binaryType = 
 
 ### 性能 [#performance]
 
-每次发布都会用 Nino 仓库中的 [`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench)，在 Node 中、相同数据上，对比生成的 TypeScript 与 Protocol Buffers（protobuf-es）、MessagePack（msgpackr）和 `JSON`。每个场景的值都由 .NET 中的 Nino 写出，计时之前每个值都必须读出再写回，得到完全相同的字节。JSON 拿到的是普通 JSON 数据（64 位整数为字符串，映射为对象），`JSON.parse` 的结果也不转换回 `bigint` 或 `Map`，所以 JSON 做的工作比生成的读取代码少。测量方法以及 Go 和 Rust 的基准测试见[其他语言的基准测试](/zh/docs/v4/perf-runtimes)。
+每次发布都会用 Nino 仓库中的 [`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench)，在 Node 中、相同数据上，对比生成的 TypeScript 与 Protocol Buffers（protobuf-es）、MessagePack（msgpackr）和 `JSON`。每个场景的值都由 .NET 中的 Nino 写出，计时之前每个值都必须读出再写回，得到完全相同的字节。JSON 拿到的是普通 JSON 数据（64 位整数为字符串，映射为对象），`JSON.parse` 的结果也不转换回 `bigint` 或 `Map`，所以 JSON 做的工作比生成的读取代码少。JSON 与二进制格式一样，计时包括转为 UTF-8 字节和从 UTF-8 字节读出（`TextEncoder`、`TextDecoder`）。测量方法以及 Go 和 Rust 的基准测试见[其他语言的基准测试](/zh/docs/v4/perf-runtimes)。
 
 <RuntimesTables lang="zh" only="typescript" />
 
@@ -522,9 +522,11 @@ data, err = nino.MarshalAs[Animal](a) // 多态根，按类型 ID 写出
 
 Go 的字符串是 UTF-8，所以按默认编码（Latin-1 或 UTF-16）写入和读取字符串时需要转码，而 Protocol Buffers 和 MessagePack 直接复制原样的 UTF-8 字节；[其他语言的基准测试](/zh/docs/v4/perf-runtimes#strings)中的字符串用例测量了这一点，Rust 也一样。
 
+短字符串（UTF-8 不超过 128 字节）读入 reader 持有的一块内存：每块最多 2 KiB，且不超过剩余数据能填满的大小，许多字符串只需一次分配。保留一个字符串会让它所在的整块内存保持存活，就像子串会让原字符串保持存活一样；用 `strings.Clone` 可得到独立的副本。同样，生成代码读出的 `*string`（`StringPtr`、`Utf8Ptr`）指向 reader 持有的、最多 32 个字符串的一块内存。
+
 ## Rust [#rust]
 
-Rust 运行时（crate `nino-serialization`，库名 `nino`）读写 Nino 的[二进制格式](/zh/docs/v4/wire-format)。它不含 `unsafe` 代码（`#![forbid(unsafe_code)]`），没有必需的依赖。在发布到 crates.io 之前，请从 Git 依赖它：
+Rust 运行时（crate `nino-serialization`，库名 `nino`）读写 Nino 的[二进制格式](/zh/docs/v4/wire-format)。它的读取代码都是安全代码；唯一允许 `unsafe` 的模块负责写入时的字符串转码（其余部分为 `#![deny(unsafe_code)]`），并在小端和大端目标上用 Miri 测试。它没有必需的依赖。在发布到 crates.io 之前，请从 Git 依赖它：
 
 ```toml title="Cargo.toml"
 [dependencies]

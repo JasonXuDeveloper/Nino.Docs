@@ -37,7 +37,7 @@ Nino 在 Go、Rust 和 TypeScript 中读写的字节与 .NET 完全相同，所�
 [`runtimes/rust/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust/bench) 使用 criterion：每个用例一组，吞吐量为值的个数，每个输入和输出都经过 `black_box`。时间是 criterion 的均值估计 ± 其 95% 置信区间的一半。
 
 - **用例：** 一条记录（`record`）、1,000 条记录（`records-1000`）、10,000 个 `i32`（`i32-10000`）、10,000 个 `f64`（`f64-10000`），以及两个[字符串用例](#strings)。
-- **序列化库：** Nino，与模板生成代码形式相同的编解码器；Protocol Buffers（prost，消息在基准测试中派生，不需要 protoc）；MessagePack（rmp-serde）；bincode；postcard；serde_json。
+- **序列化库：** Nino，与模板生成代码形式相同的编解码器；Protocol Buffers（prost，消息在基准测试中派生，不需要 protoc）；MessagePack（rmp-serde）；bincode（2，标准配置）；postcard；serde_json。
 
 ### TypeScript [#typescript]
 
@@ -45,7 +45,7 @@ Nino 在 Go、Rust 和 TypeScript 中读写的字节与 .NET 完全相同，所�
 
 - **数据：** 每个场景的值都由 .NET 中的 Nino 写出。计时之前，每个值都要在 TypeScript 中读出再写回，必须与 .NET 写出的字节完全相同；每条 protobuf 消息也必须读回相同的值。一个任务是对场景中所有值的一次遍历。
 - **场景：** 玩家、通过类型 id 区分的动物园动物、订单簿、长文本文章、由向量和整数组成的网格、数字样本、由两个短字符串映射组成的查找表、带 64 位整数的事件，以及两个[字符串用例](#strings)。
-- **序列化库：** Nino；Protocol Buffers（protobuf-es，代码由基准测试的 `.proto` 生成）；MessagePack（msgpackr，使用标准映射，不用 msgpackr 的 records），它拿到的是 Nino 读出的原样的值（`bigint` 作为 64 位整数，读回仍是 `bigint`）；以及 `JSON`，它拿到的是普通 JSON 数据（64 位整数为字符串，映射为对象），读出后也不转换回 `bigint` 或 `Map`，所以它做的工作比生成的读取代码少。MessagePack 和 JSON 都不携带多态值的类型，而 Nino 和 protobuf（`oneof`）会携带。
+- **序列化库：** Nino；Protocol Buffers（protobuf-es，代码由基准测试的 `.proto` 生成）；MessagePack（msgpackr，使用标准映射，不用 msgpackr 的 records），它拿到的是 Nino 读出的原样的值（`bigint` 作为 64 位整数，读回仍是 `bigint`）；以及 `JSON`，它拿到的是普通 JSON 数据（64 位整数为字符串，映射为对象），读出后也不转换回 `bigint` 或 `Map`，所以它做的工作比生成的读取代码少；它与二进制格式一样，计时包括转为 UTF-8 字节和从 UTF-8 字节读出（`TextEncoder`、`TextDecoder`）。MessagePack 和 JSON 都不携带多态值的类型，而 Nino 和 protobuf（`oneof`）会携带。
 
 ## 字符串 [#strings]
 
@@ -56,7 +56,7 @@ Nino 在 Go、Rust 和 TypeScript 中读写的字节与 .NET 完全相同，所�
 
 Nino 的[线格式](/zh/docs/v4/wire-format)按 .NET 保存字符串的方式写出字符串：所有字符都不超过 U+00FF 时写成 Latin-1，每个字符一个字节，否则写成 UTF-16。.NET 的字符串是 UTF-16，所以写入只是一次收窄的复制，读取只是一次展宽的复制，两者都用 SIMD；长度就是字符数，读取方可以先分配字符串，再解码内容。
 
-Go 和 Rust 的字符串是 UTF-8。Nino 的运行时写入字符串时，要检查是否有非 ASCII 字节，再转码为 Latin-1 或 UTF-16；读取时再转码回 UTF-8。而 Protocol Buffers、MessagePack、JSON、bincode 和 postcard 都直接写入和读取原样的 UTF-8 字节。ASCII 在 UTF-8 和 Latin-1 中是相同的字节，所以 ASCII 用例展示的是几乎不需要转码时各格式的表现；混合用例展示的是转码的开销。大小也不同：`è` 在 Latin-1 中占一个字节，在 UTF-8 中占两个；UTF-16 字符串的每个字符都占两个字节，而 UTF-8 中 ASCII 占一个、西里尔字母占两个、汉字占三个。JavaScript 的字符串是 UTF-16（V8 把单字节字符串按 Latin-1 保存），所以在 TypeScript 中，需要编码成 UTF-8 并从 UTF-8 解码的是 Protocol Buffers 和 MessagePack。
+Go 和 Rust 的字符串是 UTF-8。Nino 的运行时写入字符串时，要检查是否有非 ASCII 字节，再转码为 Latin-1 或 UTF-16；读取时再转码回 UTF-8。而 Protocol Buffers、MessagePack、JSON、bincode 和 postcard 都直接写入和读取原样的 UTF-8 字节。ASCII 在 UTF-8 和 Latin-1 中是相同的字节，所以 ASCII 用例展示的是几乎不需要转码时各格式的表现；混合用例展示的是转码的开销。大小也不同：`è` 在 Latin-1 中占一个字节，在 UTF-8 中占两个；UTF-16 字符串的每个字符都占两个字节，而 UTF-8 中 ASCII 占一个、西里尔字母占两个、汉字占三个。JavaScript 的字符串是 UTF-16（V8 把单字节字符串按 Latin-1 保存），所以在 TypeScript 中，需要编码成 UTF-8 并从 UTF-8 解码的是 Protocol Buffers、MessagePack 和 JSON。
 
 标记了 `[NinoUtf8]` 的成员改为按 UTF-8 写出（参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)），Go 和 Rust 读写它时不需要转码；这些基准测试使用的是默认编码。
 
