@@ -33,6 +33,7 @@ icon: RotateCcwClock
 - **`NinoTypeLayoutAttribute.Deferrable`** 说明类型在嵌套超过 128 层类主体时是否被延迟，布局的文本形式以 `deferrable=true|false` 携带它，其他语言的代码生成器直接读取，不必重新推导 .NET 的规则。参见[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)。
 - **带非公开成员的泛型 `[NinoType]` 不再需要 `partial`**，只要项目面向 .NET 9 或更高版本（编译定义了 `NET9_0_OR_GREATER`）：生成代码通过在泛型格式化器中声明的 `[UnsafeAccessor]` 访问这些成员，与 .NET 8 起非泛型类型的做法相同。继承自泛型基类的成员仍需 `partial`，除非基类的类型参数就是该类型自己按顺序排列的前几个类型参数（`class D<T, U> : Base<T>` 可以，`Base<List<T>>` 或 `Base<int>` 不行），或者基类不是泛型；NINO002 和 NINO022 会说明何时需要。泛型类型中被 `new` 隐藏的非公开基类成员在 .NET 9+ 上现在也会序列化，以前会以 NINO022 跳过。参见[私有成员](/zh/docs/v4/defining-types#private-members)和[诊断](/zh/docs/v4/analyzers#the-type)。
 - **块格式化器**：大小固定但不满足原始内存条件的 `[NinoType]` 结构体（含值元组或 `KeyValuePair` 成员、`LayoutKind.Auto`、自动属性）的数组、列表和 span 按块读写：生成器让这种结构体的格式化器实现 `INinoBlockFormatter<T>`，于是它的集合只做一次边界检查，并在 .NET 8+ 上使用元组的向量重排，而不是逐个值处理。字节不变。参见[非托管数据按原始内存拷贝](/zh/docs/v4/performance#raw-memory-for-unmanaged-data)。
+- **Unity 中的 Burst 内核**（Unity 包中的 `Nino.Burst`）：安装 `com.unity.burst` 1.8 或更高版本后，元组和结构体的数组与列表、带填充的原始结构体以及 Latin-1 字符串改用 SSSE3（x86 和 x64）或 Arm64 Neon 搬运，不再走 Nino 的 netstandard 标量路径，写出的字节相同，代码无需改动。Armv7、WebGL 和未安装 Burst 的项目继续使用标量路径。见 [Burst 加速内核](/zh/docs/v4/advanced/unity#burst-kernels)和 [Unity 基准测试](/zh/docs/v4/perf-unity)。
 - 只有生成代码使用的类型（`NinoObject`、`NinoDirect`、`NinoUnsafe`、`INinoBodyFormatter<T>` 和 `INinoBlockFormatter<T>` 等格式化器接口、`NinoPolymorphic<TBase>` ……）移到了命名空间 `Nino.Core.CompilerServices`。生成代码无需改动；手写代码中直接用到它们的，需要加上 `using Nino.Core.CompilerServices;`。
 
 ### 修复 [#fixes-5]
