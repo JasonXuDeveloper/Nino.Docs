@@ -1,0 +1,24 @@
+---
+title: Unity Benchmark
+seoTitle: "Unity Benchmark: Nino with and without Burst in an IL2CPP Player – Nino v4 Docs"
+description: "Nino in a Unity IL2CPP player on GitHub's Linux x64 runner, each case timed without and with the optional Burst-compiled kernels, for every release and each Unity version tested."
+icon: Gamepad2
+---
+
+Unity runs the netstandard build of `Nino.Core`, which has no hardware intrinsics of its own. With `com.unity.burst` installed, Nino's Unity package registers [Burst-compiled kernels](/en/docs/v4/advanced/unity#burst-kernels) for the work that gains most from SIMD. This benchmark measures what they change in a real player. For the .NET runtimes, see [Benchmarks](/en/docs/v4/perf); for Go, Rust and TypeScript, [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes).
+
+## What Is Measured [#setup]
+
+- **Where:** an IL2CPP player run on a GitHub-hosted Linux x64 runner by the release workflow of every release, with a table per Unity version. The line under the tables names the Unity versions, the player configuration, the CPU, the Burst version and the instruction set the kernels were compiled for, as the release report gives them.
+- **What:** each case is timed in the same player twice: **without Burst**, with Nino's scalar netstandard paths, and **with Burst**, with the kernels registered. Both write the same bytes. Each time is the median per call.
+- **Speedup:** the time without Burst divided by the time with it, computed by this site from the two times. Within 5% is on par, and a time under 1 ns against a measurable one is faster, too fast to measure, as on the [.NET page](/en/docs/v4/perf#setup).
+
+The kernels run for arrays and lists of at least 16 values and strings of at least 32 chars; shorter ones take the scalar path in both columns. A case below those thresholds should take about the same time in both columns. Compare times within one table: each Unity version ran in its own player, and the runner's CPU can change between releases.
+
+## Results [#results]
+
+<UnityTables lang="en" />
+
+## Reproducing [#reproducing]
+
+The Unity project is `src/Nino.Unity` in the [Nino repository](https://github.com/JasonXuDeveloper/Nino). Open it in Unity 2022.3 or later with `com.unity.burst` installed; the Test Runner's `BurstKernelTests` compare each kernel with its scalar reference byte for byte, and `NinoBurst.Unregister()` and `NinoBurst.Register()` switch the kernels off and on at run time. Numbers from your own machine are for comparing changes back to back on it.

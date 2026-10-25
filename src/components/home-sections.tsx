@@ -160,7 +160,7 @@ const text: Record<
       {
         icon: Gamepad2,
         title: 'Unity and HybridCLR',
-        text: 'IL2CPP-safe generated code, raw-memory copies of Vector3 and other unmanaged structs, and hot-update assemblies found without init calls.',
+        text: 'IL2CPP-safe generated code, raw-memory copies of Vector3 and other unmanaged structs, optional Burst-compiled SIMD kernels, and hot-update assemblies found without init calls.',
         href: 'advanced/unity',
       },
       {
@@ -290,7 +290,7 @@ const text: Record<
       {
         icon: Gamepad2,
         title: 'Unity 与 HybridCLR',
-        text: '生成的代码可直接用于 IL2CPP，Vector3 等非托管结构体按原始内存拷贝，热更新程序集无需初始化调用即可识别。',
+        text: '生成的代码可直接用于 IL2CPP，Vector3 等非托管结构体按原始内存拷贝，可选的 Burst 编译 SIMD 内核，热更新程序集无需初始化调用即可识别。',
         href: 'advanced/unity',
       },
       {

@@ -1,0 +1,62 @@
+---
+title: 各平台的 SIMD
+seoTitle: "Nino 在 .NET、Unity、Go、Rust 与 TypeScript 上的 SIMD – Nino v4 文档"
+description: "Nino 在各平台上使用哪些向量指令（.NET 的 AVX-512、AVX2、SSSE3、Arm64 和 WebAssembly 路径，Unity 的 Burst 内核，Go 和 Rust 的字符串转码），各自如何检测、什么情况下回退到可移植代码，以及各自在哪里有基准测试。"
+icon: Cpu
+---
+
+Nino 在每个平台上写出的字节都相同。在有向量指令的平台上，各个运行时把它们用在收益最大的工作上：搬运字节与内存布局不同的值（元组、带填充的结构体）、大块拷贝，以及在[线格式](/zh/docs/v4/wire-format#values)的字符串编码与语言自身的编码之间转换。每条向量路径都在运行时（或为目标平台编译代码时）选定，并且都有写出相同字节的可移植回退路径；测试会比较两者。
+
+下面按平台列出 Nino 源码中现有的向量路径，以及衡量每条路径的基准测试。
+
+## .NET [#dotnet]
+
+`Nino.Core` 的 `net8.0` 和 `net10.0` 版本使用 .NET 的硬件内联函数（hardware intrinsics）。JIT 只编译 CPU 支持的那条路径（`IsSupported` 检查对它来说是常量），其余路径没有任何开销。每种指令集具体做什么，完整列表见[各平台的 SIMD（平台页）](/zh/docs/v4/platforms#simd)。
+
+| 硬件 | 向量路径 | 基准测试 |
+| --- | --- | --- |
+| 支持 AVX-512 的 x64 | 对齐存储的 64 字节块拷贝；字节置换（AVX-512 VBMI，或仅需 AVX-512F 的 4 字节字置换），每次 64 字节读写带填充的元组和 `KeyValuePair`；512 位掩码拷贝，清零原始结构体的填充 | [基准测试](/zh/docs/v4/perf)，x64 |
+| 支持 AVX2 的 x64 | 32 字节块拷贝；带填充的元组和键值对按一组 32 字节向量搬运（`vpshufb`、`vperm2i128`）；字符串每次 32 字节收窄为 Latin-1 或扩展回来 | [基准测试](/zh/docs/v4/perf)，x64 |
+| 支持 SSSE3 的 x64 | 带填充的元组和键值对按一组 16 字节向量搬运（`pshufb`）；字符串每次 16 字节收窄和扩展 | [基准测试](/zh/docs/v4/perf) |
+| Arm64（AdvSimd） | 用查表指令（`TBL`）按一组 16 字节向量搬运带填充的元组和键值对；用成对加载和存储（`LDP`/`STP`）拷贝块；字符串每次 16 字节收窄和扩展 | [基准测试](/zh/docs/v4/perf)，Arm64 标签页 |
+| 支持 SIMD 的 WebAssembly（.NET 10） | 带填充的元组和键值对每个 16 字节向量两次 swizzle（`i8x16.swizzle`） | — |
+| Arm32，或关闭了硬件内联函数（`DOTNET_EnableHWIntrinsic=0`） | 无：值逐个搬运，块用 `memmove`；字节相同 | — |
+
+.NET Framework 和 .NET Core 3.0 到 .NET 7 加载 netstandard 版本，其中没有硬件内联函数。
+
+## Unity [#unity]
+
+Unity 加载 `Nino.Core` 的 netstandard 版本。安装 `com.unity.burst` 1.8 或更高版本后，Unity 包会在启动时通过 netstandard 版本提供的钩子 `NinoKernels` 注册 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)；Burst 为目标平台编译它们，注册时检查各自的指令集。
+
+| 硬件 | 向量路径 | 基准测试 |
+| --- | --- | --- |
+| 支持 SSSE3 的 x86 和 x64 | `Permute`：16 个及以上的元组、键值对和按块读写的 `[NinoType]` 结构体组成的数组和列表，每 16 字节一次字节重排（`pshufb`）读写，带填充的原始结构体在拷贝时清零填充；`Narrow` 和 `Widen`：32 个字符及以上的 Latin-1 字符串，每次 16 个字符 | [Unity 基准测试](/zh/docs/v4/perf-unity) |
+| Arm64（Neon） | 同样的内核，用 `tbl`，字符串用 `uzp1`/`zip` | — |
+| Armv7、WebGL、不支持 SSSE3 的 x86 和 x64、关闭或未安装 Burst | 无：Nino 的 netstandard 标量路径；字节相同 | [Unity 基准测试](/zh/docs/v4/perf-unity)，“不用 Burst”一列 |
+
+## Go [#go]
+
+Go 运行时的向量代码是处理字符串的汇编，根据 CPU 报告的能力（`CPUID`，以及用 `XGETBV` 确认系统会保存向量寄存器）在运行时选择。
+
+| 硬件 | 向量路径 | 基准测试 |
+| --- | --- | --- |
+| 支持 AVX2（和 POPCNT）的 amd64 | 字符串写入器每次 32 字节把 UTF-8 转码为 Latin-1 或 UTF-16，`WriteStrings` 一次调用写出多个字符串 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#go)，字符串用例 |
+| 支持 AVX-512（F、BW、VL、VBMI2）的 amd64 | 同一个写入器，使用掩码加载和压缩指令，不需要查找表；同时支持 VBMI 时，读取器用 AVX-512 把 Latin-1 和 UTF-16 转换为 UTF-8 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#go) |
+| amd64（SSE2）和 arm64（NEON） | 64 字节及以上的连续 ASCII 每次 16 字节拷贝或扩展为 UTF-16 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#go) |
+| 其他所有平台，或用 `-tags purego` 构建 | 无：按 8 字节字循环的 Go 代码；字节相同 | — |
+
+## Rust [#rust]
+
+Rust crate 的向量代码在 `src/simd.rs` 中，这是它唯一允许 `unsafe` 代码的模块，在 Miri 下针对 x86_64（仅 SSE2、SSSE3、SSE4.1）、Arm64 和大端的 s390x 测试。它覆盖字符串写入器；读取器用按字循环解码 Latin-1 和 UTF-16。
+
+| 硬件 | 向量路径 | 基准测试 |
+| --- | --- | --- |
+| 支持 SSE4.1（以及 SSSE3 和 POPCNT）的 x86_64 | 含非 ASCII 字符的文本一遍转码为 Latin-1 或 UTF-16；运行时检测 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#rust)，字符串用例 |
+| 支持 SSSE3 的 x86_64 | 48 字节及以上的文本中，由单字节和双字节字符组成的块用字节重排每次 16 字节转码；运行时检测 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#rust) |
+| x86_64（SSE2，总是可用） | ASCII 块每次 16 字节存储或扩展 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#rust) |
+| 小端 Arm64（NEON） | 同样的块，用 `tbl`，用于 48 字节及以上的文本 | — |
+| 32 位目标、WebAssembly、大端平台 | 无：每块两个 8 字节字；字节相同 | — |
+
+## TypeScript [#typescript]
+
+TypeScript 运行时没有自己的向量代码：它用 `DataView` 和类型化数组读写，长字符串交给 JavaScript 引擎内置的解码器。它的结果见[其他语言的基准测试](/zh/docs/v4/perf-runtimes#typescript)。

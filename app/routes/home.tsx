@@ -98,7 +98,7 @@ const copy: Record<
       {
         icon: Zap,
         label: 'SIMD on every CPU',
-        text: 'AVX-512, AVX2 and SSSE3 on x64, table lookups on Arm64, WebAssembly SIMD on .NET 10; the same bytes on every path.',
+        text: 'AVX-512, AVX2 and SSSE3 on x64, table lookups on Arm64, WebAssembly SIMD on .NET 10, Burst-compiled kernels in Unity; the same bytes on every path.',
       },
       {
         icon: FileCode,
@@ -155,7 +155,7 @@ const copy: Record<
       {
         icon: Zap,
         label: '各类 CPU 都用 SIMD',
-        text: 'x64 上用 AVX-512、AVX2 和 SSSE3，Arm64 上用查表指令，.NET 10 上用 WebAssembly SIMD；每条路径写出的字节都相同。',
+        text: 'x64 上用 AVX-512、AVX2 和 SSSE3，Arm64 上用查表指令，.NET 10 上用 WebAssembly SIMD，Unity 中用 Burst 编译的内核；每条路径写出的字节都相同。',
       },
       {
         icon: FileCode,

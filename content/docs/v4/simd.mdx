@@ -1,0 +1,62 @@
+---
+title: SIMD on Every Platform
+seoTitle: "SIMD in Nino on .NET, Unity, Go, Rust and TypeScript – Nino v4 Docs"
+description: "Which vector instructions Nino uses on each platform (.NET's AVX-512, AVX2, SSSE3, Arm64 and WebAssembly paths, Unity's Burst kernels, Go's and Rust's string transcoding), how each is detected, what falls back to portable code, and where each is benchmarked."
+icon: Cpu
+---
+
+Nino writes the same bytes on every platform. Where a platform has vector instructions, each runtime uses them for the work that gains most from them: moving values whose bytes differ from their memory (tuples, padded structs), large block copies, and converting strings between the encodings of the [wire format](/en/docs/v4/wire-format#values) and the language's own. Every vector path is found at run time (or when the code is compiled for its target), and every one has a portable fallback that writes the same bytes; the tests compare the two.
+
+The tables below list the vector paths in Nino's source today, platform by platform, with the benchmark that measures each.
+
+## .NET [#dotnet]
+
+The `net8.0` and `net10.0` builds of `Nino.Core` use .NET's hardware intrinsics. The JIT compiles only the path the CPU has (`IsSupported` checks are constants to it), so the others cost nothing. The full list of what each instruction set does is in [SIMD by Platform](/en/docs/v4/platforms#simd).
+
+| Hardware | Vector paths | Benchmark |
+| --- | --- | --- |
+| x64 with AVX-512 | 64-byte block copies with aligned stores; byte permutes (AVX-512 VBMI, or 4-byte word permutes with AVX-512F) that write and read tuples and `KeyValuePair`s with padding 64 bytes at a time; 512-bit masked copies that clear the padding of raw structs | [Benchmarks](/en/docs/v4/perf), x64 |
+| x64 with AVX2 | 32-byte block copies; tuples and pairs with padding moved a group of 32-byte vectors at a time (`vpshufb`, `vperm2i128`); strings narrowed to Latin-1 and widened back 32 bytes at a time | [Benchmarks](/en/docs/v4/perf), x64 |
+| x64 with SSSE3 | tuples and pairs with padding moved a group of 16-byte vectors at a time (`pshufb`); strings narrowed and widened 16 bytes at a time | [Benchmarks](/en/docs/v4/perf) |
+| Arm64 (AdvSimd) | table lookups (`TBL`) for tuples and pairs with padding, a group of 16-byte vectors at a time; block copies with load and store pairs (`LDP`/`STP`); strings narrowed and widened 16 bytes at a time | [Benchmarks](/en/docs/v4/perf), Arm64 tab |
+| WebAssembly with SIMD (.NET 10) | two swizzles (`i8x16.swizzle`) per 16-byte vector for tuples and pairs with padding | — |
+| Arm32, or hardware intrinsics turned off (`DOTNET_EnableHWIntrinsic=0`) | none: values moved one at a time, blocks through `memmove`; the same bytes | — |
+
+.NET Framework and .NET Core 3.0 to .NET 7 load the netstandard builds, which have no intrinsics.
+
+## Unity [#unity]
+
+Unity loads the netstandard build of `Nino.Core`. With `com.unity.burst` 1.8 or later installed, the Unity package registers [Burst-compiled kernels](/en/docs/v4/advanced/unity#burst-kernels) at startup through `NinoKernels`, a hook of the netstandard builds; Burst compiles them for the target, and each checks its instruction set when it is registered.
+
+| Hardware | Vector paths | Benchmark |
+| --- | --- | --- |
+| x86 and x64 with SSSE3 | `Permute`: arrays and lists of 16 or more tuples, pairs and blocked `[NinoType]` structs written and read with one byte shuffle (`pshufb`) per 16 bytes, and raw structs with padding copied with it cleared; `Narrow` and `Widen`: Latin-1 strings of 32 chars or more, 16 chars at a time | [Unity benchmark](/en/docs/v4/perf-unity) |
+| Arm64 (Neon) | the same kernels with `tbl`, and `uzp1`/`zip` for strings | — |
+| Armv7, WebGL, x86 and x64 without SSSE3, Burst off or not installed | none: Nino's scalar netstandard paths; the same bytes | [Unity benchmark](/en/docs/v4/perf-unity), "Without Burst" |
+
+## Go [#go]
+
+The Go runtime's vector code is assembly for strings, chosen at run time from what the CPU reports (`CPUID`, and `XGETBV` for whether the system saves the vector registers).
+
+| Hardware | Vector paths | Benchmark |
+| --- | --- | --- |
+| amd64 with AVX2 (and POPCNT) | the string writer transcodes UTF-8 to Latin-1 or UTF-16 32 bytes at a time, and `WriteStrings` writes many strings in one call | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#go), string cases |
+| amd64 with AVX-512 (F, BW, VL, VBMI2) | the same writer with masked loads and compress instructions, no tables; with VBMI too, the reader converts Latin-1 and UTF-16 to UTF-8 with AVX-512 | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#go) |
+| amd64 (SSE2) and arm64 (NEON) | runs of 64 or more ASCII bytes copied, or widened to UTF-16, 16 bytes at a time | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#go) |
+| every other platform, or built with `-tags purego` | none: Go loops over 8-byte words; the same bytes | — |
+
+## Rust [#rust]
+
+The Rust crate's vector code is in `src/simd.rs`, its only module allowed `unsafe` code, tested under Miri on x86_64 (SSE2 only, SSSE3, SSE4.1), Arm64 and big-endian s390x. It covers the string writer; the reader decodes Latin-1 and UTF-16 with word loops.
+
+| Hardware | Vector paths | Benchmark |
+| --- | --- | --- |
+| x86_64 with SSE4.1 (with SSSE3 and POPCNT) | text with non-ASCII chars transcoded to Latin-1 or UTF-16 in one pass; found at run time | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust), string cases |
+| x86_64 with SSSE3 | blocks of one- and two-byte chars transcoded 16 bytes at a time with byte shuffles, for text of 48 bytes or more; found at run time | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust) |
+| x86_64 (SSE2, always present) | blocks of ASCII stored or widened 16 bytes at a time | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust) |
+| Arm64, little-endian (NEON) | the same blocks with `tbl`, for text of 48 bytes or more | — |
+| 32-bit targets, WebAssembly, big-endian | none: two 8-byte words a block; the same bytes | — |
+
+## TypeScript [#typescript]
+
+The TypeScript runtime has no vector code of its own: it reads and writes with `DataView` and typed arrays, and long strings go through the JavaScript engine's built-in decoders. Its results are on [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#typescript).

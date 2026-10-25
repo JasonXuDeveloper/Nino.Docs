@@ -1,0 +1,24 @@
+---
+title: Unity 基准测试
+seoTitle: "Unity 基准测试：IL2CPP 播放器中使用与不用 Burst 的 Nino – Nino v4 文档"
+description: "Nino 在 GitHub Linux x64 运行器上的 Unity IL2CPP 播放器中运行，每个用例分别在不用和使用可选的 Burst 编译内核时计时，每个版本、每个测试的 Unity 版本各一份结果。"
+icon: Gamepad2
+---
+
+Unity 运行的是 `Nino.Core` 的 netstandard 构建，它本身不含硬件内联函数（hardware intrinsics）。安装 `com.unity.burst` 后，Nino 的 Unity 包会为最能从 SIMD 获益的工作注册 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)。这个基准测试衡量它们在真实播放器中带来的变化。.NET 运行时的结果见[基准测试](/zh/docs/v4/perf)；Go、Rust 和 TypeScript 的结果见[其他语言的基准测试](/zh/docs/v4/perf-runtimes)。
+
+## 测量内容 [#setup]
+
+- **在哪里：** 一个 IL2CPP 播放器，由每个版本的发布流程在 GitHub 托管的 Linux x64 运行器上运行，每个 Unity 版本一张表。表格下方的一行给出 Unity 版本、播放器配置、CPU、Burst 版本，以及内核编译所针对的指令集，均取自发布报告。
+- **测什么：** 每个用例在同一个播放器中计时两次：**不用 Burst**，即 Nino 的 netstandard 标量路径；**使用 Burst**，即注册了内核。两者写出的字节相同。每个时间是单次调用的中位数。
+- **加速：** 不用 Burst 的时间除以使用 Burst 的时间，由本站根据两个时间计算。相差 5% 以内为持平；一个低于 1 ns 的时间对比一个可测量的时间，记为更快（快到测不出），与 [.NET 页面](/zh/docs/v4/perf#setup)的规则相同。
+
+内核只用于至少 16 个值的数组和列表，以及至少 32 个字符的字符串；更短的数据在两列中都走标量路径，因此低于这些阈值的用例两列时间应该相近。请只在同一张表内比较时间：每个 Unity 版本在各自的播放器中运行，而运行器的 CPU 在不同版本之间可能不同。
+
+## 结果 [#results]
+
+<UnityTables lang="zh" />
+
+## 自行复现 [#reproducing]
+
+Unity 工程位于 [Nino 仓库](https://github.com/JasonXuDeveloper/Nino)的 `src/Nino.Unity`。用 Unity 2022.3 或更高版本打开它并安装 `com.unity.burst`；Test Runner 中的 `BurstKernelTests` 会逐字节比较每个内核与它的标量参考实现，`NinoBurst.Unregister()` 和 `NinoBurst.Register()` 可以在运行时关闭和打开内核。在你自己机器上测得的数字只适合在同一台机器上前后对比改动。

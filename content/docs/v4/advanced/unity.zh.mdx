@@ -1,11 +1,11 @@
 ---
 title: Unity 与 HybridCLR
 seoTitle: "Unity 序列化与 HybridCLR 热更新 – Nino v4 文档"
-description: "在 Unity 中配置 Nino，序列化 AnimationCurve、Gradient 和 RectOffset，配合程序集定义、IL2CPP 和 HybridCLR 热更新使用，并让每一帧都不产生 GC。"
+description: "在 Unity 中配置 Nino，用可选的 Burst 编译 SIMD 内核加速，序列化 AnimationCurve、Gradient 和 RectOffset，配合程序集定义、IL2CPP 和 HybridCLR 热更新使用，并让每一帧都不产生 GC。"
 icon: Gamepad2
 ---
 
-Nino 支持 Unity 2022.3 及以上版本的 Mono 和 IL2CPP、所有 Player 平台，以及 HybridCLR 热更新程序集，且无需任何初始化调用。本指南介绍安装、程序集定义、Nino 支持的 Unity 类、IL2CPP 构建、热更新，以及如何让每一帧都不产生 GC。
+Nino 支持 Unity 2022.3 及以上版本的 Mono 和 IL2CPP、所有 Player 平台，以及 HybridCLR 热更新程序集，且无需任何初始化调用。本指南介绍安装、程序集定义、可选的 Burst 内核、Nino 支持的 Unity 类、IL2CPP 构建、热更新，以及如何让每一帧都不产生 GC。
 
 ## 配置 [#setup]
 
@@ -56,6 +56,36 @@ public class PlayerState
 - **私有成员需要 `partial`。** Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员（或标记了 `[NinoPooled]`）的类型必须声明为 `partial`，包含它的外层类型也一样。分析器会报告 NINO002。自动加上 `partial` 的代码修复在 Rider 和 Visual Studio 中同样可用；其他编辑器中需要手动添加。
 - **没有拦截器。** Unity 包附带的是源生成器的 Roslyn 4.3 版本（Unity 支持的最低编译器版本），所以调用走常规路径。写出的字节完全相同，每次调用只差几纳秒。
 - **字节与 .NET 一致。** .NET 服务器写出的数据，Unity 客户端可以直接读取，反过来也一样，32 位的 IL2CPP Player 和旧版 Mono 运行时也不例外。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+
+## Burst 加速内核 [#burst-kernels]
+
+Unity 运行的是 `Nino.Core` 的 netstandard 构建，其中没有硬件内联函数（hardware intrinsics）：单靠它自己，元组、带填充的结构体和 Latin-1 文本只能一个字段或一个字（word）地搬运。安装 **Burst** 后，Nino 会改用 SIMD 搬运它们，你的代码无需任何改动：
+
+1. 打开 **Window > Package Manager**，选择 **Unity Registry**，安装 **Burst**（`com.unity.burst`）1.8 或更高版本。用到 Entities 或 Collections 的项目已经有它了，因为两者都依赖 Burst。
+2. 就这样。只要项目中有 Burst，Nino 包里的 `Nino.Burst` 程序集就会参与编译（没有 Burst 时跳过），并在启动时（第一个场景加载之前）以及编辑器中每次域重载（domain reload）后注册它的内核。
+
+| 内核 | 加速的内容 | 起始长度 |
+| --- | --- | --- |
+| Permute | 读写值元组、`KeyValuePair` 以及字节与内存布局不同（有填充、含元组或键值对成员）的 `[NinoType]` 结构体的数组和列表，以及复制带填充的原始结构体数组（顺带清零填充）；每个值最多 64 字节 | 16 个值 |
+| Narrow、Widen | 读写单字节（Latin-1）形式的字符串（包括 ASCII）：一次 16 个字符 | 32 个字符 |
+
+更短的数组和字符串继续走标量路径，因为调用内核的开销会超过它省下的时间。没有填充的原始结构体数组（`Vector3[]`、`Color32[]`、你自己的非托管结构体）无论有没有 Burst 都是一次内存复制。
+
+<UnityHighlights lang="zh" />
+
+**指令集。** 内核在 x86 和 x64 上使用 SSSE3（`pshufb`），在 Arm64 上使用 Neon（`tbl`），适用于编辑器、Mono 和 IL2CPP 播放器，以及通过 AOT 的 `Nino.Core` 调用它们的 HybridCLR 热更新代码。在内核无法运行的地方，Nino 不注册任何内核，继续使用标量路径：Armv7（32 位 Android）、WebGL、不支持 SSSE3 的 x86 和 x64 CPU（播放器中 x64 的 Burst 代码默认面向 SSE2 和 SSE4，启动时选择其一）、Burst 不运行的播放器，以及关闭了 Burst 编译的编辑器（**Jobs > Burst > Enable Compilation**）。
+
+**字节相同。** 每个内核写出的字节与它替代的标量路径完全相同，因此有 Burst 和没有 Burst 的播放器、.NET 服务器以及 [Go、Rust 和 TypeScript 运行时](/zh/docs/v4/advanced/codegen)都能互相读取对方的数据。Nino 的 CI 在编辑器和 IL2CPP 播放器中、在 Unity 2022.3 和 6000.3 上逐字节比较每个内核与它的标量参考实现。[Unity 基准测试](/zh/docs/v4/perf-unity)在每个版本中对 IL2CPP 播放器分别在使用和不用内核时计时。
+
+要在运行时检查或切换内核，使用 `Nino.Burst.NinoBurst` 类（你自己的程序集定义中的代码需要引用 `Nino.Burst` 程序集定义才能调用它）：
+
+```csharp
+using Nino.Burst;
+
+Debug.Log($"Nino Burst kernels: {NinoBurst.Registered}, instruction set {NinoBurst.Isa}"); // 1 SSSE3，2 Neon，0 无
+NinoBurst.Unregister(); // 回到标量路径，例如用来对比帧耗时
+NinoBurst.Register();   // Burst 关闭或 CPU 两种指令集都不支持时返回 false
+```
 
 ## Unity 的类 [#unity-classes]
 
