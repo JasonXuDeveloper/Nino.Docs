@@ -247,6 +247,10 @@ function clean(cell: string) {
   return cell
     .replace(/\*\*/g, '')
     .replace(/`/g, '')
+    .replace(/\\\|/g, '|')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
     .replace(/[   ]/g, ' ')
     .trim();
 }
@@ -279,7 +283,8 @@ export function parseSize(text: string, dash: 0 | null = 0): number | null {
 
 function cells(line: string) {
   const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
-  return trimmed.split('|').map(clean);
+  // A cell's own "|" is escaped with a backslash, as Nino's report scripts write it
+  return trimmed.split(/(?<!\\)\|/).map(clean);
 }
 
 const isSeparator = (row: string[]) =>
@@ -559,8 +564,15 @@ export function parseUnitySection(body: string) {
   const section = sectionFrom(body, start);
   const parts = section.split(/\n###\s+/);
 
-  const intro = parts[0]
-    .slice(unityHeading.length)
+  // The first paragraph: a line per Unity version (player, machine, Burst,
+  // kernels) and the sentence on the columns. The paragraph after it (the
+  // tag and how the player is measured) is what perf-unity explains itself.
+  const intro = (
+    parts[0]
+      .slice(unityHeading.length)
+      .trim()
+      .split(/\r?\n\s*\r?\n/)[0] ?? ''
+  )
     .split(/\r?\n/)
     .filter((line) => !/^\s*(<\/?\w+[^>]*>|\|)/.test(line))
     .join(' ')

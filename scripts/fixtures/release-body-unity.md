@@ -3,9 +3,11 @@ Parser test fixture: release-body-arm64.md with the rows of MessagePack and
 protobuf-net added next to Nino's in the x64 report and the Arm64 section (the
 methods Nino's benchmarks/Nino.Benchmark declares for them), and the sections
 of the runtimes outside .NET appended at the end, as written by Nino's
-benchmarks/runtimes_report.py from made-up inputs. Every number added here is
-invented (a multiple of Nino's, or random): for parser tests only; never use
-them as data. (This comment must not name the x64 section's title or the
+benchmarks/runtimes_report.py from made-up inputs, and the Unity section at the
+end, written by Nino's benchmarks/unity_report.py from its test fixtures
+(benchmarks/fixtures/unity-bench-*, made-up inputs). Every number added here is
+invented (a multiple of Nino's, or random, or a fixture's): for parser tests
+only; never use them as data. (This comment must not name the x64 section's title or the
 runtime headings: the parser finds those sections by them.)
 -->
 
@@ -694,32 +696,30 @@ The code nino-gen generates for `runtimes/typescript/bench` (`Program.cs`'s type
 
 ## 🎮 Unity benchmark (Burst, IL2CPP)
 
-Unity 6000.3.27f1 and 2022.3.62f2, IL2CPP player (Release), Linux x64, AMD EPYC 7763 64-Core Processor, Burst 1.8.25, kernels SSSE3. Each time is the median per call; "Speedup" is without Burst divided by with Burst.
+Unity 2022.3.62f2, IL2CPP player (C++ Release, code generation OptimizeSpeed, stripping Minimal, not a Development build, Nino.Core Release), Linux x64, AMD EPYC 9V45 96-Core Processor (4 cores), Burst 1.8.29 (its default x64 targets), kernels SSSE3.
+Unity 6000.3.27f1, IL2CPP player (C++ Release, code generation OptimizeSpeed, stripping Minimal, not a Development build, Nino.Core Release), Linux x64, AMD EPYC 7763 64-Core Processor (4 cores), Burst 1.8.31 (x64 targets SSE2, SSE4, AVX2), kernels AVX2.
+Each time is the median per call; "Speedup" is without Burst divided by with Burst.
 
-### Unity 6000.3.27f1
-
-| Case | Operation | Without Burst | With Burst | Speedup |
-|---|---|--:|--:|--:|
-| (int, long)[1000] | Serialize | 12.3 µs | 1.10 µs | 11.2× |
-| (int, long)[1000] | Deserialize | 18.6 µs | 0.95 µs | 19.6× |
-| (int, long)[32] | Serialize | 412 ns | 120 ns | 3.4× |
-| (byte, short, int, long, double)[1000] | Serialize | 21.4 µs | 2.05 µs | 10.4× |
-| (byte, short, int, long, double)[1000] | Deserialize | 30.2 µs | 2.31 µs | 13.1× |
-| PaddedStruct[1000] | Serialize | 9.80 µs | 1.21 µs | 8.1× |
-| string (1000 ASCII chars) | Serialize | 1.84 µs | 0.31 µs | 5.9× |
-| string (1000 ASCII chars) | Deserialize | 2.10 µs | 0.36 µs | 5.8× |
-| string (32 ASCII chars) | Serialize | 62 ns | 60 ns | 1.0× |
+v4.0.0-rc.8, measured in the IL2CPP test player that `.github/workflows/unity.yml` builds and runs on a GitHub-hosted runner (`Test.Runtime.Burst.BurstBenchmark`) with the Unity Performance Testing package 3.6.0 (`Measure.Method`: its warm-up, then 9 measurements of about 100 ms, each the mean time per call): `NinoSerializer.Serialize` to a new array, `NinoDeserializer.Deserialize` into an array of the same length (arrays) or to a new value (strings, the list), without the Burst kernels (`NinoKernels.Register(null)`: Nino.Core's own paths, as without `com.unity.burst`) and with them. Compare within a table: the runners vary between releases.
 
 ### Unity 2022.3.62f2
 
 | Case | Operation | Without Burst | With Burst | Speedup |
 |---|---|--:|--:|--:|
-| (int, long)[1000] | Serialize | 13.1 µs | 1.15 µs | 11.4× |
-| (int, long)[1000] | Deserialize | 19.4 µs | 1.01 µs | 19.2× |
-| (int, long)[32] | Serialize | 430 ns | 126 ns | 3.4× |
-| (byte, short, int, long, double)[1000] | Serialize | 22.0 µs | 2.10 µs | 10.5× |
-| (byte, short, int, long, double)[1000] | Deserialize | 31.5 µs | 2.40 µs | 13.1× |
-| PaddedStruct[1000] | Serialize | 10.2 µs | 1.25 µs | 8.2× |
-| string (1000 ASCII chars) | Serialize | 1.90 µs | 0.33 µs | 5.8× |
-| string (1000 ASCII chars) | Deserialize | 2.20 µs | 0.37 µs | 5.9× |
-| string (32 ASCII chars) | Serialize | 65 ns | 61 ns | 1.1× |
+| (byte, int)[1000] | Serialize | 86.90 μs | 2.93 μs | 29.7× |
+| (byte, int)[1000] | Deserialize | 62.40 μs | 784.0 ns | 79.6× |
+| ASCII string (1000 chars) | Serialize | 2.20 μs | 1.16 μs | 1.90× |
+| ASCII string (1000 chars) | Deserialize | 2.55 μs | 1.54 μs | 1.66× |
+
+### Unity 6000.3.27f1
+
+| Case | Operation | Without Burst | With Burst | Speedup |
+|---|---|--:|--:|--:|
+| (int, long)[32] | Serialize | 3.28 μs | 835.4 ns | 3.92× |
+| (int, long)[32] | Deserialize | 2.43 μs | 441.3 ns | 5.50× |
+| (int, long)[1000] | Serialize | 88.12 μs | 2.89 μs | 30.5× |
+| (int, long)[1000] | Deserialize | 64.86 μs | 1.16 μs | 55.9× |
+| (int, long)[100000] | Serialize | 8.16 ms | 612.00 μs | 13.3× |
+| (int, long)[100000] | Deserialize | 6.30 ms | 80.10 μs | 78.7× |
+| List&lt;string&gt; of 1000 ASCII strings (8–40 chars) | Serialize | 74.20 μs | 64.50 μs | 1.15× |
+| List&lt;string&gt; of 1000 ASCII strings (8–40 chars) | Deserialize | 0.9 ns | 0.8 ns | 1.12× |

@@ -66,14 +66,16 @@ Unity runs the netstandard build of `Nino.Core`, which has no hardware intrinsic
 
 | Kernel | What it speeds up | From |
 | --- | --- | --- |
-| Permute | Writing and reading arrays and lists of value tuples, `KeyValuePair`s and `[NinoType]` structs whose bytes differ from their memory (padding, tuple or pair members), and copying arrays of raw structs with padding, which is cleared on the way; values of up to 64 bytes | 16 values |
+| Permute | Writing and reading arrays and lists of value tuples, `KeyValuePair`s and `[NinoType]` structs whose bytes differ from their memory (padding, tuple or pair members), and copying arrays of raw structs with padding, which is cleared on the way; values of up to 64 bytes. On x64 CPUs with AVX2, values of up to 16 bytes go two or more per 32-byte vector | 16 values (AVX2: 256) |
 | Narrow, Widen | Writing and reading strings in the one-byte (Latin-1) form, ASCII included: 16 chars at a time | 32 chars |
 
 Shorter arrays and strings stay on the scalar paths, where the call to a kernel would cost more than it saves. Arrays of raw structs without padding (`Vector3[]`, `Color32[]`, your own unmanaged structs) are one memory copy with or without Burst.
 
 <UnityHighlights lang="en" />
 
-**Instruction sets.** The kernels use SSSE3 (`pshufb`) on x86 and x64 and Neon (`tbl`) on Arm64, in the editor, in Mono and IL2CPP players, and for HybridCLR hot-update code, which calls them through the AOT `Nino.Core`. Where they cannot run, Nino registers none and keeps its scalar paths: Armv7 (32-bit Android), WebGL, x86 and x64 CPUs without SSSE3 (a player's Burst code for x64 targets SSE2 and SSE4 by default and picks one at startup), players where Burst does not run, and the editor with Burst compilation turned off (**Jobs > Burst > Enable Compilation**).
+**Instruction sets.** The kernels use AVX2 (`vpshufb`) and SSSE3 (`pshufb`) on x86 and x64 and Neon (`tbl`) on Arm64, in the editor, in Mono and IL2CPP players, and for HybridCLR hot-update code, which calls them through the AOT `Nino.Core`. Where they cannot run, Nino registers none and keeps its scalar paths: Armv7 (32-bit Android), WebGL, x86 and x64 CPUs without SSSE3, players where Burst does not run, and the editor with Burst compilation turned off (**Jobs > Burst > Enable Compilation**).
+
+**x64 players: enable SSE4 and AVX2.** Burst compiles a player's code once for each x64 CPU target in **Edit > Project Settings > Burst AOT Settings** and picks the variant the CPU runs at startup. The AVX2 target gives AVX2 CPUs the 32-byte permute; the SSE4 target gives CPUs with SSSE3 but no AVX2 the 16-byte kernels. The SSE2 variant has no byte shuffle, so without an SSE4 target such a CPU gets no kernels at all. The default list depends on the Burst version (1.8.29's is SSE2 and AVX2), so check that it includes SSE4 and AVX2, as Nino's own test project does (SSE2, SSE4 and AVX2).
 
 **Same bytes.** Each kernel writes exactly the bytes of the scalar path it replaces, so players with and without Burst, .NET servers and the [Go, Rust and TypeScript runtimes](/en/docs/v4/advanced/codegen) all read each other's data. Nino's CI checks every kernel against its scalar reference byte for byte, in the editor and in IL2CPP players, on Unity 2022.3 and 6000.3. The [Unity benchmark](/en/docs/v4/perf-unity) times an IL2CPP player with and without the kernels for every release.
 
@@ -82,9 +84,10 @@ To check or switch them at run time, use the `Nino.Burst.NinoBurst` class (code 
 ```csharp
 using Nino.Burst;
 
-Debug.Log($"Nino Burst kernels: {NinoBurst.Registered}, instruction set {NinoBurst.Isa}"); // 1 SSSE3, 2 Neon, 0 none
+Debug.Log($"Nino Burst kernels: {NinoBurst.Registered}, {NinoBurst.IsaName}"); // Isa: 3 AVX2, 1 SSSE3, 2 Neon, 0 none
 NinoBurst.Unregister(); // back to the scalar paths, e.g. to compare frame times
-NinoBurst.Register();   // false where Burst is off or the CPU has neither instruction set
+NinoBurst.Register();   // false where Burst is off or the CPU has none of the instruction sets
+NinoBurst.Register(NinoBurst.Ssse3); // keep an AVX2 CPU on the 16-byte kernels (the same bytes)
 ```
 
 ## Unity Classes

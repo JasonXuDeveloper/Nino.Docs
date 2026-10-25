@@ -10,10 +10,10 @@ Unity runs the netstandard build of `Nino.Core`, which has no hardware intrinsic
 ## What Is Measured [#setup]
 
 - **Where:** an IL2CPP player run on a GitHub-hosted Linux x64 runner by the release workflow of every release, with a table per Unity version. The line under the tables names the Unity versions, the player configuration, the CPU, the Burst version and the instruction set the kernels were compiled for, as the release report gives them.
-- **What:** each case is timed in the same player twice: **without Burst**, with Nino's scalar netstandard paths, and **with Burst**, with the kernels registered. Both write the same bytes. Each time is the median per call.
+- **What:** each case is timed in the same player twice: **without Burst**, with Nino's scalar netstandard paths, and **with Burst**, with the kernels registered. Both write the same bytes. The cases are `Test.Runtime.Burst.BurstBenchmark`, measured with the Unity Performance Testing package (`Measure.Method`: a warm-up, then 9 measurements of about 100 ms, each the mean time per call); each time is the median of those measurements.
 - **Speedup:** the time without Burst divided by the time with it, computed by this site from the two times. Within 5% is on par, and a time under 1 ns against a measurable one is faster, too fast to measure, as on the [.NET page](/en/docs/v4/perf#setup).
 
-The kernels run for arrays and lists of at least 16 values and strings of at least 32 chars; shorter ones take the scalar path in both columns. A case below those thresholds should take about the same time in both columns. Compare times within one table: each Unity version ran in its own player, and the runner's CPU can change between releases.
+The kernels run for arrays and lists of at least 16 values and strings of at least 32 chars; shorter ones take the scalar path in both columns. A case below those thresholds should take about the same time in both columns. On a CPU with AVX2, blocks of 256 values or more (of up to 16 bytes each) take the 32-byte AVX2 permute, the rest the 16-byte SSSE3 kernels; the line under the tables names the kernels each player registered and the Burst x64 targets it was built with. Compare times within one table: each Unity version ran in its own player, and the runner's CPU can change between releases.
 
 ## Results [#results]
 
@@ -21,4 +21,4 @@ The kernels run for arrays and lists of at least 16 values and strings of at lea
 
 ## Reproducing [#reproducing]
 
-The Unity project is `src/Nino.Unity` in the [Nino repository](https://github.com/JasonXuDeveloper/Nino). Open it in Unity 2022.3 or later with `com.unity.burst` installed; the Test Runner's `BurstKernelTests` compare each kernel with its scalar reference byte for byte, and `NinoBurst.Unregister()` and `NinoBurst.Register()` switch the kernels off and on at run time. Numbers from your own machine are for comparing changes back to back on it.
+The Unity project is `src/Nino.Unity` in the [Nino repository](https://github.com/JasonXuDeveloper/Nino). Open it in Unity 2022.3 or later with `com.unity.burst` installed; the Test Runner's `BurstKernelTests` compare each kernel with its scalar reference byte for byte (on AVX2 CPUs, the AVX2 and SSSE3 tiers each), `BurstBenchmark` is the benchmark above, and `NinoBurst.Unregister()` and `NinoBurst.Register()` switch the kernels off and on at run time. Numbers from your own machine are for comparing changes back to back on it.

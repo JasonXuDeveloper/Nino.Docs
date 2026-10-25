@@ -1,7 +1,7 @@
 ---
 title: 各平台的 SIMD
 seoTitle: "Nino 在 .NET、Unity、Go、Rust 与 TypeScript 上的 SIMD – Nino v4 文档"
-description: "Nino 在各平台上使用哪些向量指令（.NET 的 AVX-512、AVX2、SSSE3、Arm64 和 WebAssembly 路径，Unity 的 Burst 内核，Go 和 Rust 的字符串转码），各自如何检测、什么情况下回退到可移植代码，以及各自在哪里有基准测试。"
+description: "Nino 在各平台上使用哪些向量指令（.NET 的 AVX-512、AVX2、SSSE3、Arm64 和 WebAssembly 路径，Unity 的 Burst 内核，Go 和 Rust 的字符串转码，TypeScript 的 WebAssembly 文本模块），各自如何检测、什么情况下回退到可移植代码，以及各自在哪里有基准测试。"
 icon: Cpu
 ---
 
@@ -26,24 +26,26 @@ Nino 在每个平台上写出的字节都相同。在有向量指令的平台上
 
 ## Unity [#unity]
 
-Unity 加载 `Nino.Core` 的 netstandard 版本。安装 `com.unity.burst` 1.8 或更高版本后，Unity 包会在启动时通过 netstandard 版本提供的钩子 `NinoKernels` 注册 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)；Burst 为目标平台编译它们，注册时检查各自的指令集。
+Unity 加载 `Nino.Core` 的 netstandard 版本。安装 `com.unity.burst` 1.8 或更高版本后，Unity 包会在启动时通过钩子 `NinoKernels` 注册 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)。只有 netstandard 版本会调用这个钩子（每个版本都声明了它，所以注册内核的库在 .NET 8 及更高版本上也能加载，那里仍使用自己的路径）。Burst 为其 AOT 设置中的每个 CPU 目标编译内核，启动时选出 CPU 能运行的版本，注册时各自检查指令集。
 
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |
-| 支持 SSSE3 的 x86 和 x64 | `Permute`：16 个及以上的元组、键值对和按块读写的 `[NinoType]` 结构体组成的数组和列表，每 16 字节一次字节重排（`pshufb`）读写，带填充的原始结构体在拷贝时清零填充；`Narrow` 和 `Widen`：32 个字符及以上的 Latin-1 字符串，每次 16 个字符 | [Unity 基准测试](/zh/docs/v4/perf-unity) |
+| 支持 AVX2 的 x64，Burst AVX2 目标 | 256 个值及以上、每个值最多 16 字节的块的 `Permute`：每个 32 字节向量放两个或更多值，一个 `vpshufb` 掩码，各通道用 `vpermd` 拼接或分成两个 16 字节存储；其余部分、更宽的值和字符串走下面的 SSSE3 路径 | [Unity 基准测试](/zh/docs/v4/perf-unity) |
+| 支持 SSSE3 的 x86 和 x64（x64 播放器中需要 SSE4 目标） | `Permute`：16 个及以上的元组、键值对和按块读写的 `[NinoType]` 结构体组成的数组和列表，每 16 字节一次字节重排（`pshufb`）读写，带填充的原始结构体在拷贝时清零填充；`Narrow` 和 `Widen`：32 个字符及以上的 Latin-1 字符串，每次 16 个字符 | [Unity 基准测试](/zh/docs/v4/perf-unity) |
 | Arm64（Neon） | 同样的内核，用 `tbl`，字符串用 `uzp1`/`zip` | — |
-| Armv7、WebGL、不支持 SSSE3 的 x86 和 x64、关闭或未安装 Burst | 无：Nino 的 netstandard 标量路径；字节相同 | [Unity 基准测试](/zh/docs/v4/perf-unity)，“不用 Burst”一列 |
+| Armv7、WebGL、不支持 SSSE3（或没有包含它的目标）的 x86 和 x64、关闭或未安装 Burst | 无：Nino 的 netstandard 标量路径；字节相同 | [Unity 基准测试](/zh/docs/v4/perf-unity)，“不用 Burst”一列 |
 
 ## Go [#go]
 
-Go 运行时的向量代码是处理字符串的汇编，根据 CPU 报告的能力（`CPUID`，以及用 `XGETBV` 确认系统会保存向量寄存器）在运行时选择。
+Go 运行时的向量代码是处理字符串的汇编，每个指令集一套内核，在运行时选用处理器支持的最好一档（`CPUID`，以及用 `XGETBV` 确认系统会保存向量寄存器；在 macOS 上，与 golang.org/x/sys/cpu 一样通过 `sysctl` 检测 AVX-512，从 macOS 12.2 起）。写入器一遍完成 WTF-8 校验，并以 Latin-1 或 UTF-16 写出；`WriteStrings` 一次调用写出整个列表。
 
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |
-| 支持 AVX2（和 POPCNT）的 amd64 | 字符串写入器每次 32 字节把 UTF-8 转码为 Latin-1 或 UTF-16，`WriteStrings` 一次调用写出多个字符串 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#go)，字符串用例 |
-| 支持 AVX-512（F、BW、VL、VBMI2）的 amd64 | 同一个写入器，使用掩码加载和压缩指令，不需要查找表；同时支持 VBMI 时，读取器用 AVX-512 把 Latin-1 和 UTF-16 转换为 UTF-8 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#go) |
-| amd64（SSE2）和 arm64（NEON） | 64 字节及以上的连续 ASCII 每次 16 字节拷贝或扩展为 UTF-16 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#go) |
-| 其他所有平台，或用 `-tags purego` 构建 | 无：按 8 字节字循环的 Go 代码；字节相同 | — |
+| 支持 AVX-512（F、BW、VL、VBMI2）的 amd64 | 写入器每次 32 字节，使用掩码加载和压缩指令，不需要查找表；同时支持 VBMI 时，读取器用 AVX-512 把 Latin-1 和 UTF-16 转换为 UTF-8 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#go)，字符串用例 |
+| 支持 AVX2（和 POPCNT）的 amd64 | 写入器每次 32 字节；读取器使用 SSSE3 内核 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#go) |
+| 支持 SSSE3 的 amd64 | 写入器和读取器每次 16 字节，使用 `PSHUFB` 和 `PALIGNR` | — |
+| arm64（NEON） | 写入器和读取器每次 16 字节；写入器把不需要向量的部分（块的 ASCII 判断、movemask）放在标量寄存器中做 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#go)，Arm64 |
+| 不支持 SSSE3 的 amd64、其他所有平台，或用 `-tags purego` 构建 | 无：按 8 字节字循环的 Go 代码（长串 ASCII 用 SSE2 或 NEON 每次 16 字节拷贝或扩展）；字节相同 | — |
 
 ## Rust [#rust]
 
@@ -59,4 +61,10 @@ Rust crate 的向量代码在 `src/simd.rs` 中，这是它唯一允许 `unsafe`
 
 ## TypeScript [#typescript]
 
-TypeScript 运行时没有自己的向量代码：它用 `DataView` 和类型化数组读写，长字符串交给 JavaScript 引擎内置的解码器。它的结果见[其他语言的基准测试](/zh/docs/v4/perf-runtimes#typescript)。
+TypeScript 运行时用 `DataView` 和类型化数组读写。它的向量代码用于浏览器和 Deno 中的字符串：嵌入 `nino.ts` 的一个小型 [WebAssembly 模块](/zh/docs/v4/advanced/codegen#text-in-browsers)，在第一次需要时检测和编译。
+
+| 引擎 | 向量路径 | 基准测试 |
+| --- | --- | --- |
+| 支持 WebAssembly SIMD、GC 和 JS String Builtins 的浏览器和 Deno | 读取较长的 UTF-16 和 Latin-1 文本、写入超过 64 个字符的文本，在 SIMD 寄存器中每次 8 或 16 个字符（`useWasm(false)` 可关闭） | — |
+| Node、Bun、带 Node `Buffer` 的 Deno | 不用 Nino 自己的：`Buffer` 原生的 Latin-1 和 UTF-16 方法 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#typescript) |
+| 不支持它们的引擎，或阻止编译 WebAssembly 的内容安全策略 | 无：JavaScript 路径和引擎内置的解码器；字节相同 | — |
