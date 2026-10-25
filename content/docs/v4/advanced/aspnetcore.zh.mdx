@@ -57,7 +57,7 @@ public class OrdersController : ControllerBase
 - **内容协商。** 格式化器添加在已有格式化器之后，所以对接受任意格式的客户端，默认仍是 JSON。`Content-Type: application/x-nino` 的请求用 Nino 读取；发送 `Accept: application/x-nino` 的客户端，或在 `[FormatFilter]` 下把 `format` 设为 `nino` 的 URL，会得到 Nino 响应。
 - **只处理 Nino 支持的类型。** 只有 `NinoSerializer.IsSupported(type)` 为 true 时（结果按类型缓存），格式化器才会接手这个类型，其他类型都留给别的格式化器。
 - **按声明的类型写出。** 结果按 action 声明的类型序列化，与用该类型作 `T` 调用 `Serialize<T>` 相同：`ActionResult<Shape>` 会写出所返回 `Circle` 的类型 ID，按 `Shape` 读取的客户端拿回的仍是 `Circle`。参见[多态](/zh/docs/v4/polymorphism)。
-- **无效数据返回 400。** Nino 读不了的请求体（被截断、损坏，或是为其他类型写出的）会成为模型状态错误，`[ApiController]` 会以 400 响应。
+- **无效数据返回 400。** Nino 读不了的请求体（被截断、损坏，或是为其他类型写出的）会成为模型状态错误，`[ApiController]` 会以 400 响应。只有无效数据（`NinoDataException`）才这样处理：服务器端读取时的失败（例如返回 null 的 `[NinoFactory]`）按服务器错误抛出。
 
 ## Minimal API [#minimal-apis]
 

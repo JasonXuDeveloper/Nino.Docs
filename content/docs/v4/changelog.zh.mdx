@@ -37,6 +37,7 @@ icon: RotateCcwClock
 - **带非公开成员的泛型 `[NinoType]` 不再需要 `partial`**，只要项目面向 .NET 9 或更高版本（编译定义了 `NET9_0_OR_GREATER`）：生成代码通过在泛型格式化器中声明的 `[UnsafeAccessor]` 访问这些成员，与 .NET 8 起非泛型类型的做法相同。继承自泛型基类的成员仍需 `partial`，除非基类的类型参数就是该类型自己按顺序排列的前几个类型参数（`class D<T, U> : Base<T>` 可以，`Base<List<T>>` 或 `Base<int>` 不行），或者基类不是泛型；NINO002 和 NINO022 会说明何时需要。泛型类型中被 `new` 隐藏的非公开基类成员在 .NET 9+ 上现在也会序列化，以前会以 NINO022 跳过。参见[私有成员](/zh/docs/v4/defining-types#private-members)和[诊断](/zh/docs/v4/analyzers#the-type)。
 - **块格式化器**：大小固定但不满足原始内存条件的 `[NinoType]` 结构体（含值元组或 `KeyValuePair` 成员、`LayoutKind.Auto`、自动属性）的数组、列表和 span 按块读写：生成器让这种结构体的格式化器实现 `INinoBlockFormatter<T>`，于是它的集合只做一次边界检查，并在 .NET 8+ 上使用元组的向量重排，而不是逐个值处理。字节不变。参见[非托管数据按原始内存拷贝](/zh/docs/v4/performance#raw-memory-for-unmanaged-data)。
 - **Unity 中的 Burst 内核**（Unity 包中的 `Nino.Burst`）：安装 `com.unity.burst` 1.8 或更高版本后，元组和结构体的数组与列表、带填充的原始结构体以及 Latin-1 字符串改用 AVX2 或 SSSE3（x86 和 x64）或 Arm64 Neon 搬运，不再走 Nino 的 netstandard 标量路径，写出的字节相同，代码无需改动。在 x64 播放器中，Burst 的 AVX2 目标用 AVX2 搬运 256 个值及以上的块（每个值最多 16 字节），不支持 AVX2 的 CPU 需要 SSE4 目标才能使用 SSSE3 内核。Armv7、WebGL 和未安装 Burst 的项目继续使用标量路径。见 [Burst 加速内核](/zh/docs/v4/advanced/unity#burst-kernels)和 [Unity 基准测试](/zh/docs/v4/perf-unity)。
+- TypeScript 运行时新增 **`deserializeExact`**：与 `deserialize` 相同，但值之后还有字节时抛出 `NinoError`，与 Go 的 `DeserializeExact` 和 Rust 的 `deserialize_exact` 一致。参见[不可信数据](/zh/docs/v4/advanced/codegen#untrusted-data)。
 - 只有生成代码使用的类型（`NinoObject`、`NinoDirect`、`NinoUnsafe`、`INinoBodyFormatter<T>` 和 `INinoBlockFormatter<T>` 等格式化器接口、`NinoPolymorphic<TBase>` ……）移到了命名空间 `Nino.Core.CompilerServices`。生成代码无需改动；手写代码中直接用到它们的，需要加上 `using Nino.Core.CompilerServices;`。
 
 ### 性能 [#performance-3]
@@ -44,6 +45,8 @@ icon: RotateCcwClock
 - **AVX2 CPU 上的 Unity**：x64 播放器读取小元组和结构体（每个最多 16 字节、256 个值及以上）的数组，速度最高是 SSSE3 内核的 3.5 倍，写入最高 1.3 倍（IL2CPP，Burst AVX2 目标）。参见 [Burst 加速内核](/zh/docs/v4/advanced/unity#burst-kernels)。
 - **Arm64 和不支持 AVX2 的 x64 上的 Go 字符串**：Go 运行时的字符串写入和读取有了 NEON 和 SSSE3 内核。写入混合文本在 Arm64 上快 1.9 倍（与那里的 MessagePack 持平），在不支持 AVX2 的 x64 上快 2.7 倍；读取在 Arm64 上快 17%，在不支持 AVX-512 VBMI 的 x64 上快 34%（GitHub 运行器：Neoverse-N2，以及强制指定档位的 AMD EPYC 7763）。参见[各平台的 SIMD](/zh/docs/v4/simd#go)。
 - **浏览器中的 TypeScript**：借助 WebAssembly 文本模块，在 GitHub 的 x64 和 Arm64 运行器上的 Chromium 中，以文本为主的文章读取快 27-31%，由 ASCII、Latin-1 和其他字符混合组成的字符串列表在 x64 上写入快约 12%；Node 不变。参见[浏览器中的文本](/zh/docs/v4/advanced/codegen#text-in-browsers)。
+- **Node 中的 TypeScript**：48 个字符及以下的字符串写入时不再经过正则表达式和原生调用：序列化 1,000 个 ASCII 字符串从 0.060-0.065 ms 降到 0.025-0.028 ms（GitHub 的 x64 和 Arm64 运行器），1,000 个混合字符串从 0.090 ms 降到 0.056-0.059 ms，Lookup、OrderBook 和 Player 用例分别从 0.74-0.78、0.76-0.79 和 0.31-0.34 ms 降到 0.39、0.43 和 0.26 ms。浏览器不变。参见 [TypeScript](/zh/docs/v4/advanced/codegen#typescript)。
+- **Go 的 `[NinoUtf8]` 字符串**：写入非 ASCII 文本快约 7 倍（1,000 个混合字符串：x64 上从 118 µs 降到 17.4 µs，Arm64 上从 131 µs 降到 17.4 µs），读取快 22-26%（38.3 到 29.8 µs，45.2 到 33.4 µs）。参见 [Go](/zh/docs/v4/advanced/codegen#go)。
 
 ### 修复 [#fixes-5]
 
@@ -75,6 +78,9 @@ icon: RotateCcwClock
 - **TypeScript**：没有成员的 `[NinoType]` 的生成代码在开启 `noUnusedParameters` 时也能编译（空的读写主体把参数命名为 `_r`、`_w` 和 `_v`）。参见 [TypeScript](/zh/docs/v4/advanced/codegen#typescript)。
 - **Go 和 Rust**：.NET 为夏令时切换时重复那一小时里的本地时间写出的 `DateTime`（kind 3）现在能读出并原样写回，不再报无效数据（Go 以前也拒绝写出它）；Rust 的 `kind()` 与 .NET 一样报告为 `Local`，新增的 `is_ambiguous_local()` 可以区分它。参见[不可信数据](/zh/docs/v4/advanced/codegen#untrusted-data)。
 - **Go**：在支持 AVX-512 的 Intel Mac（macOS 12.2 及更高版本）上，字符串写入和读取现在使用 AVX-512 内核；之前用的是 AVX2 内核，因为 macOS 只在线程第一次使用 AVX-512 寄存器时才启用它们。参见[各平台的 SIMD](/zh/docs/v4/simd#go)。
+- **TypeScript**：运行时拒绝 tick 数超过 `DateTime.MaxValue` 的 `DateTime`，以及小数位数超过 28 或标志位有其他位被置位的 `decimal`，抛出 `NinoError`，与 Go 和 Rust 运行时一致，不再读出一个无法写回的值。参见[不可信数据](/zh/docs/v4/advanced/codegen#untrusted-data)。
+- Unity 的 `RectOffset` 遇到不是 0 或 1 的存在字节时抛出 `NinoDataException`，与其他所有可空值一致，不再当作存在读取。参见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)。
+- 使用 Nino.AspNetCore 时，只有不是有效 Nino 数据的请求体（`NinoDataException`）才返回 400 Bad Request；服务器端读取时的失败（例如返回 null 的 `[NinoFactory]`）按服务器错误抛出，不再算作客户端的错。参见 [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore#mvc)。
 
 ## 4.0.0-rc.7
 

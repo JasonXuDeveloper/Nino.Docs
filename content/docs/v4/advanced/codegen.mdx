@@ -701,7 +701,7 @@ The TypeScript, Go and Rust readers take untrusted input, as the .NET reader doe
 - **Depth.** Class bodies nested past 128 are deferred exactly as .NET defers them, so the bytes match and the stack stays bounded; what cannot be deferred (and structs that hold themselves) fails past 512.
 - **Polymorphism.** A slot written behind a type id reads only the ids of the types allowed there; nothing is looked up by name.
 - **What .NET rejects in every mode.** `bool`s and presence bytes other than 0 or 1, a member that runs past the end of its region, a keyed member whose value leaves bytes in its entry, a malformed section of deferred bodies, a key or element repeated in a map or set.
-- **Bytes after the value** are left unread, as .NET does by default (`DeserializeExact`, `deserialize_exact` reject them in Go and Rust).
+- **Bytes after the value** are left unread, as .NET does by default (`deserializeExact`, `DeserializeExact` and `deserialize_exact` reject them in TypeScript, Go and Rust).
 
 <Tabs groupId="codegen-lang" persist items={['TypeScript', 'Go', 'Rust']}>
 <Tab value="TypeScript">

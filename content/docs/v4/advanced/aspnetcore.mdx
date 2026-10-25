@@ -57,7 +57,7 @@ public class OrdersController : ControllerBase
 - **Content negotiation.** The formatters are added after the existing ones, so JSON stays the default for a client that accepts anything. A request with `Content-Type: application/x-nino` is read with Nino, and a client that sends `Accept: application/x-nino`, or a URL with `format` set to `nino` under `[FormatFilter]`, gets a Nino response.
 - **Only types Nino supports.** The formatters claim a type only when `NinoSerializer.IsSupported(type)` is true (the answer is cached per type), and leave every other type to the other formatters.
 - **The declared type is written.** A result is serialized as the action's declared type, as `Serialize<T>` with that `T` would: `ActionResult<Shape>` writes the type id of the `Circle` it returns, and a client that reads a `Shape` gets a `Circle` back. See [Polymorphism](/en/docs/v4/polymorphism).
-- **Invalid data is a 400.** A body Nino cannot read (truncated, corrupt or written for another type) becomes a model state error, which `[ApiController]` answers with a 400.
+- **Invalid data is a 400.** A body Nino cannot read (truncated, corrupt or written for another type) becomes a model state error, which `[ApiController]` answers with a 400. Only invalid data (`NinoDataException`) is: a failure on the server's side while reading, such as a `[NinoFactory]` that returns null, propagates as a server error.
 
 ## Minimal APIs [#minimal-apis]
 
