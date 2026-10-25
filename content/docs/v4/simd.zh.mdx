@@ -49,14 +49,15 @@ Go 运行时的向量代码是处理字符串的汇编，每个指令集一套�
 
 ## Rust [#rust]
 
-Rust crate 的向量代码在 `src/simd.rs` 中，这是它唯一允许 `unsafe` 代码的模块，在 Miri 下针对 x86_64（仅 SSE2、SSSE3、SSE4.1）、Arm64 和大端的 s390x 测试。它覆盖字符串写入器；读取器用按字循环解码 Latin-1 和 UTF-16。
+Rust crate 的向量代码在 `src/simd.rs` 及其子模块 `simd/x86.rs`、`simd/neon.rs` 中，这是它唯一允许 `unsafe` 的代码，在 Miri 下针对 x86_64（仅 SSE2、SSSE3、SSE4.1、AVX2、AVX-512）、Arm64 和大端的 s390x 测试。写入字符串时一遍把 UTF-8 直接转码为 Latin-1 或 UTF-16 写进缓冲区；读取时把 Latin-1 或 UTF-16 直接解码进 `String`。每个指令集有自己的内核，x86_64 上在运行时检测一次并缓存，只在它针对的 CPU 上实测更快时才保留。
 
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |
-| 支持 SSE4.1（以及 SSSE3 和 POPCNT）的 x86_64 | 含非 ASCII 字符的文本一遍转码为 Latin-1 或 UTF-16；运行时检测 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#rust)，字符串用例 |
-| 支持 SSSE3 的 x86_64 | 48 字节及以上的文本中，由单字节和双字节字符组成的块用字节重排每次 16 字节转码；运行时检测 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#rust) |
-| x86_64（SSE2，总是可用） | ASCII 块每次 16 字节存储或扩展 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#rust) |
-| 小端 Arm64（NEON） | 同样的块，用 `tbl`，用于 48 字节及以上的文本 | — |
+| 支持 AVX-512（F、BW、VL、VBMI2；crate 用 Rust 1.89 或更高版本构建）的 x86_64 | 写入每步 64 字节，用掩码加载和存储，由 `vpcompressb`/`vpcompressw` 打包；读取 32 字节及以上的 Latin-1 和 24 个代码单元及以上的 UTF-16 时用 AVX-512 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#rust)，字符串用例 |
+| 支持 AVX2（以及 BMI1、BMI2、LZCNT）的 x86_64 | 写入用 32 字节窗口 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#rust) |
+| 支持 SSE4.1 的 x86_64 | 写入用 16 字节窗口；读取 24 个代码单元及以上的 UTF-16（Latin-1 用 SSSE3） | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#rust) |
+| 只有 SSSE3 或 SSE2 的 x86_64 | 64 字节以内的文本逐字符处理，更长的文本每块 16 字节（48 字节及以上文本中的双字节字符用 SSSE3） | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#rust) |
+| 小端 Arm64（NEON） | 写入 64 字节以上的文本用 32 字节窗口，连续的三字节字符（中日韩文字）每步 48 字节（`ld3`），更短的文本逐字符处理；读取 32 字节及以上的 Latin-1 和 24 个代码单元及以上的 UTF-16 | [其他语言的基准测试](/zh/docs/v4/perf-runtimes#rust) |
 | 32 位目标、WebAssembly、大端平台 | 无：每块两个 8 字节字；字节相同 | — |
 
 ## TypeScript [#typescript]

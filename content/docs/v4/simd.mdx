@@ -49,14 +49,15 @@ The Go runtime's vector code is assembly for strings, one kernel per instruction
 
 ## Rust [#rust]
 
-The Rust crate's vector code is in `src/simd.rs`, its only module allowed `unsafe` code, tested under Miri on x86_64 (SSE2 only, SSSE3, SSE4.1), Arm64 and big-endian s390x. It covers the string writer; the reader decodes Latin-1 and UTF-16 with word loops.
+The Rust crate's vector code is in `src/simd.rs` and its submodules `simd/x86.rs` and `simd/neon.rs`, its only code allowed `unsafe`, tested under Miri on x86_64 (SSE2 only, SSSE3, SSE4.1, AVX2, AVX-512), Arm64 and big-endian s390x. Writing a string transcodes its UTF-8 to Latin-1 or UTF-16 straight into the buffer in one pass; reading one decodes Latin-1 or UTF-16 straight into the `String`. Each instruction set has its own kernel, found once at run time on x86_64 and cached, and kept only where it measured faster on the CPUs it targets.
 
 | Hardware | Vector paths | Benchmark |
 | --- | --- | --- |
-| x86_64 with SSE4.1 (with SSSE3 and POPCNT) | text with non-ASCII chars transcoded to Latin-1 or UTF-16 in one pass; found at run time | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust), string cases |
-| x86_64 with SSSE3 | blocks of one- and two-byte chars transcoded 16 bytes at a time with byte shuffles, for text of 48 bytes or more; found at run time | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust) |
-| x86_64 (SSE2, always present) | blocks of ASCII stored or widened 16 bytes at a time | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust) |
-| Arm64, little-endian (NEON) | the same blocks with `tbl`, for text of 48 bytes or more | — |
+| x86_64 with AVX-512 (F, BW, VL, VBMI2; crate built with Rust 1.89 or later) | writes 64 bytes a step with masked loads and stores, packed by `vpcompressb`/`vpcompressw`; reads Latin-1 of 32 bytes or more and UTF-16 of 24 units or more with AVX-512 | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust), string cases |
+| x86_64 with AVX2 (and BMI1, BMI2, LZCNT) | writes in 32-byte windows | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust) |
+| x86_64 with SSE4.1 | writes in 16-byte windows; reads UTF-16 of 24 units or more (Latin-1 with SSSE3) | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust) |
+| x86_64 with SSSE3 or SSE2 only | text up to 64 bytes char by char, longer text 16 bytes a block (SSSE3 for two-byte chars in text of 48 bytes or more) | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust) |
+| Arm64, little-endian (NEON) | writes text over 64 bytes in 32-byte windows, runs of three-byte chars (CJK) 48 bytes a step (`ld3`), shorter text char by char; reads Latin-1 of 32 bytes or more and UTF-16 of 24 units or more | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust) |
 | 32-bit targets, WebAssembly, big-endian | none: two 8-byte words a block; the same bytes | — |
 
 ## TypeScript [#typescript]
