@@ -37,7 +37,7 @@ Unity loads the netstandard build of `Nino.Core`. With `com.unity.burst` 1.8 or 
 
 ## Go [#go]
 
-The Go runtime's vector code is assembly for strings, one kernel per instruction set, the best the processor has taken at run time (`CPUID`, and `XGETBV` for whether the system saves the vector registers; on macOS, AVX-512 is detected through `sysctl` as golang.org/x/sys/cpu does, from macOS 12.2 on). The writer checks the text is WTF-8 and writes it as Latin-1 or UTF-16 in one pass; `WriteStrings` writes a whole list in one call.
+The Go runtime's vector code is assembly for strings, one kernel per instruction set, the best the processor has taken at run time (`CPUID`, and `XGETBV` for whether the system saves the vector registers; on macOS, AVX-512 is detected through `sysctl` as golang.org/x/sys/cpu does, from macOS 12.2 on). The writer checks the text is WTF-8 and writes it as Latin-1 or UTF-16 in one pass; `WriteStrings` writes a whole list in one call, a string of 64 bytes or more through the single-string kernel, which reserves the longest header the text could need and moves the text down when the header is shorter.
 
 | Hardware | Vector paths | Benchmark |
 | --- | --- | --- |

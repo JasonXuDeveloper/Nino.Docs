@@ -13,14 +13,42 @@ You do not need any of this to use Nino from C#: the generator writes and reads 
 
 - **Little-endian, unaligned.** Every multi-byte value is little-endian, and each value starts right after the previous one. The only padding on the wire is inside raw structs and nullable elements of raw arrays, written as zeros. The .NET implementation refuses to run on big-endian hosts.
 - **No envelope.** A payload is the top-level value under its declared type, followed by any deferred bodies. There is no magic number, version, length or type descriptor: the declared type alone decides how the bytes are read. Bytes after the value are ignored by default and rejected in [untrusted mode](/en/docs/v4/security#untrusted-mode).
-- **Fixed-size integers.** There are no variable-length integers. Lengths and counts are `int32`, with `-1` for null; sealed classes and nullable values have a presence byte (`0` or `1`).
+- **Fixed-size integers.** Lengths and counts are `int32`, with `-1` for null; sealed classes and nullable values have a presence byte (`0` or `1`). The one variable-length integer is the [string header](#strings), whose first byte gives its size.
 - **Versioning.** The format is versioned with Nino's major version: v4 does not read v3 data. A change to the bytes inside v4 is announced in the [changelog](/en/docs/v4/changelog) under "Wire Format". Adding members to a type is handled per type by the [version-tolerant and keyed formats](/en/docs/v4/evolving-data), not by format versions.
 
 ## Values [#values]
 
 - **Primitives** (`bool`, integers, `float`, `double`, `Half`, `char`, enums) are their bytes. `nint` and `nuint` are 8 bytes on every platform. `Int128` and `UInt128` are the low 64 bits, then the high 64 bits.
 - **BCL values**: `decimal`, `Guid`, `DateTime`, `TimeSpan`, `DateOnly`, `TimeOnly` and the like have fixed sizes; `DateTimeOffset` is UTC ticks plus offset minutes (10 bytes). `BigInteger`, `Version`, `BitArray`, `Uri` and the other variable-size values have encodings of their own.
-- **Strings** have two encodings, chosen per member. The default is a header `h` followed by the text: `-1` is null, `0` is empty, a negative `h` is `~h` Latin-1 chars of one byte each (written when every char is at most U+00FF), and a positive one is `h` UTF-16 code units. `[NinoUtf8]` members write the char count, the byte count and the UTF-8 bytes. See [String Encoding](/en/docs/v4/defining-types#string-encoding).
+- **Strings** have two encodings, chosen per member, each behind a header of 1, 3 or 5 bytes; see [Strings](#strings).
+
+## Strings [#strings]
+
+A string has one of two encodings, chosen per member: the default, or UTF-8 for members marked [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding). Both start with a **header**, an unsigned value below 2³² whose first byte gives its size, as MessagePack's string markers do:
+
+| First byte | Size | Value |
+| --- | --- | --- |
+| `00` to `7F` | 1 byte | the byte itself (0 to 127) |
+| `80` | 3 bytes | the next two bytes, a little-endian `uint16` (128 to 65,535) |
+| `81` | 5 bytes | the next four bytes, a little-endian `uint32` (65,536 and above) |
+| `82` to `FF` | | invalid |
+
+A header is minimal: a value always takes the shortest form that holds it. Readers reject a header that is not minimal, that runs past the end of the data or whose first byte is `82` or above.
+
+- **Default encoding.** The header is `0` for null; `2n + 1` followed by `n` Latin-1 bytes when every char is at most U+00FF (`1` is the empty string); otherwise `2n` followed by `n` UTF-16 code units. Both forms of a string of `n` chars have headers of the same size: one byte up to 63 chars, three up to 32,767, five above. Unpaired surrogates are written as they are, in the UTF-16 form. A `StringBuilder` is always written in the UTF-16 form, except when empty: `01`, since `0` is null; readers accept both forms. The text of `Uri`, `CultureInfo` and `TimeZoneInfo` values (a zone's id) is written in this encoding too.
+- **`[NinoUtf8]`.** The header is the char count (in UTF-16 code units) plus one: `0` is null and `1` the empty string, with nothing after either. A non-empty string then has its byte count as a second header, followed by the UTF-8 bytes. An unpaired surrogate is written as U+FFFD, so the char count is the length of the string read back.
+
+| Value | Default | `[NinoUtf8]` |
+| --- | --- | --- |
+| `null` | `00` | `00` |
+| `""` | `01` | `01` |
+| `"abc"` | `07 61 62 63` | `04 03 61 62 63` |
+| `"é"` | `03 E9` | `02 02 C3 A9` |
+| `"a中"` | `04 61 00 2D 4E` | `03 04 61 E4 B8 AD` |
+| `"é😀"` | `06 E9 00 3D D8 00 DE` | `04 06 C3 A9 F0 9F 98 80` |
+| 64 × `"a"` | `80 81 00 61 … 61` | `41 40 61 … 61` |
+
+This is version 4.1 of the specification, written from 4.0.0-rc.8 on; earlier 4.0 prereleases wrote a 4-byte `int32` header, which 4.0.0-rc.8 does not read. See the [changelog](/en/docs/v4/changelog#wire-format-3).
 
 ## Raw Values [#raw-values]
 
@@ -59,4 +87,4 @@ For every `[NinoType]`, the generator publishes how it is written as `[assembly:
 
 ## Validation [#validation]
 
-The specification lists the checks a reader of untrusted data must make, and what the .NET reader does for each: bounds; lengths checked against the bytes left before allocating; `bool` and presence bytes of 0 or 1; strict UTF-8; regions and keyed entries filled exactly; type ids limited to the declared type's subtypes; back references; duplicate keys and hash flooding; depth; value ranges; trailing data. For what .NET does and the settings involved, see [Untrusted Data](/en/docs/v4/security).
+The specification lists the checks a reader of untrusted data must make, and what the .NET reader does for each: bounds; lengths checked against the bytes left before allocating; `bool` and presence bytes of 0 or 1; minimal string headers and strict UTF-8; regions and keyed entries filled exactly; type ids limited to the declared type's subtypes; back references; duplicate keys and hash flooding; depth; value ranges; trailing data. For what .NET does and the settings involved, see [Untrusted Data](/en/docs/v4/security).

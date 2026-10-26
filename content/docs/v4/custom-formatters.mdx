@@ -248,7 +248,7 @@ A formatter writes with `Writer` and reads with `Reader`, both `ref struct`s. Th
 | `WriteRaw(ReadOnlySpan<byte>)` | `ReadRaw(int)`, `Advance(int)` | raw bytes, or skipping them |
 | `Position` | `Position`, `Remaining`, `Eof` | where you are: `Position` is an absolute offset, `Remaining` the bytes left |
 
-`Write(string)` writes an `int32` header and the chars: `-1` for `null` and `0` for empty, with nothing after either; `~length` and one byte a char when every char is at most U+00FF; otherwise the length and the UTF-16 code units. `WriteUtf8` writes the length in chars (`-1` and `0` as before), then an `int32` byte count and exactly that many UTF-8 bytes: `"é😀"` is `03 00 00 00` `06 00 00 00` `C3 A9 F0 9F 98 80`. An unpaired surrogate is written as U+FFFD. See [Binary Format](/en/docs/v4/platforms#binary-format).
+`Write(string)` writes a header of 1, 3 or 5 bytes and the chars: `0` for `null`; `2 × length + 1` and one byte a char when every char is at most U+00FF (`1` for empty, with nothing after it); otherwise `2 × length` and the UTF-16 code units. `WriteUtf8` writes the length in chars plus one as a header (`0` for `null`, `1` for empty), then the byte count as a second header and exactly that many UTF-8 bytes: `"é😀"` is `04` `06` `C3 A9 F0 9F 98 80`. An unpaired surrogate is written as U+FFFD. See [Binary Format](/en/docs/v4/platforms#binary-format).
 
 ### Positions in a Slice [#positions-in-a-slice]
 

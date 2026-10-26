@@ -32,7 +32,7 @@ icon: Gauge
 | [密封类](#sealed-and-polymorphic) | 没有子类型的类 | 无 |
 | [共同的 `[NinoType]` 基类](#sealed-and-polymorphic) | 多态值 | 每个值 4 字节的类型 ID |
 | [原始元素的数组和列表](#collections) | 热路径上的集合 | 无 |
-| [默认的字符串编码](#strings) | 几乎所有情况；以 ASCII 为主、夹杂少量更宽字符的文本用 `[NinoUtf8]` | `[NinoUtf8]`：一次转码和 4 字节 |
+| [默认的字符串编码](#strings) | 几乎所有情况；以 ASCII 为主、夹杂少量更宽字符的文本用 `[NinoUtf8]` | `[NinoUtf8]`：一次转码和一个字节数 |
 | [整块拷贝的自定义格式化器](#custom-formatters) | Nino 不认识的类型 | 带自定义格式化器的成员让它的类型不再按原始内存拷贝、不再是固定大小 |
 | [提前注册与预热](#startup) | 第一条消息也必须快 | 启动时间 |
 | [拦截器](#per-call-overhead) | 项目用 .NET 8 SDK 或更高版本构建 | 无 |
@@ -289,7 +289,7 @@ Nino 在类的值前面写什么，取决于存放它的位置的声明类型（
 
 ## 字符串 [#strings]
 
-- 默认编码下，所有字符都不超过 U+00FF 的文本每个字符写一个字节，其他文本按 UTF-16 写出，都只需一遍。`[NinoUtf8]` 要做转码，还要多写 4 字节的字节数，只有以 ASCII 为主、夹杂少量更宽字符的文本才划算（参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)）。
+- 默认编码下，所有字符都不超过 U+00FF 的文本每个字符写一个字节，其他文本按 UTF-16 写出，都只需一遍。`[NinoUtf8]` 要做转码，还要多写字节数（UTF-8 不超过 127 字节时占 1 字节），只有以 ASCII 为主、夹杂少量更宽字符的文本才划算（参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)）。
 - 复用反序列化会保留内容没有变化的字符串，所以稳定的文本（名称、键、类似枚举的代码）每条消息不产生任何开销；`[NinoUtf8]` 字符串只有在内容是 ASCII 时才会保留。
 
 ## 热路径上的自定义格式化器 [#custom-formatters]

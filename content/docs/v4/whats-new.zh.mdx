@@ -118,7 +118,7 @@ Nino v4 本来就是为读取不可信来源的数据而设计的：网络对端
 
 - **私有成员**：使用 `containNonPublicMembers`；在 .NET 8 及以上通过 `[UnsafeAccessor]` 访问，无需 `partial`（泛型类型需 .NET 9 及以上，自 rc.8 起）。参见[私有成员](/zh/docs/v4/defining-types#private-members)。
 - **构造函数、record 和 `required` 成员**：Nino 调用合适的构造函数，或标记了 `[NinoConstructor]` 的那个。参见[自定义构造函数](/zh/docs/v4/constructors)。
-- **紧凑的字符串**（*rc.6*）：所有字符都不超过 U+00FF（ASCII、Latin-1）的文本每个字符写一个字节，其他文本按 UTF-16 写出。[`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 可按成员写成 UTF-8。
+- **紧凑的字符串**（*rc.6*、*rc.8*）：所有字符都不超过 U+00FF（ASCII、Latin-1）的文本每个字符写一个字节，其他文本按 UTF-16 写出，63 个字符以内的字符串头只占 1 字节（[字符串](/zh/docs/v4/wire-format#strings)）。[`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 可按成员写成 UTF-8。
 - **子类型继承 `[NinoType]`**：子类型自动从基类或接口继承该特性；泛型类型可以用作成员、元素和顶层值。参见[定义类型](/zh/docs/v4/defining-types)。
 
 ## 支持的类型 [#supported-types]

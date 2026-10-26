@@ -37,7 +37,7 @@ Unity 加载 `Nino.Core` 的 netstandard 版本。安装 `com.unity.burst` 1.8 �
 
 ## Go [#go]
 
-Go 运行时的向量代码是处理字符串的汇编，每个指令集一套内核，在运行时选用处理器支持的最好一档（`CPUID`，以及用 `XGETBV` 确认系统会保存向量寄存器；在 macOS 上，与 golang.org/x/sys/cpu 一样通过 `sysctl` 检测 AVX-512，从 macOS 12.2 起）。写入器一遍完成 WTF-8 校验，并以 Latin-1 或 UTF-16 写出；`WriteStrings` 一次调用写出整个列表。
+Go 运行时的向量代码是处理字符串的汇编，每个指令集一套内核，在运行时选用处理器支持的最好一档（`CPUID`，以及用 `XGETBV` 确认系统会保存向量寄存器；在 macOS 上，与 golang.org/x/sys/cpu 一样通过 `sysctl` 检测 AVX-512，从 macOS 12.2 起）。写入器一遍完成 WTF-8 校验，并以 Latin-1 或 UTF-16 写出；`WriteStrings` 一次调用写出整个列表，其中 64 字节及以上的字符串走单个字符串的内核：它先预留文本可能需要的最长的头，头较短时再把文本前移。
 
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |

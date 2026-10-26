@@ -11,6 +11,7 @@ icon: RotateCcwClock
 
 ### 二进制格式 [#wire-format-3]
 
+- **1、3 或 5 字节的字符串头**：每个字符串（成员、集合的元素和键、`StringBuilder`，`Uri`、`CultureInfo` 和 `TimeZoneInfo` 的文本，以及 `[NinoUtf8]` 字符串）不再以 4 字节的 `int32` 作头，而是像 MessagePack 的字符串标记一样，由头的第一个字节决定它的大小：`7F` 以内是值本身，否则是 `80` 加一个 `uint16`，再大则是 `81` 加一个 `uint32`，总是取最短形式。头的值 `0` 表示 null，`2n + 1` 表示 `n` 个 Latin-1 字符（`1` 即空字符串），`2n` 表示 `n` 个 UTF-16 码元，因此 63 个字符以内的字符串头只占 1 字节：null 是 `00`，`""` 是 `01`，`"abc"` 是 `07 61 62 63`。`[NinoUtf8]` 字符串以头写入字符数加一和字节数。`StringBuilder` 仍用 UTF-16 形式（为空时是 `01`）。读取方会拒绝不是最短形式、或以 `82` 及以上字节开头的头。Go、Rust 和 TypeScript 运行时写出和读取相同的字节。这是二进制格式规范的 4.1 版；更早的 4.0 预发布版本写出的数据无法读取（[从更早的候选版本升级](/zh/docs/v4/migration#upgrading-from-an-earlier-release-candidate)）。参见[字符串](/zh/docs/v4/wire-format#strings)。
 - **8 项及以上的元组**：类型为 8 项及以上 `ValueTuple` 的成员（或元素）现在会被写出，各项按顺序写入，与较短的元组相同；之前会被跳过并报 NINO007 警告，什么也不写。参见[其他内置类型](/zh/docs/v4/types#other-built-in-types)。
 - **运行时绑定的可空原始 `[NinoType]` 结构体**：由运行时构建格式化器的原始 `[NinoType]` 结构体（没有生成代码引用、按 `Type` 或装箱序列化的类型），其 `T?[]` 和其他 `T?` 序列现在按生成代码使用的固定步长写入，两边可以互相读取对方的字节。这类格式化器以前写出的数据需要重新写入。
 - **32 位 x86**：类型为结构体（不是 `[NinoType]`）、且在较小字段之后含有 `TimeOnly`、`Complex`、`Int128` 或 `UInt128` 的成员，现在和 64 位运行时一样按规范布局写入，不再写出 x86 上的内存。参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。

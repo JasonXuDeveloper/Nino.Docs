@@ -224,7 +224,7 @@ Reordering, inserting or removing members (or changing their indices) breaks pre
 
 ## String Encoding
 
-By default Nino picks the form of each string: one byte a char when every char is at most U+00FF (ASCII and Latin-1: English, identifiers, keys, Western European text), and UTF-16 otherwise. Both are a single pass that narrows, widens or copies the chars, vectorized on .NET 8 and later. Mark a member with `[NinoUtf8]` to write UTF-8 instead. It pays off for text that is mostly ASCII but holds a few chars above U+00FF (curly quotes, emoji, a name in another script), which the default writes entirely as UTF-16, at the cost of transcoding and a 4-byte byte count: chat messages and user names sent to many clients, or large text tables on disk. Keep the default for text that is mostly CJK, which takes 3 bytes per character in UTF-8 instead of 2.
+By default Nino picks the form of each string: one byte a char when every char is at most U+00FF (ASCII and Latin-1: English, identifiers, keys, Western European text), and UTF-16 otherwise. Both are a single pass that narrows, widens or copies the chars, vectorized on .NET 8 and later. Mark a member with `[NinoUtf8]` to write UTF-8 instead. It pays off for text that is mostly ASCII but holds a few chars above U+00FF (curly quotes, emoji, a name in another script), which the default writes entirely as UTF-16, at the cost of transcoding and a byte count (one byte up to 127 bytes of UTF-8): chat messages and user names sent to many clients, or large text tables on disk. Keep the default for text that is mostly CJK, which takes 3 bytes per character in UTF-8 instead of 2.
 
 ```csharp
 [NinoType]

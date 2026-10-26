@@ -49,6 +49,7 @@ In every mode, `NinoDataException` is thrown for:
 - a `bool`, null flag or has-value byte other than `0` or `1` (Nino writes only those two);
 - a keyed member whose entry holds more bytes than its value, and a member that runs past the end of its region;
 - a version-tolerant or keyed region whose section of deferred bodies does not match the region (its offset or its entries);
+- a [string header](/en/docs/v4/wire-format#strings) that is not in its shortest form or whose first byte is `0x82` or above;
 - a `[NinoUtf8]` string whose bytes are not valid UTF-8 or do not match its char and byte counts.
 
 A `bool` field inside a raw struct is copied with the struct's bytes, unchecked, unless [`Untrusted`](#untrusted-mode) is set. The `bool` items of value tuples and `KeyValuePair`s are checked in every mode, also in arrays and lists read as blocks.

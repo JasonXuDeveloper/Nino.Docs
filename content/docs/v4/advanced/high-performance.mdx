@@ -32,7 +32,7 @@ For copy-paste recipes built on these mechanisms, and the checklist, see [Zero-A
 | [Sealed classes](#sealed-and-polymorphic) | classes without subtypes | nothing |
 | [A common `[NinoType]` base](#sealed-and-polymorphic) | polymorphic values | a 4-byte type id per value |
 | [Arrays and lists of raw elements](#collections) | collections on hot paths | nothing |
-| [The default string encoding](#strings) | almost always; `[NinoUtf8]` for mostly-ASCII text with a few wider chars | `[NinoUtf8]`: a transcode and 4 bytes |
+| [The default string encoding](#strings) | almost always; `[NinoUtf8]` for mostly-ASCII text with a few wider chars | `[NinoUtf8]`: a transcode and a byte count |
 | [Custom formatters that copy blocks](#custom-formatters) | types Nino does not know | a member with one is no longer raw or fixed-size |
 | [Early registration and a warm-up](#startup) | the first message must be fast | startup time |
 | [Interceptors](#per-call-overhead) | the project builds with the .NET 8 SDK or later | nothing |
@@ -289,7 +289,7 @@ What Nino writes in front of a class value depends on the declared type of its s
 
 ## Strings [#strings]
 
-- The default encoding writes text whose chars are all at most U+00FF in one byte a char and other text as UTF-16, each in one pass. `[NinoUtf8]` costs a transcode and a 4-byte byte count, and pays off only for text that is mostly ASCII with a few wider chars ([String Encoding](/en/docs/v4/defining-types#string-encoding)).
+- The default encoding writes text whose chars are all at most U+00FF in one byte a char and other text as UTF-16, each in one pass. `[NinoUtf8]` costs a transcode and a byte count (one byte up to 127 bytes of UTF-8), and pays off only for text that is mostly ASCII with a few wider chars ([String Encoding](/en/docs/v4/defining-types#string-encoding)).
 - Reuse deserialization keeps a string whose text did not change, so stable text (names, keys, enum-like codes) costs nothing per message; a `[NinoUtf8]` string is kept only when its text is ASCII.
 
 ## Custom Formatters on Hot Paths [#custom-formatters]

@@ -33,16 +33,16 @@ This section is a short summary; the [Wire Format](/en/docs/v4/wire-format) page
 | `bool` | 1 byte |
 | `T?` | 1 byte has-value flag, then the value if present |
 | Length of an array or collection | `int32`; `-1` means `null` |
-| `string` | `int32` header (`-1` = null, `0` = empty): `~length` then one byte per char when every char is at most U+00FF, otherwise the length then the UTF-16 code units |
-| `string` with `[NinoUtf8]` | `int32` length in UTF-16 chars (`-1` = null, `0` = empty), then `int32` length in bytes, then the UTF-8 bytes |
+| `string` | header of 1, 3 or 5 bytes (`0` = null): `2 × length + 1` then one byte per char when every char is at most U+00FF (`1` = empty), otherwise `2 × length` then the UTF-16 code units |
+| `string` with `[NinoUtf8]` | header: length in UTF-16 chars plus one (`0` = null, `1` = empty), then a header with the length in bytes, then the UTF-8 bytes |
 | Array or list of unmanaged `T` | length, then one block of elements |
 | Other collections | length, then each element |
 | Dictionary | length, then key/value pairs |
 | `T[,]`, `T[,,]`, `T[,,,]` | each dimension's length, then elements in row-major order |
 
-A default string picks its form per string. When every char is at most U+00FF (ASCII and Latin-1: English, digits, identifiers, keys, Western European text), it is written in one byte a char after the header `~length` (`-length - 1`): `"Ada"` is `FC FF FF FF` `41 64 61`. Any other text is written as UTF-16 after its length: `"名字"` is `02 00 00 00` `0D 54 57 5B`. Both forms carry the length in chars, so the reader allocates the string at its final length and widens or copies the chars into it in one pass. A `StringBuilder` is always written in the UTF-16 form, which the same reader reads.
+A default string picks its form per string. When every char is at most U+00FF (ASCII and Latin-1: English, digits, identifiers, keys, Western European text), it is written in one byte a char after the header `2 × length + 1`: `"Ada"` is `07` `41 64 61`. Any other text is written as UTF-16 after the header `2 × length`: `"名字"` is `04` `0D 54 57 5B`. The header is one byte up to 63 chars, three bytes (`80` and a `uint16`) up to 32,767 and five bytes (`81` and a `uint32`) above, the same size in both forms; see [Strings](/en/docs/v4/wire-format#strings). Both forms carry the length in chars, so the reader allocates the string at its final length and widens or copies the chars into it in one pass. A `StringBuilder` is always written in the UTF-16 form (an empty one as `01`, since `0` is null), which the same reader reads.
 
-A `[NinoUtf8]` string starts with the string's length in UTF-16 chars (`string.Length`): `-1` for `null`, `0` for an empty string, and nothing follows either. A non-empty `[NinoUtf8]` string then carries its length in bytes, followed by exactly that many UTF-8 bytes. An unpaired surrogate is written as U+FFFD, which is one char as well, so the char count always matches the string that is read back.
+A `[NinoUtf8]` string starts with a header holding the string's length in UTF-16 chars (`string.Length`) plus one: `0` for `null`, `1` for an empty string, and nothing follows either. A non-empty `[NinoUtf8]` string then carries its length in bytes as a second header, followed by exactly that many UTF-8 bytes. An unpaired surrogate is written as U+FFFD, which is one char as well, so the char count always matches the string that is read back.
 
 The reader allocates the string at its final length and transcodes exactly the given bytes into it in one pass; the next value starts right after them. It throws `NinoDataException` when:
 
@@ -50,7 +50,7 @@ The reader allocates the string at its final length and transcodes exactly the g
 - the char count does not match the decoded bytes;
 - the bytes are not strict UTF-8 (overlong forms and encoded surrogates included) or end in the middle of a character.
 
-For example, `"é😀"` is 3 chars (U+00E9 and a surrogate pair) and 6 UTF-8 bytes, so it is written as `03 00 00 00` `06 00 00 00` `C3 A9 F0 9F 98 80`; `null` is `FF FF FF FF` and `""` is `00 00 00 00`.
+For example, `"é😀"` is 3 chars (U+00E9 and a surrogate pair) and 6 UTF-8 bytes, so it is written as `04` (3 + 1) `06` `C3 A9 F0 9F 98 80`; `null` is `00` and `""` is `01`.
 
 Objects get a header that depends on the **declared** type:
 
