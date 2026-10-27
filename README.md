@@ -107,4 +107,4 @@ The old version subdomains (`v3.nino.xgamedev.net`, `v2.nino.xgamedev.net`) are 
 
 ## Content
 
-Pages are MDX in `content/docs/<version>/`, `page.mdx` for English and `page.zh.mdx` for Chinese. See [CLAUDE.md](CLAUDE.md) for conventions.
+Pages are MDX in `content/docs/<version>/`, `page.mdx` for English and `page.zh.mdx` for Chinese. See [AGENTS.md](AGENTS.md) for conventions and [WRITING.md](WRITING.md) for how a page is written.
