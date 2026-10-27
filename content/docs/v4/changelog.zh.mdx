@@ -49,6 +49,7 @@ icon: RotateCcwClock
 - **Node 中的 TypeScript**：48 个字符及以下的字符串写入时不再经过正则表达式和原生调用：序列化 1,000 个 ASCII 字符串从 0.060-0.065 ms 降到 0.025-0.028 ms（GitHub 的 x64 和 Arm64 运行器），1,000 个混合字符串从 0.090 ms 降到 0.056-0.059 ms，Lookup、OrderBook 和 Player 用例分别从 0.74-0.78、0.76-0.79 和 0.31-0.34 ms 降到 0.39、0.43 和 0.26 ms。浏览器不变。参见 [TypeScript](/zh/docs/v4/advanced/codegen#typescript)。
 - **Node 中的 TypeScript，短中文和俄文文本**：1,000 个 4 到 16 个字符的此类字符串，序列化耗时减少 69-73%（x64 上从 0.066 ms 降到 0.018 ms，Arm64 上从 0.108 ms 降到 0.034 ms），反序列化快 46-47%；24 到 40 个字符的中文字符串读写快 5-7%（GitHub 运行器）。参见 [TypeScript](/zh/docs/v4/advanced/codegen#typescript)。
 - **Go 的 `[NinoUtf8]` 字符串**：写入非 ASCII 文本快约 7 倍（1,000 个混合字符串：x64 上从 118 µs 降到 17.4 µs，Arm64 上从 131 µs 降到 17.4 µs），读取快 22-26%（38.3 到 29.8 µs，45.2 到 33.4 µs）。参见 [Go](/zh/docs/v4/advanced/codegen#go)。
+- **Go 在新头部下的字符串**：在 GitHub 的 x64 和 Arm64 runner 上（AMD EPYC 7763、9V74 和 9V45，Intel Xeon Platinum，Neoverse-N2），1,000 个短 ASCII 字符串的列表序列化耗时减少 33-40%，反序列化减少 17-27%，混合字符串序列化快 5-14%；非 ASCII 的 `[NinoUtf8]` 字符串在 x64 和 Arm64 上每次检查 16 字节（x64 上写入和读取耗时各减少 26-32%，Arm64 上分别减少 11% 和 20%）。带标签结构体（含字符串、字符串切片和映射）的 `nino.Marshal` 和 `nino.Unmarshal` 写入耗时减少 52-76%，读取减少 18-45%。参见 [Go](/zh/docs/v4/advanced/codegen#go)。
 - **各指令集上的 Rust 字符串**：Rust 运行时的字符串写入和读取有了 AVX-512、AVX2 和 Arm64 NEON 内核。写入含非 ASCII 字符的字符串在 x64 上最快 2.4 倍（1,000 个混合字符串：AVX-512 运行器上快 37%，AVX2 运行器上快 18%），在 Arm64 上对 64 字节以上的文本最快 5 倍；读取 32 字节及以上的 Latin-1 和 UTF-16 字符串在 x64 上最快 2.4 倍，在 Arm64 上 1.6 倍。`[NinoUtf8]` 字符串写入最多快 45%，读取快 10-14%。参见[各平台的 SIMD](/zh/docs/v4/simd#rust)。
 
 ### 修复 [#fixes-5]
