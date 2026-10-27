@@ -10,7 +10,7 @@ Nino 为[内置类型](/zh/docs/v4/types)提供了格式化器，并为每个 `[
 
 格式化器是实现了 `INinoFormatter<T>` 的**结构体**：
 
-```csharp
+```csharp nocheck
 public interface INinoFormatter<T>
 {
     void Serialize(T value, ref Writer writer);
@@ -74,9 +74,12 @@ public sealed class BalanceChange
 ```csharp
 [assembly: NinoFormatter(typeof(RingFormatter<,>))]
 
-// a third-party fixed-capacity buffer: Ring(int capacity), Count, Capacity, Push, Clear,
-// and a struct enumerator, so foreach does not allocate
-public sealed class Ring<T> : IEnumerable<T> { /* ... */ }
+// From a library you cannot annotate: a fixed-capacity buffer whose struct enumerator keeps foreach free of allocations
+//   public sealed class Ring<T> : IEnumerable<T>
+//   {
+//       public Ring(int capacity); public int Count { get; } public int Capacity { get; }
+//       public void Push(T item); public void Clear(); public Enumerator GetEnumerator();
+//   }
 
 public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
     where TFormatter : struct, INinoFormatter<T>
@@ -255,13 +258,16 @@ public sealed class Level
 `Reader.ReadSlice()` 读取一个 `int32` 字节长度，并返回覆盖其后数据块的 reader（`ReserveInt32()` 加 `PatchLength(...)` 写出的就是这种数据块）。它的 `Position` **不会**从 `0` 重新开始：与父 reader 一样，它是相对整个输入起点的偏移。`Remaining` 和 `Eof` 则以切片末尾为界。要统计切片内读了多少字节，先记下起始位置，再相减：
 
 ```csharp
-Reader slice = reader.ReadSlice();     // the parent skips the whole block
-int start = slice.Position;            // an offset in the whole input, not 0
-slice.Read(out int kind);
-// ...
-int consumed = slice.Position - start; // bytes read inside the slice
-bool complete = slice.Eof;             // Remaining == 0: the slice is used up
-reader.EndSlice(in slice);             // objects read in the slice stay visible to back references
+static void ReadBlock(ref Reader reader)
+{
+    Reader slice = reader.ReadSlice();     // the parent skips the whole block
+    int start = slice.Position;            // an offset in the whole input, not 0
+    slice.Read(out int kind);
+    // ...
+    int consumed = slice.Position - start; // bytes read inside the slice
+    bool complete = slice.Eof;             // Remaining == 0: the slice is used up
+    reader.EndSlice(in slice);             // objects read in the slice stay visible to back references
+}
 ```
 
 `Writer.Position` 同样是在 `NinoArrayBufferWriter` 中的绝对位置。
@@ -269,8 +275,19 @@ reader.EndSlice(in slice);             // objects read in the slice stay visible
 如果要写入的值有自己的格式化器（`[NinoType]`、`List<T>` 等），就把 writer 或 reader 传给常规 API，这样引用和多态都能照常处理：
 
 ```csharp
-NinoSerializer.Serialize(value.Owner, ref writer);
-NinoDeserializer.Deserialize(ref owner, ref reader);
+// Contract 的格式化器里，它的 Owner 字段是 [NinoType]
+public void Serialize(Contract value, ref Writer writer)
+{
+    writer.Write(value.Id);
+    NinoSerializer.Serialize(value.Owner, ref writer); // [!code highlight]
+}
+
+public void Deserialize(ref Contract value, ref Reader reader)
+{
+    value ??= new Contract();
+    reader.Read(out value.Id);
+    NinoDeserializer.Deserialize(ref value.Owner, ref reader); // [!code highlight]
+}
 ```
 
 读取时必须按写入的顺序，读回完全相同的内容：字节里不带 schema。

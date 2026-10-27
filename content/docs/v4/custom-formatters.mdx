@@ -10,7 +10,7 @@ Nino has formatters for the [built-in types](/en/docs/v4/types) and generates on
 
 A formatter is a **struct** implementing `INinoFormatter<T>`:
 
-```csharp
+```csharp nocheck
 public interface INinoFormatter<T>
 {
     void Serialize(T value, ref Writer writer);
@@ -74,9 +74,12 @@ To teach Nino a type it does not know (your own or a third-party one), register 
 ```csharp
 [assembly: NinoFormatter(typeof(RingFormatter<,>))]
 
-// a third-party fixed-capacity buffer: Ring(int capacity), Count, Capacity, Push, Clear,
-// and a struct enumerator, so foreach does not allocate
-public sealed class Ring<T> : IEnumerable<T> { /* ... */ }
+// From a library you cannot annotate: a fixed-capacity buffer whose struct enumerator keeps foreach free of allocations
+//   public sealed class Ring<T> : IEnumerable<T>
+//   {
+//       public Ring(int capacity); public int Count { get; } public int Capacity { get; }
+//       public void Push(T item); public void Clear(); public Enumerator GetEnumerator();
+//   }
 
 public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
     where TFormatter : struct, INinoFormatter<T>
@@ -255,13 +258,16 @@ A formatter writes with `Writer` and reads with `Reader`, both `ref struct`s. Th
 `Reader.ReadSlice()` reads an `int32` byte length and returns a reader over the block that follows (the kind of block `ReserveInt32()` and `PatchLength(...)` write). Its `Position` does **not** restart at `0`: like the parent's, it is an offset from the start of the whole input. `Remaining` and `Eof` stop at the end of the slice. To count the bytes read inside a slice, record the position first and subtract:
 
 ```csharp
-Reader slice = reader.ReadSlice();     // the parent skips the whole block
-int start = slice.Position;            // an offset in the whole input, not 0
-slice.Read(out int kind);
-// ...
-int consumed = slice.Position - start; // bytes read inside the slice
-bool complete = slice.Eof;             // Remaining == 0: the slice is used up
-reader.EndSlice(in slice);             // objects read in the slice stay visible to back references
+static void ReadBlock(ref Reader reader)
+{
+    Reader slice = reader.ReadSlice();     // the parent skips the whole block
+    int start = slice.Position;            // an offset in the whole input, not 0
+    slice.Read(out int kind);
+    // ...
+    int consumed = slice.Position - start; // bytes read inside the slice
+    bool complete = slice.Eof;             // Remaining == 0: the slice is used up
+    reader.EndSlice(in slice);             // objects read in the slice stay visible to back references
+}
 ```
 
 `Writer.Position` is likewise the absolute position in the `NinoArrayBufferWriter`.
@@ -269,8 +275,19 @@ reader.EndSlice(in slice);             // objects read in the slice stay visible
 To write a value that has its own formatter (a `[NinoType]`, a `List<T>`), call the regular API with the writer or reader, so its references and polymorphism are handled as usual:
 
 ```csharp
-NinoSerializer.Serialize(value.Owner, ref writer);
-NinoDeserializer.Deserialize(ref owner, ref reader);
+// in a formatter for Contract, whose Owner field is a [NinoType]
+public void Serialize(Contract value, ref Writer writer)
+{
+    writer.Write(value.Id);
+    NinoSerializer.Serialize(value.Owner, ref writer); // [!code highlight]
+}
+
+public void Deserialize(ref Contract value, ref Reader reader)
+{
+    value ??= new Contract();
+    reader.Read(out value.Id);
+    NinoDeserializer.Deserialize(ref value.Owner, ref reader); // [!code highlight]
+}
 ```
 
 Always read exactly what you wrote, in the same order: the bytes carry no schema.

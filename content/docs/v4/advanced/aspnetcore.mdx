@@ -38,6 +38,8 @@ app.Run();
 ```
 
 ```csharp title="OrdersController.cs"
+using Microsoft.AspNetCore.Mvc;
+
 [ApiController]
 [Route("orders")]
 public class OrdersController : ControllerBase
@@ -95,6 +97,10 @@ app.MapPost("/orders/bump", async (HttpContext context) =>
 A .NET client sends and reads the bytes with `NinoSerializer` and `NinoDeserializer`:
 
 ```csharp title="Client.cs"
+using System.Net.Http.Headers;
+using Nino.AspNetCore;
+using Nino.Core;
+
 using var content = new ByteArrayContent(NinoSerializer.Serialize(order));
 content.Headers.ContentType = new MediaTypeHeaderValue(NinoMediaTypes.Application);
 using var request = new HttpRequestMessage(HttpMethod.Post, "/orders") { Content = content };

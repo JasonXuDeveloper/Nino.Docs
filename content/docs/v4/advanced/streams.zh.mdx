@@ -136,40 +136,43 @@ while (NinoStream.TryRead(stream, ref auditEvent))
 
 `Writer` 是 `ref struct`，不能用在 `async` 方法里，所以先用 `Frame` 同步构建帧，再 await I/O。`WriteAsync` 本身不需要 `async`：它直接返回流的任务，所以在任务完成之前不要复用缓冲区。把下面几个方法加到 `NinoStream` 中：
 
-```csharp
-/// <summary>Do not reuse buffer until the returned task has completed.</summary>
-public static ValueTask WriteAsync<T>(Stream stream, T value, NinoArrayBufferWriter buffer,
-    CancellationToken ct = default)
+```csharp title="NinoStream.cs"
+public static partial class NinoStream
 {
-    Frame(value, buffer);
-    return stream.WriteAsync(buffer.WrittenMemory, ct);
-}
-
-public static async ValueTask<T> ReadAsync<T>(Stream stream, CancellationToken ct = default)
-{
-    byte[] buffer = ArrayPool<byte>.Shared.Rent(4096);
-    try
+    /// <summary>Do not reuse buffer until the returned task has completed.</summary>
+    public static ValueTask WriteAsync<T>(Stream stream, T value, NinoArrayBufferWriter buffer,
+        CancellationToken ct = default)
     {
-        await FillAsync(stream, buffer, 4, ct);
-        int length = ReadLength(buffer);
-        if (length > buffer.Length)
-            Grow(ref buffer, length);
-        await FillAsync(stream, buffer, length, ct);
-        return NinoDeserializer.Deserialize<T>(buffer.AsSpan(0, length));
+        Frame(value, buffer);
+        return stream.WriteAsync(buffer.WrittenMemory, ct);
     }
-    finally
-    {
-        ArrayPool<byte>.Shared.Return(buffer);
-    }
-}
 
-private static async ValueTask FillAsync(Stream stream, byte[] buffer, int count, CancellationToken ct)
-{
-    for (int read = 0; read < count; )
+    public static async ValueTask<T> ReadAsync<T>(Stream stream, CancellationToken ct = default)
     {
-        int n = await stream.ReadAsync(buffer.AsMemory(read, count - read), ct);
-        if (n == 0) throw new EndOfStreamException();
-        read += n;
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(4096);
+        try
+        {
+            await FillAsync(stream, buffer, 4, ct);
+            int length = ReadLength(buffer);
+            if (length > buffer.Length)
+                Grow(ref buffer, length);
+            await FillAsync(stream, buffer, length, ct);
+            return NinoDeserializer.Deserialize<T>(buffer.AsSpan(0, length));
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static async ValueTask FillAsync(Stream stream, byte[] buffer, int count, CancellationToken ct)
+    {
+        for (int read = 0; read < count; )
+        {
+            int n = await stream.ReadAsync(buffer.AsMemory(read, count - read), ct);
+            if (n == 0) throw new EndOfStreamException();
+            read += n;
+        }
     }
 }
 ```

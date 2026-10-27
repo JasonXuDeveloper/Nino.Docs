@@ -251,7 +251,7 @@ public partial struct SimpleStruct
 </Tab>
 <Tab value="数据">
 
-```csharp title="SimpleBenchmarkData.cs, SimpleTest.cs"
+```csharp title="SimpleBenchmarkData.cs, SimpleTest.cs" nocheck
 public static SimpleClass Create()
 {
     Random random = new Random();
@@ -347,7 +347,7 @@ public SimpleClass MemoryPackDeserializeSimpleClass()
 <Tabs groupId="bench-code" items={["类型", "数据", "方法"]}>
 <Tab value="类型">
 
-```csharp title="PolymorphicBenchmarkData.cs"
+```csharp title="PolymorphicBenchmarkData.cs" nocheck
 [NinoType]
 [MemoryPackable]
 [MessagePackObject]
@@ -417,7 +417,7 @@ public partial struct PolymorphicTransform
 </Tab>
 <Tab value="数据">
 
-```csharp title="PolymorphicTest.cs"
+```csharp title="PolymorphicTest.cs" nocheck
 // Polymorphic class: one PolymorphicClass. Create() fills Numbers (100 ints),
 // Map1 (12 Foos: FooA to FooD, three times), Foo (a FooD) and Set (100 ints);
 // then 1,000 Foos are added to Numbers2, cycling through the 20 subtypes.
@@ -445,7 +445,7 @@ PolymorphicClassArray = Enumerable.Range(0, 100).Select(_ => /* as above, 50 Foo
 </Tab>
 <Tab value="方法">
 
-```csharp title="PolymorphicTest.cs"
+```csharp title="PolymorphicTest.cs" nocheck
 [GlobalSetup]
 public void Setup()
 {
@@ -694,7 +694,7 @@ public sealed partial class RefGraph
 </Tab>
 <Tab value="数据">
 
-```csharp title="ReferenceTest.cs"
+```csharp title="ReferenceTest.cs" nocheck
 // In RefGraph: count nodes sharing 16 tags; each node's peer is an earlier node
 // (a back reference, so the nesting stays shallow), and every node refers back to the graph.
 public static RefGraph Create(int count)
@@ -778,7 +778,7 @@ public sealed partial class TolerantClass
 </Tab>
 <Tab value="数据">
 
-```csharp title="VersionTolerantTest.cs"
+```csharp title="VersionTolerantTest.cs" nocheck
 // In TolerantClass: a copy of a SimpleClass from SimpleTest's data.
 public static TolerantClass From(SimpleClass c) => new()
 {
@@ -863,7 +863,7 @@ public sealed partial class FixedClass
 </Tab>
 <Tab value="数据">
 
-```csharp title="FixedSizeTest.cs"
+```csharp title="FixedSizeTest.cs" nocheck
 // In FixedStruct (FixedClass has the same Create):
 public static FixedStruct Create(Random r) => new()
 {
@@ -914,7 +914,7 @@ public FixedClass MemoryPackDeserializeFixedClass() =>
 
 8 种子类型、随机顺序的 1,000 个元素的数组，分别经非泛型基类型和泛型基类型的封闭实例读写。MemoryPack 的 `[MemoryPackUnion]` 不能用在泛型类型上（会报 MEMPACK013 或 MEMPACK014），所以基准测试为每个封闭基类型注册一个 `DynamicUnionFormatter`；Nino 只需要 `[NinoType]`。对应[上文结果](#more-cases)中的泛型基类型各行。
 
-```csharp title="GenericPolymorphicTest.cs"
+```csharp title="GenericPolymorphicTest.cs" nocheck
 [NinoType, MemoryPackable]
 [MemoryPackUnion(0, typeof(ProbeA))] // ... ProbeH
 public abstract partial class ProbeBase { public int V; }
