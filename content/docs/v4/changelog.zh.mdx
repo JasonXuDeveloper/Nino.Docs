@@ -40,7 +40,7 @@ icon: RotateCcwClock
 - **Unity 中的 Burst 内核**（Unity 包中的 `Nino.Burst`）：安装 `com.unity.burst` 1.8 或更高版本后，元组和结构体的数组与列表、带填充的原始结构体以及 Latin-1 字符串改用 AVX2 或 SSSE3（x86 和 x64）或 Arm64 Neon 搬运，不再走 Nino 的 netstandard 标量路径，写出的字节相同，代码无需改动。在 x64 播放器中，Burst 的 AVX2 目标用 AVX2 搬运 256 个值及以上的块（每个值最多 16 字节），不支持 AVX2 的 CPU 需要 SSE4 目标才能使用 SSSE3 内核。Armv7、WebGL 和未安装 Burst 的项目继续使用标量路径。见 [Burst 加速内核](/zh/docs/v4/advanced/unity#burst-kernels)和 [Unity 基准测试](/zh/docs/v4/perf-unity)。
 - TypeScript 运行时新增 **`deserializeExact`**：与 `deserialize` 相同，但值之后还有字节时抛出 `NinoError`，与 Go 的 `DeserializeExact` 和 Rust 的 `deserialize_exact` 一致。参见[不可信数据](/zh/docs/v4/advanced/codegen#untrusted-data)。
 - 只有生成代码使用的类型（`NinoObject`、`NinoDirect`、`NinoUnsafe`、`INinoBodyFormatter<T>` 和 `INinoBlockFormatter<T>` 等格式化器接口、`NinoPolymorphic<TBase>` ……）移到了命名空间 `Nino.Core.CompilerServices`。生成代码无需改动；手写代码中直接用到它们的，需要加上 `using Nino.Core.CompilerServices;`。
-- **给 AI 编程助手的 skill**：`npx skills add JasonXuDeveloper/Nino` 会安装一个 skill，教 Claude Code、Codex、Cursor 等编程助手使用 Nino 的推荐写法和高性能写法、各种格式、常见坑和诊断。见 [AI 编程助手](/zh/docs/v4/start#ai-coding-assistants)。
+- **给 AI 编程助手的 skill**：`npx skills add JasonXuDeveloper/Nino` 会安装 `nino-serialization` skill，教 Claude Code、Codex、Cursor 等编程助手使用 Nino 的推荐写法和高性能写法、各种格式、常见坑和诊断。见 [AI 编程助手](/zh/docs/v4/start#ai-coding-assistants)。
 
 ### 性能 [#performance-3]
 
