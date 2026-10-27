@@ -1,0 +1,60 @@
+name: C# fences
+
+# Compiles every C# fence of the v4 pages against Nino's main (bun run check:csharp): on every change to the pages
+# or the check, and daily, so an API change in Nino that breaks an example shows up here too.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'content/docs/v4/**'
+      - 'scripts/check-csharp.ts'
+      - 'scripts/csharp-check/**'
+      - '.github/workflows/csharp.yml'
+  pull_request:
+    paths:
+      - 'content/docs/v4/**'
+      - 'scripts/check-csharp.ts'
+      - 'scripts/csharp-check/**'
+      - '.github/workflows/csharp.yml'
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: csharp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check out Nino
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: JasonXuDeveloper/Nino
+          ref: main
+          path: nino
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      # The runner image ships the .NET 10 SDK; download it only when it is missing.
+      - id: sdk
+        run: dotnet --list-sdks | grep -qE '^(1[0-9]|[2-9][0-9])\.' && echo have=true >> "$GITHUB_OUTPUT" || echo have=false >> "$GITHUB_OUTPUT"
+      - if: steps.sdk.outputs.have != 'true'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      # The script needs no package from node_modules: no bun install.
+      - run: bun run check:csharp
+        env:
+          NINO_DIR: ${{ github.workspace }}/nino
+          DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+          DOTNET_NOLOGO: '1'
