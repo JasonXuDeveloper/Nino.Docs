@@ -44,7 +44,16 @@ Overview, FAQ and reference pages answer the questions their readers search for,
 - C# fences with Shiki notation (`// [!code highlight]`, `// [!code ++]`, `title="File.cs"`); alternatives (before
   and after, Nino and MemoryPack, the files of one step) in tabs.
 - Every fence compiles against the current Nino source and reports no NINO warning; examples model a real domain and
-  use the recommended form, because readers copy them.
+  use the recommended form, because readers copy them. `bun run check:csharp` (CI runs it on every change to
+  `content/` and daily against Nino's `main`) compiles each v4 fence: type declarations as they are, statements in a
+  method, members in a class. What a fragment leaves to the reader (an `order` to serialize, an `app` to map routes
+  on, a type another page declares) goes into the page's `scripts/csharp-check/Context/<page>.cs`, never into the
+  fence; its `using` lines apply to the page's fences too. A fence that redeclares a type of an earlier fence (before
+  and after, two tabs) shadows it.
+- A fence that cannot compile says so in its meta, which Fumadocs does not render: ` ```csharp nocheck ` for a
+  signature listing, v3 code, an excerpt with elisions or an API outside .NET (Unity's Burst), and
+  ` ```csharp expect="NINO019" ` for an example of a mistake, which must report that diagnostic and nothing else.
+  The Chinese page carries the same markers and the same code; only comments are translated.
 - Byte examples show what Nino writes today (`docs/spec/wire-format.md` in Nino owns the format).
 
 ## Numbers
@@ -82,6 +91,7 @@ punctuation in prose; no 翻译腔 (被 passives, 进行 / 通过……的方式
 ## Before you commit
 
 ```bash
-bun run check    # types, Biome, links, anchors and icons
-bun run build    # prerender, static files, sitemap, llms.txt, social cards
+bun run check          # types, Biome, links, anchors and icons
+bun run check:csharp   # every C# fence compiles against Nino (NINO_DIR or ../Nino), Chinese fences match English
+bun run build          # prerender, static files, sitemap, llms.txt, social cards
 ```

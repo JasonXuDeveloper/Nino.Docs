@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <!-- The C# fences of the v4 English pages, compiled against a Nino checkout: written into Generated/ by
+         scripts/check-csharp.ts (bun run check:csharp), with the declarations the pages leave to the reader (an
+         `order` to serialize, an `app` to map routes on) in Context/. Never run: only compiled.
+
+         The Web SDK gives the implicit usings of an ASP.NET Core project (System, System.Linq, System.Net.Http,
+         Microsoft.AspNetCore.Builder, ...), so a fragment compiles with the usings a reader's project has. -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Library</OutputType>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>disable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <!-- The script reads every warning and error itself, mapped to the page and line by #line directives. -->
+        <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+        <EnableNETAnalyzers>false</EnableNETAnalyzers>
+        <NuGetAudit>false</NuGetAudit>
+        <!-- No static web assets, launch settings or app host: a library that is only compiled. -->
+        <UseAppHost>false</UseAppHost>
+        <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+        <!-- Godot.SourceGenerators reads the Godot project directory. -->
+        <GodotProjectDir>$(MSBuildProjectDirectory)</GodotProjectDir>
+        <NinoDir Condition="'$(NinoDir)' == ''">$(MSBuildThisFileDirectory)../../../Nino</NinoDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Using Include="Nino.Core"/>
+    </ItemGroup>
+
+    <!-- Nino from source, the way its own tests take it: Nino.Core, the generator as an analyzer with interceptors. -->
+    <Import Project="$(NinoDir)/build/UseNinoGenerator.props"/>
+    <ItemGroup>
+        <ProjectReference Include="$(NinoDir)/src/Nino.Core/Nino.Core.csproj"/>
+        <ProjectReference Include="$(NinoDir)/src/Nino.Immutable/Nino.Immutable.csproj"/>
+        <ProjectReference Include="$(NinoDir)/src/Nino.AspNetCore/Nino.AspNetCore.csproj"/>
+    </ItemGroup>
+
+    <!-- The libraries the guides integrate with, and the ones the benchmark pages compare Nino with. -->
+    <ItemGroup>
+        <PackageReference Include="BenchmarkDotNet" Version="0.15.8"/>
+        <PackageReference Include="Confluent.Kafka" Version="2.16.0"/>
+        <PackageReference Include="GodotSharp" Version="4.7.2"/>
+        <PackageReference Include="Godot.SourceGenerators" Version="4.7.2"/>
+        <PackageReference Include="Grpc.Core.Api" Version="2.84.0"/>
+        <PackageReference Include="MemoryPack" Version="1.21.4"/>
+        <PackageReference Include="MessagePack" Version="3.1.12"/>
+        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.11.0"/>
+        <PackageReference Include="MSTest.TestFramework" Version="4.5.1"/>
+        <PackageReference Include="RabbitMQ.Client" Version="7.2.2"/>
+        <PackageReference Include="StackExchange.Redis" Version="3.4.20"/>
+        <PackageReference Include="System.IO.Hashing" Version="10.0.14"/>
+    </ItemGroup>
+
+</Project>

@@ -14,6 +14,7 @@ The facts in the docs come from the Nino repository (`src/Nino.Core`, `src/Nino.
 bun install            # install dependencies (runs fumadocs-mdx)
 bun run dev            # dev server
 bun run check          # tsc + Biome + internal link and icon check: run before committing
+bun run check:csharp   # compile every v4 C# fence against a Nino checkout (NINO_DIR, default ../Nino; .NET 10 SDK)
 bun run build          # prerender everything into build/client
 bun run preview        # build, then wrangler pages dev (static site + functions)
 bun run deploy         # build + wrangler pages deploy
@@ -47,7 +48,8 @@ Cloudflare Pages builds with the Node version in `.node-version` and the Bun ver
 │   ├── lib/versions.ts        # version list and latestVersion
 │   ├── lib/source.ts, i18n.ts # Fumadocs loader and i18n (en, zh; dot parser)
 │   └── mdx-components.tsx     # components available in MDX
-├── scripts/                   # generate-static (404, sitemap, robots, llms.txt, .md copies), og (social cards), lint-links, favicons
+├── scripts/                   # generate-static (404, sitemap, robots, llms.txt, .md copies), og (social cards), lint-links, favicons, check-csharp (compiles the C# fences)
+│   └── csharp-check/          # DocsCheck.csproj and Context/<page>.cs for check-csharp.ts (Generated/ is ignored)
 ├── functions/                 # Pages Functions: [[path]].ts (locale redirect, Markdown), api/feedback.ts
 ├── public/                    # favicons, og image, _redirects, _headers, _routes.json
 ├── app/entry.server.tsx       # prerender: wait for everything, no outlined Suspense chunks
