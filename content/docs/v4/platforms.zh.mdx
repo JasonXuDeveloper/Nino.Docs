@@ -167,6 +167,7 @@ Unity、.NET Framework 以及 .NET Core 3.0 到 .NET 7 使用 `netstandard2.0`/`
 
 - **Native AOT**（以及其他无法在运行时编译代码的环境）：Nino 只使用生成器写好的格式化器。因此要序列化的每个类型，都必须出现在生成器能看到的代码里：作为成员的类型，或者作为 `Serialize`、`Deserialize` 调用的类型参数。只在运行时才出现的类型会抛出指明该类型的错误，绝不会读写出错误的数据。
 - **在 JIT 上运行的裁剪应用**会保留为这类类型构建格式化器的运行时路径；它对裁剪器的要求都已标注。
+- **Native AOT 下的 CPU 特性**：在 x64 上，Native AOT 按 SSE2 编译，并在启动时检测其后的几个指令集，其中包括 SSSE3，所以在支持 SSSE3 的 CPU 上，Nino 会走它的 [SSSE3 路径](#simd)。AVX2 和 AVX-512 路径需要更高的基线，这同时也要求运行的 CPU 支持它：AVX2 用 `<IlcInstructionSet>x86-64-v3</IlcInstructionSet>`，AVX-512 用 `x86-64-v4`，或用 `native` 取构建机器的 CPU。在 Arm64 上，AdvSimd 属于 Native AOT 的基线，所有 Arm64 路径都会被采用。
 
 生成器也为 IL2CPP 写出同样的格式化器，所以 Nino 在 IL2CPP 上同样不需要反射。参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity#il2cpp)。
 

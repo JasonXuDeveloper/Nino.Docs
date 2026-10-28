@@ -167,6 +167,7 @@ The `net8.0` and `net10.0` builds of `Nino.Core` are marked `IsTrimmable` and `I
 
 - **Native AOT** (and any runtime that cannot compile code): Nino uses only the formatters the generator wrote. Every type you serialize must therefore appear in code the generator sees, as a member type or as the type argument of a `Serialize` or `Deserialize` call. A type that only exists at run time fails with an error that names it, never with wrong data.
 - **Trimmed apps on a JIT** keep the run-time path that builds formatters for such types; what it needs from the trimmer is annotated.
+- **CPU features under Native AOT**: on x64, Native AOT compiles for SSE2 and checks for a few later instruction sets at startup, among them SSSE3, so Nino takes its [SSSE3 paths](#simd) on CPUs that have it. Its AVX2 and AVX-512 paths need a higher baseline, which also makes the app require it: `<IlcInstructionSet>x86-64-v3</IlcInstructionSet>` for AVX2, `x86-64-v4` for AVX-512, or `native` for the CPU of the build machine. On Arm64, AdvSimd is part of Native AOT's baseline and every Arm64 path is taken.
 
 The generator writes the same formatters for IL2CPP, which is why Nino needs no reflection there either. See [Unity and HybridCLR](/en/docs/v4/advanced/unity#il2cpp).
 

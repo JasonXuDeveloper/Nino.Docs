@@ -71,6 +71,7 @@ icon: RotateCcwClock
 - 用 `NinoRegistry.Remove` 移除的程序集（或其可回收 `AssemblyLoadContext` 卸载时移除的程序集），不会再因为之后读到未知类型 ID 而被重新注册，导致无法卸载；另一个程序集卸载后紧接着加载的程序集，按类型 ID 读取时能被找到。参见[卸载程序集](/zh/docs/v4/platforms#unloading-assemblies)。
 - 使用 Nino.AspNetCore 时，类型经过 MVC 格式化器的可回收 `AssemblyLoadContext` 可以再次卸载。参见 [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)。
 - 在 NativeAOT 下，不是 `[NinoType]` 的泛型非托管结构体按原始值序列化，与 JIT 和生成代码一致，不再因为没有格式化器而失败。
+- 在 x64 的 NativeAOT 下，内存中字节排布与写出时不同的值元组、`KeyValuePair` 和定长结构体（例如 `(int, long)`）的数组和列表，在支持 SSSE3 的 CPU 上用 SSSE3 的重排指令（`pshufb`）移动；之前走的是重排的软件实现，比 JIT 下慢很多倍。参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
 - 对值类型调用 `NinoSerializer.SerializeBoxed(null, type)` 抛出 `ArgumentNullException`，不再是 `NullReferenceException`。
 - 在大端主机上，通过顶层调用序列化的原始值、原始值数组和定长类型，与其他类型一样被拒绝，不再按主机字节序写出。
 - Nino.Core 之外不能再继承 `NinoSubtypeHandler`，也不能调用 `NinoPolymorphic<TBase>.Register(NinoSubtypeHandler)`：只有生成的注册代码会添加多态子类型。
