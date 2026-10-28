@@ -20,9 +20,9 @@ Nino 在每个平台上写出的字节都相同。在有向量指令的平台上
 | 支持 SSSE3 的 x64 | 带填充的元组和键值对按一组 16 字节向量搬运（`pshufb`）；字符串每次 16 字节收窄和扩展 | [基准测试](/zh/docs/v4/perf) |
 | Arm64（AdvSimd） | 用查表指令（`TBL`）按一组 16 字节向量搬运带填充的元组和键值对；用成对加载和存储（`LDP`/`STP`）拷贝块；字符串每次 16 字节收窄和扩展 | [基准测试](/zh/docs/v4/perf)，Arm64 标签页 |
 | 支持 SIMD 的 WebAssembly（.NET 10） | 带填充的元组和键值对每个 16 字节向量两次 swizzle（`i8x16.swizzle`） | — |
-| Arm32，或关闭了硬件内联函数（`DOTNET_EnableHWIntrinsic=0`） | 无：值逐个搬运，块用 `memmove`；字节相同 | — |
+| Arm32，或关闭了硬件内联函数（`DOTNET_EnableHWIntrinsic=0`） | 无：值逐个搬运，超过 64 字节的块用 `memmove`；字节相同 | — |
 
-.NET Framework 和 .NET Core 3.0 到 .NET 7 加载 netstandard 版本，其中没有硬件内联函数。
+.NET Framework 和 .NET Core 3.0 到 .NET 7 加载 netstandard 版本，其中没有硬件内联函数；JIT 加速 `Vector<T>` 时，它们用它收窄和扩展较长的 Latin-1 字符串（Mono 和 Unity 上从不使用）。
 
 ## Unity [#unity]
 

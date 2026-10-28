@@ -20,9 +20,9 @@ The `net8.0` and `net10.0` builds of `Nino.Core` use .NET's hardware intrinsics.
 | x64 with SSSE3 | tuples and pairs with padding moved a group of 16-byte vectors at a time (`pshufb`); strings narrowed and widened 16 bytes at a time | [Benchmarks](/en/docs/v4/perf) |
 | Arm64 (AdvSimd) | table lookups (`TBL`) for tuples and pairs with padding, a group of 16-byte vectors at a time; block copies with load and store pairs (`LDP`/`STP`); strings narrowed and widened 16 bytes at a time | [Benchmarks](/en/docs/v4/perf), Arm64 tab |
 | WebAssembly with SIMD (.NET 10) | two swizzles (`i8x16.swizzle`) per 16-byte vector for tuples and pairs with padding | — |
-| Arm32, or hardware intrinsics turned off (`DOTNET_EnableHWIntrinsic=0`) | none: values moved one at a time, blocks through `memmove`; the same bytes | — |
+| Arm32, or hardware intrinsics turned off (`DOTNET_EnableHWIntrinsic=0`) | none: values moved one at a time, blocks over 64 bytes through `memmove`; the same bytes | — |
 
-.NET Framework and .NET Core 3.0 to .NET 7 load the netstandard builds, which have no intrinsics.
+.NET Framework and .NET Core 3.0 to .NET 7 load the netstandard builds, which have no intrinsics; they narrow and widen long Latin-1 strings with `Vector<T>` where the JIT accelerates it (never on Mono or Unity).
 
 ## Unity [#unity]
 
