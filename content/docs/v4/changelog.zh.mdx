@@ -47,6 +47,7 @@ icon: RotateCcwClock
 - **含字符串成员的类**：反序列化新实例时读取器不再留在内存里，单个字符的 Latin-1 字符串改为共享而不再分配：SimpleClass 和池化类型的新实例读取快 13-18%，版本容错类快 2.3-4.6%（GitHub 的 AMD EPYC 7763 和 Neoverse-N2 运行器）。
 - **已有实例中未变的 UTF-8 文本**：反序列化到已有对象（池化或 `ref` 目标）时，若字节未变，保留其较长的 [`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 文本：在同样的运行器上，池化基准快 17-22%。参见[反序列化到已有实例](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
 - **有序、不可变和字符串键的集合**：`SortedList<int, int>` 在 Arm64（Neoverse-N2）上反序列化快 21%，`SortedDictionary` 快 3%，`ImmutableDictionary`、`ImmutableHashSet` 和 `SortedSet` 在 x64 和 Arm64 上最多快 3%；`Dictionary<string, string>` 在 x64（AMD EPYC 7763）上反序列化快 9%，Arm64 上快 3%。
+- **x64 上的 `ConcurrentDictionary`**：读取时用快速取模代替两次除法来确定每个键的桶和锁：`ConcurrentDictionary<int, int>` 在 GitHub 的 AMD EPYC 7763 运行器上反序列化快 18-23%；EPYC 9V45 和 9V74（除法本就快）以及 Arm64 持平，Arm64 仍使用除法。
 - **AVX2 CPU 上的 Unity**：x64 播放器读取小元组和结构体（每个最多 16 字节、256 个值及以上）的数组，速度最高是 SSSE3 内核的 3.5 倍，写入最高 1.3 倍（IL2CPP，Burst AVX2 目标）。参见 [Burst 加速内核](/zh/docs/v4/advanced/unity#burst-kernels)。
 - **Arm64 和不支持 AVX2 的 x64 上的 Go 字符串**：Go 运行时的字符串写入和读取有了 NEON 和 SSSE3 内核。写入混合文本在 Arm64 上快 1.9 倍（与那里的 MessagePack 持平），在不支持 AVX2 的 x64 上快 2.7 倍；读取在 Arm64 上快 17%，在不支持 AVX-512 VBMI 的 x64 上快 34%（GitHub 运行器：Neoverse-N2，以及强制指定档位的 AMD EPYC 7763）。参见[各平台的 SIMD](/zh/docs/v4/simd#go)。
 - **浏览器中的 TypeScript**：借助 WebAssembly 文本模块，在 GitHub 的 x64 和 Arm64 运行器上的 Chromium 中，以文本为主的文章读取快 27-31%，由 ASCII、Latin-1 和其他字符混合组成的字符串列表在 x64 上写入快约 12%；Node 不变。参见[浏览器中的文本](/zh/docs/v4/advanced/codegen#text-in-browsers)。
