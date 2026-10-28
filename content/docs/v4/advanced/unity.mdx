@@ -66,14 +66,14 @@ Unity runs the netstandard build of `Nino.Core`, which has no hardware intrinsic
 
 | Kernel | What it speeds up | From |
 | --- | --- | --- |
-| Permute | Writing and reading arrays and lists of value tuples, `KeyValuePair`s and `[NinoType]` structs whose bytes differ from their memory (padding, tuple or pair members), and copying arrays of raw structs with padding, which is cleared on the way; values of up to 64 bytes. On x64 CPUs with AVX2, values of up to 16 bytes go two or more per 32-byte vector | 16 values (AVX2: 256) |
-| Narrow, Widen | Writing and reading strings in the one-byte (Latin-1) form, ASCII included: 16 chars at a time | 32 chars |
+| Permute | Writing and reading arrays and lists of value tuples, `KeyValuePair`s and `[NinoType]` structs whose bytes differ from their memory (padding, tuple or pair members), and copying arrays of raw structs with padding, which is cleared on the way; values of up to 64 bytes. On x64 CPUs with AVX2, values of up to 16 bytes go two or more per 32-byte vector | 2 values (raw structs with padding: 16; AVX2: 256) |
+| Narrow, Widen | Writing and reading strings in the one-byte (Latin-1) form, ASCII included: 16 chars at a time | 16 chars |
 
-Shorter arrays and strings stay on the scalar paths, where the call to a kernel would cost more than it saves. Arrays of raw structs without padding (`Vector3[]`, `Color32[]`, your own unmanaged structs) are one memory copy with or without Burst.
+Shorter arrays and strings stay on the scalar paths, where the call to a kernel would cost more than it saves: these thresholds are where the kernels became faster in IL2CPP players on Unity 2022.3 and 6000.3. The kernels are called through C# function pointers, the cheapest call into Burst code (through delegates where those fail). Arrays of raw structs without padding (`Vector3[]`, `Color32[]`, your own unmanaged structs) are one memory copy with or without Burst.
 
 <UnityHighlights lang="en" />
 
-**Instruction sets.** The kernels use AVX2 (`vpshufb`) and SSSE3 (`pshufb`) on x86 and x64 and Neon (`tbl`) on Arm64, in the editor, in Mono and IL2CPP players, and for HybridCLR hot-update code, which calls them through the AOT `Nino.Core`. Where they cannot run, Nino registers none and keeps its scalar paths: Armv7 (32-bit Android), WebGL, x86 and x64 CPUs without SSSE3, players where Burst does not run, and the editor with Burst compilation turned off (**Jobs > Burst > Enable Compilation**).
+**Instruction sets.** The kernels use AVX2 (`vpshufb`) and SSSE3 (`pshufb`) on x86 and x64 and Neon (`tbl`) on Arm64, in the editor, in Mono and IL2CPP players, and for HybridCLR hot-update code, which calls them through the AOT `Nino.Core`. Where they cannot run, Nino registers none and keeps its scalar paths: Armv7 (32-bit Android), WebGL (which has kernels of its own, [below](#webgl-kernels)), x86 and x64 CPUs without SSSE3, players where Burst does not run, and the editor with Burst compilation turned off (**Jobs > Burst > Enable Compilation**).
 
 **x64 players: enable SSE4 and AVX2.** Burst compiles a player's code once for each x64 CPU target in **Edit > Project Settings > Burst AOT Settings** and picks the variant the CPU runs at startup. The AVX2 target gives AVX2 CPUs the 32-byte permute; the SSE4 target gives CPUs with SSSE3 but no AVX2 the 16-byte kernels. The SSE2 variant has no byte shuffle, so without an SSE4 target such a CPU gets no kernels at all. The default list depends on the Burst version (1.8.29's is SSE2 and AVX2), so check that it includes SSE4 and AVX2, as Nino's own test project does (SSE2, SSE4 and AVX2).
 
@@ -89,6 +89,15 @@ NinoBurst.Unregister(); // back to the scalar paths, e.g. to compare frame times
 NinoBurst.Register();   // false where Burst is off or the CPU has none of the instruction sets
 NinoBurst.Register(NinoBurst.Ssse3); // keep an AVX2 CPU on the 16-byte kernels (the same bytes)
 ```
+
+### WebGL [#webgl-kernels]
+
+Burst does not compile for WebGL, so the Unity package brings the same kernels for it in C with WebAssembly SIMD (`Nino.WebGL`, compiled by Unity into the player; nothing to install). They register at startup when the player is built with WebAssembly SIMD, and a player without it keeps the scalar paths:
+
+- **Unity 6**: enable **Player Settings > Publishing Settings > Target WebAssembly 2023** (`PlayerSettings.WebGL.wasm2023`), which builds the whole player with SIMD.
+- **Unity 2022.3** has no such setting. Add `--compiler-flags=-msimd128` to **Player Settings > Other Settings > Additional IL2CPP Arguments**. Such a player needs WebAssembly SIMD in the browser: Chrome 91, Firefox 89 and Safari 16.4 or later, where Unity 2022.3 itself supports Safari 15, so leave it off if your players include older Safari.
+
+They take Latin-1 strings of 16 chars or more and arrays of raw structs with padding of 32 values or more; arrays of tuples, which gained nothing measurable there, of 32 or more too. The bytes are the same as without them, and CI runs them in Chrome against the scalar paths on both Unity versions. `Nino.WebGL.NinoWasm` tells whether they are on (`Simd`, `Registered`) and has `Register` and `Unregister`.
 
 ## Unity Classes
 

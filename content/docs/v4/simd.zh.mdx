@@ -31,9 +31,10 @@ Unity 加载 `Nino.Core` 的 netstandard 版本。安装 `com.unity.burst` 1.8 �
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |
 | 支持 AVX2 的 x64，Burst AVX2 目标 | 256 个值及以上、每个值最多 16 字节的块的 `Permute`：每个 32 字节向量放两个或更多值，一个 `vpshufb` 掩码，各通道用 `vpermd` 拼接或分成两个 16 字节存储；其余部分、更宽的值和字符串走下面的 SSSE3 路径 | [Unity 基准测试](/zh/docs/v4/perf-unity) |
-| 支持 SSSE3 的 x86 和 x64（x64 播放器中需要 SSE4 目标） | `Permute`：16 个及以上的元组、键值对和按块读写的 `[NinoType]` 结构体组成的数组和列表，每 16 字节一次字节重排（`pshufb`）读写，带填充的原始结构体在拷贝时清零填充；`Narrow` 和 `Widen`：32 个字符及以上的 Latin-1 字符串，每次 16 个字符 | [Unity 基准测试](/zh/docs/v4/perf-unity) |
+| 支持 SSSE3 的 x86 和 x64（x64 播放器中需要 SSE4 目标） | `Permute`：2 个及以上的元组、键值对和按块读写的 `[NinoType]` 结构体组成的数组和列表，每 16 字节一次字节重排（`pshufb`）读写，16 个及以上带填充的原始结构体在拷贝时清零填充；`Narrow` 和 `Widen`：16 个字符及以上的 Latin-1 字符串，每次 16 个字符 | [Unity 基准测试](/zh/docs/v4/perf-unity) |
 | Arm64（Neon） | 同样的内核，用 `tbl`，字符串用 `uzp1`/`zip` | — |
-| Armv7、WebGL、不支持 SSSE3（或没有包含它的目标）的 x86 和 x64、关闭或未安装 Burst | 无：Nino 的 netstandard 标量路径；字节相同 | [Unity 基准测试](/zh/docs/v4/perf-unity)，“不用 Burst”一列 |
+| 用 WebAssembly SIMD 构建的 WebGL（Unity 6 的 Target WebAssembly 2023，或 2022.3 上的 `-msimd128`） | 那里没有 Burst：同样的内核用 C 写成（`Nino.WebGL`），使用 `i8x16.swizzle` 和向量收窄、扩展，处理 16 个字符及以上的 Latin-1 字符串，其余的从 32 个值起。参见 [WebGL](/zh/docs/v4/advanced/unity#webgl-kernels) | — |
+| Armv7、没有 SIMD 的 WebGL、不支持 SSSE3（或没有包含它的目标）的 x86 和 x64、关闭或未安装 Burst | 无：Nino 的 netstandard 标量路径；字节相同 | [Unity 基准测试](/zh/docs/v4/perf-unity)，“不用 Burst”一列 |
 
 ## Go [#go]
 

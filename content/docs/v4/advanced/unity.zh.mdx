@@ -66,14 +66,14 @@ Unity 运行的是 `Nino.Core` 的 netstandard 构建，其中没有硬件内联
 
 | 内核 | 加速的内容 | 起始长度 |
 | --- | --- | --- |
-| Permute | 读写值元组、`KeyValuePair` 以及字节与内存布局不同（有填充、含元组或键值对成员）的 `[NinoType]` 结构体的数组和列表，以及复制带填充的原始结构体数组（顺带清零填充）；每个值最多 64 字节。在支持 AVX2 的 x64 CPU 上，最多 16 字节的值每个 32 字节向量放两个或更多 | 16 个值（AVX2：256 个） |
-| Narrow、Widen | 读写单字节（Latin-1）形式的字符串（包括 ASCII）：一次 16 个字符 | 32 个字符 |
+| Permute | 读写值元组、`KeyValuePair` 以及字节与内存布局不同（有填充、含元组或键值对成员）的 `[NinoType]` 结构体的数组和列表，以及复制带填充的原始结构体数组（顺带清零填充）；每个值最多 64 字节。在支持 AVX2 的 x64 CPU 上，最多 16 字节的值每个 32 字节向量放两个或更多 | 2 个值（带填充的原始结构体：16 个；AVX2：256 个） |
+| Narrow、Widen | 读写单字节（Latin-1）形式的字符串（包括 ASCII）：一次 16 个字符 | 16 个字符 |
 
-更短的数组和字符串继续走标量路径，因为调用内核的开销会超过它省下的时间。没有填充的原始结构体数组（`Vector3[]`、`Color32[]`、你自己的非托管结构体）无论有没有 Burst 都是一次内存复制。
+更短的数组和字符串继续走标量路径，因为调用内核的开销会超过它省下的时间：这些阈值就是内核在 Unity 2022.3 和 6000.3 的 IL2CPP 播放器中开始变快的地方。内核通过 C# 函数指针调用，这是调用 Burst 代码最便宜的方式（函数指针不可用时改用委托）。没有填充的原始结构体数组（`Vector3[]`、`Color32[]`、你自己的非托管结构体）无论有没有 Burst 都是一次内存复制。
 
 <UnityHighlights lang="zh" />
 
-**指令集。** 内核在 x86 和 x64 上使用 AVX2（`vpshufb`）和 SSSE3（`pshufb`），在 Arm64 上使用 Neon（`tbl`），适用于编辑器、Mono 和 IL2CPP 播放器，以及通过 AOT 的 `Nino.Core` 调用它们的 HybridCLR 热更新代码。在内核无法运行的地方，Nino 不注册任何内核，继续使用标量路径：Armv7（32 位 Android）、WebGL、不支持 SSSE3 的 x86 和 x64 CPU、Burst 不运行的播放器，以及关闭了 Burst 编译的编辑器（**Jobs > Burst > Enable Compilation**）。
+**指令集。** 内核在 x86 和 x64 上使用 AVX2（`vpshufb`）和 SSSE3（`pshufb`），在 Arm64 上使用 Neon（`tbl`），适用于编辑器、Mono 和 IL2CPP 播放器，以及通过 AOT 的 `Nino.Core` 调用它们的 HybridCLR 热更新代码。在内核无法运行的地方，Nino 不注册任何内核，继续使用标量路径：Armv7（32 位 Android）、WebGL（它有自己的内核，见[下文](#webgl-kernels)）、不支持 SSSE3 的 x86 和 x64 CPU、Burst 不运行的播放器，以及关闭了 Burst 编译的编辑器（**Jobs > Burst > Enable Compilation**）。
 
 **x64 播放器：启用 SSE4 和 AVX2。** Burst 为 **Edit > Project Settings > Burst AOT Settings** 中的每个 x64 CPU 目标各编译一次播放器代码，启动时选出 CPU 能运行的版本。AVX2 目标让支持 AVX2 的 CPU 使用 32 字节置换；SSE4 目标让支持 SSSE3 但不支持 AVX2 的 CPU 使用 16 字节内核。SSE2 版本没有字节重排，所以没有 SSE4 目标时，这类 CPU 完全用不上内核。默认的目标列表因 Burst 版本而异（1.8.29 的是 SSE2 和 AVX2），所以请确认其中包含 SSE4 和 AVX2，Nino 自己的测试工程就是这样设置的（SSE2、SSE4 和 AVX2）。
 
@@ -89,6 +89,15 @@ NinoBurst.Unregister(); // 回到标量路径，例如用来对比帧耗时
 NinoBurst.Register();   // Burst 关闭或 CPU 不支持其中任何指令集时返回 false
 NinoBurst.Register(NinoBurst.Ssse3); // 让支持 AVX2 的 CPU 只用 16 字节内核（字节相同）
 ```
+
+### WebGL [#webgl-kernels]
+
+Burst 不能为 WebGL 编译，因此 Unity 包为它提供了用 C 和 WebAssembly SIMD 写成的同样的内核（`Nino.WebGL`，由 Unity 编译进播放器，无需安装任何东西）。播放器用 WebAssembly SIMD 构建时，它们在启动时注册；没有 SIMD 的播放器继续走标量路径：
+
+- **Unity 6**：开启 **Player Settings > Publishing Settings > Target WebAssembly 2023**（`PlayerSettings.WebGL.wasm2023`），整个播放器就会带 SIMD 构建。
+- **Unity 2022.3** 没有这个设置。在 **Player Settings > Other Settings > Additional IL2CPP Arguments** 中加上 `--compiler-flags=-msimd128`。这样的播放器需要浏览器支持 WebAssembly SIMD：Chrome 91、Firefox 89、Safari 16.4 或更高版本，而 Unity 2022.3 本身支持 Safari 15，所以如果你的玩家还在用更旧的 Safari，请不要开启。
+
+它们处理 16 个字符及以上的 Latin-1 字符串和 32 个值及以上的带填充原始结构体数组；元组数组在那里测不出收益，同样从 32 个起。写出的字节与不用它们时相同，CI 在两个 Unity 版本上都会在 Chrome 中把它们与标量路径逐一比对。`Nino.WebGL.NinoWasm` 可以查询它们是否启用（`Simd`、`Registered`），并提供 `Register` 和 `Unregister`。
 
 ## Unity 的类 [#unity-classes]
 
