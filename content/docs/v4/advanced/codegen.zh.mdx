@@ -391,6 +391,7 @@ WebSocket 的用法相同：发送 `serialize` 的结果，设置 `binaryType = 
 - **`serialize(codec, value)`** 返回一个 `Uint8Array`，内容与 .NET 中 `NinoSerializer.Serialize<T>` 写出的相同。结果不会被复制：每个结果都紧接在上一个结果之后写进一个共享的 64 KB 缓冲区，返回的是它上面的一个视图，之后的调用不会覆盖它（剩余空间不多，或某个结果超出缓冲区时，会换用新的缓冲区）。直接把这个 `Uint8Array` 交给 `fetch`、`WebSocket.send`、`Blob` 或流，它们会按 `byteOffset` 和 `length` 读取；不要使用它的 `.buffer`，其中还有其他结果。保留一个结果，就会让它所在的整个缓冲区一直存活：需要独占缓冲区的数组时，调用 `bytes.slice()`。
 - **`serializeInto(codec, value, target)`** 写进你自己的内存，相当于 .NET 中用复用的 `NinoArrayBufferWriter` 调用 `NinoSerializer.Serialize(value, bufferWriter)`，返回值的字节数。写进 `NinoWriter` 时追加在已有内容之后，按需扩容；`writer.reset()` 清空它并保留缓冲区，缓冲区足够大之后写入不再分配内存（不产生新的 `ArrayBuffer`，Node 24 大约每新增 64 MB 的 `ArrayBuffer` 就触发一次完整垃圾回收），`writer.written()` 在写入器下次写入之前都是这些字节的视图。写进 `Uint8Array` 时，值放得下就从数组开头写入；返回的字节数大于数组长度表示什么都没写。Go 有 `nino.Append` 和复用的 `Writer`，Rust 有 `serialize_into`。
 - **`deserialize(codec, bytes)`** 从一个 `Uint8Array`（Node 的 `Buffer` 也可以）中读取一个值。
+- **`deserializeInto(codec, bytes, value)`** 读进你已有的值，相当于 `NinoDeserializer.Deserialize(data, ref value)`，返回读到的值（除非数据是 null 或另一个类，否则就是 `value` 本身）。嵌套对象原地读取，数组保留存储并把每个元素读进同一下标的旧元素，映射和集合先清空再填充，按类型 ID 写出的成员只有在数据中是它自己的类时才读进它；跟踪引用的对象和类型化数组总是新建。抛出异常时，`value` 保留出错前读到的内容，其余保持原样。Go 有 `nino.DeserializeInto` 配合生成的 `ReadXInto`，Rust 有 `deserialize_into`。
 - 每个类型 `X` 都有 **`XCodec`**：按 .NET 为其声明类型写出的头读写这个值。结构体没有头（`NinoCodec<X>`），密封类有空标记（`NinoCodec<X | null>`），非密封类和接口有类型 ID，所以 `AnimalCodec` 能读写 `Animal` 的任何生成子类型，与 `Serialize<Animal>` 一样。
 - **`NinoWriter` 和 `NinoReader`** 把多个值写进一个缓冲区并按顺序读回，相当于 .NET 中的 `Writer` 和 `Reader`：先 `codec.write(writer, value)`，再 `writer.toBytes()`；读取时 `codec.read(new NinoReader(bytes))`。
 - 数据不是所读类型的有效值时（数据被截断、长度超出末尾、未知的类型 ID，以及[不可信数据](#untrusted-data)中的其他检查），以及值无法写出时，抛出 **`NinoError`**。
@@ -521,6 +522,7 @@ data, err := nino.Serialize(player, protocol.WritePlayer)      // 新的切片
 buf, err = nino.Append(buf[:0], player, protocol.WritePlayer)  // 追加；buf 有空间时不分配
 player, err := nino.Deserialize(data, protocol.ReadPlayer)      // 忽略值之后的字节，与 .NET 一致
 player, err := nino.DeserializeExact(data, protocol.ReadPlayer) // ……或拒绝它们
+err = nino.DeserializeInto(data, &player, protocol.ReadPlayerInto) // 读进 player，复用其中已有的对象
 ```
 
 把值写入复用的缓冲区时不分配内存。生成的结构体也带有 `nino` 标签和 `NinoLayout()`，所以下面的结构体标签函数同样能读写它们。
@@ -582,6 +584,7 @@ nino-gen 生成的代码需要 `indexmap` 功能和 `indexmap` 本身：映射�
 | --- | --- |
 | `serialize`、`serialize_into` | 按声明类型写出一个值，与 `NinoSerializer.Serialize<T>` 相同。`serialize_into` 追加到一个 `Vec`，出错时把它截回原来的长度。 |
 | `deserialize`、`deserialize_exact` | 读取一个值。`deserialize_exact` 还会拒绝值之后的字节。 |
+| `deserialize_into` | 读进已有的值，与 `NinoDeserializer.Deserialize(data, ref value)` 相同：成员原地读取，`Vec` 的缓冲区和元素被复用，映射和集合先清空再填充，多态值只在类型相同时复用。 |
 
 ### 生成的代码 [#rust-generated-code]
 

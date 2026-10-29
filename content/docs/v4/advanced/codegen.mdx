@@ -391,6 +391,7 @@ A WebSocket works the same way: send the result of `serialize`, set `binaryType 
 - **`serialize(codec, value)`** returns a `Uint8Array` with what `NinoSerializer.Serialize<T>` writes in .NET. Nothing is copied: each result is written right after the previous one in a shared 64 KB buffer and returned as a view of it, which later calls never overwrite (a new buffer is started when little room is left, or when a result outgrows it). Pass the `Uint8Array` itself to `fetch`, `WebSocket.send`, `Blob` or a stream, which use its `byteOffset` and `length`, and never its `.buffer`, which holds other results too. A result you keep keeps its whole buffer alive: call `bytes.slice()` when you need an array with a buffer of its own.
 - **`serializeInto(codec, value, target)`** writes into memory you own, as `NinoSerializer.Serialize(value, bufferWriter)` does with a reused `NinoArrayBufferWriter`, and returns the value's size. Into a `NinoWriter` it appends, growing the writer as needed; `writer.reset()` empties it and keeps its buffer, so once it is large enough writing allocates nothing (no new `ArrayBuffer`s, which Node 24 counts toward a full garbage collection about every 64 MB of them), and `writer.written()` views the bytes until the writer writes again. Into a `Uint8Array` it writes from the start when the value fits; a returned size larger than the array means nothing was written. Go has `nino.Append` and a reused `Writer`, Rust `serialize_into`.
 - **`deserialize(codec, bytes)`** reads one value from a `Uint8Array` (a Node `Buffer` works too).
+- **`deserializeInto(codec, bytes, value)`** reads into a value you already have, as `NinoDeserializer.Deserialize(data, ref value)` does, and returns the value read (`value` itself unless the data holds null or another class). Nested objects are read in place, arrays keep their storage and read each element into the old one at its index, maps and sets are cleared and refilled, and a member written behind a type id is read into only when the data holds its own class; tracked objects and typed arrays are read new. If it throws, `value` holds what was read before the error and the rest as it was. Go has `nino.DeserializeInto` with the generated `ReadXInto`, Rust `deserialize_into`.
 - **`XCodec`** for every type `X`: reads and writes the value with the header .NET writes for its declared type. A struct has none (`NinoCodec<X>`), a sealed class a null flag (`NinoCodec<X | null>`), and a class that is not sealed or an interface a type id, so `AnimalCodec` reads and writes any generated subtype of `Animal`, as `Serialize<Animal>` does.
 - **`NinoWriter` and `NinoReader`** write several values into one buffer and read them back in order, like `Writer` and `Reader` in .NET: `codec.write(writer, value)`, then `writer.toBytes()`; `codec.read(new NinoReader(bytes))`.
 - **`NinoError`** is thrown for data that is not a valid value of the type read (truncated data, a length past the end, an unknown type id, the other checks under [Untrusted Data](#untrusted-data)) and for values that cannot be written.
@@ -521,6 +522,7 @@ data, err := nino.Serialize(player, protocol.WritePlayer)      // a new slice
 buf, err = nino.Append(buf[:0], player, protocol.WritePlayer)  // appends; no allocation when buf has room
 player, err := nino.Deserialize(data, protocol.ReadPlayer)      // bytes after the value are ignored, as in .NET
 player, err := nino.DeserializeExact(data, protocol.ReadPlayer) // ... or rejected
+err = nino.DeserializeInto(data, &player, protocol.ReadPlayerInto) // into player, reusing what it holds
 ```
 
 Writing a value into a reused buffer allocates nothing. Since the generated structs carry `nino` tags and `NinoLayout()`, the struct-tag functions below read and write them too.
@@ -582,6 +584,7 @@ Code nino-gen generates needs the `indexmap` feature and `indexmap` itself: maps
 | --- | --- |
 | `serialize`, `serialize_into` | Write a value under its declared type, as `NinoSerializer.Serialize<T>` does. `serialize_into` appends to a `Vec`, and on an error truncates it back to where it was. |
 | `deserialize`, `deserialize_exact` | Read a value. `deserialize_exact` also rejects bytes after it. |
+| `deserialize_into` | Read into an existing value, as `NinoDeserializer.Deserialize(data, ref value)` does: members in place, a `Vec`'s buffer and elements reused, maps and sets cleared and refilled, a polymorphic value reused only for the same type. |
 
 ### Generated Code [#rust-generated-code]
 
