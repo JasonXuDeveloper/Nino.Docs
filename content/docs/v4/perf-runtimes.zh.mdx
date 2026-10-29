@@ -44,6 +44,7 @@ Nino 在 Go、Rust 和 TypeScript 中读写的字节与 .NET 完全相同，所�
 [`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench) 测量 nino-gen 根据基准测试的 C# 类型生成的 TypeScript，在 Node 中由 [tinybench](https://github.com/tinylibs/tinybench) 计时：先预热，再在设定的时间内采样。时间是均值 ± 其相对误差。
 
 - **数据：** 每个场景的值都由 .NET 中的 Nino 写出。计时之前，每个值都要在 TypeScript 中读出再写回，必须与 .NET 写出的字节完全相同；每条 protobuf 消息也必须读回相同的值。一个任务是对场景中所有值的一次遍历。
+- **输入轮换：** .NET 为每个场景写出 64 个变体，结构和大小相同、内容不同（第一个就是上面的数据）；计时之前，每个序列化库都备好全部变体，每个任务（序列化和反序列化都一样）的每次遍历依次取下一个变体。V8 再次读取同一输入时会复用之前的工作：重复的 JSON 文本会沿用上一次解析的隐藏类和内部化的键，比新文本快很多倍，这会让 `JSON.parse` 看起来比处理真实数据时更快。
 - **场景：** 玩家、通过类型 id 区分的动物园动物、订单簿、长文本文章、由向量和整数组成的网格、数字样本、由两个短字符串映射组成的查找表、带 64 位整数的事件，以及两个[字符串用例](#strings)。
 - **序列化库：** Nino；Protocol Buffers（protobuf-es，代码由基准测试的 `.proto` 生成）；MessagePack（msgpackr，使用标准映射，不用 msgpackr 的 records），它拿到的是 Nino 读出的原样的值（`bigint` 作为 64 位整数，读回仍是 `bigint`）；以及 `JSON`，它拿到的是普通 JSON 数据（64 位整数为字符串，映射为对象），读出后也不转换回 `bigint` 或 `Map`，所以它做的工作比生成的读取代码少；它与二进制格式一样，计时包括转为 UTF-8 字节和从 UTF-8 字节读出（`TextEncoder`、`TextDecoder`）。MessagePack 和 JSON 都不携带多态值的类型，而 Nino 和 protobuf（`oneof`）会携带。
 

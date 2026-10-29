@@ -446,7 +446,7 @@ useWasm(true);  // 重新打开（在引擎允许的地方）
 
 ### 性能 [#performance]
 
-每次发布都会用 Nino 仓库中的 [`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench)，在 Node 中、相同数据上，对比生成的 TypeScript 与 Protocol Buffers（protobuf-es）、MessagePack（msgpackr）和 `JSON`。每个场景的值都由 .NET 中的 Nino 写出，计时之前每个值都必须读出再写回，得到完全相同的字节。JSON 拿到的是普通 JSON 数据（64 位整数为字符串，映射为对象），`JSON.parse` 的结果也不转换回 `bigint` 或 `Map`，所以 JSON 做的工作比生成的读取代码少。JSON 与二进制格式一样，计时包括转为 UTF-8 字节和从 UTF-8 字节读出（`TextEncoder`、`TextDecoder`）。测量方法以及 Go 和 Rust 的基准测试见[其他语言的基准测试](/zh/docs/v4/perf-runtimes)。
+每次发布都会用 Nino 仓库中的 [`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench)，在 Node 中、相同数据上，对比生成的 TypeScript 与 Protocol Buffers（protobuf-es）、MessagePack（msgpackr）和 `JSON`。每个场景的值都由 .NET 中的 Nino 写出，计时之前每个值都必须读出再写回，得到完全相同的字节。每次遍历依次取数据的 64 个变体中的下一个，V8 无法复用上一次遍历在同一输入上的工作。JSON 拿到的是普通 JSON 数据（64 位整数为字符串，映射为对象），`JSON.parse` 的结果也不转换回 `bigint` 或 `Map`，所以 JSON 做的工作比生成的读取代码少。JSON 与二进制格式一样，计时包括转为 UTF-8 字节和从 UTF-8 字节读出（`TextEncoder`、`TextDecoder`）。测量方法以及 Go 和 Rust 的基准测试见[其他语言的基准测试](/zh/docs/v4/perf-runtimes)。
 
 <RuntimesTables lang="zh" only="typescript" />
 
