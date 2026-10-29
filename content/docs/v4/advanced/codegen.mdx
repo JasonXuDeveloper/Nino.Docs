@@ -466,7 +466,7 @@ mesh.indices = Int32Array.of(0, 1, 2);
 
 - Arrays over 64 bytes are copied in one block; shorter ones are read and written element by element, since V8 keeps those on its heap.
 - Arrays of 65 bytes to 8 KB that are read are views of a shared 64 KB buffer: `slice()` one before transferring its `.buffer`.
-- Serialize is faster in Node and Chromium, and deserialize faster in Node. Chromium deserializes numeric arrays of a few KB 2 to 3 times slower than into `number[]`, since each typed array needs a backing store of its own; that is why it is not the default.
+- Serialize is faster in Node and Chromium, and deserializing large numeric arrays is faster in Node. Every typed array needs a backing store of its own, though, and creating them costs more than the copy saves in many reads: Chromium deserializes numeric arrays of a few KB 2 to 3.3 times slower than into `number[]` (about 2 times on Arm64, up to 3.3 on x64), data that mixes arrays with other members up to 1.4 times slower, and lists of small objects that each hold a short array 5 to 25% slower in both engines. That is why it is not the default: turn it on where serialize dominates, or where Node reads large arrays.
 - `byte` sequences are `Uint8Array` either way. `bool`, `char`, `decimal`, `TimeSpan` and enum sequences stay arrays, and sets stay `Set`s.
 
 ### What TypeScript Leaves Out [#not-supported]
