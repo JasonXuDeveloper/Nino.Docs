@@ -59,7 +59,7 @@ public class PlayerState
 
 ## Burst-Accelerated Kernels [#burst-kernels]
 
-Unity runs the netstandard build of `Nino.Core`, which has no hardware intrinsics: on its own it moves tuples, padded structs and Latin-1 text a field or a word at a time. Install **Burst** and Nino moves them with SIMD instead, with no change to your code:
+Unity runs the netstandard build of `Nino.Core`, which has no hardware intrinsics: on its own it moves tuples, padded structs and Latin-1 text a field or a word at a time and transcodes `[NinoUtf8]` strings with .NET's UTF-8 encoder. IL2CPP and Mono players without Burst stay on those scalar paths, so **install Burst for speed**: Nino then moves them with SIMD instead, with no change to your code:
 
 1. Open **Window > Package Manager**, select **Unity Registry** and install **Burst** (`com.unity.burst`) 1.8 or later. Projects that use Entities or Collections have it already, as both depend on it.
 2. That is all. The Nino package's `Nino.Burst` assembly compiles as soon as Burst is in the project (it is skipped without it) and registers its kernels at startup, before the first scene loads, and in the editor after every domain reload.
@@ -68,8 +68,9 @@ Unity runs the netstandard build of `Nino.Core`, which has no hardware intrinsic
 | --- | --- | --- |
 | Permute | Writing and reading arrays and lists of value tuples, `KeyValuePair`s and `[NinoType]` structs whose bytes differ from their memory (padding, tuple or pair members), and copying arrays of raw structs with padding, which is cleared on the way; values of up to 64 bytes. On x64 CPUs with AVX2, values of up to 16 bytes go two or more per 32-byte vector | 2 values (raw structs with padding: 16; AVX2: 256) |
 | Narrow, Widen | Writing and reading strings in the one-byte (Latin-1) form, ASCII included: 16 chars at a time | 16 chars |
+| NarrowAscii, WidenAscii | Writing and reading [`[NinoUtf8]` strings](/en/docs/v4/defining-types#string-encoding): their ASCII text up to the first other char, 16 chars at a time; the encoder (or the strict decoder) takes the rest, so invalid UTF-8 is rejected exactly as without Burst | 16 chars |
 
-Shorter arrays and strings stay on the scalar paths, where the call to a kernel would cost more than it saves: these thresholds are where the kernels became faster in IL2CPP players on Unity 2022.3 and 6000.3. The kernels are called through C# function pointers, the cheapest call into Burst code (through delegates where those fail). Arrays of raw structs without padding (`Vector3[]`, `Color32[]`, your own unmanaged structs) are one memory copy with or without Burst.
+Shorter arrays and strings stay on the scalar paths, where the call to a kernel would cost more than it saves: these thresholds are where the kernels became faster in IL2CPP players on Unity 2022.3 and 6000.3. `Nino.Core` keeps each kernel's Burst function pointer in a static field and calls it directly, the cheapest call into Burst code: one compare of the length against the threshold, then the call, with no object or virtual call in between (where the runtime cannot call Burst's function pointers, none are registered). Arrays of raw structs without padding (`Vector3[]`, `Color32[]`, your own unmanaged structs) are one memory copy with or without Burst.
 
 <UnityHighlights lang="en" />
 
@@ -97,7 +98,7 @@ Burst does not compile for WebGL, so the Unity package brings the same kernels f
 - **Unity 6**: enable **Player Settings > Publishing Settings > Target WebAssembly 2023** (`PlayerSettings.WebGL.wasm2023`), which builds the whole player with SIMD.
 - **Unity 2022.3** has no such setting. Add `--compiler-flags=-msimd128` to **Player Settings > Other Settings > Additional IL2CPP Arguments**. Such a player needs WebAssembly SIMD in the browser: Chrome 91, Firefox 89 and Safari 16.4 or later, where Unity 2022.3 itself supports Safari 15, so leave it off if your players include older Safari.
 
-They take Latin-1 strings of 16 chars or more and arrays of raw structs with padding of 32 values or more; arrays of tuples, which gained nothing measurable there, of 32 or more too. The bytes are the same as without them, and CI runs them in Chrome against the scalar paths on both Unity versions. `Nino.WebGL.NinoWasm` tells whether they are on (`Simd`, `Registered`) and has `Register` and `Unregister`.
+They take Latin-1 strings and the ASCII text of `[NinoUtf8]` strings of 16 chars or more and arrays of raw structs with padding of 32 values or more; arrays of tuples, which gained nothing measurable there, of 32 or more too. The bytes are the same as without them, and CI runs them in Chrome against the scalar paths on both Unity versions. `Nino.WebGL.NinoWasm` tells whether they are on (`Simd`, `Registered`) and has `Register` and `Unregister`. These C kernels are for WebGL only: on every other platform, the kernels come from Burst.
 
 ## Unity Classes
 

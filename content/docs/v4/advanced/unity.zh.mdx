@@ -59,7 +59,7 @@ public class PlayerState
 
 ## Burst 加速内核 [#burst-kernels]
 
-Unity 运行的是 `Nino.Core` 的 netstandard 构建，其中没有硬件内联函数（hardware intrinsics）：单靠它自己，元组、带填充的结构体和 Latin-1 文本只能一个字段或一个字（word）地搬运。安装 **Burst** 后，Nino 会改用 SIMD 搬运它们，你的代码无需任何改动：
+Unity 运行的是 `Nino.Core` 的 netstandard 构建，其中没有硬件内联函数（hardware intrinsics）：单靠它自己，元组、带填充的结构体和 Latin-1 文本只能一个字段或一个字（word）地搬运，`[NinoUtf8]` 字符串用 .NET 的 UTF-8 编码器转码。没有 Burst 的 IL2CPP 和 Mono 播放器只走这些标量路径，所以**想要速度，请安装 Burst**：之后 Nino 会改用 SIMD 搬运它们，你的代码无需任何改动：
 
 1. 打开 **Window > Package Manager**，选择 **Unity Registry**，安装 **Burst**（`com.unity.burst`）1.8 或更高版本。用到 Entities 或 Collections 的项目已经有它了，因为两者都依赖 Burst。
 2. 就这样。只要项目中有 Burst，Nino 包里的 `Nino.Burst` 程序集就会参与编译（没有 Burst 时跳过），并在启动时（第一个场景加载之前）以及编辑器中每次域重载（domain reload）后注册它的内核。
@@ -68,8 +68,9 @@ Unity 运行的是 `Nino.Core` 的 netstandard 构建，其中没有硬件内联
 | --- | --- | --- |
 | Permute | 读写值元组、`KeyValuePair` 以及字节与内存布局不同（有填充、含元组或键值对成员）的 `[NinoType]` 结构体的数组和列表，以及复制带填充的原始结构体数组（顺带清零填充）；每个值最多 64 字节。在支持 AVX2 的 x64 CPU 上，最多 16 字节的值每个 32 字节向量放两个或更多 | 2 个值（带填充的原始结构体：16 个；AVX2：256 个） |
 | Narrow、Widen | 读写单字节（Latin-1）形式的字符串（包括 ASCII）：一次 16 个字符 | 16 个字符 |
+| NarrowAscii、WidenAscii | 读写 [`[NinoUtf8]` 字符串](/zh/docs/v4/defining-types#string-encoding)：其中直到第一个非 ASCII 字符为止的 ASCII 文本，一次 16 个字符；其余部分交给编码器（或严格的解码器），因此无效的 UTF-8 被拒绝的方式与没有 Burst 时完全相同 | 16 个字符 |
 
-更短的数组和字符串继续走标量路径，因为调用内核的开销会超过它省下的时间：这些阈值就是内核在 Unity 2022.3 和 6000.3 的 IL2CPP 播放器中开始变快的地方。内核通过 C# 函数指针调用，这是调用 Burst 代码最便宜的方式（函数指针不可用时改用委托）。没有填充的原始结构体数组（`Vector3[]`、`Color32[]`、你自己的非托管结构体）无论有没有 Burst 都是一次内存复制。
+更短的数组和字符串继续走标量路径，因为调用内核的开销会超过它省下的时间：这些阈值就是内核在 Unity 2022.3 和 6000.3 的 IL2CPP 播放器中开始变快的地方。`Nino.Core` 把每个内核的 Burst 函数指针存进静态字段并直接调用，这是调用 Burst 代码最便宜的方式：先把长度和阈值比较一次，然后直接调用，中间没有对象，也没有虚调用（运行时无法调用 Burst 函数指针时，不注册任何内核）。没有填充的原始结构体数组（`Vector3[]`、`Color32[]`、你自己的非托管结构体）无论有没有 Burst 都是一次内存复制。
 
 <UnityHighlights lang="zh" />
 
@@ -97,7 +98,7 @@ Burst 不能为 WebGL 编译，因此 Unity 包为它提供了用 C 和 WebAssem
 - **Unity 6**：开启 **Player Settings > Publishing Settings > Target WebAssembly 2023**（`PlayerSettings.WebGL.wasm2023`），整个播放器就会带 SIMD 构建。
 - **Unity 2022.3** 没有这个设置。在 **Player Settings > Other Settings > Additional IL2CPP Arguments** 中加上 `--compiler-flags=-msimd128`。这样的播放器需要浏览器支持 WebAssembly SIMD：Chrome 91、Firefox 89、Safari 16.4 或更高版本，而 Unity 2022.3 本身支持 Safari 15，所以如果你的玩家还在用更旧的 Safari，请不要开启。
 
-它们处理 16 个字符及以上的 Latin-1 字符串和 32 个值及以上的带填充原始结构体数组；元组数组在那里测不出收益，同样从 32 个起。写出的字节与不用它们时相同，CI 在两个 Unity 版本上都会在 Chrome 中把它们与标量路径逐一比对。`Nino.WebGL.NinoWasm` 可以查询它们是否启用（`Simd`、`Registered`），并提供 `Register` 和 `Unregister`。
+它们处理 16 个字符及以上的 Latin-1 字符串和 `[NinoUtf8]` 字符串中的 ASCII 文本，以及 32 个值及以上的带填充原始结构体数组；元组数组在那里测不出收益，同样从 32 个起。写出的字节与不用它们时相同，CI 在两个 Unity 版本上都会在 Chrome 中把它们与标量路径逐一比对。`Nino.WebGL.NinoWasm` 可以查询它们是否启用（`Simd`、`Registered`），并提供 `Register` 和 `Unregister`。这些 C 内核只用于 WebGL：其他平台上的内核都来自 Burst。
 
 ## Unity 的类 [#unity-classes]
 
