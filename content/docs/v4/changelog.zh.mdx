@@ -20,6 +20,7 @@ icon: RotateCcwClock
 
 ### 新功能 [#new-6]
 
+- **TypeScript 的 `serializeInto`**：`serializeInto(codec, value, target)` 写进复用的 `NinoWriter`（用新的 `reset()` 清空；足够大之后不再分配内存，不会堆积触发 Node 完整垃圾回收的 `ArrayBuffer`）或一个 `Uint8Array`，返回值的字节数，相当于 .NET 中的 `NinoSerializer.Serialize(value, bufferWriter)`。参见 [API](/zh/docs/v4/advanced/codegen#api)。
 - **TypeScript 中的类型化数组**：nino-gen 的 `NumericArrays="typed"`（`--numeric-arrays typed`）把定长数字的数组和列表写成类型化数组（`Int32Array`、`Float64Array`、`BigInt64Array`……），整块复制。在 Node 和 Chromium 中序列化更快，在 Node 中反序列化更快；Chromium 反序列化它们慢 2 到 3 倍，所以默认仍是 `number[]`。参见[类型化数组](/zh/docs/v4/advanced/codegen#typed-arrays)。
 - **NINO027**：泛型类型上的 `[NinoFormerName]`，如果该类型会带类型 ID 写入（通过基类、接口或 `object`），会报这个警告：它的每个实例化都会得到同一个 ID 而冲突。参见[诊断](/zh/docs/v4/analyzers#diagnostics)。
 - **`NinoDataException`**（命名空间 `Nino.Core`，派生自 `InvalidOperationException`）：反序列化时 Nino 拒绝的每一种无效输入都抛出它，不可信数据可以用这一个具体类型捕获；`catch (InvalidOperationException)` 仍然能捕获它。参见 [NinoDataException](/zh/docs/v4/security#ninodataexception)。

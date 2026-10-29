@@ -389,6 +389,7 @@ WebSocket 的用法相同：发送 `serialize` 的结果，设置 `binaryType = 
 ### API [#api]
 
 - **`serialize(codec, value)`** 返回一个 `Uint8Array`，内容与 .NET 中 `NinoSerializer.Serialize<T>` 写出的相同。结果不会被复制：每个结果都紧接在上一个结果之后写进一个共享的 64 KB 缓冲区，返回的是它上面的一个视图，之后的调用不会覆盖它（剩余空间不多，或某个结果超出缓冲区时，会换用新的缓冲区）。直接把这个 `Uint8Array` 交给 `fetch`、`WebSocket.send`、`Blob` 或流，它们会按 `byteOffset` 和 `length` 读取；不要使用它的 `.buffer`，其中还有其他结果。保留一个结果，就会让它所在的整个缓冲区一直存活：需要独占缓冲区的数组时，调用 `bytes.slice()`。
+- **`serializeInto(codec, value, target)`** 写进你自己的内存，相当于 .NET 中用复用的 `NinoArrayBufferWriter` 调用 `NinoSerializer.Serialize(value, bufferWriter)`，返回值的字节数。写进 `NinoWriter` 时追加在已有内容之后，按需扩容；`writer.reset()` 清空它并保留缓冲区，缓冲区足够大之后写入不再分配内存（不产生新的 `ArrayBuffer`，Node 24 大约每新增 64 MB 的 `ArrayBuffer` 就触发一次完整垃圾回收），`writer.written()` 在写入器下次写入之前都是这些字节的视图。写进 `Uint8Array` 时，值放得下就从数组开头写入；返回的字节数大于数组长度表示什么都没写。Go 有 `nino.Append` 和复用的 `Writer`，Rust 有 `serialize_into`。
 - **`deserialize(codec, bytes)`** 从一个 `Uint8Array`（Node 的 `Buffer` 也可以）中读取一个值。
 - 每个类型 `X` 都有 **`XCodec`**：按 .NET 为其声明类型写出的头读写这个值。结构体没有头（`NinoCodec<X>`），密封类有空标记（`NinoCodec<X | null>`），非密封类和接口有类型 ID，所以 `AnimalCodec` 能读写 `Animal` 的任何生成子类型，与 `Serialize<Animal>` 一样。
 - **`NinoWriter` 和 `NinoReader`** 把多个值写进一个缓冲区并按顺序读回，相当于 .NET 中的 `Writer` 和 `Reader`：先 `codec.write(writer, value)`，再 `writer.toBytes()`；读取时 `codec.read(new NinoReader(bytes))`。

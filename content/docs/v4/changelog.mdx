@@ -20,6 +20,7 @@ What changed from one v4 release to the next, newest first. For everything v4 ch
 
 ### New [#new-6]
 
+- **`serializeInto` in TypeScript**: `serializeInto(codec, value, target)` writes into a reused `NinoWriter` (emptied with the new `reset()`; no allocation once it is large enough, so no `ArrayBuffer`s pile up toward Node's full garbage collections) or into a `Uint8Array`, and returns the value's size, as `NinoSerializer.Serialize(value, bufferWriter)` does in .NET. See [API](/en/docs/v4/advanced/codegen#api).
 - **Typed arrays in TypeScript**: nino-gen's `NumericArrays="typed"` (`--numeric-arrays typed`) writes arrays and lists of fixed-size numbers as typed arrays (`Int32Array`, `Float64Array`, `BigInt64Array`...), copied in one block. Serialize is faster in Node and Chromium and deserialize faster in Node; Chromium deserializes them 2 to 3 times slower, so the default stays `number[]`. See [Typed Arrays](/en/docs/v4/advanced/codegen#typed-arrays).
 - **NINO027**: a warning for `[NinoFormerName]` on a generic type that is written with a type id (through a base class, an interface or `object`): every instantiation would take the same id and collide. See [Diagnostics](/en/docs/v4/analyzers#diagnostics).
 - **`NinoDataException`** (namespace `Nino.Core`, derived from `InvalidOperationException`) is thrown for every invalid input Nino rejects while deserializing, so untrusted data can be caught with one specific type; `catch (InvalidOperationException)` still catches it. See [NinoDataException](/en/docs/v4/security#ninodataexception).
