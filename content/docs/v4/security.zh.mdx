@@ -111,7 +111,7 @@ NinoSettings.MaxCollectionLength = 100_000; // 我们的消息都不会更多
 `NinoSettings.Untrusted = true` 加上每次读取都要花时间、可信数据不需要的检查。关闭时（默认）它们没有任何开销：读取路径把它当作常量判断。开启后：
 
 - **带种子的哈希。** Nino 创建的字典和哈希集合（包括 `IDictionary`、`ISet` 和查找表）对整数、`char`、`Guid` 和 `string` 键使用以每个进程随机生成的密钥为种子的比较器（SipHash-1-3），使键根本无法被选成相互冲突。它们的 `Comparer` 不是默认比较器，但相等性相同。你传入的集合保留自己的比较器；其他键类型，以及 `ImmutableDictionary` 和 `ImmutableHashSet`，依靠 `MaxHashCollisions`。
-- **按字节复制的值也会检查**，与其自身构造函数的检查一致，原始结构体和元组内部也一样：不是 0 或 1 的 `bool`、超过 `DateTime.MaxValue` 的 `DateTime`、标志位中除符号和小数位数之外还有其他位、或小数位数超过 28 的 `decimal`、超出范围的 `DateOnly` 或 `TimeOnly`。枚举不检查：底层类型的任何值都是有效的枚举值（标志可以组合，新版本也可能增加成员）。`TimeSpan`、`Guid`、`char` 和数字没有无效值。
+- **按字节复制的值也会检查**，与其自身构造函数的检查一致，原始结构体和元组内部也一样：不是 0 或 1 的 `bool`、超过 `DateTime.MaxValue` 的 `DateTime`、标志位中除符号和小数位数之外还有其他位、或小数位数超过 28 的 `decimal`、超出范围的 `DateOnly` 或 `TimeOnly`。枚举不检查：底层类型的任何值都是有效的枚举值（标志可以组合，新版本也可能增加成员）。`TimeSpan`、`Guid`、`char` 和数字没有无效值。这类值组成的数组和列表在检查时不会对每个值分支，在 .NET 8+ 上还会用 SIMD 一次检查多个值。
 - **值之后的字节**对接收整段数据（span 或数组）的 API（`NinoDeserializer.Deserialize` 和生成的重载）而言是无效数据。从你自己创建的 `Reader` 读取时，其余字节交给你处理，所以仍然可以从一个缓冲区中读取多个值。
 
 ## 仍需你负责的部分 [#what-stays-your-job]
