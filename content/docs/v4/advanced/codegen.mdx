@@ -169,6 +169,7 @@ Each metadata of a `<NinoCodegen>` item is the nino-gen option of the same name 
 | `Names` | `--names` | TypeScript | `camel` | `camel` writes member names in camelCase (`UnitPrice` → `unitPrice`, `URL` → `url`); `keep` keeps them as in C#. |
 | `ImportExtension` | `--import-extension` | TypeScript | empty | The extension of the generated file's import of `nino.ts`: empty for bundlers (Vite, webpack, esbuild), `.js` for Node ESM compiled with `tsc`, `.ts` for Deno and Node's type stripping, or `.mjs`, `.mts`. |
 | `Runtime` | `--runtime` | TypeScript | empty | Import the runtime from this module instead of writing `nino.ts` next to the code. |
+| `NumericArrays` | `--numeric-arrays` | TypeScript | `array` | `array`: arrays and lists of numbers are `number[]` (`bigint[]` for 64-bit integers). `typed`: [typed arrays](#typed-arrays) (`Int32Array`, `Float64Array`...). |
 | `Package` | `--package` | Go | the assembly name's letters and digits, lower-cased | The package name. |
 | `Tags` | `--tags` | Go | `json,yaml` | The struct tags written after `nino`, in order; empty for none. |
 | `TagNames` | `--tag-names` | Go | `camel` | How those tags name a member: `camel`, `snake` or `original`. |
@@ -193,7 +194,7 @@ nino-gen --assembly bin/Release/net8.0/Shop.Contracts.dll --lang go --out ../ser
 
 ```text
 nino-gen --assembly <dll> --lang ts|go|rust --out <dir> [--references <file>] [--name <file name>]
-  ts:   [--names camel|keep] [--import-extension <.js|.ts|.mjs|.mts>] [--runtime <module>]
+  ts:   [--names camel|keep] [--import-extension <.js|.ts|.mjs|.mts>] [--runtime <module>] [--numeric-arrays array|typed]
   go:   [--package <name>] [--tags json,yaml] [--tag-names camel|snake|original]
   rust: [--serde] [--serde-names camel|snake|original] [--strings string|wide] [--maps indexmap|std]
 ```
@@ -427,7 +428,7 @@ useWasm(true);  // back on, where the engine allows it
 | `TimeSpan` | `bigint` | ticks of 100 ns |
 | `string` (also with `[NinoUtf8]`) | `string \| null` | |
 | `byte[]` | `Uint8Array \| null` | a copy of the bytes |
-| arrays, `List<T>` and other sequences | `T[] \| null` | |
+| arrays, `List<T>` and other sequences | `T[] \| null` | a typed array for numbers with [`NumericArrays="typed"`](#typed-arrays) |
 | `HashSet<T>` and other sets | `Set<T> \| null` | |
 | `Dictionary<TKey, TValue>` and other dictionaries | `Map<K, V> \| null` | |
 | `ValueTuple`, `KeyValuePair` | `[A, B, ...]` | a TypeScript tuple, up to 7 items |
@@ -439,6 +440,33 @@ useWasm(true);  // back on, where the engine allows it
 | struct, `[NinoType]` or copied as raw memory | class | a raw struct is read and written field by field at its offsets, padding zeroed |
 | `object` | `unknown` | any generated `[NinoType]`, by its type id |
 | keyed and version-tolerant types | as above | read and written in their [format](/en/docs/v4/evolving-data), former keys included |
+
+### Typed Arrays [#typed-arrays]
+
+By default an array or list of numbers is `number[]` (`bigint[]` for 64-bit integers), which reads fastest in every engine. With `NumericArrays="typed"` (`--numeric-arrays typed`), arrays, lists and other sequences (not sets) of `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, `nint`, `nuint`, `float` and `double` are typed arrays instead: `Int8Array`, `Int16Array`, `Uint16Array`, `Int32Array`, `Uint32Array`, `BigInt64Array`, `BigUint64Array`, `Float32Array` and `Float64Array`. Their bytes on the wire are the typed array's own, so the bytes do not change, only the TypeScript types.
+
+```csharp title="Mesh.cs"
+[NinoType]
+public class Mesh
+{
+    public float[] Positions;
+    public List<int> Indices;
+}
+```
+
+```ts
+// NumericArrays="typed"
+export class Mesh {
+  positions: Float32Array | null = null;
+  indices: Int32Array | null = null;
+}
+mesh.indices = Int32Array.of(0, 1, 2);
+```
+
+- Arrays over 64 bytes are copied in one block; shorter ones are read and written element by element, since V8 keeps those on its heap.
+- Arrays of 65 bytes to 8 KB that are read are views of a shared 64 KB buffer: `slice()` one before transferring its `.buffer`.
+- Serialize is faster in Node and Chromium, and deserialize faster in Node. Chromium deserializes numeric arrays of a few KB 2 to 3 times slower than into `number[]`, since each typed array needs a backing store of its own; that is why it is not the default.
+- `byte` sequences are `Uint8Array` either way. `bool`, `char`, `decimal`, `TimeSpan` and enum sequences stay arrays, and sets stay `Set`s.
 
 ### What TypeScript Leaves Out [#not-supported]
 
