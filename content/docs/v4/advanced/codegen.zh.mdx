@@ -512,7 +512,7 @@ Go 运行时（模块 `github.com/JasonXuDeveloper/Nino/runtimes/go/v4`，包 `n
 
 - 一个结构体，字段先带 `nino` 标签（成员的位置，键控类型中则是 C# 成员名），然后是 `Tags`：``Health int32 `nino:"Health" json:"health" yaml:"health"` ``；
 - `NinoLayout()`，返回 .NET 为这个类型发布的布局；`NinoTypeName()`；可以按类型 ID 写出的类还有 `NinoTypeID()`；
-- 与运行时手写示例形状相同的 `ReadX` 和 `WriteX` 函数：每段连续的定长成员只做一次边界检查，不用反射。
+- 与运行时手写示例形状相同的 `ReadX` 和 `WriteX` 函数：每段连续的定长成员只做一次边界检查，不用反射，也不经由函数值或接口调用：每个类的成员体和集合的每个元素都直接调用读写代码（嵌套 128 层的成员体经由运行时的 `Class`，像 .NET 一样延后处理）。
 
 密封类是 `*X`（nil 表示 null），结构体是 `X`，可以容纳多种类型的槽位（抽象类、接口、非密封类）是一个接口，每个允许的类型一个实现。枚举是带常量的具名整数类型。辅助类型命名为 `NinoTuple2`……`NinoGrid`；名字以 `Nino` 开头的用户类型会加上 `Type` 后缀，简单名相同的两个类型会加上命名空间前缀（`ShapesLeftItem`）。`[NinoFormerName]` 不在 `nino` 标签中：布局只带有它们的哈希，`NinoLayout()` 保留了这些哈希，所以键控类型仍能读取按旧名称写出的数据。
 

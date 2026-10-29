@@ -512,7 +512,7 @@ For every `[NinoType]`, `nino_types.go` holds:
 
 - a struct whose fields carry the `nino` tag first (the member's position, or its C# name in a keyed type), then the `Tags`: ``Health int32 `nino:"Health" json:"health" yaml:"health"` ``;
 - `NinoLayout()`, returning the layout .NET publishes for the type, `NinoTypeName()`, and `NinoTypeID()` on the classes that can be written behind a type id;
-- `ReadX` and `WriteX` functions in the shape the runtime's hand-written samples use: one bounds check per run of fixed-size members, no reflection.
+- `ReadX` and `WriteX` functions in the shape the runtime's hand-written samples use: one bounds check per run of fixed-size members, no reflection, and no call through a function value or interface: each class body and each element of a collection is read and written by a direct call (bodies 128 deep go through the runtime's `Class`, which defers them as .NET does).
 
 A sealed class is a `*X` (nil for null), a struct an `X`, and a slot that holds several types (an abstract class, an interface, a class that is not sealed) an interface with one implementation per allowed type. Enums are named integer types with constants. Helper types are named `NinoTuple2`, ..., `NinoGrid`; a user type whose name starts with `Nino` gets a `Type` suffix, and two types with the same simple name are prefixed with their namespace (`ShapesLeftItem`). `[NinoFormerName]`s are not in the `nino` tag: layouts carry only their hashes, which `NinoLayout()` keeps, so a keyed type still reads data written under a former name.
 
