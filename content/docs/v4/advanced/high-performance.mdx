@@ -1,6 +1,6 @@
 ---
 title: High-Performance Serialization
-description: "Every lever for Nino's speed, when to use it and what it costs: buffer writers, exact-size arrays, Writer and Reader, reuse deserialization, pools, raw and fixed-size structs, formats, sealed and polymorphic types, collections, strings, custom formatters, startup and measuring."
+description: "Every lever for Nino's speed, when to use it and what it costs: buffer writers, exact-size arrays, Writer and Reader, reuse deserialization, pools, raw and fixed-size structs, formats, sealed and polymorphic types, collections, prefetching large collections of scattered objects, strings, custom formatters, startup and measuring."
 icon: Gauge
 ---
 
@@ -36,6 +36,7 @@ For copy-paste recipes built on these mechanisms, and the checklist, see [Zero-A
 | [Custom formatters that copy blocks](#custom-formatters) | types Nino does not know | a member with one is no longer raw or fixed-size |
 | [Early registration and a warm-up](#startup) | the first message must be fast | startup time |
 | [Interceptors](#per-call-overhead) | the project builds with the .NET 8 SDK or later | nothing |
+| [`NinoPrefetchLargeCollections`](#large-collections) | arrays or lists of classes larger than the CPU cache, whose objects were replaced, shuffled or sorted | unset: nothing; set: a length test per top-level call of such a collection |
 
 ## Serialize into a Reused Buffer
 
@@ -312,6 +313,28 @@ The first call for each type pays costs that later calls do not: Nino finds the 
 - Configure `NinoSettings` before either.
 
 **Cost:** startup time, and the memory of the instances the pools now hold. Warm-up calls run unoptimized Tier-0 code, so they do not replace warming up before you [measure](#measure).
+
+## Large Collections of Scattered Objects [#large-collections]
+
+Each element of a `T[]` or `List<T>` of classes is an object of its own on the heap. While the collection's order is the order its objects were allocated in, the CPU's hardware prefetcher fetches the next ones before the loop needs them. Once objects were replaced, shuffled or sorted after they were created, each element is a cache miss the hardware cannot predict, and on a collection larger than the cache the loop spends most of its time waiting for memory.
+
+The MSBuild property `NinoPrefetchLargeCollections` makes Nino fetch those objects ahead itself (software prefetch), in the project that makes the calls:
+
+```xml title="MyApp.csproj"
+<PropertyGroup>
+  <NinoPrefetchLargeCollections>true</NinoPrefetchLargeCollections>
+</PropertyGroup>
+```
+
+With it set, these calls prefetch:
+
+- `NinoSerializer.Serialize(collection)`, with or without an `IBufferWriter<byte>`, and `NinoDeserializer.Deserialize(bytes, ref collection)` into an existing collection holding as many elements (its objects are reused, so the scattered ones are read into);
+- where `collection` is a `T[]` or `List<T>` of a non-generic `[NinoType]` class (an abstract base included) that is not [fixed-size](/en/docs/v4/performance#fixed-size-types), written or read directly (not as a member of another type) through a call the [interceptors](#per-call-overhead) route (a project built with the .NET 8 SDK or later), running on .NET 8 or later on x64 or Arm64;
+- and only when the collection takes more than a quarter of the CPU's last-level cache and its first objects are not in allocation order. Every other collection is written and read as before.
+
+The bytes are the same either way. Set it when a hot path serializes such collections, and [measure](#measure) it on your data: collections that fit in the cache, or whose objects are still in allocation order, gain nothing. Unity projects are unaffected: Unity compiles with the generator's Roslyn 4.3 build, which has no interceptors, so the property does nothing there.
+
+**Cost:** without the property (the default), nothing: the generated code is the same as before. With it, each top-level call of such a collection tests its length before its loop, which made calls on short collections a few percent slower in our benchmarks, so set it only in projects that handle such collections.
 
 ## Per-Call Overhead [#per-call-overhead]
 

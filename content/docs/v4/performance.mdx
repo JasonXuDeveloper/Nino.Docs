@@ -28,6 +28,7 @@ The saving is a few nanoseconds per call, which matters most when small values a
 - **Older compilers simply use the regular path**, which writes the same bytes. The Unity package ships the generator's Roslyn 4.3 build, so Unity projects never intercept.
 - Some calls are left alone, because intercepting them would gain nothing: raw values and arrays of raw elements (the regular path already copies them directly; only `Deserialize<T>(data)` of a raw value is intercepted, to a single load), `[NinoType]`s declared in another assembly (the calling project reaches their formatter only through the formatter cache, as the regular call does), and calls inside generic code.
 - `Serialize(value)` of a [fixed-size type](#fixed-size-types) is routed to code that writes straight into a `byte[]` of the type's size.
+- With `<NinoPrefetchLargeCollections>true</NinoPrefetchLargeCollections>` in the project, intercepted calls of large arrays and lists of classes also prefetch their objects; see [Large Collections of Scattered Objects](/en/docs/v4/advanced/high-performance#large-collections).
 - Intercepted and regular calls always use the same formatter: formatters are declared with attributes and cannot be replaced at run time, so the generator knows the one the runtime would find.
 
 <Callout type="warn">

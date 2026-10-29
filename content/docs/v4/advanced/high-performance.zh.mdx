@@ -1,6 +1,6 @@
 ---
 title: 高性能序列化
-description: "影响 Nino 速度的每一个手段，何时使用、代价是什么：缓冲区写入器、大小精确的数组、Writer 与 Reader、复用反序列化、对象池、原始与固定大小的结构体、格式、密封类与多态类型、集合、字符串、自定义格式化器、启动，以及如何测量。"
+description: "影响 Nino 速度的每一个手段，何时使用、代价是什么：缓冲区写入器、大小精确的数组、Writer 与 Reader、复用反序列化、对象池、原始与固定大小的结构体、格式、密封类与多态类型、集合、散落对象的大型集合的预取、字符串、自定义格式化器、启动，以及如何测量。"
 icon: Gauge
 ---
 
@@ -36,6 +36,7 @@ icon: Gauge
 | [整块拷贝的自定义格式化器](#custom-formatters) | Nino 不认识的类型 | 带自定义格式化器的成员让它的类型不再按原始内存拷贝、不再是固定大小 |
 | [提前注册与预热](#startup) | 第一条消息也必须快 | 启动时间 |
 | [拦截器](#per-call-overhead) | 项目用 .NET 8 SDK 或更高版本构建 | 无 |
+| [`NinoPrefetchLargeCollections`](#large-collections) | 类的数组或列表大于 CPU 缓存，且其中的对象被替换、打乱或排序过 | 不设置：无；设置：这类集合的每次顶层调用多一次长度判断 |
 
 ## 序列化到复用的缓冲区 [#serialize-into-a-reused-buffer]
 
@@ -312,6 +313,28 @@ Nino 在类的值前面写什么，取决于存放它的位置的声明类型（
 - 在这两步之前配置好 `NinoSettings`。
 
 **开销：** 启动时间，以及对象池现在持有的实例所占的内存。预热调用运行的是未经优化的 Tier-0 代码，所以它不能代替[测量](#measure)之前的预热。
+
+## 散落在内存中的大型集合 [#large-collections]
+
+类的 `T[]` 或 `List<T>` 中，每个元素都是堆上单独的对象。集合的顺序与对象分配的顺序一致时，CPU 的硬件预取器会在循环用到之前取来后面的对象；一旦对象在创建后被替换、打乱或排序，每个元素都是硬件无法预测的缓存未命中，集合比缓存大时，循环大部分时间都在等内存。
+
+在发起调用的项目中设置 MSBuild 属性 `NinoPrefetchLargeCollections`，Nino 就会自己提前取这些对象（软件预取）：
+
+```xml title="MyApp.csproj"
+<PropertyGroup>
+  <NinoPrefetchLargeCollections>true</NinoPrefetchLargeCollections>
+</PropertyGroup>
+```
+
+设置后，以下调用会预取：
+
+- `NinoSerializer.Serialize(collection)`（带或不带 `IBufferWriter<byte>`），以及 `NinoDeserializer.Deserialize(bytes, ref collection)` 读入元素个数相同的现有集合（其中的对象被复用，所以读入的正是这些散落的对象）；
+- 其中 `collection` 是非泛型 `[NinoType]` 类（包括抽象基类）的 `T[]` 或 `List<T>`，且该类不是[固定大小](/zh/docs/v4/performance#fixed-size-types)的；集合被直接写入或读取（而不是作为其他类型的成员），并且调用经由[拦截器](#per-call-overhead)转发（项目用 .NET 8 SDK 或更高版本构建），运行在 x64 或 Arm64 上的 .NET 8 或更高版本；
+- 并且只在集合大于 CPU 末级缓存的四分之一、且前几个对象不是按分配顺序排列时。其他集合的读写与之前完全相同。
+
+无论设置与否，写出的字节都相同。热路径会序列化这类集合时再设置，并用你自己的数据[测量](#measure)：放得进缓存的集合，或对象仍按分配顺序排列的集合，不会更快。Unity 项目不受影响：Unity 使用生成器的 Roslyn 4.3 版本编译，没有拦截器，这个属性在 Unity 中不起作用。
+
+**代价：** 不设置（默认）时没有任何代价：生成的代码与之前完全相同。设置后，这类集合的每次顶层调用都会在循环前判断长度，在我们的基准测试中，短集合的调用因此慢了几个百分点，所以只在处理这类集合的项目中设置。
 
 ## 每次调用的固定开销 [#per-call-overhead]
 

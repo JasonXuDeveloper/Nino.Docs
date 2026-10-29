@@ -28,6 +28,7 @@ static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 - **旧编译器直接走常规路径**，写出的字节相同。Unity 包中附带的是生成器的 Roslyn 4.3 版本，所以 Unity 项目不会拦截。
 - 以下调用不会拦截，因为拦截了也没有收益：原始值和原始元素数组（常规路径本来就直接拷贝；只有原始值的 `Deserialize<T>(data)` 会被拦截，改为一次读取），在其他程序集中声明的 `[NinoType]`（调用方项目只能通过格式化器缓存访问它的格式化器，与常规调用相同），以及泛型代码内部的调用。
 - 对[固定大小的类型](#fixed-size-types)，`Serialize(value)` 会改为调用直接写入大小正好的 `byte[]` 的代码。
+- 在项目中设置 `<NinoPrefetchLargeCollections>true</NinoPrefetchLargeCollections>` 后，类的大型数组和列表的拦截调用还会预取其中的对象；见[散落在内存中的大型集合](/zh/docs/v4/advanced/high-performance#large-collections)。
 - 拦截后的调用和常规调用用的始终是同一个格式化器：格式化器都用特性声明，运行时无法替换，所以生成器知道运行时会找到哪一个。
 
 <Callout type="warn">
