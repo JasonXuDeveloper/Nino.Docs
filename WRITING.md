@@ -88,6 +88,19 @@ punctuation in prose; no 翻译腔 (被 passives, 进行 / 通过……的方式
 | 通过使用 `[NinoUtf8]` 的方式，你可以实现更小的字符串。 | 加上 `[NinoUtf8]`，字符串按 UTF-8 写，更小。 |
 | 对于不可信数据的场景来说，这是一个非常重要的设置。 | 读不可信的数据时，务必打开它。 |
 
+One term per concept, on every page, in the changelog and in Nino's README.zh.md (grep the variants when you touch a
+page):
+
+| Concept | Term | Not |
+| --- | --- | --- |
+| reference tracking | 引用追踪, 追踪引用 | 引用跟踪, 跟踪 |
+| deferring deep bodies | 推迟, 推迟的主体 | 延迟 (also reads as latency), 延后 |
+| fixed-size types and values | 固定大小 | 定长 (定长整数 stays for fixed-width integers) |
+| version tolerance | 版本容错 | 版本兼容 |
+| keyed members | 键控成员, 键控类型 | keyed 成员 |
+| the 0/1 byte before a sealed class or nullable value | 存在字节 (English: presence byte) | null 标记, null 标志, 有值字节, null flag, has-value byte |
+| formatter, pool, untrusted, interceptor, polymorphism | 格式化器, 对象池, 不可信, 拦截器, 多态 | |
+
 ## Before you commit
 
 ```bash
