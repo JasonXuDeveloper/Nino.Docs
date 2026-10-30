@@ -95,7 +95,7 @@ icon: RotateCcwClock
 ### 修复 [#fixes-5]
 
 - **类型参数没有格式化器时报 NINO007**：成员类型把泛型 `[NinoType]` 封闭在 Nino 无法写入的类型上时（`Box<Action>`，也包括 `List<Box<Action>>`、`Box<Action>[]` 或嵌在其他泛型里），现在会报告：这样的成员会被写入，但写入它的任何值都会抛出异常。没有成员用到的类型参数不报告，字节不变。参见[诊断](/zh/docs/v4/analyzers#diagnostics)。
-- **不可信数据**：把无效数据读入已有值（`Deserialize(data, ref value)`，或被复用对象的成员）时，如果数据在数组分配之后才被拒绝，该值不再留下一个装着未初始化内存的新数组：原始 `T?` 的数组和列表、`bool` 列表、按块读取且带 `bool` 的结构体集合（如 `(int, bool)[]`），以及 `NinoSettings.Untrusted` 检查的值。该值保留原来的内容。参见[无效数据](/zh/docs/v4/basic#invalid-data)。
+- **不可信数据**：把无效数据读入已有值（`Deserialize(data, ref value)`，或被复用对象的成员）时，如果数据在数组分配之后才被拒绝，该值不再留下一个装着未初始化内存的新数组：原始 `T?` 的数组和列表、`bool` 列表、按块读取且带 `bool` 的结构体集合（如 `(int, bool)[]`），以及 `NinoSettings.Untrusted` 检查的值。读取未到达的部分保持原样或为默认值。参见[无效数据](/zh/docs/v4/basic#invalid-data)。
 - **TypeScript 中的哈希洪泛**：V8 对 `Map` 与 `Set` 的 number 和 `bigint` 键计算哈希时不加种子，数据因此可以挑选落入同一个桶的 `HashSet<int>` 元素或 `Dictionary<long, T>` 键，使读取变成二次方复杂度（在 Node 中 8,000 个这样的整数要多花 40 倍时间）。现在键数超过 128 的这类 map 或 set，若某个键在 V8 哈希表中所在的桶里已有超过 100 个键，就抛出 `NinoError`，与 .NET 的 [`MaxHashCollisions`](/zh/docs/v4/security#hash-flooding) 一致。该检查对 V8（Node、Chromium、Deno）是精确的；Safari、Bun 和 Firefox 有各自的数值哈希。重新生成 TypeScript 代码即可启用。
 - **Go 中浮点数的集合元素与字典键**：两个 NaN 元素（或键）现在视为重复，与 .NET 一致；此前 Go 运行时把它们当作不同的值，接受了 .NET 会拒绝的数据。`-0` 与 `0` 原本就相等。见 [Go](/zh/docs/v4/advanced/codegen#go)。
 - **不可信数据**：读到 Nino 从不写出的数据时，在任何模式下都抛出 `NinoDataException`：不是 0 或 1 的 `bool` 或 null/存在字节、条目中的字节多于其值的键控成员，以及偏移或条目与所在区域不符的版本容错延迟段。原始结构体中的 bool 字段仍按原样复制，除非设置了 `NinoSettings.Untrusted`。参见[会被拒绝的数据](/zh/docs/v4/security#what-is-rejected)。
