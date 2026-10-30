@@ -16,7 +16,7 @@ Nino 的分析器随源生成器一起发布（`Nino.Generator` 包和 Unity 包
 | --- | --- | --- | --- | :---: |
 | [NINO001](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino001) | 错误 | 生成代码无法引用该类型（它不是 `public`/`internal`，或者是 `static` 类或 `ref struct`） | 把该类型及其外层类型改为 `public` 或 `internal` | ✅ |
 | [NINO002](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino002) | 错误 | 类型必须是 `partial`：它要序列化的非公开成员需要通过类型内部的访问器访问（.NET 8 之前；泛型类型在 .NET 9 之前，或成员来自类型参数不同的泛型基类），或者标了 `[NinoPooled]` | 把该类型及其外层类型声明为 `partial` | ✅ |
-| [NINO003](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino003) | 警告 | 基类设置了 `allowInheritance: false`，子类型不会按自身类型序列化 | 给子类型加上 `[NinoType]` | ✅ |
+| [NINO003](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino003) | 警告 | 基类设置了 `allowInheritance: false`，子类型没有自己的格式化器：写入它会抛出异常 | 给子类型加上 `[NinoType]` | ✅ |
 
 ### 实例创建 [#construction]
 
@@ -27,7 +27,7 @@ Nino 的分析器随源生成器一起发布（`Nino.Generator` 包和 Unity 包
 | [NINO006](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino006) | 警告 | 只读成员不是构造函数参数，读出的值会被直接丢弃 | 把它加入构造函数、改为可写，或用 `[NinoIgnore]` 忽略 | ✅ |
 | [NINO017](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino017) | 错误 | `[NinoFactory]` 方法无效 | 改为可无参调用、返回声明类型的非泛型 `public static` 方法 |  |
 | [NINO021](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino021) | 错误 | `[NinoConstructor]` 是 `private` 或 `protected` 的 | 改为 `public` 或 `internal` |  |
-| [NINO025](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino025) | 警告 | 类型有 `[NinoConstructor]`，`[NinoFactory]` 永远不会被调用：实例总是通过构造函数重新创建 | 删掉 `[NinoFactory]` 则继续重建实例，删掉 `[NinoConstructor]` 则用工厂创建实例并原地填充 |  |
+| [NINO025](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino025) | 警告 | 类型有 `[NinoConstructor]`，`[NinoFactory]` 永远不会被调用：实例总是通过构造函数重新创建 | 删掉 `[NinoFactory]` 则继续重建实例，删掉 `[NinoConstructor]` 则用工厂创建实例并原地填充 | ✅ |
 
 ### 成员 [#members]
 
@@ -48,7 +48,7 @@ Nino 的分析器随源生成器一起发布（`Nino.Generator` 包和 Unity 包
 | ID | 级别 | 问题 | 处理方式 | 代码修复 |
 | --- | --- | --- | --- | :---: |
 | [NINO014](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino014) | 错误 | 两个键控成员（或某个成员的 `[NinoFormerName]`）哈希到同一个键 | 重命名其中一个，或去掉该旧名称 |  |
-| [NINO024](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino024) | 警告 | `[NinoFormerName]` 只在键控类型中起作用：按位置和版本容错的类型都不写成员名 | 删除它，或给类型设置 `format: NinoFormat.Keyed` |  |
+| [NINO024](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino024) | 警告 | `[NinoFormerName]` 只在键控类型中起作用：按位置和版本容错的类型都不写成员名 | 删除它，或给类型设置 `format: NinoFormat.Keyed` | ✅ |
 | [NINO026](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino026) | 错误 | 一个类型上有多个 `[NinoFormerName]`：类型 ID 只能由一个旧名称计算 | 只保留仍要读取的数据写出时用的那个名称 |  |
 | [NINO027](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino027) | 警告 | 会带类型 ID 写入的泛型类型上有 `[NinoFormerName]`：它的每个实例化都得到同一个 ID | 去掉旧名称，或只在非泛型类型上使用旧名称 |  |
 | [NINO015](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino015) | 警告 | `trackReferences` 用在结构体上会被忽略 | 移除 `trackReferences` | ✅ |

@@ -16,7 +16,7 @@ The [diagnostics reference](https://github.com/JasonXuDeveloper/Nino/blob/main/d
 | --- | --- | --- | --- | :---: |
 | [NINO001](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino001) | Error | Generated code cannot name the type (it is not `public`/`internal`, or it is `static` or a `ref struct`) | Make the type and its containers `public` or `internal` | ✅ |
 | [NINO002](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino002) | Error | The type must be `partial`: it serializes non-public members that generated code reaches through an accessor inside the type (before .NET 8; for generic types before .NET 9, or a member of a generic base with other type arguments), or it is `[NinoPooled]` | Make the type and its containers `partial` | ✅ |
-| [NINO003](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino003) | Warning | A subtype of a NinoType with `allowInheritance: false` is not serialized as itself | Add `[NinoType]` to the subtype | ✅ |
+| [NINO003](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino003) | Warning | A subtype of a NinoType with `allowInheritance: false` has no formatter of its own: writing one throws | Add `[NinoType]` to the subtype | ✅ |
 
 ### Construction
 
@@ -27,7 +27,7 @@ The [diagnostics reference](https://github.com/JasonXuDeveloper/Nino/blob/main/d
 | [NINO006](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino006) | Warning | A read-only member is not a constructor parameter, so its value is read and dropped | Add it to the constructor, make it settable, or `[NinoIgnore]` it | ✅ |
 | [NINO017](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino017) | Error | Invalid `[NinoFactory]` method | Make it a non-generic `public static` method, callable without arguments, returning the declaring type |  |
 | [NINO021](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino021) | Error | `[NinoConstructor]` is `private` or `protected` | Make it `public` or `internal` |  |
-| [NINO025](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino025) | Warning | `[NinoFactory]` next to a `[NinoConstructor]` is never called: the type is always re-created through the constructor | Remove `[NinoFactory]` to keep re-creating, or `[NinoConstructor]` to fill factory instances in place |  |
+| [NINO025](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino025) | Warning | `[NinoFactory]` next to a `[NinoConstructor]` is never called: the type is always re-created through the constructor | Remove `[NinoFactory]` to keep re-creating, or `[NinoConstructor]` to fill factory instances in place | ✅ |
 
 ### Members
 
@@ -48,7 +48,7 @@ The [diagnostics reference](https://github.com/JasonXuDeveloper/Nino/blob/main/d
 | Id | Severity | Problem | What to do | Code fix |
 | --- | --- | --- | --- | :---: |
 | [NINO014](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino014) | Error | Two keyed members (or a member's `[NinoFormerName]`) hash to the same key | Rename one of them, or drop the former name |  |
-| [NINO024](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino024) | Warning | `[NinoFormerName]` has no effect outside a keyed type: positional and version-tolerant types write no member names | Remove it, or give the type `format: NinoFormat.Keyed` |  |
+| [NINO024](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino024) | Warning | `[NinoFormerName]` has no effect outside a keyed type: positional and version-tolerant types write no member names | Remove it, or give the type `format: NinoFormat.Keyed` | ✅ |
 | [NINO026](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino026) | Error | More than one `[NinoFormerName]` on a type: its type id comes from a single earlier name | Keep only the name the data you still read was written under |  |
 | [NINO027](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino027) | Warning | `[NinoFormerName]` on a generic type written with a type id: every instantiation takes the same id | Remove the former name, or keep former names on non-generic types |  |
 | [NINO015](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino015) | Warning | `trackReferences` on a struct is ignored | Remove `trackReferences` | ✅ |
