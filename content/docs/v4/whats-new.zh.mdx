@@ -100,7 +100,7 @@ Nino v4 本来就是为读取不可信来源的数据而设计的：网络对端
 - **分配有上限**：每个长度在分配内存之前都会与剩余字节数比对；从 *rc.7* 起，一个集合在读到元素之前最多预先分配剩余字节数的 16 倍，更大的数量随元素实际读出再扩容。
 - **栈用量有上限**：嵌套超过 128 层的对象会推迟到较浅的层级再读取；从 *rc.7* 起，无法推迟的类型（包含自身的 struct、由构造函数创建的类型）最多 512 层（从 *rc.8* 起由 `NinoSettings.MaxDepth` 设置），并在途中检查栈空间。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
 - **只有一种异常**（*rc.7*）：所有无效输入都抛出同一种消息以 `Nino:` 开头的异常，包括类型本身拒绝的值（格式错误的 `Uri`、未知的区域性、为 null 的字典键），原始异常作为 `InnerException`。从 *rc.8* 起它是 `NinoDataException`，一种 `InvalidOperationException`。在数据进入的地方一个 `catch` 就够了。
-- **严格的字节与限制**（*rc.8*）：Nino 从不写出的字节（不是 0 或 1 的 `bool` 或 null 标记、留有字节的键控成员、格式错误的延迟主体段）会被拒绝；在哈希表中刻意构造冲突的键会抛出异常（`NinoSettings.MaxHashCollisions`）；`NinoSettings.MaxDepth` 和 `MaxCollectionLength` 可以收紧限制，`NinoSettings.Untrusted` 加上每次读取都要花时间的检查。参见[不可信数据](/zh/docs/v4/security)。
+- **严格的字节与限制**（*rc.8*）：Nino 从不写出的字节（不是 0 或 1 的 `bool` 或存在字节、留有字节的键控成员、格式错误的推迟的主体段）会被拒绝；在哈希表中刻意构造冲突的键会抛出异常（`NinoSettings.MaxHashCollisions`）；`NinoSettings.MaxDepth` 和 `MaxCollectionLength` 可以收紧限制，`NinoSettings.Untrusted` 加上每次读取都要花时间的检查。参见[不可信数据](/zh/docs/v4/security)。
 - **不留下未初始化内存**（*rc.7*）：读取到已有值失败时，不会在其中留下未初始化内存的数组。
 
 值本身不做校验（负数的血量会照原样读出），字节里也不带 schema，所以请检查你的逻辑依赖的值，并在缓冲之前限制消息大小。Nino 检查什么、哪些仍需你的代码负责，见[不可信数据](/zh/docs/v4/security)；与 MemoryPack（建议只用于可信数据）的对比，见[不可信输入](/zh/docs/v4/vs-memorypack#untrusted-input)。

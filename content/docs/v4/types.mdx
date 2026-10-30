@@ -85,7 +85,7 @@ A member declared as one of these types is read back as a concrete collection:
 | `IGrouping<TKey, TElement>` | a grouping over an array of its elements |
 | `BlockingCollection<T>` | a new, unbounded `BlockingCollection<T>` (over a `ConcurrentQueue<T>`) holding a snapshot of the elements |
 
-A member declared as a collection interface writes the same bytes as a `List<T>` of its elements for most element types (raw elements as one block). Nullable raw elements are the exception: an `int?[]` or `List<int?>` writes every element in a fixed stride (the has-value flag, padding, then the value, 8 bytes for `int?`), while a member declared as `IList<int?>`, `ICollection<int?>` or `IEnumerable<int?>` writes each element as a single `int?` (1 byte for `null`, 5 bytes otherwise). Changing a member between the two kinds changes the format.
+A member declared as a collection interface writes the same bytes as a `List<T>` of its elements for most element types (raw elements as one block). Nullable raw elements are the exception: an `int?[]` or `List<int?>` writes every element in a fixed stride (the presence byte, padding, then the value, 8 bytes for `int?`), while a member declared as `IList<int?>`, `ICollection<int?>` or `IEnumerable<int?>` writes each element as a single `int?` (1 byte for `null`, 5 bytes otherwise). Changing a member between the two kinds changes the format.
 
 <Callout type="info">
 

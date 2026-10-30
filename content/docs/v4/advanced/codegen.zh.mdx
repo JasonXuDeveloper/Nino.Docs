@@ -391,7 +391,7 @@ WebSocket 的用法相同：发送 `serialize` 的结果，设置 `binaryType = 
 - **`serialize(codec, value)`** 返回一个 `Uint8Array`，内容与 .NET 中 `NinoSerializer.Serialize<T>` 写出的相同。结果不会被复制：每个结果都紧接在上一个结果之后写进一个共享的 64 KB 缓冲区，返回的是它上面的一个视图，之后的调用不会覆盖它（剩余空间不多，或某个结果超出缓冲区时，会换用新的缓冲区）。直接把这个 `Uint8Array` 交给 `fetch`、`WebSocket.send`、`Blob` 或流，它们会按 `byteOffset` 和 `length` 读取；不要使用它的 `.buffer`，其中还有其他结果。保留一个结果，就会让它所在的整个缓冲区一直存活：需要独占缓冲区的数组时，调用 `bytes.slice()`。
 - **`serializeInto(codec, value, target)`** 写进你自己的内存，相当于 .NET 中用复用的 `NinoArrayBufferWriter` 调用 `NinoSerializer.Serialize(value, bufferWriter)`，返回值的字节数。写进 `NinoWriter` 时追加在已有内容之后，按需扩容；`writer.reset()` 清空它并保留缓冲区，缓冲区足够大之后写入不再分配内存（不产生新的 `ArrayBuffer`，Node 24 大约每新增 64 MB 的 `ArrayBuffer` 就触发一次完整垃圾回收），`writer.written()` 在写入器下次写入之前都是这些字节的视图。写进 `Uint8Array` 时，值放得下就从数组开头写入；返回的字节数大于数组长度表示什么都没写。Go 有 `nino.Append` 和复用的 `Writer`，Rust 有 `serialize_into`。
 - **`deserialize(codec, bytes)`** 从一个 `Uint8Array`（Node 的 `Buffer` 也可以）中读取一个值。
-- **`deserializeInto(codec, bytes, value)`** 读进你已有的值，相当于 `NinoDeserializer.Deserialize(data, ref value)`，返回读到的值（除非数据是 null 或另一个类，否则就是 `value` 本身）。嵌套对象原地读取，数组保留存储并把每个元素读进同一下标的旧元素，映射和集合先清空再填充，按类型 ID 写出的成员只有在数据中是它自己的类时才读进它；跟踪引用的对象和类型化数组总是新建。抛出异常时，`value` 保留出错前读到的内容，其余保持原样。Go 有 `nino.DeserializeInto` 配合生成的 `ReadXInto`，Rust 有 `deserialize_into`。
+- **`deserializeInto(codec, bytes, value)`** 读进你已有的值，相当于 `NinoDeserializer.Deserialize(data, ref value)`，返回读到的值（除非数据是 null 或另一个类，否则就是 `value` 本身）。嵌套对象原地读取，数组保留存储并把每个元素读进同一下标的旧元素，映射和集合先清空再填充，按类型 ID 写出的成员只有在数据中是它自己的类时才读进它；追踪引用的对象和类型化数组总是新建。抛出异常时，`value` 保留出错前读到的内容，其余保持原样。Go 有 `nino.DeserializeInto` 配合生成的 `ReadXInto`，Rust 有 `deserialize_into`。
 - 每个类型 `X` 都有 **`XCodec`**：按 .NET 为其声明类型写出的头读写这个值。结构体没有头（`NinoCodec<X>`），密封类有空标记（`NinoCodec<X | null>`），非密封类和接口有类型 ID，所以 `AnimalCodec` 能读写 `Animal` 的任何生成子类型，与 `Serialize<Animal>` 一样。
 - **`NinoWriter` 和 `NinoReader`** 把多个值写进一个缓冲区并按顺序读回，相当于 .NET 中的 `Writer` 和 `Reader`：先 `codec.write(writer, value)`，再 `writer.toBytes()`；读取时 `codec.read(new NinoReader(bytes))`。
 - 数据不是所读类型的有效值时（数据被截断、长度超出末尾、未知的类型 ID，以及[不可信数据](#untrusted-data)中的其他检查），以及值无法写出时，抛出 **`NinoError`**。
@@ -445,7 +445,7 @@ useWasm(true);  // 重新打开（在引擎允许的地方）
 
 ### 类型化数组 [#typed-arrays]
 
-默认情况下，数字的数组或列表是 `number[]`（64 位整数为 `bigint[]`），在所有引擎中读取都最快。设置 `NumericArrays="typed"`（`--numeric-arrays typed`）后，`sbyte`、`short`、`ushort`、`int`、`uint`、`long`、`ulong`、`nint`、`nuint`、`float` 和 `double` 的数组、列表及其他序列（集合除外）改为类型化数组：`Int8Array`、`Int16Array`、`Uint16Array`、`Int32Array`、`Uint32Array`、`BigInt64Array`、`BigUint64Array`、`Float32Array` 和 `Float64Array`。线上的字节就是类型化数组自身的字节，所以字节不变，变的只是 TypeScript 类型。
+默认情况下（`NumericArrays="plain"`），数字的数组或列表是 `number[]`（64 位整数为 `bigint[]`），在所有引擎中读取都最快。设置 `NumericArrays="typed"`（`--numeric-arrays typed`）后，`sbyte`、`short`、`ushort`、`int`、`uint`、`long`、`ulong`、`nint`、`nuint`、`float` 和 `double` 的数组、列表及其他序列（集合除外）改为类型化数组：`Int8Array`、`Int16Array`、`Uint16Array`、`Int32Array`、`Uint32Array`、`BigInt64Array`、`BigUint64Array`、`Float32Array` 和 `Float64Array`。线上的字节就是类型化数组自身的字节，所以字节不变，变的只是 TypeScript 类型。
 
 ```csharp title="Mesh.cs"
 [NinoType]
@@ -495,11 +495,11 @@ mesh.indices = Int32Array.of(0, 1, 2);
 | `char`、`decimal`、64 位枚举 | ✅ | ❌ |
 | 版本容错 | ✅ 版本容错和键控 | ❌ |
 | 泛型 | ✅ 泛型类型，以及多态槽位中的封闭泛型类型（[泛型类型](#generics)） | ❌ |
-| 引用跟踪 | ✅（[引用跟踪](#reference-tracking)） | ❌ |
+| 引用追踪 | ✅（[引用追踪](#reference-tracking)） | ❌ |
 | 导入扩展名 | 空、`.js`、`.ts`、`.mjs` 或 `.mts` | 默认 `.js`（[#170](https://github.com/Cysharp/MemoryPack/issues/170)） |
 | 其他语言 | Go 和 Rust | ❌ |
 
-Roslyn 不支持源生成器输出 C# 以外的文件（[dotnet/roslyn#49935](https://github.com/dotnet/roslyn/issues/49935)），分析器规则 RS1035 也禁止在生成器中读写文件；MemoryPack 没有启用包含这条规则的扩展分析器规则。它的 TypeScript 读写代码与 C# 格式化器分开编写，两者可能不一致：在 [#309](https://github.com/Cysharp/MemoryPack/issues/309) 中，TypeScript 写 `float?` 或 `double?` 的有值标记时宽度不对，C# 读出的是 `null`；在 [#166](https://github.com/Cysharp/MemoryPack/issues/166) 中，空字符串曾被写错。用户还报告过生成的代码无法通过严格的 `tsconfig`（[#426](https://github.com/Cysharp/MemoryPack/issues/426)）、导入了没有 `.ts` 文件的基类型（[#174](https://github.com/Cysharp/MemoryPack/issues/174)），以及换行符混用（[#311](https://github.com/Cysharp/MemoryPack/issues/311)）。
+Roslyn 不支持源生成器输出 C# 以外的文件（[dotnet/roslyn#49935](https://github.com/dotnet/roslyn/issues/49935)），分析器规则 RS1035 也禁止在生成器中读写文件；MemoryPack 没有启用包含这条规则的扩展分析器规则。它的 TypeScript 读写代码与 C# 格式化器分开编写，两者可能不一致：在 [#309](https://github.com/Cysharp/MemoryPack/issues/309) 中，TypeScript 写 `float?` 或 `double?` 的存在字节时宽度不对，C# 读出的是 `null`；在 [#166](https://github.com/Cysharp/MemoryPack/issues/166) 中，空字符串曾被写错。用户还报告过生成的代码无法通过严格的 `tsconfig`（[#426](https://github.com/Cysharp/MemoryPack/issues/426)）、导入了没有 `.ts` 文件的基类型（[#174](https://github.com/Cysharp/MemoryPack/issues/174)），以及换行符混用（[#311](https://github.com/Cysharp/MemoryPack/issues/311)）。
 
 Nino.Codegen 在构建之后运行，依据的正是 C# 格式化器所依据的布局，测试中还在 .NET 与 Node 之间逐字节往返并运行 `tsc --strict`，从而避开了这些问题。其他方案（Protocol Buffers、MessagePack）见[什么时候不适合](/zh/docs/v4#when-not-to-use-it)。
 
@@ -513,7 +513,7 @@ Go 运行时（模块 `github.com/JasonXuDeveloper/Nino/runtimes/go/v4`，包 `n
 
 - 一个结构体，字段先带 `nino` 标签（成员的位置，键控类型中则是 C# 成员名），然后是 `Tags`：``Health int32 `nino:"Health" json:"health" yaml:"health"` ``；
 - `NinoLayout()`，返回 .NET 为这个类型发布的布局；`NinoTypeName()`；可以按类型 ID 写出的类还有 `NinoTypeID()`；
-- 与运行时手写示例形状相同的 `ReadX` 和 `WriteX` 函数：每段连续的定长成员只做一次边界检查，不用反射，也不经由函数值或接口调用：每个类的成员体和集合的每个元素都直接调用读写代码（嵌套 128 层的成员体经由运行时的 `Class`，像 .NET 一样延后处理）。
+- 与运行时手写示例形状相同的 `ReadX` 和 `WriteX` 函数：每段连续的固定大小成员只做一次边界检查，不用反射，也不经由函数值或接口调用：每个类的成员体和集合的每个元素都直接调用读写代码（嵌套 128 层的成员体经由运行时的 `Class`，像 .NET 一样推迟处理）。
 
 密封类是 `*X`（nil 表示 null），结构体是 `X`，可以容纳多种类型的槽位（抽象类、接口、非密封类）是一个接口，每个允许的类型一个实现。枚举是带常量的具名整数类型。辅助类型命名为 `NinoTuple2`……`NinoGrid`；名字以 `Nino` 开头的用户类型会加上 `Type` 后缀，简单名相同的两个类型会加上命名空间前缀（`ShapesLeftItem`）。`[NinoFormerName]` 不在 `nino` 标签中：布局只带有它们的哈希，`NinoLayout()` 保留了这些哈希，所以键控类型仍能读取按旧名称写出的数据。
 
@@ -641,8 +641,10 @@ pub struct Vec2 { pub x: f32, pub y: f32 }
 | `format = "positional" \| "version_tolerant" \| "keyed"` | `NinoFormat.Positional`（默认）、`VersionTolerant` 或 `Keyed`；也接受 `"plain"` 和 `"tolerant"`。 |
 | `kind = "class" \| "open" \| "struct" \| "raw"` | 密封类（默认，带存在字节）、非密封类（带类型 ID）、结构体，或按内存写出的非托管结构体（可用 `pack` 和 `size`）。 |
 | `id = "Full.Name"` 或 `id = 0x…` | 类型 ID：在编译时哈希的 .NET 全名，或数字本身。 |
-| `deferrable = false` | .NET 从不延迟的类型（记录、通过构造函数创建的类型）。未给出时取自 `layout`。 |
-| `layout = "…"` | 类型发布的[布局](/zh/docs/v4/evolving-data#layout-metadata)，在编译时核对：成员名字和顺序、键、旧键、`[NinoUtf8]`、原始值的大小和偏移。格式、种类、类型 ID 和可延迟性未给出时取自它。 |
+| `deferrable = false` | .NET 从不推迟的类型（记录、通过构造函数创建的类型）。未给出时取自 `layout`。 |
+| `layout = "…"` | 类型发布的[布局](/zh/docs/v4/evolving-data#layout-metadata)，在编译时核对：成员名字和顺序、键、旧键、`[NinoUtf8]`、原始值的大小和偏移。格式、种类、类型 ID 和可推迟性未给出时取自它。 |
+
+手写 impl 时，`nino::sealed_read!()` 和 `nino::sealed_write!()` 写出密封类 `NinoRead` 与 `NinoWrite` impl 中的方法，和生成的代码、derive 一样；`NinoWrite::PREFETCH_BYTES`（默认 0）估计写一个值时经由它的指针读取的字节数，长列表据此边写边预取。
 
 字段属性有 `index`、`name`（.NET 中的名字；默认是字段名的 PascalCase 形式）、`key`、`former`、`utf8` 和 `skip`。枚举是多态的声明类型，每个具体类型一个变体；其他类型 ID 都会被拒绝。二进制格式无法表达的内容（`usize`、Rust 的 `char`、引用、冲突的键、不匹配的 `layout`）都是指明字段的编译错误。
 
@@ -709,17 +711,17 @@ public sealed class Box<T>
 
 </Callout>
 
-## 引用跟踪 [#reference-tracking]
+## 引用追踪 [#reference-tracking]
 
-声明了 [`[NinoType(trackReferences: true)]`](/zh/docs/v4/reference-tracking) 的类型会为每种语言生成，并带有 .NET 写出的引用头：0 表示 null，-1 表示之前没写过的对象（后面跟着它的主体），或者之前写过的对象的编号。对象在创建时、读取主体之前就被记录，所以主体可以持有它所在的对象（循环）。没有子类型的被跟踪类、按类型 ID 写出的被跟踪类或接口，以及位于不跟踪的槽位（`object`、未跟踪的基类）中的被跟踪类型，读写方式都与 .NET 相同。
+声明了 [`[NinoType(trackReferences: true)]`](/zh/docs/v4/reference-tracking) 的类型会为每种语言生成，并带有 .NET 写出的引用头：0 表示 null，-1 表示之前没写过的对象（后面跟着它的主体），或者之前写过的对象的编号。对象在创建时、读取主体之前就被记录，所以主体可以持有它所在的对象（循环）。没有子类型的被追踪类、按类型 ID 写出的被追踪类或接口，以及位于不追踪的槽位（`object`、未追踪的基类）中的被追踪类型，读写方式都与 .NET 相同。
 
-| | 被跟踪的类 `Node` |
+| | 被追踪的类 `Node` |
 | --- | --- |
 | TypeScript | `Node \| null`：读取时对同一个对象的每个引用返回同一个对象，写入时按对象标识编号 |
 | Go | `*Node`：每个引用都是同一个指针，按指针编号 |
 | Rust | `Option<nino::Shared<Node>>`：可以被任意多处持有的一个对象（克隆得到的是同一个对象），按标识比较相等；用 `Shared::empty` 和 `fill` 构建循环 |
 
-引用头不是 -1、0 或已读对象的编号时会被拒绝，指向槽位不允许的类型的对象的反向引用也会被拒绝；每个新对象至少占 4 个字节的引用头，所以对象表的增长不会快于数据。Go 的[结构体标签](#struct-tags)不跟踪引用：它们拒绝这样的类型。
+引用头不是 -1、0 或已读对象的编号时会被拒绝，指向槽位不允许的类型的对象的反向引用也会被拒绝；每个新对象至少占 4 个字节的引用头，所以对象表的增长不会快于数据。Go 的[结构体标签](#struct-tags)不追踪引用：它们拒绝这样的类型。
 
 ## `[NinoType]` 集合 [#ninotype-collections]
 
@@ -730,9 +732,9 @@ public sealed class Box<T>
 TypeScript、Go 和 Rust 的读取器与 .NET 读取器一样，按不可信输入处理数据（[不可信数据](/zh/docs/v4/security)）：不是所读类型有效值的数据，会以该运行时唯一的错误类型失败，不会抛出其他异常或 panic，也不会越界读取、无限制地递归，或分配超出数据所含内容的内存。
 
 - **边界与内存。** 每次读取都检查边界；长度或数量在分配任何内存之前，先与剩余字节数比较。
-- **深度。** 嵌套超过 128 层的类主体完全按 .NET 的方式延迟，所以字节一致、栈有界；不能延迟的（以及包含自身的结构体）超过 512 层就失败。
+- **深度。** 嵌套超过 128 层的类主体完全按 .NET 的方式推迟，所以字节一致、栈有界；不能推迟的（以及包含自身的结构体）超过 512 层就失败。
 - **多态。** 按类型 ID 写出的槽位只接受该处允许的类型的 ID；从不按名字查找类型。
-- **.NET 在任何模式下都拒绝的内容。** 不是 0 或 1 的 `bool` 和存在字节、超出其区域末尾的成员、值没有填满条目的键控成员、格式错误的延迟主体段、映射或集合中重复的键或元素。
+- **.NET 在任何模式下都拒绝的内容。** 不是 0 或 1 的 `bool` 和存在字节、超出其区域末尾的成员、值没有填满条目的键控成员、格式错误的推迟的主体段、映射或集合中重复的键或元素。
 - **值之后的字节**不读取，与 .NET 的默认行为一致（TypeScript 的 `deserializeExact`、Go 的 `DeserializeExact` 和 Rust 的 `deserialize_exact` 会拒绝它们）。
 
 <Tabs groupId="codegen-lang" persist items={['TypeScript', 'Go', 'Rust']}>
@@ -741,6 +743,7 @@ TypeScript、Go 和 Rust 的读取器与 .NET 读取器一样，按不可信输�
 - 所有失败都是 `NinoError`。
 - 映射读入 `Map`，从不读入普通对象，所以 `__proto__` 这样的键只是数据。
 - `[NinoUtf8]` 字符串必须是给定字符数的严格 UTF-8。
+- V8 对数字和 `bigint` 求哈希时不带种子，数据可以挑出落进同一个桶的键。超过 128 个数字或 `bigint` 键的映射或集合会让每个键经过 `NinoKeyGuard`：某个键在所在的桶里会碰到 100 个以上的键时，抛出 `NinoError`，和 .NET 的 [`MaxHashCollisions`](/zh/docs/v4/security#hash-flooding) 一样。这个防护只对 V8（Node、Chromium、Deno）精确，对 JavaScriptCore 和 SpiderMonkey 不精确，它们对数字的哈希方式不同。Go 和 Rust 用随机种子求键的哈希。
 - 重复的键按 `Map` 和 `Set` 的方式比较：数字、`bigint`、字符串、布尔值和 `null` 按值比较。读成对象的键（读成 `Date` 的 `DateTime`、结构体、元组）以及只有小数位数不同的 `decimal` 不参与比较，这样的映射或集合会保留两个条目。
 
 </Tab>
@@ -754,7 +757,7 @@ TypeScript、Go 和 Rust 的读取器与 .NET 读取器一样，按不可信输�
 <Tab value="Rust">
 
 - 它不会 panic，要么返回完整的值，要么返回一个 `Error`（`ErrorKind` 说明是哪项检查失败；超过 512 层是 `ErrorKind::TooDeep`）。
-- 延迟的主体放到堆上的工作列表中。集合的预先分配来自每次读取的一份预算（每个输入字节 16 字节，外加 4 KiB）。
+- 推迟的主体放到堆上的工作列表中。集合的预先分配来自每次读取的一份预算（每个输入字节 16 字节，外加 4 KiB）。
 - 在[不可信模式](/zh/docs/v4/security#untrusted-mode)之外比 .NET 更严格，或者始终更严格：它还拒绝超出范围的日期和时间、无效的 `decimal`、原始结构体中非零的填充、`BitArray` 中不为零的未用位，以及非最简形式的 `BigInteger`。
 
 </Tab>

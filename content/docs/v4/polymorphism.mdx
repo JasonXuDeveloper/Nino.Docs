@@ -103,12 +103,12 @@ Generic interfaces and abstract classes (`IRepository<T>`, `abstract class Box<T
 
 ## How a Polymorphic Value Is Written
 
-The header (the null flag or type id before the value) depends on the **declared** type of the slot (a member, a collection element, or the type argument of your `Serialize<T>`/`Deserialize<T>` call):
+The header (the presence byte or type id before the value) depends on the **declared** type of the slot (a member, a collection element, or the type argument of your `Serialize<T>`/`Deserialize<T>` call):
 
 | Declared type | Header | Polymorphic |
 | --- | --- | :---: |
 | `struct` | none | no |
-| `sealed class` | 1 byte null flag | no |
+| `sealed class` | presence byte (1 byte, `0` = null) | no |
 | non-sealed class, abstract class, interface | 4-byte type id (`0` = null) | yes |
 | `object` | 4-byte type id | yes, any `[NinoType]` |
 

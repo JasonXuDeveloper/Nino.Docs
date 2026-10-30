@@ -255,7 +255,7 @@ Nino 本来就是为读取不可信来源的数据而设计的：网络对端、
 - 类型 ID 未知，或不是声明类型的子类型；
 - 嵌套超过上面的上限；
 - `[NinoUtf8]` 字符串的字节不是合法的 UTF-8，或与它记录的字符数和字节数对不上；
-- Nino 从不写出的字节：不是 0 或 1 的 `bool` 或 null 标记、比所需更长或第一个字节为 `0x82` 及以上的字符串头、条目中的字节多于其值的键控成员、与所在区域不符的延迟主体段；
+- Nino 从不写出的字节：不是 0 或 1 的 `bool` 或存在字节、比所需更长或第一个字节为 `0x82` 及以上的字符串头、条目中的字节多于其值的键控成员、与所在区域不符的推迟的主体段；
 - 字典或集合中的重复键，或在哈希表中刻意构造的冲突键（[哈希洪泛](/zh/docs/v4/security#hash-flooding)）。
 
 这些限制可以在 `NinoSettings` 中收紧，`NinoSettings.Untrusted` 会加上每次读取都要花时间的检查；参见[不可信数据](/zh/docs/v4/security)。
@@ -280,7 +280,7 @@ Nino 本来就是为读取不可信来源的数据而设计的：网络对端、
 - **按位置**：`[NinoType]` 的默认格式：成员按声明顺序写入，不带名称和长度。最小、最快，但成员的任何改动都会改变格式；参见[数据演进](/zh/docs/v4/evolving-data#positional)。
 - **版本容错**与**键控**：另外两种格式（`NinoFormat.VersionTolerant` 和 `NinoFormat.Keyed`）。版本容错的对象先写入自己的字节长度，以后可以追加成员；键控的对象为每个成员写入一个键（成员名的哈希）和长度，成员可以增删、重排和改名。参见[数据演进](/zh/docs/v4/evolving-data)。
 - **槽位**：存放一个值的地方：一个成员、一个集合元素、一个字典值，或者你按 `ref` 传入的变量。Nino 为一个值写出什么，取决于槽位的声明类型。
-- **头部**：Nino 在类的值之前写入的字节：密封类是 1 字节的 null 标志，可能有子类型的类型是 4 字节的类型 ID；结构体没有头部。参见[多态值的写入方式](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)。
+- **头部**：Nino 在类的值之前写入的字节：密封类是一个存在字节，可能有子类型的类型是 4 字节的类型 ID；结构体没有头部。参见[多态值的写入方式](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)。
 - **复用反序列化**：`Deserialize(data, ref value)`，原地填充你传入的值以及其中的对象、列表和字典，而不是新建它们；参见[反序列化到已有值](#into-an-existing-value)。
 - **池化类**：标记了 `[NinoPooled]` 的 `[NinoType]` 类：Nino 需要新实例时从内置的对象池中取，丢弃的实例还回池中；参见 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)。
 - **回收器**：接收[复用反序列化](/zh/docs/v4/pooling)从槽位中丢弃的实例的地方：用 `NinoSettings.SetRecycler<T>` 注册的处理函数；没有的话，交给实例自己的对象池（`ReturnToPool()`）；再没有就不处理。参见[被丢弃的实例去哪里](/zh/docs/v4/pooling#where-dropped-instances-go)。

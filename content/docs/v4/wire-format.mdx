@@ -58,7 +58,7 @@ An unmanaged value (a primitive, an enum, an unmanaged struct that is not a `[Ni
 
 - **Sequences** (arrays, lists, sets, queues, stacks, `Memory<T>`, the immutable sequences, and collections you write yourself) are an `int32` count (`-1` = null), then the elements. Raw elements are one block of `count × size` bytes. Stacks are written bottom to top.
 - **Maps** are a count, then each key and value. Sorted maps are in key order; hash maps in enumeration order, which readers must not depend on.
-- **`T?[]` and `List<T?>` of raw `T`** use a fixed stride: a has-value byte, padding to `T`'s alignment, then `T` (zeros when null). A member declared as an interface (`IList<int?>`) writes each element as a single `T?` instead.
+- **`T?[]` and `List<T?>` of raw `T`** use a fixed stride: a presence byte, padding to `T`'s alignment, then `T` (zeros when null). A member declared as an interface (`IList<int?>`) writes each element as a single `T?` instead.
 - **Tuples and pairs** are their items in order; `Tuple<...>`, `T?` and `Lazy<T>` have a presence byte first. Multi-dimensional arrays are each dimension's length, then the elements in row-major order.
 
 ## Objects [#objects]
@@ -68,7 +68,7 @@ A `[NinoType]` value is a **header** chosen by its declared type, then its **bod
 | Declared type | Header |
 | --- | --- |
 | struct | none |
-| sealed class | presence byte: `0` null, `1` present |
+| sealed class | presence byte (`header=NullFlag` in its [layout](/en/docs/v4/evolving-data#layout-metadata)): `0` null, `1` present |
 | other classes, interfaces, `object` | `int32` type id of the runtime type, `0` for null |
 
 - **Type ids** are the 32-bit FNV-1a hash of the type's full name over its UTF-16 code units (or of its [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name)), so the data never holds a type name, and a reader accepts only the subtypes it knows for that slot. See [Polymorphism](/en/docs/v4/polymorphism).

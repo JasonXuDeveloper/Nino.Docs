@@ -100,11 +100,7 @@ public partial struct PackedSample // 12 bytes, no padding
 
 `Pack` 同时改变结构体在内存中的布局：`Time` 不再按 8 字节对齐。这在 x64 和 ARM64 上没有开销，但会改变写出的字节，所以请在存储数据之前确定布局。
 
-要留在这条路径上：
-
-- 批量数据（坐标、采样、时间序列）优先使用非托管 `T` 的 `T[]` 和 `List<T>`；
-- 热点结构体中不要放引用类型（`string`、数组），这样它们才能按原始内存写入；
-- 注意 `NinoFormat.VersionTolerant`、`NinoFormat.Keyed` 和自定义成员格式化器都会让该结构体不再按原始内存拷贝。
+怎样让你自己的类型留在这条路径上（用哪些集合、什么会关掉原始内存拷贝），见[批量数据保持原始内存格式](/zh/docs/v4/advanced/high-performance#keep-bulk-data-raw)。
 
 <Callout type="info">
 
@@ -125,7 +121,7 @@ public struct GeoPoint               // raw: 8 bytes
 }
 
 [NinoType]
-public sealed class SensorReading    // fixed size: 1 (null flag) + 4 + 8 + 8 + 1 = 22 bytes
+public sealed class SensorReading    // fixed size: 1 (presence byte) + 4 + 8 + 8 + 1 = 22 bytes
 {
     public int SensorId;
     public long Timestamp;
@@ -147,13 +143,13 @@ int size = NinoSerializer.GetFixedSize<SensorReading>();  // 22
 
 - **自动生效。** 在 Roslyn 4.8+ 上，[拦截器](#interceptors)会把固定大小类型的 `Serialize(value)` 导向这条路径；没有拦截器时（Unity、泛型代码、旧编译器），常规调用经过一次检查后也走这条路径，而优化后的代码会把这次检查折叠成常量。
 - 只有返回 `byte[]` 的 `Serialize(value)` 走这条路径。序列化到 `IBufferWriter<byte>` 或 `Writer` 仍按原来的方式写入。元素整块写入的数组和列表（非托管值、原始结构体、元组、`DateTimeOffset`）也直接写入大小正好的数组（见[内存分配](#allocation)）；其他固定大小类型的数组和列表走常规路径。
-- 值为 `null` 的密封类写出 1 字节的 null 标志；其他值都正好占 `GetFixedSize<T>()` 字节。
+- 值为 `null` 的密封类写出一个存在字节；其他值都正好占 `GetFixedSize<T>()` 字节。
 - `NinoSerializer.GetFixedSize<T>()` 对固定大小的类型和原始值返回其大小，对其他类型返回 `-1`。可以用它来确定缓冲区大小，或在启动时检查消息的大小。
 
 ## 内存分配 [#allocation]
 
 - **序列化不分配内存**，唯一的例外是你要的那个 `byte[]`。序列化到复用的 `NinoArrayBufferWriter`（或任意 `IBufferWriter<byte>`）时，每次调用分配 0 B。
-- **返回的 `byte[]` 大小正好**：写入前就能知道大小时（定长的值，以及元素定长的数组和列表），Nino 按这个大小分配并直接写入；其他值先写入池化的临时缓冲区，再拷贝出来一次。
+- **返回的 `byte[]` 大小正好**：写入前就能知道大小时（固定大小的值，以及元素固定大小的数组和列表），Nino 按这个大小分配并直接写入；其他值先写入池化的临时缓冲区，再拷贝出来一次。
 - **反序列化只分配结果对象**，而这些对象也可以复用：用 `ref` 反序列化到已有实例，新实例从 `[NinoPooled]` 对象池中取。复用实例时分配 0 B，只有内容变化的字符串例外：内容不变的字符串会直接保留，变化的文本才读成新实例（非 ASCII 的 `[NinoUtf8]` 文本总是读成新实例）。参见[复用反序列化与对象池](/zh/docs/v4/pooling)。
 - 默认情况下，所有字符都不超过 U+00FF 的字符串每个字符写一个字节，其他文本按 UTF-16 写出，都只需一遍收窄、扩宽或复制字符。`[NinoUtf8]` 要做转码，非空字符串在字符数之后还要多写字节数（UTF-8 不超过 127 字节时占 1 字节）；只有以 ASCII 为主、夹杂少量更宽字符的文本，用它才更小（参见[二进制格式](/zh/docs/v4/platforms#binary-format)）。
 
@@ -178,7 +174,7 @@ int size = NinoSerializer.GetFixedSize<SensorReading>();  // 22
 
 ## 多态 [#polymorphism]
 
-多态值需要额外的 4 字节类型 ID。子类型和基类声明在同一个程序集里时，生成器会为写入生成一串类型判断，为读取生成一个按 ID 的 `switch`，常见情况下直接调用子类型的格式化器；其他程序集中的子类型、泛型子类型和开启了引用追踪的类型则通过无锁注册表分派；泛型基类对其每个封闭类型的子类型也按同样方式生成分派。没有子类型的类请声明为 `sealed`：密封类只需要 1 字节的 null 标志，也不需要分派。
+多态值需要额外的 4 字节类型 ID。子类型和基类声明在同一个程序集里时，生成器会为写入生成一串类型判断，为读取生成一个按 ID 的 `switch`，常见情况下直接调用子类型的格式化器；其他程序集中的子类型、泛型子类型和开启了引用追踪的类型则通过无锁注册表分派；泛型基类对其每个封闭类型的子类型也按同样方式生成分派。密封类只需要一个存在字节，也不需要分派；该怎么做见[密封类，以及通过基类分派](/zh/docs/v4/advanced/high-performance#sealed-and-polymorphic)。
 
 ## 测量 [#measuring]
 

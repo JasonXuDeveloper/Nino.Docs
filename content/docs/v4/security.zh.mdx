@@ -13,9 +13,10 @@ Nino 就是为读取不可信来源的数据而设计的：网络对端发来的
 
 - **不会读到输入之外**，也不会读出它所在的区域或键控条目；
 - **按输入的大小分配内存**：每个长度在分配任何内存之前，先按元素最少占用的字节数与剩余字节数比较；集合在读到元素之前最多预先分配剩余字节数的 16 倍（至少 16 KB），更大的数量随着元素真正读入再增长；
-- **栈深度有界**：嵌套超过 128 层的对象会延迟到较浅的层级再读；其他会嵌套的内容（由构造函数创建或按值比较的类型、包含自身的结构体和集合）在 [`NinoSettings.MaxDepth`](#limits) 处停止，途中还会检查线程栈（见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)）；
+- **栈深度有界**：嵌套超过 128 层的对象会推迟到较浅的层级再读；其他会嵌套的内容（由构造函数创建或按值比较的类型、包含自身的结构体和集合）在 [`NinoSettings.MaxDepth`](#limits) 处停止，途中还会检查线程栈（见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)）；
 - **只创建你声明过的类型**：数据中只有类型 ID，没有类型名；多态值只能是声明类型已注册的子类型之一，回引用只能指向已读过、且类型与槽位相符的对象；
 - **限制它填充的字典和集合中每个键的工作量**（[哈希洪泛](#hash-flooding)）；
+- **不在你的对象里留下旧内存**：读进已有的值时，读取新分配的数组要等填满之后才放进去，所以读到一半被拒绝的数据不会在其中留下未初始化的内存（[无效数据](/zh/docs/v4/basic#invalid-data)）；
 - **只抛出一种异常**：以上所有情况都抛出 [`NinoDataException`](#ninodataexception)。
 
 ## NinoDataException [#ninodataexception]
@@ -35,7 +36,7 @@ catch (NinoDataException e)
 }
 ```
 
-`NinoDataException` 派生自 `InvalidOperationException`，即 Nino 在 4.0.0-rc.7 及之前对无效数据抛出的类型，所以 `catch (InvalidOperationException)` 仍然能捕获它。调用方的错误保留各自的异常类型：参数为 null、类型没有格式化器、反序列化到只读集合、[过晚修改设置](#limits)。**序列化**时的失败也是如此（对象图有未跟踪的循环，或嵌套超过 `MaxDepth`），抛出 `InvalidOperationException`：那是你的对象，不是无效数据。[Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 对无效请求体返回 400。
+`NinoDataException` 派生自 `InvalidOperationException`，即 Nino 在 4.0.0-rc.7 及之前对无效数据抛出的类型，所以 `catch (InvalidOperationException)` 仍然能捕获它。调用方的错误保留各自的异常类型：参数为 null、类型没有格式化器、反序列化到只读集合、[过晚修改设置](#limits)。**序列化**时的失败也是如此（对象图有未追踪的循环，或嵌套超过 `MaxDepth`），抛出 `InvalidOperationException`：那是你的对象，不是无效数据。[Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 对无效请求体返回 400。
 
 ## 会被拒绝的数据 [#what-is-rejected]
 
@@ -46,9 +47,9 @@ catch (NinoDataException e)
 - 未知的类型 ID、不是声明类型子类型的 ID，以及无效的回引用；
 - 嵌套深度超过 [`MaxDepth`](#limits)；
 - 读取从空开始填充的字典、`HashSet<T>` 或查找表时出现重复键，以及某个键在其哈希桶中遇到超过 [`MaxHashCollisions`](#hash-flooding) 个键；
-- 值不是 `0` 或 `1` 的 `bool`、null 标记或 has-value 字节（Nino 只写这两个值）；
+- 值不是 `0` 或 `1` 的 `bool`或存在字节（Nino 只写这两个值）；
 - 条目中的字节多于其值的键控成员，以及超出其区域末尾的成员；
-- 延迟主体段（其偏移或条目）与所在区域不符的版本容错或键控区域；
+- 推迟的主体段（其偏移或条目）与所在区域不符的版本容错或键控区域；
 - 不是最短形式、或第一个字节为 `0x82` 及以上的[字符串头](/zh/docs/v4/wire-format#strings)；
 - 字节不是有效 UTF-8、或与字符数和字节数不符的 `[NinoUtf8]` 字符串。
 
@@ -61,7 +62,7 @@ catch (NinoDataException e)
 <TypeTable
   type={{
     MaxDepth: {
-      description: '读写数据时对象最多可以嵌套多深：类主体，加上可能包含自身的结构体和集合。Nino 能在读取成员之前创建的类，超过 128 层的主体会被延迟，不需要限制；这个值限制其余的一切。至少 128。读取时过深抛出 NinoDataException，写入时抛出 InvalidOperationException。',
+      description: '读写数据时对象最多可以嵌套多深：类主体，加上可能包含自身的结构体和集合。Nino 能在读取成员之前创建的类，超过 128 层的主体会被推迟，不需要限制；这个值限制其余的一切。至少 128。读取时过深抛出 NinoDataException，写入时抛出 InvalidOperationException。',
       type: 'int',
       default: '512',
     },

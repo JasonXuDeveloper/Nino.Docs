@@ -277,7 +277,7 @@ Each `[NinoType]` picks its [format](/en/docs/v4/evolving-data) and whether it t
 
 What Nino writes in front of a class value depends on the declared type of its slot ([How a Polymorphic Value Is Written](/en/docs/v4/polymorphism#how-a-polymorphic-value-is-written)):
 
-- **Seal classes that have no subtypes.** A sealed class costs a 1-byte null flag and no dispatch; a class that is not sealed costs a 4-byte type id and a type check, even when it has no subtype.
+- **Seal classes that have no subtypes.** A sealed class costs a presence byte and no dispatch; a class that is not sealed costs a 4-byte type id and a type check, even when it has no subtype.
 - **Dispatch through a common `[NinoType]` base.** For subtypes declared in the base's assembly, generated code writes through a chain of exact type checks and reads through a `switch` on the type id, calling each subtype's formatter directly. Subtypes from other assemblies, generic subtypes, tracked types, and writes in hierarchies of more than 64 subtypes go through a lock-free registry instead ([Dispatch](/en/docs/v4/polymorphism#dispatch)).
 - **Keep `object` and the boxed API off hot paths.** A slot declared as `object` dispatches through the global registry of every `[NinoType]`, and `SerializeBoxed`/`DeserializeBoxed` find the formatter by `Type` and box value types ([Runtime Types](/en/docs/v4/basic#runtime-types)).
 
@@ -348,6 +348,6 @@ Every `NinoSerializer` and `NinoDeserializer` method is safe to call concurrentl
 
 - **Warm up first.** The first calls grow the buffers, fill the pools and run unoptimized Tier-0 code; measure after that.
 - **Count bytes per thread.** `GC.GetAllocatedBytesForCurrentThread()` counts every byte the current thread allocates, so a unit test can pin a hot path at 0 B: see [Verify It](/en/docs/v4/advanced/zero-allocation#verify-it). For a whole service, BenchmarkDotNet's `[MemoryDiagnoser]` reports the same number per operation.
-- **Time long runs.** Use BenchmarkDotNet or other long runs, and measure deserialization with reused instances: for large collections, allocating and zeroing the result often costs more than reading it. See [Measuring](/en/docs/v4/performance#measuring).
+- **Time long runs**, and measure deserialization with reused instances: [Measuring](/en/docs/v4/performance#measuring) says why.
 
 To put all of this into practice, start from the recipes in [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation) and check your hot path against its [checklist](/en/docs/v4/advanced/zero-allocation#checklist).

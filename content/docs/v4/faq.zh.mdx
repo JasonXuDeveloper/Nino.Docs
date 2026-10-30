@@ -56,7 +56,7 @@ Nino.Core 的 net8.0 和 net10.0 版本还带有裁剪和 Native AOT 标注：�
 
 ## 能在 JavaScript 或 TypeScript 中使用 Nino 吗？ [#can-i-use-nino-from-javascript-or-typescript]
 
-可以。[Nino.Codegen](/zh/docs/v4/advanced/codegen#typescript) 在每次构建后为你的 `[NinoType]` 生成 TypeScript 类、枚举和编解码器，并附带 `nino.ts` 运行时，浏览器和 Node 读写的字节与 .NET 写出的完全相同，无需 .NET 运行时。它不支持泛型类型、引用跟踪和少数内置类型（[TypeScript 不支持的内容](/zh/docs/v4/advanced/codegen#not-supported)）。需要这些功能时，可以在浏览器中直接运行 C# 类型：构建一个引用 Nino 的 .NET `browser-wasm` 应用，通过 `[JSExport]` 从 JavaScript 调用，代价是浏览器要下载 .NET 运行时。参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)。
+可以。[Nino.Codegen](/zh/docs/v4/advanced/codegen#typescript) 在每次构建后为你的 `[NinoType]` 生成 TypeScript 类、枚举和编解码器，并附带 `nino.ts` 运行时，浏览器和 Node 读写的字节与 .NET 写出的完全相同，无需 .NET 运行时。它不支持泛型类型、引用追踪和少数内置类型（[TypeScript 不支持的内容](/zh/docs/v4/advanced/codegen#not-supported)）。需要这些功能时，可以在浏览器中直接运行 C# 类型：构建一个引用 Nino 的 .NET `browser-wasm` 应用，通过 `[JSExport]` 从 JavaScript 调用，代价是浏览器要下载 .NET 运行时。参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)。
 
 ## ASP.NET Core 能读写 Nino 请求体和响应吗？ [#can-aspnet-core-read-and-write-nino-bodies]
 
@@ -78,7 +78,7 @@ Nino.Core 的 net8.0 和 net10.0 版本还带有裁剪和 Native AOT 标注：�
 
 ## 为什么序列化时报错说对象图中有环？ [#cycle]
 
-某个对象通过成员又引用回了自己，而没有任何类型追踪引用，写入就会无休止地进行下去。把环上的类型标记为 [`trackReferences: true`](/zh/docs/v4/reference-tracking)。报错说某个类型嵌套超过 512 层时也一样处理；此外，通过构造函数创建或按值比较的类无法延迟写入，所以深度递归的类型要提供无参构造函数和可赋值的成员。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
+某个对象通过成员又引用回了自己，而没有任何类型追踪引用，写入就会无休止地进行下去。把环上的类型标记为 [`trackReferences: true`](/zh/docs/v4/reference-tracking)。报错说某个类型嵌套超过 512 层时也一样处理；此外，通过构造函数创建或按值比较的类无法推迟写入，所以深度递归的类型要提供无参构造函数和可赋值的成员。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
 
 ## 为什么旧数据读不出来了，或者读出的值不对？ [#old-data]
 

@@ -138,7 +138,7 @@ public class UserProfile
 
 ## 布局元数据 [#layout-metadata]
 
-生成器会在程序集元数据里为每个 `[NinoType]` 记录一条 `[assembly: NinoTypeLayout]`，说明这个类型是怎么写出的：格式、主体前面的头（结构体是 `None`，密封类是 `NullFlag`，其他是 `TypeId`）、是否跟踪引用、是否按原始内存整体拷贝、类型 ID、嵌套过深时主体是否[延迟](/zh/docs/v4/basic#deep-object-graphs)（`deferrable`，其他语言的读取器需要它），以及按写入顺序排列的成员。做数据兼容检查的工具（CI 里的 schema 检查、两次构建的对比、迁移工具）直接读这些信息就行，不用自己再实现一遍 Nino 的规则：
+生成器会在程序集元数据里为每个 `[NinoType]` 记录一条 `[assembly: NinoTypeLayout]`，说明这个类型是怎么写出的：格式、主体前面的头（结构体是 `None`，密封类是 `NullFlag`，其他是 `TypeId`）、是否追踪引用、是否按原始内存整体拷贝、类型 ID、嵌套过深时主体是否[推迟](/zh/docs/v4/basic#deep-object-graphs)（`deferrable`，其他语言的读取器需要它），以及按写入顺序排列的成员。做数据兼容检查的工具（CI 里的 schema 检查、两次构建的对比、迁移工具）直接读这些信息就行，不用自己再实现一遍 Nino 的规则：
 
 ```csharp
 foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutAttribute>())
@@ -152,7 +152,7 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
   - `raw(n)` 或 `raw(n){...}`：按原始内存拷贝的值（见下一条）；单独的 `raw`：大小要到运行时才知道的这类值；
   - `string`：默认编码的字符串；`utf8`：`[NinoUtf8]` 字符串；
   - `type(T)`：一个 `[NinoType]`，按它自己的布局写出；`object`：带类型 ID 的 `[NinoType]`；
-  - `nullable(E)`：一个存在标记字节，然后是 `E`；
+  - `nullable(E)`：一个存在字节，然后是 `E`；
   - `seq(E)`：`int32` 元素个数（`-1` = null），然后是各元素；`map(K,V)`：元素个数，然后是每个键和值；`grid(rank,E)`：每一维的长度，然后按行优先顺序排列的元素；
   - `pair(K,V)` 和 `tuple(E,...)`：按顺序排列的各项；`group(K,E)`：元素个数、键，然后是各元素；
   - `datetimeoffset`、`bigint`、`version`、`bits`、`timezone`：这几种内置类型；

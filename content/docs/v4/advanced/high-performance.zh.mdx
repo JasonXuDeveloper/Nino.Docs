@@ -277,7 +277,7 @@ if (hash != lastHash) { Send(buffer.WrittenSpan); lastHash = hash; }
 
 Nino 在类的值前面写什么，取决于存放它的位置的声明类型（参见[多态值如何写入](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)）：
 
-- **没有子类型的类声明为 `sealed`。** 密封类只需 1 字节的 null 标记，无需分派；未密封的类即使没有任何子类型，也要写 4 字节的类型 ID 并做一次类型检查。
+- **没有子类型的类声明为 `sealed`。** 密封类只需一个存在字节，无需分派；未密封的类即使没有任何子类型，也要写 4 字节的类型 ID 并做一次类型检查。
 - **通过共同的 `[NinoType]` 基类分派。** 对于与基类声明在同一程序集中的子类型，生成的代码写入时依次做精确的类型检查，读取时按类型 ID `switch`，直接调用各子类型的格式化器。来自其他程序集的子类型、泛型子类型、开启引用追踪的类型，以及子类型超过 64 个的层次结构在写入时，则改走无锁的注册表（参见[分派](/zh/docs/v4/polymorphism#dispatch)）。
 - **热路径上不要用 `object` 和装箱 API。** 声明为 `object` 的位置要通过包含所有 `[NinoType]` 的全局注册表分派；`SerializeBoxed`/`DeserializeBoxed` 按 `Type` 查找格式化器，还要对值类型装箱（参见[运行时类型](/zh/docs/v4/basic#runtime-types)）。
 
@@ -348,6 +348,6 @@ Nino 在类的值前面写什么，取决于存放它的位置的声明类型（
 
 - **先预热。** 最初几次调用会让缓冲区增长、填满对象池，运行的还是未经优化的 Tier-0 代码；在这之后再测量。
 - **按线程统计字节数。** `GC.GetAllocatedBytesForCurrentThread()` 统计当前线程分配的每一个字节，单元测试可以把热路径的分配钉死在 0 B：见[验证](/zh/docs/v4/advanced/zero-allocation#verify-it)。对整个服务而言，BenchmarkDotNet 的 `[MemoryDiagnoser]` 会按每次操作报告同样的数字。
-- **计时要跑得够久。** 用 BenchmarkDotNet 或其他长时间运行的测试，并用复用的实例测量反序列化：对大型集合而言，分配和清零结果对象往往比读取本身更费时。参见[测量](/zh/docs/v4/performance#measuring)。
+- **计时要跑得够久**，并用复用的实例测量反序列化：原因见[测量](/zh/docs/v4/performance#measuring)。
 
 付诸实践时，从[零分配模式](/zh/docs/v4/advanced/zero-allocation)中的做法入手，再对照它的[检查清单](/zh/docs/v4/advanced/zero-allocation#checklist)检查你的热路径。
