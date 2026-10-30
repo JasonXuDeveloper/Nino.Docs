@@ -17,7 +17,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 ## 概览 [#at-a-glance]
 
 <Cards>
-  <Card icon={<Zap />} title="运行更快，构建也更快" href="/zh/docs/v4/perf">
+  <Card icon={<Zap />} title="运行更快，构建也更快" href="/zh/docs/v4/benchmarks">
     比 v3 和 MemoryPack 更快，在 .NET 8 SDK 及以上使用拦截器，源生成器真正增量。
   </Card>
   <Card icon={<ShieldCheck />} title="可读取不可信数据" href="/zh/docs/v4/whats-new#untrusted-data">
@@ -70,7 +70,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 
 <BenchmarkChart chart={['serialize', 'deserialize']} lang="zh" />
 
-通过 `ref` 反序列化到你已有的对象中、新实例从 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池中取时，比 MemoryPack 的覆盖模式最高**快 <BenchValue k="reuse.max" />**，在池化路径上每次调用只分配 **0 B**（见[池化测试结果](/zh/docs/v4/perf#pooling)）。两个库序列化时都不分配内存，数据大小也基本相同（`SimpleClass`：Nino <BenchValue k="payload.v4" /> 字节，MemoryPack <BenchValue k="payload.memorypack" /> 字节）。另请阅读[完整对比](/zh/docs/v4/vs-memorypack)，包括 [MemoryPack 仍然领先的地方](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)。
+通过 `ref` 反序列化到你已有的对象中、新实例从 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池中取时，比 MemoryPack 的覆盖模式最高**快 <BenchValue k="reuse.max" />**，在池化路径上每次调用只分配 **0 B**（见[池化测试结果](/zh/docs/v4/benchmarks#pooling)）。两个库序列化时都不分配内存，数据大小也基本相同（`SimpleClass`：Nino <BenchValue k="payload.v4" /> 字节，MemoryPack <BenchValue k="payload.memorypack" /> 字节）。另请阅读[完整对比](/zh/docs/v4/vs-memorypack)，包括 [MemoryPack 仍然领先的地方](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)。
 
 ### 构建更快 [#faster-to-build]
 
@@ -78,7 +78,7 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 
 <BenchmarkChart chart="compile" lang="zh" />
 
-项目越大，差距越明显：见[构建时间与生成代码](/zh/docs/v4/perf#build-time-and-generated-code)。
+项目越大，差距越明显：见[构建时间与生成代码](/zh/docs/v4/benchmarks#build-time-and-generated-code)。
 
 ### 速度从哪里来 [#where-the-speed-comes-from]
 
@@ -88,7 +88,7 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 - **每种集合走它自己的内部结构**：`SortedSet<T>`、`SortedDictionary<TKey, TValue>`、`SortedList<TKey, TValue>`、`LinkedList<T>`、并发集合和不可变集合，都通过它们的字段、构造函数和批量方法读写，而不是逐个元素循环。这些字段在不同运行时（.NET Framework 和 Mono）上不同，所以布局会在启动时检查一次，不匹配时改用公开 API。参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
 - **CPU 有 SIMD 就用**：AVX-512 上用 64 字节向量和掩码拷贝，AVX2 上用 32 字节向量，Arm64 上用查表指令，.NET 10 的 WebAssembly SIMD 上用字节重排。参见[各平台的 SIMD](/zh/docs/v4/platforms#simd)。
 - **固定大小的类型**直接写进大小正好的 `byte[]`；`NinoSerializer.GetFixedSize<T>()` 返回这个大小。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
-- **在 x64 和 Arm64 上测量**：每个版本都会在 x64 和 GitHub 的 Arm64 运行器上跑基准测试；见[基准测试](/zh/docs/v4/perf)。
+- **在 x64 和 Arm64 上测量**：每个版本都会在 x64 和 GitHub 的 Arm64 运行器上跑基准测试；见[基准测试](/zh/docs/v4/benchmarks)。
 
 这些都不会改变字节：每条路径写出的内容都与普通路径相同。
 
@@ -206,6 +206,6 @@ packet.ReturnToPool();                                                 // return
   <Card title="快速开始" href="/zh/docs/v4/start" description="安装 Nino v4，序列化第一个类型。" />
   <Card title="从 v3 迁移" href="/zh/docs/v4/migration" description="逐步升级，附修改前后的代码。" />
   <Card title="设计文档" href="https://github.com/JasonXuDeveloper/Nino/blob/main/docs/v4-design.md" description="v4 的架构与二进制格式。" />
-  <Card title="基准测试" href="/zh/docs/v4/perf" description="与 v3 和 MemoryPack 对比构建时间和运行性能的完整数据表。" />
+  <Card title="基准测试" href="/zh/docs/v4/benchmarks" description="与 v3 和 MemoryPack 对比构建时间和运行性能的完整数据表。" />
   <Card title="Nino 与 MemoryPack 对比" href="/zh/docs/v4/vs-memorypack" description="如实对比功能和性能。" />
 </Cards>

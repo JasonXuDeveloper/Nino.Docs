@@ -5,13 +5,13 @@ description: "Nino 在 GitHub Linux x64 运行器上的 Unity IL2CPP 播放器�
 icon: Gamepad2
 ---
 
-Unity 运行的是 `Nino.Core` 的 netstandard 构建，它本身不含硬件内联函数（hardware intrinsics）。安装 `com.unity.burst` 后，Nino 的 Unity 包会为最能从 SIMD 获益的工作注册 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)。这个基准测试衡量它们在真实播放器中带来的变化。.NET 运行时的结果见[基准测试](/zh/docs/v4/perf)；Go、Rust 和 TypeScript 的结果见[其他语言的基准测试](/zh/docs/v4/perf-runtimes)。
+Unity 运行的是 `Nino.Core` 的 netstandard 构建，它本身不含硬件内联函数（hardware intrinsics）。安装 `com.unity.burst` 后，Nino 的 Unity 包会为最能从 SIMD 获益的工作注册 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)。这个基准测试衡量它们在真实播放器中带来的变化。.NET 运行时的结果见[基准测试](/zh/docs/v4/benchmarks)；Go、Rust 和 TypeScript 的结果见[其他语言的基准测试](/zh/docs/v4/perf-runtimes)。
 
 ## 测量内容 [#setup]
 
 - **在哪里：** 一个 IL2CPP 播放器，由每个版本的发布流程在 GitHub 托管的 Linux x64 运行器上运行，每个 Unity 版本一张表。表格下方的一行给出 Unity 版本、播放器配置、CPU、Burst 版本，以及内核编译所针对的指令集，均取自发布报告。
 - **测什么：** 每个用例在同一个播放器中计时两次：**不用 Burst**，即 Nino 的 netstandard 标量路径；**使用 Burst**，即注册了内核。两者写出的字节相同。用例是 `Test.Runtime.Burst.BurstBenchmark`，用 Unity Performance Testing 包测量（`Measure.Method`：先预热，再测 9 次、每次约 100 ms，每次取单次调用的平均时间）；每个时间是这些测量的中位数。
-- **加速：** 不用 Burst 的时间除以使用 Burst 的时间，由本站根据两个时间计算。相差 5% 以内为持平；一个低于 1 ns 的时间对比一个可测量的时间，记为更快（快到测不出），与 [.NET 页面](/zh/docs/v4/perf#setup)的规则相同。
+- **加速：** 不用 Burst 的时间除以使用 Burst 的时间，由本站根据两个时间计算。相差 5% 以内为持平；一个低于 1 ns 的时间对比一个可测量的时间，记为更快（快到测不出），与 [.NET 页面](/zh/docs/v4/benchmarks#setup)的规则相同。
 
 内核只用于至少 2 个值（带填充的原始结构体：16 个）的数组和列表，以及至少 16 个字符的字符串；更短的数据在两列中都走标量路径，因此低于这些阈值的用例两列时间应该相近。在支持 AVX2 的 CPU 上，256 个值及以上（每个值最多 16 字节）的块走 32 字节的 AVX2 置换，其余走 16 字节的 SSSE3 内核；表格下方的一行给出每个播放器注册的内核，以及构建它时使用的 Burst x64 目标。请只在同一张表内比较时间：每个 Unity 版本在各自的播放器中运行，而运行器的 CPU 在不同版本之间可能不同。
 

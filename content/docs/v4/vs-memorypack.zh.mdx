@@ -6,8 +6,8 @@ icon: Swords
 
 <AnchorRedirect
   map={{
-    'deserialize-into-existing-objects': '/zh/docs/v4/perf#pooling',
-    'allocations-and-payload-size': '/zh/docs/v4/perf#allocations-and-payload-size',
+    'deserialize-into-existing-objects': '/zh/docs/v4/benchmarks#pooling',
+    'allocations-and-payload-size': '/zh/docs/v4/benchmarks#allocations-and-payload-size',
   }}
 />
 
@@ -47,11 +47,11 @@ Nino 在设计上就能读取不可信数据，快路径也守住了这些保证
 
 <Callout type="info" title="非托管结构体数组">
 
-两个库都把这类数组整块拷贝，所以两者至少持平。反序列化 `Vector4[10000]` 这一项测到的主要是结果数组的垃圾回收，结果每次运行都有波动；参见[反序列化（新实例）](/zh/docs/v4/perf#deserialize-new-instances)。
+两个库都把这类数组整块拷贝，所以两者至少持平。反序列化 `Vector4[10000]` 这一项测到的主要是结果数组的垃圾回收，结果每次运行都有波动；参见[反序列化（新实例）](/zh/docs/v4/benchmarks#deserialize-new-instances)。
 
 </Callout>
 
-每个用例的具体数字、多态与池化测试以及基准测试代码，见[基准测试](/zh/docs/v4/perf#runtime)。
+每个用例的具体数字、多态与池化测试以及基准测试代码，见[基准测试](/zh/docs/v4/benchmarks#runtime)。
 
 ## 功能矩阵 [#feature-matrix]
 
@@ -141,7 +141,7 @@ MemoryPack 写入 1 字节的 Union 标签（超过 249 时 3 字节），Nino �
 - **速度**：序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象图最高快 <BenchValue k="deserialize.max" />，数据见上文。
 - **零分配复用**：复用反序列化原地填充嵌套的对象、列表和字典；有 `[NinoPooled]` 对象池；每个被丢弃的实例都能交给回收器。
 - **数据可以演进**：键控成员在继承体系的任意一个类中都可以调整顺序、删除和插入，无需维护顺序编号；无论键控类型还是版本容错类型，旧代码都能读取新数据。
-- **多态无需维护**：没有标签，任何非密封类都可以作为基类，包括泛型基类（`Box<T>`、`IRepository<T>`），其他程序集和热更新 DLL 中的子类型也能自动找到。MemoryPack 的 Union 特性不能用在泛型类型上：每个封闭类型都要手动注册 Union 格式化器（见[泛型基类型基准测试](/zh/docs/v4/perf#more-cases)）。
+- **多态无需维护**：没有标签，任何非密封类都可以作为基类，包括泛型基类（`Box<T>`、`IRepository<T>`），其他程序集和热更新 DLL 中的子类型也能自动找到。MemoryPack 的 Union 特性不能用在泛型类型上：每个封闭类型都要手动注册 Union 格式化器（见[泛型基类型基准测试](/zh/docs/v4/benchmarks#more-cases)）。
 - **可移植、确定的字节**：在 CoreCLR、Mono、IL2CPP 以及 64 位和 32 位平台上完全相同，填充字节清零。
 - **适用范围更广**：支持 `netstandard2.0`，Unity 有 OpenUPM 包，HybridCLR 无需初始化调用。
 - **构建时间**：每个类型一个生成文件，源生成器是真正增量的。

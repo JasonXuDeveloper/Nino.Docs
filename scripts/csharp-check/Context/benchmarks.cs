@@ -1,4 +1,4 @@
-// What content/docs/v4/perf.mdx leaves to the reader: the usings of Nino's benchmark files (benchmarks/Nino.Benchmark),
+// What content/docs/v4/benchmarks.mdx leaves to the reader: the usings of Nino's benchmark files (benchmarks/Nino.Benchmark),
 // and the fields and Create methods of the parts of them the page leaves out.
 using System.Buffers;
 using System.Numerics;
@@ -7,7 +7,7 @@ using BenchmarkDotNet.Attributes;
 using MemoryPack;
 using MessagePack;
 
-namespace Docs.Page_perf;
+namespace Docs.Page_benchmarks;
 
 public sealed partial class SimpleClass
 {

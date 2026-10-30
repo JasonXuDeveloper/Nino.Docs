@@ -17,7 +17,7 @@ The v4 binary format is **not compatible** with v3 or the earlier v4 betas/previ
 ## At a Glance [#at-a-glance]
 
 <Cards>
-  <Card icon={<Zap />} title="Faster to run and to build" href="/en/docs/v4/perf">
+  <Card icon={<Zap />} title="Faster to run and to build" href="/en/docs/v4/benchmarks">
     Faster than v3 and MemoryPack, interceptors on the .NET 8 SDK and later, and a truly incremental generator.
   </Card>
   <Card icon={<ShieldCheck />} title="Safe for untrusted data" href="/en/docs/v4/whats-new#untrusted-data">
@@ -70,7 +70,7 @@ Measured against MemoryPack in the same run. Nino wins clearly when serializing 
 
 <BenchmarkChart chart={['serialize', 'deserialize']} lang="en" />
 
-Deserializing by `ref` into the objects you already have, with new instances taken from [`[NinoPooled]`](/en/docs/v4/pooling) pools, is up to **<BenchValue k="reuse.max" /> faster** than MemoryPack's overwrite mode and allocates **0 B** per call on the pooled paths ([pooling results](/en/docs/v4/perf#pooling)). Neither library allocates when serializing, and payloads are about the same size (`SimpleClass`: <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack). See the [full comparison](/en/docs/v4/vs-memorypack), including [where MemoryPack is still ahead](/en/docs/v4/vs-memorypack#where-memorypack-is-ahead).
+Deserializing by `ref` into the objects you already have, with new instances taken from [`[NinoPooled]`](/en/docs/v4/pooling) pools, is up to **<BenchValue k="reuse.max" /> faster** than MemoryPack's overwrite mode and allocates **0 B** per call on the pooled paths ([pooling results](/en/docs/v4/benchmarks#pooling)). Neither library allocates when serializing, and payloads are about the same size (`SimpleClass`: <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack). See the [full comparison](/en/docs/v4/vs-memorypack), including [where MemoryPack is still ahead](/en/docs/v4/vs-memorypack#where-memorypack-is-ahead).
 
 ### Faster to Build [#faster-to-build]
 
@@ -78,7 +78,7 @@ The v3 generator inlined the body of every subtype into each polymorphic base an
 
 <BenchmarkChart chart="compile" lang="en" />
 
-The larger the project, the bigger the gap: [Build Time and Generated Code](/en/docs/v4/perf#build-time-and-generated-code).
+The larger the project, the bigger the gap: [Build Time and Generated Code](/en/docs/v4/benchmarks#build-time-and-generated-code).
 
 ### Where the Speed Comes From [#where-the-speed-comes-from]
 
@@ -88,7 +88,7 @@ The larger the project, the bigger the gap: [Build Time and Generated Code](/en/
 - **Each collection through its own internals**: `SortedSet<T>`, `SortedDictionary<TKey, TValue>`, `SortedList<TKey, TValue>`, `LinkedList<T>`, the concurrent collections and the immutable collections are written and read through their fields, constructors and bulk methods instead of an element-by-element loop. Where those fields differ between runtimes (.NET Framework and Mono), the layout is checked once at startup and the public API is used when it does not match. See [Collection internals](/en/docs/v4/platforms#portable-by-design).
 - **SIMD on every CPU that has it**: 64-byte vectors and masked copies with AVX-512, 32-byte vectors with AVX2, table lookups on Arm64, and byte shuffles with WebAssembly SIMD on .NET 10. See [SIMD by Platform](/en/docs/v4/platforms#simd).
 - **Fixed-size types** are written straight into a `byte[]` of their exact size; `NinoSerializer.GetFixedSize<T>()` returns it. See [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
-- **Measured on x64 and Arm64**: each release is benchmarked on x64 and on GitHub's Arm64 runners; see [Benchmarks](/en/docs/v4/perf).
+- **Measured on x64 and Arm64**: each release is benchmarked on x64 and on GitHub's Arm64 runners; see [Benchmarks](/en/docs/v4/benchmarks).
 
 None of these change the bytes: every path writes what the plain path writes.
 
@@ -206,6 +206,6 @@ packet.ReturnToPool();                                                 // return
   <Card title="Quick Start" href="/en/docs/v4/start" description="Install Nino v4 and serialize your first type." />
   <Card title="Migrating from v3" href="/en/docs/v4/migration" description="Step-by-step upgrade, with before/after code." />
   <Card title="Design document" href="https://github.com/JasonXuDeveloper/Nino/blob/main/docs/v4-design.md" description="The v4 architecture and binary format." />
-  <Card title="Benchmarks" href="/en/docs/v4/perf" description="Full build-time and runtime tables against v3 and MemoryPack." />
+  <Card title="Benchmarks" href="/en/docs/v4/benchmarks" description="Full build-time and runtime tables against v3 and MemoryPack." />
   <Card title="Nino vs MemoryPack" href="/en/docs/v4/vs-memorypack" description="An honest feature and performance comparison." />
 </Cards>

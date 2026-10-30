@@ -15,10 +15,10 @@ The `net8.0` and `net10.0` builds of `Nino.Core` use .NET's hardware intrinsics.
 
 | Hardware | Vector paths | Benchmark |
 | --- | --- | --- |
-| x64 with AVX-512 | 64-byte block copies with aligned stores; byte permutes (AVX-512 VBMI, or 4-byte word permutes with AVX-512F) that write and read tuples and `KeyValuePair`s with padding 64 bytes at a time; 512-bit masked copies that clear the padding of raw structs | [Benchmarks](/en/docs/v4/perf), x64 |
-| x64 with AVX2 | 32-byte block copies; tuples and pairs with padding moved a group of 32-byte vectors at a time (`vpshufb`, `vperm2i128`); strings narrowed to Latin-1 and widened back 32 bytes at a time | [Benchmarks](/en/docs/v4/perf), x64 |
-| x64 with SSSE3 | tuples and pairs with padding moved a group of 16-byte vectors at a time (`pshufb`); strings narrowed and widened 16 bytes at a time | [Benchmarks](/en/docs/v4/perf) |
-| Arm64 (AdvSimd) | table lookups (`TBL`) for tuples and pairs with padding, a group of 16-byte vectors at a time; block copies with load and store pairs (`LDP`/`STP`); strings narrowed and widened 16 bytes at a time | [Benchmarks](/en/docs/v4/perf), Arm64 tab |
+| x64 with AVX-512 | 64-byte block copies with aligned stores; byte permutes (AVX-512 VBMI, or 4-byte word permutes with AVX-512F) that write and read tuples and `KeyValuePair`s with padding 64 bytes at a time; 512-bit masked copies that clear the padding of raw structs | [Benchmarks](/en/docs/v4/benchmarks), x64 |
+| x64 with AVX2 | 32-byte block copies; tuples and pairs with padding moved a group of 32-byte vectors at a time (`vpshufb`, `vperm2i128`); strings narrowed to Latin-1 and widened back 32 bytes at a time | [Benchmarks](/en/docs/v4/benchmarks), x64 |
+| x64 with SSSE3 | tuples and pairs with padding moved a group of 16-byte vectors at a time (`pshufb`); strings narrowed and widened 16 bytes at a time | [Benchmarks](/en/docs/v4/benchmarks) |
+| Arm64 (AdvSimd) | table lookups (`TBL`) for tuples and pairs with padding, a group of 16-byte vectors at a time; block copies with load and store pairs (`LDP`/`STP`); strings narrowed and widened 16 bytes at a time | [Benchmarks](/en/docs/v4/benchmarks), Arm64 tab |
 | WebAssembly with SIMD (.NET 10) | two swizzles (`i8x16.swizzle`) per 16-byte vector for tuples and pairs with padding | — |
 | Arm32, or hardware intrinsics turned off (`DOTNET_EnableHWIntrinsic=0`) | none: values moved one at a time, blocks over 64 bytes through `memmove`; the same bytes | — |
 
