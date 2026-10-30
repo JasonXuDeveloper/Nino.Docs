@@ -169,7 +169,7 @@ Each metadata of a `<NinoCodegen>` item is the nino-gen option of the same name 
 | `Names` | `--names` | TypeScript | `camel` | `camel` writes member names in camelCase (`UnitPrice` → `unitPrice`, `URL` → `url`); `keep` keeps them as in C#. |
 | `ImportExtension` | `--import-extension` | TypeScript | empty | The extension of the generated file's import of `nino.ts`: empty for bundlers (Vite, webpack, esbuild), `.js` for Node ESM compiled with `tsc`, `.ts` for Deno and Node's type stripping, or `.mjs`, `.mts`. |
 | `Runtime` | `--runtime` | TypeScript | empty | Import the runtime from this module instead of writing `nino.ts` next to the code. |
-| `NumericArrays` | `--numeric-arrays` | TypeScript | `array` | `array`: arrays and lists of numbers are `number[]` (`bigint[]` for 64-bit integers). `typed`: [typed arrays](#typed-arrays) (`Int32Array`, `Float64Array`...). |
+| `NumericArrays` | `--numeric-arrays` | TypeScript | `plain` | `plain`: arrays and lists of numbers are `number[]` (`bigint[]` for 64-bit integers). `typed`: [typed arrays](#typed-arrays) (`Int32Array`, `Float64Array`...). |
 | `Package` | `--package` | Go | the assembly name's letters and digits, lower-cased | The package name. |
 | `Tags` | `--tags` | Go | `json,yaml` | The struct tags written after `nino`, in order; empty for none. |
 | `TagNames` | `--tag-names` | Go | `camel` | How those tags name a member: `camel`, `snake` or `original`. |
@@ -194,7 +194,7 @@ nino-gen --assembly bin/Release/net8.0/Shop.Contracts.dll --lang go --out ../ser
 
 ```text
 nino-gen --assembly <dll> --lang ts|go|rust --out <dir> [--references <file>] [--name <file name>]
-  ts:   [--names camel|keep] [--import-extension <.js|.ts|.mjs|.mts>] [--runtime <module>] [--numeric-arrays array|typed]
+  ts:   [--names camel|keep] [--import-extension <.js|.ts|.mjs|.mts>] [--runtime <module>] [--numeric-arrays plain|typed]
   go:   [--package <name>] [--tags json,yaml] [--tag-names camel|snake|original]
   rust: [--serde] [--serde-names camel|snake|original] [--strings string|wide] [--maps indexmap|std]
 ```
@@ -638,7 +638,7 @@ pub struct Vec2 { pub x: f32, pub y: f32 }
 
 | Type attribute | Meaning |
 | --- | --- |
-| `format = "plain" \| "tolerant" \| "keyed"` | `NinoFormat.Positional` (default), `VersionTolerant` or `Keyed`. |
+| `format = "positional" \| "version_tolerant" \| "keyed"` | `NinoFormat.Positional` (default), `VersionTolerant` or `Keyed`; `"plain"` and `"tolerant"` are accepted too. |
 | `kind = "class" \| "open" \| "struct" \| "raw"` | A sealed class (default, behind a presence byte), a class that is not sealed (behind its type id), a struct, or an unmanaged struct written as its memory (with `pack` and `size`). |
 | `id = "Full.Name"` or `id = 0x…` | The type id: a .NET full name hashed at compile time, or the number. |
 | `deferrable = false` | A type .NET never defers (a record, a type built through its constructor). Taken from `layout` when not given. |

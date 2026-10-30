@@ -169,7 +169,7 @@ crate 需要打开 `indexmap` 功能的 `nino-serialization`，以及 `indexmap`
 | `Names` | `--names` | TypeScript | `camel` | `camel` 把成员名写成 camelCase（`UnitPrice` → `unitPrice`，`URL` → `url`）；`keep` 保留 C# 中的名字。 |
 | `ImportExtension` | `--import-extension` | TypeScript | 空 | 生成的文件导入 `nino.ts` 时用的扩展名：空适用于打包工具（Vite、webpack、esbuild），`.js` 适用于用 `tsc` 编译的 Node ESM，`.ts` 适用于 Deno 和 Node 的类型剥离，也可以是 `.mjs`、`.mts`。 |
 | `Runtime` | `--runtime` | TypeScript | 空 | 从这个模块导入运行时，而不是在代码旁边写出 `nino.ts`。 |
-| `NumericArrays` | `--numeric-arrays` | TypeScript | `array` | `array`：数字的数组和列表是 `number[]`（64 位整数为 `bigint[]`）。`typed`：[类型化数组](#typed-arrays)（`Int32Array`、`Float64Array`……）。 |
+| `NumericArrays` | `--numeric-arrays` | TypeScript | `plain` | `plain`：数字的数组和列表是 `number[]`（64 位整数为 `bigint[]`）。`typed`：[类型化数组](#typed-arrays)（`Int32Array`、`Float64Array`……）。 |
 | `Package` | `--package` | Go | 程序集名中的字母和数字，转为小写 | 包名。 |
 | `Tags` | `--tags` | Go | `json,yaml` | 写在 `nino` 之后的结构体标签，按顺序；为空则不写。 |
 | `TagNames` | `--tag-names` | Go | `camel` | 这些标签如何命名成员：`camel`、`snake` 或 `original`。 |
@@ -194,7 +194,7 @@ nino-gen --assembly bin/Release/net8.0/Shop.Contracts.dll --lang go --out ../ser
 
 ```text
 nino-gen --assembly <dll> --lang ts|go|rust --out <dir> [--references <file>] [--name <file name>]
-  ts:   [--names camel|keep] [--import-extension <.js|.ts|.mjs|.mts>] [--runtime <module>] [--numeric-arrays array|typed]
+  ts:   [--names camel|keep] [--import-extension <.js|.ts|.mjs|.mts>] [--runtime <module>] [--numeric-arrays plain|typed]
   go:   [--package <name>] [--tags json,yaml] [--tag-names camel|snake|original]
   rust: [--serde] [--serde-names camel|snake|original] [--strings string|wide] [--maps indexmap|std]
 ```
@@ -638,7 +638,7 @@ pub struct Vec2 { pub x: f32, pub y: f32 }
 
 | 类型属性 | 含义 |
 | --- | --- |
-| `format = "plain" \| "tolerant" \| "keyed"` | `NinoFormat.Positional`（默认）、`VersionTolerant` 或 `Keyed`。 |
+| `format = "positional" \| "version_tolerant" \| "keyed"` | `NinoFormat.Positional`（默认）、`VersionTolerant` 或 `Keyed`；也接受 `"plain"` 和 `"tolerant"`。 |
 | `kind = "class" \| "open" \| "struct" \| "raw"` | 密封类（默认，带存在字节）、非密封类（带类型 ID）、结构体，或按内存写出的非托管结构体（可用 `pack` 和 `size`）。 |
 | `id = "Full.Name"` 或 `id = 0x…` | 类型 ID：在编译时哈希的 .NET 全名，或数字本身。 |
 | `deferrable = false` | .NET 从不延迟的类型（记录、通过构造函数创建的类型）。未给出时取自 `layout`。 |

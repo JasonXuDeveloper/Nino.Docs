@@ -104,6 +104,7 @@ NinoSettings.MaxCollectionLength = 100_000; // 我们的消息都不会更多
 - Nino 自己填充新表时，计数没有额外开销，因为它本来就要遍历哈希桶来查找重复键；由表自己添加键时（读入已有集合），Nino 在添加之后遍历新键所在的桶。
 - 哈希码合理的键，每个桶大约只有一个键。哈希码较差的键（例如没有自己的 `GetHashCode` 的结构体键）可以调高这个限制。
 - 字符串键交给那些在 100 次冲突后会自行改用随机化比较器的表处理（.NET 的 `Dictionary`、`HashSet` 和 `ConcurrentDictionary`，以及 .NET Framework 的 `Dictionary` 和 `ConcurrentDictionary`）。
+- 其他运行时：Go 的 map 与其重复检查、Rust 的 `HashMap`、`HashSet` 和 `indexmap` 表都使用每个进程的随机种子计算哈希。V8（Node、Chromium、Deno）对 JavaScript `Map` 或 `Set` 的 number 和 `bigint` 键计算哈希时不加种子，因此 TypeScript 读取器对键数超过 128 的这类 map 或 set，按 V8 所建哈希表的每个桶计数，超过 100 时抛出 `NinoError`，与这里一致；JavaScriptCore（Safari、Bun）和 SpiderMonkey（Firefox）有各自的数值哈希，在那里这个计数对应的是 V8 的桶，而不是它们的。见[不可信数据](/zh/docs/v4/advanced/codegen#untrusted-data)。
 - `ConcurrentDictionary<TKey, TValue>` 不公开自己的桶：Nino 通过为每个运行时（.NET、.NET Framework、Mono 和 Unity）声明、并在启动时检查的布局找到它们，在构建新字典时为每个键所在的桶计数，读入已有字典时则在每次添加之后遍历该桶。没有匹配的布局时，由字典的构造函数填充，不计数。
 
 ## 不可信模式 [#untrusted-mode]
