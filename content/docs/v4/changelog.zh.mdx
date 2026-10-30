@@ -91,6 +91,7 @@ icon: RotateCcwClock
 ### 修复 [#fixes-5]
 
 - **类型参数没有格式化器时报 NINO007**：成员类型把泛型 `[NinoType]` 封闭在 Nino 无法写入的类型上时（`Box<Action>`，也包括 `List<Box<Action>>`、`Box<Action>[]` 或嵌在其他泛型里），现在会报告：这样的成员会被写入，但写入它的任何值都会抛出异常。没有成员用到的类型参数不报告，字节不变。参见[诊断](/zh/docs/v4/analyzers#diagnostics)。
+- **不可信数据**：把无效数据读入已有值（`Deserialize(data, ref value)`，或被复用对象的成员）时，如果数据在数组分配之后才被拒绝，该值不再留下一个装着未初始化内存的新数组：原始 `T?` 的数组和列表、`bool` 列表、按块读取且带 `bool` 的结构体集合（如 `(int, bool)[]`），以及 `NinoSettings.Untrusted` 检查的值。该值保留原来的内容。参见[无效数据](/zh/docs/v4/basic#invalid-data)。
 - **不可信数据**：读到 Nino 从不写出的数据时，在任何模式下都抛出 `NinoDataException`：不是 0 或 1 的 `bool` 或 null/存在字节、条目中的字节多于其值的键控成员，以及偏移或条目与所在区域不符的版本容错延迟段。原始结构体中的 bool 字段仍按原样复制，除非设置了 `NinoSettings.Untrusted`。参见[会被拒绝的数据](/zh/docs/v4/security#what-is-rejected)。
 - **不可信数据**：带 `bool` 项的值元组和 `KeyValuePair` 的数组和列表，无论不是 0 或 1 的 bool 字节在哪个位置、在什么 CPU 上，都会被拒绝；.NET 8+ 的向量读取路径（AVX-512、AVX2、SSSE3、Arm64、WebAssembly）以前视指令集和位置会接受其中一部分。参见[会被拒绝的数据](/zh/docs/v4/security#what-is-rejected)。
 - **不可信数据**：嵌套包含自身的集合类型（`class Tree : List<Tree>`）超过深度限制的数据，现在抛出 `NinoDataException`，不再栈溢出；运行时为这类类型构建格式化器时也不再栈溢出。参见[无效数据](/zh/docs/v4/basic#invalid-data)。
