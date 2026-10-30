@@ -68,7 +68,7 @@ Nino.Core 的 net8.0 和 net10.0 版本还带有裁剪和 Native AOT 标注：�
 
 ## 为什么 Nino 提示某个类型没有格式化器？ [#no-formatter]
 
-`Nino: no formatter for T` 表示 Nino 不知道如何写入 `T`。给它加上 `[NinoType]`，或者用 [`[assembly: NinoFormatter]`](/zh/docs/v4/custom-formatters#for-a-type-assembly-ninoformatter) 为它声明格式化器（也可以在成员上用 [`[NinoCustomFormatter]`](/zh/docs/v4/custom-formatters#for-one-member)）。如果是成员的类型，分析器在你写代码时就会报告（NINO007）。此外，声明该类型的项目里也必须运行源生成器：在那个项目中安装 `Nino` 包；在 Unity 中让它所在的程序集引用 `Nino.Core`。
+`Nino: no formatter for T` 表示 Nino 不知道如何写入 `T`。给它加上 `[NinoType]`，或者用 [`[assembly: NinoFormatter]`](/zh/docs/v4/custom-formatters#for-a-type-assembly-ninoformatter) 为它声明格式化器（也可以在成员上用 [`[NinoMemberFormatter]`](/zh/docs/v4/custom-formatters#for-one-member)）。如果是成员的类型，分析器在你写代码时就会报告（NINO007）。此外，声明该类型的项目里也必须运行源生成器：在那个项目中安装 `Nino` 包；在 Unity 中让它所在的程序集引用 `Nino.Core`。
 
 在 Native AOT 下，错误信息会说明运行时无法在运行时构建格式化器：只有源生成器见过的封闭类型才有格式化器。请在某个 `[NinoType]` 成员或某次 `Serialize`/`Deserialize` 调用中写出这个确切的类型。参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
 

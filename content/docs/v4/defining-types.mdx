@@ -90,7 +90,7 @@ A `[NinoType]` and every type containing it must be `public` or `internal` (`pro
 ```csharp nocheck
 public NinoTypeAttribute(
     bool autoCollect = true,
-    bool containNonPublicMembers = false,
+    bool includeNonPublicMembers = false,
     bool allowInheritance = true,
     NinoFormat format = NinoFormat.Positional,
     bool trackReferences = false)
@@ -103,7 +103,7 @@ public NinoTypeAttribute(
       type: 'bool',
       default: 'true',
     },
-    containNonPublicMembers: {
+    includeNonPublicMembers: {
       description: <>Also serialize <code>private</code>, <code>protected</code> and <code>internal</code> members (with <code>autoCollect</code>, or the ones marked <code>[NinoMember]</code>).</>,
       type: 'bool',
       default: 'false',
@@ -193,10 +193,10 @@ The analyzer keeps these consistent: `[NinoMember]` is redundant with `autoColle
 
 ### Private Members
 
-Set `containNonPublicMembers` to serialize non-public members as well:
+Set `includeNonPublicMembers` to serialize non-public members as well:
 
 ```csharp
-[NinoType(containNonPublicMembers: true)] // [!code highlight]
+[NinoType(includeNonPublicMembers: true)] // [!code highlight]
 public partial class Account
 {
     private long _balance;
@@ -207,7 +207,7 @@ public partial class Account
 
 - On .NET 8 and later, generated code reaches private members through `[UnsafeAccessor]`; in generic types, on .NET 9 and later (the compilation defines `NET9_0_OR_GREATER`).
 - Before that (.NET Standard, .NET Framework and Unity; generic types on .NET 8), it uses an accessor generated **inside** the type, so the type and every type containing it must be `partial` (NINO002, with a code fix). So does a generic type on .NET 9+ that serializes a non-public member of a generic base whose type arguments are not its own first type parameters in order: `class D<T> : Base<List<T>>` or `Base<int>` needs `partial`, `class D<T, U> : Base<T>` does not.
-- A non-public `[NinoMember]` without `containNonPublicMembers` is an error (NINO009).
+- A non-public `[NinoMember]` without `includeNonPublicMembers` is an error (NINO009).
 - Private members of a base class are never part of a subtype.
 
 Nino also suppresses the compiler's "field is never used / never assigned" warnings on the private members it serializes, since the compiler cannot see the generated accessors.

@@ -1,6 +1,6 @@
 ---
 title: Custom Formatters
-description: "Write a Nino formatter for a member ([NinoCustomFormatter]) or a type Nino does not support ([assembly: NinoFormatter], including generic types), using the Writer and Reader APIs."
+description: "Write a Nino formatter for a member ([NinoMemberFormatter]) or a type Nino does not support ([assembly: NinoFormatter], including generic types), using the Writer and Reader APIs."
 icon: Puzzle
 ---
 
@@ -22,7 +22,7 @@ public interface INinoFormatter<T>
 
 ## For One Member
 
-Use `[NinoCustomFormatter]` to serialize a single member with your own formatter. The formatter must implement `INinoFormatter<T>` for **exactly** the member type (NINO008).
+Use `[NinoMemberFormatter]` to serialize a single member with your own formatter. The formatter must implement `INinoFormatter<T>` for **exactly** the member type (NINO008).
 
 A typical case is a ledger or a metrics stream that records how much each value changed. The deltas are usually tiny, yet a `long` always takes 8 bytes. A zig-zag varint writes values from -64 to 63 in 1 byte, and values up to ±8191 in 2:
 
@@ -60,7 +60,7 @@ public struct ZigZagLongFormatter : INinoFormatter<long>
 public sealed class BalanceChange
 {
     public int AccountId;
-    [NinoCustomFormatter(typeof(ZigZagLongFormatter))] // [!code highlight]
+    [NinoMemberFormatter(typeof(ZigZagLongFormatter))] // [!code highlight]
     public long DeltaCents;
 }
 ```
@@ -138,7 +138,7 @@ public sealed class RingHolder
 
 `[assembly: NinoFormatter]` is an attribute, not a call: there is no module initializer and nothing to run at startup. The runtime reads an assembly's registrations when it first meets one of its types (or, when a lookup misses, from every loaded assembly). Formatters declared in a HybridCLR hot-update assembly are therefore picked up as soon as the assembly is loaded, and Nino declares its own BCL formatters the same way.
 
-There is no call that registers or replaces a formatter at run time: every formatter is declared with `[assembly: NinoFormatter]` or, for one member, `[NinoCustomFormatter]`. A type's formatter therefore never changes while the process runs, and generated code and the runtime always agree on it.
+There is no call that registers or replaces a formatter at run time: every formatter is declared with `[assembly: NinoFormatter]` or, for one member, `[NinoMemberFormatter]`. A type's formatter therefore never changes while the process runs, and generated code and the runtime always agree on it.
 
 </Callout>
 

@@ -127,14 +127,14 @@ v3's generated `Serialize` accepted `Span<T>` values. In v4, `T` is a generic ty
 
 | v3 | v4 |
 | --- | --- |
-| `[NinoType]`, `[NinoType(autoCollect, containNonPublicMembers)]` | unchanged; new optional parameters `allowInheritance`, `format` (`NinoFormat.Positional`, `NinoFormat.VersionTolerant` or `NinoFormat.Keyed`), `trackReferences` |
+| `[NinoType]`, `[NinoType(autoCollect, containNonPublicMembers)]` | `containNonPublicMembers` is now `includeNonPublicMembers`; new optional parameters `allowInheritance`, `format` (`NinoFormat.Positional`, `NinoFormat.VersionTolerant` or `NinoFormat.Keyed`), `trackReferences` |
 | every subtype needs its own `[NinoType]` | subtypes **inherit** `[NinoType]` from their base class or interface (unless it sets `allowInheritance: false`) |
 | `WEAK_VERSION_TOLERANCE` (whole project) | `[NinoType(format: NinoFormat.VersionTolerant)]` per type; the symbol still exists and makes every `NinoFormat.Positional` type of the project version-tolerant |
 | `[NinoFormerName("global::Old.Namespace.Type")]` (name copied from `NinoTypeConst.g.cs`) | `[NinoFormerName("Old.Namespace.Type")]`: runtime form, no `global::`, `+` for nested types |
 | `[NinoMember(index)]`, `[NinoIgnore]`, `[NinoUtf8]`, `[NinoConstructor(...)]` | unchanged; `[NinoConstructor]` can also mark a static factory method |
 | `[NinoExplicitOrder(...)]` | removed; use `[NinoType(false)]` and give each member a `[NinoMember(index)]`, numbered in the order the members were written (see [Member Order](/en/docs/v4/defining-types#member-order)) |
 | `[NinoPrivateProxy]` (emitted by the generator) | removed; private members are reached through `[UnsafeAccessor]` (.NET 8+) or a generated accessor in the `partial` type |
-| (none) | `[NinoPooled]`, `[NinoFactory]`, `[NinoCustomFormatter]`, `[assembly: NinoFormatter]` |
+| (none) | `[NinoPooled]`, `[NinoFactory]`, `[NinoMemberFormatter]`, `[assembly: NinoFormatter]` |
 
 ### Version Tolerance [#version-tolerance]
 
@@ -314,7 +314,7 @@ Code written against an early v4 beta uses names that changed before the release
 - **A version-tolerant object writes one length for its whole hierarchy**, instead of one length per inheritance level. Members can therefore be appended only to the most derived type: a member appended to a base class that has subclasses now shifts the subclasses' members. See [Appending to a Base Class](/en/docs/v4/evolving-data#appending-to-a-base-class).
 - **Fixed-size types are serialized into an array of their exact size.** `NinoSerializer.Serialize(value)` of a struct or sealed class whose members are all fixed-size allocates the result at its final size and writes into it, without a scratch buffer or copy; the bytes are the same. `NinoSerializer.GetFixedSize<T>()` is new. See [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
 - **`NinoSerializer.Serialize(obj)` with a variable declared as `object` writes a type id.** The betas had a `Serialize(object)` overload that wrote the value as its runtime type. It is gone, so the same call now compiles to `Serialize<object>`, which accepts only `[NinoType]` values and writes a 4-byte type id first: the bytes differ, and only `Deserialize<object>` (or `Deserialize<TBase>` with a non-sealed `[NinoType]` base or interface of the value) reads them. Give the types a common `[NinoType]` base and call `Serialize<TBase>`, or, for a type known only at run time, call `SerializeBoxed(obj, type)`; `SerializeBoxed(obj, obj.GetType())` writes what the old overload wrote (in rc.1's format). See [Runtime Types](/en/docs/v4/basic#runtime-types).
-- **Formatters cannot be registered at run time.** `NinoFormatterCache<T>.Register<TFormatter>()` is removed; declare the formatter with `[assembly: NinoFormatter]` or `[NinoCustomFormatter]` instead. See [Custom Formatters](/en/docs/v4/custom-formatters).
+- **Formatters cannot be registered at run time.** `NinoFormatterCache<T>.Register<TFormatter>()` is removed; declare the formatter with `[assembly: NinoFormatter]` or `[NinoMemberFormatter]` instead. See [Custom Formatters](/en/docs/v4/custom-formatters).
 - **`[NinoFactory]` next to a `[NinoConstructor]` is reported.** Such a factory was never called; the analyzer now warns about it (NINO025). See [Constructor or Factory?](/en/docs/v4/constructors#constructor-or-factory).
 - **On a reader returned by `ReadSlice()`, `Reader.Position` is an offset into the whole input**, not into the slice. A custom formatter that compared it with the slice's length should record the position where the slice starts and subtract it. See [Positions in a Slice](/en/docs/v4/custom-formatters#positions-in-a-slice).
 
@@ -325,3 +325,15 @@ The release candidates keep the format of 4.0.0-rc.1, except for the changes the
 - **4.0.0-rc.8** writes every string (members, elements, keys, `StringBuilder`, the text of `Uri`, `CultureInfo` and `TimeZoneInfo`, and `[NinoUtf8]` strings) with a header of 1, 3 or 5 bytes instead of a 4-byte `int32` one. It does not read strings written by earlier releases, and earlier releases do not read its: read stored data with the release that wrote it and write it again with rc.8, as described in [Reading Data from an Older Version](/en/docs/v4/versioning#reading-data-from-an-older-version), or discard it, and upgrade readers and writers together. The Go, Rust and TypeScript runtimes released with it write and read the same bytes. See [Strings](/en/docs/v4/wire-format#strings).
 - **4.0.0-rc.6** writes a string whose chars are all at most U+00FF in one byte a char, behind a negative header. It still reads strings written by earlier releases (their UTF-16 form is the other form it reads), so stored data needs no conversion. Earlier releases cannot read the one-byte strings it writes, though: upgrade the processes that read the data before, or together with, those that write it. `[NinoUtf8]` strings are unchanged. Layouts recorded from the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) of an earlier release differ as text for every member that is not raw: record them again.
 - **4.0.0-rc.3** and **4.0.0-rc.2** changed the bytes of a few structs declared in another assembly, and of `nint` and `nuint` members on netstandard; see their [Wire Format entries](/en/docs/v4/changelog#wire-format) in the Changelog.
+
+**4.0.0-rc.8 renames** these APIs, without an alias (code that names the old ones stops compiling; the bytes do not change):
+
+| Before (rc.7 and earlier) | rc.8 |
+| --- | --- |
+| `[NinoType(containNonPublicMembers: true)]` | `[NinoType(includeNonPublicMembers: true)]` |
+| `[NinoCustomFormatter(typeof(F))]` on a member | `[NinoMemberFormatter(typeof(F))]` (`[assembly: NinoFormatter]` keeps its name) |
+| `NinoTypeId.GetName(type)` | `NinoTypeId.GetRuntimeName(type)` |
+| `NinoTypeId.GetIdName(type)` | `NinoTypeId.GetHashedName(type)` |
+| `NinoSettings.DefaultPoolMaxRetained` | `NinoSettings.PoolMaxRetained` |
+| `NinoBody` (the trait flags in `Nino.Core.CompilerServices`) | `NinoBodyTraits` |
+| `INinoBlockFormatter<T>.BlockSize`, `WriteBlock(ref destination, in value)`, `ReadBlock(ref source, ref value)` | `INinoBlockFormatter<T>` extends `INinoFixedSizeFormatter<T>`: `FixedSize`, `WriteFixed(in value, ref destination)`, `ReadBlock(ref value, ref source)` |

@@ -141,7 +141,7 @@ Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
 
 | 步骤 | 什么时候需要 | 什么时候不需要 |
 | --- | --- | --- |
-| `NinoSettings`（`DefaultPoolMaxRetained`、`SetPoolMaxRetained<T>`、`SetRecycler<T>`） | 想改变默认的池大小（共享栈 256、每个线程 64），或者想让自己的对象池接收被丢弃的实例。请**最先**设置：这些值的读取不做同步。 | 默认值够用。 |
+| `NinoSettings`（`PoolMaxRetained`、`SetPoolMaxRetained<T>`、`SetRecycler<T>`） | 想改变默认的池大小（共享栈 256、每个线程 64），或者想让自己的对象池接收被丢弃的实例。请**最先**设置：这些值的读取不做同步。 | 默认值够用。 |
 | HybridCLR 补充元数据 | 热更新代码用到了 AOT 程序集中定义的泛型。按 HybridCLR 的规则处理即可，Nino 没有额外要求。 | 没有热更新。 |
 | 用 `Assembly.Load` 加载热更新 DLL | 在读取包含其中类型的数据之前。 | |
 | `NinoRegistry.EnsureInitialized(assembly)` 或 `EnsureAllInitialized()` | 想把一次性的注册表加载放到加载界面，而不是第一次用到该程序集的调用。 | 始终是可选的：注册表在首次使用时自动加载。 |

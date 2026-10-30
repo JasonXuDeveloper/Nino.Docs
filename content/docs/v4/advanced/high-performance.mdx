@@ -211,7 +211,7 @@ Size the pools at startup if the defaults (256 in the shared stack, plus up to 6
 NinoSettings.SetPoolMaxRetained<TelemetryEvent>(4096);
 ```
 
-A larger limit keeps more instances alive between bursts, for the life of the process; with a smaller one, a burst larger than the pool allocates what does not fit. `NinoSettings.DefaultPoolMaxRetained` sets the limit of every pool created afterwards. Set both before the first call on any thread: see [Settings](/en/docs/v4/pooling#settings).
+A larger limit keeps more instances alive between bursts, for the life of the process; with a smaller one, a burst larger than the pool allocates what does not fit. `NinoSettings.PoolMaxRetained` sets the limit of every pool created afterwards. Set both before the first call on any thread: see [Settings](/en/docs/v4/pooling#settings).
 
 <Callout type="idea">
 
@@ -300,7 +300,7 @@ A [custom formatter](/en/docs/v4/custom-formatters) is a struct that Nino calls 
 - **Copy unmanaged runs as one block**: `Writer.Write<T>(ReadOnlySpan<T>)` writes a length and the elements in one copy, and `WriteUnmanagedRaw` / `ReadUnmanagedRaw` move them without a length into memory you already have. Mark a generic formatter's element parameter `[NinoRaw]` so it is bound only to types Nino copies as raw bytes ([example](/en/docs/v4/custom-formatters#example-grid)).
 - **Read into the current value.** `Deserialize(ref T value, ref Reader reader)` receives the instance the caller holds: fill it when its shape fits, and keep its strings with `reader.ReadString(current)`, which returns `current` itself when the text is unchanged. Reuse deserialization then stays at 0 B through your type.
 - **Check lengths before allocating** with `ReadLength(minElementSize)`, which throws when the bytes left cannot hold that many elements.
-- **Cost:** a `[NinoCustomFormatter]` on a member means its type is no longer copied as raw memory and is no longer fixed-size. Give hot structs built-in member types where you can.
+- **Cost:** a `[NinoMemberFormatter]` on a member means its type is no longer copied as raw memory and is no longer fixed-size. Give hot structs built-in member types where you can.
 
 The methods `Writer` and `Reader` offer: [Writer and Reader](/en/docs/v4/custom-formatters#writer-and-reader).
 

@@ -116,7 +116,7 @@ Nino v4 本来就是为读取不可信来源的数据而设计的：网络对端
 
 ## 定义类型 [#defining-types]
 
-- **私有成员**：使用 `containNonPublicMembers`；在 .NET 8 及以上通过 `[UnsafeAccessor]` 访问，无需 `partial`（泛型类型需 .NET 9 及以上，自 rc.8 起）。参见[私有成员](/zh/docs/v4/defining-types#private-members)。
+- **私有成员**：使用 `includeNonPublicMembers`；在 .NET 8 及以上通过 `[UnsafeAccessor]` 访问，无需 `partial`（泛型类型需 .NET 9 及以上，自 rc.8 起）。参见[私有成员](/zh/docs/v4/defining-types#private-members)。
 - **构造函数、record 和 `required` 成员**：Nino 调用合适的构造函数，或标记了 `[NinoConstructor]` 的那个。参见[自定义构造函数](/zh/docs/v4/constructors)。
 - **紧凑的字符串**（*rc.6*、*rc.8*）：所有字符都不超过 U+00FF（ASCII、Latin-1）的文本每个字符写一个字节，其他文本按 UTF-16 写出，63 个字符以内的字符串头只占 1 字节（[字符串](/zh/docs/v4/wire-format#strings)）。[`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 可按成员写成 UTF-8。
 - **子类型继承 `[NinoType]`**：子类型自动从基类或接口继承该特性；泛型类型可以用作成员、元素和顶层值。参见[定义类型](/zh/docs/v4/defining-types)。
@@ -128,7 +128,7 @@ Nino v4 本来就是为读取不可信来源的数据而设计的：网络对端
 - **所有不可变集合**：安装可选的 `Nino.Immutable` 包即可，从 `ImmutableArray<T>` 到 `ImmutableSortedDictionary<TKey, TValue>`，各自写出与对应可变集合相同的字节。参见[不可变集合](/zh/docs/v4/types#immutable-collections)。
 - **你自己的集合**：派生自 `List<T>`、`Dictionary<TKey, TValue>` 等，或实现了 `ICollection<T>`、`IDictionary<TKey, TValue>`、`IProducerConsumerCollection<T>` 的类型，无需任何特性。参见[自定义集合](/zh/docs/v4/types#user-collections)。
 - **Unity 的 `AnimationCurve`、`Gradient` 和 `RectOffset`**：Unity 包附带 `Nino.UnityTypes.dll`，其中包含它们的格式化器。Unity 和 Godot 的结构体（`Vector3`、`Quaternion` 等）按原始内存拷贝。参见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)。
-- **可扩展的格式化器**：用 `[assembly: NinoFormatter(typeof(MyFormatter<,>))]` 教 Nino 处理一个新类型（你自己的或第三方的）。类型参数和元素格式化器会自动推断（`[NinoRaw]` 把类型参数限定为按原始字节处理的类型），生成的代码直接调用它，Nino 自带的 BCL 格式化器也是这样声明的。`[NinoCustomFormatter]` 改变单个成员的编码方式。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
+- **可扩展的格式化器**：用 `[assembly: NinoFormatter(typeof(MyFormatter<,>))]` 教 Nino 处理一个新类型（你自己的或第三方的）。类型参数和元素格式化器会自动推断（`[NinoRaw]` 把类型参数限定为按原始字节处理的类型），生成的代码直接调用它，Nino 自带的 BCL 格式化器也是这样声明的。`[NinoMemberFormatter]` 改变单个成员的编码方式。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
 
 ## 内存分配与对象池 [#allocation-and-pooling]
 
@@ -173,7 +173,7 @@ Nino v4 本来就是为读取不可信来源的数据而设计的：网络对端
 
 - `[NinoExplicitOrder]`：改用 `[NinoType(false)]` 配合 `[NinoMember(index)]`。
 - beta 中的 `Serialize(object)`：现为 `SerializeBoxed`。
-- 用 `NinoFormatterCache<T>.Register<TFormatter>()` 在运行时注册格式化器：请用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明。
+- 用 `NinoFormatterCache<T>.Register<TFormatter>()` 在运行时注册格式化器：请用 `[assembly: NinoFormatter]` 或 `[NinoMemberFormatter]` 声明。
 
 参见[从 v3 迁移](/zh/docs/v4/migration)和[从 v4 beta 升级](/zh/docs/v4/migration#upgrading-from-a-v4-beta)。
 

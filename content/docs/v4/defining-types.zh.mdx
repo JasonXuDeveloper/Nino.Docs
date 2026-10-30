@@ -90,7 +90,7 @@ public class OrderShipped : IEvent // inherits [NinoType]
 ```csharp nocheck
 public NinoTypeAttribute(
     bool autoCollect = true,
-    bool containNonPublicMembers = false,
+    bool includeNonPublicMembers = false,
     bool allowInheritance = true,
     NinoFormat format = NinoFormat.Positional,
     bool trackReferences = false)
@@ -103,7 +103,7 @@ public NinoTypeAttribute(
       type: 'bool',
       default: 'true',
     },
-    containNonPublicMembers: {
+    includeNonPublicMembers: {
       description: <>同时序列化 <code>private</code>、<code>protected</code> 和 <code>internal</code> 成员（配合 <code>autoCollect</code> 时收集全部，否则只收集标记了 <code>[NinoMember]</code> 的）。</>,
       type: 'bool',
       default: 'false',
@@ -193,10 +193,10 @@ public record Shipment(
 
 ### 私有成员 [#private-members]
 
-设置 `containNonPublicMembers` 后，非公开成员也会被序列化：
+设置 `includeNonPublicMembers` 后，非公开成员也会被序列化：
 
 ```csharp
-[NinoType(containNonPublicMembers: true)] // [!code highlight]
+[NinoType(includeNonPublicMembers: true)] // [!code highlight]
 public partial class Account
 {
     private long _balance;
@@ -207,7 +207,7 @@ public partial class Account
 
 - 在 .NET 8 及以上版本，生成代码通过 `[UnsafeAccessor]` 访问私有成员；泛型类型需要 .NET 9 及以上（编译定义了 `NET9_0_OR_GREATER`）。
 - 在此之前（.NET Standard、.NET Framework 和 Unity；.NET 8 上的泛型类型），生成代码会在类型**内部**生成访问器，所以该类型及其所有外层类型都必须声明为 `partial`（NINO002，提供代码修复）。在 .NET 9+ 上，如果泛型类型要序列化泛型基类的非公开成员，而基类的类型参数不是它自己按顺序排列的前几个类型参数，也需要 `partial`：`class D<T> : Base<List<T>>` 或 `Base<int>` 需要，`class D<T, U> : Base<T>` 不需要。
-- 没有设置 `containNonPublicMembers` 却给非公开成员标记 `[NinoMember]`，会报错（NINO009）。
+- 没有设置 `includeNonPublicMembers` 却给非公开成员标记 `[NinoMember]`，会报错（NINO009）。
 - 基类的私有成员永远不属于子类型。
 
 编译器看不到生成的访问器，所以在 Nino 要序列化的私有成员上，Nino 会屏蔽“字段从未使用 / 从未赋值”之类的编译器警告。

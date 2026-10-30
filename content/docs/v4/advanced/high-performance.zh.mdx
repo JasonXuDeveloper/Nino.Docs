@@ -211,7 +211,7 @@ telemetryEvent.ReturnToPool(); // its List<double> stays attached and is reused 
 NinoSettings.SetPoolMaxRetained<TelemetryEvent>(4096);
 ```
 
-上限越大，两次高峰之间留存的实例越多，而且会在进程的整个生命周期内占用内存；上限越小，超出池容量的高峰就要为放不下的部分分配内存。`NinoSettings.DefaultPoolMaxRetained` 设置之后创建的每个池的上限。两者都要在任何线程第一次调用之前设置：参见[设置](/zh/docs/v4/pooling#settings)。
+上限越大，两次高峰之间留存的实例越多，而且会在进程的整个生命周期内占用内存；上限越小，超出池容量的高峰就要为放不下的部分分配内存。`NinoSettings.PoolMaxRetained` 设置之后创建的每个池的上限。两者都要在任何线程第一次调用之前设置：参见[设置](/zh/docs/v4/pooling#settings)。
 
 <Callout type="idea">
 
@@ -300,7 +300,7 @@ Nino 在类的值前面写什么，取决于存放它的位置的声明类型（
 - **连续的非托管数据整块拷贝**：`Writer.Write<T>(ReadOnlySpan<T>)` 一次拷贝写出长度和全部元素；`WriteUnmanagedRaw` / `ReadUnmanagedRaw` 不带长度，直接读写你已有的内存。泛型格式化器的元素参数标上 `[NinoRaw]`，它就只会绑定到 Nino 按原始字节拷贝的类型（[示例](/zh/docs/v4/custom-formatters#example-grid)）。
 - **读入当前的值。** `Deserialize(ref T value, ref Reader reader)` 收到的是调用方持有的实例：结构合适时就填充它，并用 `reader.ReadString(current)` 保留它的字符串，文本没变时它直接返回 `current` 本身。这样复用反序列化经过你的类型时仍然是 0 B。
 - **分配之前先检查长度**：用 `ReadLength(minElementSize)`，剩余字节容纳不下那么多元素时它会抛出异常。
-- **开销：** 成员上的 `[NinoCustomFormatter]` 会让它所在的类型不再按原始内存拷贝，也不再是固定大小。热点结构体尽量使用内置的成员类型。
+- **开销：** 成员上的 `[NinoMemberFormatter]` 会让它所在的类型不再按原始内存拷贝，也不再是固定大小。热点结构体尽量使用内置的成员类型。
 
 `Writer` 和 `Reader` 提供的方法见 [Writer 与 Reader](/zh/docs/v4/custom-formatters#writer-and-reader)。
 

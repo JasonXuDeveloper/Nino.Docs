@@ -125,7 +125,7 @@ The typical use is as a collection element: a `List<Alert>` grows and shrinks wi
   - `OnNinoPoolReturn()` runs on `ReturnToPool()`: release state that Nino does not deserialize.
 - Returning an instance twice throws `InvalidOperationException`. Instances never returned are collected normally.
 - `ReturnToPool()` returns only that instance. Its lists, arrays and nested objects (pooled or not) stay attached and are reused with it next time. So **a type that holds pooled children should be pooled itself**: otherwise, when it is dropped, its children go to the garbage collector with it. To return a child to its own pool instead, return it in `OnNinoPoolReturn()` and set the field to `null`.
-- Pools are thread-safe: each thread keeps up to 64 instances of its own, and the shared stack keeps up to 256 by default. Change the limit at startup with `NinoSettings.DefaultPoolMaxRetained` or `NinoSettings.SetPoolMaxRetained<T>(int)`.
+- Pools are thread-safe: each thread keeps up to 64 instances of its own, and the shared stack keeps up to 256 by default. Change the limit at startup with `NinoSettings.PoolMaxRetained` or `NinoSettings.SetPoolMaxRetained<T>(int)`.
 - `NinoPool<T>.Shared` is the pool itself: `Count` is the number of instances in the shared stack (not counting those held per thread), and `Clear()` drops every pooled instance (the shared stack at once, and each thread's own stack the next time that thread uses it).
 
 ### Pooled Collections [#your-own-pooled-collections]
@@ -246,7 +246,7 @@ The pool and recycler settings are static members of `NinoSettings` (namespace `
       description: 'Handler called with each instance that reuse deserialization drops from a slot declared as T. Replaces returning [NinoPooled] instances to their pool for that declared type. Pass null to remove it.',
       type: 'method',
     },
-    DefaultPoolMaxRetained: {
+    PoolMaxRetained: {
       description: 'How many instances the shared stack of each pool keeps, for pools created from now on (a pool is created when its type is first deserialized or returned).',
       type: 'int',
       default: '256',

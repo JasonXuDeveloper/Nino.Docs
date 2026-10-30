@@ -1,6 +1,6 @@
 ---
 title: 自定义格式化器
-description: "为某个成员（[NinoCustomFormatter]）或 Nino 不支持的类型（[assembly: NinoFormatter]，含泛型类型）编写格式化器，使用 Writer 与 Reader API。"
+description: "为某个成员（[NinoMemberFormatter]）或 Nino 不支持的类型（[assembly: NinoFormatter]，含泛型类型）编写格式化器，使用 Writer 与 Reader API。"
 icon: Puzzle
 ---
 
@@ -22,7 +22,7 @@ public interface INinoFormatter<T>
 
 ## 用于单个成员 [#for-one-member]
 
-用 `[NinoCustomFormatter]` 让某个成员使用你自己的格式化器。格式化器实现的 `INinoFormatter<T>` 中，`T` 必须**正好**是成员类型（NINO008）。
+用 `[NinoMemberFormatter]` 让某个成员使用你自己的格式化器。格式化器实现的 `INinoFormatter<T>` 中，`T` 必须**正好**是成员类型（NINO008）。
 
 典型的例子是账本或指标流：每条记录保存各个数值的变化量。变化量通常很小，而 `long` 总是占 8 字节。改用 zig-zag 变长整数后，-64 到 63 之间的值只占 1 字节，±8191 以内只占 2 字节：
 
@@ -60,7 +60,7 @@ public struct ZigZagLongFormatter : INinoFormatter<long>
 public sealed class BalanceChange
 {
     public int AccountId;
-    [NinoCustomFormatter(typeof(ZigZagLongFormatter))] // [!code highlight]
+    [NinoMemberFormatter(typeof(ZigZagLongFormatter))] // [!code highlight]
     public long DeltaCents;
 }
 ```
@@ -138,7 +138,7 @@ public sealed class RingHolder
 
 `[assembly: NinoFormatter]` 是一个特性，而不是一次调用：没有模块初始化器，启动时也不需要执行任何代码。运行时第一次遇到某个程序集里的类型时，会读取该程序集的注册信息（查找失败时则读取所有已加载的程序集）。因此，HybridCLR 热更新程序集里声明的格式化器，程序集一加载就能用。Nino 自带的 BCL 格式化器也是这样声明的。
 
-没有在运行时注册或替换格式化器的 API：所有格式化器都用 `[assembly: NinoFormatter]` 声明，单个成员则用 `[NinoCustomFormatter]`。因此进程运行期间，一个类型的格式化器不会改变，生成代码和运行时用的始终是同一个。
+没有在运行时注册或替换格式化器的 API：所有格式化器都用 `[assembly: NinoFormatter]` 声明，单个成员则用 `[NinoMemberFormatter]`。因此进程运行期间，一个类型的格式化器不会改变，生成代码和运行时用的始终是同一个。
 
 </Callout>
 

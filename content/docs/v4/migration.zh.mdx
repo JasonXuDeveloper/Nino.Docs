@@ -127,14 +127,14 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 
 | v3 | v4 |
 | --- | --- |
-| `[NinoType]`、`[NinoType(autoCollect, containNonPublicMembers)]` | 不变；新增可选参数 `allowInheritance`、`format`（`NinoFormat.Positional`、`NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`）、`trackReferences` |
+| `[NinoType]`、`[NinoType(autoCollect, containNonPublicMembers)]` | `containNonPublicMembers` 改名为 `includeNonPublicMembers`；新增可选参数 `allowInheritance`、`format`（`NinoFormat.Positional`、`NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`）、`trackReferences` |
 | 每个子类型都要单独标记 `[NinoType]` | 子类型从基类或接口**继承** `[NinoType]`（除非基类设置了 `allowInheritance: false`） |
 | `WEAK_VERSION_TOLERANCE`（整个项目） | 按类型使用 `[NinoType(format: NinoFormat.VersionTolerant)]`；该符号仍然有效，会让项目中所有 `NinoFormat.Positional` 的类型改为版本容错 |
 | `[NinoFormerName("global::Old.Namespace.Type")]`（名称从 `NinoTypeConst.g.cs` 复制） | `[NinoFormerName("Old.Namespace.Type")]`：运行时写法，不带 `global::`，嵌套类型用 `+` 分隔 |
 | `[NinoMember(index)]`、`[NinoIgnore]`、`[NinoUtf8]`、`[NinoConstructor(...)]` | 不变；`[NinoConstructor]` 也可以标记静态工厂方法 |
 | `[NinoExplicitOrder(...)]` | 已移除；改用 `[NinoType(false)]`，并按成员原来的写入顺序给每个成员编上 `[NinoMember(index)]`（参见[成员顺序](/zh/docs/v4/defining-types#member-order)） |
 | `[NinoPrivateProxy]`（由生成器生成） | 已移除；私有成员通过 `[UnsafeAccessor]`（.NET 8+）或 `partial` 类型中生成的访问器访问 |
-| （无） | `[NinoPooled]`、`[NinoFactory]`、`[NinoCustomFormatter]`、`[assembly: NinoFormatter]` |
+| （无） | `[NinoPooled]`、`[NinoFactory]`、`[NinoMemberFormatter]`、`[assembly: NinoFormatter]` |
 
 ### 版本容错 [#version-tolerance]
 
@@ -314,7 +314,7 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 - **版本容错的对象整个继承体系只写一个长度**，不再每层继承各写一个。因此成员只能追加到最末端的派生类型：向有子类的基类追加成员，现在会让子类的成员错位。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
 - **固定大小的类型直接序列化到大小正好的数组中。** 对所有成员都是固定大小的结构体或密封类调用 `NinoSerializer.Serialize(value)`，会直接按最终大小分配结果再写入，不经过暂存缓冲区，也没有拷贝；写出的字节不变。新增了 `NinoSerializer.GetFixedSize<T>()`。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
 - **对声明为 `object` 的变量调用 `NinoSerializer.Serialize(obj)`，会写入类型 ID。** beta 有一个 `Serialize(object)` 重载，按值的运行时类型写入。这个重载已经移除，同样的调用现在会编译成 `Serialize<object>`：它只接受 `[NinoType]` 的值，并且先写 4 字节的类型 ID。写出的字节因此不同，也只有 `Deserialize<object>`（或以该值的非密封 `[NinoType]` 基类或接口调用的 `Deserialize<TBase>`）能读取。请给这些类型一个共同的 `[NinoType]` 基类型并调用 `Serialize<TBase>`；如果类型要到运行时才知道，就调用 `SerializeBoxed(obj, type)`；`SerializeBoxed(obj, obj.GetType())` 写出的内容与旧重载相同（采用 rc.1 的格式）。参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
-- **不能再在运行时注册格式化器。** `NinoFormatterCache<T>.Register<TFormatter>()` 已移除，请改用 `[assembly: NinoFormatter]` 或 `[NinoCustomFormatter]` 声明格式化器。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
+- **不能再在运行时注册格式化器。** `NinoFormatterCache<T>.Register<TFormatter>()` 已移除，请改用 `[assembly: NinoFormatter]` 或 `[NinoMemberFormatter]` 声明格式化器。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
 - **`[NinoFactory]` 与 `[NinoConstructor]` 同时出现时会报告。** 这样的工厂方法本来就不会被调用，现在分析器会给出警告（NINO025）。参见[构造函数还是工厂方法？](/zh/docs/v4/constructors#constructor-or-factory)。
 - **在 `ReadSlice()` 返回的 reader 上，`Reader.Position` 是相对整个输入的偏移**，而不是相对切片起点。如果自定义格式化器拿它和切片长度比较，应当在切片开始处记下位置，再把它减掉。参见[切片中的位置](/zh/docs/v4/custom-formatters#positions-in-a-slice)。
 
@@ -325,3 +325,15 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 - **4.0.0-rc.8** 写出的每个字符串（成员、元素、键、`StringBuilder`，`Uri`、`CultureInfo` 和 `TimeZoneInfo` 的文本，以及 `[NinoUtf8]` 字符串）都使用 1、3 或 5 字节的头，不再是 4 字节的 `int32` 头。它读不了早期版本写出的字符串，早期版本也读不了它写出的字符串：请用写出数据的版本读出已存储的数据，再用 rc.8 重新写入（参见[读取旧版本的数据](/zh/docs/v4/versioning#reading-data-from-an-older-version)），或者丢弃这些数据，并同时升级读取和写入数据的进程。与它一同发布的 Go、Rust 和 TypeScript 运行时写出和读取相同的字节。参见[字符串](/zh/docs/v4/wire-format#strings)。
 - **4.0.0-rc.6** 在字符串的所有字符都不超过 U+00FF 时，每个字符写一个字节，头部为负数。它仍能读取早期版本写出的字符串（早期的 UTF-16 形式正是它读取的另一种形式），所以已存储的数据无需转换。但早期版本读不了它写出的单字节字符串：读取数据的进程要先于写入数据的进程升级，或者同时升级。`[NinoUtf8]` 字符串不变。早期版本记录下来的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)，每个非原始内存成员的文本都会不同，需要重新记录。
 - **4.0.0-rc.3** 和 **4.0.0-rc.2** 改变了少数在其他程序集中声明的结构体的字节，以及 netstandard 上 `nint` 和 `nuint` 成员的字节；参见更新日志中对应的[二进制格式条目](/zh/docs/v4/changelog#wire-format)。
+
+**4.0.0-rc.8 改名**了以下 API，没有保留旧名（用到旧名的代码无法编译；字节不变）：
+
+| 之前（rc.7 及更早） | rc.8 |
+| --- | --- |
+| `[NinoType(containNonPublicMembers: true)]` | `[NinoType(includeNonPublicMembers: true)]` |
+| 成员上的 `[NinoCustomFormatter(typeof(F))]` | `[NinoMemberFormatter(typeof(F))]`（`[assembly: NinoFormatter]` 名称不变） |
+| `NinoTypeId.GetName(type)` | `NinoTypeId.GetRuntimeName(type)` |
+| `NinoTypeId.GetIdName(type)` | `NinoTypeId.GetHashedName(type)` |
+| `NinoSettings.DefaultPoolMaxRetained` | `NinoSettings.PoolMaxRetained` |
+| `NinoBody`（`Nino.Core.CompilerServices` 中的特征标志） | `NinoBodyTraits` |
+| `INinoBlockFormatter<T>.BlockSize`、`WriteBlock(ref destination, in value)`、`ReadBlock(ref source, ref value)` | `INinoBlockFormatter<T>` 继承 `INinoFixedSizeFormatter<T>`：`FixedSize`、`WriteFixed(in value, ref destination)`、`ReadBlock(ref value, ref source)` |
