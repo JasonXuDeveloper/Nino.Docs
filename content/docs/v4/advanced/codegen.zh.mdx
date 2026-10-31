@@ -180,6 +180,8 @@ crate 需要打开 `indexmap` 功能的 `nino-serialization`，以及 `indexmap`
 
 构建会自行传入它编译出的程序集及其引用。nino-gen 像检查命令行一样检查元数据：属于其他语言的选项，或它不接受的值，会让构建以 [NINOGEN001](#diagnostics) 失败。
 
+`TagNames` 和 `SerdeNames` 根据成员的 C# 名字起名。`camel` 把开头连续的大写字母改成小写，后面紧跟小写字母时保留最后一个大写：`Health` → `health`，`ID` → `id`，`URLPath` → `urlPath`，`I128` → `i128`，`Utf8A` → `utf8A`。`snake` 用 `_` 连接各个单词并全部小写，数字跟随前一个单词：`IntList` → `int_list`，`URLPath` → `url_path`，`I128` → `i128`，`Utf8A` → `utf8_a`。`original` 保留 C# 名字。Go 字段的 `nino` 标签始终是原样的 C# 名字。
+
 | 属性 | 默认值 | |
 | --- | --- | --- |
 | `NinoCodegenTargetFramework` | `TargetFrameworks` 中的第一个 | 有多个目标框架时，由哪个目标框架的构建写出文件。 |
@@ -609,7 +611,8 @@ mod protocol;
 | `Dictionary<K, V>`、`SortedDictionary<K, V>` | `HashMap<K, V>`、`BTreeMap<K, V>`、`IndexMap<K, V>` |
 | `ValueTuple<…>`（1 到 7 项） | 元组 |
 | `T[,]` 等多维数组 | `Grid<T, R>` |
-| `decimal`、`Guid`、`DateTime`、`DateTimeOffset`、`TimeSpan`、`DateOnly`、`TimeOnly`、`Half`、`Rune`、`Version`、`BigInteger`、`BitArray` | 同名类型 |
+| 原始结构体的 `T?[]`（按原始内存写入） | `RawNullables<T>` |
+| `decimal`、`Guid`、`DateTime`、`DateTimeOffset`、`TimeSpan`、`DateOnly`、`TimeOnly`、`Half`、`Rune`、`Version`、`BigInteger`、`BitArray` | 同名类型；`DateTimeKind` 表示 `DateTime` 的 Kind |
 
 `String` 把未配对的代理项（.NET 字符串可能包含）替换为 U+FFFD；`WideString` 保留 UTF-16 码元，所以这样的值能逐字节写回（生成的代码中用 `Strings="wide"`）。
 
@@ -690,8 +693,8 @@ public sealed class Box<T>
 | | 成员 `Shelf<int>` | 泛型 `OpenHolder<T>` 中的 `Open<T>` |
 | --- | --- | --- |
 | TypeScript | `Shelf<number> \| null`；值是一个封闭类（`new ListShelfInt32()`），槽位按它分支 | `OpenHolder<T>` 的编解码器接收槽位的编解码器以及类型实参的编解码器 |
-| Go | `Shelf[int32]`，一个由 `*ListShelf[int32]` 和 `*IntShelf` 实现的接口（非抽象定义的接口名为 `<Name>Type[T]`） | `OpenHolder[T]` 的编解码器接收槽位的读写函数 |
-| Rust | `Option<ShelfInt32Ref>`，每个允许的类型一个装箱变体的枚举 | 在自身类型参数之后多一个类型参数（`OpenHolder<T, S0>`），用作 `OpenHolder<i64, OpenInt64Ref>` |
+| Go | `Shelf[int32]`，一个由 `*ListShelf[int32]` 和 `*IntShelf` 通过标记方法实现的接口（非抽象定义的接口名为 `<Name>Type[T]`） | `OpenHolder[T]` 的编解码器接收槽位的读写函数（`OpenHolderCodec(p0, s0 NinoArg[OpenType[T]])`） |
+| Rust | `Option<ShelfInt32Ref>`，每个允许的类型一个装箱变体的枚举 | 在自身类型参数之后多一个类型参数（`OpenHolder<T, S0>`），用作 `OpenHolder<i64, OpenInt64Ref>`；只有槽位用到的类型参数放在 `_params: PhantomData` 字段中 |
 
 类型 ID 不被槽位允许的值（其他封闭类型、未知 ID）会被拒绝。在 Go 中，同一定义的封闭类型如果类型实参对应同一个 Go 类型（`Wrap<int?[]>` 和 `Wrap<List<int?>>` 都是 `Wrap[[]*int32]`），就无法区分：按名称排在第一个的成为槽位的情况，其余的跳过并给出 NINOGEN002，所以 Go 不读取它们的 ID。
 
@@ -702,7 +705,7 @@ public sealed class Box<T>
 | | `Animal` 槽位中的 `Box<int>` |
 | --- | --- |
 | TypeScript | `class BoxInt32 extends Box<number> {}`。槽位的写入代码按构造函数区分各种情况，所以写到那里的值是 `new BoxInt32()`，而不是 `new Box<number>()`。泛型编解码器的最后一个可选参数（`type`，默认 `Box`）是要构建的类，`Box<int>` 的编解码器读出的是 `BoxInt32`。 |
-| Go | `ReadAnimal` 和 `WriteAnimal` 中的一个 `*Box[int32]` 分支；`Box[T]` 获得 `NinoTypeID()`、`NinoTypeName()`（封闭名称）以及槽位的标记方法 |
+| Go | `ReadAnimal` 和 `WriteAnimal` 中的一个 `*Box[int32]` 分支，通过在 `init` 中构建的编解码器读写；`Box[T]` 获得 `NinoTypeID()`、`NinoTypeName()`（封闭名称）以及槽位的标记方法 |
 | Rust | 变体 `AnimalRef::BoxInt32(Box<BoxType<i32>>)`，`AnyObject` 中也有一个 |
 
 <Callout type="warn" title="与 .NET 接受的集合不完全相同">

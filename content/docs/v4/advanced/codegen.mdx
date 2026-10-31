@@ -180,6 +180,8 @@ Each metadata of a `<NinoCodegen>` item is the nino-gen option of the same name 
 
 The build passes the assembly it compiled and its references itself. nino-gen checks the metadata as it checks the command line: an option of another language, or a value it does not take, fails the build with [NINOGEN001](#diagnostics).
 
+`TagNames` and `SerdeNames` name a member from its C# name. `camel` lower-cases the leading run of capitals, keeping the last one when a lower-case letter follows: `Health` → `health`, `ID` → `id`, `URLPath` → `urlPath`, `I128` → `i128`, `Utf8A` → `utf8A`. `snake` joins the words with `_` in lower case, digits staying with the word before them: `IntList` → `int_list`, `URLPath` → `url_path`, `I128` → `i128`, `Utf8A` → `utf8_a`. `original` keeps the C# name. The `nino` tag of a Go field always holds the C# name as it is.
+
 | Property | Default | |
 | --- | --- | --- |
 | `NinoCodegenTargetFramework` | the first in `TargetFrameworks` | With several target frameworks, the one whose build writes the files. |
@@ -609,7 +611,8 @@ mod protocol;
 | `Dictionary<K, V>`, `SortedDictionary<K, V>` | `HashMap<K, V>`, `BTreeMap<K, V>`, `IndexMap<K, V>` |
 | `ValueTuple<…>` (1 to 7 items) | tuples |
 | `T[,]` and other multi-dimensional arrays | `Grid<T, R>` |
-| `decimal`, `Guid`, `DateTime`, `DateTimeOffset`, `TimeSpan`, `DateOnly`, `TimeOnly`, `Half`, `Rune`, `Version`, `BigInteger`, `BitArray` | types of the same names |
+| `T?[]` of raw structs (written as raw memory) | `RawNullables<T>` |
+| `decimal`, `Guid`, `DateTime`, `DateTimeOffset`, `TimeSpan`, `DateOnly`, `TimeOnly`, `Half`, `Rune`, `Version`, `BigInteger`, `BitArray` | types of the same names; `DateTimeKind` is the kind of a `DateTime` |
 
 `String` replaces an unpaired surrogate (which a .NET string may hold) with U+FFFD; `WideString` keeps the UTF-16 code units, so such a value writes back byte for byte (`Strings="wide"` in generated code).
 
@@ -690,8 +693,8 @@ A generic class that is not sealed, an abstract generic class or a generic inter
 | | A member `Shelf<int>` | `Open<T>` in a generic `OpenHolder<T>` |
 | --- | --- | --- |
 | TypeScript | `Shelf<number> \| null`; a value is a closed class (`new ListShelfInt32()`), which the slot switches on | the codec of `OpenHolder<T>` takes the slot's codec with those of its type arguments |
-| Go | `Shelf[int32]`, an interface that `*ListShelf[int32]` and `*IntShelf` implement (a non-abstract definition's interface is `<Name>Type[T]`) | the codec of `OpenHolder[T]` takes the slot's read and write functions |
-| Rust | `Option<ShelfInt32Ref>`, an enum with a boxed variant per allowed type | a type parameter after its own (`OpenHolder<T, S0>`), used as `OpenHolder<i64, OpenInt64Ref>` |
+| Go | `Shelf[int32]`, an interface that `*ListShelf[int32]` and `*IntShelf` implement through marker methods (a non-abstract definition's interface is `<Name>Type[T]`) | the codec of `OpenHolder[T]` takes the slot's read and write functions (`OpenHolderCodec(p0, s0 NinoArg[OpenType[T]])`) |
+| Rust | `Option<ShelfInt32Ref>`, an enum with a boxed variant per allowed type | a type parameter after its own (`OpenHolder<T, S0>`), used as `OpenHolder<i64, OpenInt64Ref>`; a parameter only the slots hold is kept in a `_params: PhantomData` field |
 
 A value whose type id the slot does not allow (another closed type, an unknown id) is rejected. In Go, closed types of one definition whose arguments are the same Go type (`Wrap<int?[]>` and `Wrap<List<int?>>` are both `Wrap[[]*int32]`) cannot be told apart: the first by name is the slot's case, and the others are left out with NINOGEN002, so their ids are not read in Go.
 
@@ -702,7 +705,7 @@ A generic subtype (`sealed class Box<T> : Animal`, or a generic struct implement
 | | `Box<int>` in an `Animal` slot |
 | --- | --- |
 | TypeScript | `class BoxInt32 extends Box<number> {}`. The slot's writer tells its cases apart by their constructor, so a value written there is a `new BoxInt32()`, not a `new Box<number>()`. A generic codec takes the class to build as an optional last argument (`type`, `Box` by default), and the codec of `Box<int>` reads `BoxInt32`s. |
-| Go | a case `*Box[int32]` of `ReadAnimal` and `WriteAnimal`; `Box[T]` gets `NinoTypeID()`, `NinoTypeName()` (the closed name) and the slot's marker methods |
+| Go | a case `*Box[int32]` of `ReadAnimal` and `WriteAnimal`, through a codec built in `init`; `Box[T]` gets `NinoTypeID()`, `NinoTypeName()` (the closed name) and the slot's marker methods |
 | Rust | a variant `AnimalRef::BoxInt32(Box<BoxType<i32>>)`, and one in `AnyObject` |
 
 <Callout type="warn" title="Not quite the set .NET accepts">
