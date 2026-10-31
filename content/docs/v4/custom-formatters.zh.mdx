@@ -251,7 +251,7 @@ public sealed class Level
 | `WriteRaw(ReadOnlySpan<byte>)` | `ReadRaw(int)`、`Advance(int)` | 原始字节，或跳过若干字节 |
 | `Position` | `Position`、`Remaining`、`Eof` | 当前位置：`Position` 是绝对偏移，`Remaining` 是剩余字节数 |
 
-`Write(string)` 写入一个 1、3 或 5 字节的头和字符：`null` 为 `0`；所有字符都不超过 U+00FF 时为 `2 × 长度 + 1`，然后每个字符一个字节（空串为 `1`，之后不再有内容）；否则为 `2 × 长度`，然后是 UTF-16 码元。`WriteUtf8` 先以头写入字符数加一（`null` 为 `0`，空串为 `1`），再以第二个头写入字节数，然后正好是这么多个 UTF-8 字节：`"é😀"` 写成 `04` `06` `C3 A9 F0 9F 98 80`。不成对的代理项写成 U+FFFD。参见[二进制格式](/zh/docs/v4/platforms#binary-format)。
+`Write(string)` 写入一个 1、3 或 5 字节的头和字符：`null` 为 `0`；所有字符都不超过 U+00FF 时为 `2 × 长度 + 1`，然后每个字符一个字节（空串为 `1`，之后不再有内容）；否则为 `2 × 长度`，然后是 UTF-16 码元。`WriteUtf8` 先以头写入字符数加一（`null` 为 `0`，空串为 `1`），再以第二个头写入字节数，然后正好是这么多个 UTF-8 字节：`"é😀"` 写成 `04` `06` `C3 A9 F0 9F 98 80`。不成对的代理项写成 U+FFFD。参见[字符串](/zh/docs/v4/wire-format#strings)。
 
 ### 切片中的位置 [#positions-in-a-slice]
 

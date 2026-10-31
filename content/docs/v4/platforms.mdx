@@ -25,54 +25,7 @@ Nino runs on .NET Standard 2.0 and later, Unity 2022.3+ (Mono and IL2CPP) and Go
 
 ## Binary Format
 
-This section is a short summary; the [Wire Format](/en/docs/v4/wire-format) page and the specification it links to have the details. All multi-byte values are **little-endian** and written unaligned. Positional types carry no schema and no field names: the generated code knows the layout.
-
-| Value | Encoding |
-| --- | --- |
-| Unmanaged value (`int`, `Guid`, enums, raw structs) | its raw bytes, canonical layout, padding zeroed |
-| `bool` | 1 byte |
-| `T?` | 1 byte has-value flag, then the value if present |
-| Length of an array or collection | `int32`; `-1` means `null` |
-| `string` | header of 1, 3 or 5 bytes (`0` = null): `2 × length + 1` then one byte per char when every char is at most U+00FF (`1` = empty), otherwise `2 × length` then the UTF-16 code units |
-| `string` with `[NinoUtf8]` | header: length in UTF-16 chars plus one (`0` = null, `1` = empty), then a header with the length in bytes, then the UTF-8 bytes |
-| Array or list of unmanaged `T` | length, then one block of elements |
-| Other collections | length, then each element |
-| Dictionary | length, then key/value pairs |
-| `T[,]`, `T[,,]`, `T[,,,]` | each dimension's length, then elements in row-major order |
-
-A default string picks its form per string. When every char is at most U+00FF (ASCII and Latin-1: English, digits, identifiers, keys, Western European text), it is written in one byte a char after the header `2 × length + 1`: `"Ada"` is `07` `41 64 61`. Any other text is written as UTF-16 after the header `2 × length`: `"名字"` is `04` `0D 54 57 5B`. The header is one byte up to 63 chars, three bytes (`80` and a `uint16`) up to 32,767 and five bytes (`81` and a `uint32`) above, the same size in both forms; see [Strings](/en/docs/v4/wire-format#strings). Both forms carry the length in chars, so the reader allocates the string at its final length and widens or copies the chars into it in one pass. A `StringBuilder` is always written in the UTF-16 form (an empty one as `01`, since `0` is null), which the same reader reads.
-
-A `[NinoUtf8]` string starts with a header holding the string's length in UTF-16 chars (`string.Length`) plus one: `0` for `null`, `1` for an empty string, and nothing follows either. A non-empty `[NinoUtf8]` string then carries its length in bytes as a second header, followed by exactly that many UTF-8 bytes. An unpaired surrogate is written as U+FFFD, which is one char as well, so the char count always matches the string that is read back.
-
-The reader allocates the string at its final length and transcodes exactly the given bytes into it in one pass; the next value starts right after them. It throws `NinoDataException` when:
-
-- the byte count is larger than the bytes left;
-- the char count does not match the decoded bytes;
-- the bytes are not strict UTF-8 (overlong forms and encoded surrogates included) or end in the middle of a character.
-
-For example, `"é😀"` is 3 chars (U+00E9 and a surrogate pair) and 6 UTF-8 bytes, so it is written as `04` (3 + 1) `06` `C3 A9 F0 9F 98 80`; `null` is `00` and `""` is `01`.
-
-Objects get a header that depends on the **declared** type:
-
-| Declared type | Header |
-| --- | --- |
-| `struct` | none |
-| `sealed class` | 1 byte: `0` = null, `1` = instance |
-| non-sealed class, abstract class, interface | `int32` type id: `0` = null, otherwise the runtime type's id |
-
-The type id is the FNV-1a hash of the type's name in runtime form (`Namespace.Outer+Inner`). The same hash code is compiled into the generator and the runtime, so ids cannot diverge.
-
-The body after the header depends on the type's format:
-
-| Format | Body |
-| --- | --- |
-| positional (default) | the members, those of `[NinoType]` base classes first |
-| `NinoFormat.VersionTolerant` | `int32` byte length, then the members of the whole hierarchy, root first: one length per object, whatever the depth |
-| `NinoFormat.Keyed` | `int32` byte length, then `int32` key, `int32` length and value for each member |
-
-A `trackReferences` type adds an `int32` reference header (`0` = null, `n > 0` = the n-th object already written, `-1` = a new object, followed by its usual encoding). See [Evolving Your Data](/en/docs/v4/evolving-data) and [Reference Tracking](/en/docs/v4/reference-tracking).
-
-Every length read from a payload is validated against the bytes left before anything is allocated, so malformed or hostile input cannot trigger huge allocations, and truncated data throws instead of reading past the end. See [Untrusted Data](/en/docs/v4/security).
+Every platform writes the format the [Wire Format](/en/docs/v4/wire-format) page describes, byte by byte in the specification it links to: little-endian values written unaligned, with no envelope, schema or field names, since the declared type decides how the bytes are read. A string has a header of 1, 3 or 5 bytes and is written in one byte a char when every char is at most U+00FF, otherwise as UTF-16 ([Strings](/en/docs/v4/wire-format#strings)); an unmanaged value is its bytes in one canonical layout ([Raw Values](/en/docs/v4/wire-format#raw-values)); an object has a header chosen by its declared type and a body in its type's format ([Objects](/en/docs/v4/wire-format#objects)). Every length is checked against the bytes left before anything is allocated ([Untrusted Data](/en/docs/v4/security)). How Nino keeps these bytes the same where runtimes lay out memory differently is the next section.
 
 ## Portable by Design
 
@@ -120,22 +73,7 @@ Nino reads and writes the fields of `List<T>`, `Stack<T>`, `Queue<T>`, `SortedLi
 
 ## SIMD by Platform [#simd]
 
-The net8.0 and net10.0 builds of `Nino.Core` use hardware intrinsics where the CPU has them, and fall back to portable code where it does not. Every path writes the same bytes: the tests run with AVX-512, without it, without AVX2 and with all SIMD turned off, and on Arm64.
-
-| Platform | What Nino uses |
-| --- | --- |
-| x64 with AVX-512 | 64-byte vector copies with aligned stores for blocks of 129 bytes to 32 KB; byte permutes (AVX-512 VBMI) for tuples and `KeyValuePair`s of raw items, whose memory differs from their bytes: where their memory has padding, two-source permutes write them as whole 64-byte vectors from an aligned destination (16 `(int, long)` in three), of 4-byte words where each is a whole word of memory (AVX-512F, no VBMI needed), otherwise of bytes (VBMI), and read the same way, each 64-byte vector of memory stored at an aligned address; other such items 64 bytes at a time (VBMI); 512-bit masked copies that zero padding |
-| x64 with AVX2 | blocks of 33 to 128 bytes copied inline as two or four overlapping 32-byte vectors (with AVX-512 too); 32-byte vector copies with aligned stores for blocks of 256 bytes to 16 KB (also on AVX-512 CPUs where .NET prefers 256-bit vectors); such tuples and pairs with padding moved a group at a time, written and read: each 16-byte lane of a 32-byte vector shuffled (`vpshufb`) from at most two 16-byte windows of the source, loads shared across a group's vectors and lanes far apart joined by one lane permute (`vperm2i128`), stores on 32-byte boundaries where the values allow; values whose group would take more than four vectors (5-byte blocks such as `(byte, int)`) a group of as many values as one to four vectors hold (six `(byte, int)` a 32-byte vector); otherwise an SSSE3 16-byte shuffle per value for such tuples and pairs of up to 16 bytes |
-| x64 with SSSE3 | such tuples and pairs with padding moved a group of 16-byte vectors at a time, each two shuffles (`pshufb`) ORed (twelve `(byte, int)` in four vectors, as on AVX2 for blocks whose group would take more than four); otherwise the 16-byte shuffle per value; blocks of 33 to 64 bytes copied inline as four 16-byte moves; `memmove` for larger blocks |
-| Arm64 | AdvSimd: table lookups (`TBL`) that move such tuples and pairs with padding a group of 16-byte vectors at a time, written and read: where a group's windows lie on the 16-byte grid they are loaded once each, as pairs (`LDP`), and each lookup takes one window or two consecutive ones (four `(int, long)` written from two pairs of loads by three lookups); padding masked with pairs of 16-byte loads and stores (`LDP`/`STP`); otherwise the 16-byte shuffle per value (`TBL`), and values of up to 8 bytes eight at a time, each 16 bytes written by one lookup in just the 16-byte quarters of the 64 loaded that its bytes come from (one to four registers), only the bytes of the values stored; blocks of 33 to 64 bytes copied inline as four 16-byte moves, 65 bytes to 64 KB 64 bytes a step as load and store pairs (`LDP`/`STP`) from an aligned source address, `memmove` beyond |
-| WebAssembly with SIMD (.NET 10) | two swizzles per 16-byte vector for such tuples and pairs with padding, written and read a group at a time as on SSSE3; otherwise the 16-byte shuffle per value (`PackedSimd`, `i8x16.swizzle`) |
-| Arm32; Unity (Mono, IL2CPP) without Burst, .NET Framework and .NET Core 3.0 to .NET 7 | no hardware intrinsics: blocks over 64 bytes through `memmove` (up to 64 inline on 64-bit runtimes; on 32-bit x86 and WebAssembly and .NET on Arm32, up to 64 in one call without it), rearranged values one at a time |
-
-Where a group copy stores to aligned addresses, the unaligned start and end of the output are covered by whole groups that overlap the rest, so its speed does not depend on where the output buffer starts.
-
-Strings in the [one-byte form](#binary-format) are narrowed when written and widened when read with 16-byte vectors, and 32-byte ones where AVX2 is available, on every CPU that accelerates them, in the net8.0 and net10.0 builds; the netstandard builds convert four chars at a time (with Unity's Burst or WebGL kernels, 16 at a time for strings of 16 chars or more).
-
-Unity and .NET Framework, as well as .NET Core 3.0 to .NET 7, use the `netstandard2.0`/`netstandard2.1` builds, which contain no intrinsics; on .NET Framework and .NET Core they narrow and widen long Latin-1 strings with `Vector<T>` where the JIT accelerates it (never on Mono or Unity: Mono runs `Vector.Narrow` and `Vector.Widen` in software, slower than the scalar code). In Unity with Burst installed, the package registers [Burst-compiled kernels](/en/docs/v4/advanced/unity#burst-kernels) (AVX2 and SSSE3, or Arm64 Neon) for tuples, padded structs and Latin-1 strings. For the vector paths of Unity, Go and Rust next to these, see [SIMD on Every Platform](/en/docs/v4/simd). On every platform, blocks of up to 64 bytes (most strings) are copied inline on 64-bit runtimes (on 32-bit x86 and WebAssembly and on .NET on Arm32, where unaligned 8-byte loads cannot fault, the same way in one call; Mono and IL2CPP on Arm32 call `memmove`), raw values read in blocks of 6 KB or more (into new or existing arrays) are copied with `memmove` (whose `rep movsb` on Intel x64 writes fresh cache lines without reading them first; on AMD x64 CPUs, where it is slower than vector stores, with Nino's vector loop), and padding is masked with 512-bit vectors on AVX-512, otherwise with `Vector<T>` where the runtime accelerates it (on Mono only with the System.Numerics.Vectors package; never in Unity, whose `Vector<T>` Mono does not accelerate even where it reports itself accelerated), else 8 bytes at a time.
+The net8.0 and net10.0 builds of `Nino.Core` use hardware intrinsics where the CPU has them (AVX-512, AVX2 and SSSE3 on x64, AdvSimd on Arm64, SIMD on WebAssembly) and portable code where it does not. Unity, .NET Framework and .NET Core 3.0 to .NET 7 load the netstandard builds, which have none; in Unity, [Burst-compiled kernels](/en/docs/v4/advanced/unity#burst-kernels) take their place. Every path writes the same bytes: the tests run with AVX-512, without it, without AVX2, with all SIMD turned off, and on Arm64. What each instruction set does in .NET, Unity, Go, Rust and TypeScript is in [SIMD on Every Platform](/en/docs/v4/simd).
 
 ## Unity
 

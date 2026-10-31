@@ -283,7 +283,7 @@ Nino 在类的值前面写什么，取决于存放它的位置的声明类型（
 
 ## 选择能整块拷贝的集合 [#collections]
 
-- **批量数据放进原始元素的数组和列表。** 非托管值或原始结构体的 `T[]`、`List<T>` 只需一次整块拷贝；元素全是原始值的值元组和 `KeyValuePair` 的数组和列表也一样（CPU 支持时用 [SIMD](/zh/docs/v4/platforms#simd) 重排）。完整列表见[非托管数据按原始内存拷贝](/zh/docs/v4/performance#raw-memory-for-unmanaged-data)。
+- **批量数据放进原始元素的数组和列表。** 非托管值或原始结构体的 `T[]`、`List<T>` 只需一次整块拷贝；元素全是原始值的值元组和 `KeyValuePair` 的数组和列表也一样（CPU 支持时用 [SIMD](/zh/docs/v4/simd#dotnet) 重排）。完整列表见[非托管数据按原始内存拷贝](/zh/docs/v4/performance#raw-memory-for-unmanaged-data)。
 - **数量会变化时用 `List<T>`。** 复用反序列化会就地填充列表并保留它的容量；数组只有在新数据长度相同时才会被复用。字典按键合并。
 - **声明你希望创建的类型。** 声明为 `IList<T>`、`IEnumerable<T>` 或 `IReadOnlyList<T>` 的成员读回来是 `List<T>`，`ISet<T>` 读回来是 `HashSet<T>`，`IDictionary<TKey, TValue>` 读回来是 `Dictionary<TKey, TValue>`（参见[集合类型](/zh/docs/v4/types#collection-types)）。可空原始元素只有放在数组或 `List<T?>` 中才整块写入；声明为接口时，每个元素单独写入。
 - **集合是值。** 同一个集合出现在两个成员中会被写两次；引用追踪只覆盖 `[NinoType]` 类，不覆盖集合。
