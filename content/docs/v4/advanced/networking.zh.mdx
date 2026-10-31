@@ -62,6 +62,7 @@ void Handle(Message message)
 TCP 是字节流，每条消息都需要分帧。最简单的做法是加 4 字节小端序的长度前缀。Nino 的 `Writer` 可以先预留 4 字节，接着序列化消息，最后回填长度，全部在同一个复用的缓冲区里完成，然后整帧一次性拷贝进 `PipeWriter`。缓冲区增长到最大消息的大小之后，写一帧不再分配内存：
 
 ```csharp title="FrameWriter.cs"
+using System.Buffers;
 using System.IO.Pipelines;
 using Nino.Core;
 
@@ -82,7 +83,9 @@ public sealed class FrameWriter
         output.Write(_buffer.WrittenSpan);            // PipeWriter is an IBufferWriter<byte>
     }
 }
+```
 
+```csharp
 // sending: one FrameWriter per connection; update is a PriceUpdate you fill in and reuse
 frameWriter.Write(pipe.Output, update);
 await pipe.Output.FlushAsync();
@@ -169,6 +172,43 @@ public static class FrameReader
 Nino 在分配内存之前，会把数据中的每个长度与剩余字节数比对，且一个集合在读到元素之前最多预先分配剩余字节数的 16 倍，所以恶意的帧无法让它分配与自身大小不成比例的内存；数据被截断时会抛出异常，而不会越界读取。但你仍然应该像上面那样自己限制帧的大小，以免对端让管道缓冲数 GB 的数据。嵌套很深的数据也不会让服务器栈溢出：嵌套超过 128 层的对象会推迟到较浅的层级再读取，不能推迟的最多 `NinoSettings.MaxDepth` 层（默认 512）。参见[无效数据](/zh/docs/v4/basic#invalid-data)和[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
 
 </Callout>
+
+## 接到 Socket 上 [#connect-to-a-socket]
+
+`FrameWriter` 和 `FrameReader` 工作在 `PipeWriter` 和 `PipeReader` 上。用普通 socket 时，用 `PipeWriter.Create` 和 `PipeReader.Create` 从它的 `NetworkStream` 创建这两个对象（Kestrel 的连接处理器直接给你 pipe）。下面是一个完整的程序：通过本机回环 TCP 发送两条消息，打印服务端读到的内容：
+
+```csharp title="Program.cs"
+using System.IO.Pipelines;
+using System.Net;
+using System.Net.Sockets;
+
+var listener = new TcpListener(IPAddress.Loopback, 0);
+listener.Start();
+int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+Task server = Task.Run(async () =>
+{
+    using TcpClient connection = await listener.AcceptTcpClientAsync();
+    PipeReader input = PipeReader.Create(connection.GetStream());
+    await FrameReader.ReadLoopAsync(input, message => Console.WriteLine(message.GetType().Name));
+});
+
+using (var client = new TcpClient())
+{
+    await client.ConnectAsync(IPAddress.Loopback, port);
+    PipeWriter output = PipeWriter.Create(client.GetStream());
+    var frameWriter = new FrameWriter();                          // 每个连接一个
+    frameWriter.Write(output, new Login { RequestId = 1, User = "ada" });
+    frameWriter.Write(output, new Chat { RequestId = 2, Text = "hello 👋" });
+    await output.FlushAsync();                                    // 发出两帧
+    await output.CompleteAsync();                                 // 关闭流：服务端的循环随之结束
+}
+
+await server;
+listener.Stop();
+```
+
+它会打印 `Login` 和 `Chat`。真正的服务端在循环里接受连接，每个连接启动一个读取循环，并使用自己的 `FrameWriter`。
 
 ## WebSocket 与 UDP [#websocket-and-udp]
 

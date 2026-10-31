@@ -62,6 +62,7 @@ void Handle(Message message)
 TCP is a byte stream, so each message needs a frame. A 4-byte little-endian length prefix is the simplest. Nino's `Writer` can reserve the 4 bytes, serialize the message after them, and then patch in the length, all in one reused buffer, which is then copied into the `PipeWriter` once. Once the buffer has grown to the largest message, writing a frame allocates nothing:
 
 ```csharp title="FrameWriter.cs"
+using System.Buffers;
 using System.IO.Pipelines;
 using Nino.Core;
 
@@ -82,7 +83,9 @@ public sealed class FrameWriter
         output.Write(_buffer.WrittenSpan);            // PipeWriter is an IBufferWriter<byte>
     }
 }
+```
 
+```csharp
 // sending: one FrameWriter per connection; update is a PriceUpdate you fill in and reuse
 frameWriter.Write(pipe.Output, update);
 await pipe.Output.FlushAsync();
@@ -169,6 +172,43 @@ public static class FrameReader
 Nino validates every length inside the payload against the bytes left before allocating, and a collection allocates ahead of its elements at most 16 times the bytes left, so a malicious frame cannot make it allocate out of proportion to its size; truncated data throws instead of reading past the end. Still cap the frame size yourself, as above, so a peer cannot make the pipe buffer gigabytes. Deeply nested payloads cannot overflow the server's stack either: objects nested more than 128 levels deep are deferred and read from a shallower level, and what cannot be deferred is limited to `NinoSettings.MaxDepth` (512 by default). See [Invalid Data](/en/docs/v4/basic#invalid-data) and [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
 
 </Callout>
+
+## Connect It to a Socket [#connect-to-a-socket]
+
+`FrameWriter` and `FrameReader` work on a `PipeWriter` and a `PipeReader`. Over a plain socket, make both from its `NetworkStream` with `PipeWriter.Create` and `PipeReader.Create` (Kestrel's connection handlers hand you a pipe directly). A complete program that sends two messages over loopback TCP and prints what the server reads:
+
+```csharp title="Program.cs"
+using System.IO.Pipelines;
+using System.Net;
+using System.Net.Sockets;
+
+var listener = new TcpListener(IPAddress.Loopback, 0);
+listener.Start();
+int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+Task server = Task.Run(async () =>
+{
+    using TcpClient connection = await listener.AcceptTcpClientAsync();
+    PipeReader input = PipeReader.Create(connection.GetStream());
+    await FrameReader.ReadLoopAsync(input, message => Console.WriteLine(message.GetType().Name));
+});
+
+using (var client = new TcpClient())
+{
+    await client.ConnectAsync(IPAddress.Loopback, port);
+    PipeWriter output = PipeWriter.Create(client.GetStream());
+    var frameWriter = new FrameWriter();                          // one per connection
+    frameWriter.Write(output, new Login { RequestId = 1, User = "ada" });
+    frameWriter.Write(output, new Chat { RequestId = 2, Text = "hello 👋" });
+    await output.FlushAsync();                                    // sends both frames
+    await output.CompleteAsync();                                 // closes the stream: the server's loop ends
+}
+
+await server;
+listener.Stop();
+```
+
+It prints `Login` and `Chat`. A real server accepts in a loop and starts one read loop, with its own `FrameWriter`, per connection.
 
 ## WebSocket and UDP [#websocket-and-udp]
 
