@@ -42,7 +42,7 @@ Nino 发布的运行时已经过优化，但生成器写出的格式化器，以
 `<PublishAot>true</PublishAot>` 把一切提前编译好，运行时没有 JIT：没有分层编译，没有动态 PGO，上面那些 `static readonly` 字段一直是字段读取。对 Nino 来说：
 
 - **指令集。** Native AOT 默认以目标平台的最低指令集为准；在 x64 上，CPU 有 SSSE3 时 Nino 走它的 SSSE3 路径，只有 `<IlcInstructionSet>` 提高了基线（`x86-64-v3`、`x86-64-v4`，或 `native`，即构建机的 CPU）才走 AVX2 和 AVX-512 路径，同时应用在没有这些指令的 CPU 上就启动不了。细节和 Arm64 的情况见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
-- **直接调用。** [拦截器](/zh/docs/v4/performance#interceptors)接管的调用在任何运行时上都直接进入生成的格式化器。经过格式化器缓存的调用（泛型代码里，或另一个程序集声明的 `[NinoType]`）在 Native AOT 下每个值仍是一次虚调用，而 JIT 会直接调用格式化器。
+- **直接调用。** [拦截器](/zh/docs/v4/performance#interceptors)接管的调用在任何运行时上都直接进入生成的格式化器，生成的格式化器也直接调用其成员的格式化器。经过格式化器缓存的调用在 Native AOT 下是一次虚调用，而 JIT 会直接调用格式化器：拦截器不接管的顶层调用（泛型代码里，或另一个程序集声明的 `[NinoType]`）每次调用一次；类型是另一个程序集声明的 `[NinoType]` 的成员或元素，每个值一次。大量序列化的类型，请声明在序列化持有它们的类型的那个程序集里。
 - **速度优先于体积。** `<OptimizationPreference>Speed</OptimizationPreference>` 让编译器优先考虑执行速度，而不是可执行文件的大小（默认两者兼顾）。
 - **类型。** 你序列化的每个类型都必须出现在生成器看得到的代码里；见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
 
