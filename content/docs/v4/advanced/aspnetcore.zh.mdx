@@ -22,6 +22,26 @@ dotnet add package Nino.AspNetCore --prerelease  # Web 项目
 
 用到的类型就是你已经在序列化的类型：任何 `[NinoType]`、内置类型，或有[自定义格式化器](/zh/docs/v4/custom-formatters)的类型。客户端和服务端不同时更新时，需要[能容忍变化的格式](/zh/docs/v4/evolving-data)。
 
+本页的例子使用下面这些类型。把它们声明在服务端和 .NET 客户端都引用的类库里，并在类库中安装 `Nino`（[把类型放进共享项目](/zh/docs/v4/advanced/browser#put-the-types-in-a-shared-project)）：
+
+```csharp title="Shop.Contracts/Order.cs"
+using Nino.Core;
+
+[NinoType]
+public class Order
+{
+    public int Id;
+    public string Customer;
+}
+
+[NinoType]
+public abstract class Shape { }
+
+public sealed class Circle : Shape { public double Radius; }
+
+public sealed class Square : Shape { public double Side; }
+```
+
 ## MVC 控制器 [#mvc]
 
 在 `AddControllers()`、`AddMvc()` 或 `AddMvcCore()` 之后调用 `AddNinoFormatters()`，把格式化器加入 MVC：
@@ -56,7 +76,7 @@ public class OrdersController : ControllerBase
 }
 ```
 
-- **内容协商。** 格式化器添加在已有格式化器之后，所以对接受任意格式的客户端，默认仍是 JSON。`Content-Type: application/x-nino` 的请求用 Nino 读取；发送 `Accept: application/x-nino` 的客户端，或在 `[FormatFilter]` 下把 `format` 设为 `nino` 的 URL，会得到 Nino 响应。
+- **内容协商。** 格式化器添加在已有格式化器之后，所以对接受任意格式的客户端，默认仍是 JSON。`Content-Type: application/x-nino` 的请求用 Nino 读取；发送 `Accept: application/x-nino` 的客户端，或在 `[FormatFilter]` 下把 `format` 设为 `nino` 的 URL，会得到 Nino 响应。JSON 客户端拿到的是 `System.Text.Json` 的输出，它默认只写公共属性：只有公共字段的类型（这份文档里的大多数 `[NinoType]` 都是这样）会输出 `{}`。如果 JSON 客户端也读这些类型，打开 `IncludeFields`：MVC 用 `AddControllers().AddJsonOptions(o => o.JsonSerializerOptions.IncludeFields = true)`，Minimal API 用 `builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.IncludeFields = true)`。
 - **只处理 Nino 支持的类型。** 只有 `NinoSerializer.IsSupported(type)` 为 true 时（结果按类型缓存），格式化器才会接手这个类型，其他类型都留给别的格式化器。
 - **按声明的类型写出。** 结果按 action 声明的类型序列化，与用该类型作 `T` 调用 `Serialize<T>` 相同：`ActionResult<Shape>` 会写出所返回 `Circle` 的类型 ID，按 `Shape` 读取的客户端拿回的仍是 `Circle`。参见[多态](/zh/docs/v4/polymorphism)。
 - **无效数据返回 400。** Nino 读不了的请求体（被截断、损坏，或是为其他类型写出的）会成为模型状态错误，`[ApiController]` 会以 400 响应。只有无效数据（`NinoDataException`）才这样处理：服务器端读取时的失败（例如返回 null 的 `[NinoFactory]`）按服务器错误抛出。
@@ -94,17 +114,20 @@ app.MapPost("/orders/bump", async (HttpContext context) =>
 
 ## 客户端 [#clients]
 
-.NET 客户端用 `NinoSerializer` 和 `NinoDeserializer` 发送和读取字节：
+.NET 客户端用 `NinoSerializer` 和 `NinoDeserializer` 发送和读取字节。客户端只需要 `Nino` 包和共享的类型，不需要 Nino.AspNetCore：它依赖 ASP.NET Core，装不进 MAUI、Blazor WebAssembly 或 Unity 客户端：
 
 ```csharp title="Client.cs"
 using System.Net.Http.Headers;
-using Nino.AspNetCore;
 using Nino.Core;
 
+const string NinoMediaType = "application/x-nino"; // 即服务端的 NinoMediaTypes.Application
+using var http = new HttpClient { BaseAddress = new Uri("https://localhost:5001") };
+
+var order = new Order { Customer = "Ada" };
 using var content = new ByteArrayContent(NinoSerializer.Serialize(order));
-content.Headers.ContentType = new MediaTypeHeaderValue(NinoMediaTypes.Application);
+content.Headers.ContentType = new MediaTypeHeaderValue(NinoMediaType);
 using var request = new HttpRequestMessage(HttpMethod.Post, "/orders") { Content = content };
-request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(NinoMediaTypes.Application));
+request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(NinoMediaType));
 
 using HttpResponseMessage response = await http.SendAsync(request);
 Order saved = NinoDeserializer.Deserialize<Order>(await response.Content.ReadAsByteArrayAsync());

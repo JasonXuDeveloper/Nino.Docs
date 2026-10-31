@@ -22,6 +22,26 @@ dotnet add package Nino.AspNetCore --prerelease  # in the web project
 
 The types are the ones you already serialize: any `[NinoType]`, built-in type or type with a [custom formatter](/en/docs/v4/custom-formatters). Clients and servers that update at different times need a [format that tolerates changes](/en/docs/v4/evolving-data).
 
+The examples on this page use these types. Declare them in a class library that the server and its .NET clients both reference, with `Nino` installed there ([Put the types in a shared project](/en/docs/v4/advanced/browser#put-the-types-in-a-shared-project)):
+
+```csharp title="Shop.Contracts/Order.cs"
+using Nino.Core;
+
+[NinoType]
+public class Order
+{
+    public int Id;
+    public string Customer;
+}
+
+[NinoType]
+public abstract class Shape { }
+
+public sealed class Circle : Shape { public double Radius; }
+
+public sealed class Square : Shape { public double Side; }
+```
+
 ## MVC Controllers [#mvc]
 
 Add the formatters to MVC with `AddNinoFormatters()`, on `AddControllers()`, `AddMvc()` or `AddMvcCore()`:
@@ -56,7 +76,7 @@ public class OrdersController : ControllerBase
 }
 ```
 
-- **Content negotiation.** The formatters are added after the existing ones, so JSON stays the default for a client that accepts anything. A request with `Content-Type: application/x-nino` is read with Nino, and a client that sends `Accept: application/x-nino`, or a URL with `format` set to `nino` under `[FormatFilter]`, gets a Nino response.
+- **Content negotiation.** The formatters are added after the existing ones, so JSON stays the default for a client that accepts anything. A request with `Content-Type: application/x-nino` is read with Nino, and a client that sends `Accept: application/x-nino`, or a URL with `format` set to `nino` under `[FormatFilter]`, gets a Nino response. JSON clients get `System.Text.Json`, which writes public properties only: a type made of public fields, like most `[NinoType]`s in these docs, comes out as `{}`. If JSON clients read the same types, set `IncludeFields`: `AddControllers().AddJsonOptions(o => o.JsonSerializerOptions.IncludeFields = true)`, and for Minimal APIs `builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.IncludeFields = true)`.
 - **Only types Nino supports.** The formatters claim a type only when `NinoSerializer.IsSupported(type)` is true (the answer is cached per type), and leave every other type to the other formatters.
 - **The declared type is written.** A result is serialized as the action's declared type, as `Serialize<T>` with that `T` would: `ActionResult<Shape>` writes the type id of the `Circle` it returns, and a client that reads a `Shape` gets a `Circle` back. See [Polymorphism](/en/docs/v4/polymorphism).
 - **Invalid data is a 400.** A body Nino cannot read (truncated, corrupt or written for another type) becomes a model state error, which `[ApiController]` answers with a 400. Only invalid data (`NinoDataException`) is: a failure on the server's side while reading, such as a `[NinoFactory]` that returns null, propagates as a server error.
@@ -94,17 +114,20 @@ app.MapPost("/orders/bump", async (HttpContext context) =>
 
 ## Clients [#clients]
 
-A .NET client sends and reads the bytes with `NinoSerializer` and `NinoDeserializer`:
+A .NET client sends and reads the bytes with `NinoSerializer` and `NinoDeserializer`. It needs the `Nino` package and the shared types, not Nino.AspNetCore, which depends on ASP.NET Core and so cannot go into a MAUI, Blazor WebAssembly or Unity client:
 
 ```csharp title="Client.cs"
 using System.Net.Http.Headers;
-using Nino.AspNetCore;
 using Nino.Core;
 
+const string NinoMediaType = "application/x-nino"; // NinoMediaTypes.Application on the server
+using var http = new HttpClient { BaseAddress = new Uri("https://localhost:5001") };
+
+var order = new Order { Customer = "Ada" };
 using var content = new ByteArrayContent(NinoSerializer.Serialize(order));
-content.Headers.ContentType = new MediaTypeHeaderValue(NinoMediaTypes.Application);
+content.Headers.ContentType = new MediaTypeHeaderValue(NinoMediaType);
 using var request = new HttpRequestMessage(HttpMethod.Post, "/orders") { Content = content };
-request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(NinoMediaTypes.Application));
+request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(NinoMediaType));
 
 using HttpResponseMessage response = await http.SendAsync(request);
 Order saved = NinoDeserializer.Deserialize<Order>(await response.Content.ReadAsByteArrayAsync());
