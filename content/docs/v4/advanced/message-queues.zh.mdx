@@ -14,6 +14,8 @@ Kafka、RabbitMQ、Azure Service Bus、NATS 这类消息中间件传递的都是
 一个流里的事件从同一个基类派生。Nino 会随每个值写入它的运行时类型，所以消费者按 `OrderEvent` 读取，得到的就是 `OrderPlaced`，不需要自己写类型头：
 
 ```csharp title="OrderEvents.cs"
+using System;
+using System.Collections.Generic;
 using Nino.Core;
 
 [NinoType(format: NinoFormat.VersionTolerant)] // subtypes inherit [NinoType] and its options
@@ -65,6 +67,7 @@ switch (NinoDeserializer.Deserialize<OrderEvent>(payload))
 [Confluent.Kafka](https://github.com/confluentinc/confluent-kafka-dotnet) 为键和值的类型各接收一个序列化器和反序列化器。它的反序列化器拿到的是 `ReadOnlySpan<byte>`，Nino 可以直接读取：
 
 ```csharp title="NinoKafkaSerializer.cs"
+using System;
 using Confluent.Kafka;
 using Nino.Core;
 
@@ -99,6 +102,7 @@ Kafka 的 `ISerializer<T>` 必须返回 `byte[]`，所以每生产一条消息�
 其他客户端大多以 `ReadOnlyMemory<byte>` 接收消息体。序列化到复用的 `NinoArrayBufferWriter`，传入 `WrittenMemory`：你这一侧每条消息都不分配内存。以 RabbitMQ.Client 7 为例：
 
 ```csharp title="OrderPublisher.cs"
+using System.Threading.Tasks;
 using Nino.Core;
 using RabbitMQ.Client;
 
@@ -143,6 +147,8 @@ await channel.BasicConsumeAsync("orders", autoAck: true, consumer);
 小事件（一次点击、一次价格变动、一个指标）往往批量发送更划算：一条中间件消息、一次网络往返、一个消息头。先写入数量，再把各个事件依次写入复用的缓冲区（写一批不分配内存），然后像上面那样发送 `buffer.WrittenMemory`：
 
 ```csharp title="EventBatch.cs"
+using System;
+using System.Collections.Generic;
 using Nino.Core;
 
 public static class EventBatch
@@ -180,6 +186,8 @@ public static class EventBatch
 指标、链路追踪和行情数据以很高的速率到达，每条都是又小又扁平的记录。把每条记录定义为非托管结构体，放在列表里发送：
 
 ```csharp title="Samples.cs"
+using System;
+using System.Collections.Generic;
 using Nino.Core;
 
 [NinoType]

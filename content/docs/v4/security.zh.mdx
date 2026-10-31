@@ -25,6 +25,8 @@ Nino 就是为读取不可信来源的数据而设计的：网络对端发来的
 每一项拒绝数据的检查都抛出 `NinoDataException`（命名空间 `Nino.Core`），消息以 `Nino:` 开头。值在创建时被其自身类型拒绝（格式错误的 `Uri`、未知的区域性或时区、超出范围的 `DateTimeOffset`、为 null 的字典键）时也同样报告，原始异常放在 `InnerException` 中。在数据进入的地方捕获它：
 
 ```csharp title="Receive.cs"
+using Nino.Core;
+
 try
 {
     var message = NinoDeserializer.Deserialize<Message>(payload);
@@ -93,6 +95,8 @@ catch (NinoDataException e)
 </Callout>
 
 ```csharp title="Program.cs"
+using Nino.Core;
+
 // 启动时，在任何 Nino 调用之前。
 NinoSettings.Untrusted = true;              // 数据来自客户端
 NinoSettings.MaxCollectionLength = 100_000; // 我们的消息都不会更多

@@ -62,6 +62,7 @@ void Handle(Message message)
 TCP 是字节流，每条消息都需要分帧。最简单的做法是加 4 字节小端序的长度前缀。Nino 的 `Writer` 可以先预留 4 字节，接着序列化消息，最后回填长度，全部在同一个复用的缓冲区里完成，然后整帧一次性拷贝进 `PipeWriter`。缓冲区增长到最大消息的大小之后，写一帧不再分配内存：
 
 ```csharp title="FrameWriter.cs"
+using System;
 using System.Buffers;
 using System.IO.Pipelines;
 using Nino.Core;
@@ -104,8 +105,12 @@ await pipe.Output.FlushAsync();
 从管道给出的 `ReadOnlySequence<byte>` 中切出每一帧。位于单个分段中的帧（最常见的情况）直接在管道自己的内存上反序列化；跨两个分段的帧拷贝一次，拷到栈上或池化的数组中。一次读取可能停在某帧的中间，也可能包含好几帧：循环取出所有完整的帧，剩下的留在管道里等下一次读取。
 
 ```csharp title="FrameReader.cs"
+using System;
 using System.Buffers;
+using System.IO;
 using System.IO.Pipelines;
+using System.Threading;
+using System.Threading.Tasks;
 using Nino.Core;
 
 public static class FrameReader
@@ -178,9 +183,11 @@ Nino 在分配内存之前，会把数据中的每个长度与剩余字节数比
 `FrameWriter` 和 `FrameReader` 工作在 `PipeWriter` 和 `PipeReader` 上。用普通 socket 时，用 `PipeWriter.Create` 和 `PipeReader.Create` 从它的 `NetworkStream` 创建这两个对象（Kestrel 的连接处理器直接给你 pipe）。下面是一个完整的程序：通过本机回环 TCP 发送两条消息，打印服务端读到的内容：
 
 ```csharp title="Program.cs"
+using System;
 using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading.Tasks;
 
 var listener = new TcpListener(IPAddress.Loopback, 0);
 listener.Start();
@@ -215,9 +222,13 @@ listener.Stop();
 以完整消息为单位传输的协议不需要长度前缀：一个 Nino 负载就是一条 WebSocket 消息或一个数据报。序列化到复用的缓冲区并发送它的内存；接收到复用的缓冲区，再从中反序列化：
 
 ```csharp title="MessageTransports.cs"
+using System;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Threading;
+using System.Threading.Tasks;
 using Nino.Core;
 
 public static class MessageTransports

@@ -47,6 +47,8 @@ public sealed class Square : Shape { public double Side; }
 Add the formatters to MVC with `AddNinoFormatters()`, on `AddControllers()`, `AddMvc()` or `AddMvcCore()`:
 
 ```csharp title="Program.cs"
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 using Nino.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -86,6 +88,7 @@ public class OrdersController : ControllerBase
 Take a `NinoBody<T>` parameter and return `NinoResults.Ok(value)` or `NinoResults.Status(statusCode, value)`:
 
 ```csharp title="Program.cs"
+using Microsoft.AspNetCore.Builder;
 using Nino.AspNetCore;
 
 app.MapPost("/orders", (NinoBody<Order> order) => NinoResults.Ok(Save(order.Value)));
@@ -102,6 +105,10 @@ app.MapGet("/shape", () => NinoResults.Ok<Shape>(new Square { Side = 3 })); // w
 Inside any handler or middleware, `HttpRequest.ReadFromNinoAsync<T>()` reads the whole body as one `T`, and `HttpResponse.WriteAsNinoAsync(value)` writes one:
 
 ```csharp title="Program.cs"
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Nino.AspNetCore;
+
 app.MapPost("/orders/bump", async (HttpContext context) =>
 {
     Order order = await context.Request.ReadFromNinoAsync<Order>(context.RequestAborted);
@@ -117,6 +124,8 @@ app.MapPost("/orders/bump", async (HttpContext context) =>
 A .NET client sends and reads the bytes with `NinoSerializer` and `NinoDeserializer`. It needs the `Nino` package and the shared types, not Nino.AspNetCore, which depends on ASP.NET Core and so cannot go into a MAUI, Blazor WebAssembly or Unity client:
 
 ```csharp title="Client.cs"
+using System;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using Nino.Core;
 

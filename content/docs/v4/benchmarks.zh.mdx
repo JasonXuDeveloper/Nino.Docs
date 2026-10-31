@@ -211,6 +211,13 @@ v3 的编译时间比类型数量增长得快得多：类型数量是原来的 3
 <Tab value="类型">
 
 ```csharp title="SimpleBenchmarkData.cs"
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using MemoryPack;
+using MessagePack;
+using Nino.Core;
+
 [NinoType]
 [MemoryPackable]
 [MessagePackObject]
@@ -295,6 +302,11 @@ Vectors = Enumerable.Range(0, 10000)
 <Tab value="方法">
 
 ```csharp title="SimpleTest.cs"
+using System.Buffers;
+using BenchmarkDotNet.Attributes;
+using MemoryPack;
+using Nino.Core;
+
 [GlobalSetup]
 public void Setup()
 {
@@ -483,6 +495,11 @@ public PolymorphicClassBase NinoDeserializePolymorphicClass()
 <Tab value="类型">
 
 ```csharp title="PooledTest.cs"
+using System;
+using System.Collections.Generic;
+using MemoryPack;
+using Nino.Core;
+
 [NinoType, NinoPooled]
 [MemoryPackable]
 public sealed partial class PooledSimpleClass
@@ -510,6 +527,10 @@ public sealed partial class PooledSimpleClass
 <Tab value="方法">
 
 ```csharp title="PooledTest.cs"
+using BenchmarkDotNet.Attributes;
+using MemoryPack;
+using Nino.Core;
+
 private static readonly PooledSimpleClass Value = PooledSimpleClass.From(SimpleClass.Create());
 private static readonly byte[] NinoData = NinoSerializer.Serialize(Value);
 private static readonly byte[] MemoryPackData = MemoryPackSerializer.Serialize(Value);
@@ -552,6 +573,11 @@ public PooledSimpleClass MemoryPackDeserializeOverwrite()
 <Tab value="类型">
 
 ```csharp title="PooledGraphTest.cs"
+using System;
+using System.Collections.Generic;
+using MemoryPack;
+using Nino.Core;
+
 [NinoType, NinoPooled]
 [MemoryPackable]
 public sealed partial class PooledLeaf
@@ -598,6 +624,13 @@ public sealed partial class PooledNode
 <Tab value="方法">
 
 ```csharp title="PooledGraphTest.cs"
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using BenchmarkDotNet.Attributes;
+using MemoryPack;
+using Nino.Core;
+
 private static readonly PooledNode Node = PooledNode.Create(new Random(1));
 private static readonly List<PooledLeaf> Leaves =
     Enumerable.Range(0, 100).Select(_ => PooledLeaf.Create(new Random(2))).ToList();
@@ -662,6 +695,10 @@ public List<PooledLeaf> MemoryPackLeavesOverwrite()
 <Tab value="类型">
 
 ```csharp title="ReferenceTest.cs"
+using System.Collections.Generic;
+using MemoryPack;
+using Nino.Core;
+
 [NinoType(trackReferences: true)]
 [MemoryPackable(GenerateType.CircularReference)]
 public sealed partial class RefNode
@@ -724,6 +761,10 @@ private static readonly byte[] MemoryPackGraph = MemoryPackSerializer.Serialize(
 <Tab value="方法">
 
 ```csharp title="ReferenceTest.cs"
+using BenchmarkDotNet.Attributes;
+using MemoryPack;
+using Nino.Core;
+
 [Benchmark(Baseline = true), BenchmarkCategory("GraphSerialize")]
 public int NinoSerializeGraph()
 {
@@ -758,6 +799,11 @@ public RefGraph MemoryPackDeserializeGraph() => MemoryPackSerializer.Deserialize
 <Tab value="类型">
 
 ```csharp title="VersionTolerantTest.cs"
+using System;
+using System.Collections.Generic;
+using MemoryPack;
+using Nino.Core;
+
 [NinoType(format: NinoFormat.VersionTolerant)]
 [MemoryPackable(GenerateType.VersionTolerant)]
 public sealed partial class TolerantClass
@@ -799,6 +845,10 @@ private static readonly byte[] MemoryPackTolerantClass = MemoryPackSerializer.Se
 <Tab value="方法">
 
 ```csharp title="VersionTolerantTest.cs"
+using BenchmarkDotNet.Attributes;
+using MemoryPack;
+using Nino.Core;
+
 [Benchmark(Baseline = true), BenchmarkCategory("TolerantClassSerialize")]
 public int NinoSerializeTolerantClass()
 {
@@ -837,6 +887,11 @@ public TolerantClass MemoryPackDeserializeTolerantClass() =>
 <Tab value="类型">
 
 ```csharp title="FixedSizeTest.cs"
+using System;
+using System.Numerics;
+using MemoryPack;
+using Nino.Core;
+
 // Unmanaged members only (40 bytes, no padding): every value serializes to the same number of bytes.
 [NinoType]
 [MemoryPackable]
@@ -891,6 +946,10 @@ static FixedSizeTest()
 <Tab value="方法">
 
 ```csharp title="FixedSizeTest.cs"
+using BenchmarkDotNet.Attributes;
+using MemoryPack;
+using Nino.Core;
+
 [Benchmark(Baseline = true), BenchmarkCategory("FixedClassSerialize")]
 public byte[] NinoSerializeFixedClass() => NinoSerializer.Serialize(FixedClass);
 

@@ -20,6 +20,7 @@ So most classes need nothing: a parameterless constructor and settable members a
 <Tab value="Constructor">
 
 ```csharp title="Product.cs"
+using System;
 using Nino.Core;
 
 [NinoType]
@@ -60,6 +61,7 @@ public sealed class Customer
 <Tab value="Factory method">
 
 ```csharp title="Currency.cs"
+using System;
 using System.Collections.Concurrent;
 using Nino.Core;
 
@@ -149,6 +151,7 @@ Use one or the other. A type with a `[NinoConstructor]` is always re-created thr
 A `[NinoFactory]` method is called only when Nino needs a **new** instance: the slot is `null`, a list grows, or a polymorphic slot changes type. Nino then fills the instance in place. Combined with [reuse deserialization](/en/docs/v4/pooling#deserializing-into-existing-instances) and a [recycler](/en/docs/v4/pooling#why-setrecycler) for the instances it drops, a stream of messages allocates nothing once the pool is warm:
 
 ```csharp title="Order.cs"
+using System.Collections.Generic;
 using Nino.Core;
 
 [NinoType]

@@ -16,6 +16,8 @@ icon: Save
 | 小型值结构体（`Point`、`Rgba`） | 按位置（不带参数的 `[NinoType]`） | 按原始字节写入，紧凑，也很少变化。定下来后就不要再改。 |
 
 ```csharp title="Document.cs"
+using System;
+using System.Collections.Generic;
 using Nino.Core;
 
 [NinoType(format: NinoFormat.Keyed)]
@@ -126,6 +128,7 @@ public class TaskItem
 Nino 本身不写魔数，也不写格式版本。在数据前面加一个小文件头，用来识别文件、决定如何迁移。编码到由调用方传入的缓冲区，这样一个复用的缓冲区就能服务每一次保存：
 
 ```csharp title="DocumentFile.cs"
+using System;
 using System.IO;
 using Nino.Core;
 
@@ -169,6 +172,7 @@ public static class DocumentFile
 写到一半时崩溃或断电，不能连带毁掉上一份文件。先写到临时文件，刷到磁盘上，再替换正式文件。读取时也读进复用的缓冲区，这样加载也不需要单独分配 `byte[]`：
 
 ```csharp title="SafeFile.cs"
+using System;
 using System.IO;
 using Nino.Core;
 
@@ -222,6 +226,7 @@ Document loaded = DocumentFile.Decode(SafeFile.Read(path, buffer));
 嵌入式存储（RocksDB、LMDB、FASTER、LiteDB 的文件存储、SQLite 的 `BLOB` 列）和本地缓存都是字节进、字节出。Nino 两头都能对上：把键和值分别序列化到复用的缓冲区，传入 span，再把取回的字节反序列化到复用的实例中。下面的存储接口代表你所用存储的 API：
 
 ```csharp title="TypedStore.cs"
+using System;
 using System.Buffers;
 using Nino.Core;
 
@@ -271,8 +276,10 @@ public sealed class TypedStore<TKey, TValue> where TKey : unmanaged
 追加日志（事件存储、预写日志、变更记录）只追加记录，从不改写。给每条记录加上长度前缀，读取方就能找到记录的边界，并发现被崩溃截断的记录：
 
 ```csharp title="EventLog.cs"
+using System;
 using System.Buffers;
 using System.Buffers.Binary;
+using System.IO;
 using Nino.Core;
 
 [NinoType(format: NinoFormat.VersionTolerant)]
@@ -361,6 +368,7 @@ public sealed class EventLog : IDisposable
 每次启动都重放一份很长的日志会很慢。把状态的快照连同它所覆盖到的位置一起保存，之后只应用快照之后的事件（或在每次快照时截断日志，让重放保持简短）：
 
 ```csharp title="Snapshots.cs"
+using System.IO;
 using Nino.Core;
 
 [NinoType(format: NinoFormat.Keyed)]

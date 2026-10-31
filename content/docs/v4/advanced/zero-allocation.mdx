@@ -25,6 +25,7 @@ The buffer you serialize into grows on the first calls and is then reused, and a
 The base recipe: one `NinoArrayBufferWriter` per thread, connection or encoder, reset before each use ([why](/en/docs/v4/advanced/high-performance#serialize-into-a-reused-buffer)).
 
 ```csharp title="MessageEncoder.cs"
+using System;
 using Nino.Core;
 
 public sealed class MessageEncoder : IDisposable
@@ -45,6 +46,7 @@ public sealed class MessageEncoder : IDisposable
 Use `WrittenMemory` instead of `WrittenSpan` when an async API needs the bytes, and do not reset the buffer until that call has completed. For code that has no natural owner, a thread-static buffer works:
 
 ```csharp title="ScratchBuffer.cs"
+using System;
 using Nino.Core;
 
 static class ScratchBuffer
@@ -318,6 +320,7 @@ Another process can write the same file (or a shared-memory map created with `Me
 Measure, rather than assume: a unit test can pin a hot path at zero ([how to measure](/en/docs/v4/advanced/high-performance#measure)):
 
 ```csharp title="AllocationTests.cs"
+using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Nino.Core;
 

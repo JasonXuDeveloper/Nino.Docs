@@ -456,6 +456,9 @@ useWasm(true);  // 重新打开（在引擎允许的地方）
 默认情况下（`NumericArrays="plain"`），数字的数组或列表是 `number[]`（64 位整数为 `bigint[]`），在所有引擎中读取都最快。设置 `NumericArrays="typed"`（`--numeric-arrays typed`）后，`sbyte`、`short`、`ushort`、`int`、`uint`、`long`、`ulong`、`nint`、`nuint`、`float` 和 `double` 的数组、列表及其他序列（集合除外）改为类型化数组：`Int8Array`、`Int16Array`、`Uint16Array`、`Int32Array`、`Uint32Array`、`BigInt64Array`、`BigUint64Array`、`Float32Array` 和 `Float64Array`。线上的字节就是类型化数组自身的字节，所以字节不变，变的只是 TypeScript 类型。
 
 ```csharp title="Mesh.cs"
+using System.Collections.Generic;
+using Nino.Core;
+
 [NinoType]
 public class Mesh
 {
@@ -673,6 +676,8 @@ pub struct Vec2 { pub x: f32, pub y: f32 }
 泛型 `[NinoType]` 在每种语言中都生成为泛型类型，其编解码器由类型参数的编解码器组合而成，就像 .NET 用 `Box<T>` 和 `int` 的格式化器构建 `Box<int>` 的格式化器一样：
 
 ```csharp title="Box.cs"
+using Nino.Core;
+
 [NinoType]
 public sealed class Box<T>
 {

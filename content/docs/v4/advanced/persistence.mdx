@@ -16,6 +16,8 @@ Stored data is read by builds that did not exist when it was written: a desktop 
 | Small value structs (`Point`, `Rgba`) | positional (bare `[NinoType]`) | Raw, compact, and unlikely to change. Freeze them. |
 
 ```csharp title="Document.cs"
+using System;
+using System.Collections.Generic;
 using Nino.Core;
 
 [NinoType(format: NinoFormat.Keyed)]
@@ -126,6 +128,7 @@ Each object is written once; later references are written as a 4-byte index, and
 Nino writes no magic number or format version of its own. Put a small header in front of the data so you can recognize the file and decide how to migrate it. Encode into a buffer you pass in, so a reused buffer serves every save:
 
 ```csharp title="DocumentFile.cs"
+using System;
 using System.IO;
 using Nino.Core;
 
@@ -169,6 +172,7 @@ public static class DocumentFile
 A crash or power loss in the middle of a write must not destroy the previous file. Write to a temporary file, flush it to disk, then swap it in. Read files back into a reused buffer, so loading needs no `byte[]` of its own either:
 
 ```csharp title="SafeFile.cs"
+using System;
 using System.IO;
 using Nino.Core;
 
@@ -222,6 +226,7 @@ Document loaded = DocumentFile.Decode(SafeFile.Read(path, buffer));
 Embedded stores (RocksDB, LMDB, FASTER, LiteDB's file storage, SQLite `BLOB` columns) and local caches take bytes in and give bytes out. Nino fits both sides: serialize the key and the value into reused buffers, pass the spans, and deserialize what comes back into a reused instance. The store interface below stands in for your store's API:
 
 ```csharp title="TypedStore.cs"
+using System;
 using System.Buffers;
 using Nino.Core;
 
@@ -271,8 +276,10 @@ public sealed class TypedStore<TKey, TValue> where TKey : unmanaged
 An append-only log (an event store, a write-ahead log, a journal of changes) appends records and never rewrites them. Frame each record with a length prefix, so a reader can find the record boundaries and detect a record that a crash cut short:
 
 ```csharp title="EventLog.cs"
+using System;
 using System.Buffers;
 using System.Buffers.Binary;
+using System.IO;
 using Nino.Core;
 
 [NinoType(format: NinoFormat.VersionTolerant)]
@@ -361,6 +368,7 @@ public sealed class EventLog : IDisposable
 Replaying a long log on every start is slow. Store a snapshot of the state together with the position it covers, and apply only the events after it (or truncate the log at each snapshot, so replay stays short):
 
 ```csharp title="Snapshots.cs"
+using System.IO;
 using Nino.Core;
 
 [NinoType(format: NinoFormat.Keyed)]

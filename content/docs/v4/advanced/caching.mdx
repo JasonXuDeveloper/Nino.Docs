@@ -10,6 +10,8 @@ A cache stores values as bytes: Redis strings, `IDistributedCache` entries, memc
 The examples below use a profile type:
 
 ```csharp title="UserProfile.cs"
+using System;
+using System.Collections.Generic;
 using Nino.Core;
 
 [NinoType(format: NinoFormat.VersionTolerant)] // cached data outlives a deployment, see below
@@ -28,6 +30,7 @@ public sealed class UserProfile
 Any Redis client takes and returns values as bytes. With [StackExchange.Redis](https://stackexchange.github.io/StackExchange.Redis/), serialize into a reused buffer and pass its memory directly, and read with `StringGetLease`, which hands you pooled bytes instead of a new `byte[]`:
 
 ```csharp title="RedisProfileCache.cs"
+using System;
 using Nino.Core;
 using StackExchange.Redis;
 
@@ -65,6 +68,8 @@ The Redis calls are an illustration; the Nino part is the same with any client. 
 `IDistributedCache` (Redis, SQL Server, and other ASP.NET Core cache providers) stores `byte[]`. Two extension methods are enough:
 
 ```csharp title="DistributedCacheExtensions.cs"
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Distributed;
 using Nino.Core;
 
@@ -90,6 +95,7 @@ The interface takes and returns arrays, so each call allocates one `byte[]`: tha
 `HybridCache` (the `Microsoft.Extensions.Caching.Hybrid` package) hands a serializer an `IBufferWriter<byte>` to write into and a `ReadOnlySequence<byte>` to read from, which matches Nino's API directly:
 
 ```csharp title="NinoHybridSerializer.cs"
+using System;
 using System.Buffers;
 using Microsoft.Extensions.Caching.Hybrid;
 using Nino.Core;

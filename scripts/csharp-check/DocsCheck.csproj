@@ -4,13 +4,15 @@
          scripts/check-csharp.ts (bun run check:csharp), with the declarations the pages leave to the reader (an
          `order` to serialize, an `app` to map routes on) in Context/. Never run: only compiled.
 
-         The Web SDK gives the implicit usings of an ASP.NET Core project (System, System.Linq, System.Net.Http,
-         Microsoft.AspNetCore.Builder, ...), so a fragment compiles with the usings a reader's project has. -->
+         No implicit usings: a fence with a file title (`title="Program.cs"`) compiles as a whole file, with its own
+         using directives only. check-csharp.ts writes the implicit usings of an ASP.NET Core project (System,
+         System.Linq, Microsoft.AspNetCore.Builder, ...) and Nino.Core into the file of each page's other fences, so a
+         fragment compiles with the usings a reader's project has. -->
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <OutputType>Library</OutputType>
         <LangVersion>latest</LangVersion>
-        <ImplicitUsings>enable</ImplicitUsings>
+        <ImplicitUsings>disable</ImplicitUsings>
         <Nullable>disable</Nullable>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <!-- The script reads every warning and error itself, mapped to the page and line by #line directives. -->
@@ -26,8 +28,9 @@
         <NinoDir Condition="'$(NinoDir)' == ''">$(MSBuildThisFileDirectory)../../../Nino</NinoDir>
     </PropertyGroup>
 
+    <!-- check-csharp.ts compiles a copy of each Context file, with the implicit usings in front of it. -->
     <ItemGroup>
-        <Using Include="Nino.Core"/>
+        <Compile Remove="Context/**"/>
     </ItemGroup>
 
     <!-- Nino from source, the way its own tests take it: Nino.Core, the generator as an analyzer with interceptors. -->
@@ -48,6 +51,7 @@
         <PackageReference Include="MemoryPack" Version="1.21.4"/>
         <PackageReference Include="MessagePack" Version="3.1.12"/>
         <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.11.0"/>
+        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.14"/>
         <PackageReference Include="MSTest.TestFramework" Version="4.5.1"/>
         <PackageReference Include="RabbitMQ.Client" Version="7.2.2"/>
         <PackageReference Include="StackExchange.Redis" Version="3.4.20"/>

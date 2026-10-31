@@ -25,6 +25,7 @@ icon: Leaf
 最基本的做法：每个线程、连接或编码器持有一个 `NinoArrayBufferWriter`，每次使用前重置（[原因](/zh/docs/v4/advanced/high-performance#serialize-into-a-reused-buffer)）。
 
 ```csharp title="MessageEncoder.cs"
+using System;
 using Nino.Core;
 
 public sealed class MessageEncoder : IDisposable
@@ -45,6 +46,7 @@ public sealed class MessageEncoder : IDisposable
 如果异步 API 需要这些字节，就用 `WrittenMemory` 代替 `WrittenSpan`，并且等这次调用完成后再重置缓冲区。如果代码没有明确的归属对象，可以用线程静态的缓冲区：
 
 ```csharp title="ScratchBuffer.cs"
+using System;
 using Nino.Core;
 
 static class ScratchBuffer
@@ -318,6 +320,7 @@ unsafe
 要测量，不要假设：单元测试可以把热路径的分配钉死在 0（[如何测量](/zh/docs/v4/advanced/high-performance#measure)）：
 
 ```csharp title="AllocationTests.cs"
+using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Nino.Core;
 

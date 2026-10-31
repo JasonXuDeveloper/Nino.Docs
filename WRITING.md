@@ -48,8 +48,13 @@ Overview, FAQ and reference pages answer the questions their readers search for,
   `content/` and daily against Nino's `main`) compiles each v4 fence: type declarations as they are, statements in a
   method, members in a class. What a fragment leaves to the reader (an `order` to serialize, an `app` to map routes
   on, a type another page declares) goes into the page's `scripts/csharp-check/Context/<page>.cs`, never into the
-  fence; its `using` lines apply to the page's fences too. A fence that redeclares a type of an earlier fence (before
-  and after, two tabs) shadows it.
+  fence. A fence that redeclares a type of an earlier fence (before and after, two tabs) shadows it.
+- A fence with a file title (`title="Program.cs"`) is a whole file a reader copies: it is compiled as a file of its
+  own, with its own `using` lines only, so it lists every namespace it uses (`System`, `System.Collections.Generic`,
+  `Nino.Core`, ...; a Unity script or a netstandard library has no implicit usings). It still sees the types of the
+  page's other fences and of its Context file, and what the Context file's `Snippets` class declares, as files of one
+  project do. An untitled fence is a fragment: it gets the implicit usings of an ASP.NET Core project, `Nino.Core`
+  and the `using` lines of its Context file. Give a fence a file title only when it is that file.
 - A fence that cannot compile says so in its meta, which Fumadocs does not render: ` ```csharp nocheck ` for a
   signature listing, v3 code, an excerpt with elisions or an API outside .NET (Unity's Burst), and
   ` ```csharp expect="NINO019" ` for an example of a mistake, which must report that diagnostic and nothing else.

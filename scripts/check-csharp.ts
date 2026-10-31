@@ -10,6 +10,13 @@
  *   scripts/csharp-check/Context/<page>.cs declares what the page leaves to the
  *   reader (an `order` to serialize, an `app` to map routes on). `#line`
  *   directives map every diagnostic back to the page and line.
+ * - Usings: the project has no implicit usings. A fence with a file title
+ *   (`title="Program.cs"`) is a whole file and compiles in a C# file of its
+ *   own, with its own using directives only, so a reader who copies it gets
+ *   every using it needs. Untitled fences (fragments) get the implicit usings
+ *   of an ASP.NET Core project, Nino.Core and the usings at the top of their
+ *   Context file; the Context files themselves are compiled from copies with
+ *   the implicit usings in front.
  * - A fence that declares a type an earlier fence of its page declared (a
  *   before and after, two tabs) gets a nested namespace, so it shadows the
  *   first one instead of clashing with it.
@@ -350,10 +357,50 @@ function namespaceOf(page: string): string {
     .replace(/[^A-Za-z0-9]+/g, '_')}`;
 }
 
-/** The C# file of one page. */
-function generate(page: string, name: string, fences: Fence[]): string {
+/**
+ * The usings a fragment may rely on: the implicit usings of an ASP.NET Core
+ * project (the Web SDK's list) and Nino.Core. Whole files (a fence with a
+ * file title) get none of them.
+ */
+const implicitUsings = [
+  'System',
+  'System.Collections.Generic',
+  'System.IO',
+  'System.Linq',
+  'System.Net.Http',
+  'System.Net.Http.Json',
+  'System.Threading',
+  'System.Threading.Tasks',
+  'Microsoft.AspNetCore.Builder',
+  'Microsoft.AspNetCore.Hosting',
+  'Microsoft.AspNetCore.Http',
+  'Microsoft.AspNetCore.Routing',
+  'Microsoft.Extensions.Configuration',
+  'Microsoft.Extensions.DependencyInjection',
+  'Microsoft.Extensions.Hosting',
+  'Microsoft.Extensions.Logging',
+  'Nino.Core',
+].map((name) => `using ${name};`);
+
+/** The file title of a fence (`title="Program.cs"`), which makes it a whole file. */
+function fileTitleOf(meta: string): string | undefined {
+  return /(?:^|\s)title="([^"]*\.cs)"/.exec(meta)?.[1];
+}
+
+type Output = { name: string; text: string };
+
+/**
+ * The C# files of one page: one for its fragments (untitled fences), with the
+ * implicit usings and the Context file's usings in scope, and one per fence
+ * with a file title, compiled as that file: its own using directives only.
+ * Every fence's types share the page's namespace, so a whole file still sees
+ * the types the page's other fences and its Context file declare, as files of
+ * one project do, and its statements and members still see what the Context
+ * file's Snippets class declares (the `payload` it leaves to the reader).
+ */
+function generate(page: string, name: string, fences: Fence[]): Output[] {
   const ns = namespaceOf(page);
-  const out: string[] = [
+  const header = [
     // not marked auto-generated: analyzers skip generated code, and the NINO rules must see the fences
     '// Written by scripts/check-csharp.ts from the page below: edit the page, not this file.',
     `// ${relative(root, page)}`,
@@ -362,6 +409,32 @@ function generate(page: string, name: string, fences: Fence[]): string {
   ];
   const assembly: string[] = [];
   const body: string[] = [];
+  const wholeFiles: {
+    line: number;
+    usings: string[];
+    assembly: string[];
+    body: string[];
+  }[] = [];
+  // the namespaces the page's fences declare, which live under the page's namespace
+  const pageNamespaces = new Set<string>();
+  for (const fence of fences) {
+    if (markerOf(fence.meta).nocheck) continue;
+    for (const line of fence.code) {
+      const match = /^\s*namespace\s+([\w.]+)/.exec(codeOnly(line));
+      if (match) pageNamespaces.add(match[1]);
+    }
+  }
+  // a whole file's using of such a namespace names it under the page's namespace
+  const rebase = (line: string) =>
+    line.replace(
+      /^(\s*using\s+(?:static\s+)?(?:\w+\s*=\s*)?)([\w.]+)/,
+      (all, head: string, target: string) =>
+        [...pageNamespaces].some(
+          (n) => target === n || target.startsWith(`${n}.`),
+        )
+          ? `${head}global::${ns}.${target}`
+          : all,
+    );
   const declared = new Map<string, boolean>();
   const usedNamespaces = new Set<string>([ns]);
   const aliases: string[] = [];
@@ -383,6 +456,7 @@ function generate(page: string, name: string, fences: Fence[]): string {
   for (const fence of fences) {
     const marker = markerOf(fence.meta);
     if (marker.nocheck) continue;
+    const whole = fileTitleOf(fence.meta) !== undefined;
     const lines = fence.code.map(stripNotation);
     const chunks = chunksOf(lines);
     // a partial declaration adds to an earlier partial one; anything else redeclares the type
@@ -400,52 +474,72 @@ function generate(page: string, name: string, fences: Fence[]): string {
         aliases.push(`using ${name} = ${fenceNs}.${name};`);
     }
 
-    body.push(
-      '',
-      `// ${relative(root, fence.file)}:${fence.line}`,
-      `namespace ${fenceNs}`,
-      '{',
-    );
+    // a whole file is a file of its own: its usings and assembly attributes open it
+    const file = { line: fence.line, usings: [], assembly: [], body: [] };
+    if (whole) wholeFiles.push(file);
+    const target: string[] = whole ? file.body : body;
+    if (!whole)
+      target.push(
+        '',
+        `// ${relative(root, fence.file)}:${fence.line}`,
+        `namespace ${fenceNs}`,
+        '{',
+      );
     for (const chunk of chunks.filter((c) => c.kind === 'using'))
-      emit(body, fence, lines, chunk.start, chunk.end);
+      emit(
+        whole ? file.usings : target,
+        fence,
+        whole ? lines.map(rebase) : lines,
+        chunk.start,
+        chunk.end,
+      );
     for (const chunk of chunks.filter((c) => c.kind === 'assembly'))
-      emit(assembly, fence, lines, chunk.start, chunk.end);
+      emit(
+        whole ? file.assembly : assembly,
+        fence,
+        lines,
+        chunk.start,
+        chunk.end,
+      );
+    if (whole) target.push(`namespace ${fenceNs}`, '{');
     const fileNamespace = chunks.find((c) => c.kind === 'namespace');
     if (fileNamespace) {
       const name = /namespace\s+([\w.]+)/.exec(
         lines.slice(fileNamespace.start, fileNamespace.end + 1).join(' '),
       )?.[1];
-      body.push(`namespace ${name}`, '{');
+      target.push(`namespace ${name}`, '{');
       usedNamespaces.add(`${fenceNs}.${name}`);
     }
     for (const chunk of chunks.filter((c) => c.kind === 'type'))
-      emit(body, fence, lines, chunk.start, chunk.end);
+      emit(target, fence, lines, chunk.start, chunk.end);
     const members = chunks.filter((c) => c.kind === 'member');
     const statements = chunks.filter((c) => c.kind === 'statement');
     if (members.length > 0 || statements.length > 0) {
-      body.push(
+      target.push(
         `public class Fence_L${fence.line} : global::${ns}.Snippets`,
         '{',
       );
       for (const chunk of members)
-        emit(body, fence, lines, chunk.start, chunk.end);
+        emit(target, fence, lines, chunk.start, chunk.end);
       if (statements.length > 0) {
         const code = statements
           .map((c) => lines.slice(c.start, c.end + 1).join('\n'))
           .join('\n');
         const awaits = /\bawait\b/.test(scan(code));
-        body.push(
-          awaits ? 'public async Task Run()' : 'public void Run()',
+        target.push(
+          awaits
+            ? 'public async global::System.Threading.Tasks.Task Run()'
+            : 'public void Run()',
           '{',
         );
         for (const chunk of statements)
-          emit(body, fence, lines, chunk.start, chunk.end);
-        body.push('}');
+          emit(target, fence, lines, chunk.start, chunk.end);
+        target.push('}');
       }
-      body.push('}');
+      target.push('}');
     }
-    if (fileNamespace) body.push('}');
-    body.push('}');
+    if (fileNamespace) target.push('}');
+    target.push('}');
   }
 
   // the page's context class, which Context/<page>.cs extends
@@ -456,11 +550,30 @@ function generate(page: string, name: string, fences: Fence[]): string {
     'public partial class Snippets { }',
     '}',
   );
+  const out = [...header, ...implicitUsings];
   for (const used of usedNamespaces) out.push(`using ${used};`);
-  // what Context/<page>.cs declares is in scope everywhere on the page, in the types the fences declare too
+  // what Context/<page>.cs declares is in scope everywhere in the fragments, in the types they declare too
   out.push(`using static ${ns}.Snippets;`, ...aliases);
   out.push(...contextUsings(name));
-  return [...out, ...assembly, ...body, ''].join('\n');
+  return [
+    { name, text: [...out, ...assembly, ...body, ''].join('\n') },
+    ...wholeFiles.map((file) => ({
+      name: `${name}.L${file.line}`,
+      // the page's namespace stands for the reader's global namespace (an assembly attribute names its types), and
+      // the Snippets members for what the page leaves to the reader;
+      // the aliases name types, not namespaces: a type first declared in a shadowing fence is still the page's
+      text: [
+        ...header,
+        ...file.usings,
+        `using ${ns};`,
+        `using static ${ns}.Snippets;`,
+        ...aliases,
+        ...file.assembly,
+        ...file.body,
+        '',
+      ].join('\n'),
+    })),
+  ];
 }
 
 /** The fence without comments, notation and trailing spaces, for comparing the languages. */
@@ -533,8 +646,20 @@ function main() {
     const name = relative(docsDir, page)
       .replace(/\.mdx$/, '')
       .replace(/[\\/]/g, '.');
-    writeFileSync(join(generatedDir, `${name}.cs`), generate(page, name, list));
+    for (const output of generate(page, name, list))
+      writeFileSync(join(generatedDir, `${output.name}.cs`), output.text);
   }
+  // the Context files are fragments too: they get the implicit usings, and #line keeps their own paths in diagnostics
+  for (const file of readdirSync(contextDir).filter((f) => f.endsWith('.cs')))
+    writeFileSync(
+      join(generatedDir, `Context.${file}`),
+      [
+        '// Written by scripts/check-csharp.ts: edit the Context file below, not this copy.',
+        ...implicitUsings,
+        `#line 1 "${join(contextDir, file)}"`,
+        readFileSync(join(contextDir, file), 'utf8'),
+      ].join('\n'),
+    );
   console.log(
     `${compiled} C# fences to compile, ${skipped} marked nocheck, in ${fences.size} pages`,
   );

@@ -25,6 +25,8 @@ Whatever the bytes, a read:
 Every check that rejects data throws `NinoDataException` (namespace `Nino.Core`), with a message that starts with `Nino:`. A value its own type rejects while it is created (a malformed `Uri`, an unknown culture or time zone, a `DateTimeOffset` out of range, a null dictionary key) is reported the same way, with the original exception as `InnerException`. Catch it where the data comes in:
 
 ```csharp title="Receive.cs"
+using Nino.Core;
+
 try
 {
     var message = NinoDeserializer.Deserialize<Message>(payload);
@@ -93,6 +95,8 @@ The read and write paths take these four as constants: they are frozen the first
 </Callout>
 
 ```csharp title="Program.cs"
+using Nino.Core;
+
 // At startup, before any Nino call.
 NinoSettings.Untrusted = true;              // data comes from clients
 NinoSettings.MaxCollectionLength = 100_000; // no message of ours holds more

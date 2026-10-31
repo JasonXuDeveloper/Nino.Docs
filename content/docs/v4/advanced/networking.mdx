@@ -62,6 +62,7 @@ void Handle(Message message)
 TCP is a byte stream, so each message needs a frame. A 4-byte little-endian length prefix is the simplest. Nino's `Writer` can reserve the 4 bytes, serialize the message after them, and then patch in the length, all in one reused buffer, which is then copied into the `PipeWriter` once. Once the buffer has grown to the largest message, writing a frame allocates nothing:
 
 ```csharp title="FrameWriter.cs"
+using System;
 using System.Buffers;
 using System.IO.Pipelines;
 using Nino.Core;
@@ -104,8 +105,12 @@ If your transport already frames messages (WebSocket messages, UDP datagrams, a 
 Read frames out of the `ReadOnlySequence<byte>` the pipe gives you. A frame that lies in one segment (the common case) is deserialized from the pipe's own memory; one that spans two segments is copied once, to the stack or to a pooled array. A read may end in the middle of a frame or hold several frames: the loop takes every complete frame and leaves the rest in the pipe for the next read.
 
 ```csharp title="FrameReader.cs"
+using System;
 using System.Buffers;
+using System.IO;
 using System.IO.Pipelines;
+using System.Threading;
+using System.Threading.Tasks;
 using Nino.Core;
 
 public static class FrameReader
@@ -178,9 +183,11 @@ Nino validates every length inside the payload against the bytes left before all
 `FrameWriter` and `FrameReader` work on a `PipeWriter` and a `PipeReader`. Over a plain socket, make both from its `NetworkStream` with `PipeWriter.Create` and `PipeReader.Create` (Kestrel's connection handlers hand you a pipe directly). A complete program that sends two messages over loopback TCP and prints what the server reads:
 
 ```csharp title="Program.cs"
+using System;
 using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading.Tasks;
 
 var listener = new TcpListener(IPAddress.Loopback, 0);
 listener.Start();
@@ -215,9 +222,13 @@ It prints `Login` and `Chat`. A real server accepts in a loop and starts one rea
 Transports that deliver whole messages need no length prefix: one Nino payload is one WebSocket message or one datagram. Serialize into a reused buffer and send its memory; receive into a reused buffer and deserialize from it:
 
 ```csharp title="MessageTransports.cs"
+using System;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Threading;
+using System.Threading.Tasks;
 using Nino.Core;
 
 public static class MessageTransports

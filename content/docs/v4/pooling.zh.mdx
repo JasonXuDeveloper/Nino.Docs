@@ -53,6 +53,7 @@ while (transport.TryReceive(out ReadOnlyMemory<byte> message)) // a view of the 
 用 `[NinoFactory]` 从池中借出的对象，它的成员往往也是借来的。比如客户对象借出时就带着一个借来的 `Tags` 列表：
 
 ```csharp title="Customer.cs"
+using System.Collections.Generic;
 using Nino.Core;
 
 [NinoType]
@@ -74,6 +75,7 @@ public class Customer
 如果某条消息里 `Tags` 是 `null`，Nino 会把这个列表从客户对象上摘掉。`List<int>` 不知道自己来自哪个池，没有回收器的话它只能交给 GC：这个列表就从池里**漏掉**了，池子越用越空，最后又回到每次都 `new`。注册回收器后，被摘掉的列表会还回池中：
 
 ```csharp title="Startup.cs"
+using System.Collections.Generic;
 using Nino.Core;
 
 // at startup, before the first serialization call
@@ -104,6 +106,8 @@ NinoSettings.SetRecycler<Customer>(customer => ObjectPool<Customer>.Return(custo
 `[NinoPooled]` 为 `[NinoType]` 类提供内置的对象池。无论 Nino 在哪里创建它的实例（你要反序列化的值本身、成员还是集合元素），都会先从池中取一个，再反序列化到这个实例中；被丢弃的实例会自动还回池中。
 
 ```csharp title="Alert.cs"
+using System.Collections.Generic;
+using System.Linq;
 using Nino.Core;
 
 [NinoType, NinoPooled] // [!code highlight]
@@ -141,6 +145,8 @@ alert.ReturnToPool();                                   // returning it twice th
 普通 `List<T>` 的创建无法挂接工厂。要让列表本身也走池，可以包装一个对象池，再定义一个实现 `INinoPooled`（命名空间 `Nino.Core`）的列表类型：借出走 `[NinoFactory]`，被丢弃时 Nino 调用它的 `ReturnToPool()`，不需要注册回收器。
 
 ```csharp title="ObjectPool.cs"
+using System;
+using System.Collections.Generic;
 using Nino.Core;
 
 public static class ObjectPool<T> where T : class, new()

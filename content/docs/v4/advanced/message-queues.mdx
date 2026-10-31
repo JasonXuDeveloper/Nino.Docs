@@ -14,6 +14,8 @@ This guide covers what differs from request/response messaging: messages that st
 Derive the events of a stream from one base class. Nino writes the runtime type with each value, so a consumer reads an `OrderEvent` and gets back an `OrderPlaced`, with no type header of your own:
 
 ```csharp title="OrderEvents.cs"
+using System;
+using System.Collections.Generic;
 using Nino.Core;
 
 [NinoType(format: NinoFormat.VersionTolerant)] // subtypes inherit [NinoType] and its options
@@ -65,6 +67,7 @@ The type id is a hash of the type's full name: rename an event with [`[NinoForme
 [Confluent.Kafka](https://github.com/confluentinc/confluent-kafka-dotnet) takes a serializer and a deserializer per key and value type. Its deserializer receives a `ReadOnlySpan<byte>`, which Nino reads directly:
 
 ```csharp title="NinoKafkaSerializer.cs"
+using System;
 using Confluent.Kafka;
 using Nino.Core;
 
@@ -99,6 +102,7 @@ Kafka's `ISerializer<T>` must return a `byte[]`, so producing allocates one arra
 Most other clients take a body as `ReadOnlyMemory<byte>`. Serialize into a reused `NinoArrayBufferWriter` and pass `WrittenMemory`: nothing is allocated per message on your side. With RabbitMQ.Client 7:
 
 ```csharp title="OrderPublisher.cs"
+using System.Threading.Tasks;
 using Nino.Core;
 using RabbitMQ.Client;
 
@@ -143,6 +147,8 @@ await channel.BasicConsumeAsync("orders", autoAck: true, consumer);
 Small events (a click, a price change, a metric) are often cheaper to send in batches: one broker message, one network round trip, one header. Write a count and then the events back to back into a reused buffer (writing a batch allocates nothing), and send `buffer.WrittenMemory` as above:
 
 ```csharp title="EventBatch.cs"
+using System;
+using System.Collections.Generic;
 using Nino.Core;
 
 public static class EventBatch
@@ -180,6 +186,8 @@ A `List<OrderEvent>` member in a `[NinoType]` class does the same and adds a pla
 Metrics, traces and market data arrive at high rates as many small, flat records. Keep each record an unmanaged struct and send them in a list:
 
 ```csharp title="Samples.cs"
+using System;
+using System.Collections.Generic;
 using Nino.Core;
 
 [NinoType]

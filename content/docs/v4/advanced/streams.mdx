@@ -46,6 +46,12 @@ public static partial class StreamFrames
 Reading is the mirror image: read the 4-byte prefix, check the length, read exactly that many bytes, then deserialize. A stream may return fewer bytes than asked, so `Fill` loops until it has them all:
 
 ```csharp title="StreamFrames.cs"
+using System;
+using System.Buffers;
+using System.Buffers.Binary;
+using System.IO;
+using Nino.Core;
+
 public static partial class StreamFrames
 {
     /// <summary>Reads the next frame into value (default: a new one). False at the end of the stream.</summary>
@@ -137,6 +143,13 @@ The frame format is the same as in the [network guide](/en/docs/v4/advanced/netw
 `Writer` is a `ref struct` and cannot live in an `async` method, so build the frame synchronously with `Frame`, then await the I/O. `WriteAsync` needs no `async` of its own: it returns the stream's task, so do not reuse the buffer until that has completed. Add these to `StreamFrames`:
 
 ```csharp title="StreamFrames.cs"
+using System;
+using System.Buffers;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using Nino.Core;
+
 public static partial class StreamFrames
 {
     /// <summary>Do not reuse buffer until the returned task has completed.</summary>

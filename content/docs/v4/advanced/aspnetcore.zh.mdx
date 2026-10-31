@@ -47,6 +47,8 @@ public sealed class Square : Shape { public double Side; }
 在 `AddControllers()`、`AddMvc()` 或 `AddMvcCore()` 之后调用 `AddNinoFormatters()`，把格式化器加入 MVC：
 
 ```csharp title="Program.cs"
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 using Nino.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -86,6 +88,7 @@ public class OrdersController : ControllerBase
 参数用 `NinoBody<T>`，返回 `NinoResults.Ok(value)` 或 `NinoResults.Status(statusCode, value)`：
 
 ```csharp title="Program.cs"
+using Microsoft.AspNetCore.Builder;
 using Nino.AspNetCore;
 
 app.MapPost("/orders", (NinoBody<Order> order) => NinoResults.Ok(Save(order.Value)));
@@ -102,6 +105,10 @@ app.MapGet("/shape", () => NinoResults.Ok<Shape>(new Square { Side = 3 })); // �
 在任何处理程序或中间件中，`HttpRequest.ReadFromNinoAsync<T>()` 把整个请求体读成一个 `T`，`HttpResponse.WriteAsNinoAsync(value)` 写出一个值：
 
 ```csharp title="Program.cs"
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Nino.AspNetCore;
+
 app.MapPost("/orders/bump", async (HttpContext context) =>
 {
     Order order = await context.Request.ReadFromNinoAsync<Order>(context.RequestAborted);
@@ -117,6 +124,8 @@ app.MapPost("/orders/bump", async (HttpContext context) =>
 .NET 客户端用 `NinoSerializer` 和 `NinoDeserializer` 发送和读取字节。客户端只需要 `Nino` 包和共享的类型，不需要 Nino.AspNetCore：它依赖 ASP.NET Core，装不进 MAUI、Blazor WebAssembly 或 Unity 客户端：
 
 ```csharp title="Client.cs"
+using System;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using Nino.Core;
 
