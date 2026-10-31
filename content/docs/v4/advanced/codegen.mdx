@@ -451,6 +451,8 @@ useWasm(true);  // back on, where the engine allows it
 | `object` | `unknown` | any generated `[NinoType]`, by its type id |
 | keyed and version-tolerant types | as above | read and written in their [format](/en/docs/v4/evolving-data), former keys included |
 
+To build such values in TypeScript, use the types above: a `decimal` is its text (`"19.99"`; up to 28 digits after the point, a coefficient below 2^96), a `Guid` its text in the `D`, `N` or `B` form, a `DateTime` a `Date` (`new Date(Date.UTC(2026, 9, 31, 12))`), and a `TimeSpan` its ticks of 100 ns as a `bigint` (`90n * 10_000_000n` for 90 seconds). The writer rejects text that is not a valid `decimal` or `Guid` with a `NinoError`.
+
 ### Typed Arrays [#typed-arrays]
 
 By default (`NumericArrays="plain"`) an array or list of numbers is `number[]` (`bigint[]` for 64-bit integers), which reads fastest in every engine. With `NumericArrays="typed"` (`--numeric-arrays typed`), arrays, lists and other sequences (not sets) of `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, `nint`, `nuint`, `float` and `double` are typed arrays instead: `Int8Array`, `Int16Array`, `Uint16Array`, `Int32Array`, `Uint32Array`, `BigInt64Array`, `BigUint64Array`, `Float32Array` and `Float64Array`. Their bytes on the wire are the typed array's own, so the bytes do not change, only the TypeScript types.
@@ -580,6 +582,24 @@ Go strings are UTF-8, so writing and reading a string in the default encoding (L
 
 Short strings (up to 128 bytes of UTF-8) are read into a block the reader keeps, up to 2 KiB and never more than the data left can fill: one allocation for many strings. A string you keep keeps its block alive, as a substring keeps its string; `strings.Clone` gives a copy of its own. Likewise the `*string`s generated code reads (`StringPtr`, `Utf8Ptr`) point into a block of up to 32 the reader keeps.
 
+### .NET Values [#go-values]
+
+`decimal`, `Guid`, `DateTime` and the other .NET value types have Go types of the same names in package `nino`, with constructors from Go's own types; a `*big.Int` is a `BigInteger`:
+
+```go
+price, err := nino.ParseDecimal("19.99")                           // decimal: scale 2, as 19.99m
+id, err := nino.ParseGuid("6f9619ff-8b86-d011-b42d-00c04fc964ff")  // the D, N or B form
+placed, ok := nino.DateTimeOf(time.Now())                          // DateTime, kind Utc, to the 100 ns
+local := nino.NewDateTime(placed.Ticks(), nino.KindLocal)          // ticks since 0001-01-01 and a kind
+timeout := nino.TimeSpanOf(90 * time.Second)                       // TimeSpan
+sent, ok := nino.DateTimeOffsetOf(time.Now())                      // DateTimeOffset, offset in whole minutes
+huge, ok := nino.Int128Of(new(big.Int).Lsh(big.NewInt(1), 100))   // Int128 (UInt128Of for UInt128)
+half := nino.HalfOf(1.5)                                           // Half
+version := &nino.Version{Major: 4, Minor: 0, Build: -1, Revision: -1} // 4.0
+```
+
+`DateTimeOf` and `DateTimeOffsetOf` return false for a time outside .NET's range, and `DateTimeOffsetOf` also for an offset that is not whole minutes or is past ±14 hours. Back to Go types: `DateTime.Time()`, `TimeSpan.Duration()`, `DateTimeOffset.Time()`, `Decimal.String()` (or `Coefficient()` and `Scale()`), `Guid.String()`, `Int128.Big()`, `Half.Float32()`. `DateOnly` and `TimeOnly` are a day number and ticks (`nino.DateOnly(days since 0001-01-01)`). The runtime's [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go) lists every type.
+
 ## Rust [#rust]
 
 The Rust runtime (crate `nino-serialization`, library `nino`) reads and writes Nino's [wire format](/en/docs/v4/wire-format). Its bounds checks are safe code; `unsafe` (`#![deny(unsafe_code)]` elsewhere) is allowed only in the module that transcodes strings as they are written and read, tested under Miri on little- and big-endian targets, and in one block of [reference tracking](#reference-tracking)'s `Shared::get`, tested under Miri too. It has no required dependencies. Every release publishes it to crates.io with Nino's version:
@@ -624,6 +644,30 @@ mod protocol;
 | `decimal`, `Guid`, `DateTime`, `DateTimeOffset`, `TimeSpan`, `DateOnly`, `TimeOnly`, `Half`, `Rune`, `Version`, `BigInteger`, `BitArray` | types of the same names; `DateTimeKind` is the kind of a `DateTime` |
 
 `String` replaces an unpaired surrogate (which a .NET string may hold) with U+FFFD; `WideString` keeps the UTF-16 code units, so such a value writes back byte for byte (`Strings="wide"` in generated code).
+
+### .NET Values [#rust-values]
+
+Build them with their constructors, which check the range .NET accepts and return `nino::Result`, or from text; the `chrono`, `uuid`, `rust_decimal` and `num-bigint` [features](#rust-features) add `TryFrom` and `From` conversions from those crates' types:
+
+```rust
+use nino::{DateOnly, DateTime, DateTimeKind, DateTimeOffset, Decimal, Guid, TimeSpan};
+
+let price: Decimal = "19.99".parse()?;                       // decimal text, scale kept
+let price = Decimal::new(1999, 2, false)?;                   // mantissa, scale, negative
+let id: Guid = "6f9619ff-8b86-d011-b42d-00c04fc964ff".parse()?;
+let id = Guid::from_u128(0x6f9619ff_8b86_d011_b42d_00c04fc964ff);
+let epoch = DateTime::new(nino::UNIX_EPOCH_TICKS, DateTimeKind::Utc)?; // ticks since 0001-01-01
+let timeout = TimeSpan(90 * 10_000_000);                     // ticks of 100 ns
+let day = DateOnly::new(739_919)?;                           // days since 0001-01-01
+
+// with the chrono feature
+let now = DateTime::try_from(chrono::Utc::now())?;          // kind Utc
+let sent = DateTimeOffset::try_from(chrono::Local::now().fixed_offset())?;
+let wait = TimeSpan::try_from(chrono::TimeDelta::seconds(90))?;
+let date: chrono::NaiveDate = day.try_into()?;
+```
+
+`Half` is its 16 bits (`Half(0x3E00)` is 1.5), `BigInteger` comes `from_i128` or from its text, and `Version` is a struct with public fields. The runtime's [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust) lists every type and conversion.
 
 ### Derive [#rust-derive]
 

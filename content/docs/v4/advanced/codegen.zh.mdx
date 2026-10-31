@@ -451,6 +451,8 @@ useWasm(true);  // 重新打开（在引擎允许的地方）
 | `object` | `unknown` | 任何生成的 `[NinoType]`，按类型 ID |
 | 键控与版本容错类型 | 同上 | 按其[格式](/zh/docs/v4/evolving-data)读写，包括旧键 |
 
+在 TypeScript 里构造这些值，直接用上表的类型：`decimal` 是它的文本（`"19.99"`；小数点后最多 28 位，系数小于 2^96），`Guid` 是 `D`、`N` 或 `B` 格式的文本，`DateTime` 是 `Date`（`new Date(Date.UTC(2026, 9, 31, 12))`），`TimeSpan` 是以 100 ns 为单位的 tick 数，类型为 `bigint`（90 秒是 `90n * 10_000_000n`）。不是合法 `decimal` 或 `Guid` 的文本，写入时抛出 `NinoError`。
+
 ### 类型化数组 [#typed-arrays]
 
 默认情况下（`NumericArrays="plain"`），数字的数组或列表是 `number[]`（64 位整数为 `bigint[]`），在所有引擎中读取都最快。设置 `NumericArrays="typed"`（`--numeric-arrays typed`）后，`sbyte`、`short`、`ushort`、`int`、`uint`、`long`、`ulong`、`nint`、`nuint`、`float` 和 `double` 的数组、列表及其他序列（集合除外）改为类型化数组：`Int8Array`、`Int16Array`、`Uint16Array`、`Int32Array`、`Uint32Array`、`BigInt64Array`、`BigUint64Array`、`Float32Array` 和 `Float64Array`。线上的字节就是类型化数组自身的字节，所以字节不变，变的只是 TypeScript 类型。
@@ -580,6 +582,24 @@ Go 的字符串是 UTF-8，所以按默认编码（Latin-1 或 UTF-16）写入�
 
 短字符串（UTF-8 不超过 128 字节）读入 reader 持有的一块内存：每块最多 2 KiB，且不超过剩余数据能填满的大小，许多字符串只需一次分配。保留一个字符串会让它所在的整块内存保持存活，就像子串会让原字符串保持存活一样；用 `strings.Clone` 可得到独立的副本。同样，生成代码读出的 `*string`（`StringPtr`、`Utf8Ptr`）指向 reader 持有的、最多 32 个字符串的一块内存。
 
+### .NET 值 [#go-values]
+
+`decimal`、`Guid`、`DateTime` 等 .NET 值类型，在 `nino` 包里都有同名的 Go 类型，并提供从 Go 自身类型构造的函数；`*big.Int` 就是 `BigInteger`：
+
+```go
+price, err := nino.ParseDecimal("19.99")                           // decimal：scale 为 2，等同 19.99m
+id, err := nino.ParseGuid("6f9619ff-8b86-d011-b42d-00c04fc964ff")  // D、N 或 B 格式
+placed, ok := nino.DateTimeOf(time.Now())                          // DateTime，Kind 为 Utc，精确到 100 ns
+local := nino.NewDateTime(placed.Ticks(), nino.KindLocal)          // 自 0001-01-01 起的 tick 数和 Kind
+timeout := nino.TimeSpanOf(90 * time.Second)                       // TimeSpan
+sent, ok := nino.DateTimeOffsetOf(time.Now())                      // DateTimeOffset，偏移为整分钟
+huge, ok := nino.Int128Of(new(big.Int).Lsh(big.NewInt(1), 100))   // Int128（UInt128 用 UInt128Of）
+half := nino.HalfOf(1.5)                                           // Half
+version := &nino.Version{Major: 4, Minor: 0, Build: -1, Revision: -1} // 4.0
+```
+
+时间超出 .NET 的范围时，`DateTimeOf` 和 `DateTimeOffsetOf` 返回 false；偏移不是整分钟或超过 ±14 小时，`DateTimeOffsetOf` 也返回 false。转回 Go 类型：`DateTime.Time()`、`TimeSpan.Duration()`、`DateTimeOffset.Time()`、`Decimal.String()`（或 `Coefficient()` 和 `Scale()`）、`Guid.String()`、`Int128.Big()`、`Half.Float32()`。`DateOnly` 和 `TimeOnly` 分别是天数和 tick 数（`nino.DateOnly(自 0001-01-01 起的天数)`）。全部类型见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go)。
+
 ## Rust [#rust]
 
 Rust 运行时（crate `nino-serialization`，库名 `nino`）读写 Nino 的[二进制格式](/zh/docs/v4/wire-format)。它的边界检查都是安全代码；只有两处允许 `unsafe`（其余部分为 `#![deny(unsafe_code)]`）：读写时转码字符串的模块，在小端和大端目标上用 Miri 测试；以及[引用追踪](#reference-tracking)中 `Shared::get` 的一个代码块，同样用 Miri 测试。它没有必需的依赖。每次发布都会以 Nino 的版本号把它发布到 crates.io：
@@ -624,6 +644,30 @@ mod protocol;
 | `decimal`、`Guid`、`DateTime`、`DateTimeOffset`、`TimeSpan`、`DateOnly`、`TimeOnly`、`Half`、`Rune`、`Version`、`BigInteger`、`BitArray` | 同名类型；`DateTimeKind` 表示 `DateTime` 的 Kind |
 
 `String` 把未配对的代理项（.NET 字符串可能包含）替换为 U+FFFD；`WideString` 保留 UTF-16 码元，所以这样的值能逐字节写回（生成的代码中用 `Strings="wide"`）。
+
+### .NET 值 [#rust-values]
+
+用各类型的构造函数创建，它们检查 .NET 接受的范围，返回 `nino::Result`；也可以从文本解析。`chrono`、`uuid`、`rust_decimal` 和 `num-bigint` 这几个[功能](#rust-features)提供从这些 crate 的类型转换过来的 `TryFrom` 和 `From`：
+
+```rust
+use nino::{DateOnly, DateTime, DateTimeKind, DateTimeOffset, Decimal, Guid, TimeSpan};
+
+let price: Decimal = "19.99".parse()?;                       // decimal 文本，保留 scale
+let price = Decimal::new(1999, 2, false)?;                   // 系数、scale、是否为负
+let id: Guid = "6f9619ff-8b86-d011-b42d-00c04fc964ff".parse()?;
+let id = Guid::from_u128(0x6f9619ff_8b86_d011_b42d_00c04fc964ff);
+let epoch = DateTime::new(nino::UNIX_EPOCH_TICKS, DateTimeKind::Utc)?; // 自 0001-01-01 起的 tick 数
+let timeout = TimeSpan(90 * 10_000_000);                     // 以 100 ns 为单位的 tick 数
+let day = DateOnly::new(739_919)?;                           // 自 0001-01-01 起的天数
+
+// 开启 chrono 功能时
+let now = DateTime::try_from(chrono::Utc::now())?;          // Kind 为 Utc
+let sent = DateTimeOffset::try_from(chrono::Local::now().fixed_offset())?;
+let wait = TimeSpan::try_from(chrono::TimeDelta::seconds(90))?;
+let date: chrono::NaiveDate = day.try_into()?;
+```
+
+`Half` 就是它的 16 位（`Half(0x3E00)` 是 1.5），`BigInteger` 用 `from_i128` 或从文本创建，`Version` 是字段公开的结构体。全部类型和转换见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust)。
 
 ### Derive [#rust-derive]
 
