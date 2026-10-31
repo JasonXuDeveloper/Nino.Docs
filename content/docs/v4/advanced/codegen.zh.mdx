@@ -132,25 +132,31 @@ go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4
 ```
 
 ```go
-data, err := nino.Serialize(player, protocol.WritePlayer)
-player, err := nino.Deserialize(data, protocol.ReadPlayer)
+order, err := nino.Deserialize(data, protocol.ReadOrder) // data：NinoSerializer.Serialize(order) 写出的字节
+again, err := nino.Serialize(order, protocol.WriteOrder) // 相同的字节
 ```
 
-参见 [Go](#go)。
+`ReadOrder` 和 `WriteOrder` 是为[下面例子](#example)中的 `Order` 生成的。参见 [Go](#go)。
 
 </Tab>
 <Tab value="Rust">
 
-```rust title="lib.rs"
+```rust title="main.rs"
 #[rustfmt::skip]
 #[path = "nino_types.rs"]
 mod protocol;
 
-let bytes = nino::serialize(&player)?;
-let back: protocol::Player = nino::deserialize_exact(&bytes)?;
+use protocol::OrderRef;
+
+fn main() -> nino::Result<()> {
+    let bytes = std::fs::read("order.bin").expect("order.bin"); // NinoSerializer.Serialize(order) 写出的字节
+    let order: Option<OrderRef> = nino::deserialize(&bytes)?;   // Order 不是 sealed：带类型 ID 读取
+    assert_eq!(nino::serialize(&order)?, bytes);                // 再次得到相同的字节
+    Ok(())
+}
 ```
 
-crate 需要打开 `indexmap` 功能的 `nino-serialization`，以及 `indexmap`（使用 `Maps="std"` 时只需要这个 crate）；参见 [Rust](#rust)。
+`Order` 是[下面的例子](#example)中的类型。struct 读成它本身，sealed 类读成 `Option<Order>`，非 sealed 的类（比如 `Order`）读成 `Option<OrderRef>`，也就是列出这个位置允许的类型的枚举。crate 需要打开 `indexmap` 功能的 `nino-serialization`，以及 `indexmap`（使用 `Maps="std"` 时只需要这个 crate）；参见 [Rust](#rust)。
 
 </Tab>
 </Tabs>

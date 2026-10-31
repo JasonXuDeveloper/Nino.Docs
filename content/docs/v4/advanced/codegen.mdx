@@ -132,25 +132,31 @@ go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4
 ```
 
 ```go
-data, err := nino.Serialize(player, protocol.WritePlayer)
-player, err := nino.Deserialize(data, protocol.ReadPlayer)
+order, err := nino.Deserialize(data, protocol.ReadOrder) // data: what NinoSerializer.Serialize(order) wrote
+again, err := nino.Serialize(order, protocol.WriteOrder) // the same bytes
 ```
 
-See [Go](#go).
+`ReadOrder` and `WriteOrder` are generated for `Order` of the [example below](#example). See [Go](#go).
 
 </Tab>
 <Tab value="Rust">
 
-```rust title="lib.rs"
+```rust title="main.rs"
 #[rustfmt::skip]
 #[path = "nino_types.rs"]
 mod protocol;
 
-let bytes = nino::serialize(&player)?;
-let back: protocol::Player = nino::deserialize_exact(&bytes)?;
+use protocol::OrderRef;
+
+fn main() -> nino::Result<()> {
+    let bytes = std::fs::read("order.bin").expect("order.bin"); // what NinoSerializer.Serialize(order) wrote
+    let order: Option<OrderRef> = nino::deserialize(&bytes)?;   // Order is not sealed: read behind its type id
+    assert_eq!(nino::serialize(&order)?, bytes);                // the same bytes again
+    Ok(())
+}
 ```
 
-The crate needs `nino-serialization` with its `indexmap` feature, and `indexmap` (with `Maps="std"`, the crate alone); see [Rust](#rust).
+`Order` is the [example below](#example). A struct reads as itself, a sealed class as `Option<Order>`, and a class that is not sealed, like `Order`, as `Option<OrderRef>`, an enum of the types its slot allows. The crate needs `nino-serialization` with its `indexmap` feature, and `indexmap` (with `Maps="std"`, the crate alone); see [Rust](#rust).
 
 </Tab>
 </Tabs>
