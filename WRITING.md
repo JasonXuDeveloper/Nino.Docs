@@ -99,6 +99,8 @@ page):
 | version tolerance | 版本容错 | 版本兼容 |
 | keyed members | 键控成员, 键控类型 | keyed 成员 |
 | the 0/1 byte before a sealed class or nullable value | 存在字节 (English: presence byte) | null 标记, null 标志, 有值字节, null flag, has-value byte |
+| the bytes Nino writes (the wire format page, the specification) | 二进制格式 | 线格式 |
+| deserializing into an existing value (`Deserialize(data, ref value)`) | 复用反序列化 (English: reuse deserialization); 读入已有实例 for the act | 原地反序列化, in-place deserialization |
 | formatter, pool, untrusted, interceptor, polymorphism | 格式化器, 对象池, 不可信, 拦截器, 多态 | |
 
 ## Before you commit

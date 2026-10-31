@@ -55,7 +55,7 @@ Nino 在 Go、Rust 和 TypeScript 中读写的字节与 .NET 完全相同，所�
 - **ASCII：** 1,000 个短 ASCII 字符串，从 `"string 0"` 到 `"string 999"`。
 - **混合：** 1,000 个字符串，三种轮流出现：ASCII（`"string i"`）、Latin-1（`"crème brûlée i"`），以及含 BMP 以外字符的其他文字（`"строка 字符串 🎉 i"`）。
 
-Nino 的[线格式](/zh/docs/v4/wire-format)按 .NET 保存字符串的方式写出字符串：所有字符都不超过 U+00FF 时写成 Latin-1，每个字符一个字节，否则写成 UTF-16。.NET 的字符串是 UTF-16，所以写入只是一次收窄的复制，读取只是一次展宽的复制，两者都用 SIMD；长度就是字符数，读取方可以先分配字符串，再解码内容。
+Nino 的[二进制格式](/zh/docs/v4/wire-format)按 .NET 保存字符串的方式写出字符串：所有字符都不超过 U+00FF 时写成 Latin-1，每个字符一个字节，否则写成 UTF-16。.NET 的字符串是 UTF-16，所以写入只是一次收窄的复制，读取只是一次展宽的复制，两者都用 SIMD；长度就是字符数，读取方可以先分配字符串，再解码内容。
 
 Go 和 Rust 的字符串是 UTF-8。Nino 的运行时写入字符串时，要检查是否有非 ASCII 字节，再转码为 Latin-1 或 UTF-16；读取时再转码回 UTF-8。而 Protocol Buffers、MessagePack、JSON、bincode 和 postcard 都直接写入和读取原样的 UTF-8 字节。ASCII 在 UTF-8 和 Latin-1 中是相同的字节，所以 ASCII 用例展示的是几乎不需要转码时各格式的表现；混合用例展示的是转码的开销。大小也不同：`è` 在 Latin-1 中占一个字节，在 UTF-8 中占两个；UTF-16 字符串的每个字符都占两个字节，而 UTF-8 中 ASCII 占一个、西里尔字母占两个、汉字占三个。JavaScript 的字符串是 UTF-16（V8 把单字节字符串按 Latin-1 保存），所以在 TypeScript 中，需要编码成 UTF-8 并从 UTF-8 解码的是 Protocol Buffers、MessagePack 和 JSON。
 

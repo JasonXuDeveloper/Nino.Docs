@@ -120,7 +120,7 @@ using (var file = File.OpenRead(path))
     checkpoint = NinoStream.Read<Checkpoint>(file);
 ```
 
-`TryRead` 每帧租一个池化数组来读前缀和数据，并把结果原地反序列化到 `value` 中：`value` 的结构合适之后，写一帧、读一帧除了内容有变化的字符串之外都不分配内存。`Read` 每次返回新值。
+`TryRead` 每帧租一个池化数组来读前缀和数据，并把结果复用反序列化到 `value` 中：`value` 的结构合适之后，写一帧、读一帧除了内容有变化的字符串之外都不分配内存。`Read` 每次返回新值。
 
 一串值（其他库用 `IAsyncEnumerable<T>` 流式传输的那种）就是连续的帧：每个元素写一帧，读到流结束为止，每一帧都读进同一个实例：
 
@@ -185,7 +185,7 @@ public static partial class NinoStream
 
 ## 多段输入（`ReadOnlySequence`） [#readonlysequence-input]
 
-`PipeReader` 或 `SequenceReader` 给出的是 `ReadOnlySequence<byte>`。只有一段时直接原地反序列化；有多段时，先拷贝一次到池化的缓冲区。`ref` 重载会填充你保留的实例：
+`PipeReader` 或 `SequenceReader` 给出的是 `ReadOnlySequence<byte>`。只有一段时直接从它反序列化；有多段时，先拷贝一次到池化的缓冲区。`ref` 重载会填充你保留的实例：
 
 ```csharp
 public static T Deserialize<T>(in ReadOnlySequence<byte> data)
