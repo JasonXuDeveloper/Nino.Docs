@@ -47,7 +47,7 @@ Nino 在设计上就能读取不可信数据，快路径也守住了这些保证
 
 <Callout type="info" title="非托管结构体数组">
 
-两个库都把这类数组整块拷贝，所以两者至少持平。反序列化 `Vector4[10000]` 这一项测到的主要是结果数组的垃圾回收，结果每次运行都有波动；参见[反序列化（新实例）](/zh/docs/v4/benchmarks#deserialize-new-instances)。
+两个库都把这类数组整块拷贝，所以两者至少持平。带填充的结构体例外：Nino 拷贝时把填充置零，MemoryPack 则照搬内存里填充位置上的内容，包括残留的字节，布局还取决于平台；见[带填充的结构体和元组](/zh/docs/v4/benchmarks#padded-values)。反序列化 `Vector4[10000]` 这一项测到的主要是结果数组的垃圾回收，结果每次运行都有波动；参见[反序列化（新实例）](/zh/docs/v4/benchmarks#deserialize-new-instances)。
 
 </Callout>
 

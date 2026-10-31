@@ -47,7 +47,7 @@ Measured with BenchmarkDotNet, both libraries in the same run. Bars show time re
 
 <Callout type="info" title="Arrays of unmanaged structs">
 
-Both libraries copy these as one block, so they are at least on par. The `Vector4[10000]` deserialize case mostly measures garbage collection of the result array and varies between runs; see [Deserialize (New Instances)](/en/docs/v4/benchmarks#deserialize-new-instances).
+Both libraries copy these as one block, so they are at least on par. Structs with padding are the exception: Nino sets the padding to zero as it copies, while MemoryPack copies whatever the memory holds there, stale bytes included, in a layout that depends on the platform; see [Padded Structs and Tuples](/en/docs/v4/benchmarks#padded-values). The `Vector4[10000]` deserialize case mostly measures garbage collection of the result array and varies between runs; see [Deserialize (New Instances)](/en/docs/v4/benchmarks#deserialize-new-instances).
 
 </Callout>
 
