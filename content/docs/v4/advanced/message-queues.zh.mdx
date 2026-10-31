@@ -66,6 +66,11 @@ switch (NinoDeserializer.Deserialize<OrderEvent>(payload))
 
 [Confluent.Kafka](https://github.com/confluentinc/confluent-kafka-dotnet) 为键和值的类型各接收一个序列化器和反序列化器。它的反序列化器拿到的是 `ReadOnlySpan<byte>`，Nino 可以直接读取：
 
+```shell
+dotnet add package Nino --prerelease
+dotnet add package Confluent.Kafka
+```
+
 ```csharp title="NinoKafkaSerializer.cs"
 using System;
 using Confluent.Kafka;
@@ -82,24 +87,68 @@ public sealed class NinoKafkaSerializer<T> : ISerializer<T>, IDeserializer<T>
 }
 ```
 
-```csharp
-using var producer = new ProducerBuilder<Guid, OrderEvent>(config)
-    .SetKeySerializer(NinoKafkaSerializer<Guid>.Instance)
-    .SetValueSerializer(NinoKafkaSerializer<OrderEvent>.Instance)
-    .Build();
-await producer.ProduceAsync("orders", new Message<Guid, OrderEvent> { Key = evt.OrderId, Value = evt });
+然后照常生产和消费，只有序列化器换成 Nino 的：
 
-using var consumer = new ConsumerBuilder<Guid, OrderEvent>(consumerConfig)
-    .SetKeyDeserializer(NinoKafkaSerializer<Guid>.Instance)
-    .SetValueDeserializer(NinoKafkaSerializer<OrderEvent>.Instance)
-    .Build();
+```csharp title="OrderStream.cs"
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Confluent.Kafka;
+
+public sealed class OrderProducer : IDisposable
+{
+    private readonly IProducer<Guid, OrderEvent> _producer; // 整个进程一个：它是线程安全的
+
+    public OrderProducer(string bootstrapServers) =>
+        _producer = new ProducerBuilder<Guid, OrderEvent>(new ProducerConfig { BootstrapServers = bootstrapServers })
+            .SetKeySerializer(NinoKafkaSerializer<Guid>.Instance) // [!code highlight]
+            .SetValueSerializer(NinoKafkaSerializer<OrderEvent>.Instance) // [!code highlight]
+            .Build();
+
+    public Task PublishAsync(OrderEvent evt) =>
+        _producer.ProduceAsync("orders", new Message<Guid, OrderEvent> { Key = evt.OrderId, Value = evt });
+
+    public void Dispose()
+    {
+        _producer.Flush(TimeSpan.FromSeconds(10)); // 发出队列里还没发的消息
+        _producer.Dispose();
+    }
+}
+
+public static class OrderConsumer
+{
+    public static void Run(string bootstrapServers, Action<OrderEvent> handle, CancellationToken cancel)
+    {
+        var config = new ConsumerConfig
+        {
+            BootstrapServers = bootstrapServers,
+            GroupId = "order-handlers",
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+        };
+        using var consumer = new ConsumerBuilder<Guid, OrderEvent>(config)
+            .SetKeyDeserializer(NinoKafkaSerializer<Guid>.Instance) // [!code highlight]
+            .SetValueDeserializer(NinoKafkaSerializer<OrderEvent>.Instance) // [!code highlight]
+            .Build();
+        consumer.Subscribe("orders");
+        try
+        {
+            while (true)
+                handle(consumer.Consume(cancel).Message.Value);
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            consumer.Close(); // 立即离开消费组
+        }
+    }
+}
 ```
 
 Kafka 的 `ISerializer<T>` 必须返回 `byte[]`，所以每生产一条消息都会分配一个数组：`NinoSerializer.Serialize(data)` 先写入每个线程一份的暂存缓冲区，再只把写入的字节拷贝出来，所以这个数组就是唯一的分配。消费时不需要拷贝：反序列化器直接读取客户端交给它的 span。`Guid` 键是原始值：16 字节，一次拷贝完成读写。
 
 ## 其他消息中间件 [#other-brokers]
 
-其他客户端大多以 `ReadOnlyMemory<byte>` 接收消息体。序列化到复用的 `NinoArrayBufferWriter`，传入 `WrittenMemory`：你这一侧每条消息都不分配内存。以 RabbitMQ.Client 7 为例：
+其他客户端大多以 `ReadOnlyMemory<byte>` 接收消息体。序列化到复用的 `NinoArrayBufferWriter`，传入 `WrittenMemory`：你这一侧每条消息都不分配内存。以 RabbitMQ.Client 7 为例（`dotnet add package RabbitMQ.Client`）：
 
 ```csharp title="OrderPublisher.cs"
 using System.Threading.Tasks;
@@ -123,24 +172,60 @@ public sealed class OrderPublisher
 }
 ```
 
-```csharp
+```csharp title="OrderSubscriber.cs"
+using System;
+using System.Threading.Tasks;
+using Nino.Core;
+using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-// consuming
-var consumer = new AsyncEventingBasicConsumer(channel);
-consumer.ReceivedAsync += (_, delivery) =>
+public static class OrderSubscriber
 {
-    // the body's memory is only valid inside the handler: deserialize here
-    Handle(NinoDeserializer.Deserialize<OrderEvent>(delivery.Body.Span));
-    return Task.CompletedTask;
-};
-await channel.BasicConsumeAsync("orders", autoAck: true, consumer);
+    public static async Task StartAsync(IChannel channel, Action<OrderEvent> handle)
+    {
+        await channel.QueueDeclareAsync("orders", durable: true, exclusive: false, autoDelete: false);
+        await channel.QueueBindAsync("orders", exchange: "orders", routingKey: "");
+
+        var consumer = new AsyncEventingBasicConsumer(channel);
+        consumer.ReceivedAsync += (_, delivery) =>
+        {
+            // 消息体的内存只在处理函数内有效：在这里反序列化
+            handle(NinoDeserializer.Deserialize<OrderEvent>(delivery.Body.Span)); // [!code highlight]
+            return Task.CompletedTask;
+        };
+        await channel.BasicConsumeAsync("orders", autoAck: true, consumer);
+    }
+}
+```
+
+```csharp title="Program.cs"
+using System;
+using RabbitMQ.Client;
+
+var factory = new ConnectionFactory { HostName = "localhost" };
+await using IConnection connection = await factory.CreateConnectionAsync();
+await using IChannel channel = await connection.CreateChannelAsync();
+await channel.ExchangeDeclareAsync("orders", ExchangeType.Fanout, durable: true);
+
+await OrderSubscriber.StartAsync(channel, evt => Console.WriteLine($"{evt.GetType().Name} {evt.OrderId}"));
+var publisher = new OrderPublisher(channel);
+await publisher.PublishAsync(new OrderShipped
+{
+    OrderId = Guid.NewGuid(), OccurredAt = DateTime.UtcNow, Carrier = "DHL", TrackingNumber = "JD0146",
+});
+Console.ReadLine(); // 一直消费，直到按下回车
 ```
 
 - 等发布调用完成后（`await` 之后）再重置缓冲区，因为客户端可能还在读取它。在多个线程上使用的发布者，每个线程需要一个缓冲区，或者加锁。
 - Azure Service Bus 的做法相同：`new ServiceBusMessage(buffer.WrittenMemory)` 直接包装这段内存，不做拷贝；收到的消息用 `NinoDeserializer.Deserialize<OrderEvent>(message.Body.ToMemory().Span)` 读取。
 - 只接受 `byte[]` 消息体的客户端，传 `NinoSerializer.Serialize(evt)`：和 Kafka 一样，是一个大小正好等于负载的数组。
 - 消费端把收到的消息体（`ReadOnlyMemory<byte>.Span` 或数组）交给 `NinoDeserializer.Deserialize<T>`，不需要先拷贝一份。如果中间件在处理函数返回后会复用消息体的内存，就在处理函数内部完成反序列化；反序列化的结果不会引用输入的字节。
+
+<Callout type="info" title="这些代码测试过什么">
+
+本页的 C# 代码，在本站每次改动时都会针对 Confluent.Kafka 2 和 RabbitMQ.Client 7 编译。Nino 这一侧（`NinoKafkaSerializer`、发布者的缓冲区、下面的批量读写）在没有消息中间件的测试中运行过；与中间件的连接本身（`BootstrapServers`、`ConnectionFactory`、队列和交换机）没有运行过，这些设置请对照你所用中间件的文档检查。
+
+</Callout>
 
 ## 批量发送 [#batching]
 

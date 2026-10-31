@@ -66,6 +66,11 @@ The type id is a hash of the type's full name: rename an event with [`[NinoForme
 
 [Confluent.Kafka](https://github.com/confluentinc/confluent-kafka-dotnet) takes a serializer and a deserializer per key and value type. Its deserializer receives a `ReadOnlySpan<byte>`, which Nino reads directly:
 
+```shell
+dotnet add package Nino --prerelease
+dotnet add package Confluent.Kafka
+```
+
 ```csharp title="NinoKafkaSerializer.cs"
 using System;
 using Confluent.Kafka;
@@ -82,24 +87,68 @@ public sealed class NinoKafkaSerializer<T> : ISerializer<T>, IDeserializer<T>
 }
 ```
 
-```csharp
-using var producer = new ProducerBuilder<Guid, OrderEvent>(config)
-    .SetKeySerializer(NinoKafkaSerializer<Guid>.Instance)
-    .SetValueSerializer(NinoKafkaSerializer<OrderEvent>.Instance)
-    .Build();
-await producer.ProduceAsync("orders", new Message<Guid, OrderEvent> { Key = evt.OrderId, Value = evt });
+Then produce and consume as usual; only the serializers are Nino's:
 
-using var consumer = new ConsumerBuilder<Guid, OrderEvent>(consumerConfig)
-    .SetKeyDeserializer(NinoKafkaSerializer<Guid>.Instance)
-    .SetValueDeserializer(NinoKafkaSerializer<OrderEvent>.Instance)
-    .Build();
+```csharp title="OrderStream.cs"
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Confluent.Kafka;
+
+public sealed class OrderProducer : IDisposable
+{
+    private readonly IProducer<Guid, OrderEvent> _producer; // one for the process: it is thread safe
+
+    public OrderProducer(string bootstrapServers) =>
+        _producer = new ProducerBuilder<Guid, OrderEvent>(new ProducerConfig { BootstrapServers = bootstrapServers })
+            .SetKeySerializer(NinoKafkaSerializer<Guid>.Instance) // [!code highlight]
+            .SetValueSerializer(NinoKafkaSerializer<OrderEvent>.Instance) // [!code highlight]
+            .Build();
+
+    public Task PublishAsync(OrderEvent evt) =>
+        _producer.ProduceAsync("orders", new Message<Guid, OrderEvent> { Key = evt.OrderId, Value = evt });
+
+    public void Dispose()
+    {
+        _producer.Flush(TimeSpan.FromSeconds(10)); // deliver what is still queued
+        _producer.Dispose();
+    }
+}
+
+public static class OrderConsumer
+{
+    public static void Run(string bootstrapServers, Action<OrderEvent> handle, CancellationToken cancel)
+    {
+        var config = new ConsumerConfig
+        {
+            BootstrapServers = bootstrapServers,
+            GroupId = "order-handlers",
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+        };
+        using var consumer = new ConsumerBuilder<Guid, OrderEvent>(config)
+            .SetKeyDeserializer(NinoKafkaSerializer<Guid>.Instance) // [!code highlight]
+            .SetValueDeserializer(NinoKafkaSerializer<OrderEvent>.Instance) // [!code highlight]
+            .Build();
+        consumer.Subscribe("orders");
+        try
+        {
+            while (true)
+                handle(consumer.Consume(cancel).Message.Value);
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            consumer.Close(); // leave the group at once
+        }
+    }
+}
 ```
 
 Kafka's `ISerializer<T>` must return a `byte[]`, so producing allocates one array per message: `NinoSerializer.Serialize(data)` writes into a per-thread scratch buffer and copies out exactly the bytes written, so that array is the only allocation. Consuming needs no copy: the deserializer reads the span the client hands it. A `Guid` key is a raw value: 16 bytes, written and read as one copy.
 
 ## Other Brokers [#other-brokers]
 
-Most other clients take a body as `ReadOnlyMemory<byte>`. Serialize into a reused `NinoArrayBufferWriter` and pass `WrittenMemory`: nothing is allocated per message on your side. With RabbitMQ.Client 7:
+Most other clients take a body as `ReadOnlyMemory<byte>`. Serialize into a reused `NinoArrayBufferWriter` and pass `WrittenMemory`: nothing is allocated per message on your side. With RabbitMQ.Client 7 (`dotnet add package RabbitMQ.Client`):
 
 ```csharp title="OrderPublisher.cs"
 using System.Threading.Tasks;
@@ -123,24 +172,60 @@ public sealed class OrderPublisher
 }
 ```
 
-```csharp
+```csharp title="OrderSubscriber.cs"
+using System;
+using System.Threading.Tasks;
+using Nino.Core;
+using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-// consuming
-var consumer = new AsyncEventingBasicConsumer(channel);
-consumer.ReceivedAsync += (_, delivery) =>
+public static class OrderSubscriber
 {
-    // the body's memory is only valid inside the handler: deserialize here
-    Handle(NinoDeserializer.Deserialize<OrderEvent>(delivery.Body.Span));
-    return Task.CompletedTask;
-};
-await channel.BasicConsumeAsync("orders", autoAck: true, consumer);
+    public static async Task StartAsync(IChannel channel, Action<OrderEvent> handle)
+    {
+        await channel.QueueDeclareAsync("orders", durable: true, exclusive: false, autoDelete: false);
+        await channel.QueueBindAsync("orders", exchange: "orders", routingKey: "");
+
+        var consumer = new AsyncEventingBasicConsumer(channel);
+        consumer.ReceivedAsync += (_, delivery) =>
+        {
+            // the body's memory is only valid inside the handler: deserialize here
+            handle(NinoDeserializer.Deserialize<OrderEvent>(delivery.Body.Span)); // [!code highlight]
+            return Task.CompletedTask;
+        };
+        await channel.BasicConsumeAsync("orders", autoAck: true, consumer);
+    }
+}
+```
+
+```csharp title="Program.cs"
+using System;
+using RabbitMQ.Client;
+
+var factory = new ConnectionFactory { HostName = "localhost" };
+await using IConnection connection = await factory.CreateConnectionAsync();
+await using IChannel channel = await connection.CreateChannelAsync();
+await channel.ExchangeDeclareAsync("orders", ExchangeType.Fanout, durable: true);
+
+await OrderSubscriber.StartAsync(channel, evt => Console.WriteLine($"{evt.GetType().Name} {evt.OrderId}"));
+var publisher = new OrderPublisher(channel);
+await publisher.PublishAsync(new OrderShipped
+{
+    OrderId = Guid.NewGuid(), OccurredAt = DateTime.UtcNow, Carrier = "DHL", TrackingNumber = "JD0146",
+});
+Console.ReadLine(); // keep consuming until Enter
 ```
 
 - Reset the buffer only after the publish call has completed (after the `await`), since the client may still be reading it. A publisher used from several threads needs a buffer per thread or a lock.
 - Azure Service Bus works the same way: `new ServiceBusMessage(buffer.WrittenMemory)` wraps the memory without copying it, and a received message is read with `NinoDeserializer.Deserialize<OrderEvent>(message.Body.ToMemory().Span)`.
 - A client that only accepts a `byte[]` body gets `NinoSerializer.Serialize(evt)`: one array of exactly the payload's size, as with Kafka.
 - On the consumer side, pass the delivered body (`ReadOnlyMemory<byte>.Span`, or the array) to `NinoDeserializer.Deserialize<T>`. There is no need to copy it first. If the broker reuses a body's memory after your handler returns, deserialize inside the handler; the result does not reference the input bytes.
+
+<Callout type="info" title="What this code was tested against">
+
+The C# on this page is compiled against Confluent.Kafka 2 and RabbitMQ.Client 7 on every change to this site. Its Nino side (`NinoKafkaSerializer`, the publisher's buffer, the batches below) was run in a test without a broker; the broker connections themselves (`BootstrapServers`, `ConnectionFactory`, queues and exchanges) were not, so check those settings against your broker's documentation.
+
+</Callout>
 
 ## Batching [#batching]
 

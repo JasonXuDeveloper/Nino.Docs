@@ -124,15 +124,58 @@ public sealed class NinoHybridSerializer<T> : IHybridCacheSerializer<T>
 }
 ```
 
-```csharp
-// registration
-services.AddHybridCache()
-    .AddSerializer<UserProfile, NinoHybridSerializer<UserProfile>>();
-```
-
-- Register one serializer per cached type.
+- Register one serializer per cached type, with `AddSerializer` (see [Register Them](#registration)).
 - `HybridCache`'s buffer writer is not a `NinoArrayBufferWriter`, so Nino serializes into its per-thread scratch buffer and copies the result in once. Nothing is allocated per call.
 - Calls inside the generic serializer are not [intercepted](/en/docs/v4/performance#interceptors), because `T` is a type parameter there; they take the regular path, a few nanoseconds more per call.
+
+## Register Them [#registration]
+
+The three adapters above need their clients registered in the host. With the packages
+
+```shell
+dotnet add package Nino --prerelease
+dotnet add package StackExchange.Redis
+dotnet add package Microsoft.Extensions.Caching.StackExchangeRedis
+dotnet add package Microsoft.Extensions.Caching.Hybrid
+```
+
+an ASP.NET Core host that uses all three looks like this (keep the ones you use):
+
+```csharp title="Program.cs"
+using System.Threading;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.DependencyInjection;
+using StackExchange.Redis;
+
+var builder = WebApplication.CreateBuilder(args);
+const string redis = "localhost:6379";
+
+// StackExchange.Redis directly: one multiplexer for the process
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redis));
+builder.Services.AddSingleton<RedisProfileCache>();
+
+// IDistributedCache on Redis
+builder.Services.AddStackExchangeRedisCache(options => options.Configuration = redis);
+
+// HybridCache: memory in front of that IDistributedCache, with Nino for the profiles
+builder.Services.AddHybridCache()
+    .AddSerializer<UserProfile, NinoHybridSerializer<UserProfile>>(); // [!code highlight]
+
+var app = builder.Build();
+app.MapGet("/profiles/{id}", (long id, HybridCache cache, CancellationToken ct) =>
+    cache.GetOrCreateAsync($"profile:v1:{id}", token => LoadProfileAsync(id, token), cancellationToken: ct));
+app.MapGet("/profiles/{id}/stored", (long id, IDistributedCache cache, CancellationToken ct) =>
+    cache.GetNinoAsync<UserProfile>($"profile:v1:{id}", ct));
+app.Run();
+```
+
+<Callout type="info" title="What this code was tested against">
+
+The C# on this page is compiled against StackExchange.Redis 3, Microsoft.Extensions.Caching.StackExchangeRedis 10 and Microsoft.Extensions.Caching.Hybrid 10 on every change to this site. `DistributedCacheExtensions`, `NinoHybridSerializer` and `BlobCache` were run in a test, with an in-memory `IDistributedCache` standing in for Redis behind two `HybridCache` instances; `RedisProfileCache` and the Redis connection were not run, so check those settings against the Redis documentation.
+
+</Callout>
 
 ## In-Process Blob Caches [#in-process-blob-caches]
 

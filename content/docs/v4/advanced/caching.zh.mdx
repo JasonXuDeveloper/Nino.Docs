@@ -124,15 +124,58 @@ public sealed class NinoHybridSerializer<T> : IHybridCacheSerializer<T>
 }
 ```
 
-```csharp
-// registration
-services.AddHybridCache()
-    .AddSerializer<UserProfile, NinoHybridSerializer<UserProfile>>();
-```
-
-- 每个缓存的类型注册一个序列化器。
+- 每个缓存的类型用 `AddSerializer` 注册一个序列化器（见[注册](#registration)）。
 - `HybridCache` 提供的缓冲区写入器不是 `NinoArrayBufferWriter`，所以 Nino 先序列化到每个线程的暂存缓冲区，再一次性复制进去。每次调用都不分配内存。
 - 泛型序列化器内部的调用不会被[拦截](/zh/docs/v4/performance#interceptors)，因为那里的 `T` 是类型参数；它们走常规路径，每次调用多花几纳秒。
+
+## 注册 [#registration]
+
+上面三个适配器都需要在宿主里注册对应的客户端。装好这些包：
+
+```shell
+dotnet add package Nino --prerelease
+dotnet add package StackExchange.Redis
+dotnet add package Microsoft.Extensions.Caching.StackExchangeRedis
+dotnet add package Microsoft.Extensions.Caching.Hybrid
+```
+
+三者都用的 ASP.NET Core 宿主是这样的（只留你用到的）：
+
+```csharp title="Program.cs"
+using System.Threading;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.DependencyInjection;
+using StackExchange.Redis;
+
+var builder = WebApplication.CreateBuilder(args);
+const string redis = "localhost:6379";
+
+// 直接用 StackExchange.Redis：整个进程一个 multiplexer
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redis));
+builder.Services.AddSingleton<RedisProfileCache>();
+
+// 基于 Redis 的 IDistributedCache
+builder.Services.AddStackExchangeRedisCache(options => options.Configuration = redis);
+
+// HybridCache：在这个 IDistributedCache 前面加一层内存缓存，用户资料用 Nino 读写
+builder.Services.AddHybridCache()
+    .AddSerializer<UserProfile, NinoHybridSerializer<UserProfile>>(); // [!code highlight]
+
+var app = builder.Build();
+app.MapGet("/profiles/{id}", (long id, HybridCache cache, CancellationToken ct) =>
+    cache.GetOrCreateAsync($"profile:v1:{id}", token => LoadProfileAsync(id, token), cancellationToken: ct));
+app.MapGet("/profiles/{id}/stored", (long id, IDistributedCache cache, CancellationToken ct) =>
+    cache.GetNinoAsync<UserProfile>($"profile:v1:{id}", ct));
+app.Run();
+```
+
+<Callout type="info" title="这些代码测试过什么">
+
+本页的 C# 代码，在本站每次改动时都会针对 StackExchange.Redis 3、Microsoft.Extensions.Caching.StackExchangeRedis 10 和 Microsoft.Extensions.Caching.Hybrid 10 编译。`DistributedCacheExtensions`、`NinoHybridSerializer` 和 `BlobCache` 在测试中运行过，两个 `HybridCache` 实例后面接的是代替 Redis 的内存版 `IDistributedCache`；`RedisProfileCache` 和 Redis 连接没有运行过，这些设置请对照 Redis 的文档检查。
+
+</Callout>
 
 ## 进程内的序列化数据缓存 [#in-process-blob-caches]
 
