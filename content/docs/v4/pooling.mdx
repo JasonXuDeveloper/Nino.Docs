@@ -12,6 +12,18 @@ icon: Recycle
 
 Deserializing a class normally allocates a new object graph on every call. With **reuse deserialization**, Nino v4 fills the objects you already have and takes any new ones from a pool, so a steady stream of messages or frames is deserialized with **0 B** allocated.
 
+## Which Reuse Mechanism [#which-mechanism]
+
+Nino has three ways to avoid allocating what it reads. They answer different questions, and they combine:
+
+| Mechanism | Fits | What it costs |
+| --- | --- | --- |
+| [Deserialize by `ref`](#deserializing-into-existing-instances) | A value you keep and read into again and again (a snapshot, a batch, the last message of a connection), handled before the next read | Nothing to declare. The instance is yours: no other code may hold it while the next message is read into it, and only the same type is filled in place (a slot whose type changes gets a new instance). |
+| [`[NinoPooled]`](#ninopooled) | Instances Nino creates: list elements that come and go, members that turn from `null` to a value, messages you hand to other code and give back when it is done | The class is `sealed` and `partial` with two partial methods (NINO018, NINO002, NINO019). You call `ReturnToPool()` once for each instance you take out of Nino's hands (a second call throws); each pool keeps up to 64 instances per thread and 256 shared. |
+| [`[NinoFactory]`](#creating-instances-with-ninofactory) and [`SetRecycler<T>`](#why-setrecycler) | Pools you already have (a framework's own pooled lists, an entity system), or types that cannot be `[NinoPooled]` (not sealed, or a collection) | A factory method per type, and a recycler per declared type registered at startup, before the first call. A recycler applies to every slot of its type, so only objects owned by the deserialized graph may pass through it. |
+
+Most hot paths use the first two together: deserialize by `ref` into the root, and mark the classes its lists and members create `[NinoPooled]`, as the [example](#example) below does.
+
 ## Deserializing into Existing Instances
 
 `NinoDeserializer.Deserialize(data, ref value)` (or `Deserialize(ref value, ref reader)` with your own `Reader`) populates an existing value in place:

@@ -136,7 +136,7 @@ NinoDeserializer.Deserialize(payload, ref batch);   // later calls fill it: 0 B
 - 内容不变的字符串会直接保留，不产生分配；内容变化时读成新字符串。非 ASCII 的 `[NinoUtf8]` 文本无论是否变化，每次都会解码成新字符串。
 - 已有实例被**丢弃**时（数据中为 `null`、列表变短、某个键消失、多态类型改变），存放它的成员或元素所对应的[回收器](/zh/docs/v4/pooling#where-dropped-instances-go)会收到它（只收一次），而不是让它被悄悄覆盖掉。正因如此，复用反序列化才能安全地和对象池配合使用；参见[复用反序列化与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
 
-外层的循环怎么写、如何让字符串和条数变化不再分配内存，见[复用反序列化的结果](/zh/docs/v4/advanced/zero-allocation#reuse-what-you-deserialize)。
+外层的循环怎么写、如何让字符串和条数变化不再分配内存，见[复用反序列化的结果](/zh/docs/v4/advanced/zero-allocation#reuse-what-you-deserialize)。什么时候按 `ref` 填充、什么时候用对象池、什么时候用自己的池，见[选哪种复用方式](/zh/docs/v4/pooling#which-mechanism)。
 
 ## 池化新建的对象 [#pool-what-you-create]
 

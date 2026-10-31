@@ -192,7 +192,7 @@ while (TryReceive(out ReadOnlySpan<byte> frame))
 - 每条消息都会变化的文本，每次都要分配新字符串，所以必须保持 0 B 的数据里，会变化的值应使用数字或 id，而不是文本。
 - Nino 需要新建的类（列表变长、`null` 成员有了值）标记为 [`[NinoPooled]`](/zh/docs/v4/advanced/high-performance#pool-what-you-create)，这样新实例从对象池里取，被丢弃的实例也会回到池中。
 
-[零 GC 状态同步示例](/zh/docs/v4/pooling#example)把这些做法组合在了一起。
+[零 GC 状态同步示例](/zh/docs/v4/pooling#example)把这些做法组合在了一起；按 `ref` 填充、`[NinoPooled]` 和自己的对象池怎么选，见[选哪种复用方式](/zh/docs/v4/pooling#which-mechanism)。
 
 ## 分帧读写流，不按消息分配 [#framed-streams]
 
