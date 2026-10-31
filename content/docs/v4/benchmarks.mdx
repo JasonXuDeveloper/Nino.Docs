@@ -17,7 +17,7 @@ icon: ChartColumn
   }}
 />
 
-This page has every benchmark number the documentation quotes, the code that produces them, and how to run it yourself. Other pages summarize these results and link here. Go, Rust and TypeScript have [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes), and Unity's Burst kernels the [Unity Benchmark](/en/docs/v4/perf-unity); [SIMD on Every Platform](/en/docs/v4/simd) says which vector paths each of them measures.
+This page has every benchmark number the documentation quotes, the code that produces them, and how to run it yourself. Other pages summarize these results and link here. Go, Rust and TypeScript have [Benchmarks in Other Languages](/en/docs/v4/benchmarks-runtimes), and Unity's Burst kernels the [Unity Benchmark](/en/docs/v4/benchmarks-unity); [SIMD on Every Platform](/en/docs/v4/simd) says which vector paths each of them measures.
 
 ## What Is Compared [#what-is-compared]
 
@@ -27,7 +27,7 @@ This page has every benchmark number the documentation quotes, the code that pro
 | Nino v3 **3.3.13** | The last release of the v3 API, the version you would upgrade from | Runtime, back to back with v4 on the same machine (the **v4 vs v3** column of the runtime tables), and [build time](#build-time-and-generated-code) |
 | [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) **3.1.12** and [protobuf-net](https://github.com/protobuf-net/protobuf-net) **3.4.30** | The most common binary format in .NET, and the most common Protocol Buffers library for .NET | Runtime, in the same BenchmarkDotNet run, in every case where the format can write the same data: a column each in the runtime tables, a row each in [All Measurements](#results) (see [MessagePack and protobuf-net](#messagepack-and-protobuf-net)). Release reports before they joined the benchmark have no rows for them, and the tables then show Nino and MemoryPack only |
 
-Absolute times depend on the machine; compare the ratios. For Nino in Go, Rust and TypeScript against Protocol Buffers, MessagePack and each language's usual serializers, see [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes). For features rather than speed, see [Nino vs MemoryPack](/en/docs/v4/vs-memorypack) and [v3 vs v4](/en/docs/v4/v3-vs-v4).
+Absolute times depend on the machine; compare the ratios. For Nino in Go, Rust and TypeScript against Protocol Buffers, MessagePack and each language's usual serializers, see [Benchmarks in Other Languages](/en/docs/v4/benchmarks-runtimes). For features rather than speed, see [Nino vs MemoryPack](/en/docs/v4/vs-memorypack) and [v3 vs v4](/en/docs/v4/v3-vs-v4).
 
 ## How It Is Measured [#setup]
 
@@ -965,5 +965,5 @@ dotnet run -c Release --project benchmarks/Nino.GeneratorBenchmark -- 30 8
 
 - `benchmarks/run.sh` builds `benchmarks/v3` (the same `SimpleTest` against Nino 3.3.13 from NuGet) and runs it directly before v4. It prints **v4 vs v3** for each case.
 - Every release runs the same protocol in CI, with the benchmark classes split over ten runners per architecture (v3 runs directly before `SimpleTest` on its runner), and publishes the result in the release notes: the Performance Report, and a **v3 3.3.13 vs v4 (same machine)** section. This site takes its runtime numbers from the newest v4 release that has them.
-- The Go, Rust and TypeScript benchmarks run in the same release workflow; how to run them is in [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#reproducing).
+- The Go, Rust and TypeScript benchmarks run in the same release workflow; how to run them is in [Benchmarks in Other Languages](/en/docs/v4/benchmarks-runtimes#reproducing).
 - `benchmarks/members` takes `SimpleClass` apart member by member, against v3 and v4, to find which member a case spends its time on. See the [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks).

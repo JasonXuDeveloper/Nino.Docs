@@ -566,7 +566,7 @@ export function parseUnitySection(body: string) {
 
   // The first paragraph: a line per Unity version (player, machine, Burst,
   // kernels) and the sentence on the columns. The paragraph after it (the
-  // tag and how the player is measured) is what perf-unity explains itself.
+  // tag and how the player is measured) is what benchmarks-unity explains itself.
   const intro = (
     parts[0]
       .slice(unityHeading.length)

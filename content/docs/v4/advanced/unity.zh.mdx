@@ -78,7 +78,7 @@ Unity 运行的是 `Nino.Core` 的 netstandard 构建，其中没有硬件内联
 
 **x64 播放器：启用 SSE4 和 AVX2。** Burst 为 **Edit > Project Settings > Burst AOT Settings** 中的每个 x64 CPU 目标各编译一次播放器代码，启动时选出 CPU 能运行的版本。AVX2 目标让支持 AVX2 的 CPU 使用 32 字节置换；SSE4 目标让支持 SSSE3 但不支持 AVX2 的 CPU 使用 16 字节内核。SSE2 版本没有字节重排，所以没有 SSE4 目标时，这类 CPU 完全用不上内核。默认的目标列表因 Burst 版本而异（1.8.29 的是 SSE2 和 AVX2），所以请确认其中包含 SSE4 和 AVX2，Nino 自己的测试工程就是这样设置的（SSE2、SSE4 和 AVX2）。
 
-**字节相同。** 每个内核写出的字节与它替代的标量路径完全相同，因此有 Burst 和没有 Burst 的播放器、.NET 服务器以及 [Go、Rust 和 TypeScript 运行时](/zh/docs/v4/advanced/codegen)都能互相读取对方的数据。Nino 的 CI 在编辑器和 IL2CPP 播放器中、在 Unity 2022.3 和 6000.3 上逐字节比较每个内核与它的标量参考实现。[Unity 基准测试](/zh/docs/v4/perf-unity)在每个版本中对 IL2CPP 播放器分别在使用和不用内核时计时。
+**字节相同。** 每个内核写出的字节与它替代的标量路径完全相同，因此有 Burst 和没有 Burst 的播放器、.NET 服务器以及 [Go、Rust 和 TypeScript 运行时](/zh/docs/v4/advanced/codegen)都能互相读取对方的数据。Nino 的 CI 在编辑器和 IL2CPP 播放器中、在 Unity 2022.3 和 6000.3 上逐字节比较每个内核与它的标量参考实现。[Unity 基准测试](/zh/docs/v4/benchmarks-unity)在每个版本中对 IL2CPP 播放器分别在使用和不用内核时计时。
 
 要在运行时检查或切换内核，使用 `Nino.Burst.NinoBurst` 类（你自己的程序集定义中的代码需要引用 `Nino.Burst` 程序集定义才能调用它）：
 

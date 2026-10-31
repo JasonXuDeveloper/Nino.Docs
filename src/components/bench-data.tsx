@@ -703,7 +703,7 @@ export function UnityHighlights({
   const zh = lang === 'zh';
   if (unity.length === 0) return null;
   // The Markdown copies link absolutely, as src/lib/markdown.tsx does for MDX links.
-  const page = `${markdown ? siteUrl : ''}/${zh ? 'zh' : 'en'}/docs/v4/perf-unity`;
+  const page = `${markdown ? siteUrl : ''}/${zh ? 'zh' : 'en'}/docs/v4/benchmarks-unity`;
   const keys: { case: string; operation: string }[] = [];
   const seen = new Set<string>();
   for (const version of unity)

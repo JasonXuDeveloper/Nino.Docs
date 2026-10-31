@@ -30,11 +30,11 @@ Unity loads the netstandard build of `Nino.Core`. With `com.unity.burst` 1.8 or 
 
 | Hardware | Vector paths | Benchmark |
 | --- | --- | --- |
-| x64 with AVX2, Burst AVX2 target | `Permute` for blocks of 256 values or more of up to 16 bytes: two or more values per 32-byte vector, one `vpshufb` mask, lanes joined with `vpermd` or stored as two 16-byte halves; the rest, wider values and strings take the SSSE3 paths below | [Unity benchmark](/en/docs/v4/perf-unity) |
-| x86 and x64 with SSSE3 (in x64 players, the SSE4 target) | `Permute`: arrays and lists of 2 or more tuples, pairs and blocked `[NinoType]` structs written and read with one byte shuffle (`pshufb`) per 16 bytes, and 16 or more raw structs with padding copied with it cleared; `Narrow` and `Widen`: Latin-1 strings of 16 chars or more, 16 chars at a time; `NarrowAscii` and `WidenAscii`: the ASCII text of `[NinoUtf8]` strings of 16 chars or more, up to the first other char, which .NET's UTF-8 encoder and strict decoder take from there | [Unity benchmark](/en/docs/v4/perf-unity) |
+| x64 with AVX2, Burst AVX2 target | `Permute` for blocks of 256 values or more of up to 16 bytes: two or more values per 32-byte vector, one `vpshufb` mask, lanes joined with `vpermd` or stored as two 16-byte halves; the rest, wider values and strings take the SSSE3 paths below | [Unity benchmark](/en/docs/v4/benchmarks-unity) |
+| x86 and x64 with SSSE3 (in x64 players, the SSE4 target) | `Permute`: arrays and lists of 2 or more tuples, pairs and blocked `[NinoType]` structs written and read with one byte shuffle (`pshufb`) per 16 bytes, and 16 or more raw structs with padding copied with it cleared; `Narrow` and `Widen`: Latin-1 strings of 16 chars or more, 16 chars at a time; `NarrowAscii` and `WidenAscii`: the ASCII text of `[NinoUtf8]` strings of 16 chars or more, up to the first other char, which .NET's UTF-8 encoder and strict decoder take from there | [Unity benchmark](/en/docs/v4/benchmarks-unity) |
 | Arm64 (Neon) | the same kernels with `tbl`, and `uzp1`/`zip` for strings | — |
 | WebGL built with WebAssembly SIMD (Unity 6's Target WebAssembly 2023, or `-msimd128` on 2022.3) | no Burst there: the same kernels in C (`Nino.WebGL`) with `i8x16.swizzle` and vector narrowing and widening, for Latin-1 strings and the ASCII text of `[NinoUtf8]` strings of 16 chars or more and 32 values or more of the rest. See [WebGL](/en/docs/v4/advanced/unity#webgl-kernels) | — |
-| Armv7, WebGL without SIMD, x86 and x64 without SSSE3 (or without the target that has it), IL2CPP and Mono players without Burst (install Burst for the kernels) | none: Nino's scalar netstandard paths; the same bytes | [Unity benchmark](/en/docs/v4/perf-unity), "Without Burst" |
+| Armv7, WebGL without SIMD, x86 and x64 without SSSE3 (or without the target that has it), IL2CPP and Mono players without Burst (install Burst for the kernels) | none: Nino's scalar netstandard paths; the same bytes | [Unity benchmark](/en/docs/v4/benchmarks-unity), "Without Burst" |
 
 ## Go [#go]
 
@@ -42,10 +42,10 @@ The Go runtime's vector code is assembly for strings, one kernel per instruction
 
 | Hardware | Vector paths | Benchmark |
 | --- | --- | --- |
-| amd64 with AVX-512 (F, BW, VL, VBMI2) | the writer 32 bytes at a time with masked loads and compress instructions, no tables; with VBMI too, the reader converts Latin-1 and UTF-16 to UTF-8 with AVX-512 | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#go), string cases |
-| amd64 with AVX2 (and POPCNT) | the writer 32 bytes at a time; the reader takes the SSSE3 kernels | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#go) |
+| amd64 with AVX-512 (F, BW, VL, VBMI2) | the writer 32 bytes at a time with masked loads and compress instructions, no tables; with VBMI too, the reader converts Latin-1 and UTF-16 to UTF-8 with AVX-512 | [Benchmarks in Other Languages](/en/docs/v4/benchmarks-runtimes#go), string cases |
+| amd64 with AVX2 (and POPCNT) | the writer 32 bytes at a time; the reader takes the SSSE3 kernels | [Benchmarks in Other Languages](/en/docs/v4/benchmarks-runtimes#go) |
 | amd64 with SSSE3 | the writer and the reader 16 bytes at a time with `PSHUFB` and `PALIGNR` | — |
-| arm64 (NEON) | the writer and the reader 16 bytes at a time; the writer does in scalar registers what needs no vector (the ASCII test of a block, the movemask) | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#go), Arm64 |
+| arm64 (NEON) | the writer and the reader 16 bytes at a time; the writer does in scalar registers what needs no vector (the ASCII test of a block, the movemask) | [Benchmarks in Other Languages](/en/docs/v4/benchmarks-runtimes#go), Arm64 |
 | amd64 without SSSE3, every other platform, or built with `-tags purego` | none: Go loops over 8-byte words (long runs of ASCII copied or widened 16 bytes at a time with SSE2 or NEON); the same bytes | — |
 
 ## Rust [#rust]
@@ -54,11 +54,11 @@ The Rust crate's vector code is in `src/simd.rs` and its submodules `simd/x86.rs
 
 | Hardware | Vector paths | Benchmark |
 | --- | --- | --- |
-| x86_64 with AVX-512 (F, BW, VL, VBMI2; crate built with Rust 1.89 or later) | writes 64 bytes a step with masked loads and stores, packed by `vpcompressb`/`vpcompressw`; reads Latin-1 of 32 bytes or more and UTF-16 of 24 units or more with AVX-512 | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust), string cases |
-| x86_64 with AVX2 (and BMI1, BMI2, LZCNT) | writes in 32-byte windows | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust) |
-| x86_64 with SSE4.1 | writes in 16-byte windows; reads UTF-16 of 24 units or more (Latin-1 with SSSE3) | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust) |
-| x86_64 with SSSE3 or SSE2 only | text up to 64 bytes char by char, longer text 16 bytes a block (SSSE3 for two-byte chars in text of 48 bytes or more) | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust) |
-| Arm64, little-endian (NEON) | writes text over 64 bytes in 32-byte windows, runs of three-byte chars (CJK) 48 bytes a step (`ld3`), shorter text char by char; reads Latin-1 of 32 bytes or more and UTF-16 of 24 units or more | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#rust) |
+| x86_64 with AVX-512 (F, BW, VL, VBMI2; crate built with Rust 1.89 or later) | writes 64 bytes a step with masked loads and stores, packed by `vpcompressb`/`vpcompressw`; reads Latin-1 of 32 bytes or more and UTF-16 of 24 units or more with AVX-512 | [Benchmarks in Other Languages](/en/docs/v4/benchmarks-runtimes#rust), string cases |
+| x86_64 with AVX2 (and BMI1, BMI2, LZCNT) | writes in 32-byte windows | [Benchmarks in Other Languages](/en/docs/v4/benchmarks-runtimes#rust) |
+| x86_64 with SSE4.1 | writes in 16-byte windows; reads UTF-16 of 24 units or more (Latin-1 with SSSE3) | [Benchmarks in Other Languages](/en/docs/v4/benchmarks-runtimes#rust) |
+| x86_64 with SSSE3 or SSE2 only | text up to 64 bytes char by char, longer text 16 bytes a block (SSSE3 for two-byte chars in text of 48 bytes or more) | [Benchmarks in Other Languages](/en/docs/v4/benchmarks-runtimes#rust) |
+| Arm64, little-endian (NEON) | writes text over 64 bytes in 32-byte windows, runs of three-byte chars (CJK) 48 bytes a step (`ld3`), shorter text char by char; reads Latin-1 of 32 bytes or more and UTF-16 of 24 units or more | [Benchmarks in Other Languages](/en/docs/v4/benchmarks-runtimes#rust) |
 | 32-bit targets, WebAssembly, big-endian | none: two 8-byte words a block; the same bytes | — |
 
 ## TypeScript [#typescript]
@@ -68,5 +68,5 @@ The TypeScript runtime reads and writes with `DataView` and typed arrays. Its ve
 | Engine | Vector paths | Benchmark |
 | --- | --- | --- |
 | Browsers and Deno with WebAssembly SIMD, GC and the JS String Builtins | longer UTF-16 and Latin-1 text read, and text of more than 64 chars written, 8 or 16 chars at a time in SIMD registers (`useWasm(false)` turns it off) | — |
-| Node, Bun, Deno with Node's `Buffer` | none of Nino's: `Buffer`'s native Latin-1 and UTF-16 methods | [Benchmarks in Other Languages](/en/docs/v4/perf-runtimes#typescript) |
+| Node, Bun, Deno with Node's `Buffer` | none of Nino's: `Buffer`'s native Latin-1 and UTF-16 methods | [Benchmarks in Other Languages](/en/docs/v4/benchmarks-runtimes#typescript) |
 | Engines without them, or a Content Security Policy that blocks compiling WebAssembly | none: the JavaScript paths and the engine's built-in decoders; the same bytes | — |
