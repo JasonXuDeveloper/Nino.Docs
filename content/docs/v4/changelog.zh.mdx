@@ -88,6 +88,7 @@ icon: RotateCcwClock
 - **不可信数据**：带 `bool` 项的值元组和 `KeyValuePair` 的数组和列表，无论不是 0 或 1 的 bool 字节在哪个位置、在什么 CPU 上，都会被拒绝；.NET 8+ 的向量读取路径（AVX-512、AVX2、SSSE3、Arm64、WebAssembly）以前视指令集和位置会接受其中一部分。参见[会被拒绝的数据](/zh/docs/v4/security#what-is-rejected)。
 - **不可信数据**：嵌套包含自身的集合类型（`class Tree : List<Tree>`）超过深度限制的数据，现在抛出 `NinoDataException`，不再栈溢出；运行时为这类类型构建格式化器时也不再栈溢出。参见[无效数据](/zh/docs/v4/basic#invalid-data)。
 - **不可信数据**：再次读到同一个未知类型 ID（损坏、恶意或过期的数据）时，不再每次都搜索所有注册表和已加载的程序集；声明该 ID 的程序集一加载或注册就能找到。参见[其他程序集中的子类型](/zh/docs/v4/polymorphism#subtypes-in-other-assemblies)。
+- **不可信数据**：在 .NET 8 及更高版本上，从数据读出的 `CultureInfo` 不会再让进程内存无限增长（.NET 会在进程生命周期内保留它创建的每个区域性，而且此前接受任何格式正确的名称）：只有运行时自带的区域性才能读回，包括 `zh-CN` 这样的别名。自定义区域性和带 `-u-`、`-x-` 扩展的名称现在属于无效数据（`NinoDataException`），在固定（invariant）全球化模式下只有固定区域性能读回；.NET Framework、Mono 和 Unity 不变。参见[其他内置类型](/zh/docs/v4/types#other-built-in-types)。
 - 序列化通过包含自身的结构体或集合（或包含自己的集合）嵌套超过 `NinoSettings.MaxDepth` 的对象图时，抛出 `InvalidOperationException`，不再栈溢出。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
 - 写出的对象图如果在记录（或其他 Nino 不能推迟的类）外围嵌套包含自身的结构体，两者合计超过 `NinoSettings.MaxDepth` 时抛出 `InvalidOperationException`，不再写出连它自己的读取器都会拒绝的数据。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
 - 八项及以上的值元组可以作为生成代码从未见过其封闭形式的泛型 `[NinoType]` 的类型实参；Nino.Core 以前对它抛出“no formatter”。写出的字节与生成代码为这种元组写出的相同。参见[可序列化的类型](/zh/docs/v4/types#serializable-types)。
