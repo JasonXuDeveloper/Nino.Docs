@@ -142,7 +142,7 @@ npx skills add JasonXuDeveloper/Nino
 
 ### 给类型加上 `[NinoType]` [#mark-a-type-with-ninotype]
 
-```csharp
+```csharp title="UserProfile.cs"
 using Nino.Core;
 
 [NinoType]
@@ -154,12 +154,16 @@ public class UserProfile
 }
 ```
 
+把类型放在单独的文件里。如果想写在控制台程序的 `Program.cs` 里，就放在顶级语句之后：C# 要求类型声明出现在顶级语句后面（否则报 CS8803）。
+
 </Step>
 <Step>
 
 ### 序列化 [#serialize-it]
 
-```csharp
+```csharp title="Program.cs"
+using Nino.Core;
+
 var data = new UserProfile { Id = 42, Name = "Ada", LastLogin = DateTime.UtcNow };
 byte[] bytes = NinoSerializer.Serialize(data);
 ```
@@ -173,6 +177,7 @@ byte[] bytes = NinoSerializer.Serialize(data);
 
 ```csharp
 UserProfile restored = NinoDeserializer.Deserialize<UserProfile>(bytes);
+Console.WriteLine($"{restored.Id} {restored.Name}"); // 42 Ada
 ```
 
 数据的类型是 `ReadOnlySpan<byte>`，所以也可以直接传入池化数组或网络缓冲区的一个切片，无需拷贝。
@@ -185,6 +190,8 @@ UserProfile restored = NinoDeserializer.Deserialize<UserProfile>(bytes);
 用 `ref` 传入已有实例，Nino 会原地填充它，并复用其中的嵌套对象和集合；传入 `null` 则创建新实例：
 
 ```csharp
+byte[] newBytes = NinoSerializer.Serialize(new UserProfile { Id = 42, Name = "Ada Lovelace" });
+
 UserProfile current = null;
 NinoDeserializer.Deserialize(bytes, ref current);    // creates the instance
 NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
@@ -192,6 +199,12 @@ NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
 
 </Step>
 </Steps>
+
+<Callout type="info">
+
+后面各页的例子默认已经有 `using Nino.Core;`（也可以在项目里写一次 `global using Nino.Core;`），并且省略了可空注解。新建的 .NET 项目默认开启可空引用类型，照抄会看到 CS8618、CS8600 之类的警告：按需写成 `string? Name`、`UserProfile? current = null` 即可，Nino 对两种写法读写的字节完全相同。
+
+</Callout>
 
 ## 启动时 [#at-startup]
 

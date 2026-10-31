@@ -15,6 +15,27 @@ icon: Play
 
 `NinoSerializer` 和 `NinoDeserializer`（命名空间 `Nino.Core`）就是全部的运行时 API。两者都是静态类，并且**线程安全**：可以在任意多个线程上同时调用，无需加锁。每次调用用到的临时状态（暂存缓冲区、引用表）按线程保存，热路径上不会写共享内存。
 
+本页的例子序列化下面这个 `Order`：
+
+```csharp title="Order.cs"
+using Nino.Core;
+
+[NinoType]
+public sealed class Order
+{
+    public long Id;
+    public string Customer;
+    public List<OrderLine> Lines;
+}
+
+[NinoType]
+public struct OrderLine
+{
+    public int ProductId;
+    public int Quantity;
+}
+```
+
 ## 序列化 [#serializing]
 
 ```csharp nocheck

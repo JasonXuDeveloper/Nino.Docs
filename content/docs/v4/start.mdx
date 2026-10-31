@@ -142,7 +142,7 @@ At compile time, the source generator writes a **formatter** for every `[NinoTyp
 
 ### Mark a type with `[NinoType]`
 
-```csharp
+```csharp title="UserProfile.cs"
 using Nino.Core;
 
 [NinoType]
@@ -154,12 +154,16 @@ public class UserProfile
 }
 ```
 
+Put the type in a file of its own. In a console app's `Program.cs`, it can also go after the top-level statements, never before them (CS8803).
+
 </Step>
 <Step>
 
 ### Serialize it
 
-```csharp
+```csharp title="Program.cs"
+using Nino.Core;
+
 var data = new UserProfile { Id = 42, Name = "Ada", LastLogin = DateTime.UtcNow };
 byte[] bytes = NinoSerializer.Serialize(data);
 ```
@@ -173,6 +177,7 @@ This allocates the returned array. On a hot path, serialize into a buffer you ke
 
 ```csharp
 UserProfile restored = NinoDeserializer.Deserialize<UserProfile>(bytes);
+Console.WriteLine($"{restored.Id} {restored.Name}"); // 42 Ada
 ```
 
 The data is a `ReadOnlySpan<byte>`, so a slice of a pooled array or a network buffer works too, without copying.
@@ -185,6 +190,8 @@ The data is a `ReadOnlySpan<byte>`, so a slice of a pooled array or a network bu
 Pass an existing instance by `ref` and Nino fills it in place, reusing its nested objects and collections. Pass `null` and a new one is created:
 
 ```csharp
+byte[] newBytes = NinoSerializer.Serialize(new UserProfile { Id = 42, Name = "Ada Lovelace" });
+
 UserProfile current = null;
 NinoDeserializer.Deserialize(bytes, ref current);    // creates the instance
 NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
@@ -192,6 +199,12 @@ NinoDeserializer.Deserialize(newBytes, ref current); // fills the same instance
 
 </Step>
 </Steps>
+
+<Callout type="info">
+
+The examples on the following pages assume `using Nino.Core;` (or one `global using Nino.Core;` in your project) and leave out nullable annotations. New .NET projects enable nullable reference types, so copied code shows warnings such as CS8618 and CS8600: declare `string? Name` or `UserProfile? current = null` where you want them gone. Nino writes and reads the same bytes either way.
+
+</Callout>
 
 ## At Startup
 

@@ -15,6 +15,27 @@ icon: Play
 
 `NinoSerializer` and `NinoDeserializer` (namespace `Nino.Core`) are the whole runtime API. Both are static and **thread safe**: call them from any number of threads without locking. Per-call state (the [scratch buffer](#terms) Nino serializes into, reference tables) is kept per thread, and no hot path writes shared memory.
 
+The examples on this page serialize an `Order` like this one:
+
+```csharp title="Order.cs"
+using Nino.Core;
+
+[NinoType]
+public sealed class Order
+{
+    public long Id;
+    public string Customer;
+    public List<OrderLine> Lines;
+}
+
+[NinoType]
+public struct OrderLine
+{
+    public int ProductId;
+    public int Quantity;
+}
+```
+
 ## Serializing
 
 ```csharp nocheck
