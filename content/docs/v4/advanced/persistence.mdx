@@ -83,6 +83,28 @@ public sealed class Profile
 
 Keep the attribute for as long as old files may still be opened. A build that predates the rename does not know the new name: it opens newer files without that value (and drops it if it saves the file again), so do not let users downgrade after it.
 
+## Change a Field's Type [#change-a-fields-type]
+
+No format tolerates a member whose type changes: the bytes of an `int` are not those of a `long`. In a keyed type, add a member under a new name, keep the old one to read old files, and move the value across after loading, using the version in your [file header](#add-a-file-header):
+
+```csharp
+[NinoType(format: NinoFormat.Keyed)]
+public sealed class PlayerStats
+{
+    public long TotalScore; // new in file version 4
+    public int Score;       // the int that versions up to 3 wrote: kept only to read their files
+}
+
+static void Upgrade(PlayerStats stats, int fileVersion)
+{
+    if (fileVersion < 4)
+        stats.TotalScore = stats.Score;
+    stats.Score = 0;        // new files carry it as 0; delete it once no version-3 file is left
+}
+```
+
+When whole classes change shape, keep the old ones under new names (`DocumentV3`), read each file with the classes its header version names, and convert in code. A sealed root such as `Document` is written without a type id, so renaming the old class does not change what it reads.
+
 ## Object Graphs
 
 By default every reference is written as its own copy. If several parts of a file point to the same object (a task that several others depend on, a parent link back up a tree), mark the shared types `trackReferences: true`:

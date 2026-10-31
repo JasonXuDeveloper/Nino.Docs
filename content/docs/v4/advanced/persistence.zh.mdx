@@ -83,6 +83,28 @@ public sealed class Profile
 
 只要旧文件还可能被打开，就要一直保留这个特性。改名之前的版本不认识新名称：它打开新文件时读不到这个值（再保存一次还会把它丢掉），所以改名之后不要让用户降级。
 
+## 修改字段类型 [#change-a-fields-type]
+
+没有哪种格式能容忍成员改类型：`int` 的字节不是 `long` 的字节。在键控类型里，用新名字加一个成员，保留旧成员用来读旧文件，加载后按[文件头](#add-a-file-header)中的版本把值搬过去：
+
+```csharp
+[NinoType(format: NinoFormat.Keyed)]
+public sealed class PlayerStats
+{
+    public long TotalScore; // 文件版本 4 新增
+    public int Score;       // 版本 3 及以前写的 int：只为读取旧文件而保留
+}
+
+static void Upgrade(PlayerStats stats, int fileVersion)
+{
+    if (fileVersion < 4)
+        stats.TotalScore = stats.Score;
+    stats.Score = 0;        // 新文件里它是 0；等不再有版本 3 的文件时删掉它
+}
+```
+
+如果整个类的结构都变了，就把旧类改个名字保留下来（`DocumentV3`），按文件头里的版本选择用哪套类读取，再在代码里转换。`Document` 这样的 sealed 根类型写入时不带类型 ID，所以给旧类改名不影响它读取的数据。
+
 ## 对象图 [#object-graphs]
 
 默认情况下，每个引用都各自写一份副本。如果文件里有多处指向同一个对象（被好几个任务依赖的任务、指回树上一层的父节点链接），就给这些共享的类型加上 `trackReferences: true`：
