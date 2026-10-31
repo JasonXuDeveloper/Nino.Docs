@@ -4,7 +4,7 @@ description: "Upgrade a Nino v3 project to v4 step by step: package changes, ren
 icon: ArrowRightLeft
 ---
 
-Nino v4 is a breaking release. This page lists every API, attribute and option that changed, with before/after code, and explains what to do with data written by v3. Upgrading from a v4 beta or preview instead? See [Upgrading from a v4 Beta](#upgrading-from-a-v4-beta). From an earlier release candidate: [Upgrading from an Earlier Release Candidate](#upgrading-from-an-earlier-release-candidate).
+Nino v4 is a breaking release. This page lists every API, attribute and option that changed, with before/after code, and explains what to do with data written by v3. Upgrading from a v4 beta or preview instead? See [Upgrading from a v4 Beta](#upgrading-from-a-v4-beta). From an earlier release candidate: [Upgrading from an Earlier Release Candidate](#upgrading-from-an-earlier-release-candidate). Coming from MemoryPack: [Switching from MemoryPack](/en/docs/v4/vs-memorypack#switching-from-memorypack).
 
 <Callout type="warn">
 
@@ -267,7 +267,7 @@ In the v4 application, import the neutral data and write it with `NinoSerializer
 </Step>
 <Step>
 
-If you cannot convert offline (for example, data stored on users' devices, such as local documents or app state), ship the converter logic with the application and mark new data with a **header** (a magic number or version byte). Data with the header is read with v4; data without it is converted once and saved again with v4.
+If you cannot convert offline (for example, data stored on users' devices, such as local documents, app state or game saves), convert on the device. Since one project cannot reference both versions, the v3 reader runs either in a **bridge release** still built on v3, which reads each file at startup and saves it again in the neutral form, for the v4 release to import; or, on .NET with a JIT (not Unity, Native AOT or other AOT platforms), in the v4 application itself, with the converter and Nino v3 loaded into their own `AssemblyLoadContext`. Either way, give the data v4 writes a **header** (a magic number and a version, see [Add a File Header](/en/docs/v4/advanced/persistence#add-a-file-header)): data with the header is read with v4, and data without it is converted once and saved again with v4. Users who skip the bridge release keep files no release can read, so keep it available for as long as old installs may update.
 
 </Step>
 </Steps>

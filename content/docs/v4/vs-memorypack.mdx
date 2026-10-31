@@ -163,3 +163,60 @@ The cost is 3 more bytes per polymorphic value. See [Polymorphism](/en/docs/v4/p
 Both are MIT licensed, source generated and AOT safe. If you are unsure, benchmark your own types: the [benchmark project](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark) runs Nino and MemoryPack side by side.
 
 </Callout>
+
+## Switching from MemoryPack [#switching-from-memorypack]
+
+Most of a MemoryPack codebase maps one to one:
+
+| MemoryPack | Nino |
+| --- | --- |
+| `[MemoryPackable] partial class` | `[NinoType] class`; `partial` only for [non-public members](/en/docs/v4/defining-types#private-members) before .NET 8 and for `[NinoPooled]` |
+| `[MemoryPackIgnore]` | `[NinoIgnore]` |
+| `[MemoryPackInclude]` on a non-public member | `[NinoType(includeNonPublicMembers: true)]` for every non-public member, or `[NinoType(false, true)]` with `[NinoMember(index)]` on each member to write |
+| `[MemoryPackOrder(n)]` | `[NinoType(false)]` with `[NinoMember(n)]` |
+| `[MemoryPackConstructor]` | `[NinoConstructor]` ([Constructors](/en/docs/v4/constructors)) |
+| `[MemoryPackUnion(tag, typeof(T))]` on the base | `[NinoType]` on the base: subtypes inherit it, with no tags ([Polymorphism](/en/docs/v4/polymorphism)) |
+| `GenerateType.VersionTolerant` | `format: NinoFormat.Keyed` (members by name, no order numbers), or `NinoFormat.VersionTolerant` for types that only grow ([Evolving Your Data](/en/docs/v4/evolving-data)) |
+| `GenerateType.CircularReference` | `trackReferences: true` ([Reference Tracking](/en/docs/v4/reference-tracking)) |
+| `GenerateType.Collection` | nothing: [your own collections](/en/docs/v4/types#user-collections) work as they are |
+| `[MemoryPackOnSerializing]` and the other callbacks | your own hooks around the call ([Callbacks](/en/docs/v4/advanced/streams#callbacks)) |
+| `MemoryPackSerializer.Serialize(value)` | `NinoSerializer.Serialize(value)` |
+| `MemoryPackSerializer.Serialize(bufferWriter, value)` | `NinoSerializer.Serialize(value, bufferWriter)`: the value comes first |
+| `MemoryPackSerializer.Deserialize<T>(bytes)`, `Deserialize(bytes, ref value)` | `NinoDeserializer.Deserialize<T>(bytes)`, `Deserialize(bytes, ref value)` |
+| `SerializeAsync(stream, value)`, `DeserializeAsync<T>(stream)` | a frame helper over the buffer API ([Async](/en/docs/v4/advanced/streams#async)) |
+| UTF-8 strings | one byte a char up to U+00FF, else UTF-16; `[NinoUtf8]` per member ([String Encoding](/en/docs/v4/defining-types#string-encoding)) |
+
+The two libraries write different bytes, so stored data has to be converted. Both can be installed in one project: keep both attributes on your types while you convert, read each stored value with MemoryPack and write it again with Nino, then remove MemoryPack. Mark the converted data with a [file header](/en/docs/v4/advanced/persistence#add-a-file-header) so that a later build knows which reader it needs. Messages between processes need no conversion: upgrade both ends together.
+
+```csharp title="Messages.cs"
+using MemoryPack;
+using Nino.Core;
+
+[MemoryPackable]
+[MemoryPackUnion(0, typeof(Ping))]
+[MemoryPackUnion(1, typeof(Chat))]
+[NinoType]                       // [!code ++]
+public partial interface IMessage { }
+
+[MemoryPackable]
+public sealed partial class Ping : IMessage
+{
+    public long SentAt { get; set; }
+}
+
+[MemoryPackable]
+public sealed partial class Chat : IMessage
+{
+    public string Text { get; set; }
+    [MemoryPackIgnore, NinoIgnore]   public int Cached;
+}
+```
+
+```csharp
+using MemoryPack;
+
+byte[] old = MemoryPackSerializer.Serialize<IMessage>(new Chat { Text = "hi" });
+IMessage message = MemoryPackSerializer.Deserialize<IMessage>(old); // what MemoryPack stored
+byte[] bytes = NinoSerializer.Serialize(message);                   // written again with Nino
+IMessage back = NinoDeserializer.Deserialize<IMessage>(bytes);      // a Chat
+```

@@ -4,7 +4,7 @@ description: "把 Nino v3 项目逐步升级到 v4：包的变化、改名的特
 icon: ArrowRightLeft
 ---
 
-Nino v4 是不向后兼容的大版本。本页列出所有变化的 API、特性和选项，附上修改前后的代码，并说明 v3 写出的数据该怎么处理。如果是从 v4 beta 或 preview 升级，请看[从 v4 beta 升级](#upgrading-from-a-v4-beta)；从更早的候选版本升级，请看[从更早的候选版本升级](#upgrading-from-an-earlier-release-candidate)。
+Nino v4 是不向后兼容的大版本。本页列出所有变化的 API、特性和选项，附上修改前后的代码，并说明 v3 写出的数据该怎么处理。如果是从 v4 beta 或 preview 升级，请看[从 v4 beta 升级](#upgrading-from-a-v4-beta)；从更早的候选版本升级，请看[从更早的候选版本升级](#upgrading-from-an-earlier-release-candidate)；从 MemoryPack 迁移，请看[从 MemoryPack 迁移](/zh/docs/v4/vs-memorypack#switching-from-memorypack)。
 
 <Callout type="warn">
 
@@ -267,7 +267,7 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 </Step>
 <Step>
 
-如果无法离线转换（例如数据保存在用户设备上，像本地文档或应用状态），就把转换逻辑随应用一起发布，并给新数据加上**文件头**（魔数或版本字节）。有文件头的数据用 v4 读取；没有的就转换一次，再用 v4 重新保存。
+如果无法离线转换（例如数据保存在用户设备上，像本地文档、应用状态或游戏存档），就在设备上转换。一个项目不能同时引用两个版本，所以 v3 的读取代码只能跑在两个地方之一：一是**过渡版本**，仍基于 v3 构建，启动时读取每个文件，再以中立格式重新保存，供 v4 版本导入；二是在 .NET 的 JIT 环境下（Unity、Native AOT 等 AOT 平台不行），在 v4 应用里把转换器和 Nino v3 加载到单独的 `AssemblyLoadContext` 中。无论哪种，都给 v4 写出的数据加上**文件头**（魔数和版本，参见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）：有文件头的数据用 v4 读取；没有的就转换一次，再用 v4 重新保存。跳过过渡版本的用户，手里的文件将没有任何版本能读，所以只要还有旧安装可能升级，就要一直保留过渡版本。
 
 </Step>
 </Steps>

@@ -163,3 +163,60 @@ MemoryPack 写入 1 字节的 Union 标签（超过 249 时 3 字节），Nino �
 两者都采用 MIT 许可证，都基于源生成，都可以放心用于 AOT。拿不定主意时，就用你自己的类型测一测：[基准测试项目](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)会把 Nino 和 MemoryPack 放在一起运行。
 
 </Callout>
+
+## 从 MemoryPack 迁移 [#switching-from-memorypack]
+
+MemoryPack 代码中的大部分写法都能一一对应：
+
+| MemoryPack | Nino |
+| --- | --- |
+| `[MemoryPackable] partial class` | `[NinoType] class`；只有 .NET 8 之前的[非公共成员](/zh/docs/v4/defining-types#private-members)和 `[NinoPooled]` 才需要 `partial` |
+| `[MemoryPackIgnore]` | `[NinoIgnore]` |
+| 非公共成员上的 `[MemoryPackInclude]` | `[NinoType(includeNonPublicMembers: true)]` 写出所有非公共成员；或者用 `[NinoType(false, true)]`，在每个要写的成员上加 `[NinoMember(index)]` |
+| `[MemoryPackOrder(n)]` | `[NinoType(false)]` 加 `[NinoMember(n)]` |
+| `[MemoryPackConstructor]` | `[NinoConstructor]` （[构造函数](/zh/docs/v4/constructors)） |
+| 基类型上的 `[MemoryPackUnion(tag, typeof(T))]` | 基类型上的 `[NinoType]`：子类型自动继承，不需要标签（[多态](/zh/docs/v4/polymorphism)） |
+| `GenerateType.VersionTolerant` | `format: NinoFormat.Keyed`（按名字识别成员，不需要序号）；只会追加成员的类型也可以用 `NinoFormat.VersionTolerant`（[数据演进](/zh/docs/v4/evolving-data)） |
+| `GenerateType.CircularReference` | `trackReferences: true`（[引用追踪](/zh/docs/v4/reference-tracking)） |
+| `GenerateType.Collection` | 不需要：[自定义集合](/zh/docs/v4/types#user-collections)直接可用 |
+| `[MemoryPackOnSerializing]` 等回调 | 在调用前后调用你自己的钩子（[回调](/zh/docs/v4/advanced/streams#callbacks)） |
+| `MemoryPackSerializer.Serialize(value)` | `NinoSerializer.Serialize(value)` |
+| `MemoryPackSerializer.Serialize(bufferWriter, value)` | `NinoSerializer.Serialize(value, bufferWriter)`：值在前 |
+| `MemoryPackSerializer.Deserialize<T>(bytes)`, `Deserialize(bytes, ref value)` | `NinoDeserializer.Deserialize<T>(bytes)`, `Deserialize(bytes, ref value)` |
+| `SerializeAsync(stream, value)`, `DeserializeAsync<T>(stream)` | 基于缓冲区 API 的帧辅助方法（[异步](/zh/docs/v4/advanced/streams#async)） |
+| UTF-8 字符串 | 所有字符都不超过 U+00FF 时每字符一个字节，否则 UTF-16；按成员用 `[NinoUtf8]`（[字符串编码](/zh/docs/v4/defining-types#string-encoding)） |
+
+两个库写出的字节不同，所以已经存下的数据需要转换。两个库可以装在同一个项目里：转换期间给类型同时保留两种特性，用 MemoryPack 读出每个存下的值，再用 Nino 写回，最后移除 MemoryPack。给转换后的数据加上[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)，以后的版本就知道该用哪个读取器。进程之间的消息不需要转换：两端同时升级即可。
+
+```csharp title="Messages.cs"
+using MemoryPack;
+using Nino.Core;
+
+[MemoryPackable]
+[MemoryPackUnion(0, typeof(Ping))]
+[MemoryPackUnion(1, typeof(Chat))]
+[NinoType]                       // [!code ++]
+public partial interface IMessage { }
+
+[MemoryPackable]
+public sealed partial class Ping : IMessage
+{
+    public long SentAt { get; set; }
+}
+
+[MemoryPackable]
+public sealed partial class Chat : IMessage
+{
+    public string Text { get; set; }
+    [MemoryPackIgnore, NinoIgnore]   public int Cached;
+}
+```
+
+```csharp
+using MemoryPack;
+
+byte[] old = MemoryPackSerializer.Serialize<IMessage>(new Chat { Text = "hi" });
+IMessage message = MemoryPackSerializer.Deserialize<IMessage>(old); // MemoryPack 存下的数据
+byte[] bytes = NinoSerializer.Serialize(message);                   // 用 Nino 重新写出
+IMessage back = NinoDeserializer.Deserialize<IMessage>(bytes);      // 一个 Chat
+```
