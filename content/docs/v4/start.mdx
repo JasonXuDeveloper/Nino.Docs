@@ -96,6 +96,23 @@ openupm add com.jasonxudeveloper.nino
 
 The package ships `Nino.Core.dll` together with the source generator (`Nino.Generator.dll`, labelled as a `RoslynAnalyzer`) and `Nino.UnityTypes.dll`, the formatters for [Unity's `AnimationCurve`, `Gradient` and `RectOffset`](/en/docs/v4/advanced/unity#unity-classes), so nothing else has to be installed. This is the generator's Roslyn 4.3 build, which matches the oldest compiler Unity supports, so calls are not [intercepted](/en/docs/v4/performance#interceptors) in Unity. They take the regular path and write the same bytes.
 
+#### OpenUPM Versions
+
+OpenUPM cannot order prerelease labels, so each release candidate is published to it as `4.0.0-preview.(200 + N)`: rc.N on NuGet and in these docs is preview.(200 + N) in the Unity Package Manager. A page that says "since rc.6" means preview.206 or later in Unity.
+
+| NuGet and these docs | OpenUPM (Unity) |
+|---|---|
+| 4.0.0-rc.8 | 4.0.0-preview.208 |
+| 4.0.0-rc.7 | 4.0.0-preview.207 |
+| 4.0.0-rc.6 | 4.0.0-preview.206 |
+| 4.0.0-rc.5 | 4.0.0-preview.205 |
+| 4.0.0-rc.4 | 4.0.0-preview.204 |
+| 4.0.0-rc.3 | 4.0.0-preview.203 |
+| 4.0.0-rc.2 | 4.0.0-preview.202 |
+| 4.0.0-rc.1 | 4.0.0-preview.201 |
+
+OpenUPM's alpha and beta previews below preview.200 are older v4 test builds; use an rc.
+
 Unity compiles against .NET Standard, which has no `[UnsafeAccessor]`. A type that serializes non-public members (or uses `[NinoPooled]`) must therefore be declared `partial`, and so must every type that contains it. The analyzer reports this (NINO002), and its code fix adds `partial` in Rider or Visual Studio.
 
 <Callout type="warn">
