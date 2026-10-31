@@ -210,16 +210,16 @@ When you rebuild while the editor is open, Godot unloads the project's assembly 
 - **Godot 4.4 and later (.NET 8):** the project gets Nino.Core's `net8.0` build. When the load context of an assembly with generated Nino code starts unloading, Nino clears everything it cached for that assembly: its registry, the formatters, type ids and raw memory layouts of its types, its polymorphic subtypes and its `[assembly: NinoFormatter]` registrations. There is nothing to do.
 - **Godot 4.0–4.3 (.NET 6):** the project gets the `netstandard2.1` build, which cannot see `AssemblyLoadContext`. `NinoRegistry.Remove(assembly)` does the same cleanup; call it when the context unloads:
 
-```csharp title="NinoReload.cs"
+```csharp title="UnloadCleanup.cs"
 using System.Runtime.Loader;
 using Nino.Core;
 
-public static class NinoReload
+public static class UnloadCleanup
 {
     /// <summary>Call once at startup: removes this assembly from Nino when its load context unloads.</summary>
     public static void Register()
     {
-        var assembly = typeof(NinoReload).Assembly;
+        var assembly = typeof(UnloadCleanup).Assembly;
         var context = AssemblyLoadContext.GetLoadContext(assembly);
         if (context is { IsCollectible: true })
             context.Unloading += _ => NinoRegistry.Remove(assembly);

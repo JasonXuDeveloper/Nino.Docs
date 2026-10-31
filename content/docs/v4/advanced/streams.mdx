@@ -10,7 +10,7 @@ Nino serializes into an `IBufferWriter<byte>` and deserializes from a `ReadOnlyS
 
 A stream has no message boundaries, so write each value as a frame: a 4-byte little-endian length, then the payload. `Writer` reserves the length slot, serializes the value after it and then patches in the length, all in one buffer:
 
-```csharp title="NinoStream.cs"
+```csharp title="StreamFrames.cs"
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
@@ -19,7 +19,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Nino.Core;
 
-public static partial class NinoStream
+public static partial class StreamFrames
 {
     public const int MaxFrameSize = 16 << 20; // reject absurd lengths before renting a buffer
 
@@ -45,8 +45,8 @@ public static partial class NinoStream
 
 Reading is the mirror image: read the 4-byte prefix, check the length, read exactly that many bytes, then deserialize. A stream may return fewer bytes than asked, so `Fill` loops until it has them all:
 
-```csharp title="NinoStream.cs"
-public static partial class NinoStream
+```csharp title="StreamFrames.cs"
+public static partial class StreamFrames
 {
     /// <summary>Reads the next frame into value (default: a new one). False at the end of the stream.</summary>
     public static bool TryRead<T>(Stream stream, ref T value)
@@ -114,10 +114,10 @@ public static partial class NinoStream
 ```csharp
 using var buffer = new NinoArrayBufferWriter(); // one per thread or connection
 using (var file = File.Create(path))
-    NinoStream.Write(file, checkpoint, buffer);
+    StreamFrames.Write(file, checkpoint, buffer);
 
 using (var file = File.OpenRead(path))
-    checkpoint = NinoStream.Read<Checkpoint>(file);
+    checkpoint = StreamFrames.Read<Checkpoint>(file);
 ```
 
 `TryRead` rents one pooled array per frame for the prefix and the payload, and deserializes into `value` in place: once `value` has the right shape, writing and reading a frame allocates nothing but the strings whose text changed. `Read` returns a new value each time.
@@ -126,7 +126,7 @@ A sequence of values (what `IAsyncEnumerable<T>` streaming gives you elsewhere) 
 
 ```csharp
 AuditEvent auditEvent = null;                   // filled in place by every frame
-while (NinoStream.TryRead(stream, ref auditEvent))
+while (StreamFrames.TryRead(stream, ref auditEvent))
     Index(auditEvent);
 ```
 
@@ -134,10 +134,10 @@ The frame format is the same as in the [network guide](/en/docs/v4/advanced/netw
 
 ## Async
 
-`Writer` is a `ref struct` and cannot live in an `async` method, so build the frame synchronously with `Frame`, then await the I/O. `WriteAsync` needs no `async` of its own: it returns the stream's task, so do not reuse the buffer until that has completed. Add these to `NinoStream`:
+`Writer` is a `ref struct` and cannot live in an `async` method, so build the frame synchronously with `Frame`, then await the I/O. `WriteAsync` needs no `async` of its own: it returns the stream's task, so do not reuse the buffer until that has completed. Add these to `StreamFrames`:
 
-```csharp title="NinoStream.cs"
-public static partial class NinoStream
+```csharp title="StreamFrames.cs"
+public static partial class StreamFrames
 {
     /// <summary>Do not reuse buffer until the returned task has completed.</summary>
     public static ValueTask WriteAsync<T>(Stream stream, T value, NinoArrayBufferWriter buffer,
@@ -217,7 +217,7 @@ public static void Deserialize<T>(in ReadOnlySequence<byte> data, ref T value)
 }
 ```
 
-Add both to `NinoStream`. Pipes usually return one segment per read, so most frames take the first branch and copy nothing.
+Add both to `StreamFrames`. Pipes usually return one segment per read, so most frames take the first branch and copy nothing.
 
 ## Callbacks
 
@@ -254,7 +254,7 @@ public static class CallbackSerializer
 
 Compress the bytes Nino writes, and decompress into a pooled buffer before reading. With spans, store the uncompressed length first so the reader knows how much to rent. `Compress` writes into any `IBufferWriter<byte>` (a second `NinoArrayBufferWriter` you keep, a `PipeWriter`), and `Decompress` fills an instance you keep, so neither allocates once the buffers have grown:
 
-```csharp title="NinoBrotli.cs"
+```csharp title="BrotliPayload.cs"
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
@@ -262,7 +262,7 @@ using System.IO;
 using System.IO.Compression;
 using Nino.Core;
 
-public static class NinoBrotli
+public static class BrotliPayload
 {
     public const int MaxSize = 64 << 20;
 
@@ -307,10 +307,10 @@ With streams, wrap the stream and reuse the frame helpers from above. `GZipStrea
 
 ```csharp
 using (var gzip = new GZipStream(File.Create(path), CompressionLevel.Fastest))
-    NinoStream.Write(gzip, checkpoint, buffer);
+    StreamFrames.Write(gzip, checkpoint, buffer);
 
 using (var gzip = new GZipStream(File.OpenRead(path), CompressionMode.Decompress))
-    checkpoint = NinoStream.Read<Checkpoint>(gzip);
+    checkpoint = StreamFrames.Read<Checkpoint>(gzip);
 ```
 
 `BrotliEncoder`, `BrotliDecoder` and `BrotliStream` need .NET Core 2.1 or later, and are not in .NET Standard. If you want more speed and can accept less compression, LZ4 libraries offer the same span-in, span-out shape as `BrotliEncoder.TryCompress`.
