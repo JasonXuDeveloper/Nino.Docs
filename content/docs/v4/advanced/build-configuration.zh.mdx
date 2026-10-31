@@ -1,0 +1,130 @@
+---
+title: 推荐的构建配置
+description: "在你自己的构建里设置什么，能让 Nino 和它生成的代码编译成最快的机器码：.NET 的 Release 构建、分层编译与动态 PGO、ReadyToRun 和 Native AOT；Unity 的 IL2CPP 与 Burst；Rust 的 Cargo profile 与目标 CPU；Go 的 PGO 与 GOAMD64；TypeScript 的引擎与打包工具。"
+icon: Wrench
+---
+
+Nino 发布的运行时已经过优化，但生成器写出的格式化器，以及 nino-gen 为 TypeScript、Go 和 Rust 写出的代码，都由**你的**构建、按你的设置编译。本页按平台列出会改变 Nino 所跑机器码的设置：每一项改变了 Nino 代码的什么，你要付出什么。它们都不改变字节：任何构建写出和读入的数据都一样。
+
+[基准测试页面](#what-the-benchmarks-use)上的数字来自各工具链的默认设置，所以想得到这些数字，本页的设置一项都不需要。
+
+## 一览 [#at-a-glance]
+
+| 平台 | 这样做 | 避免 |
+| --- | --- | --- |
+| [.NET](#dotnet) | Release 构建；保持分层编译和动态 PGO 开启（默认）；用 .NET 8 SDK 或更新版本构建，以启用[拦截器](/zh/docs/v4/performance#interceptors) | `<TieredCompilation>false</TieredCompilation>`；测 Debug 构建 |
+| [.NET Native AOT](#native-aot) | 按你发布到的 CPU 设置 `<IlcInstructionSet>`；`<OptimizationPreference>Speed</OptimizationPreference>` | 不提高指令集却指望走 AVX2 或 AVX-512 路径 |
+| [Unity](#unity) | IL2CPP 播放器，C++ Compiler Configuration 选 Release 或 Master；安装 Burst；Burst AOT Settings 里勾上 SSE4 和 AVX2 | 不装 Burst 的播放器；Debug 的 C++ 配置 |
+| [Rust](#rust) | `[profile.release]` 里设 `lto` 和 `codegen-units = 1`；x86_64 上用 Rust 1.89 或更新版本 | 在别的机器上运行的二进制用 `-C target-cpu=native` |
+| [Go](#go) | 一份 `default.pgo`；所有机器都支持时设 `GOAMD64=v3` | `-tags purego` |
+| [TypeScript](#typescript) | 支持 WebAssembly SIMD、GC 和 JS String Builtins 的浏览器；内容安全策略里允许 `'wasm-unsafe-eval'` | 打包工具的目标低于 ES2020 |
+
+## .NET [#dotnet]
+
+### 用 Release 构建 [#release]
+
+生成器把你的 `[NinoType]` 的格式化器加进**你的**程序集，所以它们按你项目的配置编译。Debug 构建（`Optimize` 为 false）编译你的程序集时不做优化，格式化器也一样；NuGet 上的 `Nino.Core` 则始终是优化过的。发布和测量都用 Release 构建（`dotnet publish`、`dotnet run -c Release`）；Debug 构建的耗时说明不了 Nino 的速度。
+
+### 保持分层编译和动态 PGO 开启 [#tiered-compilation]
+
+分层编译从 .NET Core 3.0 起默认开启；动态 PGO 用第一层观察到的情况（代码实际走的类型和路径）去优化第二层，从 .NET 8 起默认开启。两者都保持原样：
+
+- Nino 对 CPU 指令集和每个类型内存布局的检查都是 `static readonly` 字段。优化层（Tier 1）在它们赋值之后才编译，把它们当常量读，只留下当前 CPU 和当前类型要走的路径；放在 `static readonly` 字段里的格式化器，它也按确切的类直接调用，小的还会内联。
+- `<TieredCompilation>false</TieredCompilation>`（或 `DOTNET_TieredCompilation=0`）让每个方法只编译一次，完全优化，但没有画像：动态 PGO 只能配合分层编译工作，所以也随之关闭。`<TieredPGO>false</TieredPGO>` 只关掉画像。
+- 方法的头几次调用跑的是未优化的 Tier-0 代码。测量前先预热；想让第一条消息就快，见[启动与第一次调用](/zh/docs/v4/advanced/high-performance#startup)。
+
+### ReadyToRun [#ready-to-run]
+
+`<PublishReadyToRun>true</PublishReadyToRun>` 预编译你的程序集，`Nino.Core` 和生成的格式化器都在内，应用启动时 JIT 的工作更少。它是启动设置，不是速度设置：预编译的代码不如 JIT 的优化得充分（其中 Nino 的 `static readonly` 字段是一次读取，不是常量）；分层编译开启时，运行时会把常调用的方法换成 Tier-1 代码，和不用 ReadyToRun 时一样。关掉分层编译，预编译的代码就永远不会被替换。启动时间要紧时用 ReadyToRun，同时保持分层编译开启。
+
+### Native AOT [#native-aot]
+
+`<PublishAot>true</PublishAot>` 把一切提前编译好，运行时没有 JIT：没有分层编译，没有动态 PGO，上面那些 `static readonly` 字段一直是字段读取。对 Nino 来说：
+
+- **指令集。** Native AOT 默认以目标平台的最低指令集为准；在 x64 上，CPU 有 SSSE3 时 Nino 走它的 SSSE3 路径，只有 `<IlcInstructionSet>` 提高了基线（`x86-64-v3`、`x86-64-v4`，或 `native`，即构建机的 CPU）才走 AVX2 和 AVX-512 路径，同时应用在没有这些指令的 CPU 上就启动不了。细节和 Arm64 的情况见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
+- **直接调用。** [拦截器](/zh/docs/v4/performance#interceptors)接管的调用在任何运行时上都直接进入生成的格式化器。经过格式化器缓存的调用（泛型代码里，或另一个程序集声明的 `[NinoType]`）在 Native AOT 下每个值仍是一次虚调用，而 JIT 会直接调用格式化器。
+- **速度优先于体积。** `<OptimizationPreference>Speed</OptimizationPreference>` 让编译器优先考虑执行速度，而不是可执行文件的大小（默认两者兼顾）。
+- **类型。** 你序列化的每个类型都必须出现在生成器看得到的代码里；见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
+
+```xml title="MyApp.csproj"
+<PropertyGroup>
+  <PublishAot>true</PublishAot>
+  <OptimizationPreference>Speed</OptimizationPreference>
+  <!-- 只有当应用运行的每台机器都支持 AVX2 时： -->
+  <IlcInstructionSet>x86-64-v3</IlcInstructionSet>
+</PropertyGroup>
+```
+
+### Nino 自己的选项 [#nino-options]
+
+- **拦截器**在 .NET 8 SDK 或更新版本（Roslyn 4.8+）下始终开启：调用处已知类型的调用直接进入生成的格式化器。更老的编译器和 Unity 走常规路径。见[拦截器](/zh/docs/v4/performance#interceptors)。
+- **`NinoPrefetchLargeCollections`** 是一个 MSBuild 属性，让被拦截的、由散落对象组成的大型数组和列表的调用预取这些对象。默认关闭；什么时候值得开、开销是什么，见[散落在内存中的大型集合](/zh/docs/v4/advanced/high-performance#large-collections)。
+
+## Unity [#unity]
+
+- **IL2CPP，Release 或 Master。** 播放器用 IL2CPP 构建，它把 Nino 和生成的格式化器编译成 C++，再编译成原生代码。在 **Player Settings > Other Settings > Configuration** 里把 **C++ Compiler Configuration** 设为 **Release** 或 **Master**：Debug 关掉 C++ 编译器的所有优化；Master 打开全部优化，构建时间可能比 Release 长得多（Unity 建议构建时间可以接受时，正式发布版用 Master）。**IL2CPP Code Generation** 保持默认的 **Optimize for runtime speed**：另一个选项生成的机器码更少，运行时可能更慢。
+- **安装 Burst**（`com.unity.burst` 1.8 或更新版本）。Unity 加载的是 `Nino.Core` 的 netstandard 构建，没有硬件内在函数；装了 Burst，Nino 在启动时为元组、带填充的结构体和字符串注册 SIMD 内核。没装时，IL2CPP 和 Mono 播放器停在标量路径上（字节相同）。x64 播放器要在 **Burst AOT Settings** 里勾上 **SSE4** 和 **AVX2** 两个目标，否则没有 AVX2 的 CPU 用不上任何内核。见 [Burst 加速内核](/zh/docs/v4/advanced/unity#burst-kernels)。
+- **WebGL** 没有 Burst：用 WebAssembly SIMD 构建（Unity 6：**Target WebAssembly 2023**），才能用上 Nino 的 WebGL 内核；见 [WebGL](/zh/docs/v4/advanced/unity#webgl-kernels)。
+- **裁剪。** Nino 不带 `link.xml`，也不要求你加：每个生成的注册表都标了 `[RuntimeInitializeOnLoadMethod]`，IL2CPP 链接器不会把它裁掉。见 [IL2CPP](/zh/docs/v4/advanced/unity#il2cpp)。
+
+## Rust [#rust]
+
+```toml title="Cargo.toml"
+[profile.release]
+lto = "fat"        # 或 "thin"：收益大体相同，构建更快
+codegen-units = 1
+```
+
+- **LTO 和代码生成单元。** 你的类型的编解码是泛型代码，在你的 crate 里单态化；crate 的热点函数都标了 `#[inline]`，所以 Nino 大部分代码本来就和你的代码一起编译。Cargo 的 release profile 默认只在一个 crate 的各代码生成单元之间优化（16 个单元，“thin local LTO”）；`lto = "fat"` 跨程序的所有 crate 优化，`"thin"` 用更少的时间得到相近的效果，一个代码生成单元则让优化器一次看到整个 crate。三者都要花构建时间；在你的程序上测量。
+- **目标 CPU。** 在 x86_64 上，字符串内核在运行时挑选，与你编译的目标无关：第一个字符串询问 CPU（`is_x86_feature_detected!`），crate 记住结果：AVX-512、AVX2、SSE4.1、SSSE3 或 SSE2。所以按基线构建，CPU 有 AVX2 或 AVX-512 时转码照样用它们。`-C target-cpu=x86-64-v3`（或 `native`）改变的是其余代码：LLVM 自己向量化的部分可以用 AVX2，例如[固定大小](/zh/docs/v4/performance#fixed-size-types)块的复制（32 字节一次而不是 16 字节），检测里对 AVX2 的判断也变成常量。代价是二进制在没有这些指令的 CPU 上会失败：`native` 只用于就在构建机上运行的程序，要分发的二进制选一个所有用户 CPU 都支持的级别。
+- **Rust 版本。** AVX-512 内核只在 Rust 1.89 或更新版本下编译（crate 从 1.88 起可以构建，只是没有它们）。在小端 Arm64 上，NEON 属于目标本身，它的内核总会编译进来。见 [SIMD：Rust](/zh/docs/v4/simd#rust)。
+- **panic。** `panic = "abort"` 由你的应用决定：Nino 把每一种坏输入都报告为 `Err`，从不 panic，所以不依赖 panic 策略。
+
+## Go [#go]
+
+- **保留汇编。** 字符串内核是 amd64 和 arm64 的 Go 汇编，运行时按 CPU 支持的指令挑选（`CPUID`；amd64 上是 AVX-512、AVX2 或 SSSE3，arm64 上是 NEON），与 `GOAMD64` 无关。用 `-tags purego` 构建会把它们去掉。见 [SIMD：Go](/zh/docs/v4/simd#go)。
+- **`GOAMD64`**（默认 `v1`）决定 Go 编译器能在 Go 代码里用哪些指令，Nino 的代码和生成的代码都在内：从 `v2` 起，字符串路径里的 `bits.OnesCount64` 是一条 `POPCNT`，不再先检查 CPU；从 `v3` 起，`bits.TrailingZeros64` 是一条 `TZCNT`。按某个级别构建的二进制启动时检查 CPU 是否达到该级别，达不到就不运行，所以只在所有机器都达到时才设置。
+- **PGO。** 从 Go 1.21 起，`go build` 会使用主包目录下名为 `default.pgo` 的 CPU 画像。有了它，编译器对画像显示为热点的调用更积极地内联，程序的每个包都算（Nino 的运行时和生成的编解码也在内），热点接口调用还会去虚化。画像要从你自己程序的代表性运行中采集（`pprof`）；二进制会略大一些。
+
+## TypeScript 与 JavaScript [#typescript]
+
+- **引擎。** 运行时支持 Node 15 及以上。在 Node（以及 Bun、带 Node `Buffer` 的 Deno）里，字符串走 `Buffer` 的原生方法。在浏览器和 Deno 里，引擎支持 WebAssembly SIMD、GC 和 JS String Builtins（Chromium 130、Firefox 134 及以上）时，较长的文本走一个小的 WebAssembly 模块；其余情况走 JavaScript 路径，字节相同。内容安全策略要允许 `'wasm-unsafe-eval'` 才能用这个模块。见[浏览器中的文本](/zh/docs/v4/advanced/codegen#text-in-browsers)。
+- **数字数组。** `--numeric-arrays plain`（默认）或 `typed` 决定用 `number[]` 还是类型化数组，两者在各引擎里的读写速度不同：见[类型化数组](/zh/docs/v4/advanced/codegen#typed-arrays)。
+- **打包工具**无需设置：WebAssembly 模块以字符串形式嵌在 `nino.ts` 里，没有要部署的 `.wasm` 文件，也不用加插件；npm 包是 ES2022，标了 `sideEffects: false`。打包目标保持在 ES2020 或以上，因为运行时用了 `bigint` 字面量。压缩工具可能重命名类：Nino 按类型 id 识别类型，变的只是错误消息里的类名。
+
+## 基准测试用的配置 [#what-the-benchmarks-use]
+
+公布的数字来自各工具链的默认设置，在 GitHub 的运行器上测得：
+
+- [.NET](/zh/docs/v4/benchmarks)：BenchmarkDotNet 的 Release 构建，跑在 JIT 上，分层编译和动态 PGO 开启；不用 ReadyToRun，不用 Native AOT。
+- [Unity](/zh/docs/v4/benchmarks-unity)：IL2CPP 播放器，每个用例分别在不用和使用 Burst 内核时测量。
+- [Go、Rust 和 TypeScript](/zh/docs/v4/benchmarks-runtimes)：`go test -bench`，不用 PGO，`GOAMD64` 为默认值；`cargo bench`，Cargo 默认的 release 设置，不指定目标 CPU；Node 和无头 Chromium。
+
+## 常见陷阱 [#pitfalls]
+
+| 错误 | 后果 | 改为 |
+| --- | --- | --- |
+| 给 Debug 构建计时 | 你程序集里生成的格式化器没有优化 | 测 Release 构建，先预热 |
+| 为了“数字更稳”把 `TieredCompilation` 设为 false | 没有动态 PGO；ReadyToRun 代码永远不会被替换 | 保持分层编译开启 |
+| x64 上用 Native AOT 却不设 `IlcInstructionSet` | 不走 AVX2 和 AVX-512 路径 | 提高到用户 CPU 都支持的级别 |
+| `IlcInstructionSet`、`-C target-cpu` 或 `GOAMD64` 高于用户的 CPU | 应用启动不了，或遇到非法指令而终止 | 选每台目标机器都支持的级别 |
+| Unity 播放器没装 Burst | 元组、带填充的结构体和字符串走标量路径 | 安装 `com.unity.burst`，勾上 SSE4 和 AVX2 目标 |
+| `go build -tags purego` | 没有字符串内核 | 去掉这个标签构建 |
+| 页面的 CSP 禁止编译 WebAssembly | 文本走 JavaScript 路径（浏览器可能报告一次 CSP 违规） | 允许 `'wasm-unsafe-eval'` |
+
+## 相关页面 [#related]
+
+<Cards>
+  <Card title="高性能序列化" href="/zh/docs/v4/advanced/high-performance">
+    你代码里的手段：缓冲区、复用、对象池、原始结构体、格式。
+  </Card>
+  <Card title="各平台的 SIMD" href="/zh/docs/v4/simd">
+    每个运行时走哪些向量路径，各自如何检测。
+  </Card>
+  <Card title="平台与二进制格式" href="/zh/docs/v4/platforms">
+    Nino 支持的每个运行时，裁剪与 Native AOT。
+  </Card>
+  <Card title="TypeScript、Go 与 Rust" href="/zh/docs/v4/advanced/codegen">
+    为其他运行时生成代码，以及它的选项。
+  </Card>
+</Cards>

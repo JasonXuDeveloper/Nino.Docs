@@ -1,0 +1,130 @@
+---
+title: Recommended Build Configuration
+description: "What to set in your own builds so Nino and the code it generates compile to the fastest machine code: Release builds, tiered compilation and Dynamic PGO, ReadyToRun and Native AOT in .NET; IL2CPP and Burst in Unity; Cargo profiles and target CPUs in Rust; PGO and GOAMD64 in Go; engines and bundlers for TypeScript."
+icon: Wrench
+---
+
+Nino ships its runtime already optimized, but the formatters the generator writes, and the code nino-gen writes for TypeScript, Go and Rust, are compiled by **your** build, with your settings. This page lists, per platform, the settings that change the machine code Nino runs, what each one changes in Nino's code, and what it costs you. None of them changes the bytes: every build writes and reads the same data.
+
+The numbers on the [benchmark pages](#what-the-benchmarks-use) come from builds with each toolchain's defaults, so nothing here is needed to get them.
+
+## At a Glance [#at-a-glance]
+
+| Platform | Do | Avoid |
+| --- | --- | --- |
+| [.NET](#dotnet) | Release builds; keep tiered compilation and Dynamic PGO on (the default); build with the .NET 8 SDK or later for [interceptors](/en/docs/v4/performance#interceptors) | `<TieredCompilation>false</TieredCompilation>`; measuring a Debug build |
+| [.NET Native AOT](#native-aot) | `<IlcInstructionSet>` for the CPUs you ship to; `<OptimizationPreference>Speed</OptimizationPreference>` | expecting AVX2 or AVX-512 paths without raising the instruction set |
+| [Unity](#unity) | IL2CPP players with C++ Compiler Configuration Release or Master; install Burst; SSE4 and AVX2 in Burst AOT Settings | players without Burst; the Debug C++ configuration |
+| [Rust](#rust) | `lto` and `codegen-units = 1` in `[profile.release]`; Rust 1.89 or later on x86_64 | `-C target-cpu=native` for binaries that run on other machines |
+| [Go](#go) | a `default.pgo` profile; `GOAMD64=v3` where every machine has it | `-tags purego` |
+| [TypeScript](#typescript) | browsers with WebAssembly SIMD, GC and the JS String Builtins; `'wasm-unsafe-eval'` in a Content Security Policy | a bundler target below ES2020 |
+
+## .NET [#dotnet]
+
+### Build in Release [#release]
+
+The generator adds the formatters of your `[NinoType]`s to **your** assembly, so they are compiled with your project's configuration. A Debug build (`Optimize` false) compiles your assembly without optimizations, the formatters included, while `Nino.Core` from NuGet stays optimized. Ship and measure Release builds (`dotnet publish` and `dotnet run -c Release`); a Debug build's timings say nothing about Nino's speed.
+
+### Keep Tiered Compilation and Dynamic PGO On [#tiered-compilation]
+
+Tiered compilation is on by default since .NET Core 3.0, and Dynamic PGO, which uses what the first tier observed (the types and paths your code actually takes) to optimize the second, is on by default since .NET 8. Leave both as they are:
+
+- Nino's checks for the CPU's instruction sets and for each type's memory layout are `static readonly` fields. The optimizing tier (Tier 1) compiles once they are set, reads them as constants, and keeps only the path this CPU and this type take; it also calls a formatter held in a `static readonly` field through its exact class, inlined where it is small.
+- `<TieredCompilation>false</TieredCompilation>` (or `DOTNET_TieredCompilation=0`) compiles each method once, fully optimized but without a profile: Dynamic PGO works only with tiered compilation, so it is off too. `<TieredPGO>false</TieredPGO>` turns off only the profile.
+- The first calls of a method run unoptimized Tier-0 code. Warm up before you measure, and for a fast first message see [Startup and the First Call](/en/docs/v4/advanced/high-performance#startup).
+
+### ReadyToRun [#ready-to-run]
+
+`<PublishReadyToRun>true</PublishReadyToRun>` precompiles your assemblies, `Nino.Core` and the generated formatters included, so the app starts with less JIT work. It is a startup setting, not a speed setting: precompiled code is less optimized than the JIT's (in it, Nino's `static readonly` fields are loads, not constants), and with tiered compilation on, the runtime replaces the methods you call often with Tier-1 code, as it would without ReadyToRun. With tiered compilation off, the precompiled code is never replaced. Use ReadyToRun when startup matters; keep tiered compilation on with it.
+
+### Native AOT [#native-aot]
+
+`<PublishAot>true</PublishAot>` compiles everything ahead of time and has no JIT at run time: no tiered compilation, no Dynamic PGO, and the `static readonly` fields above stay field loads. What it means for Nino:
+
+- **Instruction sets.** Native AOT targets the minimum instruction set of the target by default; on x64, Nino then takes its SSSE3 paths where the CPU has them, and its AVX2 and AVX-512 paths only when `<IlcInstructionSet>` raises the baseline (`x86-64-v3`, `x86-64-v4`, or `native` for the build machine's CPU), which also makes the app fail to start on CPUs without those instructions. Details and the Arm64 case: [Trimming and Native AOT](/en/docs/v4/platforms#trimming-and-native-aot).
+- **Direct calls.** Calls the [interceptors](/en/docs/v4/performance#interceptors) route go straight to the generated formatter on every runtime. Calls that go through the formatter cache instead (inside generic code, or for a `[NinoType]` declared in another assembly) stay one virtual call per value under Native AOT, where the JIT calls the formatter directly.
+- **Speed over size.** `<OptimizationPreference>Speed</OptimizationPreference>` tells the compiler to favor execution speed over the executable's size (the default blends the two).
+- **Types.** Every type you serialize must appear in code the generator sees; see [Trimming and Native AOT](/en/docs/v4/platforms#trimming-and-native-aot).
+
+```xml title="MyApp.csproj"
+<PropertyGroup>
+  <PublishAot>true</PublishAot>
+  <OptimizationPreference>Speed</OptimizationPreference>
+  <!-- only if every machine the app runs on has AVX2: -->
+  <IlcInstructionSet>x86-64-v3</IlcInstructionSet>
+</PropertyGroup>
+```
+
+### Nino's Own Options [#nino-options]
+
+- **Interceptors** are always on with the .NET 8 SDK or later (Roslyn 4.8+): calls whose type is known at the call site go straight to the generated formatter. Older compilers and Unity take the regular path. See [Interceptors](/en/docs/v4/performance#interceptors).
+- **`NinoPrefetchLargeCollections`**, an MSBuild property, makes intercepted calls of large arrays and lists of scattered objects prefetch them. Off by default; when it pays and what it costs: [Large Collections of Scattered Objects](/en/docs/v4/advanced/high-performance#large-collections).
+
+## Unity [#unity]
+
+- **IL2CPP, Release or Master.** Build players with IL2CPP, which compiles Nino and the generated formatters to C++ and then to native code. In **Player Settings > Other Settings > Configuration**, set **C++ Compiler Configuration** to **Release** or **Master**: Debug turns off all optimizations of the C++ compiler; Master enables all of them and can take significantly longer to build than Release (Unity recommends Master for the shipping build if the build time is acceptable). Keep **IL2CPP Code Generation** at its default, **Optimize for runtime speed**: the other option produces less machine code and can be slower at run time.
+- **Install Burst** (`com.unity.burst` 1.8 or later). Unity loads the netstandard build of `Nino.Core`, which has no hardware intrinsics; with Burst, Nino registers SIMD kernels for tuples, padded structs and strings at startup. Without it, IL2CPP and Mono players stay on the scalar paths (the same bytes). In **Burst AOT Settings**, include the **SSE4** and **AVX2** targets for x64 players, or CPUs without AVX2 get no kernels. See [Burst-Accelerated Kernels](/en/docs/v4/advanced/unity#burst-kernels).
+- **WebGL** has no Burst: build with WebAssembly SIMD (Unity 6: **Target WebAssembly 2023**) for Nino's WebGL kernels; see [WebGL](/en/docs/v4/advanced/unity#webgl-kernels).
+- **Stripping.** Nino ships no `link.xml` and asks for none: each generated registry is marked `[RuntimeInitializeOnLoadMethod]`, which keeps the IL2CPP linker from stripping it. See [IL2CPP](/en/docs/v4/advanced/unity#il2cpp).
+
+## Rust [#rust]
+
+```toml title="Cargo.toml"
+[profile.release]
+lto = "fat"        # or "thin": most of the gain for less build time
+codegen-units = 1
+```
+
+- **LTO and codegen units.** Your types' codecs are generic code that monomorphizes in your crate, and the crate's hot functions are `#[inline]`, so most of Nino already compiles together with your code. By default Cargo's release profile optimizes across the codegen units of one crate only (16 units, "thin local LTO"); `lto = "fat"` optimizes across every crate of the program, `"thin"` gets similar results in less time, and one codegen unit gives the optimizer the whole crate at once. All three cost build time; measure on your program.
+- **Target CPU.** On x86_64 the string kernels are picked at run time, whatever you compile for: the first string asks the CPU (`is_x86_feature_detected!`) and the crate keeps the answer, AVX-512, AVX2, SSE4.1, SSSE3 or SSE2, so a baseline build already transcodes with AVX2 or AVX-512 where the CPU has it. `-C target-cpu=x86-64-v3` (or `native`) changes the rest of the code: LLVM may use AVX2 for what it vectorizes itself, such as the copies of [fixed-size](/en/docs/v4/performance#fixed-size-types) blocks (32-byte moves instead of 16-byte ones), and the detection's AVX2 checks become constants. The binary then fails on CPUs without those instructions: use `native` only for the machine it runs on, and for a binary you distribute, a level all your users' CPUs have.
+- **Rust version.** The AVX-512 kernels are compiled only with Rust 1.89 or later (the crate builds from 1.88 without them). On little-endian Arm64, NEON is part of the target and its kernels are always compiled in. See [SIMD: Rust](/en/docs/v4/simd#rust).
+- **Panics.** `panic = "abort"` is your application's choice: Nino reports every bad input as an `Err`, never as a panic, so it does not depend on the panic strategy.
+
+## Go [#go]
+
+- **Keep the assembly.** The string kernels are Go assembly for amd64 and arm64, picked at run time from what the CPU has (`CPUID`; AVX-512, AVX2 or SSSE3 on amd64, NEON on arm64), whatever `GOAMD64` is. Building with `-tags purego` leaves them out. See [SIMD: Go](/en/docs/v4/simd#go).
+- **`GOAMD64`** (default `v1`) sets the instructions the Go compiler may emit in Go code, Nino's and the generated code's included: from `v2`, `bits.OnesCount64` in the string paths is one `POPCNT` with no check of the CPU first; from `v3`, `bits.TrailingZeros64` is a `TZCNT`. A binary built for a level checks at startup that the CPU has it and does not run otherwise, so set it only where every machine has that level.
+- **PGO.** Since Go 1.21, `go build` uses a CPU profile named `default.pgo` in the main package's directory. With it, the compiler inlines more aggressively the calls the profile shows hot, in every package of the program (Nino's runtime and the generated codecs too), and devirtualizes hot interface calls. Collect the profile from a representative run of your own program (`pprof`); binaries grow slightly.
+
+## TypeScript and JavaScript [#typescript]
+
+- **Engines.** The runtime runs on Node 15 and later. In Node (and Bun, and Deno with Node's `Buffer`) strings go through `Buffer`'s native methods. In browsers and Deno, longer text goes through a small WebAssembly module where the engine has WebAssembly SIMD, GC and the JS String Builtins (Chromium 130, Firefox 134 and later); elsewhere the JavaScript paths run, with the same bytes. A Content Security Policy must allow `'wasm-unsafe-eval'` for the module. See [Text in Browsers](/en/docs/v4/advanced/codegen#text-in-browsers).
+- **Arrays of numbers.** `--numeric-arrays plain` (the default) or `typed` decides between `number[]` and typed arrays, which read and write at different speeds per engine: [Typed Arrays](/en/docs/v4/advanced/codegen#typed-arrays).
+- **Bundlers** need no setup: the WebAssembly module is embedded in `nino.ts` as a string, so there is no `.wasm` file to serve or plugin to add, and the npm package is ES2022 marked `sideEffects: false`. Keep the bundler's target at ES2020 or later, since the runtime uses `bigint` literals. Minifiers may rename classes: Nino identifies types by type id, so only the class names in error messages change.
+
+## What the Benchmarks Use [#what-the-benchmarks-use]
+
+The published numbers come from builds with each toolchain's defaults, on GitHub's runners:
+
+- [.NET](/en/docs/v4/benchmarks): Release builds of BenchmarkDotNet run on the JIT, tiered compilation and Dynamic PGO on; no ReadyToRun, no Native AOT.
+- [Unity](/en/docs/v4/benchmarks-unity): IL2CPP players, each case without and with the Burst kernels.
+- [Go, Rust and TypeScript](/en/docs/v4/benchmarks-runtimes): `go test -bench` without PGO and with the default `GOAMD64`; `cargo bench` with Cargo's default release settings and no target CPU; Node and headless Chromium.
+
+## Pitfalls [#pitfalls]
+
+| Mistake | What happens | Instead |
+| --- | --- | --- |
+| Timing a Debug build | the generated formatters in your assembly run unoptimized | measure Release builds, after a warm-up |
+| `TieredCompilation` false "for steadier numbers" | no Dynamic PGO; ReadyToRun code is never replaced | leave tiering on |
+| Native AOT on x64 without `IlcInstructionSet` | AVX2 and AVX-512 paths are not taken | raise it to what your users' CPUs have |
+| `IlcInstructionSet`, `-C target-cpu` or `GOAMD64` above your users' CPUs | the app does not start, or stops on an illegal instruction | a level every target machine has |
+| A Unity player without Burst | scalar paths for tuples, padded structs and strings | install `com.unity.burst`, with SSE4 and AVX2 targets |
+| `go build -tags purego` | no string kernels | build without the tag |
+| A page whose CSP forbids compiling WebAssembly | text takes the JavaScript paths (and the browser may report a CSP violation) | allow `'wasm-unsafe-eval'` |
+
+## Related [#related]
+
+<Cards>
+  <Card title="High-Performance Serialization" href="/en/docs/v4/advanced/high-performance">
+    The levers in your code: buffers, reuse, pools, raw structs, formats.
+  </Card>
+  <Card title="SIMD on Every Platform" href="/en/docs/v4/simd">
+    Which vector paths each runtime takes, and how each is detected.
+  </Card>
+  <Card title="Platforms and Binary Format" href="/en/docs/v4/platforms">
+    Every runtime Nino supports, trimming and Native AOT.
+  </Card>
+  <Card title="TypeScript, Go and Rust" href="/en/docs/v4/advanced/codegen">
+    Generating code for the other runtimes and its options.
+  </Card>
+</Cards>
