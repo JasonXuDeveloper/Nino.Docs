@@ -103,7 +103,7 @@ Nino 直接读写 `List<T>`、`Stack<T>`、`Queue<T>`、`SortedList<TKey, TValue
 
 `Nino.Core` 的 `net8.0` 和 `net10.0` 版本标记了 `IsTrimmable` 和 `IsAotCompatible`，每次构建都会经过裁剪和 AOT 分析器的检查，所以用 `PublishTrimmed` 或 `PublishAot` 发布时，Nino 不会产生任何警告。目标框架为 .NET 8 及以上的项目用的就是这两个版本之一。
 
-- **Native AOT**（以及其他无法在运行时编译代码的环境）：Nino 只使用生成器写好的格式化器。因此要序列化的每个类型，都必须出现在生成器能看到的代码里：作为成员的类型，或者作为 `Serialize`、`Deserialize` 调用的类型参数。其他调用不会注册类型：像 `Pair<int, int>` 这样的封闭泛型类型，如果程序只把它传给 `GetFixedSize<T>()`、`SerializeBoxed` 或 `DeserializeBoxed`，在 Native AOT 下会抛异常，而 JIT 会在运行时构造它的格式化器。只在运行时才出现的类型会抛出指明该类型的错误，绝不会读写出错误的数据。
+- **Native AOT**（以及其他无法在运行时编译代码的环境）：Nino 只使用生成器写好的格式化器。因此要序列化的每个类型，都必须出现在生成器能看到的代码里：作为成员的类型，作为 `NinoSerializer`/`NinoDeserializer` 调用（`Serialize`、`Deserialize`、`GetFixedSize<T>()`）的类型参数，或者作为 `SerializeBoxed`、`DeserializeBoxed`、`IsSupported` 的 `typeof` 参数。运行时才算出的 `Type`（`value.GetType()`）不会注册任何类型：像 `Pair<int, int>` 这样的封闭泛型类型，如果只以这种方式交给 Nino，在 Native AOT 下会抛异常，而 JIT 会在运行时构造它的格式化器。只在运行时才出现的类型会抛出指明该类型的错误，绝不会读写出错误的数据。
 - **在 JIT 上运行的裁剪应用**会保留为这类类型构建格式化器的运行时路径；它对裁剪器的要求都已标注。
 - **Native AOT 下的 CPU 特性**：在 x64 上，Native AOT 按 SSE2 编译，并在启动时检测其后的几个指令集，其中包括 SSSE3，所以在支持 SSSE3 的 CPU 上，Nino 会走它的 [SSSE3 路径](#simd)。AVX2 和 AVX-512 路径需要更高的基线，这同时也要求运行的 CPU 支持它：AVX2 用 `<IlcInstructionSet>x86-64-v3</IlcInstructionSet>`，AVX-512 用 `x86-64-v4`，或用 `native` 取构建机器的 CPU。在 Arm64 上，AdvSimd 属于 Native AOT 的基线，所有 Arm64 路径都会被采用。
 
