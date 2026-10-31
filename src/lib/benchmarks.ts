@@ -83,8 +83,8 @@ export const archLabels: Record<Arch, string> = { x64: 'x64', arm64: 'Arm64' };
  * struct read measured anywhere from 0.05 to 0.8 ns in Nino and MemoryPack
  * alike, once BenchmarkDotNet subtracts its empty-method overhead. v4 under it against a measurable
  * time is faster, too fast to measure: no ratio, which would only reflect the
- * floor. Both under it is on par. Nino's benchmarks/readme.py and
- * benchmarks/v3/compare.py use the same floor.
+ * floor. Both under it is on par. Nino's benchmarks/bdn.py holds the same
+ * floor (readme.py, compare_v3.py and ab.py use it).
  */
 export const FLOOR_NS = 1;
 

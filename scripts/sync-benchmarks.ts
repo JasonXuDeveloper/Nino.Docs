@@ -389,7 +389,7 @@ export function parseArm64Section(body: string) {
 }
 
 /**
- * Parses the v3 section of a release body: the compare.py tables (case,
+ * Parses the v3 section of a release body: the compare_v3.py tables (case,
  * "v3 3.3.13", "v4", ...), one per v3 run (one since rc.2; older reports have
  * two, before and after v4). v3Ns is the mean of the runs; v4Ns
  * is the v4 run they were all compared with. Returns null when the body has no
