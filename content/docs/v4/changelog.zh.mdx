@@ -101,6 +101,7 @@ icon: RotateCcwClock
 - 在大端主机上，通过顶层调用序列化的原始值、原始值数组和固定大小类型，与其他类型一样被拒绝，不再按主机字节序写出。
 - Nino.Core 之外不能再继承 `NinoSubtypeHandler`，也不能调用 `NinoPolymorphic<TBase>.Register(NinoSubtypeHandler)`：只有生成的注册代码会添加多态子类型。
 - 从 alpha 键数量为 -1 的数据反序列化 Unity `Gradient` 时，抛出 `NinoDataException`，不再是 `OverflowException`。参见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)。
+- 从颜色键或 alpha 键超过 8 个（Unity 的上限）的数据反序列化 Unity `Gradient` 时，在分配之前抛出 `NinoDataException`，不再是 Unity 的 setter 抛出的异常。参见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)。
 - Unity 的 `RectOffset` 遇到不是 0 或 1 的存在字节时抛出 `NinoDataException`，与其他所有可空值一致，不再当作存在读取。参见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)。
 - 项目中两个 `[NinoType]` 的名称只有大小写不同（`RawS` 和 `Raws`）时，重新能得到生成代码；之前生成器报 CS8785 失败，什么也不生成。
 - 通过 `using` 别名或 `using static` 写的顶层 `NinoSerializer`/`NinoDeserializer` 调用会被拦截，其格式化器也会为 AOT 注册，与写出类名的调用相同。

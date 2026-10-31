@@ -101,6 +101,7 @@ What changed from one v4 release to the next, newest first. For everything v4 ch
 - On a big-endian host, raw values, arrays of them and fixed-size types serialized through the top-level calls are rejected like every other type, instead of being written in the host's byte order.
 - `NinoSubtypeHandler` can no longer be subclassed, nor `NinoPolymorphic<TBase>.Register(NinoSubtypeHandler)` called, outside Nino.Core: only generated registrations add polymorphic subtypes.
 - Deserializing a Unity `Gradient` from data with -1 as its alpha key count throws `NinoDataException` instead of `OverflowException`. See [Unity Classes](/en/docs/v4/advanced/unity#unity-classes).
+- Deserializing a Unity `Gradient` from data with more than 8 color or alpha keys (Unity's limit) throws `NinoDataException` before allocating them, instead of an exception from Unity's setters. See [Unity Classes](/en/docs/v4/advanced/unity#unity-classes).
 - Unity's `RectOffset` rejects a presence byte other than 0 or 1 with `NinoDataException`, as every other nullable value does, instead of reading it as present. See [Unity Classes](/en/docs/v4/advanced/unity#unity-classes).
 - Projects with two `[NinoType]`s whose names differ only by case (`RawS` and `Raws`) get their generated code again; the generator failed with CS8785 and added none.
 - Top-level `NinoSerializer`/`NinoDeserializer` calls written through a `using` alias or `using static` are intercepted and their formatters registered for AOT, like calls that name the class.
