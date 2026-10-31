@@ -10,7 +10,6 @@ namespace Docs.Page_advanced_zero_allocation;
 [NinoType] public sealed class Order { public long Id; public decimal Total; }
 [NinoType] public sealed class OrderBook { public long Sequence; public List<double> Bids, Asks; }
 [NinoType] public sealed class MetricsBatch { public long Sequence; public List<double> Values; }
-[NinoType] public sealed class Quote { public int InstrumentId; public double Bid, Ask; }
 
 public partial class Snippets
 {

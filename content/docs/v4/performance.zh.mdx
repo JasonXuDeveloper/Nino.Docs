@@ -78,6 +78,9 @@ Nino 仓库在每次修改读写路径时都会检查这一点：`benchmarks/asm
 | `[StructLayout(LayoutKind.Auto)]` | **不按原始内存写入**：运行时可能重排字段，所以 Nino 逐个字段写入，耗时是整块拷贝的好几倍；但它的数组和列表仍按块读写（见上文） |
 
 ```csharp title="Layouts.cs"
+using System.Runtime.InteropServices;
+using Nino.Core;
+
 [NinoType]
 public partial struct Sample // 16 bytes, 4 of them padding
 {
@@ -113,6 +116,8 @@ public partial struct PackedSample // 12 bytes, no padding
 有些类型无论取什么值，写出的字节数都相同。对这类类型，`NinoSerializer.Serialize(value)` 会按最终大小分配 `byte[]`，再把值直接写进去：不用暂存缓冲区，不用 writer，没有扩容检查，也没有最后的拷贝。写出的字节与通用路径相同。
 
 ```csharp title="SensorReading.cs"
+using Nino.Core;
+
 [NinoType]
 public struct GeoPoint               // raw: 8 bytes
 {
@@ -128,7 +133,9 @@ public sealed class SensorReading    // fixed size: 1 (presence byte) + 4 + 8 + 
     public GeoPoint Location;
     public bool Alarm;
 }
+```
 
+```csharp
 byte[] bytes = NinoSerializer.Serialize(reading);         // a new byte[22], written in place
 int size = NinoSerializer.GetFixedSize<SensorReading>();  // 22
 ```

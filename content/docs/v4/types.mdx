@@ -107,6 +107,8 @@ dotnet add package Nino.Immutable --prerelease
 Reference it and use the types as members or pass them to `NinoSerializer`/`NinoDeserializer` directly; there is nothing to register. The package declares its formatters with [`[assembly: NinoFormatter]`](/en/docs/v4/custom-formatters#for-a-type-assembly-ninoformatter), exactly like Nino's own BCL formatters:
 
 ```csharp
+using System.Collections.Immutable;
+
 [NinoType]
 public sealed class Article
 {
@@ -115,7 +117,7 @@ public sealed class Article
 }
 ```
 
-Each writes the bytes of its mutable counterpart (`List<T>`, `HashSet<T>`, `SortedSet<T>`, `Queue<T>`, `Stack<T>`, `Dictionary<TKey, TValue>`, `SortedDictionary<TKey, TValue>`), so a member can change between the two without changing the format. Sets and dictionaries are read with the default comparer, and the same key or element twice in the data throws an `InvalidOperationException`, as for a `HashSet<T>`.
+Each writes the bytes of its mutable counterpart (`List<T>`, `HashSet<T>`, `SortedSet<T>`, `Queue<T>`, `Stack<T>`, `Dictionary<TKey, TValue>`, `SortedDictionary<TKey, TValue>`), so a member can change between the two without changing the format. Sets and dictionaries are read with the default comparer, and the same key or element twice in the data throws a `NinoDataException`, as for a `HashSet<T>`.
 
 ### User Collections
 

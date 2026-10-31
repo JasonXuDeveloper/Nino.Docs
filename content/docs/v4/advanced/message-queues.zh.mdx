@@ -101,7 +101,6 @@ Kafka 的 `ISerializer<T>` 必须返回 `byte[]`，所以每生产一条消息�
 ```csharp title="OrderPublisher.cs"
 using Nino.Core;
 using RabbitMQ.Client;
-using RabbitMQ.Client.Events;
 
 public sealed class OrderPublisher
 {
@@ -118,6 +117,10 @@ public sealed class OrderPublisher
         await _channel.BasicPublishAsync(exchange: "orders", routingKey: "", body: _buffer.WrittenMemory);
     }
 }
+```
+
+```csharp
+using RabbitMQ.Client.Events;
 
 // consuming
 var consumer = new AsyncEventingBasicConsumer(channel);

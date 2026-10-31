@@ -168,6 +168,8 @@ NinoRegistry.EnsureInitialized(hotUpdate);             // optional: pay the regi
 Game data authored in spreadsheets or the editor (items, levels, drop tables) is a good fit for Nino: export it to a `.bytes` file once, and load it at runtime without any parsing. Give the table types `format: NinoFormat.Keyed`, so that adding or reordering a column does not break files exported before:
 
 ```csharp title="ItemTable.cs"
+using Nino.Core;
+
 [NinoType(format: NinoFormat.Keyed)]
 public sealed class ItemTable
 {
@@ -181,9 +183,11 @@ public sealed class ItemRow
     public string Name;
     public int Price;
 }
+```
 
+```csharp
 // Editor: export after the table is edited (a menu item, or an import step for your spreadsheets)
-File.WriteAllBytes("Assets/Config/items.bytes", NinoSerializer.Serialize(table));
+File.WriteAllBytes("Assets/Resources/Config/items.bytes", NinoSerializer.Serialize(table));
 
 // Player: .bytes files import as TextAsset
 var asset = Resources.Load<TextAsset>("Config/items");

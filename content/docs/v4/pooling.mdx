@@ -53,6 +53,8 @@ Reuse deserialization drops an existing instance when the data holds `null` for 
 An object rented through `[NinoFactory]` often carries members that were rented too. Here a customer comes out of the pool with a pooled `Tags` list:
 
 ```csharp title="Customer.cs"
+using Nino.Core;
+
 [NinoType]
 public class Customer
 {
@@ -72,6 +74,8 @@ public class Customer
 When a message has `Tags = null`, Nino takes the list off the customer. A `List<int>` does not know which pool it came from, so without a recycler it goes to the garbage collector: the list **leaks** out of your pool, which drains until every rent is a `new` again. With a recycler, the dropped list goes back:
 
 ```csharp title="Startup.cs"
+using Nino.Core;
+
 // at startup, before the first serialization call
 NinoSettings.SetRecycler<List<int>>(list =>
 {
@@ -100,6 +104,8 @@ This works for collection types too (a `List<T>` subclass, an `IDictionary<TKey,
 `[NinoPooled]` gives a `[NinoType]` class a built-in object pool. Wherever Nino creates an instance (the value you deserialize, a member or a collection element), it takes one from the pool and deserializes into it; dropped instances go back to the pool on their own.
 
 ```csharp title="Alert.cs"
+using Nino.Core;
+
 [NinoType, NinoPooled] // [!code highlight]
 public sealed partial class Alert
 {
@@ -111,7 +117,9 @@ public sealed partial class Alert
     private static partial IEnumerable<Alert> OnNinoPoolWarmup() => Enumerable.Range(0, 64).Select(_ => new Alert());
     private partial void OnNinoPoolReturn() { /* clear state Nino does not deserialize */ }
 }
+```
 
+```csharp
 var alert = NinoDeserializer.Deserialize<Alert>(bytes); // reuses a pooled instance if there is one
 // ... use it ...
 alert.ReturnToPool();                                   // returning it twice throws
@@ -133,6 +141,8 @@ The typical use is as a collection element: a `List<Alert>` grows and shrinks wi
 Creating a plain `List<T>` cannot go through a factory. To pool the list itself, wrap an object pool and define a list type that implements `INinoPooled` (namespace `Nino.Core`): renting goes through `[NinoFactory]`, and Nino calls `ReturnToPool()` when it drops one, with no recycler to register.
 
 ```csharp title="ObjectPool.cs"
+using Nino.Core;
+
 public static class ObjectPool<T> where T : class, new()
 {
     [ThreadStatic] private static Stack<T> _items;

@@ -141,6 +141,8 @@ public class UserProfile
 For every `[NinoType]`, the generator records how the type is written in the assembly's metadata, as an `[assembly: NinoTypeLayout]`: the format, the header in front of the body (`None` for a struct, `NullFlag` for a sealed class, `TypeId` otherwise), whether references are tracked, whether the type is a raw struct, its type id, whether a body nested too deep is [deferred](/en/docs/v4/basic#deep-object-graphs) (`deferrable`, which readers in other languages need), and its members in the order they are written. Tools that check data compatibility (a schema check in CI, a diff between two builds, a migration tool) can read it instead of re-implementing Nino's rules:
 
 ```csharp
+using System.Reflection; // GetCustomAttributes<T>()
+
 foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutAttribute>())
     Console.WriteLine($"{layout.Type}: {layout}");
 

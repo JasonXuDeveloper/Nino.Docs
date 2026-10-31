@@ -20,6 +20,8 @@ Nino 反序列化每个类型时，都要知道怎样创建它的实例。生成
 <Tab value="构造函数">
 
 ```csharp title="Product.cs"
+using Nino.Core;
+
 [NinoType]
 public sealed class Product
 {
@@ -58,6 +60,9 @@ public sealed class Customer
 <Tab value="工厂方法">
 
 ```csharp title="Currency.cs"
+using System.Collections.Concurrent;
+using Nino.Core;
+
 [NinoType]
 public sealed class Currency
 {
@@ -144,6 +149,8 @@ Nino 提供两种介入实例创建的方式，用途不同：
 只有当 Nino 需要一个**新**实例时，才会调用 `[NinoFactory]` 方法：槽位为 `null`、列表变长，或多态槽位换了类型。之后 Nino 原地填充这个实例。再配合[复用反序列化](/zh/docs/v4/pooling#deserializing-into-existing-instances)，并为被丢弃的实例注册[回收器](/zh/docs/v4/pooling#why-setrecycler)，对象池预热之后，处理源源不断的消息也不会再分配内存：
 
 ```csharp title="Order.cs"
+using Nino.Core;
+
 [NinoType]
 public sealed class Order
 {

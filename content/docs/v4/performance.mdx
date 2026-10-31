@@ -78,6 +78,9 @@ How you declare a hot struct decides which path it takes:
 | `[StructLayout(LayoutKind.Auto)]` | **not raw**: the runtime may reorder the fields, so Nino writes them one by one, at several times the cost; arrays and lists of it are still read and written as blocks (see above) |
 
 ```csharp title="Layouts.cs"
+using System.Runtime.InteropServices;
+using Nino.Core;
+
 [NinoType]
 public partial struct Sample // 16 bytes, 4 of them padding
 {
@@ -113,6 +116,8 @@ The raw layout is the canonical 64-bit layout. Where a runtime lays a struct out
 Some types take the same number of bytes whatever their values. For those, `NinoSerializer.Serialize(value)` allocates the `byte[]` at its final size and writes the value straight into it: no scratch buffer, no writer, no growth checks and no final copy. The bytes are the same as on the general path.
 
 ```csharp title="SensorReading.cs"
+using Nino.Core;
+
 [NinoType]
 public struct GeoPoint               // raw: 8 bytes
 {
@@ -128,7 +133,9 @@ public sealed class SensorReading    // fixed size: 1 (presence byte) + 4 + 8 + 
     public GeoPoint Location;
     public bool Alarm;
 }
+```
 
+```csharp
 byte[] bytes = NinoSerializer.Serialize(reading);         // a new byte[22], written in place
 int size = NinoSerializer.GetFixedSize<SensorReading>();  // 22
 ```

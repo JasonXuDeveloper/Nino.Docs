@@ -14,6 +14,8 @@ icon: GitFork
 Nino serializes the runtime type of a value, so a value declared as a base class or interface is read back as the type it really is. This is what you need for the event history of an event-sourced order, the shapes of a drawing, or the messages of a network protocol: one declared type, many concrete ones.
 
 ```csharp title="OrderEvents.cs"
+using Nino.Core;
+
 [NinoType] // [!code highlight]
 public abstract class OrderEvent
 {
@@ -180,7 +182,7 @@ Two alternatives exist, and both cost more:
 
 ## Subtypes in Other Assemblies
 
-Subtypes are found automatically wherever they are declared, including assemblies loaded later (plugins, HybridCLR hot-update DLLs): when a type id is unknown, Nino looks in the registries of newly loaded assemblies before it fails. There is no registration call. For example, a plugin or hot-update DLL adds `public sealed class OrderRefunded : OrderEvent`. Once the DLL is loaded, the code in the main (AOT) assembly reads a `List<OrderEvent>` that contains an `OrderRefunded`, with no change to that code. The generator must run in the subtype's assembly too (install the `Nino` package in that project; in Unity, its assembly must reference `Nino.Core`); an id whose type is in no loaded assembly throws `InvalidOperationException`.
+Subtypes are found automatically wherever they are declared, including assemblies loaded later (plugins, HybridCLR hot-update DLLs): when a type id is unknown, Nino looks in the registries of newly loaded assemblies before it fails. There is no registration call. For example, a plugin or hot-update DLL adds `public sealed class OrderRefunded : OrderEvent`. Once the DLL is loaded, the code in the main (AOT) assembly reads a `List<OrderEvent>` that contains an `OrderRefunded`, with no change to that code. The generator must run in the subtype's assembly too (install the `Nino` package in that project; in Unity, its assembly must reference `Nino.Core`); an id whose type is in no loaded assembly throws `NinoDataException`.
 
 The one exception is a closed generic subtype (`Box<int>`) that the process only **reads**, and never names in code or writes. Register it at startup:
 

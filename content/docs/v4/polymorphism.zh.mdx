@@ -14,6 +14,8 @@ icon: GitFork
 Nino 会写入值的运行时类型，所以声明为基类或接口的值，读回来仍是它真正的类型。事件溯源中一个订单的事件历史、一张图纸里的各种图形、网络协议里的各种消息，都需要这一点：声明的是一个类型，实际存放的是多种具体类型。
 
 ```csharp title="OrderEvents.cs"
+using Nino.Core;
+
 [NinoType] // [!code highlight]
 public abstract class OrderEvent
 {
@@ -180,7 +182,7 @@ public sealed class CommandChannel
 
 ## 其他程序集中的子类型 [#subtypes-in-other-assemblies]
 
-无论子类型声明在哪里，Nino 都能自动找到，包括之后才加载的程序集（插件、HybridCLR 热更新 DLL）：遇到未知的类型 ID 时，Nino 会先查找新加载程序集的注册表，找不到才报错。不需要任何注册调用。例如，一个插件或热更新 DLL 新增了 `public sealed class OrderRefunded : OrderEvent`。DLL 加载之后，主程序集（AOT 程序集）里的代码不用做任何改动，就能读取包含 `OrderRefunded` 的 `List<OrderEvent>`。源生成器也必须在子类型所在的程序集中运行（在该项目中安装 `Nino` 包；在 Unity 中，该程序集必须引用 `Nino.Core`）；如果类型 ID 对应的类型不在任何已加载的程序集中，会抛出 `InvalidOperationException`。
+无论子类型声明在哪里，Nino 都能自动找到，包括之后才加载的程序集（插件、HybridCLR 热更新 DLL）：遇到未知的类型 ID 时，Nino 会先查找新加载程序集的注册表，找不到才报错。不需要任何注册调用。例如，一个插件或热更新 DLL 新增了 `public sealed class OrderRefunded : OrderEvent`。DLL 加载之后，主程序集（AOT 程序集）里的代码不用做任何改动，就能读取包含 `OrderRefunded` 的 `List<OrderEvent>`。源生成器也必须在子类型所在的程序集中运行（在该项目中安装 `Nino` 包；在 Unity 中，该程序集必须引用 `Nino.Core`）；如果类型 ID 对应的类型不在任何已加载的程序集中，会抛出 `NinoDataException`。
 
 唯一的例外是封闭泛型子类型（如 `Box<int>`）：如果进程只会**读取**它，代码里既不出现它的名字，也从不写入它，就需要在启动时注册：
 

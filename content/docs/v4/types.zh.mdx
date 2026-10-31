@@ -112,6 +112,8 @@ dotnet add package Nino.Immutable --prerelease
 引用该包后，直接把这些类型用作成员，或直接传给 `NinoSerializer`/`NinoDeserializer` 即可，无需注册。这个包用 [`[assembly: NinoFormatter]`](/zh/docs/v4/custom-formatters#for-a-type-assembly-ninoformatter) 声明格式化器，做法和 Nino 自带的 BCL 格式化器完全一样：
 
 ```csharp
+using System.Collections.Immutable;
+
 [NinoType]
 public sealed class Article
 {
@@ -120,7 +122,7 @@ public sealed class Article
 }
 ```
 
-每种不可变集合写出的字节都与对应的可变集合（`List<T>`、`HashSet<T>`、`SortedSet<T>`、`Queue<T>`、`Stack<T>`、`Dictionary<TKey, TValue>`、`SortedDictionary<TKey, TValue>`）相同，所以成员在两者之间切换不会改变格式。集合和字典读回时使用默认比较器；数据中出现重复的键或元素时会抛出 `InvalidOperationException`，与 `HashSet<T>` 一样。
+每种不可变集合写出的字节都与对应的可变集合（`List<T>`、`HashSet<T>`、`SortedSet<T>`、`Queue<T>`、`Stack<T>`、`Dictionary<TKey, TValue>`、`SortedDictionary<TKey, TValue>`）相同，所以成员在两者之间切换不会改变格式。集合和字典读回时使用默认比较器；数据中出现重复的键或元素时会抛出 `NinoDataException`，与 `HashSet<T>` 一样。
 
 ### 自定义集合 [#user-collections]
 

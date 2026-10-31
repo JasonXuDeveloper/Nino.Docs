@@ -141,6 +141,8 @@ public class UserProfile
 生成器会在程序集元数据里为每个 `[NinoType]` 记录一条 `[assembly: NinoTypeLayout]`，说明这个类型是怎么写出的：格式、主体前面的头（结构体是 `None`，密封类是 `NullFlag`，其他是 `TypeId`）、是否追踪引用、是否按原始内存整体拷贝、类型 ID、嵌套过深时主体是否[推迟](/zh/docs/v4/basic#deep-object-graphs)（`deferrable`，其他语言的读取器需要它），以及按写入顺序排列的成员。做数据兼容检查的工具（CI 里的 schema 检查、两次构建的对比、迁移工具）直接读这些信息就行，不用自己再实现一遍 Nino 的规则：
 
 ```csharp
+using System.Reflection; // GetCustomAttributes<T>()
+
 foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutAttribute>())
     Console.WriteLine($"{layout.Type}: {layout}");
 
