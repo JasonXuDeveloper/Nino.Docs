@@ -40,6 +40,7 @@ public sealed class Chat : Message
 ```
 
 - 把消息和 `Message` 声明在同一个程序集中：这样 Nino 会用生成的代码分派（写入时是一串类型判断，读取时是对 ID 的 `switch`），而不是查注册表。把它们声明为 `sealed`，这样声明为 `PriceUpdate` 的成员只需 1 字节头部，而不是 4 字节 ID。
+- 这个程序集要让两端都能编译，放在服务端和 .NET 客户端都引用的类库里；Unity 客户端见[与 .NET 服务端共享类型](/zh/docs/v4/advanced/unity#shared-types)。
 - 类型 ID 来自类型名，所以给消息类改名或换命名空间会导致旧版本的对端无法识别。改名时请使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
 - `NinoFormat.VersionTolerant` 让你以后可以给各个消息添加字段（不能加到 `Message` 本身），参见[滚动升级](#rolling-upgrades)。子类型会随 `[NinoType]` 一起继承它；如果给某个消息单独加了 `[NinoType]`，记得在那里也写上 `format: NinoFormat.VersionTolerant`。
 
@@ -67,9 +68,9 @@ using System.Buffers;
 using System.IO.Pipelines;
 using Nino.Core;
 
-public sealed class FrameWriter
+public sealed class FrameWriter : IDisposable
 {
-    private readonly NinoArrayBufferWriter _buffer = new(4096); // one per connection
+    private readonly NinoArrayBufferWriter _buffer = new(4096); // one per connection; rented from ArrayPool<byte>.Shared
 
     public void Write(PipeWriter output, Message message)
     {
@@ -83,6 +84,8 @@ public sealed class FrameWriter
 
         output.Write(_buffer.WrittenSpan);            // PipeWriter is an IBufferWriter<byte>
     }
+
+    public void Dispose() => _buffer.Dispose();       // the buffer goes back to the pool
 }
 ```
 
@@ -117,20 +120,30 @@ public static class FrameReader
 {
     public const int MaxFrameSize = 1 << 20; // reject absurd lengths before buffering them
 
-    public static async Task ReadLoopAsync(PipeReader input, Action<Message> handle)
+    // handler 写入 replies 的回复，每次读取只 flush 一次
+    public static async Task ReadLoopAsync(PipeReader input, Action<Message> handle,
+        PipeWriter replies = null, CancellationToken cancel = default)
     {
-        while (true)
+        try
         {
-            ReadResult result = await input.ReadAsync();
-            ReadOnlySequence<byte> buffer = result.Buffer;
+            while (true)
+            {
+                ReadResult result = await input.ReadAsync(cancel);
+                ReadOnlySequence<byte> buffer = result.Buffer;
 
-            while (TryReadFrame(ref buffer, out ReadOnlySequence<byte> frame))
-                handle(Decode<Message>(frame));
+                while (TryReadFrame(ref buffer, out ReadOnlySequence<byte> frame))
+                    handle(Decode<Message>(frame));
 
-            input.AdvanceTo(buffer.Start, buffer.End);
-            if (result.IsCompleted) break;
+                input.AdvanceTo(buffer.Start, buffer.End);
+                if (replies != null)
+                    await replies.FlushAsync(cancel);        // 这次读取的所有回复，一次发出
+                if (result.IsCompleted) break;
+            }
         }
-        await input.CompleteAsync();
+        finally
+        {
+            await input.CompleteAsync();
+        }
     }
 
     private static bool TryReadFrame(ref ReadOnlySequence<byte> buffer, out ReadOnlySequence<byte> frame)
@@ -215,7 +228,95 @@ await server;
 listener.Stop();
 ```
 
-它会打印 `Login` 和 `Chat`。真正的服务端在循环里接受连接，每个连接启动一个读取循环，并使用自己的 `FrameWriter`。
+它会打印 `Login` 和 `Chat`。
+
+### 服务多个连接 [#accept-loop]
+
+服务端在循环里接受连接，每个连接在自己的任务里处理，并使用自己的 `FrameWriter`。下面的 `MessageServer` 就是这样做的：它把 handler 返回的回复发回去，令牌取消时停止：
+
+```csharp title="MessageServer.cs"
+using System;
+using System.Collections.Concurrent;
+using System.IO;
+using System.IO.Pipelines;
+using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
+using Nino.Core;
+
+public static class MessageServer
+{
+    // 接受连接，直到 cancel 触发，再等仍打开的连接关闭
+    public static async Task RunAsync(TcpListener listener, Func<Message, Message> handle, CancellationToken cancel)
+    {
+        var open = new ConcurrentDictionary<Task, bool>();
+        try
+        {
+            while (true)
+            {
+                Socket socket = await listener.AcceptSocketAsync(cancel);
+                Task connection = ServeAsync(socket, handle, cancel); // 每个连接一个任务
+                open.TryAdd(connection, true);
+                // 出错的连接留在集合里，RunAsync 停止时重新抛出它的异常
+                _ = connection.ContinueWith(done => open.TryRemove(done, out _),
+                    TaskContinuationOptions.OnlyOnRanToCompletion);
+            }
+        }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested) { }
+        await Task.WhenAll(open.Keys);
+    }
+
+    private static async Task ServeAsync(Socket socket, Func<Message, Message> handle, CancellationToken cancel)
+    {
+        await Task.Yield();                                   // 立即回到 accept 循环
+        using var stream = new NetworkStream(socket, ownsSocket: true);
+        using var frames = new FrameWriter();                 // 这个连接的缓冲区，来自对象池
+        PipeReader input = PipeReader.Create(stream);
+        PipeWriter output = PipeWriter.Create(stream);
+        try
+        {
+            await FrameReader.ReadLoopAsync(input, message =>
+            {
+                Message reply = handle(message);
+                if (reply != null)
+                    frames.Write(output, reply);              // 和这次读取的其他回复一起发出
+            }, output, cancel);
+        }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested) { } // 正在停止
+        catch (IOException) { }                               // 对端重置了连接
+        catch (InvalidDataException) { }                      // 帧超过 MaxFrameSize
+        catch (NinoDataException) { }                         // 不是合法的 Message
+        await output.CompleteAsync();
+    }
+}
+```
+
+```csharp title="Program.cs"
+using System;
+using System.Net;
+using System.Net.Sockets;
+using System.Threading;
+
+var listener = new TcpListener(IPAddress.Any, 5000);
+listener.Start();
+using var stop = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Cancel(); }; // Ctrl+C：停止并关闭所有连接
+
+await MessageServer.RunAsync(listener, message => message switch
+{
+    Login login => new Chat { RequestId = login.RequestId, Text = $"welcome, {login.User}" },
+    _ => null,                                                // 不回复
+}, stop.Token);
+listener.Stop();
+```
+
+- **每个连接一个任务。** `ServeAsync` 一开始先让出线程，accept 循环立即去接下一个连接。同一个连接的消息在它自己的任务上按顺序处理；不同连接并行处理，这是[安全的](#threads)，因为每个连接有自己的 `FrameWriter`。
+- **池化的缓冲区。** 每个连接的 `FrameWriter` 从 `ArrayPool<byte>.Shared` 租用缓冲区，连接结束时（`Dispose`）还回去，所以连接来来去去，也不会把缓冲区留给垃圾回收器。帧直接从管道自己的池化分段中读取，只有跨两个分段的帧才拷贝一次（见[读取帧](#reading-frames)）。
+- **每次读取只发送一次。** handler 的回复生成后立即写进管道，`ReadLoopAsync` 每次读取之后 flush 一次：客户端在一个包里发了十个请求，十个回复也在一次发送里回去。
+- **取消。** 取消令牌会结束 `AcceptSocketAsync` 和每个连接上等待中的读取；仍打开的连接都关闭之后，`RunAsync` 返回。
+- **恶意或出错的对端。** 发来超过 `MaxFrameSize` 的帧、或者不是合法 `Message` 的字节的连接会被关闭，其他连接照常运行。数据来自客户端时，还要打开[不可信模式](/zh/docs/v4/security#untrusted-mode)。handler 抛出的异常不会被捕获：它结束那个连接，`RunAsync` 停止时会重新抛出。
+
+客户端像上面的程序那样连接，用 `FrameReader.ReadLoopAsync` 在 `PipeReader.Create(client.GetStream())` 上读取回复。
 
 ## WebSocket 与 UDP [#websocket-and-udp]
 

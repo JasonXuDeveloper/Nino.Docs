@@ -40,6 +40,7 @@ public sealed class Chat : Message
 ```
 
 - Declare the messages in the same assembly as `Message`: Nino then dispatches on them with generated code (a type check chain when writing, a `switch` on the id when reading) instead of a registry lookup. Seal them, so that a member declared as `PriceUpdate` costs a 1-byte header instead of a 4-byte id.
+- Put that assembly where both ends compile it, a class library the server and its .NET clients reference; for a Unity client, see [Sharing Types with a .NET Server](/en/docs/v4/advanced/unity#shared-types).
 - Type ids come from names, so renaming or moving a message class breaks old peers. Use [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name) when you rename one.
 - `NinoFormat.VersionTolerant` lets you add fields to each message later (not to `Message` itself); see [Rolling Upgrades](#rolling-upgrades). Subtypes inherit it with `[NinoType]`; if you give a message its own `[NinoType]`, repeat `format: NinoFormat.VersionTolerant` there.
 
@@ -67,9 +68,9 @@ using System.Buffers;
 using System.IO.Pipelines;
 using Nino.Core;
 
-public sealed class FrameWriter
+public sealed class FrameWriter : IDisposable
 {
-    private readonly NinoArrayBufferWriter _buffer = new(4096); // one per connection
+    private readonly NinoArrayBufferWriter _buffer = new(4096); // one per connection; rented from ArrayPool<byte>.Shared
 
     public void Write(PipeWriter output, Message message)
     {
@@ -83,6 +84,8 @@ public sealed class FrameWriter
 
         output.Write(_buffer.WrittenSpan);            // PipeWriter is an IBufferWriter<byte>
     }
+
+    public void Dispose() => _buffer.Dispose();       // the buffer goes back to the pool
 }
 ```
 
@@ -117,20 +120,30 @@ public static class FrameReader
 {
     public const int MaxFrameSize = 1 << 20; // reject absurd lengths before buffering them
 
-    public static async Task ReadLoopAsync(PipeReader input, Action<Message> handle)
+    // replies the handler writes go out with one flush per read
+    public static async Task ReadLoopAsync(PipeReader input, Action<Message> handle,
+        PipeWriter replies = null, CancellationToken cancel = default)
     {
-        while (true)
+        try
         {
-            ReadResult result = await input.ReadAsync();
-            ReadOnlySequence<byte> buffer = result.Buffer;
+            while (true)
+            {
+                ReadResult result = await input.ReadAsync(cancel);
+                ReadOnlySequence<byte> buffer = result.Buffer;
 
-            while (TryReadFrame(ref buffer, out ReadOnlySequence<byte> frame))
-                handle(Decode<Message>(frame));
+                while (TryReadFrame(ref buffer, out ReadOnlySequence<byte> frame))
+                    handle(Decode<Message>(frame));
 
-            input.AdvanceTo(buffer.Start, buffer.End);
-            if (result.IsCompleted) break;
+                input.AdvanceTo(buffer.Start, buffer.End);
+                if (replies != null)
+                    await replies.FlushAsync(cancel);        // every reply to this read, in one send
+                if (result.IsCompleted) break;
+            }
         }
-        await input.CompleteAsync();
+        finally
+        {
+            await input.CompleteAsync();
+        }
     }
 
     private static bool TryReadFrame(ref ReadOnlySequence<byte> buffer, out ReadOnlySequence<byte> frame)
@@ -215,7 +228,95 @@ await server;
 listener.Stop();
 ```
 
-It prints `Login` and `Chat`. A real server accepts in a loop and starts one read loop, with its own `FrameWriter`, per connection.
+It prints `Login` and `Chat`.
+
+### Serve Many Connections [#accept-loop]
+
+A server accepts connections in a loop and serves each one in a task of its own, with its own `FrameWriter`. `MessageServer` below does that, sends the replies your handler returns, and stops when its token is cancelled:
+
+```csharp title="MessageServer.cs"
+using System;
+using System.Collections.Concurrent;
+using System.IO;
+using System.IO.Pipelines;
+using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
+using Nino.Core;
+
+public static class MessageServer
+{
+    // Accepts connections until cancel fires, then waits for the open ones to close.
+    public static async Task RunAsync(TcpListener listener, Func<Message, Message> handle, CancellationToken cancel)
+    {
+        var open = new ConcurrentDictionary<Task, bool>();
+        try
+        {
+            while (true)
+            {
+                Socket socket = await listener.AcceptSocketAsync(cancel);
+                Task connection = ServeAsync(socket, handle, cancel); // one task per connection
+                open.TryAdd(connection, true);
+                // a connection that failed stays in the set, so RunAsync rethrows its exception when it stops
+                _ = connection.ContinueWith(done => open.TryRemove(done, out _),
+                    TaskContinuationOptions.OnlyOnRanToCompletion);
+            }
+        }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested) { }
+        await Task.WhenAll(open.Keys);
+    }
+
+    private static async Task ServeAsync(Socket socket, Func<Message, Message> handle, CancellationToken cancel)
+    {
+        await Task.Yield();                                   // back to the accept loop at once
+        using var stream = new NetworkStream(socket, ownsSocket: true);
+        using var frames = new FrameWriter();                 // this connection's buffer, pooled
+        PipeReader input = PipeReader.Create(stream);
+        PipeWriter output = PipeWriter.Create(stream);
+        try
+        {
+            await FrameReader.ReadLoopAsync(input, message =>
+            {
+                Message reply = handle(message);
+                if (reply != null)
+                    frames.Write(output, reply);              // sent with this read's other replies
+            }, output, cancel);
+        }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested) { } // shutting down
+        catch (IOException) { }                               // the peer reset the connection
+        catch (InvalidDataException) { }                      // a frame over MaxFrameSize
+        catch (NinoDataException) { }                         // not a valid Message
+        await output.CompleteAsync();
+    }
+}
+```
+
+```csharp title="Program.cs"
+using System;
+using System.Net;
+using System.Net.Sockets;
+using System.Threading;
+
+var listener = new TcpListener(IPAddress.Any, 5000);
+listener.Start();
+using var stop = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Cancel(); }; // Ctrl+C: stop and close every connection
+
+await MessageServer.RunAsync(listener, message => message switch
+{
+    Login login => new Chat { RequestId = login.RequestId, Text = $"welcome, {login.User}" },
+    _ => null,                                                // no reply
+}, stop.Token);
+listener.Stop();
+```
+
+- **One task per connection.** `ServeAsync` yields before it does anything, so the accept loop takes the next connection at once. The messages of one connection are handled in order, on its task; different connections are handled in parallel, which [is safe](#threads) because each has its own `FrameWriter`.
+- **Pooled buffers.** Each connection's `FrameWriter` rents its buffer from `ArrayPool<byte>.Shared` and returns it when the connection ends (`Dispose`), so connections that come and go do not leave buffers to the garbage collector. Frames are read from the pipe's own pooled segments, and only a frame split across two of them is copied (see [Reading Frames](#reading-frames)).
+- **One send per read.** The handler's replies are written into the pipe as they are made, and `ReadLoopAsync` flushes them once after each read, so a client that sends ten requests in one packet gets its ten replies in one send.
+- **Cancellation.** Cancelling the token ends `AcceptSocketAsync` and every connection's pending read; `RunAsync` returns once the open connections have closed.
+- **Bad peers.** A connection that sends a frame over `MaxFrameSize` or bytes that are not a valid `Message` is closed, and the others keep running. For data from clients, also turn on [untrusted mode](/en/docs/v4/security#untrusted-mode). An exception from your handler is not caught: it ends that connection, and `RunAsync` rethrows it when it stops.
+
+A client connects as in the program above, and reads the replies with `FrameReader.ReadLoopAsync` on `PipeReader.Create(client.GetStream())`.
 
 ## WebSocket and UDP [#websocket-and-udp]
 
