@@ -31,6 +31,7 @@ On every build and runtime:
 - Blocks of up to 64 bytes (most strings) are copied inline on 64-bit runtimes; on 32-bit x86 and WebAssembly and on .NET on Arm32, where unaligned 8-byte loads cannot fault, the same way in one call; Mono and IL2CPP on Arm32 call `memmove`.
 - Raw values read in blocks of 6 KB or more (into new or existing arrays) are copied with `memmove`, whose `rep movsb` on Intel x64 writes fresh cache lines without reading them first; on AMD x64 CPUs, where it is slower than vector stores, with Nino's vector loop.
 - Padding is masked with 512-bit vectors on AVX-512, otherwise with `Vector<T>` where the runtime accelerates it (on Mono only with the System.Numerics.Vectors package; never in Unity, whose `Vector<T>` Mono does not accelerate even where it reports itself accelerated), else 8 bytes at a time.
+- On Intel's Ice Lake generation (Ice Lake, Tiger Lake and Rocket Lake, recognized by CPU model), where a 64-byte load across two cache lines costs about twice an aligned one: padding is masked with 32-byte vectors instead of 64-byte ones, tuples and pairs whose groups move whole 4-byte words are written from loads that start on a cache line, and on Linux blocks of about 2 to 32 KB are copied by the C library's `rep movsb`. Every other CPU keeps the paths above; the bytes are the same.
 
 ## Unity [#unity]
 

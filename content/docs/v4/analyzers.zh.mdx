@@ -1,6 +1,6 @@
 ---
 title: 分析器诊断
-description: "Nino 在你写代码时报告的全部诊断（NINO001 至 NINO027）：含义和修复方法。"
+description: "Nino 在你写代码时报告的全部诊断（NINO001 至 NINO028）：含义和修复方法。"
 icon: ShieldCheck
 ---
 
@@ -42,6 +42,7 @@ Nino 的分析器随源生成器一起发布（`Nino.Generator` 包和 Unity 包
 | [NINO013](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino013) | 错误 | `[NinoMember]` 索引重复 | 改用下一个空闲索引 | ✅ |
 | [NINO022](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino022) | 警告 | 基类中被 `new` 隐藏的非公开成员无法访问（通过 `[UnsafeAccessor]` 可以访问：.NET 8+，泛型类型 .NET 9+），会被跳过 | 重命名其中一个成员，或改为公共成员 |  |
 | [NINO023](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino023) | 错误 | 结构体没有任何成员参与序列化：会被写成 0 字节，由它组成的集合无法读回 | 至少序列化一个成员，或设为 `VersionTolerant` 或 `Keyed` |  |
+| [NINO028](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md#nino028) | 警告 | `[NinoMember]` 标在永远不会被序列化的成员上（静态成员、常量、索引器、固定大小缓冲区、没有 getter 或显式实现接口的属性、没有 setter 且没有构造函数接收的属性，或 `[field: NinoMember]`）：这个成员什么都不写；关于这个特性只报这一条诊断 | 去掉 `[NinoMember]`；要序列化只读自动属性，给构造函数加一个同名参数 | ✅ |
 
 ### 格式与引用 [#formats-and-references]
 

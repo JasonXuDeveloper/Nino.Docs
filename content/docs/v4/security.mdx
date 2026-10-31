@@ -16,6 +16,7 @@ Whatever the bytes, a read:
 - **keeps its stack bounded**: objects nested more than 128 levels deep are read later from a shallow level, and everything else that nests (types built by their constructor or compared by value, structs and collections that hold themselves) stops at [`NinoSettings.MaxDepth`](#limits), with the thread's stack checked on the way (see [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs));
 - **creates only the types you declared**: the data holds type ids, never type names, a polymorphic value must be one of the declared type's registered subtypes, and a back reference must point to an object already read, of the slot's type;
 - **bounds the work per key** of the dictionaries and sets it fills ([hash flooding](#hash-flooding));
+- **grows no process-wide cache**: on .NET 8 and later (the net8.0 and net10.0 builds) a `CultureInfo` reads back only if the runtime ships it (aliases such as `zh-CN` included) and its name has no extension or private-use subtag (`-u-`, `-t-`, `-x-`); with invariant globalization only the invariant culture (`""`) reads back. .NET keeps every culture it creates for the life of the process, so names taken from the data could otherwise grow the heap without bound. .NET Framework, Mono and Unity know only the cultures of their own tables;
 - **leaves no stale memory in your objects**: reading into an existing value, an array the read allocated takes its place only once the read has filled it, so data rejected half way never leaves uninitialized memory in it ([Invalid Data](/en/docs/v4/basic#invalid-data));
 - **throws one exception type**, [`NinoDataException`](#ninodataexception), for all of it.
 
@@ -51,7 +52,8 @@ In every mode, `NinoDataException` is thrown for:
 - a keyed member whose entry holds more bytes than its value, and a member that runs past the end of its region;
 - a version-tolerant or keyed region whose section of deferred bodies does not match the region (its offset or its entries);
 - a [string header](/en/docs/v4/wire-format#strings) that is not in its shortest form or whose first byte is `0x82` or above;
-- a `[NinoUtf8]` string whose bytes are not valid UTF-8 or do not match its char and byte counts.
+- a `[NinoUtf8]` string whose bytes are not valid UTF-8 or do not match its char and byte counts;
+- a value its type rejects: a malformed `Uri`, an unknown time zone, and on .NET 8 and later a `CultureInfo` the runtime does not ship ([Guarantees](#guarantees)).
 
 A `bool` field inside a raw struct is copied with the struct's bytes, unchecked, unless [`Untrusted`](#untrusted-mode) is set. The `bool` items of value tuples and `KeyValuePair`s are checked in every mode, also in arrays and lists read as blocks.
 

@@ -573,7 +573,7 @@ Go 的字符串是 UTF-8，所以按默认编码（Latin-1 或 UTF-16）写入�
 
 ## Rust [#rust]
 
-Rust 运行时（crate `nino-serialization`，库名 `nino`）读写 Nino 的[二进制格式](/zh/docs/v4/wire-format)。它的读取代码都是安全代码；唯一允许 `unsafe` 的模块负责写入时的字符串转码（其余部分为 `#![deny(unsafe_code)]`），并在小端和大端目标上用 Miri 测试。它没有必需的依赖。每次发布都会以 Nino 的版本号把它发布到 crates.io：
+Rust 运行时（crate `nino-serialization`，库名 `nino`）读写 Nino 的[二进制格式](/zh/docs/v4/wire-format)。它的边界检查都是安全代码；只有两处允许 `unsafe`（其余部分为 `#![deny(unsafe_code)]`）：读写时转码字符串的模块，在小端和大端目标上用 Miri 测试；以及[引用追踪](#reference-tracking)中 `Shared::get` 的一个代码块，同样用 Miri 测试。它没有必需的依赖。每次发布都会以 Nino 的版本号把它发布到 crates.io：
 
 ```shell
 cargo add nino-serialization --features indexmap
@@ -641,7 +641,7 @@ pub struct Vec2 { pub x: f32, pub y: f32 }
 
 | 类型属性 | 含义 |
 | --- | --- |
-| `format = "positional" \| "version_tolerant" \| "keyed"` | `NinoFormat.Positional`（默认）、`VersionTolerant` 或 `Keyed`；也接受 `"plain"` 和 `"tolerant"`。 |
+| `format = "positional" \| "version_tolerant" \| "keyed"` | `NinoFormat.Positional`（默认）、`VersionTolerant` 或 `Keyed`。 |
 | `kind = "class" \| "open" \| "struct" \| "raw"` | 密封类（默认，带存在字节）、非密封类（带类型 ID）、结构体，或按内存写出的非托管结构体（可用 `pack` 和 `size`）。 |
 | `id = "Full.Name"` 或 `id = 0x…` | 类型 ID：在编译时哈希的 .NET 全名，或数字本身。 |
 | `deferrable = false` | .NET 从不推迟的类型（记录、通过构造函数创建的类型）。未给出时取自 `layout`。 |
@@ -724,6 +724,8 @@ public sealed class Box<T>
 | Go | `*Node`：每个引用都是同一个指针，按指针编号 |
 | Rust | `Option<nino::Shared<Node>>`：可以被任意多处持有的一个对象（克隆得到的是同一个对象），按标识比较相等；用 `Shared::empty` 和 `fill` 构建循环 |
 
+在 Rust 中，一次读取创建的对象（包括循环）都属于这次读取，一起释放，就像 .NET 的垃圾回收器那样：最后一个保持它们的 `Shared`（返回的值、任何克隆、存放在所有被追踪对象之外的 `Shared`）被丢弃时，或者读取失败时。丢弃读到的值后还要保留图的一部分，就克隆你要保留的 `Shared`。手工构建的图（`Shared::new`、`Shared::empty` 和 `fill`）像 `Rc` 一样按引用计数，这样构建的循环不会被释放。手写多态被追踪槽位的读取代码时，对槽位允许的每个类型用 `r.shared_from::<T>(&r.back_ref(header)?)` 取回引用。
+
 引用头不是 -1、0 或已读对象的编号时会被拒绝，指向槽位不允许的类型的对象的反向引用也会被拒绝；每个新对象至少占 4 个字节的引用头，所以对象表的增长不会快于数据。Go 的[结构体标签](#struct-tags)不追踪引用：它们拒绝这样的类型。
 
 ## `[NinoType]` 集合 [#ninotype-collections]
@@ -746,7 +748,7 @@ TypeScript、Go 和 Rust 的读取器与 .NET 读取器一样，按不可信输�
 - 所有失败都是 `NinoError`。
 - 映射读入 `Map`，从不读入普通对象，所以 `__proto__` 这样的键只是数据。
 - `[NinoUtf8]` 字符串必须是给定字符数的严格 UTF-8。
-- V8 对数字和 `bigint` 求哈希时不带种子，数据可以挑出落进同一个桶的键。超过 128 个数字或 `bigint` 键的映射或集合会让每个键经过 `NinoKeyGuard`：某个键在所在的桶里会碰到 100 个以上的键时，抛出 `NinoError`，和 .NET 的 [`MaxHashCollisions`](/zh/docs/v4/security#hash-flooding) 一样。这个防护只对 V8（Node、Chromium、Deno）精确，对 JavaScriptCore 和 SpiderMonkey 不精确，它们对数字的哈希方式不同。Go 和 Rust 用随机种子求键的哈希。
+- V8 对数字、`bigint` 以及数组下标形式的字符串（`"0"` 到 `"4294967294"`，按其数值求哈希）求哈希时不带种子，数据可以挑出落进同一个桶的键。超过 128 个数字、`bigint` 或字符串键的映射或集合会让每个键经过 `NinoKeyGuard`（字符串只对数组下标形式的求哈希）：某个键在所在的桶里会碰到 100 个以上的键时，抛出 `NinoError`，和 .NET 的 [`MaxHashCollisions`](/zh/docs/v4/security#hash-flooding) 一样。这个防护只对 V8（Node、Chromium、Deno）精确，对 JavaScriptCore 和 SpiderMonkey 不精确，它们对键的哈希方式不同。Go 和 Rust 用随机种子求键的哈希。
 - 重复的键按 `Map` 和 `Set` 的方式比较：数字、`bigint`、字符串、布尔值和 `null` 按值比较。读成对象的键（读成 `Date` 的 `DateTime`、结构体、元组）以及只有小数位数不同的 `decimal` 不参与比较，这样的映射或集合会保留两个条目。
 
 </Tab>

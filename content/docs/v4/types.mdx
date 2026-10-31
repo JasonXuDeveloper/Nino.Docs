@@ -55,7 +55,7 @@ The raw layout is the canonical 64-bit layout. On runtimes that lay a struct out
 - `Nullable<T>` (`T?`) of any serializable `T`
 - `ValueTuple` and `Tuple` with 1 to 7 elements; as a member or element of your own types (generated code), or as the type argument of a generic `[NinoType]`, a `ValueTuple` of eight elements or more too
 - `KeyValuePair<TKey, TValue>`
-- `BigInteger` (its two's-complement bytes), `Version`, `Uri` (its original string, read back relative or absolute), `StringBuilder` (a `string` in its UTF-16 form; it reads either form), `BitArray`, `CultureInfo` (its name) and `TimeZoneInfo` (its id, plus its serialized form, adjustment rules included, for a custom zone; a system zone reads back as the reading machine's zone of that id)
+- `BigInteger` (its two's-complement bytes), `Version`, `Uri` (its original string, read back relative or absolute), `StringBuilder` (a `string` in its UTF-16 form; it reads either form), `BitArray`, `CultureInfo` (its name; on .NET 8 and later only a culture the runtime ships reads back, see [Untrusted Data](/en/docs/v4/security#guarantees)) and `TimeZoneInfo` (its id, plus its serialized form, adjustment rules included, for a custom zone; a system zone reads back as the reading machine's zone of that id)
 - `Lazy<T>`: its value, which serializing creates if it was not yet; read back as an already created `Lazy<T>`
 - `object`: a member declared as `object` can hold any `[NinoType]` instance (class or struct), written with its type id so the runtime type is preserved. Other values (an `int`, a `List<T>`) cannot be written through `object`; serializing one throws.
 

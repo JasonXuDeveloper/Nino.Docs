@@ -60,7 +60,7 @@ Nino 支持所有[非托管类型](https://learn.microsoft.com/zh-cn/dotnet/csha
 - 任意可序列化类型 `T` 的 `Nullable<T>`（`T?`）
 - 1 到 7 个元素的 `ValueTuple` 和 `Tuple`；作为自己类型的成员或元素（生成代码），或作为泛型 `[NinoType]` 的类型实参时，8 个及以上元素的 `ValueTuple` 也支持
 - `KeyValuePair<TKey, TValue>`
-- `BigInteger`（它的二进制补码字节）、`Version`、`Uri`（它的原始字符串，读回时相对或绝对 URI 均可）、`StringBuilder`（按 UTF-16 形式的 `string` 写出，两种形式都能读取）、`BitArray`、`CultureInfo`（它的名称）和 `TimeZoneInfo`（它的 ID；自定义时区再加上它的序列化形式，包括调整规则；系统时区读回时是读取方机器上该 ID 的时区）
+- `BigInteger`（它的二进制补码字节）、`Version`、`Uri`（它的原始字符串，读回时相对或绝对 URI 均可）、`StringBuilder`（按 UTF-16 形式的 `string` 写出，两种形式都能读取）、`BitArray`、`CultureInfo`（它的名称；在 .NET 8 及以上只能读回运行时自带的区域性，见[不可信数据](/zh/docs/v4/security#guarantees)）和 `TimeZoneInfo`（它的 ID；自定义时区再加上它的序列化形式，包括调整规则；系统时区读回时是读取方机器上该 ID 的时区）
 - `Lazy<T>`：写入它的值（如果还没创建，序列化时会创建）；读回的是已经创建好值的 `Lazy<T>`
 - `object`：声明为 `object` 的成员可以存放任何 `[NinoType]` 实例（类或结构体），写入时带上类型 ID，读回后仍是原来的运行时类型。其他值（如 `int`、`List<T>`）不能通过 `object` 写入，序列化这样的值会抛出异常。
 
@@ -90,7 +90,7 @@ Nino 支持所有[非托管类型](https://learn.microsoft.com/zh-cn/dotnet/csha
 | `IGrouping<TKey, TElement>` | 包装其元素数组的分组 |
 | `BlockingCollection<T>` | 一个新的、无容量上限的 `BlockingCollection<T>`（底层为 `ConcurrentQueue<T>`），包含元素的快照 |
 
-声明为集合接口的成员，对大多数元素类型来说，写出的字节与同样元素的 `List<T>` 相同（原始类型元素整块写入）。可空的原始类型元素是个例外：`int?[]` 或 `List<int?>` 的每个元素占固定的跨度（先是有值标志，然后是填充，再是值，`int?` 共 8 字节）；而声明为 `IList<int?>`、`ICollection<int?>` 或 `IEnumerable<int?>` 的成员把每个元素当作单独的 `int?` 写入（`null` 占 1 字节，否则占 5 字节）。成员在这两类声明之间切换，格式就会改变。
+声明为集合接口的成员，对大多数元素类型来说，写出的字节与同样元素的 `List<T>` 相同（原始类型元素整块写入）。可空的原始类型元素是个例外：`int?[]` 或 `List<int?>` 的每个元素占固定的跨度（先是存在字节，然后是填充，再是值，`int?` 共 8 字节）；而声明为 `IList<int?>`、`ICollection<int?>` 或 `IEnumerable<int?>` 的成员把每个元素当作单独的 `int?` 写入（`null` 占 1 字节，否则占 5 字节）。成员在这两类声明之间切换，格式就会改变。
 
 <Callout type="info">
 
