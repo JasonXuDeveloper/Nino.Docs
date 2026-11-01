@@ -1,0 +1,241 @@
+---
+title: Struct Layouts Across Runtimes
+seoTitle: "Struct Layouts Across Runtimes – Nino v4 Docs"
+description: "Why a raw struct written by Nino on .NET reads back on Mono, IL2CPP, .NET Framework, 32-bit hosts and in Go, Rust and TypeScript: one canonical layout, 64-bit CoreCLR's, and the measured layout of every BCL struct on each runtime."
+icon: LayoutGrid
+---
+
+An unmanaged struct that is not a `[NinoType]`, and a raw `[NinoType]` struct, are written as one block of bytes. Runtimes do not agree on how they lay such a struct out in memory: Mono keeps a value tuple's items in declaration order where CoreCLR reorders them, 32-bit runtimes pack 8-byte fields differently, .NET 8 and .NET 10 hold a `DateTimeOffset` differently, and `Vector<T>` is as wide as the CPU's vectors. Nino writes every such struct in **one canonical layout**, so the bytes one runtime writes are the bytes every other one reads.
+
+## One Layout, Every Runtime [#canonical]
+
+The canonical layout is the one **64-bit CoreCLR** (.NET on x64 and Arm64) uses, made independent of the .NET version: `DateTimeOffset` as .NET 10 holds it (its offset in minutes as an `int`, then the UTC date), `nint`, `nuint` and pointers as 8 bytes, `Vector<T>` as 32 bytes (x64 with AVX2, the default), and the SIMD vectors aligned as on x64. Padding bytes are always written as zeros. The [specification](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#52-the-canonical-layout) gives the rule for every struct, value tuples included.
+
+- **64-bit .NET copies memory.** Where a runtime's layout is the canonical one, which is every struct on .NET x64 and almost every one on Arm64, Nino copies the struct as it lies in memory and clears its padding in the same pass.
+- **Every other runtime converts.** Mono, IL2CPP, .NET Framework and 32-bit runtimes find once where their own layout puts each field (reading an instance) and convert each value field by field: widening a 4-byte `nint` to 8 bytes, moving a tuple's items, zero-extending a 16-byte `Vector<T>` to 32. 64-bit .NET never adapts to them.
+- **Go, Rust and TypeScript** read and write the same bytes from the published layout ([Code Generation](/en/docs/v4/advanced/codegen)).
+
+So data moves both ways between a .NET 10 server, a Unity IL2CPP client on a 32-bit phone, a .NET Framework tool and a Go service. MemoryPack copies an unmanaged struct as it lies in memory: a struct holding `(int, long)` written by .NET on x64 has the `long` first, and Mono, which keeps the `int` first, reads other values from the same bytes ([Nino vs MemoryPack](/en/docs/v4/vs-memorypack)).
+
+## What Differs Between Runtimes [#differences]
+
+The [tables below](#measured-layouts) are measured: CI runs `tests/Nino.RuntimeTests` on each runtime, which prints the size and field offsets of every unmanaged BCL struct, alone and inside a struct `{ byte A; T B; int C; }`, and checks that the runtime writes and reads the bytes CoreCLR x64 wrote for each. Nino's [docs/layouts.md](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/layouts.md) is generated from those CI logs and is the source of these tables. In short:
+
+- **Value tuples** are `LayoutKind.Auto`. 64-bit CoreCLR puts primitive items first, largest first (`(int, long)` is the `long`, then the `int`); Mono and IL2CPP keep declaration order; 32-bit runtimes and .NET Framework pack them otherwise.
+- **`DateTimeOffset`**: .NET 10 holds an `int` of minutes at 0 and the date at 8, .NET 8 a `short` at 0, Mono, IL2CPP and .NET Framework the date first and a `short` at 8.
+- **`decimal`** is aligned to 8 on CoreCLR and Mono, to 4 on .NET Framework and IL2CPP.
+- **.NET Framework** lays out a struct that holds an auto-layout struct (a tuple, `DateTime`) as auto-layout too, so the fields of `{ byte A; DateTime B; int C; }` move.
+- **32-bit runtimes** have 4-byte `nint` and align some 8-byte fields to 4 (a `DateTime` field on Windows x86).
+- **`Vector<T>`** is 32 bytes on x64 with AVX2 or AVX-512, 16 on Arm64, on x64 without AVX2, on Mono and IL2CPP, and 64 with `DOTNET_MaxVectorTBitWidth=512`. **`Vector256<T>` and `Vector512<T>`** are aligned to 16 on Arm64 (32 and 64 on x64).
+- **`KeyValuePair`**, **`Nullable<T>`**, `Guid`, `DateTime` and `TimeSpan` agree everywhere, except where their items or a runtime's alignment differ.
+
+## What It Costs [#cost]
+
+| Runtime | Raw struct whose layout is canonical there | Raw struct whose layout differs |
+| --- | --- | --- |
+| 64-bit .NET (x64, Arm64) | a memory copy, padding cleared in the same pass | a field-by-field conversion (Arm64: `Vector<T>`, `Vector256`, `Vector512`) |
+| Mono, IL2CPP, .NET Framework, 32-bit | a memory copy | a field-by-field conversion |
+
+Whether a type is copied or converted is decided once per type, before .NET compiles the code that uses it at full speed, as a `static readonly` flag the JIT folds: the fast code of an array, list or value of a canonical struct holds no layout check at all, so 64-bit .NET pays nothing for the other runtimes. A converted struct is not written as one block: arrays and lists of it take a loop over their values instead of a single copy. On Mono and IL2CPP the flag is read once per call.
+
+## What You Should Do [#what-to-do]
+
+- **Prefer a `[NinoType]` struct** for data you design: the generator copies it as one block only when its layout is the same on every runtime (checked at compile time), and otherwise writes it member by member with no padding, so no runtime converts anything. A plain struct (no `[NinoType]`) holding tuples, `DateTimeOffset`, `nint` or vectors is still portable, at the cost of a conversion off 64-bit .NET.
+- **Order fields largest first** in plain structs you share: fewer padding bytes on the wire.
+- **`Vector<T>`**: Nino writes 32 bytes on every host. A host with 16-byte vectors (Arm64, Unity, x64 without AVX2) writes its 16 bytes and 16 zero bytes, and rejects data whose upper 16 bytes are not zero with `NinoDataException` rather than dropping them; a host with 64-byte vectors refuses to write a value whose bytes past 32 are set (`InvalidOperationException`). When data with all lanes set must be read on Arm64 or in Unity, store the lanes as an array (`int[]`) instead. Go, Rust and TypeScript have no `Vector<T>`: nino-gen leaves out types that hold one, with warning NINOGEN002.
+- **Godot's math structs** differ between single- and double-precision builds; that is the build's choice, not the runtime's ([Platforms](/en/docs/v4/platforms#godot)).
+
+```csharp
+// A plain struct: raw, in the canonical layout. (int, long) is placed as 64-bit .NET places it
+// (the long, then the int), and Mono, IL2CPP and 32-bit runtimes convert to it.
+public struct Sample
+{
+    public byte Kind;
+    public (int Id, long Ticks) Stamp;
+    public float Value;
+}
+
+// The same data as a [NinoType] struct: its layout differs on 32-bit runtimes (20 bytes
+// there, 24 on 64-bit), so the generator writes it member by member (17 bytes) everywhere.
+[NinoType]
+public struct SampleRecord
+{
+    public long Ticks;
+    public int Id;
+    public float Value;
+    public byte Kind;
+}
+```
+
+## Measured Layouts [#measured-layouts]
+
+Measured by Nino's CI (run 41280617045, `tests/Nino.RuntimeTests`): .NET 10 on Linux x64 and Arm64, Windows x86 and Linux Arm32 (under qemu), .NET Framework 4.8 64-bit and 32-bit, Mono 6.14 on Linux x64 and Arm64. The first column is the canonical layout, with two exceptions that do not depend on the runtime: `DateTimeOffset` as .NET 10 lays it out, and `nint`/`nuint` as 8 bytes. `=` is the same size and field offsets as CoreCLR x64; a **bold** cell differs (offsets in field order); `n/a` is a type the runtime does not have. Field names differ between runtimes; offsets are what count. Every runtime in these tables writes and reads CoreCLR x64's bytes for each type, checked in the same CI run.
+
+### Each Type: Size, Then the Offset of Each Field [#each-type]
+
+| Type | CoreCLR x64 | CoreCLR Arm64 | CoreCLR x86 | CoreCLR Arm32 | .NET Framework x64 | .NET Framework x86 | Mono x64 | Mono Arm64 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `(int,long)` | 16: Item1 8, Item2 0 | = | **12: 8, 0** | = | = | **12: 8, 0** | **16: 0, 8** | **16: 0, 8** |
+| `(long,int)` | 16: Item1 0, Item2 8 | = | **12: 0, 8** | = | = | **12: 0, 8** | = | = |
+| `(byte,short)` | 4: Item1 2, Item2 0 | = | = | = | = | = | **4: 0, 2** | **4: 0, 2** |
+| `(byte,long,int)` | 16: Item1 12, Item2 0, Item3 8 | = | = | = | = | = | **24: 0, 8, 16** | **24: 0, 8, 16** |
+| `(byte,int,short)` | 8: Item1 6, Item2 0, Item3 4 | = | = | = | = | = | **12: 0, 4, 8** | **12: 0, 4, 8** |
+| `(short,byte,int)` | 8: Item1 4, Item2 6, Item3 0 | = | = | = | = | = | **8: 0, 2, 4** | **8: 0, 2, 4** |
+| `(int,int)` | 8: Item1 0, Item2 4 | = | = | = | = | = | = | = |
+| `(int,int,int)` | 16: Item1 0, Item2 4, Item3 8 | = | **12: 0, 4, 8** | **12: 0, 4, 8** | = | **12: 0, 4, 8** | **12: 0, 4, 8** | **12: 0, 4, 8** |
+| `(byte,byte,byte)` | 4: Item1 0, Item2 1, Item3 2 | = | = | = | = | = | **3: 0, 1, 2** | **3: 0, 1, 2** |
+| `(bool,char,byte)` | 4: Item1 2, Item2 0, Item3 3 | = | = | = | = | = | **6: 0, 2, 4** | **6: 0, 2, 4** |
+| `(double,float)` | 16: Item1 0, Item2 8 | = | **12: 0, 8** | = | = | **12: 0, 8** | = | = |
+| `(Tag,long)` | 16: Item1 8, Item2 0 | = | **12: 8, 0** | = | = | **12: 8, 0** | **16: 0, 8** | **16: 0, 8** |
+| `(int,IntPtr)` | 16: Item1 8, Item2 0 | = | **8: 0, 4** | **8: 0, 4** | = | **8: 0, 4** | **16: 0, 8** | **16: 0, 8** |
+| `(byte,UIntPtr)` | 16: Item1 8, Item2 0 | = | **8: 4, 0** | **8: 4, 0** | = | **8: 4, 0** | **16: 0, 8** | **16: 0, 8** |
+| `ValueTuple<long>` | 8: Item1 0 | = | = | = | = | = | = | = |
+| `(int,DateTime)` | 16: Item1 0, Item2 8 | = | **12: 0, 4** | = | = | **12: 0, 4** | = | = |
+| `(byte,DateTime,int)` | 16: Item1 4, Item2 8, Item3 0 | = | = | = | = | = | **24: 0, 8, 16** | **24: 0, 8, 16** |
+| `(int,TimeSpan)` | 16: Item1 0, Item2 8 | = | = | = | = | **12: 0, 4** | = | = |
+| `(byte,decimal)` | 24: Item1 0, Item2 8 | = | = | = | = | **20: 0, 4** | = | = |
+| `(int,decimal)` | 24: Item1 0, Item2 8 | = | = | = | = | **20: 0, 4** | = | = |
+| `(byte,Guid)` | 24: Item1 0, Item2 4 | = | **20: 0, 4** | **20: 0, 4** | **24: 0, 8** | **20: 0, 4** | **20: 0, 4** | **20: 0, 4** |
+| `(byte,int?)` | 16: Item1 0, Item2 4 | = | **12: 0, 4** | **12: 0, 4** | **16: 0, 8** | **12: 0, 4** | **12: 0, 4** | **12: 0, 4** |
+| `(long?,byte)` | 24: Item1 8, Item2 0 | = | = | = | = | **20: 4, 0** | **24: 0, 16** | **24: 0, 16** |
+| `(byte,(int,long))` | 24: Item1 0, Item2 8 | = | **16: 0, 4** | = | = | **16: 0, 4** | = | = |
+| `((byte,short),long)` | 16: Item1 8, Item2 0 | = | **12: 8, 0** | = | = | **12: 8, 0** | **16: 0, 8** | **16: 0, 8** |
+| `(int,(byte,short),long)` | 16: Item1 8, Item2 12, Item3 0 | = | = | = | **24: 8, 16, 0** | = | **16: 0, 4, 8** | **16: 0, 4, 8** |
+| `(int,KVP<int,long>)` | 24: Item1 0, Item2 8 | = | = | = | = | **20: 0, 4** | = | = |
+| `(byte,DateTimeOffset)` | 24: Item1 0, Item2 8 | = | **16: 0, 4** | = | = | **16: 0, 4** | = | = |
+| `(byte,short,int,long,byte,short,int)` | 24: Item1 20, Item2 16, Item3 8, Item4 0, Item5 21, Item6 18, Item7 12 | = | = | = | = | = | **24: 0, 2, 4, 8, 16, 18, 20** | **24: 0, 2, 4, 8, 16, 18, 20** |
+| `(byte,long,byte,long,byte,long,byte,int)` | 32: Item1 24, Item2 0, Item3 25, Item4 8, Item5 26, Item6 16, Item7 27, Rest 28 | = | = | = | **40: 24, 0, 25, 8, 26, 16, 27, 32** | = | **56: 0, 8, 16, 24, 32, 40, 48, 52** | **56: 0, 8, 16, 24, 32, 40, 48, 52** |
+| `(int,(byte,long),(short,(byte,int)))` | 40: Item1 0, Item2 8, Item3 24 | = | **28: 0, 4, 16** | = | = | **28: 0, 4, 16** | = | = |
+| `KVP<int,long>` | 16: key 0, value 8 | = | = | = | = | = | = | = |
+| `KVP<byte,long>` | 16: key 0, value 8 | = | = | = | = | = | = | = |
+| `KVP<long,byte>` | 16: key 0, value 8 | = | = | = | = | = | = | = |
+| `KVP<int,DateTime>` | 16: key 0, value 8 | = | **12: 0, 4** | = | = | **12: 0, 4** | = | = |
+| `KVP<byte,(int,long)>` | 24: key 0, value 8 | = | **16: 0, 4** | = | = | **16: 0, 4** | = | = |
+| `DateTimeOffset` | 16: _dateTime 8, _offsetMinutes 0 | = | **12: 4, 0** | = | = | **12: 4, 0** | **16: 0, 8** | **16: 0, 8** |
+| `DateTime` | 8: _dateData 0 | = | = | = | = | = | = | = |
+| `TimeSpan` | 8: _ticks 0 | = | = | = | = | = | = | = |
+| `decimal` | 16: _flags 0, _hi32 4, _lo64 8 | = | = | = | **16: 0, 4, 8, 12** | **16: 0, 4, 8, 12** | **16: 0, 4, 8, 12, 8** | **16: 0, 4, 8, 12, 8** |
+| `Guid` | 16: _a 0, _b 4, _c 6, _d 8, _e 9, _f 10, _g 11, _h 12, _i 13, _j 14, _k 15 | = | = | = | = | = | = | = |
+| `int?` | 8: hasValue 0, value 4 | = | = | = | = | = | = | = |
+| `long?` | 16: hasValue 0, value 8 | = | = | = | = | = | = | = |
+| `(int,long)?` | 24: hasValue 0, value 8 | = | **16: 0, 4** | = | = | **16: 0, 4** | = | = |
+| `DateTimeOffset?` | 24: hasValue 0, value 8 | = | **16: 0, 4** | = | = | **16: 0, 4** | = | = |
+| `IntPtr` | 8: _value 0 | = | **4: 0** | **4: 0** | = | **4** | = | = |
+| `Complex` | 16: m_real 0, m_imaginary 8 | = | = | = | = | = | = | = |
+| `Vector<int>` | 32: _00 0, _01 8 | **16: 0, 8** | = | **16: 0, 8** | **32: 0** | **16: 0** | **16: 0** | **16: 0** |
+| `Int128` | 16: _lower 0, _upper 8 | = | = | = | n/a | n/a | n/a | n/a |
+| `(byte,Int128)` | 32: Item1 0, Item2 16 | = | = | **24: 0, 8** | n/a | n/a | n/a | n/a |
+| `Half` | 2: _value 0 | = | = | = | n/a | n/a | n/a | n/a |
+| `(byte,Half)` | 4: Item1 0, Item2 2 | = | = | = | n/a | n/a | n/a | n/a |
+| `DateOnly` | 4: _dayNumber 0 | = | = | = | n/a | n/a | n/a | n/a |
+| `TimeOnly` | 8: _ticks 0 | = | = | = | n/a | n/a | n/a | n/a |
+| `(byte,DateOnly,TimeOnly)` | 16: Item1 0, Item2 4, Item3 8 | = | = | = | n/a | n/a | n/a | n/a |
+| `Range` | 8: Start 0, End 4 | = | = | = | n/a | n/a | n/a | n/a |
+| `Index` | 4: _value 0 | = | = | = | n/a | n/a | n/a | n/a |
+| `Rune` | 4: _value 0 | = | = | = | n/a | n/a | n/a | n/a |
+| `Vector2` | 8: X 0, Y 4 | = | = | = | n/a | n/a | n/a | n/a |
+| `Vector3` | 12: X 0, Y 4, Z 8 | = | = | = | n/a | n/a | n/a | n/a |
+| `Vector4` | 16: X 0, Y 4, Z 8, W 12 | = | = | = | n/a | n/a | n/a | n/a |
+| `Quaternion` | 16: X 0, Y 4, Z 8, W 12 | = | = | = | n/a | n/a | n/a | n/a |
+| `Plane` | 16: Normal 0, D 12 | = | = | = | n/a | n/a | n/a | n/a |
+| `Matrix3x2` | 24: M11 0, M12 4, M21 8, M22 12, M31 16, M32 20 | = | = | = | n/a | n/a | n/a | n/a |
+| `Matrix4x4` | 64: M11 0, M12 4, M13 8, M14 12, M21 16, M22 20, M23 24, M24 28, M31 32, M32 36, M33 40, M34 44, M41 48, M42 52, M43 56, M44 60 | = | = | = | n/a | n/a | n/a | n/a |
+| `Vector64<int>` | 8: _00 0 | = | = | = | n/a | n/a | n/a | n/a |
+| `Vector128<int>` | 16: _lower 0, _upper 8 | = | = | = | n/a | n/a | n/a | n/a |
+| `Vector256<long>` | 32: _lower 0, _upper 16 | = | = | = | n/a | n/a | n/a | n/a |
+| `Vector512<long>` | 64: _lower 0, _upper 32 | = | = | = | n/a | n/a | n/a | n/a |
+
+### Inside `Around<T> { byte A; T B; int C; }`: Size, Then the Offsets of A, B and C [#around]
+
+| Type | CoreCLR x64 | CoreCLR Arm64 | CoreCLR x86 | CoreCLR Arm32 | .NET Framework x64 | .NET Framework x86 | Mono x64 | Mono Arm64 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `(int,long)` | 32: 0, 8, 24 | = | **20: 0, 4, 16** | = | **24: 4, 8, 0** | **20: 4, 8, 0** | = | = |
+| `(long,int)` | 32: 0, 8, 24 | = | **20: 0, 4, 16** | = | **24: 4, 8, 0** | **20: 4, 8, 0** | = | = |
+| `(byte,short)` | 12: 0, 4, 8 | = | = | = | **16: 4, 8, 0** | **12: 4, 8, 0** | **12: 0, 2, 8** | **12: 0, 2, 8** |
+| `(byte,long,int)` | 32: 0, 8, 24 | = | **24: 0, 4, 20** | = | **24: 4, 8, 0** | **24: 4, 8, 0** | **40: 0, 8, 32** | **40: 0, 8, 32** |
+| `(byte,int,short)` | 24: 0, 8, 16 | = | **16: 0, 4, 12** | **16: 0, 4, 12** | **16: 4, 8, 0** | **16: 4, 8, 0** | **20: 0, 4, 16** | **20: 0, 4, 16** |
+| `(short,byte,int)` | 24: 0, 8, 16 | = | **16: 0, 4, 12** | **16: 0, 4, 12** | **16: 4, 8, 0** | **16: 4, 8, 0** | **16: 0, 4, 12** | **16: 0, 4, 12** |
+| `(int,int)` | 24: 0, 8, 16 | = | **16: 0, 4, 12** | **16: 0, 4, 12** | **16: 4, 8, 0** | **16: 4, 8, 0** | **16: 0, 4, 12** | **16: 0, 4, 12** |
+| `(int,int,int)` | 32: 0, 8, 24 | = | **20: 0, 4, 16** | **20: 0, 4, 16** | **24: 4, 8, 0** | **20: 4, 8, 0** | **20: 0, 4, 16** | **20: 0, 4, 16** |
+| `(byte,byte,byte)` | 12: 0, 4, 8 | = | = | = | **16: 4, 8, 0** | **12: 4, 8, 0** | **8: 0, 1, 4** | **8: 0, 1, 4** |
+| `(bool,char,byte)` | 12: 0, 4, 8 | = | = | = | **16: 4, 8, 0** | **12: 4, 8, 0** | **12: 0, 2, 8** | **12: 0, 2, 8** |
+| `(double,float)` | 32: 0, 8, 24 | = | **20: 0, 4, 16** | = | **24: 4, 8, 0** | **20: 4, 8, 0** | = | = |
+| `(Tag,long)` | 32: 0, 8, 24 | = | **20: 0, 4, 16** | = | **24: 4, 8, 0** | **20: 4, 8, 0** | = | = |
+| `(int,IntPtr)` | 32: 0, 8, 24 | = | **16: 0, 4, 12** | **16: 0, 4, 12** | **24: 4, 8, 0** | **16: 4, 8, 0** | = | = |
+| `(byte,UIntPtr)` | 32: 0, 8, 24 | = | **16: 0, 4, 12** | **16: 0, 4, 12** | **24: 4, 8, 0** | **16: 4, 8, 0** | = | = |
+| `ValueTuple<long>` | 24: 0, 8, 16 | = | = | = | = | = | = | = |
+| `(int,DateTime)` | 32: 0, 8, 24 | = | **20: 0, 4, 16** | = | **24: 4, 8, 0** | **20: 4, 8, 0** | = | = |
+| `(byte,DateTime,int)` | 32: 0, 8, 24 | = | **24: 0, 4, 20** | = | **24: 4, 8, 0** | **24: 4, 8, 0** | **40: 0, 8, 32** | **40: 0, 8, 32** |
+| `(int,TimeSpan)` | 32: 0, 8, 24 | = | = | = | **24: 4, 8, 0** | **20: 4, 8, 0** | = | = |
+| `(byte,decimal)` | 40: 0, 8, 32 | = | = | = | **32: 4, 8, 0** | **28: 4, 8, 0** | = | = |
+| `(int,decimal)` | 40: 0, 8, 32 | = | = | = | **32: 4, 8, 0** | **28: 4, 8, 0** | = | = |
+| `(byte,Guid)` | 40: 0, 8, 32 | = | **28: 0, 4, 24** | **28: 0, 4, 24** | **32: 4, 8, 0** | **28: 4, 8, 0** | **28: 0, 4, 24** | **28: 0, 4, 24** |
+| `(byte,int?)` | 32: 0, 8, 24 | = | **20: 0, 4, 16** | **20: 0, 4, 16** | **24: 4, 8, 0** | **20: 4, 8, 0** | **20: 0, 4, 16** | **20: 0, 4, 16** |
+| `(long?,byte)` | 40: 0, 8, 32 | = | = | = | **32: 4, 8, 0** | **28: 4, 8, 0** | = | = |
+| `(byte,(int,long))` | 40: 0, 8, 32 | = | **24: 0, 4, 20** | = | **32: 4, 8, 0** | **24: 4, 8, 0** | = | = |
+| `((byte,short),long)` | 32: 0, 8, 24 | = | **20: 0, 4, 16** | = | **24: 4, 8, 0** | **20: 4, 8, 0** | = | = |
+| `(int,(byte,short),long)` | 32: 0, 8, 24 | = | **24: 0, 4, 20** | = | **32: 4, 8, 0** | **24: 4, 8, 0** | = | = |
+| `(int,KVP<int,long>)` | 40: 0, 8, 32 | = | = | = | **32: 4, 8, 0** | **28: 4, 8, 0** | = | = |
+| `(byte,DateTimeOffset)` | 40: 0, 8, 32 | = | **24: 0, 4, 20** | = | **32: 4, 8, 0** | **24: 4, 8, 0** | = | = |
+| `(byte,short,int,long,byte,short,int)` | 40: 0, 8, 32 | = | **32: 0, 4, 28** | = | **32: 4, 8, 0** | **32: 4, 8, 0** | = | = |
+| `(byte,long,byte,long,byte,long,byte,int)` | 48: 0, 8, 40 | = | **40: 0, 4, 36** | = | **48: 4, 8, 0** | **40: 4, 8, 0** | **72: 0, 8, 64** | **72: 0, 8, 64** |
+| `(int,(byte,long),(short,(byte,int)))` | 56: 0, 8, 48 | = | **36: 0, 4, 32** | = | **48: 4, 8, 0** | **36: 4, 8, 0** | = | = |
+| `KVP<int,long>` | 32: 0, 8, 24 | = | = | = | = | = | = | = |
+| `KVP<byte,long>` | 32: 0, 8, 24 | = | = | = | = | = | = | = |
+| `KVP<long,byte>` | 32: 0, 8, 24 | = | = | = | = | = | = | = |
+| `KVP<int,DateTime>` | 32: 0, 8, 24 | = | **20: 0, 4, 16** | = | **24: 4, 8, 0** | **20: 4, 8, 0** | = | = |
+| `KVP<byte,(int,long)>` | 40: 0, 8, 32 | = | **24: 0, 4, 20** | = | **32: 4, 8, 0** | **24: 4, 8, 0** | = | = |
+| `DateTimeOffset` | 32: 0, 8, 24 | = | **20: 0, 4, 16** | = | **24: 4, 8, 0** | **20: 4, 8, 0** | = | = |
+| `DateTime` | 24: 0, 8, 16 | = | **16: 0, 4, 12** | = | **16: 4, 8, 0** | **16: 4, 8, 0** | = | = |
+| `TimeSpan` | 24: 0, 8, 16 | = | = | = | = | = | = | = |
+| `decimal` | 32: 0, 8, 24 | = | = | = | **24: 0, 4, 20** | **24: 0, 4, 20** | = | = |
+| `Guid` | 24: 0, 4, 20 | = | = | = | = | = | = | = |
+| `int?` | 16: 0, 4, 12 | = | = | = | = | = | = | = |
+| `long?` | 32: 0, 8, 24 | = | = | = | = | = | = | = |
+| `(int,long)?` | 40: 0, 8, 32 | = | **24: 0, 4, 20** | = | **32: 4, 8, 0** | **24: 4, 8, 0** | = | = |
+| `DateTimeOffset?` | 40: 0, 8, 32 | = | **24: 0, 4, 20** | = | **32: 4, 8, 0** | **24: 4, 8, 0** | = | = |
+| `IntPtr` | 24: 0, 8, 16 | = | **12: 0, 4, 8** | **12: 0, 4, 8** | = | **12: 0, 4, 8** | = | = |
+| `Complex` | 32: 0, 8, 24 | = | = | = | = | = | = | = |
+| `Vector<int>` | 48: 0, 8, 40 | **32: 0, 8, 24** | = | **32: 0, 8, 24** | = | **32: 0, 8, 24** | **32: 0, 8, 24** | **32: 0, 8, 24** |
+| `Int128` | 48: 0, 16, 32 | = | = | **32: 0, 8, 24** | n/a | n/a | n/a | n/a |
+| `(byte,Int128)` | 64: 0, 16, 48 | = | = | **40: 0, 8, 32** | n/a | n/a | n/a | n/a |
+| `Half` | 8: 0, 2, 4 | = | = | = | n/a | n/a | n/a | n/a |
+| `(byte,Half)` | 12: 0, 4, 8 | = | = | = | n/a | n/a | n/a | n/a |
+| `DateOnly` | 12: 0, 4, 8 | = | = | = | n/a | n/a | n/a | n/a |
+| `TimeOnly` | 24: 0, 8, 16 | = | = | = | n/a | n/a | n/a | n/a |
+| `(byte,DateOnly,TimeOnly)` | 32: 0, 8, 24 | = | = | = | n/a | n/a | n/a | n/a |
+| `Range` | 16: 0, 4, 12 | = | = | = | n/a | n/a | n/a | n/a |
+| `Index` | 12: 0, 4, 8 | = | = | = | n/a | n/a | n/a | n/a |
+| `Rune` | 12: 0, 4, 8 | = | = | = | n/a | n/a | n/a | n/a |
+| `Vector2` | 16: 0, 4, 12 | = | = | = | n/a | n/a | n/a | n/a |
+| `Vector3` | 20: 0, 4, 16 | = | = | = | n/a | n/a | n/a | n/a |
+| `Vector4` | 24: 0, 4, 20 | = | = | = | n/a | n/a | n/a | n/a |
+| `Quaternion` | 24: 0, 4, 20 | = | = | = | n/a | n/a | n/a | n/a |
+| `Plane` | 24: 0, 4, 20 | = | = | = | n/a | n/a | n/a | n/a |
+| `Matrix3x2` | 32: 0, 4, 28 | = | = | = | n/a | n/a | n/a | n/a |
+| `Matrix4x4` | 72: 0, 4, 68 | = | = | = | n/a | n/a | n/a | n/a |
+| `Vector64<int>` | 24: 0, 8, 16 | = | = | = | n/a | n/a | n/a | n/a |
+| `Vector128<int>` | 48: 0, 16, 32 | = | = | **32: 0, 8, 24** | n/a | n/a | n/a | n/a |
+| `Vector256<long>` | 96: 0, 32, 64 | **64: 0, 16, 48** | = | **48: 0, 8, 40** | n/a | n/a | n/a | n/a |
+| `Vector512<long>` | 192: 0, 64, 128 | **96: 0, 16, 80** | = | **80: 0, 8, 72** | n/a | n/a | n/a | n/a |
+
+### Unity: Mono and IL2CPP [#unity]
+
+Unity's tests log the layouts of a few types (CI: Unity 2022.3 and 6000.3, the editor's Mono and a Linux x64 IL2CPP player, the same on all four), and check CoreCLR's bytes for every case above in the editor and the IL2CPP player. `Vector<T>` is 16 bytes there.
+
+| Type | CoreCLR x64 | Unity Mono and IL2CPP |
+| --- | --- | --- |
+| `(int,long)` | 16: Item1 8, Item2 0 | **16: 0, 8** |
+| `(byte,short)` | 4: Item1 2, Item2 0 | **4: 0, 2** |
+| `(byte,long,int)` | 16: Item1 12, Item2 0, Item3 8 | **24: 0, 8, 16** |
+| `KeyValuePair<int,long>` | 16 | = |
+| `DateTimeOffset` | 16: minutes 0 (`int`), UTC 8 | **16: UTC 0, minutes 8 (`short`)** |
+| `Around<(int,long)>` | 32 | = |
+
+## Related [#related]
+
+<Cards>
+  <Card title="Platforms and Binary Format" href="/en/docs/v4/platforms" description="Where Nino runs and why every target writes the same bytes." />
+  <Card title="Wire Format" href="/en/docs/v4/wire-format#raw-values" description="Raw values and the canonical layout, byte by byte." />
+  <Card title="Nino vs MemoryPack" href="/en/docs/v4/vs-memorypack" description="Copies of memory against one defined layout." />
+</Cards>

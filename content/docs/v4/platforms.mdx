@@ -29,7 +29,7 @@ Every platform writes the format the [Wire Format](/en/docs/v4/wire-format) page
 
 ## Portable by Design
 
-Nino defines its bytes instead of copying whatever a runtime has in memory. Runtimes do not always agree on memory layout, so these cases are handled explicitly:
+Nino defines its bytes instead of copying whatever a runtime has in memory. Runtimes do not always agree on memory layout, so these cases are handled explicitly ([Struct Layouts Across Runtimes](/en/docs/v4/struct-layouts) has the rule and the measured layouts):
 
 <Accordions type="multiple">
 <Accordion title={<><code>Nullable&lt;T&gt;</code></>} value="nullable">
@@ -44,12 +44,12 @@ CoreCLR and Unity 2021.3+ store `bool hasValue; T value;`, while old Mono (Unity
 </Accordion>
 <Accordion title={<><code>decimal</code>, <code>DateTimeOffset</code>, <code>nint</code></>} value="bcl">
 
-`decimal` is aligned to 8 bytes on CoreCLR and to 4 on Mono and IL2CPP, so a struct holding one can have a different layout; Nino converts it to the canonical layout. `DateTimeOffset` on its own is written as UTC ticks plus the offset in minutes (10 bytes), never raw. Its memory differs between runtimes, even between .NET versions: .NET 10 holds the offset as an `int` at byte 0 and the UTC time at 8, .NET 8 a `short` at 0, .NET Framework and Mono the time first and a `short` at 8. Inside an unmanaged struct it is written as .NET 10 holds it (copied there, converted elsewhere). `nint`/`nuint` are always 8 bytes, inside unmanaged structs too: a 32-bit runtime widens them, and rejects a value that does not fit its own.
+`decimal` is aligned to 8 bytes on CoreCLR and to 4 on Mono and IL2CPP, so a struct holding one can have a different layout; Nino converts it to the canonical layout. `DateTimeOffset` on its own is written as UTC ticks plus the offset in minutes (10 bytes), never raw. Its memory differs between runtimes, even between .NET versions: .NET 10 holds the offset as an `int` at byte 0 and the UTC time at 8, .NET 8 a `short` at 0, .NET Framework and Mono the time first and a `short` at 8. Inside an unmanaged struct it is written as .NET 10 holds it (copied there, converted elsewhere). `nint`/`nuint` are always 8 bytes, inside unmanaged structs too: a 32-bit runtime widens them, and rejects a value that does not fit its own. `Vector<T>` is as wide as the CPU's vectors (32 bytes on x64 with AVX2, 16 on Arm64 and in Unity) and always 32 bytes on the wire: a 16-byte host zero-extends it and rejects a value whose upper half is set.
 
 </Accordion>
 <Accordion title="32-bit platforms" value="32bit">
 
-On 32-bit x86, .NET aligns `long`, `double` and structs holding one (`TimeSpan`, `decimal`, your own) to 8 bytes, as 64-bit runtimes do, but a `DateTime`, `ValueTuple` or `DateTimeOffset` field (auto-layout structs) to 4: `struct { int a; long b; }` is 16 bytes on both, `struct { int a; DateTime b; }` 16 bytes on x64 and 12 on x86 .NET. .NET Framework also reorders the fields of a struct that holds a `DateTime` (`struct { byte a; DateTime b; int c; }` puts `c` first). Nino's raw layout is the canonical 64-bit one; where a runtime differs, values are converted field by field into the same bytes (at some cost in speed) and bulk raw copies are skipped. The measured layout of every unmanaged BCL struct on each runtime is listed in the repository's [docs/layouts.md](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/layouts.md).
+On 32-bit x86, .NET aligns `long`, `double` and structs holding one (`TimeSpan`, `decimal`, your own) to 8 bytes, as 64-bit runtimes do, but a `DateTime`, `ValueTuple` or `DateTimeOffset` field (auto-layout structs) to 4: `struct { int a; long b; }` is 16 bytes on both, `struct { int a; DateTime b; }` 16 bytes on x64 and 12 on x86 .NET. .NET Framework also reorders the fields of a struct that holds a `DateTime` (`struct { byte a; DateTime b; int c; }` puts `c` first). Nino's raw layout is the canonical 64-bit one; where a runtime differs, values are converted field by field into the same bytes (at some cost in speed) and bulk raw copies are skipped. The measured layout of every unmanaged BCL struct on each runtime, `Vector<T>` included, is on [Struct Layouts Across Runtimes](/en/docs/v4/struct-layouts).
 
 </Accordion>
 <Accordion title="Padding" value="padding">

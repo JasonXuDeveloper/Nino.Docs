@@ -52,7 +52,7 @@ Nino 的二进制格式在 Nino 仓库的 [docs/spec/wire-format.md](https://git
 
 ## 原始值 [#raw-values]
 
-非托管值（基元类型、枚举、不是 `[NinoType]` 的非托管结构体，或符合条件的 `[NinoType]` 结构体）按**规范布局**作为一整块写出：即 64 位 CoreCLR 给它的布局，每个字段按自然对齐（`decimal` 对齐到 8，`Int128` 对齐到 16），填充写为零。每个运行时写出的字节都相同：自身布局不同时（32 位平台、Mono 和 IL2CPP、.NET Framework 上的部分结构体），Nino 逐字段转换。`Nullable<T>`、`ValueTuple`、`KeyValuePair` 和 `DateTimeOffset` 单独出现时从不按原始值写出，而是逐项写出。它们位于非托管结构体之中时，属于该结构体的整块数据，同样采用规范布局：值元组的各项放在 64 位 CoreCLR 放置的位置（较大的基元项在前，所以 `(int, long)` 先是 `long`，再是 `int`），`KeyValuePair` 先键后值，`DateTimeOffset` 按 .NET 10 的方式存放（以分钟为单位的偏移为 `int`，UTC 时间位于第 8 字节），`nint`/`nuint` 占 8 字节。参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
+非托管值（基元类型、枚举、不是 `[NinoType]` 的非托管结构体，或符合条件的 `[NinoType]` 结构体）按**规范布局**作为一整块写出：即 64 位 CoreCLR 给它的布局，每个字段按自然对齐（`decimal` 对齐到 8，`Int128` 对齐到 16），填充写为零。每个运行时写出的字节都相同：自身布局不同时（32 位平台、Mono 和 IL2CPP、.NET Framework 上的部分结构体），Nino 逐字段转换。`Nullable<T>`、`ValueTuple`、`KeyValuePair` 和 `DateTimeOffset` 单独出现时从不按原始值写出，而是逐项写出。它们位于非托管结构体之中时，属于该结构体的整块数据，同样采用规范布局：值元组的各项放在 64 位 CoreCLR 放置的位置（较大的基元项在前，所以 `(int, long)` 先是 `long`，再是 `int`），`KeyValuePair` 先键后值，`DateTimeOffset` 按 .NET 10 的方式存放（以分钟为单位的偏移为 `int`，UTC 时间位于第 8 字节），`nint`/`nuint` 占 8 字节。`Vector<T>` 在所有平台上都是 32 字节，各 SIMD 向量按 x64 的方式对齐。各运行时有哪些不同，参见[跨运行时的结构体布局](/zh/docs/v4/struct-layouts)。
 
 ## 集合 [#collections]
 

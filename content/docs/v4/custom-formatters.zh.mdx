@@ -233,7 +233,7 @@ public sealed class Level
 }
 ```
 
-- `[NinoRaw]` 只把 `T` 绑定到 Nino 按原始字节拷贝的类型：`Grid<byte>`、`Grid<Vector2>` 会用这个格式化器，而 `Grid<string>` 成员没有格式化器（NINO007）。
+- `[NinoRaw]` 只把 `T` 绑定到 Nino 按原始字节拷贝的类型：`Grid<byte>`、`Grid<Vector2>` 会用这个格式化器，而 `Grid<string>` 成员没有格式化器（NINO007）。运行时才遇到的类型也按同样的规则绑定，Unity 的 IL2CPP 播放器里也是：IL2CPP 不保留类型参数上的特性，所以你的程序集生成的注册表会为它注册的格式化器登记 `[NinoRaw]`、`[NinoCreated]` 和 `unmanaged`。
 - `Writer.Write<T>(ReadOnlySpan<T>)` 和 `Reader.ReadUnmanagedRaw<T>(Span<T>)` 把元素作为一整块拷贝；如果运行时的内存布局与规范布局不同，会逐字段转换。
 - 剩余字节放不下这么多格子时，`ReadLength` 会抛出异常，所以损坏的数据不会让格式化器分配一个巨大的网格。
 
