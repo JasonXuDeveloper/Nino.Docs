@@ -126,16 +126,7 @@ Nino 把数据反序列化到已有的对象图中（[复用反序列化](/zh/do
 
 三者都序列化到复用的缓冲区写入器，并反序列化为新实例。
 
-### 带填充的结构体和元组 [#padded-values]
-
-其中两个用例的值在内存中带有填充：`InventoryItem[1000]`（一个 `int`、一个 `short` 和一个 `bool`：7 字节成员占 8 字节）和 `List<(int, long)>`（x64 上 12 字节的元素占 16 字节，.NET 把 `long` 放在前面）。MemoryPack 原样拷贝它们的内存，连同填充。Nino 则规定了字节：`InventoryItem` 按 8 字节写出，填充字节置零，MemoryPack 是普通拷贝，Nino 是带掩码的拷贝，这就是 Nino 在这个用例上多做的工作。`(int, long)` 按两个元素写出，占 12 字节，MemoryPack 写 16 字节，这就是两者数据大小的差别。
-
-拷贝填充的代价不只是大小：
-
-- **填充是内存里原有的内容。** 相等的值可能序列化成不同的字节，残留的内存也跟着写了出去。用 MemoryPack 1.21.4 测试：两个值相等的 `InventoryItem[2]`，其中一个在原先装着 `0xCD` 的缓冲区里构造，序列化出的字节不同，每个填充字节都是 `CD`；同样构造的 `List<(int, long)>`，每个元素后面都跟着 `CDCDCDCD`。Nino 对两者写出的字节相同，填充为零。
-- **布局取决于平台。** `(int, long)` 在 32 位 x86 .NET 上占 12 字节内存，在 x64 和 Arm32 上占 16 字节（.NET 10 对各目标的布局，从 crossgen2 为它编译出的代码中读出），所以拷贝它的内存，在那里大小就不同。Mono 上元素的顺序也不同：见[基准测试中发现的 MemoryPack 问题](/zh/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)。
-
-Nino 的字节在所有平台上都相同：[原始值](/zh/docs/v4/wire-format#raw-values)按 64 位布局写出，填充置零；元组逐个元素写出。
+`InventoryItem` 和 `(int, long)` 在内存中带有填充，MemoryPack 原样拷贝，Nino 则置零或省去：这对耗时、大小和字节本身意味着什么，见[带填充的结构体和元组](/zh/docs/v4/vs-memorypack#padded-values)。
 
 ### MessagePack 与 protobuf-net [#messagepack-and-protobuf-net]
 
@@ -221,14 +212,7 @@ v3 的编译时间比类型数量增长得快得多：类型数量是原来的 3
 <Tabs groupId="bench-code" items={["类型", "数据", "方法"]}>
 <Tab value="类型">
 
-```csharp title="SimpleBenchmarkData.cs"
-using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using MemoryPack;
-using MessagePack;
-using Nino.Core;
-
+```csharp title="SimpleBenchmarkData.cs" excerpt
 [NinoType]
 [MemoryPackable]
 [MessagePackObject]
@@ -312,12 +296,7 @@ Vectors = Enumerable.Range(0, 10000)
 </Tab>
 <Tab value="方法">
 
-```csharp title="SimpleTest.cs"
-using System.Buffers;
-using BenchmarkDotNet.Attributes;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="SimpleTest.cs" excerpt
 [GlobalSetup]
 public void Setup()
 {
@@ -505,12 +484,7 @@ public PolymorphicClassBase NinoDeserializePolymorphicClass()
 <Tabs groupId="bench-code" items={["类型", "方法"]}>
 <Tab value="类型">
 
-```csharp title="PooledTest.cs"
-using System;
-using System.Collections.Generic;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="PooledTest.cs" excerpt
 [NinoType, NinoPooled]
 [MemoryPackable]
 public sealed partial class PooledSimpleClass
@@ -537,11 +511,7 @@ public sealed partial class PooledSimpleClass
 </Tab>
 <Tab value="方法">
 
-```csharp title="PooledTest.cs"
-using BenchmarkDotNet.Attributes;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="PooledTest.cs" excerpt
 private static readonly PooledSimpleClass Value = PooledSimpleClass.From(SimpleClass.Create());
 private static readonly byte[] NinoData = NinoSerializer.Serialize(Value);
 private static readonly byte[] MemoryPackData = MemoryPackSerializer.Serialize(Value);
@@ -583,12 +553,7 @@ public PooledSimpleClass MemoryPackDeserializeOverwrite()
 <Tabs groupId="bench-code" items={["类型", "方法"]}>
 <Tab value="类型">
 
-```csharp title="PooledGraphTest.cs"
-using System;
-using System.Collections.Generic;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="PooledGraphTest.cs" excerpt
 [NinoType, NinoPooled]
 [MemoryPackable]
 public sealed partial class PooledLeaf
@@ -634,14 +599,7 @@ public sealed partial class PooledNode
 </Tab>
 <Tab value="方法">
 
-```csharp title="PooledGraphTest.cs"
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using BenchmarkDotNet.Attributes;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="PooledGraphTest.cs" excerpt
 private static readonly PooledNode Node = PooledNode.Create(new Random(1));
 private static readonly List<PooledLeaf> Leaves =
     Enumerable.Range(0, 100).Select(_ => PooledLeaf.Create(new Random(2))).ToList();
@@ -705,11 +663,7 @@ public List<PooledLeaf> MemoryPackLeavesOverwrite()
 <Tabs groupId="bench-code" items={["类型", "数据", "方法"]}>
 <Tab value="类型">
 
-```csharp title="ReferenceTest.cs"
-using System.Collections.Generic;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="ReferenceTest.cs" excerpt
 [NinoType(trackReferences: true)]
 [MemoryPackable(GenerateType.CircularReference)]
 public sealed partial class RefNode
@@ -771,11 +725,7 @@ private static readonly byte[] MemoryPackGraph = MemoryPackSerializer.Serialize(
 </Tab>
 <Tab value="方法">
 
-```csharp title="ReferenceTest.cs"
-using BenchmarkDotNet.Attributes;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="ReferenceTest.cs" excerpt
 [Benchmark(Baseline = true), BenchmarkCategory("GraphSerialize")]
 public int NinoSerializeGraph()
 {
@@ -809,12 +759,7 @@ public RefGraph MemoryPackDeserializeGraph() => MemoryPackSerializer.Deserialize
 <Tabs groupId="bench-code" items={["类型", "数据", "方法"]}>
 <Tab value="类型">
 
-```csharp title="VersionTolerantTest.cs"
-using System;
-using System.Collections.Generic;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="VersionTolerantTest.cs" excerpt
 [NinoType(format: NinoFormat.VersionTolerant)]
 [MemoryPackable(GenerateType.VersionTolerant)]
 public sealed partial class TolerantClass
@@ -855,11 +800,7 @@ private static readonly byte[] MemoryPackTolerantClass = MemoryPackSerializer.Se
 </Tab>
 <Tab value="方法">
 
-```csharp title="VersionTolerantTest.cs"
-using BenchmarkDotNet.Attributes;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="VersionTolerantTest.cs" excerpt
 [Benchmark(Baseline = true), BenchmarkCategory("TolerantClassSerialize")]
 public int NinoSerializeTolerantClass()
 {
@@ -897,12 +838,7 @@ public TolerantClass MemoryPackDeserializeTolerantClass() =>
 <Tabs groupId="bench-code" items={["类型", "数据", "方法"]}>
 <Tab value="类型">
 
-```csharp title="FixedSizeTest.cs"
-using System;
-using System.Numerics;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="FixedSizeTest.cs" excerpt
 // Unmanaged members only (40 bytes, no padding): every value serializes to the same number of bytes.
 [NinoType]
 [MemoryPackable]
@@ -956,11 +892,7 @@ static FixedSizeTest()
 </Tab>
 <Tab value="方法">
 
-```csharp title="FixedSizeTest.cs"
-using BenchmarkDotNet.Attributes;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="FixedSizeTest.cs" excerpt
 [Benchmark(Baseline = true), BenchmarkCategory("FixedClassSerialize")]
 public byte[] NinoSerializeFixedClass() => NinoSerializer.Serialize(FixedClass);
 

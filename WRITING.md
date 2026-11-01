@@ -54,7 +54,8 @@ Overview, FAQ and reference pages answer the questions their readers search for,
   `Nino.Core`, ...; a Unity script or a netstandard library has no implicit usings). It still sees the types of the
   page's other fences and of its Context file, and what the Context file's `Snippets` class declares, as files of one
   project do. An untitled fence is a fragment: it gets the implicit usings of an ASP.NET Core project, `Nino.Core`
-  and the `using` lines of its Context file. Give a fence a file title only when it is that file.
+  and the `using` lines of its Context file. A titled fence that shows only part of its file (the types or the methods
+  of a benchmark, one tab each) says so with ` excerpt` in its meta and compiles as a fragment.
 - A fence that cannot compile says so in its meta, which Fumadocs does not render: ` ```csharp nocheck ` for a
   signature listing, v3 code, an excerpt with elisions or an API outside .NET (Unity's Burst), and
   ` ```csharp expect="NINO019" ` for an example of a mistake, which must report that diagnostic and nothing else.

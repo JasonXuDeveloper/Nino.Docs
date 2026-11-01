@@ -47,11 +47,22 @@ Nino 在设计上就能读取不可信数据，快路径也守住了这些保证
 
 <Callout type="info" title="非托管结构体数组">
 
-两个库都把这类数组整块拷贝，所以两者至少持平。带填充的结构体例外：Nino 拷贝时把填充置零，MemoryPack 则照搬内存里填充位置上的内容，包括残留的字节，布局还取决于平台；见[带填充的结构体和元组](/zh/docs/v4/benchmarks#padded-values)。反序列化 `Vector4[10000]` 这一项测到的主要是结果数组的垃圾回收，结果每次运行都有波动；参见[反序列化（新实例）](/zh/docs/v4/benchmarks#deserialize-new-instances)。
+两个库都把这类数组整块拷贝，所以两者至少持平。带填充的结构体例外：Nino 拷贝时把填充置零，MemoryPack 则照搬内存里填充位置上的内容，包括残留的字节，布局还取决于平台；见[带填充的结构体和元组](#padded-values)。反序列化 `Vector4[10000]` 这一项测到的主要是结果数组的垃圾回收，结果每次运行都有波动；参见[反序列化（新实例）](/zh/docs/v4/benchmarks#deserialize-new-instances)。
 
 </Callout>
 
 每个用例的具体数字、多态与池化测试以及基准测试代码，见[基准测试](/zh/docs/v4/benchmarks#runtime)。
+
+### 带填充的结构体和元组 [#padded-values]
+
+[常用类型与集合](/zh/docs/v4/benchmarks#common-types-and-collections)中有两个用例的值在内存中带有填充：`InventoryItem[1000]`（一个 `int`、一个 `short` 和一个 `bool`：7 字节成员占 8 字节）和 `List<(int, long)>`（x64 上 12 字节的元素占 16 字节，.NET 把 `long` 放在前面）。MemoryPack 原样拷贝它们的内存，连同填充。Nino 则规定了字节：`InventoryItem` 按 8 字节写出，填充字节置零，MemoryPack 是普通拷贝，Nino 是带掩码的拷贝，这就是 Nino 在这个用例上多做的工作。`(int, long)` 按两个元素写出，占 12 字节，MemoryPack 写 16 字节，这就是两者数据大小的差别。
+
+拷贝填充的代价不只是大小：
+
+- **填充是内存里原有的内容。** 相等的值可能序列化成不同的字节，残留的内存也跟着写了出去。用 MemoryPack 1.21.4 测试：两个值相等的 `InventoryItem[2]`，其中一个在原先装着 `0xCD` 的缓冲区里构造，序列化出的字节不同，每个填充字节都是 `CD`；同样构造的 `List<(int, long)>`，每个元素后面都跟着 `CDCDCDCD`。Nino 对两者写出的字节相同，填充为零。
+- **布局取决于平台。** `(int, long)` 在 Windows 的 32 位 x86 .NET 上占 12 字节内存，在 x64 和 Arm32 上占 16 字节（.NET 10 对各目标的布局，从 crossgen2 为它编译出的代码中读出），所以拷贝它的内存，在那里大小就不同。Mono 上元素的顺序也不同：见[基准测试中发现的 MemoryPack 问题](#memorypack-bugs-found-while-benchmarking)。
+
+Nino 的字节在所有平台上都相同：[原始值](/zh/docs/v4/wire-format#raw-values)按 64 位布局写出，填充置零；元组逐个元素写出。
 
 ## 功能矩阵 [#feature-matrix]
 

@@ -11,7 +11,7 @@
  *   reader (an `order` to serialize, an `app` to map routes on). `#line`
  *   directives map every diagnostic back to the page and line.
  * - Usings: the project has no implicit usings. A fence with a file title
- *   (`title="Program.cs"`) is a whole file and compiles in a C# file of its
+ *   (`title="Program.cs"`) and no `excerpt` marker is a whole file and compiles in a C# file of its
  *   own, with its own using directives only, so a reader who copies it gets
  *   every using it needs. Untitled fences (fragments) get the implicit usings
  *   of an ASP.NET Core project, Nino.Core and the usings at the top of their
@@ -31,6 +31,8 @@
  *                                  or an excerpt (say why in the prose)
  *   ```csharp expect="NINO019"     must report NINO019 (one or more ids,
  *                                  comma-separated), and may report nothing else
+ *   ```csharp title="X.cs" excerpt part of the file it names (one tab of a
+ *                                  benchmark's file): compiled as a fragment
  *
  * The build fails on any error, any NINO warning a fence does not expect, and
  * any use of an obsolete API (CS0612, CS0618).
@@ -64,12 +66,13 @@ type Fence = {
   code: string[];
 };
 
-type Marker = { nocheck: boolean; expect: string[] };
+type Marker = { nocheck: boolean; excerpt: boolean; expect: string[] };
 
 function markerOf(meta: string): Marker {
   const expect = /(?:^|\s)expect="([^"]*)"/.exec(meta)?.[1];
   return {
     nocheck: /(?:^|\s)nocheck(?:\s|$)/.test(meta),
+    excerpt: /(?:^|\s)excerpt(?:\s|$)/.test(meta),
     expect: expect ? expect.split(',').map((id) => id.trim()) : [],
   };
 }
@@ -456,7 +459,7 @@ function generate(page: string, name: string, fences: Fence[]): Output[] {
   for (const fence of fences) {
     const marker = markerOf(fence.meta);
     if (marker.nocheck) continue;
-    const whole = fileTitleOf(fence.meta) !== undefined;
+    const whole = fileTitleOf(fence.meta) !== undefined && !marker.excerpt;
     const lines = fence.code.map(stripNotation);
     const chunks = chunksOf(lines);
     // a partial declaration adds to an earlier partial one; anything else redeclares the type

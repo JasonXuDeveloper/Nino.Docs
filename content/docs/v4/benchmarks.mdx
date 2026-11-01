@@ -126,16 +126,7 @@ Three more classes, measured since v4.0.0-rc.5; their rows are in [All Measureme
 
 All three serialize to a reused buffer writer and deserialize into new instances.
 
-### Padded Structs and Tuples [#padded-values]
-
-Two of these cases hold values with padding in memory: `InventoryItem[1000]` (an `int`, a `short` and a `bool`: 7 bytes of members in 8) and `List<(int, long)>` (12 bytes of items in 16 on x64, where .NET puts the `long` first). MemoryPack copies their memory as it is, padding included. Nino defines the bytes instead. It writes an `InventoryItem` in its 8 bytes with the padding byte set to zero, a masked copy where MemoryPack makes a plain one, which is the extra work in Nino's time for that case. It writes a `(int, long)` as its two items, 12 bytes where MemoryPack writes 16, which is the difference in their payload sizes.
-
-Copying the padding costs more than size:
-
-- **The padding is whatever the memory held.** Equal values can serialize to different bytes, and stale memory goes out with them. In a test with MemoryPack 1.21.4, two `InventoryItem[2]` with equal values, one of them built in a buffer that had held `0xCD` bytes, serialized to different bytes, with `CD` in each padding byte; a `List<(int, long)>` built the same way carried `CDCDCDCD` after every item. Nino wrote the same bytes for both, padding zero.
-- **The layout is the platform's.** `(int, long)` is 12 bytes in memory on 32-bit x86 .NET, and 16 on x64 and Arm32 (.NET 10's layout for each target, read from the code crossgen2 compiles for it), so a copy of its memory has another size there. On Mono the items are also in another order: see [MemoryPack Bugs Found While Benchmarking](/en/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking).
-
-Nino's bytes are the same on every platform: [raw values](/en/docs/v4/wire-format#raw-values) in the 64-bit layout with zeroed padding, tuples item by item.
+`InventoryItem` and `(int, long)` have padding in memory, which MemoryPack copies as it is and Nino writes as zeros or leaves out: see [Padded Structs and Tuples](/en/docs/v4/vs-memorypack#padded-values) for what that changes in time, size and the bytes themselves.
 
 ### MessagePack and protobuf-net [#messagepack-and-protobuf-net]
 
@@ -221,14 +212,7 @@ Serialize and deserialize of a class with common member types, a 12-byte struct,
 <Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
 <Tab value="Types">
 
-```csharp title="SimpleBenchmarkData.cs"
-using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using MemoryPack;
-using MessagePack;
-using Nino.Core;
-
+```csharp title="SimpleBenchmarkData.cs" excerpt
 [NinoType]
 [MemoryPackable]
 [MessagePackObject]
@@ -312,12 +296,7 @@ Vectors = Enumerable.Range(0, 10000)
 </Tab>
 <Tab value="Methods">
 
-```csharp title="SimpleTest.cs"
-using System.Buffers;
-using BenchmarkDotNet.Attributes;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="SimpleTest.cs" excerpt
 [GlobalSetup]
 public void Setup()
 {
@@ -505,12 +484,7 @@ public PolymorphicClassBase NinoDeserializePolymorphicClass()
 <Tabs groupId="bench-code" items={["Types", "Methods"]}>
 <Tab value="Types">
 
-```csharp title="PooledTest.cs"
-using System;
-using System.Collections.Generic;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="PooledTest.cs" excerpt
 [NinoType, NinoPooled]
 [MemoryPackable]
 public sealed partial class PooledSimpleClass
@@ -537,11 +511,7 @@ public sealed partial class PooledSimpleClass
 </Tab>
 <Tab value="Methods">
 
-```csharp title="PooledTest.cs"
-using BenchmarkDotNet.Attributes;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="PooledTest.cs" excerpt
 private static readonly PooledSimpleClass Value = PooledSimpleClass.From(SimpleClass.Create());
 private static readonly byte[] NinoData = NinoSerializer.Serialize(Value);
 private static readonly byte[] MemoryPackData = MemoryPackSerializer.Serialize(Value);
@@ -583,12 +553,7 @@ Pooled graphs without strings, so the steady state can allocate nothing: a node 
 <Tabs groupId="bench-code" items={["Types", "Methods"]}>
 <Tab value="Types">
 
-```csharp title="PooledGraphTest.cs"
-using System;
-using System.Collections.Generic;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="PooledGraphTest.cs" excerpt
 [NinoType, NinoPooled]
 [MemoryPackable]
 public sealed partial class PooledLeaf
@@ -634,14 +599,7 @@ public sealed partial class PooledNode
 </Tab>
 <Tab value="Methods">
 
-```csharp title="PooledGraphTest.cs"
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using BenchmarkDotNet.Attributes;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="PooledGraphTest.cs" excerpt
 private static readonly PooledNode Node = PooledNode.Create(new Random(1));
 private static readonly List<PooledLeaf> Leaves =
     Enumerable.Range(0, 100).Select(_ => PooledLeaf.Create(new Random(2))).ToList();
@@ -705,11 +663,7 @@ A graph of 200 nodes with shared tags, shared peers and cycles through the root,
 <Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
 <Tab value="Types">
 
-```csharp title="ReferenceTest.cs"
-using System.Collections.Generic;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="ReferenceTest.cs" excerpt
 [NinoType(trackReferences: true)]
 [MemoryPackable(GenerateType.CircularReference)]
 public sealed partial class RefNode
@@ -771,11 +725,7 @@ private static readonly byte[] MemoryPackGraph = MemoryPackSerializer.Serialize(
 </Tab>
 <Tab value="Methods">
 
-```csharp title="ReferenceTest.cs"
-using BenchmarkDotNet.Attributes;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="ReferenceTest.cs" excerpt
 [Benchmark(Baseline = true), BenchmarkCategory("GraphSerialize")]
 public int NinoSerializeGraph()
 {
@@ -809,12 +759,7 @@ The members of `SimpleClass` in a version-tolerant type, alone and as an array o
 <Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
 <Tab value="Types">
 
-```csharp title="VersionTolerantTest.cs"
-using System;
-using System.Collections.Generic;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="VersionTolerantTest.cs" excerpt
 [NinoType(format: NinoFormat.VersionTolerant)]
 [MemoryPackable(GenerateType.VersionTolerant)]
 public sealed partial class TolerantClass
@@ -855,11 +800,7 @@ private static readonly byte[] MemoryPackTolerantClass = MemoryPackSerializer.Se
 </Tab>
 <Tab value="Methods">
 
-```csharp title="VersionTolerantTest.cs"
-using BenchmarkDotNet.Attributes;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="VersionTolerantTest.cs" excerpt
 [Benchmark(Baseline = true), BenchmarkCategory("TolerantClassSerialize")]
 public int NinoSerializeTolerantClass()
 {
@@ -897,12 +838,7 @@ Types whose values always take the same number of bytes ([fixed-size types](/en/
 <Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
 <Tab value="Types">
 
-```csharp title="FixedSizeTest.cs"
-using System;
-using System.Numerics;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="FixedSizeTest.cs" excerpt
 // Unmanaged members only (40 bytes, no padding): every value serializes to the same number of bytes.
 [NinoType]
 [MemoryPackable]
@@ -956,11 +892,7 @@ static FixedSizeTest()
 </Tab>
 <Tab value="Methods">
 
-```csharp title="FixedSizeTest.cs"
-using BenchmarkDotNet.Attributes;
-using MemoryPack;
-using Nino.Core;
-
+```csharp title="FixedSizeTest.cs" excerpt
 [Benchmark(Baseline = true), BenchmarkCategory("FixedClassSerialize")]
 public byte[] NinoSerializeFixedClass() => NinoSerializer.Serialize(FixedClass);
 

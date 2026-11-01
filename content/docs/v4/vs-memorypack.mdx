@@ -47,11 +47,22 @@ Measured with BenchmarkDotNet, both libraries in the same run. Bars show time re
 
 <Callout type="info" title="Arrays of unmanaged structs">
 
-Both libraries copy these as one block, so they are at least on par. Structs with padding are the exception: Nino sets the padding to zero as it copies, while MemoryPack copies whatever the memory holds there, stale bytes included, in a layout that depends on the platform; see [Padded Structs and Tuples](/en/docs/v4/benchmarks#padded-values). The `Vector4[10000]` deserialize case mostly measures garbage collection of the result array and varies between runs; see [Deserialize (New Instances)](/en/docs/v4/benchmarks#deserialize-new-instances).
+Both libraries copy these as one block, so they are at least on par. Structs with padding are the exception: Nino sets the padding to zero as it copies, while MemoryPack copies whatever the memory holds there, stale bytes included, in a layout that depends on the platform; see [Padded Structs and Tuples](#padded-values). The `Vector4[10000]` deserialize case mostly measures garbage collection of the result array and varies between runs; see [Deserialize (New Instances)](/en/docs/v4/benchmarks#deserialize-new-instances).
 
 </Callout>
 
 Every case with its numbers, the polymorphic and pooled runs, and the benchmark code: [Benchmarks](/en/docs/v4/benchmarks#runtime).
+
+### Padded Structs and Tuples [#padded-values]
+
+Two cases of the [common types and collections](/en/docs/v4/benchmarks#common-types-and-collections) hold values with padding in memory: `InventoryItem[1000]` (an `int`, a `short` and a `bool`: 7 bytes of members in 8) and `List<(int, long)>` (12 bytes of items in 16 on x64, where .NET puts the `long` first). MemoryPack copies their memory as it is, padding included. Nino defines the bytes instead. It writes an `InventoryItem` in its 8 bytes with the padding byte set to zero, a masked copy where MemoryPack makes a plain one, which is the extra work in Nino's time for that case. It writes a `(int, long)` as its two items, 12 bytes where MemoryPack writes 16, which is the difference in their payload sizes.
+
+Copying the padding costs more than size:
+
+- **The padding is whatever the memory held.** Equal values can serialize to different bytes, and stale memory goes out with them. In a test with MemoryPack 1.21.4, two `InventoryItem[2]` with equal values, one of them built in a buffer that had held `0xCD` bytes, serialized to different bytes, with `CD` in each padding byte; a `List<(int, long)>` built the same way carried `CDCDCDCD` after every item. Nino wrote the same bytes for both, padding zero.
+- **The layout is the platform's.** `(int, long)` is 12 bytes in memory on 32-bit x86 .NET for Windows, and 16 on x64 and Arm32 (.NET 10's layout for each target, read from the code crossgen2 compiles for it), so a copy of its memory has another size there. On Mono the items are also in another order: see [MemoryPack Bugs Found While Benchmarking](#memorypack-bugs-found-while-benchmarking).
+
+Nino's bytes are the same on every platform: [raw values](/en/docs/v4/wire-format#raw-values) in the 64-bit layout with zeroed padding, tuples item by item.
 
 ## Feature Matrix
 
