@@ -709,11 +709,14 @@ function main() {
       .get(resolve(file))
       ?.find((f) => line >= f.line && line < f.line + f.code.length);
   const seen = new Set<Fence>();
-  for (const d of diagnostics.values()) {
+  // Expected diagnostics that are errors (NINO019, NINO029): they fail the build, and nothing else may.
+  const expectedErrors = new Set<string>();
+  for (const [key, d] of diagnostics) {
     const fence = fenceAt(d.file, d.line);
     const expected = fence ? markerOf(fence.meta).expect : [];
     if (fence && expected.includes(d.id)) {
       seen.add(fence);
+      if (d.severity === 'error') expectedErrors.add(key);
       continue;
     }
     const counts =
@@ -736,7 +739,19 @@ function main() {
           `${relative(root, fence.file)}:${fence.line}: expected ${expect.join(', ')}, the compiler reported none`,
         );
     }
-  if (build.status !== 0 && errors.length === 0) {
+  // A build that failed only on expected errors: every error line of the output is one of them.
+  const onlyExpectedErrors =
+    expectedErrors.size > 0 &&
+    output
+      .split('\n')
+      .filter((line) => /: error /.test(line))
+      .every((line) =>
+        [...expectedErrors].some((key) => {
+          const d = diagnostics.get(key);
+          return d !== undefined && line.includes(`error ${d.id}: ${d.message}`);
+        }),
+      );
+  if (build.status !== 0 && errors.length === 0 && !onlyExpectedErrors) {
     // a failure the parser above did not attribute (restore, a missing project)
     console.error(output);
     errors.push(`dotnet build failed with exit code ${build.status}`);

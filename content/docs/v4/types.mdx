@@ -155,6 +155,8 @@ These have no formatter; a member of such a type is skipped with warning NINO007
 - collections Nino cannot create or fill: an abstract collection class (`abstract class Bag : ICollection<int>`), a collection without a public constructor callable without arguments or a [`[NinoFactory]`](/en/docs/v4/pooling#creating-instances-with-ninofactory) method, a struct collection (`struct Ring : IList<int>`), and a type implementing `ICollection<T>` for two different `T`;
 - Unity and Godot **classes** (`Texture2D`, `ScriptableObject`, `Node`, `Resource`...), except Unity's `AnimationCurve`, `Gradient` and `RectOffset` ([Unity Classes](/en/docs/v4/advanced/unity#unity-classes)); their unmanaged structs are supported.
 
+`System.Numerics.Vector<T>` is refused outright, alone or inside any type (an array, a collection, a tuple, a plain struct): error NINO029 as you type, and `NotSupportedException` at run time. Its size depends on the CPU (16 or 32 bytes), so no host could read every other host's bytes; store a fixed number of lanes instead ([`Vector<T>` Is Not Serializable](/en/docs/v4/struct-layouts#vector-t)). `Vector64<T>` to `Vector512<T>` are supported.
+
 ## Your Own Types
 
 Classes, structs, records and interfaces become serializable with `[NinoType]`. See [Defining Types](/en/docs/v4/defining-types) and [Polymorphism](/en/docs/v4/polymorphism).
