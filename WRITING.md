@@ -72,9 +72,11 @@ Overview, FAQ and reference pages answer the questions their readers search for,
 - **Diagrams**: Mermaid fences (` ```mermaid `), drawn at build time (`src/lib/mermaid.ts`: Mermaid in a headless
   Chromium through Playwright, on mermaid-isomorphic's page), so the page holds the SVG and loads no Mermaid; the
   `neutral` theme, inverted in dark mode (`src/components/mermaid.tsx`); the Markdown copy keeps the source. Keep
-  them small (`flowchart LR` or `TD`, about ten nodes at most, short labels: a wide diagram shrinks its text), no
-  styles or colours, Chinese labels on Chinese pages; write `<` and `>` in a label as `#lt;` and `#gt;`. Use one for
-  a flow, a decision or an architecture, never for a list. Why: the owner chose EasyEcs docs' build-time rendering
+  them small (`flowchart LR`, rounded nodes `A(label)`, no diamonds, about six nodes, short labels: a wide diagram
+  shrinks its text; no diagram taller than about 420px at desktop width, which the build's spacing and the component
+  cap; a decision with a few outcomes is a "question | answer | use" table, not a flowchart, since round 105's
+  diamond trees were taller than a screen), no styles or colours, Chinese labels on Chinese pages; write `<` and `>`
+  in a label as `#lt;` and `#gt;`. Use one for a flow or an architecture, never for a list. Why: the owner chose EasyEcs docs' build-time rendering
   (round 105) over hand-drawn SVG, and a client-side renderer prerenders empty.
 
 ## Code

@@ -29,6 +29,16 @@ const renderOptions = {
     // with the build's fonts and shown with the reader's.
     fontFamily:
       "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial, sans-serif",
+    // Small diagrams that sit inline with the text (WRITING.md, Visual forms):
+    // the page's text size and tight spacing.
+    themeVariables: { fontSize: '14px' },
+    flowchart: {
+      nodeSpacing: 24,
+      rankSpacing: 28,
+      padding: 8,
+      diagramPadding: 4,
+      useMaxWidth: true,
+    },
   } satisfies MermaidConfig,
 };
 

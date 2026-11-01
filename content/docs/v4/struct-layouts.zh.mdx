@@ -13,10 +13,9 @@ icon: LayoutGrid
 
 ```mermaid
 flowchart LR
-  Q{这里的布局是规范布局？} -- "是：64 位 .NET" --> C[复制内存]
-  Q -- "否：Mono、IL2CPP、.NET Framework、32 位" --> V[逐字段转换]
-  C --> B[处处同样的字节]
-  V --> B
+  A(64 位 .NET) -->|复制内存| B(规范字节)
+  C(Mono、IL2CPP、.NET Framework、32 位) -->|逐字段转换| B
+  B --> D(Go、Rust、TypeScript)
 ```
 
 - **64 位 .NET 直接复制内存。** 运行时的布局和规范布局相同时（.NET x64 上的全部结构体，Arm64 上几乎全部），Nino 按内存原样复制，复制的同时清零填充。

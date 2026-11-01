@@ -13,10 +13,9 @@ The canonical layout is the one **64-bit CoreCLR** (.NET on x64 and Arm64) uses,
 
 ```mermaid
 flowchart LR
-  Q{Layout canonical here?} -- "yes: 64-bit .NET" --> C[Copy memory]
-  Q -- "no: Mono, IL2CPP, .NET Framework, 32-bit" --> V[Convert field by field]
-  C --> B[The same bytes everywhere]
-  V --> B
+  A(64-bit .NET) -->|copies memory| B(Canonical bytes)
+  C(Mono, IL2CPP, .NET Framework, 32-bit) -->|convert field by field| B
+  B --> D(Go, Rust, TypeScript)
 ```
 
 - **64-bit .NET copies memory.** Where a runtime's layout is the canonical one, which is every struct on .NET x64 and almost every one on Arm64, Nino copies the struct as it lies in memory and clears its padding in the same pass.

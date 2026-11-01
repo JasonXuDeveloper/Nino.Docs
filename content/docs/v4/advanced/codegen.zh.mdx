@@ -32,13 +32,11 @@ nino-gen 在 .NET 8 或更高版本上运行（在构建中用的是 SDK 自带�
 
 ```mermaid
 flowchart LR
-  C["[NinoType] C#"] --> G[Nino.Generator]
-  G --> F[.NET 格式化器]
-  G --> L["[assembly: NinoTypeLayout]"]
-  L --> N[nino-gen]
-  N --> T[nino_types.ts]
-  N --> O[nino_types.go]
-  N --> R[nino_types.rs]
+  C("[NinoType] C#") --> G(Nino.Generator)
+  G --> F(.NET 格式化器)
+  G --> L("[NinoTypeLayout]")
+  L --> N(nino-gen)
+  N --> O(".ts / .go / .rs")
 ```
 
 - **基于构建出的程序集。** nino-gen 只读取生成器在每个编译的程序集中发布的 `[assembly: NinoTypeLayout]` 特性（[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)），包括该程序集及其引用的程序集，不加载它们。它不需要源代码，也不运行任何代码：只需要构建好的 `.dll`。生成该程序集的 `[NinoType]`，以及它用到的、被引用程序集中的 `[NinoType]`。

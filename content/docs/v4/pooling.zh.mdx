@@ -16,14 +16,6 @@ icon: Recycle
 
 Nino 有三种办法避免为读到的数据分配内存。它们解决的问题不同，也可以一起用：
 
-```mermaid
-flowchart TD
-  Q{实例由谁创建？} -- "你：留着反复读入" --> R["Deserialize(data, ref value)"]
-  Q -- "Nino：列表元素、原本为 null 的成员" --> S{这个类能是 sealed 和 partial 吗？}
-  S -- 能 --> P["[NinoPooled]"]
-  S -- "不能，或你已经有对象池" --> F["[NinoFactory] 和 SetRecycler#lt;T#gt;"]
-```
-
 | 方式 | 适合 | 代价 |
 | --- | --- | --- |
 | [按 `ref` 反序列化](#deserializing-into-existing-instances) | 一个你留着、反复读入的值（快照、一批数据、一个连接上的上一条消息），并且在下一次读之前处理完 | 不用声明任何东西。实例归你管：读下一条消息时，别的代码不能还拿着它；只有类型相同时才原地填充（槽位里的类型变了，就会新建实例）。 |
@@ -64,11 +56,8 @@ while (transport.TryReceive(out ReadOnlyMemory<byte> message)) // a view of the 
 
 ```mermaid
 flowchart LR
-  A["对象池、工厂或 new"] -- Nino 读入 --> B[你的对象图]
-  B -- "数据为 null、列表变短、类型改变" --> C{槽位类型的回收器}
-  C -- "SetRecycler#lt;T#gt;" --> D[你的处理器]
-  C -- INinoPooled --> E["ReturnToPool()"]
-  C -- 其他 --> G[垃圾回收器]
+  A("对象池、工厂或 new") -->|Nino 读入| B(你的对象图)
+  B -->|被丢弃| C("SetRecycler#lt;T#gt;，否则 ReturnToPool()，否则 GC")
 ```
 
 复用反序列化会在这些时候丢弃已有实例：数据中该成员为 `null`、列表变短、数组需要重新分配、字典删除了某个键、多态槽位的类型改变、只能重新创建的类型被替换。每个被丢弃的实例只会**交出一次**，交给槽位声明类型对应的回收器：

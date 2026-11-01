@@ -32,13 +32,11 @@ nino-gen runs on .NET 8 or later (in a build, the SDK's runtime), whatever the p
 
 ```mermaid
 flowchart LR
-  C["[NinoType] C#"] --> G[Nino.Generator]
-  G --> F[.NET formatters]
-  G --> L["[assembly: NinoTypeLayout]"]
-  L --> N[nino-gen]
-  N --> T[nino_types.ts]
-  N --> O[nino_types.go]
-  N --> R[nino_types.rs]
+  C("[NinoType] C#") --> G(Nino.Generator)
+  G --> F(.NET formatters)
+  G --> L("[NinoTypeLayout]")
+  L --> N(nino-gen)
+  N --> O(".ts / .go / .rs")
 ```
 
 - **From the built assembly.** nino-gen reads nothing but the `[assembly: NinoTypeLayout]` attributes (the [layout metadata](/en/docs/v4/evolving-data#layout-metadata)) that the generator publishes in every assembly it compiles, from the assembly and the assemblies it references, without loading them. It needs no source and runs no code: only the built `.dll`. Its `[NinoType]`s are generated, and those of referenced assemblies that it uses.

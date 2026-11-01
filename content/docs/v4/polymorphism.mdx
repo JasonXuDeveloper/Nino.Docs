@@ -140,11 +140,8 @@ Nino uses hybrid dispatch:
 
 ```mermaid
 flowchart LR
-  V[Value of a polymorphic slot] --> Q{Subtype in the base's assembly?}
-  Q -- yes --> S["Generated switch on the type id"]
-  Q -- "no, generic, tracked, or over 64 subtypes when writing" --> R[Lock-free registry]
-  S --> F[Subtype's formatter]
-  R --> F
+  A(Subtype in the base's assembly) -->|generated switch| F(Subtype's formatter)
+  B(Other assembly, generic, tracked) -->|lock-free registry| F
 ```
 
 - **Generated dispatch** for subtypes declared in the same assembly as their base: writing is a chain of exact type checks and reading is a `switch` on the type id, and both call the subtype's formatter directly. A generic base (`abstract class Box<T>`, `IRepository<T>`) has one such dispatch for each closed base its subtypes derive from (`IntBox : Box<int>`), selected by comparing types, which the JIT removes when the type arguments are value types.
