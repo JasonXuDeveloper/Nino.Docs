@@ -39,10 +39,50 @@ A feature page has these parts, in this order (Chinese headings in brackets):
 
 Overview, FAQ and reference pages answer the questions their readers search for, one `##` per question.
 
+## Visual forms
+
+- **Show a fact in the most efficient form, prose last.** Before writing a paragraph, ask whether a table, a support
+  matrix, a byte figure, a diagram, `<Steps>`, code tabs, a `TypeTable`, a `Files` tree or a chart shows it faster,
+  and use that; prose is for what has no such form (why, trade-offs, caveats). Why: the owner wants the docs
+  intuitive, "not necessarily many words" (round 105); readers scan. Evidence: round 105 turned the security page's
+  rejection list into one default-versus-`Untrusted` matrix, the evolving-data ✓/✗ table and vs-memorypack's emoji
+  table into `<Matrix>`, the ASCII `length | Id | CustomerId` comment into a v1/v2 byte figure, and the platforms
+  page's four layout accordions into one table.
+- **Each docs pass re-reads Fumadocs' current component and MDX-plugin list for the site's version** (fumadocs-ui and
+  fumadocs-core in package.json; `node_modules/fumadocs-core/dist/mdx-plugins`, `fumadocs-ui/dist/components`) and
+  adopts what fits a prerendered site with Markdown copies. Why: Fumadocs adds forms between versions, and most of the
+  value was already installed and unused. Evidence: round 105 (16.17.3) adopted code-block tabs (34 tab groups that
+  only wrapped fences), Mermaid and a banner; it kept `<Steps>` JSX because `remarkSteps` runs after
+  `remarkHeading`, whose ids and TOC entries would keep the `[step]` tag; it skipped Twoslash and Auto Type Table
+  (TypeScript only), Graph View and KaTeX.
+- **Byte figures**: `<Bytes rows={[{ title, fields: [{ hex: '07', kind: 'header', label: 'header 7' }, ...] }]} />`
+  (`src/components/bytes.tsx`). Kinds: `header` (header, presence byte, reference header), `length` (lengths and
+  counts), `id` (type ids and keys), `value`, `pad` (hatched), `changed` (the bytes a comparison is about). Stack rows
+  to compare encodings or versions. The bytes come from the specification's worked examples
+  (`docs/spec/wire-format.md`, Appendix A, dumps of a real run) or are derived from its rules and checked there;
+  never typed from memory.
+- **Support matrices**: `<Matrix columns={[...]} rows={[{ group: 'Platforms' }, { label, cells: ['yes', 'no: why',
+  'partial: when', 'n/a', ['yes', <>JSX note</>]] }]} />` for any table whose cells are yes, no or partly with a short
+  note; lucide icons on the palette's tints, a ✓/✗/⚠/– table in the Markdown copy. Not for tables of values.
+- **The category palette** (`--nino-cat-1` to `--nino-cat-5` in `app/app.css`, light and dark) is for byte figures
+  and matrices only; everything else keeps the single accent. Why: the owner allowed a small calm palette for
+  these two forms (round 105), where colour carries the meaning (which bytes are a header); elsewhere it would only
+  decorate. A colour's meaning is fixed site-wide (1 header, 2 length and yes, 3 id or key, 4 value and partly,
+  5 changed and no), and the Markdown copy never depends on it.
+- **Diagrams**: Mermaid fences (` ```mermaid `), drawn at build time (`src/lib/mermaid.ts`: Mermaid in a headless
+  Chromium through Playwright, on mermaid-isomorphic's page), so the page holds the SVG and loads no Mermaid; the
+  `neutral` theme, inverted in dark mode (`src/components/mermaid.tsx`); the Markdown copy keeps the source. Keep
+  them small (`flowchart LR` or `TD`, about ten nodes at most, short labels: a wide diagram shrinks its text), no
+  styles or colours, Chinese labels on Chinese pages; write `<` and `>` in a label as `#lt;` and `#gt;`. Use one for
+  a flow, a decision or an architecture, never for a list. Why: the owner chose EasyEcs docs' build-time rendering
+  (round 105) over hand-drawn SVG, and a client-side renderer prerenders empty.
+
 ## Code
 
-- C# fences with Shiki notation (`// [!code highlight]`, `// [!code ++]`, `title="File.cs"`); alternatives (before
-  and after, Nino and MemoryPack, the files of one step) in tabs.
+- C# fences with Shiki notation (`// [!code highlight]`, `// [!code ++]` and `// [!code --]` for before and after,
+  `// [!code focus]` in a long example, `title="File.cs"`); alternatives (before and after, Nino and MemoryPack, the
+  files of one step) as code-block tabs: consecutive fences with `tab="Nino"` (and `tab-group="..."` to persist the
+  choice across a page's groups), not `<Tabs>` around fences.
 - Every fence compiles against the current Nino source and reports no NINO warning; examples model a real domain and
   use the recommended form, because readers copy them. `bun run check:csharp` (CI runs it on every change to
   `content/` and daily against Nino's `main`) compiles each v4 fence: type declarations as they are, statements in a
