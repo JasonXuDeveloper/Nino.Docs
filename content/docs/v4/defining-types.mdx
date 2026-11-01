@@ -19,10 +19,7 @@ public class Order
 }
 ```
 
-<Tabs items={["Class", "Struct", "Record", "Record struct", "Interface"]}>
-<Tab value="Class">
-
-```csharp
+```csharp tab="Class"
 [NinoType]
 public class Customer
 {
@@ -31,10 +28,7 @@ public class Customer
 }
 ```
 
-</Tab>
-<Tab value="Struct">
-
-```csharp
+```csharp tab="Struct"
 [NinoType]
 public struct Money
 {
@@ -43,26 +37,17 @@ public struct Money
 }
 ```
 
-</Tab>
-<Tab value="Record">
-
-```csharp
+```csharp tab="Record"
 [NinoType]
 public record Address(string Street, string City, string PostalCode);
 ```
 
-</Tab>
-<Tab value="Record struct">
-
-```csharp
+```csharp tab="Record struct"
 [NinoType]
 public record struct GeoPoint(double Latitude, double Longitude);
 ```
 
-</Tab>
-<Tab value="Interface">
-
-```csharp
+```csharp tab="Interface"
 [NinoType]
 public interface IEvent
 {
@@ -75,9 +60,6 @@ public class OrderShipped : IEvent // inherits [NinoType]
     public long OrderId;
 }
 ```
-
-</Tab>
-</Tabs>
 
 <Callout type="info">
 
@@ -159,10 +141,7 @@ public class Session
 
 With `[NinoType(false)]` (`autoCollect: false`) only members marked `[NinoMember(index)]` are serialized, ordered by `index` ascending:
 
-<Tabs items={["Class", "Record"]}>
-<Tab value="Class">
-
-```csharp
+```csharp tab="Class"
 [NinoType(false)] // [!code highlight]
 public class Invoice
 {
@@ -172,18 +151,12 @@ public class Invoice
 }
 ```
 
-</Tab>
-<Tab value="Record">
-
-```csharp
+```csharp tab="Record"
 [NinoType(false)] // [!code highlight]
 public record Shipment(
     [property: NinoMember(2)] string Carrier,         // [!code highlight]
     [property: NinoMember(1)] string TrackingNumber); // [!code highlight]
 ```
-
-</Tab>
-</Tabs>
 
 <Callout type="info">
 
@@ -225,6 +198,13 @@ Reordering, inserting or removing members (or changing their indices) breaks pre
 ## String Encoding
 
 By default Nino picks the form of each string: one byte a char when every char is at most U+00FF (ASCII and Latin-1: English, identifiers, keys, Western European text), and UTF-16 otherwise. Both are a single pass that narrows, widens or copies the chars, vectorized on .NET 8 and later. Mark a member with `[NinoUtf8]` to write UTF-8 instead. It pays off for text that is mostly ASCII but holds a few chars above U+00FF (curly quotes, emoji, a name in another script), which the default writes entirely as UTF-16, at the cost of transcoding and a byte count (one byte up to 127 bytes of UTF-8): chat messages and user names sent to many clients, or large text tables on disk. Keep the default for text that is mostly CJK, which takes 3 bytes per character in UTF-8 instead of 2.
+
+| Text of n chars (headers aside) | Default | `[NinoUtf8]` |
+| --- | --- | --- |
+| ASCII (English, identifiers, keys) | n bytes | n bytes, plus a byte count |
+| Latin-1 above U+007F (é, ü) | n bytes | 2 bytes for each such char |
+| Mostly ASCII with a few chars above U+00FF (“quotes”, emoji) | 2n bytes: the whole string as UTF-16 | about n bytes |
+| Mostly CJK | 2n bytes | about 3n bytes |
 
 ```csharp
 [NinoType]

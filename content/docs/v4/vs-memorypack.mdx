@@ -66,56 +66,54 @@ Nino's bytes are the same on every platform: [raw values](/en/docs/v4/wire-forma
 
 ## Feature Matrix
 
-✅ supported · ⚠️ partial or with conditions · ❌ not supported
-
-| | Nino v4 | MemoryPack 1.21.4 |
-| --- | --- | --- |
-| **Platforms** | | |
-| Minimum .NET target | ✅ `netstandard2.0` | ⚠️ `netstandard2.1` (and `net7.0`+) |
-| Unity | ✅ 2022.3+, OpenUPM package | ✅ 2022.3.12f1+, NuGetForUnity plus a git package |
-| IL2CPP / Native AOT | ✅ source generated, no reflection when serializing | ✅ source generated, no IL.Emit |
-| Same bytes on every runtime and CPU | ✅ canonical layout, converted on 32-bit and old Mono | ⚠️ unmanaged structs are copied as laid out in memory |
-| Deterministic output (padding zeroed) | ✅ | ❌ padding is copied as is |
-| **Defining types** | | |
-| `partial` required | ⚠️ only for `[NinoPooled]` classes, and for non-public members before .NET 8 (generic types: before .NET 9) | ✅ always |
-| Private members | ✅ `includeNonPublicMembers` | ✅ `[MemoryPackInclude]` |
-| Constructors, records, `required` members | ✅ | ✅ |
-| User collection types | ✅ automatic (`List<T>`, `Dictionary<,>` subclasses, `ICollection<T>`...) | ⚠️ `[MemoryPackable(GenerateType.Collection)]` per type |
-| **Polymorphism** | | |
-| Abstract classes and interfaces | ✅ | ✅ `[MemoryPackUnion]` |
-| Non-abstract base classes | ✅ | ❌ unions only on interfaces and abstract classes |
-| Generic bases (`Box<T>`, `IRepository<T>`) | ✅ automatic, for any type argument, with the same generated dispatch as a non-generic base | ❌ `[MemoryPackUnion]` on a generic type does not build (MEMPACK013, MEMPACK014); a `DynamicUnionFormatter<T>` registered by hand for each closed type, with its tags |
-| Subtype ids | ✅ automatic (hash of the type name), 4 bytes | ⚠️ explicit tag per subtype, 1 byte (3 above 249) |
-| Subtypes in other assemblies | ✅ automatic | ⚠️ `[MemoryPackUnionFormatter]`; in Unity, registered manually at startup |
-| Hot-update assemblies (HybridCLR) | ✅ found lazily, no init call | — not documented |
-| **Evolving data** | | |
-| Append members | ✅ `NinoFormat.VersionTolerant` (most derived type), `NinoFormat.Keyed` (any class) | ✅ default mode (new code reads old data only) |
-| Old code reads new data | ✅ `NinoFormat.VersionTolerant`, `NinoFormat.Keyed` | ✅ `GenerateType.VersionTolerant` |
-| Remove members | ✅ `NinoFormat.Keyed` | ✅ `VersionTolerant` with explicit orders |
-| Reorder or insert members | ✅ `NinoFormat.Keyed` | ⚠️ `VersionTolerant`: declarations can move, the `[MemoryPackOrder]` numbers fix the wire order |
-| Rename members | ✅ positional, `NinoFormat.VersionTolerant`; `NinoFormat.Keyed` with `[NinoFormerName]` | ✅ |
-| Rename or move types | ✅ `[NinoFormerName]` | ✅ union tags do not depend on names |
-| **Object graphs** | | |
-| Shared and circular references | ✅ `trackReferences`, any constructor that can fill in place | ⚠️ `GenerateType.CircularReference`, parameterless constructors only |
-| **Allocation** | | |
-| Deserialize into an existing instance | ✅ reuses elements by index, merges dictionaries | ⚠️ arrays reused only at the same length; collections cleared and refilled |
-| Object pools | ✅ `[NinoPooled]`, factories, recycler for dropped instances | ⚠️ `MemoryPoolFormatter<T>` rents arrays from `ArrayPool` |
-| **Tooling** | | |
-| Analyzer | ✅ NINO001–NINO029, many with code fixes | ✅ 35 rules, `MEMPACK001`–`MEMPACK035` |
-| Compile-time call interception | ✅ Roslyn 4.8+ (.NET 8 SDK) | — not documented |
-| **I/O and integrations** | | |
-| `IBufferWriter<byte>` / `PipeWriter` | ✅ | ✅ |
-| Deserialize `ReadOnlySpan<byte>` | ✅ | ✅ |
-| Deserialize `ReadOnlySequence<byte>` | ✅ a [short helper](/en/docs/v4/advanced/streams#readonlysequence-input) over the span API | ✅ |
-| `Stream` and async I/O | ✅ a [short helper](/en/docs/v4/advanced/streams#async) over the buffer API | ✅ `SerializeAsync` / `DeserializeAsync` |
-| Streaming collections (`IAsyncEnumerable<T>`) | ⚠️ one [frame](/en/docs/v4/advanced/streams#streams) per element | ✅ `MemoryPack.Streaming` |
-| Serialization callbacks | ✅ your own hooks around the call ([example](/en/docs/v4/advanced/streams#callbacks)) | ✅ `[MemoryPackOnSerializing]` and three more |
-| Custom formatters | ✅ struct formatters, inlined; `[assembly: NinoFormatter]` binds generic types | ✅ `MemoryPackFormatter<T>`, provider registration |
-| Compression | ✅ `System.IO.Compression` over the output ([example](/en/docs/v4/advanced/streams#compression)) | ✅ `BrotliCompressor`, `[BrotliFormatter]` |
-| Untrusted input | ✅ by design ([Invalid Data](/en/docs/v4/basic#invalid-data)) | ❌ trusted data only, per its README |
-| TypeScript code generation | ✅ [Nino.Codegen](/en/docs/v4/advanced/codegen#typescript) (also Go and Rust), after each build from the layout metadata; structs, `decimal`, keyed and version-tolerant types included | ⚠️ `[GenerateTypeScript]`, classes only, from inside the source generator, to be removed in its next release ([comparison](/en/docs/v4/advanced/codegen#compared-with-memorypack)) |
-| ASP.NET Core | ✅ [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore): MVC formatters, Minimal API `NinoBody<T>` and `NinoResults` | ✅ `MemoryPack.AspNetCoreMvcFormatter` |
-| Default string encoding | one byte a char when every char is at most U+00FF, else UTF-16; `[NinoUtf8]` per member | UTF-8, option for UTF-16 |
+<Matrix columns={['Nino v4', 'MemoryPack 1.21.4']} rows={[
+  { group: 'Platforms' },
+  { label: 'Minimum .NET target', cells: [['yes', <><code>netstandard2.0</code></>], ['partial', <><code>netstandard2.1</code> (and <code>net7.0</code>+)</>]] },
+  { label: 'Unity', cells: ['yes: 2022.3+, OpenUPM package', 'yes: 2022.3.12f1+, NuGetForUnity plus a git package'] },
+  { label: 'IL2CPP / Native AOT', cells: ['yes: source generated, no reflection when serializing', 'yes: source generated, no IL.Emit'] },
+  { label: 'Same bytes on every runtime and CPU', cells: ['yes: canonical layout, converted on 32-bit and old Mono', 'partial: unmanaged structs are copied as laid out in memory'] },
+  { label: 'Deterministic output (padding zeroed)', cells: ['yes', 'no: padding is copied as is'] },
+  { group: 'Defining types' },
+  { label: <><code>partial</code> required</>, cells: [['partial', <>only for <code>[NinoPooled]</code> classes, and for non-public members before .NET 8 (generic types: before .NET 9)</>], 'yes: always'] },
+  { label: 'Private members', cells: [['yes', <><code>includeNonPublicMembers</code></>], ['yes', <><code>[MemoryPackInclude]</code></>]] },
+  { label: <>Constructors, records, <code>required</code> members</>, cells: ['yes', 'yes'] },
+  { label: 'User collection types', cells: [['yes', <>automatic (<code>List&lt;T&gt;</code>, <code>Dictionary&lt;,&gt;</code> subclasses, <code>ICollection&lt;T&gt;</code>...)</>], ['partial', <><code>[MemoryPackable(GenerateType.Collection)]</code> per type</>]] },
+  { group: 'Polymorphism' },
+  { label: 'Abstract classes and interfaces', cells: ['yes', ['yes', <><code>[MemoryPackUnion]</code></>]] },
+  { label: 'Non-abstract base classes', cells: ['yes', 'no: unions only on interfaces and abstract classes'] },
+  { label: <>Generic bases (<code>Box&lt;T&gt;</code>, <code>IRepository&lt;T&gt;</code>)</>, cells: ['yes: automatic, for any type argument, with the same generated dispatch as a non-generic base', ['no', <><code>[MemoryPackUnion]</code> on a generic type does not build (MEMPACK013, MEMPACK014); a <code>DynamicUnionFormatter&lt;T&gt;</code> registered by hand for each closed type, with its tags</>]] },
+  { label: 'Subtype ids', cells: ['yes: automatic (hash of the type name), 4 bytes', 'partial: explicit tag per subtype, 1 byte (3 above 249)'] },
+  { label: 'Subtypes in other assemblies', cells: ['yes: automatic', ['partial', <><code>[MemoryPackUnionFormatter]</code>; in Unity, registered manually at startup</>]] },
+  { label: 'Hot-update assemblies (HybridCLR)', cells: ['yes: found lazily, no init call', 'n/a: not documented'] },
+  { group: 'Evolving data' },
+  { label: 'Append members', cells: [['yes', <><code>NinoFormat.VersionTolerant</code> (most derived type), <code>NinoFormat.Keyed</code> (any class)</>], 'yes: default mode (new code reads old data only)'] },
+  { label: 'Old code reads new data', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>, <code>NinoFormat.Keyed</code></>], ['yes', <><code>GenerateType.VersionTolerant</code></>]] },
+  { label: 'Remove members', cells: [['yes', <><code>NinoFormat.Keyed</code></>], ['yes', <><code>VersionTolerant</code> with explicit orders</>]] },
+  { label: 'Reorder or insert members', cells: [['yes', <><code>NinoFormat.Keyed</code></>], ['partial', <><code>VersionTolerant</code>: declarations can move, the <code>[MemoryPackOrder]</code> numbers fix the wire order</>]] },
+  { label: 'Rename members', cells: [['yes', <>positional, <code>NinoFormat.VersionTolerant</code>; <code>NinoFormat.Keyed</code> with <code>[NinoFormerName]</code></>], 'yes'] },
+  { label: 'Rename or move types', cells: [['yes', <><code>[NinoFormerName]</code></>], 'yes: union tags do not depend on names'] },
+  { group: 'Object graphs' },
+  { label: 'Shared and circular references', cells: [['yes', <><code>trackReferences</code>, any constructor that can fill in place</>], ['partial', <><code>GenerateType.CircularReference</code>, parameterless constructors only</>]] },
+  { group: 'Allocation' },
+  { label: 'Deserialize into an existing instance', cells: ['yes: reuses elements by index, merges dictionaries', 'partial: arrays reused only at the same length; collections cleared and refilled'] },
+  { label: 'Object pools', cells: [['yes', <><code>[NinoPooled]</code>, factories, recycler for dropped instances</>], ['partial', <><code>MemoryPoolFormatter&lt;T&gt;</code> rents arrays from <code>ArrayPool</code></>]] },
+  { group: 'Tooling' },
+  { label: 'Analyzer', cells: ['yes: NINO001–NINO029, many with code fixes', ['yes', <>35 rules, <code>MEMPACK001</code>–<code>MEMPACK035</code></>]] },
+  { label: 'Compile-time call interception', cells: ['yes: Roslyn 4.8+ (.NET 8 SDK)', 'n/a: not documented'] },
+  { group: 'I/O and integrations' },
+  { label: <><code>IBufferWriter&lt;byte&gt;</code> / <code>PipeWriter</code></>, cells: ['yes', 'yes'] },
+  { label: <>Deserialize <code>ReadOnlySpan&lt;byte&gt;</code></>, cells: ['yes', 'yes'] },
+  { label: <>Deserialize <code>ReadOnlySequence&lt;byte&gt;</code></>, cells: [['yes', <>a <a href="/en/docs/v4/advanced/streams#readonlysequence-input">short helper</a> over the span API</>], 'yes'] },
+  { label: <><code>Stream</code> and async I/O</>, cells: [['yes', <>a <a href="/en/docs/v4/advanced/streams#async">short helper</a> over the buffer API</>], ['yes', <><code>SerializeAsync</code> / <code>DeserializeAsync</code></>]] },
+  { label: <>Streaming collections (<code>IAsyncEnumerable&lt;T&gt;</code>)</>, cells: [['partial', <>one <a href="/en/docs/v4/advanced/streams#streams">frame</a> per element</>], ['yes', <><code>MemoryPack.Streaming</code></>]] },
+  { label: 'Serialization callbacks', cells: [['yes', <>your own hooks around the call (<a href="/en/docs/v4/advanced/streams#callbacks">example</a>)</>], ['yes', <><code>[MemoryPackOnSerializing]</code> and three more</>]] },
+  { label: 'Custom formatters', cells: [['yes', <>struct formatters, inlined; <code>[assembly: NinoFormatter]</code> binds generic types</>], ['yes', <><code>MemoryPackFormatter&lt;T&gt;</code>, provider registration</>]] },
+  { label: 'Compression', cells: [['yes', <><code>System.IO.Compression</code> over the output (<a href="/en/docs/v4/advanced/streams#compression">example</a>)</>], ['yes', <><code>BrotliCompressor</code>, <code>[BrotliFormatter]</code></>]] },
+  { label: 'Untrusted input', cells: [['yes', <>by design (<a href="/en/docs/v4/basic#invalid-data">Invalid Data</a>)</>], 'no: trusted data only, per its README'] },
+  { label: 'TypeScript code generation', cells: [['yes', <><a href="/en/docs/v4/advanced/codegen#typescript">Nino.Codegen</a> (also Go and Rust), after each build from the layout metadata; structs, <code>decimal</code>, keyed and version-tolerant types included</>], ['partial', <><code>[GenerateTypeScript]</code>, classes only, from inside the source generator, to be removed in its next release (<a href="/en/docs/v4/advanced/codegen#compared-with-memorypack">comparison</a>)</>]] },
+  { label: 'ASP.NET Core', cells: [['yes', <><a href="/en/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>: MVC formatters, Minimal API <code>NinoBody&lt;T&gt;</code> and <code>NinoResults</code></>], ['yes', <><code>MemoryPack.AspNetCoreMvcFormatter</code></>]] },
+  { label: 'Default string encoding', cells: [<>one byte a char when every char is at most U+00FF, else UTF-16; <code>[NinoUtf8]</code> per member</>, 'UTF-8, option for UTF-16'] },
+]} />
 
 ## Where MemoryPack Is Ahead
 

@@ -209,10 +209,7 @@ The types and methods behind each table, from [`benchmarks/Nino.Benchmark`](http
 
 Serialize and deserialize of a class with common member types, a 12-byte struct, arrays of both, and `Vector4[10000]`. Used by the [serialize](#serialize-to-a-reused-buffer-writer) and [deserialize](#deserialize-new-instances) tables.
 
-<Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
-<Tab value="Types">
-
-```csharp title="SimpleBenchmarkData.cs" excerpt
+```csharp title="SimpleBenchmarkData.cs" excerpt tab="Types" tab-group="bench-code"
 [NinoType]
 [MemoryPackable]
 [MessagePackObject]
@@ -250,10 +247,7 @@ public partial struct SimpleStruct
 }
 ```
 
-</Tab>
-<Tab value="Data">
-
-```csharp title="SimpleBenchmarkData.cs, SimpleTest.cs" nocheck
+```csharp title="SimpleBenchmarkData.cs, SimpleTest.cs" nocheck tab="Data" tab-group="bench-code"
 public static SimpleClass Create()
 {
     Random random = new Random();
@@ -293,10 +287,7 @@ Vectors = Enumerable.Range(0, 10000)
         r.NextSingle(), r.NextSingle())).ToArray();
 ```
 
-</Tab>
-<Tab value="Methods">
-
-```csharp title="SimpleTest.cs" excerpt
+```csharp title="SimpleTest.cs" excerpt tab="Methods" tab-group="bench-code"
 [GlobalSetup]
 public void Setup()
 {
@@ -339,17 +330,11 @@ public SimpleClass MemoryPackDeserializeSimpleClass()
 // and Vectors (Vector4[10000]) have the same methods.
 ```
 
-</Tab>
-</Tabs>
-
 ### PolymorphicTest [#polymorphictest]
 
 Values declared as an abstract base and read back as one of 21 subtypes. Used by the [polymorphic graphs](#polymorphism) rows.
 
-<Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
-<Tab value="Types">
-
-```csharp title="PolymorphicBenchmarkData.cs" nocheck
+```csharp title="PolymorphicBenchmarkData.cs" nocheck tab="Types" tab-group="bench-code"
 [NinoType]
 [MemoryPackable]
 [MessagePackObject]
@@ -416,10 +401,7 @@ public partial struct PolymorphicTransform
 }
 ```
 
-</Tab>
-<Tab value="Data">
-
-```csharp title="PolymorphicTest.cs" nocheck
+```csharp title="PolymorphicTest.cs" nocheck tab="Data" tab-group="bench-code"
 // Polymorphic class: one PolymorphicClass. Create() fills Numbers (100 ints),
 // Map1 (12 Foos: FooA to FooD, three times), Foo (a FooD) and Set (100 ints);
 // then 1,000 Foos are added to Numbers2, cycling through the 20 subtypes.
@@ -444,10 +426,7 @@ PolymorphicFooArray = new PolymorphicFooBase[1000];
 PolymorphicClassArray = Enumerable.Range(0, 100).Select(_ => /* as above, 50 Foos */).ToArray();
 ```
 
-</Tab>
-<Tab value="Methods">
-
-```csharp title="PolymorphicTest.cs" nocheck
+```csharp title="PolymorphicTest.cs" nocheck tab="Methods" tab-group="bench-code"
 [GlobalSetup]
 public void Setup()
 {
@@ -474,17 +453,11 @@ public PolymorphicClassBase NinoDeserializePolymorphicClass()
 // PolymorphicFooArray and PolymorphicClassArray have the same methods.
 ```
 
-</Tab>
-</Tabs>
-
 ### PooledTest [#pooledtest]
 
 `SimpleClass`'s members in a `[NinoPooled]` class: Nino taking the instance from its pool against MemoryPack's overwrite. The "Pooled class" row of the [reuse table](#pooling).
 
-<Tabs groupId="bench-code" items={["Types", "Methods"]}>
-<Tab value="Types">
-
-```csharp title="PooledTest.cs" excerpt
+```csharp title="PooledTest.cs" excerpt tab="Types" tab-group="bench-code"
 [NinoType, NinoPooled]
 [MemoryPackable]
 public sealed partial class PooledSimpleClass
@@ -508,10 +481,7 @@ public sealed partial class PooledSimpleClass
 }
 ```
 
-</Tab>
-<Tab value="Methods">
-
-```csharp title="PooledTest.cs" excerpt
+```csharp title="PooledTest.cs" excerpt tab="Methods" tab-group="bench-code"
 private static readonly PooledSimpleClass Value = PooledSimpleClass.From(SimpleClass.Create());
 private static readonly byte[] NinoData = NinoSerializer.Serialize(Value);
 private static readonly byte[] MemoryPackData = MemoryPackSerializer.Serialize(Value);
@@ -543,17 +513,11 @@ public PooledSimpleClass MemoryPackDeserializeOverwrite()
 }
 ```
 
-</Tab>
-</Tabs>
-
 ### PooledGraphTest [#pooledgraphtest]
 
 Pooled graphs without strings, so the steady state can allocate nothing: a node with nested pooled children, and a list of 100 pooled leaves. The "Pooled node" and "Pooled leaves" rows of the [reuse table](#pooling).
 
-<Tabs groupId="bench-code" items={["Types", "Methods"]}>
-<Tab value="Types">
-
-```csharp title="PooledGraphTest.cs" excerpt
+```csharp title="PooledGraphTest.cs" excerpt tab="Types" tab-group="bench-code"
 [NinoType, NinoPooled]
 [MemoryPackable]
 public sealed partial class PooledLeaf
@@ -596,10 +560,7 @@ public sealed partial class PooledNode
 }
 ```
 
-</Tab>
-<Tab value="Methods">
-
-```csharp title="PooledGraphTest.cs" excerpt
+```csharp title="PooledGraphTest.cs" excerpt tab="Methods" tab-group="bench-code"
 private static readonly PooledNode Node = PooledNode.Create(new Random(1));
 private static readonly List<PooledLeaf> Leaves =
     Enumerable.Range(0, 100).Select(_ => PooledLeaf.Create(new Random(2))).ToList();
@@ -653,17 +614,11 @@ public List<PooledLeaf> MemoryPackLeavesOverwrite()
 // and the Plain category (List<PlainLeaf>, new instances, Nino and MemoryPack).
 ```
 
-</Tab>
-</Tabs>
-
 ### ReferenceTest [#referencetest]
 
 A graph of 200 nodes with shared tags, shared peers and cycles through the root, written into a reused buffer writer and read back. Nino tracks references with `trackReferences`, MemoryPack with `GenerateType.CircularReference` (which needs a `[MemoryPackOrder]` on each member); both write each object once and read shared references and cycles back as one instance. The "Object graph" rows of the [results above](#more-cases).
 
-<Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
-<Tab value="Types">
-
-```csharp title="ReferenceTest.cs" excerpt
+```csharp title="ReferenceTest.cs" excerpt tab="Types" tab-group="bench-code"
 [NinoType(trackReferences: true)]
 [MemoryPackable(GenerateType.CircularReference)]
 public sealed partial class RefNode
@@ -693,10 +648,7 @@ public sealed partial class RefGraph
 }
 ```
 
-</Tab>
-<Tab value="Data">
-
-```csharp title="ReferenceTest.cs" nocheck
+```csharp title="ReferenceTest.cs" nocheck tab="Data" tab-group="bench-code"
 // In RefGraph: count nodes sharing 16 tags; each node's peer is an earlier node
 // (a back reference, so the nesting stays shallow), and every node refers back to the graph.
 public static RefGraph Create(int count)
@@ -722,10 +674,7 @@ private static readonly byte[] NinoGraph = NinoSerializer.Serialize(Graph);
 private static readonly byte[] MemoryPackGraph = MemoryPackSerializer.Serialize(Graph);
 ```
 
-</Tab>
-<Tab value="Methods">
-
-```csharp title="ReferenceTest.cs" excerpt
+```csharp title="ReferenceTest.cs" excerpt tab="Methods" tab-group="bench-code"
 [Benchmark(Baseline = true), BenchmarkCategory("GraphSerialize")]
 public int NinoSerializeGraph()
 {
@@ -749,17 +698,11 @@ public RefGraph NinoDeserializeGraph() => NinoDeserializer.Deserialize<RefGraph>
 public RefGraph MemoryPackDeserializeGraph() => MemoryPackSerializer.Deserialize<RefGraph>(MemoryPackGraph);
 ```
 
-</Tab>
-</Tabs>
-
 ### VersionTolerantTest [#versiontoleranttest]
 
 The members of `SimpleClass` in a version-tolerant type, alone and as an array of 100, written into a reused buffer writer and read back as [`SimpleTest`](#simpletest) does with `SimpleClass`: the difference between the two is the cost of version tolerance. Nino prefixes the body with its length (`NinoFormat.VersionTolerant`); MemoryPack writes a member count and the length of every member (`GenerateType.VersionTolerant`, which needs a `[MemoryPackOrder]` on each member). The `TolerantClass` rows of the [results above](#more-cases).
 
-<Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
-<Tab value="Types">
-
-```csharp title="VersionTolerantTest.cs" excerpt
+```csharp title="VersionTolerantTest.cs" excerpt tab="Types" tab-group="bench-code"
 [NinoType(format: NinoFormat.VersionTolerant)]
 [MemoryPackable(GenerateType.VersionTolerant)]
 public sealed partial class TolerantClass
@@ -777,10 +720,7 @@ public sealed partial class TolerantClass
 }
 ```
 
-</Tab>
-<Tab value="Data">
-
-```csharp title="VersionTolerantTest.cs" nocheck
+```csharp title="VersionTolerantTest.cs" nocheck tab="Data" tab-group="bench-code"
 // In TolerantClass: a copy of a SimpleClass from SimpleTest's data.
 public static TolerantClass From(SimpleClass c) => new()
 {
@@ -797,10 +737,7 @@ private static readonly byte[] NinoTolerantClass = NinoSerializer.Serialize(Tole
 private static readonly byte[] MemoryPackTolerantClass = MemoryPackSerializer.Serialize(TolerantClass);
 ```
 
-</Tab>
-<Tab value="Methods">
-
-```csharp title="VersionTolerantTest.cs" excerpt
+```csharp title="VersionTolerantTest.cs" excerpt tab="Methods" tab-group="bench-code"
 [Benchmark(Baseline = true), BenchmarkCategory("TolerantClassSerialize")]
 public int NinoSerializeTolerantClass()
 {
@@ -828,17 +765,11 @@ public TolerantClass MemoryPackDeserializeTolerantClass() =>
 // TolerantClasses (the array of 100) has the same methods.
 ```
 
-</Tab>
-</Tabs>
-
 ### FixedSizeTest [#fixedsizetest]
 
 Types whose values always take the same number of bytes ([fixed-size types](/en/docs/v4/performance#fixed-size-types)): `Serialize(value)` returns a new `byte[]` allocated at exactly that size and writes the value straight into it, with no scratch buffer, writer or copy. Measured through the `byte[]` APIs of both serializers, so allocating the result is part of every serialize call, plus an array of 100 of the classes, whose length varies and which takes the regular path. The `FixedStruct` and `FixedClass` rows of the [results above](#more-cases).
 
-<Tabs groupId="bench-code" items={["Types", "Data", "Methods"]}>
-<Tab value="Types">
-
-```csharp title="FixedSizeTest.cs" excerpt
+```csharp title="FixedSizeTest.cs" excerpt tab="Types" tab-group="bench-code"
 // Unmanaged members only (40 bytes, no padding): every value serializes to the same number of bytes.
 [NinoType]
 [MemoryPackable]
@@ -862,10 +793,7 @@ public sealed partial class FixedClass
 }
 ```
 
-</Tab>
-<Tab value="Data">
-
-```csharp title="FixedSizeTest.cs" nocheck
+```csharp title="FixedSizeTest.cs" nocheck tab="Data" tab-group="bench-code"
 // In FixedStruct (FixedClass has the same Create):
 public static FixedStruct Create(Random r) => new()
 {
@@ -889,10 +817,7 @@ static FixedSizeTest()
 }
 ```
 
-</Tab>
-<Tab value="Methods">
-
-```csharp title="FixedSizeTest.cs" excerpt
+```csharp title="FixedSizeTest.cs" excerpt tab="Methods" tab-group="bench-code"
 [Benchmark(Baseline = true), BenchmarkCategory("FixedClassSerialize")]
 public byte[] NinoSerializeFixedClass() => NinoSerializer.Serialize(FixedClass);
 
@@ -908,9 +833,6 @@ public FixedClass MemoryPackDeserializeFixedClass() =>
 
 // FixedStruct and FixedClasses (the array of 100) have the same methods.
 ```
-
-</Tab>
-</Tabs>
 
 ### GenericPolymorphicTest [#genericpolymorphictest]
 

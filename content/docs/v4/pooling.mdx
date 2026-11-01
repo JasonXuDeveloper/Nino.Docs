@@ -16,6 +16,14 @@ Deserializing a class normally allocates a new object graph on every call. With 
 
 Nino has three ways to avoid allocating what it reads. They answer different questions, and they combine:
 
+```mermaid
+flowchart TD
+  Q{Who creates the instance?} -- "you: kept and read into again" --> R["Deserialize(data, ref value)"]
+  Q -- "Nino: list elements, members that were null" --> S{Can the class be sealed and partial?}
+  S -- yes --> P["[NinoPooled]"]
+  S -- "no, or you already have a pool" --> F["[NinoFactory] and SetRecycler#lt;T#gt;"]
+```
+
 | Mechanism | Fits | What it costs |
 | --- | --- | --- |
 | [Deserialize by `ref`](#deserializing-into-existing-instances) | A value you keep and read into again and again (a snapshot, a batch, the last message of a connection), handled before the next read | Nothing to declare. The instance is yours: no other code may hold it while the next message is read into it, and only the same type is filled in place (a slot whose type changes gets a new instance). |
@@ -53,6 +61,15 @@ Whenever Nino needs a new instance for a slot (a member, a collection element or
 | Anything else, including plain `List<T>` and `Dictionary<K, V>` | `new` |
 
 ## Where Dropped Instances Go
+
+```mermaid
+flowchart LR
+  A["Pool, factory or new"] -- Nino reads into it --> B[Your object graph]
+  B -- "null in the data, list shrinks, type changes" --> C{Recycler of the slot's type}
+  C -- "SetRecycler#lt;T#gt;" --> D[Your handler]
+  C -- INinoPooled --> E["ReturnToPool()"]
+  C -- otherwise --> G[Garbage collector]
+```
 
 Reuse deserialization drops an existing instance when the data holds `null` for it, a list shrinks, an array must be reallocated, a dictionary key disappears, a polymorphic slot changes type, or a type that can only be re-created is replaced. Each dropped instance is handed **once** to the recycler of the slot's declared type:
 

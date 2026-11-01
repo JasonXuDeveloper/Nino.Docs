@@ -30,6 +30,17 @@ nino-gen runs on .NET 8 or later (in a build, the SDK's runtime), whatever the p
 
 ## How It Works [#how-it-works]
 
+```mermaid
+flowchart LR
+  C["[NinoType] C#"] --> G[Nino.Generator]
+  G --> F[.NET formatters]
+  G --> L["[assembly: NinoTypeLayout]"]
+  L --> N[nino-gen]
+  N --> T[nino_types.ts]
+  N --> O[nino_types.go]
+  N --> R[nino_types.rs]
+```
+
 - **From the built assembly.** nino-gen reads nothing but the `[assembly: NinoTypeLayout]` attributes (the [layout metadata](/en/docs/v4/evolving-data#layout-metadata)) that the generator publishes in every assembly it compiles, from the assembly and the assemblies it references, without loading them. It needs no source and runs no code: only the built `.dll`. Its `[NinoType]`s are generated, and those of referenced assemblies that it uses.
 - **The same layouts as the formatters.** The generator writes each layout from the same model as the type's C# formatter, so the generated code reads and writes the members in the order, encoding and format the .NET code uses. Every decision about the bytes is made once, for all three languages.
 - **Quiet on unchanged builds.** Each file is written only when its text changes, so watchers and incremental builds see no change. In a build, an item runs again only when the assembly, its references, the tool or the item's metadata change, and never in the IDE's design-time builds.
@@ -62,35 +73,23 @@ Nino.Codegen is a development dependency: `dotnet add package` marks it `Private
 
 One `<NinoCodegen>` item per output. The item is the language (`typescript` or `ts`, `go`, `rust`); every other metadata is a [nino-gen option](#options). Two items of one language with different `Out`s write twice.
 
-<Tabs groupId="codegen-lang" persist items={['TypeScript', 'Go', 'Rust']}>
-<Tab value="TypeScript">
-
-```xml title="Shop.Contracts.csproj"
+```xml title="Shop.Contracts.csproj" tab="TypeScript" tab-group="codegen-lang"
 <ItemGroup>
   <NinoCodegen Include="typescript" Out="../web/src/nino" ImportExtension=".js" />
 </ItemGroup>
 ```
 
-</Tab>
-<Tab value="Go">
-
-```xml title="Shop.Contracts.csproj"
+```xml title="Shop.Contracts.csproj" tab="Go" tab-group="codegen-lang"
 <ItemGroup>
   <NinoCodegen Include="go" Out="../server/protocol" Package="protocol" />
 </ItemGroup>
 ```
 
-</Tab>
-<Tab value="Rust">
-
-```xml title="Shop.Contracts.csproj"
+```xml title="Shop.Contracts.csproj" tab="Rust" tab-group="codegen-lang"
 <ItemGroup>
   <NinoCodegen Include="rust" Out="../client/src" Serde="true" />
 </ItemGroup>
 ```
-
-</Tab>
-</Tabs>
 
 A project that references the package without an item gets warning [NINOGEN004](#diagnostics) and writes nothing.
 
@@ -715,6 +714,21 @@ Field attributes are `index`, `name` (the .NET name; the default is the field's 
 
 The runtime's [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust) has the full API and the serde form of each value type.
 
+## Fields of Raw Structs [#raw-struct-fields]
+
+A raw struct (an unmanaged struct written as one block, [Raw Values](/en/docs/v4/wire-format#raw-values)) is generated as a type of its fields at their offsets in the canonical layout, padding zeroed. The fields whose .NET size or layout depends on the host get a fixed form:
+
+| Field inside a raw struct | Bytes | TypeScript | Go | Rust |
+| --- | --- | --- | --- | --- |
+| `nint` | 8, sign-extended | `bigint` | `int64` | `i64` |
+| `nuint`, pointers, function pointers (`delegate*`) | 8, zero-extended | `bigint` | `uint64` | `u64` |
+| `Int128`, `UInt128` | 16, aligned to 16 | a class of its two halves (`bigint`) | `nino.Int128`, `nino.UInt128` | `i128`, `u128` |
+| `DateTimeOffset` | 16: offset minutes at 0, UTC ticks at 8 | NINOGEN002 | a struct `{ DateTime, OffsetMinutes }` | a struct `{ date_time, offset_minutes }` |
+| `T?` of a raw `T` | the flag, zeros to `T`'s alignment, then `T` | `T \| null` | `*T` | `Option<T>` |
+| `Vector64<T>` to `Vector512<T>` | 8 to 64 | NINOGEN002 | NINOGEN002 | NINOGEN002 |
+
+An array of `Int128?` has a stride of 32 bytes (the flag, 15 zeros, the value). TypeScript leaves out a raw struct holding a `DateTimeOffset` because a `Date` holds milliseconds and reads as UTC, so the ticks and kind would not come back. A layout from an older build that holds a `System.Numerics.Vector<T>` is NINOGEN002 in every language: `Vector<T>` is [not serializable](/en/docs/v4/struct-layouts#vector-t).
+
 ## Generic Types [#generics]
 
 A generic `[NinoType]` is generated as a generic type in each language, with a codec built from the codecs of its type arguments, as .NET builds the formatter of `Box<int>` from those of `Box<T>` and `int`:
@@ -834,7 +848,8 @@ nino-gen leaves out, with warning NINOGEN002, every type its language cannot exp
 - in slots, closed generic types neither the assembly nor a slot names: their ids are unknown;
 - a generic type with `trackReferences`;
 - in TypeScript, the members [listed above](#not-supported);
-- in Rust, maps and sets whose key or element Rust cannot hash (`f32`, `f64` and types containing them), raw tuples with padding, and nullable raw values outside sequences.
+- in Rust, maps and sets whose key or element Rust cannot hash (`f32`, `f64` and types containing them), and raw tuples with padding;
+- in every language, the `Vector64<T>` to `Vector512<T>` fields and, in TypeScript, the `DateTimeOffset` fields of raw structs ([Fields of Raw Structs](#raw-struct-fields)), and layouts from an older build that hold a `System.Numerics.Vector<T>`.
 
 In Go and Rust, the elements of a `HashSet<string>` and the keys of a dictionary are non-null strings, since .NET never writes a null key there.
 

@@ -11,9 +11,27 @@ An unmanaged struct that is not a `[NinoType]`, and a raw `[NinoType]` struct, a
 
 The canonical layout is the one **64-bit CoreCLR** (.NET on x64 and Arm64) uses, made independent of the .NET version: `DateTimeOffset` as .NET 10 holds it (its offset in minutes as an `int`, then the UTC date), `nint`, `nuint` and pointers as 8 bytes, and the SIMD vectors aligned as on x64 (`Vector<T>` is [not serializable](#vector-t)). Padding bytes are always written as zeros. The [specification](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#52-the-canonical-layout) gives the rule for every struct, value tuples included.
 
+```mermaid
+flowchart LR
+  Q{Layout canonical here?} -- "yes: 64-bit .NET" --> C[Copy memory]
+  Q -- "no: Mono, IL2CPP, .NET Framework, 32-bit" --> V[Convert field by field]
+  C --> B[The same bytes everywhere]
+  V --> B
+```
+
 - **64-bit .NET copies memory.** Where a runtime's layout is the canonical one, which is every struct on .NET x64 and almost every one on Arm64, Nino copies the struct as it lies in memory and clears its padding in the same pass.
 - **Every other runtime converts.** Mono, IL2CPP, .NET Framework and 32-bit runtimes find once where their own layout puts each field (reading an instance) and convert each value field by field: widening a 4-byte `nint` to 8 bytes, moving a tuple's items. 64-bit .NET never adapts to them.
 - **Go, Rust and TypeScript** read and write the same bytes from the published layout ([Code Generation](/en/docs/v4/advanced/codegen)).
+
+`struct { int A; (int, long) B; }` holding `{1, (2, 3)}` is 24 bytes on every runtime: the tuple's `long` comes before its `int`, as 64-bit .NET places them, even on Mono, which keeps the `int` first in memory.
+
+<Bytes rows={[{ fields: [
+  { hex: '01 00 00 00', kind: 'value', label: 'A = 1' },
+  { hex: '00 00 00 00', kind: 'pad', label: 'padding to 8' },
+  { hex: '03 00 00 00 00 00 00 00', kind: 'value', label: 'B.Item2 (long) = 3' },
+  { hex: '02 00 00 00', kind: 'value', label: 'B.Item1 (int) = 2' },
+  { hex: '00 00 00 00', kind: 'pad', label: 'padding to 24' },
+] }]} />
 
 So data moves both ways between a .NET 10 server, a Unity IL2CPP client on a 32-bit phone, a .NET Framework tool and a Go service. MemoryPack copies an unmanaged struct as it lies in memory: a struct holding `(int, long)` written by .NET on x64 has the `long` first, and Mono, which keeps the `int` first, reads other values from the same bytes ([Nino vs MemoryPack](/en/docs/v4/vs-memorypack)).
 
@@ -21,13 +39,16 @@ So data moves both ways between a .NET 10 server, a Unity IL2CPP client on a 32-
 
 The [tables below](#measured-layouts) are measured: CI runs `tests/Nino.RuntimeTests` on each runtime, which prints the size and field offsets of every unmanaged BCL struct, alone and inside a struct `{ byte A; T B; int C; }`, and checks that the runtime writes and reads the bytes CoreCLR x64 wrote for each. Nino's [docs/layouts.md](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/layouts.md) is generated from those CI logs and is the source of these tables. In short:
 
-- **Value tuples** are `LayoutKind.Auto`. 64-bit CoreCLR puts primitive items first, largest first (`(int, long)` is the `long`, then the `int`); Mono and IL2CPP keep declaration order; 32-bit runtimes and .NET Framework pack them otherwise.
-- **`DateTimeOffset`**: .NET 10 holds an `int` of minutes at 0 and the date at 8, .NET 8 a `short` at 0, Mono, IL2CPP and .NET Framework the date first and a `short` at 8.
-- **`decimal`** is aligned to 8 on CoreCLR and Mono, to 4 on .NET Framework and IL2CPP.
-- **.NET Framework** lays out a struct that holds an auto-layout struct (a tuple, `DateTime`) as auto-layout too, so the fields of `{ byte A; DateTime B; int C; }` move.
-- **32-bit runtimes** have 4-byte `nint` and align some 8-byte fields to 4 (a `DateTime` field on Windows x86).
-- **`Vector<T>`** is 32 bytes on x64 with AVX2 or AVX-512, 16 on Arm64, on x64 without AVX2, on Mono and IL2CPP, and 64 with `DOTNET_MaxVectorTBitWidth=512`, which is why it is [not serializable](#vector-t). **`Vector256<T>` and `Vector512<T>`** are aligned to 16 on Arm64 (32 and 64 on x64).
-- **`KeyValuePair`**, **`Nullable<T>`**, `Guid`, `DateTime` and `TimeSpan` agree everywhere, except where their items or a runtime's alignment differ.
+| Type | 64-bit CoreCLR (the canonical layout) | Where it differs |
+| --- | --- | --- |
+| Value tuples (`LayoutKind.Auto`) | primitive items first, largest first: `(int, long)` is the `long`, then the `int` | Mono and IL2CPP keep declaration order; 32-bit runtimes and .NET Framework pack them otherwise |
+| `DateTimeOffset` | .NET 10: an `int` of minutes at 0, the date at 8 | .NET 8: a `short` at 0; Mono, IL2CPP, .NET Framework: the date first, a `short` at 8 |
+| `decimal` | aligned to 8 (Mono too) | aligned to 4 on .NET Framework and IL2CPP |
+| A struct holding a tuple or `DateTime` | sequential | .NET Framework lays it out as auto-layout: the fields of `{ byte A; DateTime B; int C; }` move |
+| `nint`, `nuint`, pointers, function pointers (`delegate*`) | 8 bytes (`nint` sign-extended, the others zero-extended) | 4 bytes on 32-bit runtimes, which also align some 8-byte fields to 4 (a `DateTime` field on Windows x86); Mono and IL2CPP see a `delegate*` field as an `IntPtr` and sign-extend it, which differs on a 32-bit Unity player only for an address with its top bit set |
+| `Vector256<T>`, `Vector512<T>` | aligned to 32 and 64 (x64) | aligned to 16 on Arm64 |
+| `Vector<T>` | 16, 32 or 64 bytes, chosen by the CPU | [not serializable](#vector-t) |
+| `KeyValuePair`, `Nullable<T>`, `Guid`, `DateTime`, `TimeSpan` | sequential, natural alignment | the same everywhere, except where their items or a runtime's alignment differ |
 
 ## What It Costs [#cost]
 
@@ -39,6 +60,12 @@ The [tables below](#measured-layouts) are measured: CI runs `tests/Nino.RuntimeT
 Whether a type is copied or converted is decided once per type, before .NET compiles the code that uses it at full speed, as a `static readonly` flag the JIT folds: the fast code of an array, list or value of a canonical struct holds no layout check at all, so 64-bit .NET pays nothing for the other runtimes. A converted struct is not written as one block: arrays and lists of it take a loop over their values instead of a single copy. On Mono and IL2CPP the flag is read once per call.
 
 ## What You Should Do [#what-to-do]
+
+<Callout type="warn" title="Raw bytes are copied as they are">
+
+Reading a raw struct copies its block: in the default mode a `bool` field or a `Nullable` flag inside it is not checked, and a byte other than 0 or 1 there is undefined behavior to the .NET JIT (the value can compare unequal to itself). Read data from an untrusted source with `NinoSettings.Untrusted = true` ([What Is Rejected](/en/docs/v4/security#what-is-rejected)).
+
+</Callout>
 
 - **Prefer a `[NinoType]` struct** for data you design: the generator copies it as one block only when its layout is the same on every runtime (checked at compile time), and otherwise writes it member by member with no padding, so no runtime converts anything. A plain struct (no `[NinoType]`) holding tuples, `DateTimeOffset`, `nint` or vectors is still portable, at the cost of a conversion off 64-bit .NET.
 - **Order fields largest first** in plain structs you share: fewer padding bytes on the wire.
@@ -69,7 +96,7 @@ public struct SampleRecord
 
 ## `Vector<T>` Is Not Serializable [#vector-t]
 
-`System.Numerics.Vector<T>` is as wide as the CPU's vectors: 32 bytes on x64 with AVX2 or AVX-512, 16 on Arm64, in Unity (Mono and IL2CPP, on x64 too), on .NET Framework x86 and on x64 without AVX2, and 64 with `DOTNET_MaxVectorTBitWidth=512`. No layout carries it between hosts: the 32 bytes an x64 server writes do not fit the 16-byte `Vector<T>` of a phone. So Nino writes no type that is or holds one, alone or inside anything (arrays, collections and classes deriving from one, as in `class Lanes : List<Vector<int>>`, tuples, `T?`, plain structs at any depth). The analyzer reports error NINO029 on the member or the `NinoSerializer`/`NinoDeserializer` call, and a type it did not see (resolved at run time, boxed, from another assembly) throws `NotSupportedException` the first time its formatter is needed, before a byte is written or read; a formatter called by hand (an `UnmanagedFormatter<T>` you create, `Writer.Write`) throws it when it writes or reads the value. `Vector64<T>` to `Vector512<T>` have a fixed size and are serializable.
+`System.Numerics.Vector<T>` is 16, 32 or 64 bytes, chosen by the CPU (the [specification](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#3-primitive-and-bcl-values) lists which host has which). No layout carries it between hosts: the 32 bytes an x64 server writes do not fit the 16-byte `Vector<T>` of a phone. So Nino writes no type that is or holds one, alone or inside anything (arrays, collections and classes deriving from one, as in `class Lanes : List<Vector<int>>`, tuples, `T?`, plain structs at any depth). The analyzer reports error NINO029 on the member or the `NinoSerializer`/`NinoDeserializer` call, and a type it did not see (resolved at run time, boxed, from another assembly) throws `NotSupportedException` the first time its formatter is needed, before a byte is written or read; a formatter called by hand (an `UnmanagedFormatter<T>` you create, `Writer.Write`) throws it when it writes or reads the value. `Vector64<T>` to `Vector512<T>` have a fixed size and are serializable.
 
 ```csharp expect="NINO029"
 [NinoType]

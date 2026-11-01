@@ -43,21 +43,28 @@ catch (NinoDataException e)
 
 ## What Is Rejected [#what-is-rejected]
 
-In every mode, `NinoDataException` is thrown for:
+Each row throws `NinoDataException`. The default mode checks everything that costs nothing on valid data; [`Untrusted`](#untrusted-mode) adds the checks that cost time on every read.
 
-- data that ends early, and a length or count that is negative (other than `-1` for null) or larger than the bytes left can hold;
-- a collection longer than [`MaxCollectionLength`](#limits);
-- an unknown type id, or one that is not a subtype of the declared type, and an invalid back reference;
-- data nested deeper than [`MaxDepth`](#limits);
-- the same key twice in a dictionary, `HashSet<T>` or lookup that the read fills from empty, and a key that finds more than [`MaxHashCollisions`](#hash-flooding) keys in its hash bucket;
-- a `bool` or presence byte other than `0` or `1` (Nino writes only those two);
-- a keyed member whose entry holds more bytes than its value, and a member that runs past the end of its region;
-- a version-tolerant or keyed region whose section of deferred bodies does not match the region (its offset or its entries);
-- a [string header](/en/docs/v4/wire-format#strings) that is not in its shortest form or whose first byte is `0x82` or above;
-- a `[NinoUtf8]` string whose bytes are not valid UTF-8 or do not match its char and byte counts;
-- a value its type rejects: a malformed `Uri`, an unknown time zone, and on .NET 8 and later a `CultureInfo` the runtime does not ship ([Guarantees](#guarantees)).
+<Matrix corner="Input" columns={['Default', 'Untrusted']} rows={[
+  { label: 'Data that ends early; a length or count that is negative (other than -1 for null) or larger than the bytes left can hold', cells: ['yes', 'yes'] },
+  { label: <>A collection longer than <a href="#limits"><code>MaxCollectionLength</code></a>; data nested deeper than <a href="#limits"><code>MaxDepth</code></a></>, cells: ['yes', 'yes'] },
+  { label: 'An unknown type id, one that is not a subtype of the declared type, an invalid back reference', cells: ['yes', 'yes'] },
+  { label: <>The same key twice in a dictionary, set or lookup the read fills from empty; a key that finds more than <a href="#hash-flooding"><code>MaxHashCollisions</code></a> keys in its bucket</>, cells: ['yes', 'yes'] },
+  { label: 'Keys chosen to share hash buckets at all (integer, char, Guid and string keys)', cells: ['partial: bounded by MaxHashCollisions', 'yes: seeded hashing'] },
+  { label: 'A bool or presence byte other than 0 or 1 (values, members, bool arrays, tuple and KeyValuePair items)', cells: ['yes', 'yes'] },
+  { label: <>A <code>bool</code> field or a <code>Nullable</code> flag other than 0 or 1 <strong>inside a raw struct</strong></>, cells: ['no: copied unchecked', 'yes'] },
+  { label: 'A DateTime past DateTime.MaxValue, a decimal with other flag bits or a scale above 28, a DateOnly or TimeOnly out of range', cells: ['no', 'yes'] },
+  { label: 'Bytes after the value (APIs that take the whole payload)', cells: ['no: ignored', 'yes'] },
+  { label: 'A keyed entry holding more bytes than its value, a member past its region, a section of deferred bodies that does not match its region', cells: ['yes', 'yes'] },
+  { label: <>A <a href="/en/docs/v4/wire-format#strings">string header</a> not in its shortest form or starting with 0x82 or above; <code>[NinoUtf8]</code> bytes that are not valid UTF-8 or do not match their counts</>, cells: ['yes', 'yes'] },
+  { label: <>A value its type rejects: a malformed <code>Uri</code>, an unknown time zone, on .NET 8+ a <code>CultureInfo</code> the runtime does not ship (<a href="#guarantees">Guarantees</a>)</>, cells: ['yes', 'yes'] },
+]} />
 
-A `bool` field inside a raw struct is copied with the struct's bytes, unchecked, unless [`Untrusted`](#untrusted-mode) is set. The `bool` items of value tuples and `KeyValuePair`s are checked in every mode, also in arrays and lists read as blocks.
+<Callout type="error" title="Read untrusted data with NinoSettings.Untrusted">
+
+The default mode copies a raw struct (an unmanaged struct written as one block) as it is, so a `bool` field or a `Nullable` flag inside one is not checked. A byte other than 0 or 1 there is undefined behavior to the .NET JIT, not only a wrong value: the struct can compare unequal to itself once its code is recompiled (a `long?` with a flag of 2 was read as null by one compiled method and as a value by another) and be lost as a key or value in a `Dictionary`. Data from someone who could craft it must be read with `NinoSettings.Untrusted = true`, which rejects it. The Go, Rust and TypeScript readers always do.
+
+</Callout>
 
 ## Limits [#limits]
 
@@ -119,7 +126,7 @@ Keys built to share one hash bucket make every insert scan all the keys before i
 `NinoSettings.Untrusted = true` adds the checks that cost time on every read, which trusted data does not need. With it off (the default) none of them costs anything: the read paths test it as a constant. On:
 
 - **Seeded hashing.** The dictionaries and hash sets Nino creates (also for `IDictionary`, `ISet` and lookups) hash integer, `char`, `Guid` and `string` keys with a comparer keyed by a secret drawn once per process (SipHash-1-3), so keys cannot be chosen to collide at all. Their `Comparer` is not the default one, but equality is the same. Collections you pass in keep their comparer; other key types, and `ImmutableDictionary` and `ImmutableHashSet`, rely on `MaxHashCollisions`.
-- **Values copied as bytes are checked** as their own constructors would check them, also inside raw structs and tuples: a `bool` other than 0 or 1, a `DateTime` past `DateTime.MaxValue`, a `decimal` with flag bits other than the sign or a scale above 28, a `DateOnly` or `TimeOnly` out of range. Enums are not checked: any value of the underlying type is valid (flags combine, and a newer version may add members). `TimeSpan`, `Guid`, `char` and the numbers have no invalid values. Arrays and lists of such values are checked without a branch per value, and on .NET 8+ with SIMD, many values at a time.
+- **Values copied as bytes are checked** as their own constructors would check them, also inside raw structs and tuples: a `bool` or `Nullable` flag other than 0 or 1, a `DateTime` past `DateTime.MaxValue`, a `decimal` with flag bits other than the sign or a scale above 28, a `DateOnly` or `TimeOnly` out of range. Enums are not checked: any value of the underlying type is valid (flags combine, and a newer version may add members). `TimeSpan`, `Guid`, `char` and the numbers have no invalid values. Arrays and lists of such values are checked without a branch per value, and on .NET 8+ with SIMD, many values at a time.
 - **Bytes after the value** are invalid data for the APIs that take the whole payload as a span or array (`NinoDeserializer.Deserialize` and the generated overloads). Reading from a `Reader` you create leaves the rest to you, so several values can still be read from one buffer.
 
 ## What Stays Your Job [#what-stays-your-job]

@@ -28,6 +28,16 @@ byte[] bytes = NinoSerializer.Serialize(order);
 Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 ```
 
+```mermaid
+flowchart LR
+  T["[NinoType] Order"] -->|compile time| G[Source generator]
+  G --> F[Formatter for Order]
+  G --> I[Interceptor for each call]
+  C["NinoSerializer.Serialize(order)"] --> I
+  I --> F
+  F --> B[Bytes]
+```
+
 ## Why Nino
 
 - **Fast.** Against MemoryPack in the same run, Nino serializes up to <BenchValue k="serialize.max" /> faster and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; on arrays of unmanaged structs, which both copy as one block, the two are at least on par. See [Benchmarks](/en/docs/v4/benchmarks).

@@ -6,16 +6,18 @@ icon: GitBranch
 
 Data outlives code. A saved document, a cached asset or a message from an older client is read by a newer build of your types, and sometimes the other way round. Nino gives every type one of three formats, the values of the `NinoFormat` enum, chosen with `[NinoType(format: ...)]`:
 
-| | `NinoFormat.Positional` (default) | `format: NinoFormat.VersionTolerant` | `format: NinoFormat.Keyed` |
-| --- | :---: | :---: | :---: |
-| Append members to a type without subclasses | ✗ | ✓ | ✓ |
-| Append members to a base class | ✗ | ✗ | ✓ |
-| Insert, remove or reorder members | ✗ | ✗ | ✓ |
-| Rename members | ✓ | ✓ | ✓ with `[NinoFormerName]` |
-| New code reads old data | ✗ | ✓ | ✓ |
-| Old code reads new data | ✗ | ✓ | ✓ |
-| Overhead | none | 4 bytes per object | 8 bytes per member, plus 4 per object |
-| Speed | fastest | close to positional: one length per object | the most work: a key and length per member, and a key check per member when reading |
+<Matrix columns={[<code key="p">Positional</code>, <code key="v">VersionTolerant</code>, <code key="k">Keyed</code>]} rows={[
+  { label: 'Append members to a type without subclasses', cells: ['no', 'yes', 'yes'] },
+  { label: 'Append members to a base class', cells: ['no', 'no', 'yes'] },
+  { label: 'Insert, remove or reorder members', cells: ['no', 'no', 'yes'] },
+  { label: 'Rename members', cells: ['yes', 'yes', 'yes: with [NinoFormerName]'] },
+  { label: 'New code reads old data', cells: ['no', 'yes', 'yes'] },
+  { label: 'Old code reads new data', cells: ['no', 'yes', 'yes'] },
+  { label: 'Overhead on the wire', cells: ['none', '4 bytes per object', '8 bytes per member, plus 4 per object'] },
+  { label: 'Speed', cells: ['fastest', 'close to positional: one length per object', 'the most work: a key and length per member, a key check per member when reading'] },
+]} />
+
+`Positional` is the default; the others are `[NinoType(format: NinoFormat.VersionTolerant)]` and `[NinoType(format: NinoFormat.Keyed)]`.
 
 The format itself is part of the data: changing a type's `format` makes previously written data unreadable. Choose before you store anything.
 
@@ -84,10 +86,14 @@ public sealed class Invoice : Document
 {
     public int CustomerId;
 }
-
-// after its header, version 1 writes an Invoice as  length | Id | CustomerId
-// and version 2 writes it as                        length | Id | Revision | CustomerId
 ```
+
+After its header, an `Invoice { Id = 1, Revision = 2, CustomerId = 5 }` is written as:
+
+<Bytes rows={[
+  { title: 'Version 1', fields: [{ hex: '08 00 00 00', kind: 'length', label: 'length 8' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '05 00 00 00', kind: 'value', label: 'CustomerId' }] },
+  { title: 'Version 2', fields: [{ hex: '0C 00 00 00', kind: 'length', label: 'length 12' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '02 00 00 00', kind: 'changed', label: 'Revision: where version 1 expects CustomerId' }, { hex: '05 00 00 00', kind: 'value', label: 'CustomerId: skipped by version 1' }] },
+]} />
 
 - **Version 2 reads version 1 data:** `Revision` gets the bytes of `CustomerId`, and the data ends before `CustomerId`, which keeps its value like any missing member (`0` in a new `Invoice`).
 - **Version 1 reads version 2 data:** `CustomerId` gets the bytes of `Revision`, and the real `CustomerId` is skipped as an unknown trailing member.
@@ -167,6 +173,14 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
 - Because the layout is metadata, a tool can also read it from referenced assemblies, even without loading them (`System.Reflection.Metadata`). A project gets the same layouts in every target framework.
 
 ## Choosing
+
+```mermaid
+flowchart TD
+  A{Do writer and reader always run the same build?} -- yes --> P[Positional]
+  A -- no --> B{Will you only append members, to classes without subclasses?}
+  B -- yes --> V[VersionTolerant]
+  B -- "no: remove, reorder, or add to a base class" --> K[Keyed]
+```
 
 <Accordions type="single">
 <Accordion title="Messages between a client and a server">

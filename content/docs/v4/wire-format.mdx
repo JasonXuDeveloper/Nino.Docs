@@ -38,6 +38,13 @@ A header is minimal: a value always takes the shortest form that holds it. Reade
 - **Default encoding.** The header is `0` for null; `2n + 1` followed by `n` Latin-1 bytes when every char is at most U+00FF (`1` is the empty string); otherwise `2n` followed by `n` UTF-16 code units. Both forms of a string of `n` chars have headers of the same size: one byte up to 63 chars, three up to 32,767, five above. Unpaired surrogates are written as they are, in the UTF-16 form. A `StringBuilder` is always written in the UTF-16 form, except when empty: `01`, since `0` is null; readers accept both forms. The text of `Uri`, `CultureInfo` and `TimeZoneInfo` values (a zone's id) is written in this encoding too.
 - **`[NinoUtf8]`.** The header is the char count (in UTF-16 code units) plus one: `0` is null and `1` the empty string, with nothing after either. A non-empty string then has its byte count as a second header, followed by the UTF-8 bytes. An unpaired surrogate is written as U+FFFD, so the char count is the length of the string read back.
 
+<Bytes rows={[
+  { title: <>"abc", default</>, fields: [{ hex: '07', kind: 'header', label: 'header 7 = 2 × 3 + 1: Latin-1, 3 chars' }, { hex: '61 62 63', kind: 'value', label: '"abc"' }] },
+  { title: <>"abc", <code>[NinoUtf8]</code></>, fields: [{ hex: '04', kind: 'header', label: '3 chars + 1' }, { hex: '03', kind: 'length', label: '3 bytes' }, { hex: '61 62 63', kind: 'value', label: '"abc"' }] },
+  { title: <>"a中", default</>, fields: [{ hex: '04', kind: 'header', label: 'header 4 = 2 × 2: UTF-16, 2 chars' }, { hex: '61 00 2D 4E', kind: 'value', label: '"a", "中" as UTF-16' }] },
+  { title: <>"a中", <code>[NinoUtf8]</code></>, fields: [{ hex: '03', kind: 'header', label: '2 chars + 1' }, { hex: '04', kind: 'length', label: '4 bytes' }, { hex: '61 E4 B8 AD', kind: 'value', label: '"a", "中" as UTF-8' }] },
+]} />
+
 | Value | Default | `[NinoUtf8]` |
 | --- | --- | --- |
 | `null` | `00` | `00` |
@@ -52,7 +59,13 @@ This is version 4.1 of the specification, written from 4.0.0-rc.8 on; earlier 4.
 
 ## Raw Values [#raw-values]
 
-An unmanaged value (a primitive, an enum, an unmanaged struct that is not a `[NinoType]`, or a `[NinoType]` struct that qualifies) is written as one block in the **canonical layout**: the layout 64-bit CoreCLR gives it, with each field at its natural alignment (`decimal` aligned to 8, `Int128` to 16) and padding written as zeros. Every runtime writes the same bytes: where its own layout differs (32-bit platforms, Mono and IL2CPP, .NET Framework, for some structs), Nino converts field by field. `Nullable<T>`, `ValueTuple`, `KeyValuePair` and `DateTimeOffset` are never raw on their own: they are written item by item. Inside an unmanaged struct they are part of its block, in the same canonical layout: a value tuple's items where 64-bit CoreCLR puts them (largest primitive items first, so `(int, long)` is the `long`, then the `int`), a `KeyValuePair` key then value, a `DateTimeOffset` as .NET 10 holds it (its offset in minutes as an `int`, then its UTC time at byte 8), and `nint`/`nuint` as 8 bytes. The SIMD vectors (`Vector64<T>` to `Vector512<T>`) are aligned as on x64; `Vector<T>`, as wide as the CPU's vectors, is [not serializable](/en/docs/v4/struct-layouts#vector-t). See [Struct Layouts Across Runtimes](/en/docs/v4/struct-layouts) for what differs on each runtime.
+An unmanaged value (a primitive, an enum, an unmanaged struct that is not a `[NinoType]`, or a `[NinoType]` struct that qualifies) is written as one block in the **canonical layout**: the layout 64-bit CoreCLR gives it, with each field at its natural alignment (`decimal` aligned to 8, `Int128` to 16) and padding written as zeros. Every runtime writes the same bytes: where its own layout differs (32-bit platforms, Mono and IL2CPP, .NET Framework, for some structs), Nino converts field by field. `Nullable<T>`, `ValueTuple`, `KeyValuePair` and `DateTimeOffset` are never raw on their own: they are written item by item. Inside an unmanaged struct they are part of its block, in the same canonical layout: a value tuple's items where 64-bit CoreCLR puts them (largest primitive items first, so `(int, long)` is the `long`, then the `int`), a `KeyValuePair` key then value, a `DateTimeOffset` as .NET 10 holds it (its offset in minutes as an `int`, then its UTC time at byte 8), and `nint`/`nuint` as 8 bytes. The SIMD vectors (`Vector64<T>` to `Vector512<T>`) are aligned as on x64; `Vector<T>`, 16, 32 or 64 bytes chosen by the CPU, is [not serializable](/en/docs/v4/struct-layouts#vector-t). See [Struct Layouts Across Runtimes](/en/docs/v4/struct-layouts) for what differs on each runtime.
+
+<Callout type="warn" title="Raw bytes are copied as they are">
+
+Reading a raw struct copies its block: in the default mode a `bool` field or a `Nullable` flag inside it is not checked, and a byte other than 0 or 1 there is undefined behavior to the .NET JIT (the value can compare unequal to itself). Read data from an untrusted source with `NinoSettings.Untrusted = true` ([What Is Rejected](/en/docs/v4/security#what-is-rejected)).
+
+</Callout>
 
 ## Collections [#collections]
 
@@ -76,6 +89,17 @@ A `[NinoType]` value is a **header** chosen by its declared type, then its **bod
 - **Version-tolerant** bodies are an `int32` length, then the members: a reader of an older version skips members it does not know, and a newer one gives missing members their default.
 - **Keyed** bodies are an `int32` length, then one `(int32 key, int32 length, value)` entry per member, where the key is the FNV-1a hash of the member's name. Entries may come in any order, and unknown keys are skipped.
 - **Reference tracking** (`trackReferences: true`) replaces the header with an `int32`: `0` null, `-1` a new object, `n > 0` a back reference to the `n`th object read. See [Reference Tracking](/en/docs/v4/reference-tracking).
+
+Examples (from the [specification's](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#appendix-a-worked-examples) dumps, namespace `Spec`):
+
+<Bytes rows={[
+  { title: <>Positional, sealed: <code>Small {'{'} A = 1, B = "a" {'}'}</code></>, fields: [{ hex: '01', kind: 'header', label: 'presence byte' }, { hex: '01 00 00 00', kind: 'value', label: 'A = 1' }, { hex: '03 61', kind: 'value', label: 'B = "a"' }] },
+  { title: <><code>Circle</code> in a <code>List&lt;Shape&gt;</code></>, fields: [{ hex: 'AC 2B C0 ED', kind: 'id', label: 'type id of Spec.Circle' }, { hex: '01 00 00 00', kind: 'value', label: 'Id = 1 (base first)' }, { hex: '00 00 80 3F', kind: 'value', label: 'R = 1f' }] },
+  { title: <>Version-tolerant, sealed: <code>TolLeaf</code></>, fields: [{ hex: '01', kind: 'header', label: 'presence byte' }, { hex: '08 00 00 00', kind: 'length', label: 'body length 8' }, { hex: '01 00 00 00', kind: 'value', label: 'A = 1' }, { hex: '07 00 00 00', kind: 'value', label: 'B = 7 (an older reader skips it)' }] },
+  { title: <>Keyed, sealed: <code>Keyed {'{'} Id = 1, … {'}'}</code></>, fields: [{ hex: '01', kind: 'header', label: 'presence byte' }, { hex: '26 00 00 00', kind: 'length', label: 'body length 38' }, { hex: '48 19 C4 98', kind: 'id', label: 'key FNV("Id")' }, { hex: '04 00 00 00', kind: 'length', label: 'entry length 4' }, { hex: '01 00 00 00', kind: 'value', label: 'Id = 1' }, { hex: 'E2 B3 85 30', kind: 'id', label: 'key FNV("Name")' }, { hex: '02 00 00 00', kind: 'length', label: '2' }, { hex: '03 6E', kind: 'value', label: 'Name = "n"' }] },
+]} />
+
+The keyed example continues with the `Score` entry (`4D B1 4A 04 08 00 00 00` and the value).
 
 ## Deep Nesting [#deep-nesting]
 

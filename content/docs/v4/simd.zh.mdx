@@ -7,6 +7,17 @@ icon: Cpu
 
 Nino 在每个平台上写出的字节都相同。在有向量指令的平台上，各个运行时把它们用在收益最大的工作上：搬运字节与内存布局不同的值（元组、带填充的结构体）、大块拷贝，以及在[二进制格式](/zh/docs/v4/wire-format#values)的字符串编码与语言自身的编码之间转换。每条向量路径都在运行时（或为目标平台编译代码时）选定，并且都有写出相同字节的可移植回退路径；测试会比较两者。
 
+一览（✓ 有向量路径，⚠ 部分工作有，✗ 只有可移植路径）：
+
+<Matrix corner="硬件" columns={[<a key="n" href="#dotnet">.NET</a>, <a key="u" href="#unity">Unity</a>, <a key="g" href="#go">Go</a>, <a key="r" href="#rust">Rust</a>, <a key="t" href="#typescript">TypeScript</a>]} rows={[
+  { label: '有 AVX-512 的 x64', cells: ['yes', 'partial: 用 AVX2 目标', 'yes', 'yes: Rust 1.89+', 'n/a: 看引擎'] },
+  { label: '有 AVX2 的 x64', cells: ['yes', 'yes: Burst AVX2 目标', 'yes', 'yes', 'n/a: 看引擎'] },
+  { label: '有 SSSE3 的 x86 和 x64', cells: ['yes', 'yes', 'yes', 'partial: SSE4.1 和 SSSE3 路径', 'n/a: 看引擎'] },
+  { label: 'Arm64', cells: ['yes: AdvSimd', 'yes: Neon', 'yes: NEON', 'yes: NEON', 'n/a: 看引擎'] },
+  { label: '带 SIMD 的 WebAssembly', cells: ['yes: .NET 10', 'yes: WebGL，C 写的内核', 'no', 'no', 'yes: 支持 Wasm SIMD、GC 和 JS String Builtins 的浏览器'] },
+  { label: 'Arm32、无 SIMD、关闭内联函数', cells: ['no', 'no', 'no', 'no', 'n/a: 看引擎'] },
+]} />
+
 下面按平台列出 Nino 源码中现有的向量路径，以及衡量每条路径的基准测试。
 
 ## .NET [#dotnet]

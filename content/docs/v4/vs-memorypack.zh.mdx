@@ -66,56 +66,54 @@ Nino 的字节在所有平台上都相同：[原始值](/zh/docs/v4/wire-format#
 
 ## 功能矩阵 [#feature-matrix]
 
-✅ 支持 · ⚠️ 部分支持或有条件 · ❌ 不支持
-
-| | Nino v4 | MemoryPack 1.21.4 |
-| --- | --- | --- |
-| **平台** | | |
-| 最低 .NET 目标 | ✅ `netstandard2.0` | ⚠️ `netstandard2.1`（以及 `net7.0`+） |
-| Unity | ✅ 2022.3+，OpenUPM 包 | ✅ 2022.3.12f1+，NuGetForUnity 加 git 包 |
-| IL2CPP / Native AOT | ✅ 源生成，序列化时无反射 | ✅ 源生成，无 IL.Emit |
-| 所有运行时和 CPU 上字节相同 | ✅ 规范布局，在 32 位和旧版 Mono 上转换 | ⚠️ 非托管结构体按内存布局原样拷贝 |
-| 确定性输出（填充清零） | ✅ | ❌ 填充原样拷贝 |
-| **定义类型** | | |
-| 需要 `partial` | ⚠️ 只有 `[NinoPooled]` 类，以及在 .NET 8 之前（泛型类型：.NET 9 之前）序列化非公开成员时需要 | ✅ 总是需要 |
-| 私有成员 | ✅ `includeNonPublicMembers` | ✅ `[MemoryPackInclude]` |
-| 构造函数、记录、`required` 成员 | ✅ | ✅ |
-| 自定义集合类型 | ✅ 自动（`List<T>`、`Dictionary<,>` 子类、`ICollection<T>`……） | ⚠️ 每个类型需要 `[MemoryPackable(GenerateType.Collection)]` |
-| **多态** | | |
-| 抽象类与接口 | ✅ | ✅ `[MemoryPackUnion]` |
-| 非抽象基类 | ✅ | ❌ Union 只能用于接口和抽象类 |
-| 泛型基类（`Box<T>`、`IRepository<T>`） | ✅ 自动，任何类型参数都行，与非泛型基类使用同样的生成分派 | ❌ 泛型类型上的 `[MemoryPackUnion]` 无法编译（MEMPACK013、MEMPACK014）；需为每个封闭类型手动注册 `DynamicUnionFormatter<T>`，并指定标签 |
-| 子类型 ID | ✅ 自动（类型名哈希），4 字节 | ⚠️ 每个子类型显式指定标签，1 字节（超过 249 时 3 字节） |
-| 其他程序集中的子类型 | ✅ 自动 | ⚠️ `[MemoryPackUnionFormatter]`；在 Unity 中需在启动时手动注册 |
-| 热更新程序集（HybridCLR） | ✅ 按需查找，无需初始化调用 | — 未见文档说明 |
-| **数据演进** | | |
-| 追加成员 | ✅ `NinoFormat.VersionTolerant`（最末端的派生类型）、`NinoFormat.Keyed`（任意类） | ✅ 默认模式（仅新代码可读旧数据） |
-| 旧代码读取新数据 | ✅ `NinoFormat.VersionTolerant`、`NinoFormat.Keyed` | ✅ `GenerateType.VersionTolerant` |
-| 删除成员 | ✅ `NinoFormat.Keyed` | ✅ 带显式顺序的 `VersionTolerant` |
-| 重新排序或插入成员 | ✅ `NinoFormat.Keyed` | ⚠️ `VersionTolerant`：声明可以挪动，写入顺序由 `[MemoryPackOrder]` 编号固定 |
-| 重命名成员 | ✅ 按位置、`NinoFormat.VersionTolerant`；`NinoFormat.Keyed` 配合 `[NinoFormerName]` | ✅ |
-| 重命名或移动类型 | ✅ `[NinoFormerName]` | ✅ Union 标签与名称无关 |
-| **对象图** | | |
-| 共享引用与循环引用 | ✅ `trackReferences`，支持任何可原地填充的构造方式 | ⚠️ `GenerateType.CircularReference`，仅限无参构造函数 |
-| **内存分配** | | |
-| 反序列化到已有实例 | ✅ 按索引复用元素，按键合并字典 | ⚠️ 数组仅在长度相同时复用；集合先清空再填充 |
-| 对象池 | ✅ `[NinoPooled]`、工厂方法、被丢弃实例的回收器 | ⚠️ `MemoryPoolFormatter<T>` 从 `ArrayPool` 租用数组 |
-| **工具** | | |
-| 分析器 | ✅ NINO001–NINO029，许多带代码修复 | ✅ 35 条规则，`MEMPACK001`–`MEMPACK035` |
-| 编译期调用拦截 | ✅ Roslyn 4.8+（.NET 8 SDK） | — 未见文档说明 |
-| **I/O 与集成** | | |
-| `IBufferWriter<byte>` / `PipeWriter` | ✅ | ✅ |
-| 反序列化 `ReadOnlySpan<byte>` | ✅ | ✅ |
-| 反序列化 `ReadOnlySequence<byte>` | ✅ 在 span API 之上写的[小工具方法](/zh/docs/v4/advanced/streams#readonlysequence-input) | ✅ |
-| `Stream` 与异步 I/O | ✅ 在缓冲区 API 之上写的[小工具方法](/zh/docs/v4/advanced/streams#async) | ✅ `SerializeAsync` / `DeserializeAsync` |
-| 流式集合（`IAsyncEnumerable<T>`） | ⚠️ 每个元素写一[帧](/zh/docs/v4/advanced/streams#streams) | ✅ `MemoryPack.Streaming` |
-| 序列化回调 | ✅ 在调用前后执行自己的钩子（[示例](/zh/docs/v4/advanced/streams#callbacks)） | ✅ `[MemoryPackOnSerializing]` 等四个 |
-| 自定义格式化器 | ✅ 结构体格式化器，可内联；`[assembly: NinoFormatter]` 绑定泛型类型 | ✅ `MemoryPackFormatter<T>`，通过 Provider 注册 |
-| 压缩 | ✅ 用 `System.IO.Compression` 压缩输出（[示例](/zh/docs/v4/advanced/streams#compression)） | ✅ `BrotliCompressor`、`[BrotliFormatter]` |
-| 不可信输入 | ✅ 设计目标（[无效数据](/zh/docs/v4/basic#invalid-data)） | ❌ 按其 README，仅用于可信数据 |
-| TypeScript 代码生成 | ✅ [Nino.Codegen](/zh/docs/v4/advanced/codegen#typescript)（也支持 Go 和 Rust），每次构建后基于布局元数据生成；支持结构体、`decimal`、键控和版本容错类型 | ⚠️ `[GenerateTypeScript]`，只支持类，在源生成器内部生成，将在下个版本移除（[对比](/zh/docs/v4/advanced/codegen#compared-with-memorypack)） |
-| ASP.NET Core | ✅ [Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore)：MVC 格式化器，Minimal API 的 `NinoBody<T>` 和 `NinoResults` | ✅ `MemoryPack.AspNetCoreMvcFormatter` |
-| 默认字符串编码 | 所有字符都不超过 U+00FF 时每个字符一个字节，否则 UTF-16；可按成员使用 `[NinoUtf8]` | UTF-8，可选 UTF-16 |
+<Matrix columns={['Nino v4', 'MemoryPack 1.21.4']} rows={[
+  { group: '平台' },
+  { label: '最低 .NET 目标', cells: [['yes', <><code>netstandard2.0</code></>], ['partial', <><code>netstandard2.1</code>（以及 <code>net7.0</code>+）</>]] },
+  { label: 'Unity', cells: ['yes: 2022.3+，OpenUPM 包', 'yes: 2022.3.12f1+，NuGetForUnity 加 git 包'] },
+  { label: 'IL2CPP / Native AOT', cells: ['yes: 源生成，序列化时无反射', 'yes: 源生成，无 IL.Emit'] },
+  { label: '所有运行时和 CPU 上字节相同', cells: ['yes: 规范布局，在 32 位和旧版 Mono 上转换', 'partial: 非托管结构体按内存布局原样拷贝'] },
+  { label: '确定性输出（填充清零）', cells: ['yes', 'no: 填充原样拷贝'] },
+  { group: '定义类型' },
+  { label: <>需要 <code>partial</code></>, cells: [['partial', <>只有 <code>[NinoPooled]</code> 类，以及在 .NET 8 之前（泛型类型：.NET 9 之前）序列化非公开成员时需要</>], 'yes: 总是需要'] },
+  { label: '私有成员', cells: [['yes', <><code>includeNonPublicMembers</code></>], ['yes', <><code>[MemoryPackInclude]</code></>]] },
+  { label: <>构造函数、记录、<code>required</code> 成员</>, cells: ['yes', 'yes'] },
+  { label: '自定义集合类型', cells: [['yes', <>自动（<code>List&lt;T&gt;</code>、<code>Dictionary&lt;,&gt;</code> 子类、<code>ICollection&lt;T&gt;</code>……）</>], ['partial', <>每个类型需要 <code>[MemoryPackable(GenerateType.Collection)]</code></>]] },
+  { group: '多态' },
+  { label: '抽象类与接口', cells: ['yes', ['yes', <><code>[MemoryPackUnion]</code></>]] },
+  { label: '非抽象基类', cells: ['yes', 'no: Union 只能用于接口和抽象类'] },
+  { label: <>泛型基类（<code>Box&lt;T&gt;</code>、<code>IRepository&lt;T&gt;</code>）</>, cells: ['yes: 自动，任何类型参数都行，与非泛型基类使用同样的生成分派', ['no', <>泛型类型上的 <code>[MemoryPackUnion]</code> 无法编译（MEMPACK013、MEMPACK014）；需为每个封闭类型手动注册 <code>DynamicUnionFormatter&lt;T&gt;</code>，并指定标签</>]] },
+  { label: '子类型 ID', cells: ['yes: 自动（类型名哈希），4 字节', 'partial: 每个子类型显式指定标签，1 字节（超过 249 时 3 字节）'] },
+  { label: '其他程序集中的子类型', cells: ['yes: 自动', ['partial', <><code>[MemoryPackUnionFormatter]</code>；在 Unity 中需在启动时手动注册</>]] },
+  { label: '热更新程序集（HybridCLR）', cells: ['yes: 按需查找，无需初始化调用', 'n/a: 未见文档说明'] },
+  { group: '数据演进' },
+  { label: '追加成员', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>（最末端的派生类型）、<code>NinoFormat.Keyed</code>（任意类）</>], 'yes: 默认模式（仅新代码可读旧数据）'] },
+  { label: '旧代码读取新数据', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>、<code>NinoFormat.Keyed</code></>], ['yes', <><code>GenerateType.VersionTolerant</code></>]] },
+  { label: '删除成员', cells: [['yes', <><code>NinoFormat.Keyed</code></>], ['yes', <>带显式顺序的 <code>VersionTolerant</code></>]] },
+  { label: '重新排序或插入成员', cells: [['yes', <><code>NinoFormat.Keyed</code></>], ['partial', <><code>VersionTolerant</code>：声明可以挪动，写入顺序由 <code>[MemoryPackOrder]</code> 编号固定</>]] },
+  { label: '重命名成员', cells: [['yes', <>按位置、<code>NinoFormat.VersionTolerant</code>；<code>NinoFormat.Keyed</code> 配合 <code>[NinoFormerName]</code></>], 'yes'] },
+  { label: '重命名或移动类型', cells: [['yes', <><code>[NinoFormerName]</code></>], 'yes: Union 标签与名称无关'] },
+  { group: '对象图' },
+  { label: '共享引用与循环引用', cells: [['yes', <><code>trackReferences</code>，支持任何可原地填充的构造方式</>], ['partial', <><code>GenerateType.CircularReference</code>，仅限无参构造函数</>]] },
+  { group: '内存分配' },
+  { label: '反序列化到已有实例', cells: ['yes: 按索引复用元素，按键合并字典', 'partial: 数组仅在长度相同时复用；集合先清空再填充'] },
+  { label: '对象池', cells: [['yes', <><code>[NinoPooled]</code>、工厂方法、被丢弃实例的回收器</>], ['partial', <><code>MemoryPoolFormatter&lt;T&gt;</code> 从 <code>ArrayPool</code> 租用数组</>]] },
+  { group: '工具' },
+  { label: '分析器', cells: ['yes: NINO001–NINO029，许多带代码修复', ['yes', <>35 条规则，<code>MEMPACK001</code>–<code>MEMPACK035</code></>]] },
+  { label: '编译期调用拦截', cells: ['yes: Roslyn 4.8+（.NET 8 SDK）', 'n/a: 未见文档说明'] },
+  { group: 'I/O 与集成' },
+  { label: <><code>IBufferWriter&lt;byte&gt;</code> / <code>PipeWriter</code></>, cells: ['yes', 'yes'] },
+  { label: <>反序列化 <code>ReadOnlySpan&lt;byte&gt;</code></>, cells: ['yes', 'yes'] },
+  { label: <>反序列化 <code>ReadOnlySequence&lt;byte&gt;</code></>, cells: [['yes', <>在 span API 之上写的<a href="/zh/docs/v4/advanced/streams#readonlysequence-input">小工具方法</a></>], 'yes'] },
+  { label: <><code>Stream</code> 与异步 I/O</>, cells: [['yes', <>在缓冲区 API 之上写的<a href="/zh/docs/v4/advanced/streams#async">小工具方法</a></>], ['yes', <><code>SerializeAsync</code> / <code>DeserializeAsync</code></>]] },
+  { label: <>流式集合（<code>IAsyncEnumerable&lt;T&gt;</code>）</>, cells: [['partial', <>每个元素写一<a href="/zh/docs/v4/advanced/streams#streams">帧</a></>], ['yes', <><code>MemoryPack.Streaming</code></>]] },
+  { label: '序列化回调', cells: [['yes', <>在调用前后执行自己的钩子（<a href="/zh/docs/v4/advanced/streams#callbacks">示例</a>）</>], ['yes', <><code>[MemoryPackOnSerializing]</code> 等四个</>]] },
+  { label: '自定义格式化器', cells: [['yes', <>结构体格式化器，可内联；<code>[assembly: NinoFormatter]</code> 绑定泛型类型</>], ['yes', <><code>MemoryPackFormatter&lt;T&gt;</code>，通过 Provider 注册</>]] },
+  { label: '压缩', cells: [['yes', <>用 <code>System.IO.Compression</code> 压缩输出（<a href="/zh/docs/v4/advanced/streams#compression">示例</a>）</>], ['yes', <><code>BrotliCompressor</code>、<code>[BrotliFormatter]</code></>]] },
+  { label: '不可信输入', cells: [['yes', <>设计目标（<a href="/zh/docs/v4/basic#invalid-data">无效数据</a>）</>], 'no: 按其 README，仅用于可信数据'] },
+  { label: 'TypeScript 代码生成', cells: [['yes', <><a href="/zh/docs/v4/advanced/codegen#typescript">Nino.Codegen</a>（也支持 Go 和 Rust），每次构建后基于布局元数据生成；支持结构体、<code>decimal</code>、键控和版本容错类型</>], ['partial', <><code>[GenerateTypeScript]</code>，只支持类，在源生成器内部生成，将在下个版本移除（<a href="/zh/docs/v4/advanced/codegen#compared-with-memorypack">对比</a>）</>]] },
+  { label: 'ASP.NET Core', cells: [['yes', <><a href="/zh/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>：MVC 格式化器，Minimal API 的 <code>NinoBody&lt;T&gt;</code> 和 <code>NinoResults</code></>], ['yes', <><code>MemoryPack.AspNetCoreMvcFormatter</code></>]] },
+  { label: '默认字符串编码', cells: [<>所有字符都不超过 U+00FF 时每个字符一个字节，否则 UTF-16；可按成员使用 <code>[NinoUtf8]</code></>, 'UTF-8，可选 UTF-16'] },
+]} />
 
 ## MemoryPack 仍然领先的地方 [#where-memorypack-is-ahead]
 

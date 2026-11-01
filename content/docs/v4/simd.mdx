@@ -7,6 +7,17 @@ icon: Cpu
 
 Nino writes the same bytes on every platform. Where a platform has vector instructions, each runtime uses them for the work that gains most from them: moving values whose bytes differ from their memory (tuples, padded structs), large block copies, and converting strings between the encodings of the [wire format](/en/docs/v4/wire-format#values) and the language's own. Every vector path is found at run time (or when the code is compiled for its target), and every one has a portable fallback that writes the same bytes; the tests compare the two.
 
+At a glance (✓ a vector path, ⚠ part of the work, ✗ the portable path only):
+
+<Matrix corner="Hardware" columns={[<a key="n" href="#dotnet">.NET</a>, <a key="u" href="#unity">Unity</a>, <a key="g" href="#go">Go</a>, <a key="r" href="#rust">Rust</a>, <a key="t" href="#typescript">TypeScript</a>]} rows={[
+  { label: 'x64 with AVX-512', cells: ['yes', 'partial: the AVX2 target', 'yes', 'yes: Rust 1.89+', 'n/a: by engine'] },
+  { label: 'x64 with AVX2', cells: ['yes', 'yes: Burst AVX2 target', 'yes', 'yes', 'n/a: by engine'] },
+  { label: 'x86 and x64 with SSSE3', cells: ['yes', 'yes', 'yes', 'partial: SSE4.1 and SSSE3 paths', 'n/a: by engine'] },
+  { label: 'Arm64', cells: ['yes: AdvSimd', 'yes: Neon', 'yes: NEON', 'yes: NEON', 'n/a: by engine'] },
+  { label: 'WebAssembly with SIMD', cells: ['yes: .NET 10', 'yes: WebGL, kernels in C', 'no', 'no', 'yes: browsers with Wasm SIMD, GC and JS String Builtins'] },
+  { label: 'Arm32, no SIMD, intrinsics off', cells: ['no', 'no', 'no', 'no', 'n/a: by engine'] },
+]} />
+
 The tables below list the vector paths in Nino's source today, platform by platform, with the benchmark that measures each.
 
 ## .NET [#dotnet]

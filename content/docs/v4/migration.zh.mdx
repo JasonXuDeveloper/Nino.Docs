@@ -63,11 +63,7 @@ v3 的生成器会在每个程序集的 `<AssemblyName>.NinoGen` 命名空间里
 | （无） | `NinoDeserializer.Deserialize(data, ref value)`：反序列化到已有实例 |
 | （无） | `NinoSerializer.SerializeBoxed(value, type)`、`NinoDeserializer.DeserializeBoxed(data, type)`：仅用于运行时才知道、并且与其他类型没有共同 `[NinoType]` 基类型的类型（参见[运行时类型](/zh/docs/v4/basic#runtime-types)） |
 
-<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
-
-<Tab value="v3">
-
-```csharp nocheck
+```csharp nocheck tab="v3" tab-group="nino-version"
 using MyApp.NinoGen;
 
 byte[] bytes = obj.Serialize();
@@ -75,10 +71,7 @@ byte[] bytes = obj.Serialize();
 Deserializer.Deserialize(bytes, out ObjClass result);
 ```
 
-</Tab>
-<Tab value="v4">
-
-```csharp
+```csharp tab="v4" tab-group="nino-version"
 using Nino.Core;
 
 byte[] bytes = NinoSerializer.Serialize(obj);
@@ -86,25 +79,15 @@ byte[] bytes = NinoSerializer.Serialize(obj);
 ObjClass result = NinoDeserializer.Deserialize<ObjClass>(bytes);
 ```
 
-</Tab>
-</Tabs>
-
 复用缓冲区：
 
-<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
-
-<Tab value="v3">
-
-```csharp nocheck
+```csharp nocheck tab="v3" tab-group="nino-version"
 var bufferWriter = Serializer.GetBufferWriter();
 obj.Serialize(bufferWriter);
 Serializer.ReturnBufferWriter(bufferWriter);
 ```
 
-</Tab>
-<Tab value="v4">
-
-```csharp
+```csharp tab="v4" tab-group="nino-version"
 // create once and keep it (one per thread)
 var buffer = new NinoArrayBufferWriter();
 
@@ -113,9 +96,6 @@ buffer.ResetWrittenCount();
 NinoSerializer.Serialize(obj, buffer); // [!code highlight]
 ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // valid until the next write
 ```
-
-</Tab>
-</Tabs>
 
 <Callout type="info">
 
@@ -138,11 +118,7 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 
 ### 版本容错 [#version-tolerance]
 
-<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
-
-<Tab value="v3">
-
-```csharp
+```csharp tab="v3" tab-group="nino-version"
 // v3: #define WEAK_VERSION_TOLERANCE in the project settings
 [NinoType]
 public class Customer
@@ -153,10 +129,7 @@ public class Customer
 }
 ```
 
-</Tab>
-<Tab value="v4">
-
-```csharp
+```csharp tab="v4" tab-group="nino-version"
 [NinoType(format: NinoFormat.VersionTolerant)]
 public class Customer
 {
@@ -165,9 +138,6 @@ public class Customer
     public bool Verified; // appended later
 }
 ```
-
-</Tab>
-</Tabs>
 
 v4 的版本容错按类型设置。成员可以追加到**最末端的派生类型**（没有 `[NinoType]` 子类的类），嵌套多深都可以，旧代码会跳过它不认识的成员。追加到基类的成员会让子类的成员错位，所以不在容错范围内。要调整顺序、删除或插入成员，或者向基类添加成员，请使用 `[NinoType(format: NinoFormat.Keyed)]`。参见[版本容错](/zh/docs/v4/evolving-data#version-tolerance)和[键控成员](/zh/docs/v4/evolving-data#keyed-members)。
 
@@ -179,37 +149,23 @@ v4 的版本容错按类型设置。成员可以追加到**最末端的派生类
 
 ### 旧名称 [#former-names]
 
-<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
-
-<Tab value="v3">
-
-```csharp nocheck
+```csharp nocheck tab="v3" tab-group="nino-version"
 [NinoType]
 [NinoFormerName("global::MyApp.Billing.Bill")]
 public class Invoice { public long Id; }
 ```
 
-</Tab>
-<Tab value="v4">
-
-```csharp
+```csharp tab="v4" tab-group="nino-version"
 [NinoType]
 [NinoFormerName("MyApp.Billing.Bill")]
 public class Invoice { public long Id; }
 ```
 
-</Tab>
-</Tabs>
-
 旧名称只对 v4 自己写出的数据有意义（v3 的数据本来就读不了），所以只有升级到 v4 之后才改名的类型需要它。
 
 ### 多态 [#polymorphism]
 
-<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
-
-<Tab value="v3">
-
-```csharp
+```csharp tab="v3" tab-group="nino-version"
 [NinoType]
 public abstract class Payment { public long Id; }
 
@@ -217,18 +173,12 @@ public abstract class Payment { public long Id; }
 public sealed class CardPayment : Payment { public string Last4; }
 ```
 
-</Tab>
-<Tab value="v4">
-
-```csharp
+```csharp tab="v4" tab-group="nino-version"
 [NinoType]
 public abstract class Payment { public long Id; }
 
 public sealed class CardPayment : Payment { public string Last4; }
 ```
-
-</Tab>
-</Tabs>
 
 在子类型上保留 `[NinoType]` 没有坏处，子类型还能借此设置自己的选项。但这些选项会取代继承来的选项，想保留的（例如 `format: NinoFormat.VersionTolerant`）要再写一遍。唯一的例外是 `trackReferences`：被追踪类型的所有子类型都会保持追踪。
 

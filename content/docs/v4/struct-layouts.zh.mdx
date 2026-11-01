@@ -11,9 +11,27 @@ icon: LayoutGrid
 
 规范布局就是 **64 位 CoreCLR**（x64 和 Arm64 上的 .NET）用的布局，并且不随 .NET 版本变化：`DateTimeOffset` 按 .NET 10 的存法（先是 `int` 型的分钟偏移，再是 UTC 时间），`nint`、`nuint` 和指针一律 8 字节，各个 SIMD 向量按 x64 的方式对齐（`Vector<T>` [不能序列化](#vector-t)）。填充字节总是写成 0。每种结构体（含值元组）的规则见[规范](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#52-the-canonical-layout)。
 
+```mermaid
+flowchart LR
+  Q{这里的布局是规范布局？} -- "是：64 位 .NET" --> C[复制内存]
+  Q -- "否：Mono、IL2CPP、.NET Framework、32 位" --> V[逐字段转换]
+  C --> B[处处同样的字节]
+  V --> B
+```
+
 - **64 位 .NET 直接复制内存。** 运行时的布局和规范布局相同时（.NET x64 上的全部结构体，Arm64 上几乎全部），Nino 按内存原样复制，复制的同时清零填充。
 - **其他运行时负责转换。** Mono、IL2CPP、.NET Framework 和 32 位运行时先读一个实例，找出自己把每个字段放在哪里（只找一次），再逐字段转换：把 4 字节的 `nint` 扩成 8 字节，挪动元组的项。64 位 .NET 从不迁就它们。
 - **Go、Rust 和 TypeScript** 按发布的布局读写同样的字节（[代码生成](/zh/docs/v4/advanced/codegen)）。
+
+`struct { int A; (int, long) B; }` 存 `{1, (2, 3)}` 时，在每个运行时上都是 24 字节：元组的 `long` 在 `int` 前面，和 64 位 .NET 的放法一样；Mono 在内存里把 `int` 放在前面，写出的字节也照样如此。
+
+<Bytes rows={[{ fields: [
+  { hex: '01 00 00 00', kind: 'value', label: 'A = 1' },
+  { hex: '00 00 00 00', kind: 'pad', label: '填充到 8' },
+  { hex: '03 00 00 00 00 00 00 00', kind: 'value', label: 'B.Item2（long）= 3' },
+  { hex: '02 00 00 00', kind: 'value', label: 'B.Item1（int）= 2' },
+  { hex: '00 00 00 00', kind: 'pad', label: '填充到 24' },
+] }]} />
 
 所以数据可以在 .NET 10 服务器、32 位手机上的 Unity IL2CPP 客户端、.NET Framework 工具和 Go 服务之间双向流动。MemoryPack 按内存原样复制非托管结构体：在 x64 的 .NET 上写一个含 `(int, long)` 的结构体，`long` 在前；Mono 把 `int` 放在前面，读同样的字节会得到别的值（[Nino 对比 MemoryPack](/zh/docs/v4/vs-memorypack)）。
 
@@ -21,13 +39,16 @@ icon: LayoutGrid
 
 [下面的表格](#measured-layouts)都是实测的：CI 在每个运行时上跑 `tests/Nino.RuntimeTests`，打印每个非托管 BCL 结构体单独和放在 `{ byte A; T B; int C; }` 里时的大小和字段偏移，并检查这个运行时写出、读入的字节和 CoreCLR x64 写的一致。Nino 仓库的 [docs/layouts.md](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/layouts.md) 由这些 CI 日志生成，是这些表格的来源。简单说：
 
-- **值元组**是 `LayoutKind.Auto`。64 位 CoreCLR 先放基元类型的项，大的在前（`(int, long)` 是先 `long` 后 `int`）；Mono 和 IL2CPP 按声明顺序；32 位运行时和 .NET Framework 又是另一种排法。
-- **`DateTimeOffset`**：.NET 10 在 0 处放 `int` 型分钟数、8 处放时间；.NET 8 在 0 处放 `short`；Mono、IL2CPP 和 .NET Framework 先放时间，8 处放 `short`。
-- **`decimal`** 在 CoreCLR 和 Mono 上按 8 对齐，在 .NET Framework 和 IL2CPP 上按 4 对齐。
-- **.NET Framework** 会把含自动布局结构体（元组、`DateTime`）的结构体也当成自动布局，所以 `{ byte A; DateTime B; int C; }` 的字段会换位置。
-- **32 位运行时**的 `nint` 是 4 字节，部分 8 字节字段按 4 对齐（Windows x86 上的 `DateTime` 字段）。
-- **`Vector<T>`** 在开 AVX2 或 AVX-512 的 x64 上是 32 字节，在 Arm64、没有 AVX2 的 x64、Mono 和 IL2CPP 上是 16 字节，设了 `DOTNET_MaxVectorTBitWidth=512` 时是 64 字节，所以它[不能序列化](#vector-t)。**`Vector256<T>` 和 `Vector512<T>`** 在 Arm64 上按 16 对齐（x64 上按 32 和 64）。
-- **`KeyValuePair`**、**`Nullable<T>`**、`Guid`、`DateTime` 和 `TimeSpan` 在各处一致，除非它们的项或运行时的对齐不同。
+| 类型 | 64 位 CoreCLR（规范布局） | 哪里不同 |
+| --- | --- | --- |
+| 值元组（`LayoutKind.Auto`） | 先放基元类型的项，大的在前：`(int, long)` 是先 `long` 后 `int` | Mono 和 IL2CPP 按声明顺序；32 位运行时和 .NET Framework 又是另一种排法 |
+| `DateTimeOffset` | .NET 10：0 处是 `int` 型分钟数，8 处是时间 | .NET 8：0 处是 `short`；Mono、IL2CPP、.NET Framework：先放时间，8 处放 `short` |
+| `decimal` | 按 8 对齐（Mono 也是） | .NET Framework 和 IL2CPP 上按 4 对齐 |
+| 含元组或 `DateTime` 的结构体 | 顺序布局 | .NET Framework 把它当成自动布局：`{ byte A; DateTime B; int C; }` 的字段会换位置 |
+| `nint`、`nuint`、指针、函数指针（`delegate*`） | 8 字节（`nint` 符号扩展，其余零扩展） | 32 位运行时上是 4 字节，部分 8 字节字段也按 4 对齐（Windows x86 上的 `DateTime` 字段）；Mono 和 IL2CPP 把 `delegate*` 字段当成 `IntPtr` 做符号扩展，只在 32 位 Unity 播放器上、地址最高位为 1 时才有差别 |
+| `Vector256<T>`、`Vector512<T>` | 按 32 和 64 对齐（x64） | Arm64 上按 16 对齐 |
+| `Vector<T>` | 16、32 或 64 字节，由 CPU 决定 | [不能序列化](#vector-t) |
+| `KeyValuePair`、`Nullable<T>`、`Guid`、`DateTime`、`TimeSpan` | 顺序布局，自然对齐 | 各处一致，除非它们的项或运行时的对齐不同 |
 
 ## 开销 [#cost]
 
@@ -39,6 +60,12 @@ icon: LayoutGrid
 复制还是转换，每个类型只判断一次，在 .NET 用全速编译使用它的代码之前就定下来，是一个 JIT 能折叠掉的 `static readonly` 标志：规范结构体的数组、列表和单个值，全速代码里根本没有布局判断，64 位 .NET 不为其他运行时付出任何代价。需要转换的结构体不能整块写出：它的数组和列表要逐个值循环，不能一次复制。Mono 和 IL2CPP 每次调用读一次这个标志。
 
 ## 你该怎么做 [#what-to-do]
+
+<Callout type="warn" title="原始字节按原样复制">
+
+读原始结构体就是复制它的整块字节：默认模式下，里面的 `bool` 字段和 `Nullable` 存在字节都不检查，那里出现不是 0 或 1 的字节，对 .NET JIT 是未定义行为（这个值可能和自己都不相等）。来源不可信的数据，要设 `NinoSettings.Untrusted = true` 再读（见[会被拒绝的数据](/zh/docs/v4/security#what-is-rejected)）。
+
+</Callout>
 
 - **自己设计的数据，优先用 `[NinoType]` 结构体**：只有当它在所有运行时上布局都相同时（编译时检查），生成器才整块复制，否则逐成员写出、没有填充，任何运行时都不用转换。不标 `[NinoType]` 的普通结构体里放元组、`DateTimeOffset`、`nint` 或向量，同样可移植，只是在 64 位 .NET 以外要付转换的开销。
 - **共享的普通结构体，字段按从大到小排**：线上的填充字节更少。
@@ -69,7 +96,7 @@ public struct SampleRecord
 
 ## `Vector<T>` 不能序列化 [#vector-t]
 
-`System.Numerics.Vector<T>` 的宽度跟着 CPU 的向量走：开 AVX2 或 AVX-512 的 x64 上是 32 字节，Arm64、Unity（Mono 和 IL2CPP，x64 上也一样）、.NET Framework x86 和没有 AVX2 的 x64 上是 16 字节，设了 `DOTNET_MaxVectorTBitWidth=512` 时是 64 字节。没有哪种布局能让它在各平台之间通用：x64 服务器写出的 32 字节，放不进手机上 16 字节的 `Vector<T>`。所以 Nino 不写任何本身是或含有 `Vector<T>` 的类型，无论它单独出现还是在别的类型里（数组、集合及继承集合的类，例如 `class Lanes : List<Vector<int>>`、元组、`T?`、任意深度的普通结构体）。分析器会在成员或 `NinoSerializer`/`NinoDeserializer` 调用上报错误 NINO029；分析器没看到的类型（运行时解析的、装箱的、来自别的程序集的），在第一次需要它的格式化器时抛 `NotSupportedException`，不会写出或读入任何字节；手动调用格式化器（自己创建的 `UnmanagedFormatter<T>`、`Writer.Write`）时，写入或读取这个值时抛同样的异常。`Vector64<T>` 到 `Vector512<T>` 大小固定，可以序列化。
+`System.Numerics.Vector<T>` 是 16、32 或 64 字节，由 CPU 决定（哪种主机是多少，见[规范](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#3-primitive-and-bcl-values)）。没有哪种布局能让它在各平台之间通用：x64 服务器写出的 32 字节，放不进手机上 16 字节的 `Vector<T>`。所以 Nino 不写任何本身是或含有 `Vector<T>` 的类型，无论它单独出现还是在别的类型里（数组、集合及继承集合的类，例如 `class Lanes : List<Vector<int>>`、元组、`T?`、任意深度的普通结构体）。分析器会在成员或 `NinoSerializer`/`NinoDeserializer` 调用上报错误 NINO029；分析器没看到的类型（运行时解析的、装箱的、来自别的程序集的），在第一次需要它的格式化器时抛 `NotSupportedException`，不会写出或读入任何字节；手动调用格式化器（自己创建的 `UnmanagedFormatter<T>`、`Writer.Write`）时，写入或读取这个值时抛同样的异常。`Vector64<T>` 到 `Vector512<T>` 大小固定，可以序列化。
 
 ```csharp expect="NINO029"
 [NinoType]

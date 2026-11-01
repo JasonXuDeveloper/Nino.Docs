@@ -49,6 +49,19 @@ Without tracking, the chart would load two separate `Department` objects, and a 
 - Tracking covers `[NinoType]` classes, not collections: the same `List<T>` in two members is still written twice.
 - Cost: a small fixed cost per `NinoSerializer`/`NinoDeserializer` call you make (a [top-level call](/en/docs/v4/basic#terms)), plus 4 bytes and one identity lookup per tracked object. Calls without tracked objects pay nothing.
 
+One `Node { V = 5 }` held twice by a sealed `Holder` (an `object` member, then a `Node` member), bytes from the [specification](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#a5-reference-tracking):
+
+<Bytes rows={[
+  { fields: [
+    { hex: '01', kind: 'header', label: 'Holder present' },
+    { hex: '06 2E 6C 29', kind: 'id', label: 'Any: type id of Node' },
+    { hex: 'FF FF FF FF', kind: 'header', label: 'reference header -1: new object #1' },
+    { hex: '05 00 00 00', kind: 'value', label: 'V = 5' },
+    { hex: '00 00 00 00', kind: 'header', label: 'Next: 0 = null' },
+    { hex: '01 00 00 00', kind: 'changed', label: 'N: object #1 again' },
+  ] },
+]} />
+
 <Callout type="warn">
 
 Types that must be re-created from constructor arguments or read-only members (for example positional records) cannot be tracked (NINO016). `trackReferences` on a struct is ignored with a warning (NINO015).

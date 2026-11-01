@@ -38,6 +38,13 @@ Nino 的二进制格式在 Nino 仓库的 [docs/spec/wire-format.md](https://git
 - **默认编码。** null 的头为 `0`；所有字符都不超过 U+00FF 时，头为 `2n + 1`，后面是 `n` 个 Latin-1 字节（`1` 即空字符串）；否则头为 `2n`，后面是 `n` 个 UTF-16 码元。同一个 `n` 个字符的字符串，两种形式的头大小相同：63 个字符以内 1 字节，32,767 个以内 3 字节，更长 5 字节。不成对的代理项按原样以 UTF-16 形式写出。`StringBuilder` 总是以 UTF-16 形式写出，只有为空时写 `01`，因为 `0` 是 null；读取方两种形式都接受。`Uri`、`CultureInfo` 和 `TimeZoneInfo`（时区的 ID）的文本也按这种编码写出。
 - **`[NinoUtf8]`。** 头是字符数（UTF-16 码元个数）加一：`0` 为 null，`1` 为空字符串，两者之后都不再有内容。非空字符串接着以第二个头写入字节数，然后是 UTF-8 字节。不成对的代理项写成 U+FFFD，所以字符数就是读回的字符串的长度。
 
+<Bytes rows={[
+  { title: <>"abc"，默认</>, fields: [{ hex: '07', kind: 'header', label: '头 7 = 2 × 3 + 1：Latin-1，3 个字符' }, { hex: '61 62 63', kind: 'value', label: '"abc"' }] },
+  { title: <>"abc"，<code>[NinoUtf8]</code></>, fields: [{ hex: '04', kind: 'header', label: '3 个字符 + 1' }, { hex: '03', kind: 'length', label: '3 字节' }, { hex: '61 62 63', kind: 'value', label: '"abc"' }] },
+  { title: <>"a中"，默认</>, fields: [{ hex: '04', kind: 'header', label: '头 4 = 2 × 2：UTF-16，2 个字符' }, { hex: '61 00 2D 4E', kind: 'value', label: 'UTF-16 的 "a"、"中"' }] },
+  { title: <>"a中"，<code>[NinoUtf8]</code></>, fields: [{ hex: '03', kind: 'header', label: '2 个字符 + 1' }, { hex: '04', kind: 'length', label: '4 字节' }, { hex: '61 E4 B8 AD', kind: 'value', label: 'UTF-8 的 "a"、"中"' }] },
+]} />
+
 | 值 | 默认编码 | `[NinoUtf8]` |
 | --- | --- | --- |
 | `null` | `00` | `00` |
@@ -53,6 +60,12 @@ Nino 的二进制格式在 Nino 仓库的 [docs/spec/wire-format.md](https://git
 ## 原始值 [#raw-values]
 
 非托管值（基元类型、枚举、不是 `[NinoType]` 的非托管结构体，或符合条件的 `[NinoType]` 结构体）按**规范布局**作为一整块写出：即 64 位 CoreCLR 给它的布局，每个字段按自然对齐（`decimal` 对齐到 8，`Int128` 对齐到 16），填充写为零。每个运行时写出的字节都相同：自身布局不同时（32 位平台、Mono 和 IL2CPP、.NET Framework 上的部分结构体），Nino 逐字段转换。`Nullable<T>`、`ValueTuple`、`KeyValuePair` 和 `DateTimeOffset` 单独出现时从不按原始值写出，而是逐项写出。它们位于非托管结构体之中时，属于该结构体的整块数据，同样采用规范布局：值元组的各项放在 64 位 CoreCLR 放置的位置（较大的基元项在前，所以 `(int, long)` 先是 `long`，再是 `int`），`KeyValuePair` 先键后值，`DateTimeOffset` 按 .NET 10 的方式存放（以分钟为单位的偏移为 `int`，UTC 时间位于第 8 字节），`nint`/`nuint` 占 8 字节。各 SIMD 向量（`Vector64<T>` 到 `Vector512<T>`）按 x64 的方式对齐；宽度跟着 CPU 走的 `Vector<T>` [不能序列化](/zh/docs/v4/struct-layouts#vector-t)。各运行时有哪些不同，参见[跨运行时的结构体布局](/zh/docs/v4/struct-layouts)。
+
+<Callout type="warn" title="原始字节按原样复制">
+
+读原始结构体就是复制它的整块字节：默认模式下，里面的 `bool` 字段和 `Nullable` 存在字节都不检查，那里出现不是 0 或 1 的字节，对 .NET JIT 是未定义行为（这个值可能和自己都不相等）。来源不可信的数据，要设 `NinoSettings.Untrusted = true` 再读（见[会被拒绝的数据](/zh/docs/v4/security#what-is-rejected)）。
+
+</Callout>
 
 ## 集合 [#collections]
 
@@ -76,6 +89,17 @@ Nino 的二进制格式在 Nino 仓库的 [docs/spec/wire-format.md](https://git
 - **版本容错**的主体是一个 `int32` 长度，然后是各成员：旧版本的读取器跳过不认识的成员，新版本给缺少的成员赋默认值。
 - **键控**的主体是一个 `int32` 长度，然后每个成员一个 `(int32 键, int32 长度, 值)` 条目，键是成员名的 FNV-1a 哈希。条目可以任意顺序，未知的键被跳过。
 - **引用追踪**（`trackReferences: true`）把头换成一个 `int32`：`0` 为 null，`-1` 为新对象，`n > 0` 为指向第 `n` 个已读对象的回引用。参见[引用追踪](/zh/docs/v4/reference-tracking)。
+
+例子（取自[规范](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#appendix-a-worked-examples)里实际写出的字节，命名空间 `Spec`）：
+
+<Bytes rows={[
+  { title: <>按位置，密封类：<code>Small {'{'} A = 1, B = "a" {'}'}</code></>, fields: [{ hex: '01', kind: 'header', label: '存在字节' }, { hex: '01 00 00 00', kind: 'value', label: 'A = 1' }, { hex: '03 61', kind: 'value', label: 'B = "a"' }] },
+  { title: <><code>List&lt;Shape&gt;</code> 里的 <code>Circle</code></>, fields: [{ hex: 'AC 2B C0 ED', kind: 'id', label: 'Spec.Circle 的类型 ID' }, { hex: '01 00 00 00', kind: 'value', label: 'Id = 1（基类成员在前）' }, { hex: '00 00 80 3F', kind: 'value', label: 'R = 1f' }] },
+  { title: <>版本容错，密封类：<code>TolLeaf</code></>, fields: [{ hex: '01', kind: 'header', label: '存在字节' }, { hex: '08 00 00 00', kind: 'length', label: '主体长度 8' }, { hex: '01 00 00 00', kind: 'value', label: 'A = 1' }, { hex: '07 00 00 00', kind: 'value', label: 'B = 7（旧版读取器跳过它）' }] },
+  { title: <>键控，密封类：<code>Keyed {'{'} Id = 1, … {'}'}</code></>, fields: [{ hex: '01', kind: 'header', label: '存在字节' }, { hex: '26 00 00 00', kind: 'length', label: '主体长度 38' }, { hex: '48 19 C4 98', kind: 'id', label: '键 FNV("Id")' }, { hex: '04 00 00 00', kind: 'length', label: '条目长度 4' }, { hex: '01 00 00 00', kind: 'value', label: 'Id = 1' }, { hex: 'E2 B3 85 30', kind: 'id', label: '键 FNV("Name")' }, { hex: '02 00 00 00', kind: 'length', label: '2' }, { hex: '03 6E', kind: 'value', label: 'Name = "n"' }] },
+]} />
+
+键控的例子后面还有 `Score` 条目（`4D B1 4A 04 08 00 00 00` 和值）。
 
 ## 深层嵌套 [#deep-nesting]
 

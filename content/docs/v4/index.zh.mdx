@@ -28,6 +28,16 @@ byte[] bytes = NinoSerializer.Serialize(order);
 Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 ```
 
+```mermaid
+flowchart LR
+  T["[NinoType] Order"] -->|编译期| G[源生成器]
+  G --> F[Order 的格式化器]
+  G --> I[每个调用的拦截器]
+  C["NinoSerializer.Serialize(order)"] --> I
+  I --> F
+  F --> B[字节]
+```
+
 ## 为什么选 Nino [#why-nino]
 
 - **快。** 在同一轮测试中与 MemoryPack 相比，Nino 序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象图最高快 <BenchValue k="deserialize.max" />；非托管结构体数组两者都是整块拷贝，性能至少持平。详见[基准测试](/zh/docs/v4/benchmarks)。

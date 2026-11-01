@@ -160,7 +160,7 @@ public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 - Nino 无法创建或填充的集合：抽象集合类（`abstract class Bag : ICollection<int>`）、既没有可无参调用的公共构造函数也没有 [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) 方法的集合、结构体集合（`struct Ring : IList<int>`），以及对两个不同的 `T` 实现了 `ICollection<T>` 的类型；
 - Unity 和 Godot 的**类**（`Texture2D`、`ScriptableObject`、`Node`、`Resource` 等），Unity 的 `AnimationCurve`、`Gradient` 和 `RectOffset` 除外（[Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)）；它们的非托管结构体是支持的。
 
-`System.Numerics.Vector<T>` 直接被拒绝，无论单独出现还是在别的类型里（数组、集合、元组、普通结构体）：写代码时报错误 NINO029，运行时抛 `NotSupportedException`。它的大小取决于 CPU（16 或 32 字节），任何平台都没法读回所有其他平台写的字节；请改存固定数量的通道（见[`Vector<T>` 不能序列化](/zh/docs/v4/struct-layouts#vector-t)）。`Vector64<T>` 到 `Vector512<T>` 是支持的。
+`System.Numerics.Vector<T>` 直接被拒绝，无论单独出现还是在别的类型里（数组、集合、元组、普通结构体）：写代码时报错误 NINO029，运行时抛 `NotSupportedException`。它是 16、32 或 64 字节，由 CPU 决定，任何平台都没法读回所有其他平台写的字节；请改存固定数量的通道（见[`Vector<T>` 不能序列化](/zh/docs/v4/struct-layouts#vector-t)）。`Vector64<T>` 到 `Vector512<T>` 是支持的。
 
 ## 你自己的类型 [#your-own-types]
 

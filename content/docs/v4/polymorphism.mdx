@@ -58,11 +58,7 @@ In v4, subtypes **inherit** `[NinoType]` (including its options) from their near
 
 Interfaces and abstract classes work the same way. Mark the interface or abstract class with `[NinoType]`; implementing classes and structs inherit it:
 
-<Tabs items={["Interface example", "Abstract class example"]}>
-
-<Tab value="Interface example">
-
-```csharp
+```csharp tab="Interface example"
 [NinoType] // [!code highlight]
 public interface IBase
 {
@@ -80,11 +76,7 @@ public struct ImplStruct : IBase
 }
 ```
 
-</Tab>
-
-<Tab value="Abstract class example">
-
-```csharp
+```csharp tab="Abstract class example"
 [NinoType] // [!code highlight]
 public abstract class Base
 {
@@ -96,9 +88,6 @@ public class Derived : Base
     public int B { get; set; }
 }
 ```
-
-</Tab>
-</Tabs>
 
 A `[NinoType]` interface serializes its own members through the implementing type's members of the same name. A struct read through a member declared as an interface or `object` is boxed.
 
@@ -114,6 +103,15 @@ The header (the presence byte or type id before the value) depends on the **decl
 | `sealed class` | presence byte (1 byte, `0` = null) | no |
 | non-sealed class, abstract class, interface | 4-byte type id (`0` = null) | yes |
 | `object` | 4-byte type id | yes, any `[NinoType]` |
+
+The same `Circle { Id = 1, R = 1f }` behind each declared type (bytes from the [specification's](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#a2-polymorphism) examples, namespace `Spec`):
+
+<Bytes rows={[
+  { title: <>declared <code>Circle</code> (sealed)</>, fields: [{ hex: '01', kind: 'header', label: 'presence byte' }, { hex: '01 00 00 00 00 00 80 3F', kind: 'value', label: 'Id = 1, R = 1f' }] },
+  { title: <>declared <code>Shape</code> (abstract)</>, fields: [{ hex: 'AC 2B C0 ED', kind: 'id', label: 'type id of Spec.Circle' }, { hex: '01 00 00 00 00 00 80 3F', kind: 'value', label: 'Id = 1, R = 1f' }] },
+  { title: <>null, declared <code>Circle</code></>, fields: [{ hex: '00', kind: 'header', label: 'presence byte 0' }] },
+  { title: <>null, declared <code>Shape</code></>, fields: [{ hex: '00 00 00 00', kind: 'id', label: 'type id 0' }] },
+]} />
 
 The type id is the FNV-1a hash of the runtime type's full name, computed by the generator, so there are no tags to assign and nothing to keep in sync between assemblies. Rename or move a type with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name).
 
@@ -139,6 +137,15 @@ Ids are never `0`, which encodes `null`.
 ## Dispatch
 
 Nino uses hybrid dispatch:
+
+```mermaid
+flowchart LR
+  V[Value of a polymorphic slot] --> Q{Subtype in the base's assembly?}
+  Q -- yes --> S["Generated switch on the type id"]
+  Q -- "no, generic, tracked, or over 64 subtypes when writing" --> R[Lock-free registry]
+  S --> F[Subtype's formatter]
+  R --> F
+```
 
 - **Generated dispatch** for subtypes declared in the same assembly as their base: writing is a chain of exact type checks and reading is a `switch` on the type id, and both call the subtype's formatter directly. A generic base (`abstract class Box<T>`, `IRepository<T>`) has one such dispatch for each closed base its subtypes derive from (`IntBox : Box<int>`), selected by comparing types, which the JIT removes when the type arguments are value types.
 - **A lock-free registry** for everything else: subtypes in other assemblies, generic subtypes (`Leaf<int>` for `class Leaf<T> : Box<T>`), tracked types, and writes in hierarchies with more than 64 subtypes (reading still uses the generated `switch`).

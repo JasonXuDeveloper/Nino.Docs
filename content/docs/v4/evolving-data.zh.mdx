@@ -6,16 +6,18 @@ icon: GitBranch
 
 数据往往比代码活得更久。保存的文档、缓存的资源、旧版客户端发来的消息，都会被新版本的类型读取，有时反过来也一样。Nino 为每个类型提供三种格式，也就是 `NinoFormat` 枚举的三个值，用 `[NinoType(format: ...)]` 选定：
 
-| | `NinoFormat.Positional`（默认） | `format: NinoFormat.VersionTolerant` | `format: NinoFormat.Keyed` |
-| --- | :---: | :---: | :---: |
-| 向没有子类的类型追加成员 | ✗ | ✓ | ✓ |
-| 向基类追加成员 | ✗ | ✗ | ✓ |
-| 插入、删除或重排成员 | ✗ | ✗ | ✓ |
-| 重命名成员 | ✓ | ✓ | ✓（配合 `[NinoFormerName]`） |
-| 新代码读旧数据 | ✗ | ✓ | ✓ |
-| 旧代码读新数据 | ✗ | ✓ | ✓ |
-| 额外开销 | 无 | 每个对象 4 字节 | 每个成员 8 字节，每个对象另加 4 字节 |
-| 速度 | 最快 | 接近按位置：每个对象一个长度 | 开销最大：每个成员多写一个键和长度，读取时每个成员要检查一次键 |
+<Matrix columns={[<code key="p">Positional</code>, <code key="v">VersionTolerant</code>, <code key="k">Keyed</code>]} rows={[
+  { label: '向没有子类的类型追加成员', cells: ['no', 'yes', 'yes'] },
+  { label: '向基类追加成员', cells: ['no', 'no', 'yes'] },
+  { label: '插入、删除或重排成员', cells: ['no', 'no', 'yes'] },
+  { label: '重命名成员', cells: ['yes', 'yes', 'yes: 配合 [NinoFormerName]'] },
+  { label: '新代码读旧数据', cells: ['no', 'yes', 'yes'] },
+  { label: '旧代码读新数据', cells: ['no', 'yes', 'yes'] },
+  { label: '线上的额外开销', cells: ['无', '每个对象 4 字节', '每个成员 8 字节，每个对象另加 4 字节'] },
+  { label: '速度', cells: ['最快', '接近按位置：每个对象一个长度', '开销最大：每个成员多写一个键和长度，读取时每个成员要检查一次键'] },
+]} />
+
+`Positional` 是默认格式；另外两种是 `[NinoType(format: NinoFormat.VersionTolerant)]` 和 `[NinoType(format: NinoFormat.Keyed)]`。
 
 格式本身也是数据的一部分：修改某个类型的 `format`，会让之前写出的数据无法读取。请在保存任何数据之前选好。
 
@@ -84,10 +86,14 @@ public sealed class Invoice : Document
 {
     public int CustomerId;
 }
-
-// after its header, version 1 writes an Invoice as  length | Id | CustomerId
-// and version 2 writes it as                        length | Id | Revision | CustomerId
 ```
+
+`Invoice { Id = 1, Revision = 2, CustomerId = 5 }` 在头之后写成：
+
+<Bytes rows={[
+  { title: '版本 1', fields: [{ hex: '08 00 00 00', kind: 'length', label: '长度 8' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '05 00 00 00', kind: 'value', label: 'CustomerId' }] },
+  { title: '版本 2', fields: [{ hex: '0C 00 00 00', kind: 'length', label: '长度 12' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '02 00 00 00', kind: 'changed', label: 'Revision：正是版本 1 期待 CustomerId 的位置' }, { hex: '05 00 00 00', kind: 'value', label: 'CustomerId：版本 1 当作未知成员跳过' }] },
+]} />
 
 - **版本 2 读取版本 1 的数据：** `Revision` 读到的是 `CustomerId` 的字节；数据在 `CustomerId` 之前就结束了，`CustomerId` 像其他缺少的成员一样保留原有的值（新建的 `Invoice` 中为 `0`）。
 - **版本 1 读取版本 2 的数据：** `CustomerId` 读到的是 `Revision` 的字节，真正的 `CustomerId` 被当作未知的尾部成员跳过。
@@ -167,6 +173,14 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
 - 布局记录在元数据里，所以工具也能读取所引用程序集里的布局，甚至不必加载程序集（用 `System.Reflection.Metadata` 即可）。同一个项目在不同目标框架下得到的布局完全一样。
 
 ## 如何选择 [#choosing]
+
+```mermaid
+flowchart TD
+  A{写入方和读取方总是同一个构建？} -- 是 --> P[Positional]
+  A -- 否 --> B{只追加成员，而且只加在没有子类的类上？}
+  B -- 是 --> V[VersionTolerant]
+  B -- "否：要删除、重排或给基类加成员" --> K[Keyed]
+```
 
 <Accordions type="single">
 <Accordion title="客户端与服务器之间的消息">

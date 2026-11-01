@@ -63,11 +63,7 @@ In v3, the generator emitted static `Serializer` and `Deserializer` classes (and
 | (none) | `NinoDeserializer.Deserialize(data, ref value)`: deserialize into an existing instance |
 | (none) | `NinoSerializer.SerializeBoxed(value, type)`, `NinoDeserializer.DeserializeBoxed(data, type)`: only for a type known only at run time that shares no common `[NinoType]` base with the others (see [Runtime Types](/en/docs/v4/basic#runtime-types)) |
 
-<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
-
-<Tab value="v3">
-
-```csharp nocheck
+```csharp nocheck tab="v3" tab-group="nino-version"
 using MyApp.NinoGen;
 
 byte[] bytes = obj.Serialize();
@@ -75,10 +71,7 @@ byte[] bytes = obj.Serialize();
 Deserializer.Deserialize(bytes, out ObjClass result);
 ```
 
-</Tab>
-<Tab value="v4">
-
-```csharp
+```csharp tab="v4" tab-group="nino-version"
 using Nino.Core;
 
 byte[] bytes = NinoSerializer.Serialize(obj);
@@ -86,25 +79,15 @@ byte[] bytes = NinoSerializer.Serialize(obj);
 ObjClass result = NinoDeserializer.Deserialize<ObjClass>(bytes);
 ```
 
-</Tab>
-</Tabs>
-
 Buffer reuse:
 
-<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
-
-<Tab value="v3">
-
-```csharp nocheck
+```csharp nocheck tab="v3" tab-group="nino-version"
 var bufferWriter = Serializer.GetBufferWriter();
 obj.Serialize(bufferWriter);
 Serializer.ReturnBufferWriter(bufferWriter);
 ```
 
-</Tab>
-<Tab value="v4">
-
-```csharp
+```csharp tab="v4" tab-group="nino-version"
 // create once and keep it (one per thread)
 var buffer = new NinoArrayBufferWriter();
 
@@ -113,9 +96,6 @@ buffer.ResetWrittenCount();
 NinoSerializer.Serialize(obj, buffer); // [!code highlight]
 ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // valid until the next write
 ```
-
-</Tab>
-</Tabs>
 
 <Callout type="info">
 
@@ -138,11 +118,7 @@ v3's generated `Serialize` accepted `Span<T>` values. In v4, `T` is a generic ty
 
 ### Version Tolerance [#version-tolerance]
 
-<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
-
-<Tab value="v3">
-
-```csharp
+```csharp tab="v3" tab-group="nino-version"
 // v3: #define WEAK_VERSION_TOLERANCE in the project settings
 [NinoType]
 public class Customer
@@ -153,10 +129,7 @@ public class Customer
 }
 ```
 
-</Tab>
-<Tab value="v4">
-
-```csharp
+```csharp tab="v4" tab-group="nino-version"
 [NinoType(format: NinoFormat.VersionTolerant)]
 public class Customer
 {
@@ -165,9 +138,6 @@ public class Customer
     public bool Verified; // appended later
 }
 ```
-
-</Tab>
-</Tabs>
 
 In v4, you choose version tolerance per type. Members can be appended to the **most derived type** (a class without `[NinoType]` subclasses), at any nesting depth, and old code skips the members it does not know. Members appended to a base class shift its subclasses' members, so they are not tolerated. To reorder, remove or insert members, or to add them to a base class, use `[NinoType(format: NinoFormat.Keyed)]`. See [Version Tolerance](/en/docs/v4/evolving-data#version-tolerance) and [Keyed Members](/en/docs/v4/evolving-data#keyed-members).
 
@@ -179,37 +149,23 @@ In v3, `WEAK_VERSION_TOLERANCE` also allowed changing a member to an unmanaged t
 
 ### Former Names [#former-names]
 
-<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
-
-<Tab value="v3">
-
-```csharp nocheck
+```csharp nocheck tab="v3" tab-group="nino-version"
 [NinoType]
 [NinoFormerName("global::MyApp.Billing.Bill")]
 public class Invoice { public long Id; }
 ```
 
-</Tab>
-<Tab value="v4">
-
-```csharp
+```csharp tab="v4" tab-group="nino-version"
 [NinoType]
 [NinoFormerName("MyApp.Billing.Bill")]
 public class Invoice { public long Id; }
 ```
 
-</Tab>
-</Tabs>
-
 Former names only matter for data written by v4 itself (v3 data cannot be read anyway), so you only need them for types renamed after you adopted v4.
 
 ### Polymorphism
 
-<Tabs groupId="nino-version" persist items={["v3", "v4"]}>
-
-<Tab value="v3">
-
-```csharp
+```csharp tab="v3" tab-group="nino-version"
 [NinoType]
 public abstract class Payment { public long Id; }
 
@@ -217,18 +173,12 @@ public abstract class Payment { public long Id; }
 public sealed class CardPayment : Payment { public string Last4; }
 ```
 
-</Tab>
-<Tab value="v4">
-
-```csharp
+```csharp tab="v4" tab-group="nino-version"
 [NinoType]
 public abstract class Payment { public long Id; }
 
 public sealed class CardPayment : Payment { public string Last4; }
 ```
-
-</Tab>
-</Tabs>
 
 Keeping `[NinoType]` on a subtype does no harm and lets the subtype set its own options. Those options replace the inherited ones, so repeat any you want to keep, such as `format: NinoFormat.VersionTolerant`. The one exception is `trackReferences`, which stays on for every subtype of a tracked type.
 
