@@ -39,17 +39,17 @@ CoreCLR 和 Unity 2021.3+ 的布局是 `bool hasValue; T value;`，而旧版 Mon
 </Accordion>
 <Accordion title={<><code>ValueTuple</code> 与 <code>KeyValuePair</code></>} value="tuple">
 
-`ValueTuple` 在 .NET 上是 `LayoutKind.Auto`，CoreCLR 可能调整它的字段顺序，而 Mono 按声明顺序排列。Nino 总是按声明顺序逐项写入元组和 `KeyValuePair`，从不直接拷贝内存。各项都是原始值的元组和键值对，其数组和列表仍按整块处理：运行时的内存布局与字节一致时（启动时检查一次）直接拷贝内存，否则在 CPU 支持时用 [SIMD 重排](#simd)，再不行就逐项处理。每条路径写出的字节都相同。
+`ValueTuple` 是 `LayoutKind.Auto`，每个运行时排列各项的方式都不同：64 位 CoreCLR 把基元项放在前面、较大的在前（`(int, long)` 先是 `long` 再是 `int`；`(byte, long, int)` 占 16 字节），Mono 和 IL2CPP 保持声明顺序（`(byte, long, int)` 占 24 字节），.NET Framework 和 32 位运行时又各不相同。单独出现时，Nino 总是按声明顺序逐项写入元组和 `KeyValuePair`，从不直接拷贝内存。各项都是原始值的元组和键值对，其数组和列表仍按整块处理：运行时的内存布局与字节一致时（启动时检查一次）直接拷贝内存，否则在 CPU 支持时用 [SIMD 重排](#simd)，再不行就逐项处理。在不是 `[NinoType]` 的非托管结构体中，元组按 64 位 CoreCLR 的布局作为该结构体整块数据的一部分，`KeyValuePair` 先键后值：64 位 .NET 直接拷贝整个结构体，Mono、IL2CPP、.NET Framework 和 32 位运行时一次性找出自身布局中各字段的位置，再逐字段转换。每条路径、每个运行时写出的字节都相同，Go、Rust 和 TypeScript 运行时也读写同样的字节。
 
 </Accordion>
 <Accordion title={<><code>decimal</code>、<code>DateTimeOffset</code>、<code>nint</code></>} value="bcl">
 
-`decimal` 在 CoreCLR 上按 8 字节对齐，在 Mono 和 IL2CPP 上按 4 字节对齐，所以包含它的结构体布局可能不同；Nino 会转换成规范布局。`DateTimeOffset` 写成 UTC 刻度（ticks）加上以分钟为单位的偏移（10 字节），从不直接拷贝。`nint`/`nuint` 始终占 8 字节。
+`decimal` 在 CoreCLR 上按 8 字节对齐，在 Mono 和 IL2CPP 上按 4 字节对齐，所以包含它的结构体布局可能不同；Nino 会转换成规范布局。单独出现的 `DateTimeOffset` 写成 UTC 刻度（ticks）加上以分钟为单位的偏移（10 字节），从不直接拷贝。它的内存布局在各运行时之间、甚至各 .NET 版本之间都不同：.NET 10 把偏移作为 `int` 放在第 0 字节、UTC 时间放在第 8 字节，.NET 8 在第 0 字节放一个 `short`，.NET Framework 和 Mono 先放时间、在第 8 字节放一个 `short`。位于非托管结构体中时，它按 .NET 10 的方式写出（在 .NET 10 上直接拷贝，其他运行时转换）。`nint`/`nuint` 始终占 8 字节，在非托管结构体中也是如此：32 位运行时会将其扩展，并拒绝超出自身范围的值。
 
 </Accordion>
 <Accordion title="32 位平台" value="32bit">
 
-在 32 位 x86 上，.NET 和 64 位运行时一样把 `long`、`double` 以及含有它们的结构体（`TimeSpan`、`decimal`、你自己的结构体）按 8 字节对齐，但 `DateTime`、`ValueTuple` 或 `DateTimeOffset` 字段（自动布局的结构体）只按 4 字节对齐：`struct { int a; long b; }` 在两者上都占 16 字节，`struct { int a; DateTime b; }` 在 x64 上占 16 字节，在 x86 的 .NET 上占 12 字节。.NET Framework 还会重排含有 `DateTime` 的结构体的字段（`struct { byte a; DateTime b; int c; }` 把 `c` 放在最前）。Nino 以 64 位布局为规范布局；运行时布局不同时，会逐个字段转换成相同的字节（会有一些速度上的代价），并且不再整块拷贝。
+在 32 位 x86 上，.NET 和 64 位运行时一样把 `long`、`double` 以及含有它们的结构体（`TimeSpan`、`decimal`、你自己的结构体）按 8 字节对齐，但 `DateTime`、`ValueTuple` 或 `DateTimeOffset` 字段（自动布局的结构体）只按 4 字节对齐：`struct { int a; long b; }` 在两者上都占 16 字节，`struct { int a; DateTime b; }` 在 x64 上占 16 字节，在 x86 的 .NET 上占 12 字节。.NET Framework 还会重排含有 `DateTime` 的结构体的字段（`struct { byte a; DateTime b; int c; }` 把 `c` 放在最前）。Nino 以 64 位布局为规范布局；运行时布局不同时，会逐个字段转换成相同的字节（会有一些速度上的代价），并且不再整块拷贝。每个非托管 BCL 结构体在各运行时上实测的布局，列在仓库的 [docs/layouts.md](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/layouts.md) 中。
 
 </Accordion>
 <Accordion title="填充字节" value="padding">
