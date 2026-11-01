@@ -69,7 +69,7 @@ public struct SampleRecord
 
 ## `Vector<T>` 不能序列化 [#vector-t]
 
-`System.Numerics.Vector<T>` 的宽度跟着 CPU 的向量走：开 AVX2 或 AVX-512 的 x64 上是 32 字节，Arm64、Unity（Mono 和 IL2CPP，x64 上也一样）、.NET Framework x86 和没有 AVX2 的 x64 上是 16 字节，设了 `DOTNET_MaxVectorTBitWidth=512` 时是 64 字节。没有哪种布局能让它在各平台之间通用：x64 服务器写出的 32 字节，放不进手机上 16 字节的 `Vector<T>`。所以 Nino 不写任何本身是或含有 `Vector<T>` 的类型，无论它单独出现还是在别的类型里（数组、集合、元组、`T?`、任意深度的普通结构体）。分析器会在成员或 `NinoSerializer`/`NinoDeserializer` 调用上报错误 NINO029；分析器没看到的类型（运行时解析的、装箱的、来自别的程序集的），在第一次需要它的格式化器时抛 `NotSupportedException`，不会写出或读入任何字节。`Vector64<T>` 到 `Vector512<T>` 大小固定，可以序列化。
+`System.Numerics.Vector<T>` 的宽度跟着 CPU 的向量走：开 AVX2 或 AVX-512 的 x64 上是 32 字节，Arm64、Unity（Mono 和 IL2CPP，x64 上也一样）、.NET Framework x86 和没有 AVX2 的 x64 上是 16 字节，设了 `DOTNET_MaxVectorTBitWidth=512` 时是 64 字节。没有哪种布局能让它在各平台之间通用：x64 服务器写出的 32 字节，放不进手机上 16 字节的 `Vector<T>`。所以 Nino 不写任何本身是或含有 `Vector<T>` 的类型，无论它单独出现还是在别的类型里（数组、集合及继承集合的类，例如 `class Lanes : List<Vector<int>>`、元组、`T?`、任意深度的普通结构体）。分析器会在成员或 `NinoSerializer`/`NinoDeserializer` 调用上报错误 NINO029；分析器没看到的类型（运行时解析的、装箱的、来自别的程序集的），在第一次需要它的格式化器时抛 `NotSupportedException`，不会写出或读入任何字节；手动调用格式化器（自己创建的 `UnmanagedFormatter<T>`、`Writer.Write`）时，写入或读取这个值时抛同样的异常。`Vector64<T>` 到 `Vector512<T>` 大小固定，可以序列化。
 
 ```csharp expect="NINO029"
 [NinoType]
