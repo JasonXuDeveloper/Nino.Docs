@@ -21,9 +21,11 @@ import {
   UnityHighlights,
   UnityTables,
 } from '@/components/bench-data';
+import { Bytes, Matrix } from '@/components/bytes';
 import { BenchmarkChart } from '@/components/charts';
 import { handleBlockFeedback } from '@/components/feedback/actions';
 import { FeedbackBlock } from '@/components/feedback/client';
+import { Mermaid } from '@/components/mermaid';
 import { CountUp } from '@/components/showcase';
 
 export function getMDXComponents(components?: MDXComponents): MDXComponents {
@@ -39,6 +41,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     BenchmarkChart,
     BenchSource,
     BenchValue,
+    Bytes,
     ExtraRuntimeTables,
     ResultsTable,
     ReuseTable,
@@ -50,6 +53,8 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     File,
     Files,
     Folder,
+    Matrix,
+    Mermaid,
     Step,
     Steps,
     Tab,

@@ -18,6 +18,12 @@ import {
   UnityHighlights,
   UnityTables,
 } from '@/components/bench-data';
+import {
+  type ByteRow,
+  byteCells,
+  type MatrixRow,
+  parseCell,
+} from '@/components/bytes';
 import { chartProps } from '@/components/charts/benchmark-charts';
 import { type ChartId, isArchChart } from '@/components/charts/ids';
 import { getMDXComponents } from '@/mdx-components';
@@ -146,6 +152,86 @@ function markdownComponents(lang: Locale, pageUrl: string) {
     Step({ children }: Children) {
       asMarkdown();
       return children;
+    },
+    // A byte figure: one table per row, the bytes and what they are.
+    Bytes({ rows, caption }: { rows: ByteRow[]; caption?: ReactNode }) {
+      asMarkdown();
+      return (
+        <>
+          {rows.map((row, r) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: static figure
+            <div key={r}>
+              {row.title ? md`\n**${row.title}**\n\n` : null}
+              {table(
+                [zh ? '字节' : 'Bytes', zh ? '含义' : 'Meaning'],
+                row.fields.map((field) => [
+                  md`\`${byteCells(field.hex).join(' ')}\``,
+                  field.label,
+                ]),
+              )}
+            </div>
+          ))}
+          {caption ? md`\n${caption}\n\n` : null}
+        </>
+      );
+    },
+    // A support matrix: ✓, ✗, ⚠ and – with the cell's note.
+    Matrix({
+      columns,
+      rows,
+      corner,
+    }: {
+      columns: ReactNode[];
+      rows: MatrixRow[];
+      corner?: ReactNode;
+    }) {
+      asMarkdown();
+      const symbols: Record<string, string> = {
+        yes: '✓',
+        no: '✗',
+        partial: '⚠',
+        'n/a': '–',
+      };
+      return table(
+        [corner ?? '', ...columns],
+        rows.map((row) =>
+          'group' in row
+            ? [<strong key="g">{row.group}</strong>, ...columns.map(() => '')]
+            : [
+                row.label,
+                ...row.cells.map((cell) => {
+                  const { mark, note } = parseCell(cell);
+                  const symbol = mark ? symbols[mark] : '';
+                  return note ? (
+                    <>
+                      {symbol ? `${symbol} ` : ''}
+                      {note}
+                    </>
+                  ) : (
+                    symbol
+                  );
+                }),
+              ],
+        ),
+      );
+    },
+    // A ```mermaid fence keeps its source: language models read it well.
+    Mermaid({ chart }: { chart: string }) {
+      asMarkdown();
+      return md`\n\`\`\`mermaid\n${chart.trim()}\n\`\`\`\n\n`;
+    },
+    // Code-block tabs (```csharp tab="Nino"): each fence under its label.
+    CodeBlockTabs({ children }: Children) {
+      asMarkdown();
+      return children;
+    },
+    CodeBlockTabsList() {
+      asMarkdown();
+      return null;
+    },
+    CodeBlockTab({ value, children }: Children & { value?: string }) {
+      asMarkdown();
+      return md`\n**${value ?? ''}**\n\n${children}\n\n`;
     },
     Accordions({ children }: Children) {
       asMarkdown();

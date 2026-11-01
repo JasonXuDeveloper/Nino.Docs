@@ -22,7 +22,7 @@ import { faqFromMarkdown, pageBodyMarkdown } from '@/lib/markdown';
 import { type DocSeo, docMeta, markdownPath } from '@/lib/seo';
 import { docsRepoUrl as repoUrl } from '@/lib/site';
 import { docExtras, source } from '@/lib/source';
-import { isVersion, latestVersion } from '@/lib/versions';
+import { isVersion, latestIsPrerelease, latestVersion } from '@/lib/versions';
 import { getMDXComponents } from '@/mdx-components';
 import type { Route } from './+types/docs';
 
@@ -185,6 +185,32 @@ function OldVersionBanner({
   );
 }
 
+/** Latest docs while the release is a prerelease: how to install it. */
+function PrereleaseBanner({ lang }: { lang: Locale }) {
+  const start = `/${lang}/docs/${latestVersion}/start#net-project`;
+  return (
+    <Banner id={`${latestVersion}-prerelease`}>
+      {lang === 'zh' ? (
+        <span>
+          Nino {latestVersion} 仍是预发布版本：用{' '}
+          <code>dotnet add package Nino --prerelease</code> 安装。
+          <Link to={start} className="font-semibold underline">
+            安装说明
+          </Link>
+        </span>
+      ) : (
+        <span>
+          Nino {latestVersion} is a prerelease: install it with{' '}
+          <code>dotnet add package Nino --prerelease</code>.{' '}
+          <Link to={start} className="font-semibold underline">
+            Installing
+          </Link>
+        </span>
+      )}
+    </Banner>
+  );
+}
+
 export default function DocsRoute({ loaderData }: Route.ComponentProps) {
   const { pageTree, lang, version, latestUrl, path, url } =
     useFumadocsLoader(loaderData);
@@ -193,6 +219,9 @@ export default function DocsRoute({ loaderData }: Route.ComponentProps) {
     <>
       {latestUrl && (
         <OldVersionBanner lang={lang} version={version} latestUrl={latestUrl} />
+      )}
+      {version === latestVersion && latestIsPrerelease && (
+        <PrereleaseBanner lang={lang} />
       )}
       <DocsLayout tree={pageTree} {...baseOptions(lang)}>
         {clientLoader.useContent(path, { lang, path, url })}

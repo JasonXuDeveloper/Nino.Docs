@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import {
   rehypeCodeDefaultOptions,
   remarkImage,
+  remarkMdxMermaid,
 } from 'fumadocs-core/mdx-plugins';
 import { remarkFeedbackBlock } from 'fumadocs-core/mdx-plugins/remark-feedback-block';
 import {
@@ -11,6 +12,7 @@ import {
   metaSchema,
 } from 'fumadocs-mdx/config';
 import lastModified from 'fumadocs-mdx/plugins/last-modified';
+import { rehypeMermaid, remarkMermaidSource } from './src/lib/mermaid';
 
 // "Last updated" dates come from `git log`, but only with the full history:
 // in a shallow clone the oldest commit looks like it added every file, so
@@ -29,6 +31,9 @@ function hasFullGitHistory() {
     return false;
   }
 }
+
+/** Set by vite.config.ts for `--mode scripts`. */
+const contentOnly = process.env.DOCS_CONTENT_ONLY === '1';
 
 /**
  * Frontmatter: Fumadocs' fields plus
@@ -72,8 +77,19 @@ export default defineConfig({
     rehypeCodeOptions: { ...rehypeCodeDefaultOptions, addLanguageClass: true },
     remarkPlugins: [
       [remarkImage, { external: false, publicDir: 'public' }],
+      // ```mermaid fences -> <Mermaid chart="...">fence</Mermaid>: the
+      // attribute is the Markdown copy's source, rehypeMermaid below
+      // replaces the fence inside with the SVG.
+      remarkMdxMermaid,
+      remarkMermaidSource,
       // Block-level feedback: a "Feedback" button on each paragraph
       remarkFeedbackBlock,
     ],
+    // Diagrams are drawn at build time (src/lib/mermaid.ts), before
+    // rehype-code highlights fences. The scripts (`--mode scripts`) read the
+    // Markdown form of a page, which keeps the diagram source: they skip the
+    // drawing.
+    rehypePlugins: (plugins) =>
+      contentOnly ? plugins : [rehypeMermaid, ...plugins],
   },
 });
