@@ -56,7 +56,9 @@ function Message({ lang }: { lang: Locale }) {
 
 export default function NotFound() {
   const { pathname } = useLocation();
-  // The prerendered /404 page is shown for every language, so it says both.
+  // /en/404.html and /zh/404.html are served for unknown URLs under their
+  // locale; /404.html only for the rest (the Pages Function redirects every
+  // URL without a locale to one, so in practice assets), so it says both.
   const langs: Locale[] = pathname.startsWith('/404')
     ? ['en', 'zh']
     : [getLocale(pathname.split('/')[1])];

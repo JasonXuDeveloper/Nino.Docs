@@ -480,21 +480,22 @@ function cards(): Card[] {
 /* ------------------------------------------------------------------ */
 
 async function main() {
-  // Cloudflare serves /404.html (status 404) for unknown paths. It is shown at
-  // any URL, so it must not hydrate: the router would try to load that URL.
-  const notFoundDir = path.join(outDir, '404');
-  const notFound = await fs.readFile(
-    path.join(notFoundDir, 'index.html'),
-    'utf8',
-  );
-  await write(
-    '404.html',
-    notFound
-      .replace(/<link rel="modulepreload"[^>]*>/g, '')
-      .replace(/<script type="module"[\s\S]*?<\/script>/g, '')
-      .replace(/<script>[^<]*__reactRouter[\s\S]*?<\/script>/g, ''),
-  );
-  await fs.rm(notFoundDir, { recursive: true, force: true });
+  // Cloudflare Pages serves the 404.html closest to an unknown path (status
+  // 404): /zh/404.html under /zh, /en/404.html under /en, /404.html elsewhere.
+  // It is shown at any URL, so it must not hydrate: the router would try to
+  // load that URL.
+  for (const page of ['404', 'en/404', 'zh/404']) {
+    const dir = path.join(outDir, page);
+    const html = await fs.readFile(path.join(dir, 'index.html'), 'utf8');
+    await write(
+      `${page}.html`,
+      html
+        .replace(/<link rel="modulepreload"[^>]*>/g, '')
+        .replace(/<script type="module"[\s\S]*?<\/script>/g, '')
+        .replace(/<script>[^<]*__reactRouter[\s\S]*?<\/script>/g, ''),
+    );
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 
   const moved = await flattenPages(outDir);
 

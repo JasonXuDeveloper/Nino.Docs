@@ -22,7 +22,15 @@ export default {
     v8_trailingSlashAwareDataRequests: true,
   },
   async prerender({ getStaticPaths }) {
-    const paths = new Set(['/', '/en', '/zh', '/404', ...getStaticPaths()]);
+    const paths = new Set([
+      '/',
+      '/en',
+      '/zh',
+      '/404',
+      '/en/404',
+      '/zh/404',
+      ...getStaticPaths(),
+    ]);
     for await (const file of glob('**/*.mdx', { cwd: 'content/docs' })) {
       paths.add(getDocUrl(file));
     }
