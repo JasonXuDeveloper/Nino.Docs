@@ -49,7 +49,7 @@ CoreCLR 和 Unity 2021.3+ 的布局是 `bool hasValue; T value;`，而旧版 Mon
 </Accordion>
 <Accordion title="32 位平台" value="32bit">
 
-`struct { int a; long b; }` 在 x64 上占 16 字节，在 x86 的 .NET 和 Mono 上占 12 字节。Nino 以 64 位布局为规范布局；运行时布局不同时，会逐个字段转换成相同的字节（会有一些速度上的代价），并且不再整块拷贝。
+在 32 位 x86 上，.NET 和 64 位运行时一样把 `long`、`double` 以及含有它们的结构体（`TimeSpan`、`decimal`、你自己的结构体）按 8 字节对齐，但 `DateTime`、`ValueTuple` 或 `DateTimeOffset` 字段（自动布局的结构体）只按 4 字节对齐：`struct { int a; long b; }` 在两者上都占 16 字节，`struct { int a; DateTime b; }` 在 x64 上占 16 字节，在 x86 的 .NET 上占 12 字节。.NET Framework 还会重排含有 `DateTime` 的结构体的字段（`struct { byte a; DateTime b; int c; }` 把 `c` 放在最前）。Nino 以 64 位布局为规范布局；运行时布局不同时，会逐个字段转换成相同的字节（会有一些速度上的代价），并且不再整块拷贝。
 
 </Accordion>
 <Accordion title="填充字节" value="padding">

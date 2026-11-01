@@ -49,7 +49,7 @@ CoreCLR and Unity 2021.3+ store `bool hasValue; T value;`, while old Mono (Unity
 </Accordion>
 <Accordion title="32-bit platforms" value="32bit">
 
-`struct { int a; long b; }` is 16 bytes on x64 and 12 bytes on x86 .NET and Mono. Nino's raw layout is the canonical 64-bit one; where a runtime differs, values are converted field by field into the same bytes (at some cost in speed) and bulk raw copies are skipped.
+On 32-bit x86, .NET aligns `long`, `double` and structs holding one (`TimeSpan`, `decimal`, your own) to 8 bytes, as 64-bit runtimes do, but a `DateTime`, `ValueTuple` or `DateTimeOffset` field (auto-layout structs) to 4: `struct { int a; long b; }` is 16 bytes on both, `struct { int a; DateTime b; }` 16 bytes on x64 and 12 on x86 .NET. .NET Framework also reorders the fields of a struct that holds a `DateTime` (`struct { byte a; DateTime b; int c; }` puts `c` first). Nino's raw layout is the canonical 64-bit one; where a runtime differs, values are converted field by field into the same bytes (at some cost in speed) and bulk raw copies are skipped.
 
 </Accordion>
 <Accordion title="Padding" value="padding">

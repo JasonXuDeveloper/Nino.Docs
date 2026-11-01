@@ -15,6 +15,7 @@ icon: RotateCcwClock
 - **8 项及以上的元组**：类型为 8 项及以上 `ValueTuple` 的成员（或元素）现在会被写出，各项按顺序写入，与较短的元组相同；之前会被跳过并报 NINO007 警告，什么也不写。参见[其他内置类型](/zh/docs/v4/types#other-built-in-types)。
 - **运行时绑定的可空原始 `[NinoType]` 结构体**：由运行时构建格式化器的原始 `[NinoType]` 结构体（没有生成代码引用、按 `Type` 或装箱序列化的类型），其 `T?[]` 和其他 `T?` 序列现在按生成代码使用的固定步长写入，两边可以互相读取对方的字节。这类格式化器以前写出的数据需要重新写入。
 - **32 位 x86**：类型为结构体（不是 `[NinoType]`）、且在较小字段之后含有 `TimeOnly`、`Complex`、`Int128` 或 `UInt128` 的成员，现在和 64 位运行时一样按规范布局写入，不再写出 x86 上的内存。参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
+- **32 位 x86 .NET 和 .NET Framework 上原始结构体中的 `DateTime`**：按原始字节写入的结构体（不是 `[NinoType]` 的结构体，或布局在不同运行时上不同的 `[NinoType]` 结构体）若在较小字段之后含有 `DateTime`，现在和 64 位 .NET 一样按规范布局写入。Windows x86 .NET 把 `DateTime` 字段按 4 字节对齐，`struct { int A; DateTime B; }` 原先按其 12 字节的内存拷贝，而不是 16 字节；.NET Framework（64 位和 32 位）会重排含有 `DateTime` 的结构体的字段，`struct { byte A; DateTime B; int C; }` 原先按其 16 字节的内存拷贝（`int` 在前），而不是 24 字节。其他运行时都无法读取这两种字节。参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
 - **原始结构体中的 `Int128` 和 `UInt128`**：不是 `[NinoType]`、且含有 `Int128` 或 `UInt128` 的非托管结构体，在 .NET 8 及更高版本上按规范布局的要求把填充写为零；之前填充是从内存复制的，内容不确定。参见[原始值](/zh/docs/v4/wire-format#raw-values)。
 - **封闭的泛型 `[NinoType]` 结构体**：作为成员或集合元素的封闭泛型 `[NinoType]` 结构体（`struct Pad<T> { byte A; T B; }` 的 `Pad<int>`）现在逐成员写出，与它的格式化器在其他地方的写法一致；生成的代码以前在那里把它连同填充字节按原始内存复制。两种编码无法互相读取：由顶层调用或通过泛型类型写出的值无法作为成员读出，反之亦然。只要定义中有类型参数类型的字段，它的每个封闭类型都逐成员写出；包含这类成员的数据需要重新写出。参见[泛型类型](/zh/docs/v4/defining-types#generic-types)。
 
