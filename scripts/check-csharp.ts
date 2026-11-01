@@ -748,7 +748,9 @@ function main() {
       .every((line) =>
         [...expectedErrors].some((key) => {
           const d = diagnostics.get(key);
-          return d !== undefined && line.includes(`error ${d.id}: ${d.message}`);
+          return (
+            d !== undefined && line.includes(`error ${d.id}: ${d.message}`)
+          );
         }),
       );
   if (build.status !== 0 && errors.length === 0 && !onlyExpectedErrors) {
