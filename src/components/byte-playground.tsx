@@ -44,6 +44,18 @@ export function exampleFields(
   }));
 }
 
+/**
+ * An example's code is its types, then a blank line and the value written
+ * (the last paragraph), which the playground shows side by side. An example
+ * with one paragraph (strings: the value is picked) has types only.
+ */
+export function splitCode(code: string) {
+  const at = code.lastIndexOf('\n\n');
+  return at < 0
+    ? { type: code, value: undefined }
+    : { type: code.slice(0, at), value: code.slice(at + 2) };
+}
+
 export function byteCount(fields: ExampleField[]) {
   return fields.reduce((n, f) => n + f.hex.trim().split(/\s+/).length, 0);
 }
@@ -91,6 +103,7 @@ export function BytePlayground({ lang = 'en' }: { lang?: Locale }) {
   const [str, setStr] = useState('"abc"');
   const [encoding, setEncoding] = useState<'def' | 'utf8'>('def');
   const example = byteExamples.find((e) => e.id === id) ?? byteExamples[0];
+  const { type, value } = splitCode(example.code);
 
   const rows =
     example.strings !== undefined
@@ -147,11 +160,31 @@ export function BytePlayground({ lang = 'en' }: { lang?: Locale }) {
         ) : null}
       </div>
       <div className="flex flex-col gap-3 p-3 sm:p-4">
-        <DynamicCodeBlock
-          lang="csharp"
-          code={example.code}
-          codeblock={{ className: 'my-0' }}
-        />
+        <div
+          className={cn(
+            'grid gap-3',
+            value !== undefined && 'md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]',
+          )}
+        >
+          {value !== undefined ? (
+            <DynamicCodeBlock
+              lang="csharp"
+              code={value}
+              codeblock={{
+                title: zh ? '数据' : 'Value',
+                className: 'my-0 self-start',
+              }}
+            />
+          ) : null}
+          <DynamicCodeBlock
+            lang="csharp"
+            code={type}
+            codeblock={{
+              title: zh ? '数据结构' : 'Type',
+              className: 'my-0 self-start',
+            }}
+          />
+        </div>
         <p className="text-sm text-fd-muted-foreground">{example[lang].note}</p>
         <div aria-live="polite">
           <Bytes
