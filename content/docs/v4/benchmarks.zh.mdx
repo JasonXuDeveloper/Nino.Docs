@@ -1,7 +1,7 @@
 ---
 title: .NET 基准测试
 seoTitle: "基准测试：Nino 对比 MemoryPack、MessagePack、protobuf-net 与 v3 – Nino v4 文档"
-description: "Nino v4 与 v3（3.3.13）、MemoryPack 1.21.4、MessagePack 3.1.12 和 protobuf-net 3.4.30 的构建时间与运行时基准测试，以及复现方法。"
+description: "Nino v4 与 v3（3.3.13）、MemoryPack 1.21.4、MessagePack 3.1.12 和 protobuf-net 3.4.40 的构建时间与运行时基准测试，以及复现方法。"
 icon: ChartColumn
 ---
 
@@ -25,7 +25,7 @@ icon: ChartColumn
 | --- | --- | --- |
 | [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | .NET 上使用广泛、速度最快的二进制序列化库，和 Nino 一样基于源生成器 | 运行时性能，同一次 BenchmarkDotNet 运行：[序列化](#serialize-to-a-reused-buffer-writer)、[反序列化](#deserialize-new-instances)、[多态对象图](#polymorphism)、[复用实例](#pooling)、[引用追踪、版本容错和固定大小的类型](#more-cases) |
 | Nino v3 **3.3.13** | v3 API 的最后一个版本，也就是你升级之前所用的版本 | 运行时性能，与 v4 在同一台机器上背靠背测量（运行时表格中的 **v4 对比 v3** 列），以及[构建时间](#build-time-and-generated-code) |
-| [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) **3.1.12** 和 [protobuf-net](https://github.com/protobuf-net/protobuf-net) **3.4.30** | .NET 中最常用的二进制格式，以及 .NET 中最常用的 Protocol Buffers 库 | 运行时性能，同一次 BenchmarkDotNet 运行，覆盖格式能写出相同数据的每个用例：运行时表格中各占一列，[全部测量结果](#results)中各占若干行（参见 [MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)）。它们加入基准测试之前的发布报告没有这些行，表格这时只显示 Nino 和 MemoryPack |
+| [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) **3.1.12** 和 [protobuf-net](https://github.com/protobuf-net/protobuf-net) **3.4.40** | .NET 中最常用的二进制格式，以及 .NET 中最常用的 Protocol Buffers 库 | 运行时性能，同一次 BenchmarkDotNet 运行，覆盖格式能写出相同数据的每个用例：运行时表格中各占一列，[全部测量结果](#results)中各占若干行（参见 [MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)）。它们加入基准测试之前的发布报告没有这些行，表格这时只显示 Nino 和 MemoryPack |
 
 绝对耗时取决于机器，请比较倍数。Go、Rust 和 TypeScript 中的 Nino 对比 Protocol Buffers、MessagePack 和各语言常用序列化库的结果，参见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes)。功能而非速度方面的对比，参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)和 [v3 与 v4 对比](/zh/docs/v4/whats-new#features)。
 
@@ -130,7 +130,7 @@ Nino 把数据反序列化到已有的对象图中（[复用反序列化](/zh/do
 
 ### MessagePack 与 protobuf-net [#messagepack-and-protobuf-net]
 
-MessagePack 3（MessagePack-CSharp）和 protobuf-net 3 通过相同的类型读写与 Nino、MemoryPack 相同的值：`[MessagePackObject]` 配合整数 `[Key]`，子类型用 `[Union]`；`[ProtoContract]` 配合 `[ProtoMember]` 和 `[ProtoInclude]`。
+MessagePack 3（MessagePack-CSharp）和 protobuf-net 3 通过相同的类型读写与 Nino、MemoryPack 相同的值：`[MessagePackObject]` 配合整数 `[Key]`，子类型用 `[Union]`；`[ProtoContract]` 配合 `[ProtoMember]` 和 `[ProtoInclude]`。速度以外的区别见 [Nino 与 MessagePack 对比](/zh/docs/v4/vs-messagepack)和 [Nino 与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net)。
 
 - **MessagePack** 用 `MessagePackSerializer.Serialize(IBufferWriter<byte>, value)` 序列化到复用的 `ArrayBufferWriter<byte>`，用 `Deserialize<T>(ReadOnlyMemory<byte>)` 反序列化，使用默认选项，其解析器会采用 MessagePack 源生成器在编译时为基准测试类型写出的格式化器。不可变集合通过 `ImmutableCollectionResolver`（MessagePack.ImmutableCollection 包）处理。
 - **protobuf-net** 用 `Serializer.Serialize(Stream, value)` 序列化到复用的 `MemoryStream`，用 `Serializer.Deserialize<T>(ReadOnlySpan<byte>)` 反序列化，使用默认的运行时模型，它在第一次使用某个类型时为其编译序列化器。它的流写入器是它最快的写入方式：它的 `IBufferWriter<byte>` 写入器在写入每条嵌套消息之前要先测量其大小。`FixedSizeTest` 测的是返回 `byte[]` 的 API：protobuf-net 没有这种 API，所以先写入复用的流，再把字节复制到新数组。

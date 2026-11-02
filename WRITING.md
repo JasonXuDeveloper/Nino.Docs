@@ -25,8 +25,8 @@ to version your types), and the evaluator's pages split between "Overview" and "
 
 The sidebar (`content/docs/v4/meta.json`, `meta.zh.json`, same order) is the reader's path: **Get Started**
 (introduction, quick start, serialize and deserialize), **Define Types**, **Features**, **Guides** (the `advanced/`
-folder, collapsed: best practices, performance, use cases, engines and languages), **Compare** (vs MemoryPack, the
-three benchmark pages, limitations), **Reference** (analyzers, platforms, wire format, struct layouts, SIMD,
+folder, collapsed: best practices, performance, use cases, engines and languages), **Compare** (vs MemoryPack, vs
+MessagePack, vs protobuf-net, the three benchmark pages, limitations), **Reference** (analyzers, platforms, wire format, struct layouts, SIMD,
 performance internals, glossary), **Project** (what's new, migration, format versions, changelog, FAQ). A page never
 relies on a feature taught later; it links forward instead of explaining twice.
 
@@ -35,7 +35,7 @@ relies on a feature taught later; it links forward instead of explaining twice.
 Check each item, in both languages, and fix what fails:
 
 - **One home per fact.** Grep the pages for the same fact or explanation (whats-new, changelog, migration and format
-  versions; vs-memorypack and benchmarks; performance internals, high-performance, zero-allocation and best
+  versions; vs-memorypack, vs-messagepack, vs-protobuf-net and benchmarks; performance internals, high-performance, zero-allocation and best
   practices; platforms, struct layouts, wire format and limitations; defining types, supported types and
   constructors; security and limitations; FAQ and the pages it answers from). The owner explains it; the others say
   it in a sentence and link. A page that only repeats others is merged into its owner. Round 107: v3-vs-v4 was

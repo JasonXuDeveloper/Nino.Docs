@@ -1,0 +1,189 @@
+---
+title: Nino vs protobuf-net
+seoTitle: "Nino vs protobuf-net: Protocol Buffers or Nino in .NET – Nino v4 Docs"
+description: "Nino v4 compared with protobuf-net 3.4.40: Protocol Buffers against Nino's format, reading untrusted data, benchmarks from the same run, a feature matrix, when to choose which, and switching from [ProtoContract] to [NinoType]."
+icon: Swords
+---
+
+[protobuf-net](https://github.com/protobuf-net/protobuf-net) is, in its README's words, "a contract based serializer for .NET code, that happens to write data in the protocol buffers serialization format": you annotate your C# types, and it reads and writes the [Protocol Buffers](https://protobuf.dev) wire format that every protobuf implementation understands. This page compares Nino v4 with protobuf-net **3.4.40**, the version Nino's benchmark runs, using protobuf-net's README, its documentation at [docs.protobuf-net.dev](https://docs.protobuf-net.dev/) and its release notes for its features, and Nino's source for Nino's; behavior marked "tested" was checked with 3.4.40 in a test program. Where we could not verify a feature, it is left out.
+
+## Two Formats [#formats]
+
+Protocol Buffers is a format with a schema language (`.proto`) and implementations in many languages: each field carries its number and wire type, so a reader skips what it does not know. Nino's bytes carry no field numbers: your C# types say how to read them, in .NET and in the Go, Rust and TypeScript code [nino-gen](/en/docs/v4/advanced/codegen) generates from them.
+
+| | Nino v4 | protobuf-net |
+| --- | --- | --- |
+| An object | its members one after another; with [`NinoFormat.Keyed`](/en/docs/v4/evolving-data#keyed-members), a key and a length per member (8 bytes) | each field with its number and wire type; a nested object as a length-prefixed message |
+| A subtype | a 4-byte type id, a hash of the type's name | a nested message under its `[ProtoInclude]` number, one per level of the hierarchy |
+| Integers | at their full width (an `int` is 4 bytes) | varints by default (small values in one byte); `DataFormat.FixedSize` for full width |
+| Null and empty | a null collection, an empty one and null elements read back as written | no null in the format: an empty collection reads back as null, and a null root as an object with default members (tested) |
+| The schema | your C# types | your C# types, or a `.proto` file that `protogen` turns into C# |
+| Readers in other languages | Go, Rust and TypeScript, through code generated from your C# types | every Protocol Buffers implementation, from a `.proto` schema |
+
+## Untrusted Input [#untrusted-input]
+
+protobuf-net has no separate mode for untrusted data; its documentation covers the limits to apply. Version 3 does not implement dynamic typing (`DynamicType`), so data cannot name a type, and since 3.1 `TypeModel.MaxDepth` (512 by default) bounds nesting ([release notes](https://docs.protobuf-net.dev/releasenotes)). The format's varints make the objects in memory larger than their bytes: about 4 to 24 times for packed integer collections, by its [memory and size limits](https://docs.protobuf-net.dev/memory_and_size_limits) page, which has no maximum message size setting and asks you to bound the input yourself, at the host (Kestrel's `MaxRequestBodySize`, gRPC's `MaxReceiveMessageSize`) or around the stream.
+
+Nino reads untrusted data in its default mode; [`NinoSettings.Untrusted`](/en/docs/v4/security#untrusted-mode) adds the checks that cost time on every read.
+
+<Matrix columns={['Nino v4', 'protobuf-net 3.4.40']} rows={[
+  { label: 'The data cannot name a type to create', cells: ['yes: type ids of the declared type\'s registered subtypes only', 'yes: dynamic typing is not implemented in v3'] },
+  { label: 'Nesting limit', cells: [['yes', <><code>NinoSettings.MaxDepth</code>, 512, with the thread's stack checked</>], ['yes', <><code>TypeModel.MaxDepth</code>, 512</>]] },
+  { label: 'Memory in proportion to the input', cells: ['yes: a collection allocates ahead of its elements at most 16 times the bytes left', 'yes: up to about 24 times the payload for packed integers, by its documentation'] },
+  { label: 'Hash flooding of dictionaries and sets', cells: [['yes', <><code>MaxHashCollisions</code> per bucket; seeded hashing with <code>Untrusted</code></>], 'n/a: not documented'] },
+  { label: 'One exception type for invalid data', cells: [['yes', <><code>NinoDataException</code></>], 'n/a: not documented'] },
+]} />
+
+What stays the application's job either way (the values themselves, the size of a message, authenticating the sender) is in [Untrusted Data](/en/docs/v4/security#what-stays-your-job).
+
+## Performance
+
+Measured with BenchmarkDotNet in the same run as Nino, on the same values and the same types. protobuf-net writes to a reused `MemoryStream` (its fastest writer) and reads from a `ReadOnlySpan<byte>`, on its default runtime model, which compiles a serializer for each type on first use; see [MessagePack and protobuf-net](/en/docs/v4/benchmarks#messagepack-and-protobuf-net) for the setup. Cases protobuf-net cannot express with the same data (reference tracking, deserializing into existing objects) have no row.
+
+<LibraryTables lib="protobuf" lang="en" />
+
+Payload sizes differ by format, not by effort: protobuf writes small integers as one-byte varints and nests a message per level of a class hierarchy, Nino writes integers at their full width and a subtype as a type id before its members. Every case, MemoryPack included: [.NET Benchmarks](/en/docs/v4/benchmarks#runtime).
+
+## Feature Matrix
+
+<Matrix columns={['Nino v4', 'protobuf-net 3.4.40']} rows={[
+  { group: 'Platforms' },
+  { label: 'Minimum .NET target', cells: [['yes', <><code>netstandard2.0</code></>], ['yes', <><code>netstandard2.0</code>, .NET Framework 4.6.2+</>]] },
+  { label: 'Unity', cells: ['yes: 2022.3+, one OpenUPM package', 'n/a: not documented'] },
+  { label: 'IL2CPP / Native AOT', cells: ['yes: source generated, no reflection when serializing', ['partial', <>a compile-time model since 3.3, still a preview (<code>[Experimental]</code>, C# 12); the default model emits IL at run time</>]] },
+  { label: 'Readers in other languages', cells: [['partial', <>Go, Rust and TypeScript, generated by <a href="/en/docs/v4/advanced/codegen">nino-gen</a></>], 'yes: every Protocol Buffers implementation'] },
+  { group: 'Defining types' },
+  { label: 'Attributes on every member', cells: ['yes: none needed; public members in declaration order', ['partial', <><code>[ProtoMember(n)]</code> on each member</>]] },
+  { label: 'Private members', cells: [['yes', <><code>includeNonPublicMembers</code></>], 'yes: tested'] },
+  { label: 'Configured without attributes', cells: ['no: [NinoType] on each type or its base', ['yes', <><code>RuntimeTypeModel</code></>]] },
+  { label: 'Types from a schema file', cells: ['no: the C# types are the schema', ['yes', <><code>.proto</code> files and <code>protogen</code></>]] },
+  { group: 'Polymorphism' },
+  { label: 'Abstract and non-abstract base classes', cells: ['yes', ['yes', <><code>[ProtoInclude(n, typeof(T))]</code> per subtype</>]] },
+  { label: 'Interfaces', cells: ['yes', 'partial: supported; its analyzer advises an abstract base instead (PBN0023)'] },
+  { label: <>Generic bases (<code>Box&lt;T&gt;</code>)</>, cells: ['yes: automatic, for any type argument', ['partial', <>the subtypes of each closed type added to <code>RuntimeTypeModel</code> by hand</>]] },
+  { label: 'Subtypes in other assemblies, hot-update DLLs', cells: ['yes: found automatically, no numbers', 'partial: each subtype listed on its base'] },
+  { group: 'Evolving data' },
+  { label: 'Add members; old code reads new data', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>, <code>NinoFormat.Keyed</code></>], 'yes: every type; unknown fields are skipped (tested)'] },
+  { label: 'Remove, reorder or rename members', cells: [['yes', <><code>NinoFormat.Keyed</code>, renames with <code>[NinoFormerName]</code></>], 'yes: field numbers fix the data; names are not written'] },
+  { group: 'Object graphs and allocation' },
+  { label: 'Shared and circular references', cells: [['yes', <><code>trackReferences</code></>], 'no: not implemented in v3; a cycle throws (tested)'] },
+  { label: 'Null and empty collections kept apart', cells: ['yes', 'no: an empty collection reads back as null'] },
+  { label: 'Deserialize into an existing instance', cells: ['yes: fills objects, lists and dictionaries in place', ['partial', <><code>Serializer.Merge</code> merges: lists are appended to (tested)</>]] },
+  { label: 'Object pools', cells: [['yes', <><code>[NinoPooled]</code>, factories, recycler</>], 'n/a: not documented'] },
+  { group: 'I/O and integrations' },
+  { label: <><code>IBufferWriter&lt;byte&gt;</code> and spans</>, cells: ['yes', 'yes'] },
+  { label: <><code>Stream</code></>, cells: [['yes', <>a <a href="/en/docs/v4/advanced/streams#streams">short helper</a> over the buffer API</>], 'yes: its main API'] },
+  { label: 'Serialization callbacks', cells: [['yes', <>your own hooks around the call (<a href="/en/docs/v4/advanced/streams#callbacks">example</a>)</>], ['yes', <><code>[ProtoBeforeSerialization]</code>, <code>[ProtoAfterDeserialization]</code> and others</>]] },
+  { label: 'Types it cannot annotate', cells: [['yes', <><a href="/en/docs/v4/custom-formatters">custom formatters</a></>], ['yes', <>surrogates (<code>SetSurrogate</code>)</>]] },
+  { label: 'Built-in BCL types', cells: [['yes', <><code>BigInteger</code>, <code>Version</code>, <code>DateTimeOffset</code> and <a href="/en/docs/v4/types#other-built-in-types">more</a></>], 'partial: no serializer for BigInteger, Version, StringBuilder, BitArray or DateTimeOffset, among others'] },
+  { label: 'gRPC', cells: ['n/a: a serializer, not an RPC framework', ['yes', <>protobuf-net.Grpc, code-first</>]] },
+  { label: 'ASP.NET Core bodies', cells: [['yes', <><a href="/en/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>: MVC formatters and Minimal API bodies</>], 'n/a: not documented'] },
+]} />
+
+## Where protobuf-net Is Ahead
+
+- **Protocol Buffers.** A standard format with a schema language and implementations in many languages: services in Java, Go, Python or C++ read your messages from a shared `.proto` file, and protobuf-net generates C# from one with `protogen`. Nino's data is read through your C# types, or through Go, Rust and TypeScript code generated from them.
+- **gRPC.** protobuf-net.Grpc serves and calls gRPC services from C# interfaces, and gRPC peers in other languages talk to them.
+- **Every type tolerates change.** Field numbers are written with the data, so members can be added, removed, reordered and renamed, and readers skip fields they do not know. In Nino this is a choice per type ([`NinoFormat.Keyed`](/en/docs/v4/evolving-data#keyed-members)); the default positional format breaks when members change.
+- **Smaller integers.** Varints take one byte for small numbers.
+- **Tools for the bytes.** [protobuf-net.dev](https://protobuf-net.dev/) decodes a raw payload in the browser without its schema.
+
+## Where Nino Is Ahead
+
+- **Untrusted input by default**, with documented limits for depth, memory and hash flooding, and one exception type ([Untrusted Input](#untrusted-input)).
+- **Polymorphism without bookkeeping**: subtypes inherit `[NinoType]`, with no numbers to list on the base and keep stable, generic bases included; subtypes in other assemblies and hot-update DLLs are found automatically.
+- **Object graphs**: shared and circular references with [`trackReferences`](/en/docs/v4/reference-tracking).
+- **Null stays null, empty stays empty**, for collections and their elements.
+- **Zero-allocation reuse**: [reuse deserialization](/en/docs/v4/pooling) replaces the contents of existing objects, lists and dictionaries in place, and `[NinoPooled]` pools supply new instances.
+- **Fewer attributes**: public members are written in declaration order, with no number on each.
+- **AOT without a preview**: formatters are generated for every `[NinoType]` at compile time, for IL2CPP and Native AOT alike; Unity in one package from OpenUPM, HybridCLR without init calls.
+- **More of the base class library**: `BigInteger`, `Version`, `DateTimeOffset`, immutable and concurrent collections and others are [built in](/en/docs/v4/types#other-built-in-types).
+
+## When to Choose Which
+
+<Cards>
+  <Card title="Choose Nino when">
+    Your programs are .NET, Unity or Godot, plus TypeScript, Go or Rust through generated code; the data can come from a peer or a file you do not control; you need polymorphism without numbered includes, shared references, null kept apart from empty, or zero GC through reuse and pooling.
+  </Card>
+  <Card title="Choose protobuf-net when">
+    The contract is a `.proto` file shared with programs in other languages, you call or serve gRPC with peers outside .NET, or every type must tolerate changes without choosing a format for it.
+  </Card>
+</Cards>
+
+<Callout type="idea">
+
+Both are open source and work in .NET without a schema file. If you are unsure, benchmark your own types: the [benchmark project](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark) runs Nino and protobuf-net side by side.
+
+</Callout>
+
+## Switching from protobuf-net [#switching-from-protobuf-net]
+
+| protobuf-net | Nino |
+| --- | --- |
+| `[ProtoContract]` | `[NinoType]` |
+| `[ProtoMember(1)]`, `[ProtoMember(2)]`... on each member | nothing: public members in declaration order; or `[NinoType(false)]` with `[NinoMember(n)]` on the members to write ([Choosing Members Explicitly](/en/docs/v4/defining-types#choosing-members-explicitly)) |
+| field numbers, so members can change later | `[NinoType(format: NinoFormat.Keyed)]`: members by name, renamed with `[NinoFormerName]`; `NinoFormat.VersionTolerant` for types that only grow ([Evolving Your Data](/en/docs/v4/evolving-data)) |
+| `[ProtoIgnore]` | `[NinoIgnore]` (Nino writes every public member unless told not to) |
+| `[ProtoMember]` on a private member | `[NinoType(includeNonPublicMembers: true)]` |
+| `[ProtoInclude(n, typeof(T))]` on the base | `[NinoType]` on the base: subtypes inherit it, with no numbers ([Polymorphism](/en/docs/v4/polymorphism)) |
+| `[ProtoBeforeSerialization]`, `[ProtoAfterDeserialization]` | your own hooks around the call ([Callbacks](/en/docs/v4/advanced/streams#callbacks)) |
+| `RuntimeTypeModel` surrogates | [Custom Formatters](/en/docs/v4/custom-formatters) |
+| `Serializer.Serialize(stream, value)` | `NinoSerializer.Serialize(value)`, or `NinoSerializer.Serialize(value, bufferWriter)`; streams through a [short helper](/en/docs/v4/advanced/streams#streams) |
+| `Serializer.Deserialize<T>(stream)` | `NinoDeserializer.Deserialize<T>(bytes)` |
+| `Serializer.Merge(stream, value)` | `NinoDeserializer.Deserialize(bytes, ref value)`, which replaces the contents instead of appending ([Reuse and Pooling](/en/docs/v4/pooling)) |
+| `TypeModel.MaxDepth` | `NinoSettings.MaxDepth` ([Limits](/en/docs/v4/security#limits)) |
+
+The two libraries write different bytes, so stored data has to be converted. Both can be installed in one project: keep both attributes on your types while you convert, read each stored value with protobuf-net and write it again with Nino, then remove protobuf-net. Mark the converted data with a [file header](/en/docs/v4/advanced/persistence#add-a-file-header) so that a later build knows which reader it needs. Messages between processes need no conversion: upgrade both ends together. Messages that programs in other languages read from a `.proto` schema stay Protocol Buffers, or move to code generated by [nino-gen](/en/docs/v4/advanced/codegen) if those programs are TypeScript, Go or Rust.
+
+```csharp title="Messages.cs"
+using Nino.Core;
+using ProtoBuf;
+
+[ProtoContract]
+[ProtoInclude(10, typeof(Ping))]
+[ProtoInclude(11, typeof(Chat))]
+[NinoType]                       // [!code ++]
+public abstract class Message { }
+
+[ProtoContract]
+public sealed class Ping : Message
+{
+    [ProtoMember(1)] public long SentAt { get; set; }
+}
+
+[ProtoContract]
+public sealed class Chat : Message
+{
+    [ProtoMember(1)] public string Text { get; set; }
+    [NinoIgnore] public int Cached { get; set; } // protobuf-net writes only [ProtoMember]s
+}
+```
+
+```csharp
+using System.IO;
+using ProtoBuf;
+
+var stored = new MemoryStream();
+Serializer.Serialize<Message>(stored, new Chat { Text = "hi" });
+stored.Position = 0;
+Message message = Serializer.Deserialize<Message>(stored); // what protobuf-net stored
+byte[] bytes = NinoSerializer.Serialize(message);          // written again with Nino
+Message back = NinoDeserializer.Deserialize<Message>(bytes); // a Chat
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Nino vs MessagePack" href="/en/docs/v4/vs-messagepack">
+    The same comparison with MessagePack for C#.
+  </Card>
+  <Card title=".NET Benchmarks" href="/en/docs/v4/benchmarks">
+    Every case, with MemoryPack, MessagePack and protobuf-net, and the code that measures it.
+  </Card>
+  <Card title="TypeScript, Go and Rust" href="/en/docs/v4/advanced/codegen">
+    Read and write Nino's bytes outside .NET with code generated from your types.
+  </Card>
+  <Card title="Untrusted Data" href="/en/docs/v4/security">
+    What every read checks, the limits and Untrusted mode.
+  </Card>
+</Cards>

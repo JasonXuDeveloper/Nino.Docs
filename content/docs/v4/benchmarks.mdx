@@ -1,7 +1,7 @@
 ---
 title: .NET Benchmarks
 seoTitle: "Benchmarks: Nino vs MemoryPack, MessagePack, protobuf-net and v3 – Nino v4 Docs"
-description: "Build-time and runtime benchmarks of Nino v4 against v3 (3.3.13), MemoryPack 1.21.4, MessagePack 3.1.12 and protobuf-net 3.4.30, with the setup to reproduce them."
+description: "Build-time and runtime benchmarks of Nino v4 against v3 (3.3.13), MemoryPack 1.21.4, MessagePack 3.1.12 and protobuf-net 3.4.40, with the setup to reproduce them."
 icon: ChartColumn
 ---
 
@@ -25,7 +25,7 @@ This page has every benchmark number the documentation quotes, the code that pro
 | --- | --- | --- |
 | [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | The fastest widely used binary serializer for .NET, and source-generated like Nino | Runtime, in the same BenchmarkDotNet run: [serialize](#serialize-to-a-reused-buffer-writer), [deserialize](#deserialize-new-instances), [polymorphic graphs](#polymorphism), [reusing instances](#pooling), [reference tracking, version tolerance and fixed-size types](#more-cases) |
 | Nino v3 **3.3.13** | The last release of the v3 API, the version you would upgrade from | Runtime, back to back with v4 on the same machine (the **v4 vs v3** column of the runtime tables), and [build time](#build-time-and-generated-code) |
-| [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) **3.1.12** and [protobuf-net](https://github.com/protobuf-net/protobuf-net) **3.4.30** | The most common binary format in .NET, and the most common Protocol Buffers library for .NET | Runtime, in the same BenchmarkDotNet run, in every case where the format can write the same data: a column each in the runtime tables, a row each in [All Measurements](#results) (see [MessagePack and protobuf-net](#messagepack-and-protobuf-net)). Release reports before they joined the benchmark have no rows for them, and the tables then show Nino and MemoryPack only |
+| [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) **3.1.12** and [protobuf-net](https://github.com/protobuf-net/protobuf-net) **3.4.40** | The most common binary format in .NET, and the most common Protocol Buffers library for .NET | Runtime, in the same BenchmarkDotNet run, in every case where the format can write the same data: a column each in the runtime tables, a row each in [All Measurements](#results) (see [MessagePack and protobuf-net](#messagepack-and-protobuf-net)). Release reports before they joined the benchmark have no rows for them, and the tables then show Nino and MemoryPack only |
 
 Absolute times depend on the machine; compare the ratios. For Nino in Go, Rust and TypeScript against Protocol Buffers, MessagePack and each language's usual serializers, see [Other-Language Benchmarks](/en/docs/v4/benchmarks-runtimes). For features rather than speed, see [Nino vs MemoryPack](/en/docs/v4/vs-memorypack) and [v3 vs v4](/en/docs/v4/whats-new#features).
 
@@ -130,7 +130,7 @@ All three serialize to a reused buffer writer and deserialize into new instances
 
 ### MessagePack and protobuf-net [#messagepack-and-protobuf-net]
 
-MessagePack 3 (MessagePack-CSharp) and protobuf-net 3 read and write the same values as Nino and MemoryPack, through the same types: `[MessagePackObject]` with integer `[Key]`s and `[Union]` for subtypes, `[ProtoContract]` with `[ProtoMember]` and `[ProtoInclude]`.
+MessagePack 3 (MessagePack-CSharp) and protobuf-net 3 read and write the same values as Nino and MemoryPack, through the same types: `[MessagePackObject]` with integer `[Key]`s and `[Union]` for subtypes, `[ProtoContract]` with `[ProtoMember]` and `[ProtoInclude]`. How the libraries differ beyond speed: [Nino vs MessagePack](/en/docs/v4/vs-messagepack) and [Nino vs protobuf-net](/en/docs/v4/vs-protobuf-net).
 
 - **MessagePack** serializes with `MessagePackSerializer.Serialize(IBufferWriter<byte>, value)` into a reused `ArrayBufferWriter<byte>` and deserializes with `Deserialize<T>(ReadOnlyMemory<byte>)`, with the default options, whose resolver takes the formatters MessagePack's source generator writes for the benchmark types at compile time. The immutable collections go through `ImmutableCollectionResolver` (the MessagePack.ImmutableCollection package).
 - **protobuf-net** serializes with `Serializer.Serialize(Stream, value)` into a reused `MemoryStream` and deserializes with `Serializer.Deserialize<T>(ReadOnlySpan<byte>)`, on the default runtime model, which compiles a serializer for each type on first use. Its stream writer is its fastest: its `IBufferWriter<byte>` writer measures each nested message before writing it. `FixedSizeTest` measures `byte[]` APIs: protobuf-net has none, so it writes to a reused stream and copies the bytes into a new array.

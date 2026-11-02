@@ -30,6 +30,10 @@ Nino.Core 的 net8.0 和 net10.0 版本还带有裁剪和 Native AOT 标注：�
 
 在同一次基准测试中，Nino v4 的序列化最高比 MemoryPack 快 <BenchValue k="serialize.max" />，类与多态对象图的反序列化最高快 <BenchValue k="deserialize.max" />；原始结构体数组上两者至少持平。序列化到复用的缓冲区时零分配。参见[.NET 基准测试](/zh/docs/v4/benchmarks)和 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)。
 
+## Nino 和 MessagePack、protobuf-net 比怎么样？ [#how-does-nino-compare-with-messagepack-and-protobuf-net]
+
+它们写出的格式，其他语言的程序不需要你的 C# 类型也能读：MessagePack 给每个值加类型标记，Protocol Buffers 给每个字段编号。Nino 的字节由你的 C# 类型定义，在 .NET 中读，也可以在 Go、Rust 和 TypeScript 中通过生成的代码读。换来的是：Nino 的默认模式就能读不可信数据，成员上不用写键或字段号，多态不用列出子类型，还能追踪共享引用，这些它们都做不到。发布时的基准测试会在相同数据上测量它们和 Nino。参见 [Nino 与 MessagePack 对比](/zh/docs/v4/vs-messagepack)和 [Nino 与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net)。
+
 ## Nino 适合用在哪里？ [#what-can-i-use-nino-for]
 
 凡是需要把 .NET 对象转成紧凑字节、再还原回来的地方：服务之间的网络协议与 RPC、消息队列与事件流、缓存、文件等持久化存储、进程间通信以及数据管道。同样的代码可以运行在 .NET 服务器、桌面应用、Unity 和 Godot 上。参见[进阶指南](/zh/docs/v4/advanced)。
@@ -64,7 +68,7 @@ Nino.Core 的 net8.0 和 net10.0 版本还带有裁剪和 Native AOT 标注：�
 
 ## 什么时候不该用 Nino？ [#when-should-i-not-use-nino]
 
-当数据需要人来阅读或编辑时（请用 JSON、YAML 或 TOML），或者需要由 C#、TypeScript、JavaScript、Go、Rust 以外语言的程序读取时：格式由你的 C# 类型定义，没有 schema 文件，也没有面向这些语言的生成器，这种情况请使用 Protocol Buffers、FlatBuffers 或 MessagePack。JavaScript、TypeScript、Go 和 Rust 程序可以通过[生成的代码](/zh/docs/v4/advanced/codegen)使用 Nino，浏览器还可以在 [.NET WebAssembly](/zh/docs/v4/advanced/browser) 上运行 C# 类型。参见[局限性](/zh/docs/v4/limit)。
+当数据需要人来阅读或编辑时（请用 JSON、YAML 或 TOML），或者需要由 C#、TypeScript、JavaScript、Go、Rust 以外语言的程序读取时：格式由你的 C# 类型定义，没有 schema 文件，也没有面向这些语言的生成器，这种情况请使用 Protocol Buffers、FlatBuffers 或 MessagePack（[Nino 与 MessagePack 对比](/zh/docs/v4/vs-messagepack)、[Nino 与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net)）。JavaScript、TypeScript、Go 和 Rust 程序可以通过[生成的代码](/zh/docs/v4/advanced/codegen)使用 Nino，浏览器还可以在 [.NET WebAssembly](/zh/docs/v4/advanced/browser) 上运行 C# 类型。参见[局限性](/zh/docs/v4/limit)。
 
 ## 为什么 Nino 提示某个类型没有格式化器？ [#no-formatter]
 

@@ -30,6 +30,10 @@ Nino.Core's net8.0 and net10.0 builds are also annotated for trimming and Native
 
 In the same benchmark run, Nino v4 serializes up to <BenchValue k="serialize.max" /> faster than MemoryPack and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; on raw struct arrays the two are at least on par. Serializing into a reused buffer allocates nothing. See [.NET Benchmarks](/en/docs/v4/benchmarks) and [Nino vs MemoryPack](/en/docs/v4/vs-memorypack).
 
+## How does Nino compare with MessagePack and protobuf-net?
+
+They write formats that programs in other languages read without your C# types: MessagePack tags every value, Protocol Buffers numbers every field. Nino's bytes are defined by your C# types and read in .NET, and in Go, Rust and TypeScript through generated code. In return Nino reads untrusted data in its default mode, needs no keys or field numbers on members, handles polymorphism without listing subtypes, and tracks shared references, which neither does. The release benchmark times both against Nino on the same data. See [Nino vs MessagePack](/en/docs/v4/vs-messagepack) and [Nino vs protobuf-net](/en/docs/v4/vs-protobuf-net).
+
 ## What can I use Nino for?
 
 Anything that turns .NET objects into compact bytes and back: network protocols and RPC between services, message queues and event streams, caches, files and other persistent storage, inter-process communication, and data pipelines. The same code runs on .NET servers, desktop apps, Unity and Godot. See [Advanced Guides](/en/docs/v4/advanced).
@@ -64,7 +68,7 @@ Yes, with [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) (4.0.0-rc.6 and lat
 
 ## When should I not use Nino?
 
-When people need to read or edit the data (use JSON, YAML or TOML), or when a program in a language other than C#, TypeScript, JavaScript, Go or Rust must read it: the format is defined by your C# types, with no schema file and no generator for those languages, so use Protocol Buffers, FlatBuffers or MessagePack for that. JavaScript, TypeScript, Go and Rust programs use Nino through [generated code](/en/docs/v4/advanced/codegen), and browsers can also run the C# types on [.NET WebAssembly](/en/docs/v4/advanced/browser). See [Limitations](/en/docs/v4/limit).
+When people need to read or edit the data (use JSON, YAML or TOML), or when a program in a language other than C#, TypeScript, JavaScript, Go or Rust must read it: the format is defined by your C# types, with no schema file and no generator for those languages, so use Protocol Buffers, FlatBuffers or MessagePack for that ([Nino vs MessagePack](/en/docs/v4/vs-messagepack), [Nino vs protobuf-net](/en/docs/v4/vs-protobuf-net)). JavaScript, TypeScript, Go and Rust programs use Nino through [generated code](/en/docs/v4/advanced/codegen), and browsers can also run the C# types on [.NET WebAssembly](/en/docs/v4/advanced/browser). See [Limitations](/en/docs/v4/limit).
 
 ## Why does Nino say there is no formatter for a type? [#no-formatter]
 
