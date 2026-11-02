@@ -168,16 +168,22 @@ Overview, FAQ and reference pages answer the questions their readers search for,
   `check:csharp`) finds each `<Bytes>` row of the v4 pages and each playground row in a hex dump of Nino's
   `docs/spec/wire-format.md` or in a file of `conformance/corpus/valid`, and fails on any row it cannot find. Run it
   after any change to a figure and after a wire-format change in Nino.
-- **Layout is fixed in the component, checked at 390px and 1280px**: at 1280 a table or matrix fits the column
-  unless it has more columns than fit (struct layouts), and at 390 it scrolls inside its box rather than squeezing
-  to a word per line; a number never wraps away from its unit (`whitespace-nowrap` on time cells); inline code
-  breaks inside a token only when it cannot fit a line (`app/app.css`), and a token over 24 characters may break
-  anywhere in a table cell from 768px (`InlineCode`, `src/mdx-components.tsx`); a minimum width that only phones need
-  is a container query (`@2xl:min-w-0` in `Matrix`). Why: the owner's complaints were all layout seen at one width
-  only. Evidence: round 117's Playwright pass over every v4 page found the changelog's long MSBuild code clipped at
-  390, "366 ns" split over two lines in every benchmark table, the charts' axis title cut to "elative time", and
-  the SIMD matrix and five prose tables scrolling at 1280 for one cell. Serve `build/client` with a server that maps
-  `/en` to `en.html` (Python's `http.server` lists the directory there, and `.html` URLs hydrate the wrong route).
+- **Layout is fixed in the component, checked at 390px, 1024px and 1280px**: at 1024 and up every table and matrix
+  fits the column; a table with more columns than fit is restructured (transposed, or reduced to the cells that
+  differ, as struct layouts' "Where it differs"), never left to scroll. At 390 a table scrolls inside its box rather
+  than squeezing: prose cells keep 6rem and cells of running text 10rem (`TableCell`, `src/mdx-components.tsx`). A
+  number never wraps away from its unit (`whitespace-nowrap` on time cells), nor a run of hex bytes (`nino-bytes`);
+  inline code breaks inside a token only when it cannot fit a line (`app/app.css`), and a token over 24 characters may
+  break anywhere in a table cell from 768px (`InlineCode`); a minimum width that only phones need is a container
+  query (`@2xl:min-w-0` in `Matrix`); a code block's copy button shows on hover or focus and sits above the code on
+  touch screens, never over it. Why: the owner's complaints were all layout seen at one width only, and "problems
+  get solved, not skipped" (round 122). Evidence: round 117's Playwright pass over every v4 page found the
+  changelog's long MSBuild code clipped at 390, "366 ns" split over two lines in every benchmark table, the charts'
+  axis title cut to "elative time", and the SIMD matrix and five prose tables scrolling at 1280 for one cell; round
+  122 found 179 phone table cells squeezed to a word or character per line and two tables of 6 and 9 columns
+  scrolling at 1280. Serve `build/client` with a server that maps `/en` to `en.html` (Python's `http.server` lists
+  the directory there, and `.html` URLs hydrate the wrong route); emulate touch (`hasTouch`, `isMobile`) to see what
+  a phone sees.
 
 ## Code
 
