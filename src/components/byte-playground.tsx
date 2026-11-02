@@ -46,7 +46,7 @@ export function exampleFields(
 
 /**
  * An example's code is its types, then a blank line and the value written
- * (the last paragraph), which the playground shows side by side. An example
+ * (the last paragraph), which the playground shows as two blocks. An example
  * with one paragraph (strings: the value is picked) has types only.
  */
 export function splitCode(code: string) {
@@ -160,61 +160,59 @@ export function BytePlayground({ lang = 'en' }: { lang?: Locale }) {
         ) : null}
       </div>
       <div className="flex flex-col gap-3 p-3 sm:p-4">
-        <div
-          className={cn(
-            'grid gap-3',
-            value !== undefined && 'md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]',
-          )}
-        >
-          {value !== undefined ? (
-            <DynamicCodeBlock
-              lang="csharp"
-              code={value}
-              codeblock={{
-                title: zh ? '数据' : 'Value',
-                className: 'my-0 self-start',
-              }}
-            />
-          ) : null}
+        <DynamicCodeBlock
+          lang="csharp"
+          code={type}
+          codeblock={{
+            title: zh ? '数据结构' : 'Type',
+            className: 'my-0',
+          }}
+        />
+        {value !== undefined ? (
           <DynamicCodeBlock
             lang="csharp"
-            code={type}
+            code={value}
             codeblock={{
-              title: zh ? '数据结构' : 'Type',
-              className: 'my-0 self-start',
+              title: zh ? '写入的数据' : 'Value written',
+              className: 'my-0',
             }}
           />
-        </div>
+        ) : null}
         <p className="text-sm text-fd-muted-foreground">{example[lang].note}</p>
-        <div aria-live="polite">
-          <Bytes
-            stacked
-            rows={rows.map((row) => ({
-              title: (
-                <>
-                  <code className="text-[0.75rem]">{row.title}</code>
-                  <span className="font-normal">
-                    {zh
-                      ? ` · ${byteCount(row.fields)} 字节`
-                      : ` · ${byteCount(row.fields)} bytes`}
-                  </span>
-                </>
-              ),
-              fields: exampleFields(row.fields, lang),
-            }))}
-          />
-        </div>
-        <p className="text-xs text-fd-muted-foreground">
-          {zh ? '字节来自' : 'Bytes from'}{' '}
-          <a href={specUrl} className="underline underline-offset-2">
+        <section className="not-prose overflow-hidden rounded-xl border bg-fd-card text-sm">
+          <div className="flex h-9.5 items-center border-b px-4 text-fd-muted-foreground">
+            {zh ? '写出的字节' : 'Bytes written'}
+          </div>
+          <div aria-live="polite" className="px-4 py-3">
+            <Bytes
+              stacked
+              rows={rows.map((row) => ({
+                title: (
+                  <>
+                    <code className="text-[0.75rem]">{row.title}</code>
+                    <span className="font-normal">
+                      {zh
+                        ? ` · ${byteCount(row.fields)} 字节`
+                        : ` · ${byteCount(row.fields)} bytes`}
+                    </span>
+                  </>
+                ),
+                fields: exampleFields(row.fields, lang),
+              }))}
+            />
+          </div>
+          <p className="border-t px-4 py-2.5 text-xs text-fd-muted-foreground">
+            {zh ? '字节来自' : 'Bytes from'}{' '}
+            <a href={specUrl} className="underline underline-offset-2">
+              {zh
+                ? `规范附录 ${example.spec}`
+                : `the specification, Appendix ${example.spec}`}
+            </a>
             {zh
-              ? `规范附录 ${example.spec}`
-              : `the specification, Appendix ${example.spec}`}
-          </a>
-          {zh
-            ? '：Nino 4.0.0-rc.8 实际运行的输出。'
-            : ': the output of a real run of Nino 4.0.0-rc.8.'}
-        </p>
+              ? '：Nino 4.0.0-rc.8 实际运行的输出。'
+              : ': the output of a real run of Nino 4.0.0-rc.8.'}
+          </p>
+        </section>
       </div>
     </div>
   );
