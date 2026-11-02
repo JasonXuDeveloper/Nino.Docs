@@ -4,7 +4,8 @@
  *
  * The .NET tables compare Nino with MemoryPack, and with MessagePack and
  * protobuf-net in a column each once the synced release measured them ("—"
- * for a case a library cannot express). RuntimesTables prints the Go, Rust and
+ * for a case a library cannot express); LibraryTables compares Nino with one of
+ * those two alone, for its comparison page. RuntimesTables prints the Go, Rust and
  * TypeScript benchmarks of the same release, UnityTables and UnityHighlights
  * the Unity player's times without and with the Burst kernels.
  *
@@ -24,6 +25,7 @@ import {
   formatRatio,
   formatTime,
   isOnPar,
+  type OtherLib,
   otherLibs,
   payload,
   type RuntimeCase,
@@ -397,6 +399,137 @@ export function ExtraRuntimeTables({ lang = 'en', markdown }: ArchProps) {
       );
     },
   });
+}
+
+/**
+ * Nino against one other .NET serializer (MessagePack or protobuf-net): a
+ * serialize and a deserialize table of every case the synced report measured
+ * for that library (the main cases, then reference tracking, version tolerance
+ * and fixed-size types), and the size of one SimpleClass. A note stands in for
+ * them until a release report includes the library. For the comparison pages.
+ */
+export function LibraryTables({
+  lib,
+  lang = 'en',
+  markdown,
+}: ArchProps & { lib: OtherLib }) {
+  const zh = lang === 'zh';
+  const label = otherLibs.find((other) => other.key === lib)?.label ?? lib;
+  // Not measured on any architecture yet: one note, outside the tabs.
+  if (!datasets.some((ds) => libraryRows(ds, lib).length > 0))
+    return (
+      <p className="text-sm text-fd-muted-foreground">
+        {zh
+          ? `${label} 已经在 Nino 的基准测试项目中，与 Nino 读写相同的数据，但目前发布的报告还没有包含它。等某个版本的发布报告包含它后，结果会显示在这里。`
+          : `${label} is in Nino's benchmark project, reading and writing the same data as Nino, but the published report does not include it yet. Its results appear here once a release report does.`}
+      </p>
+    );
+  return ArchTabs({
+    markdown,
+    render: (ds, tabbed) => (
+      <>
+        {libraryTables(ds, lib, label, zh, markdown)}
+        {tabbed && sourceLine(ds, zh, true)}
+      </>
+    ),
+  });
+}
+
+/** The cases of one report that `lib` was measured in, by operation */
+function libraryRows(ds: BenchDataset, lib: OtherLib) {
+  if (!ds.libraries.includes(lib)) return [];
+  return (['serialize', 'deserialize'] as const).flatMap((op) => {
+    const rows = [...ds.runtime[op], ...ds.extraRuntime[op]].filter(
+      (row) => row.others[lib],
+    );
+    return rows.length > 0 ? [{ op, rows }] : [];
+  });
+}
+
+function libraryTables(
+  ds: BenchDataset,
+  lib: OtherLib,
+  label: string,
+  zh: boolean,
+  markdown?: boolean,
+) {
+  const tables = libraryRows(ds, lib);
+  if (tables.length === 0)
+    return (
+      <p className="text-sm text-fd-muted-foreground">
+        {zh
+          ? `这次运行没有测量 ${label}。`
+          : `${label} was not measured in this run.`}
+      </p>
+    );
+  const ninoBytes = ds.payload.v4;
+  const otherBytes = ds.payload[lib];
+  return (
+    <>
+      {tables.map(({ op, rows }) => (
+        <Fragment key={op}>
+          <p>
+            <strong>
+              {op === 'serialize'
+                ? zh
+                  ? '序列化'
+                  : 'Serialize'
+                : zh
+                  ? '反序列化'
+                  : 'Deserialize'}
+            </strong>
+          </p>
+          <div className="relative overflow-auto prose-no-margin my-6">
+            <table>
+              <thead>
+                <tr>
+                  <th>{zh ? '用例' : 'Case'}</th>
+                  <th className="text-right">Nino v4</th>
+                  <th className="text-right">{label}</th>
+                  <th className="text-right">
+                    {zh ? `Nino 对比 ${label}` : `Nino vs ${label}`}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const vs = row.others[lib] as Versus;
+                  return (
+                    <tr key={row.key}>
+                      <td>{caseName(row, zh)}</td>
+                      <td className="text-right tabular-nums">{row.v4.text}</td>
+                      <td className="text-right tabular-nums">
+                        {vs.time.text}
+                      </td>
+                      <td className="text-right tabular-nums">
+                        {ratioCell(vs.ratio, zh, vs.tooFast)}
+                        {!markdown && (
+                          <TimeBars
+                            bars={[
+                              { label: 'Nino v4', time: row.v4, nino: true },
+                              { label, time: vs.time },
+                            ]}
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Fragment>
+      ))}
+      {!markdown && barsLegend(zh, 'Nino v4', label)}
+      {ninoBytes !== null && otherBytes !== null && (
+        <p className="text-sm text-fd-muted-foreground">
+          {zh
+            ? `一个 SimpleClass 序列化后：Nino ${formatBytes(ninoBytes)}，${label} ${formatBytes(otherBytes)}。`
+            : `One serialized SimpleClass: ${formatBytes(ninoBytes)} in Nino, ${formatBytes(otherBytes)} in ${label}.`}
+        </p>
+      )}
+    </>
+  );
 }
 
 /** Deserializing into existing objects: Nino new / reusing vs MemoryPack new / overwrite */

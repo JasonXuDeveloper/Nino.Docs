@@ -21,6 +21,7 @@ import {
   BenchSource,
   benchValue,
   ExtraRuntimeTables,
+  LibraryTables,
   ResultsTable,
   ReuseTable,
   RuntimesTables,
@@ -396,6 +397,10 @@ function markdownComponents(lang: Locale, pageUrl: string) {
     ExtraRuntimeTables(props: ComponentProps<typeof ExtraRuntimeTables>) {
       asMarkdown();
       return ExtraRuntimeTables({ ...props, markdown: true });
+    },
+    LibraryTables(props: ComponentProps<typeof LibraryTables>) {
+      asMarkdown();
+      return LibraryTables({ ...props, markdown: true });
     },
     ReuseTable(props: ComponentProps<typeof ReuseTable>) {
       asMarkdown();
