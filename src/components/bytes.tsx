@@ -175,7 +175,7 @@ export function Matrix({
   corner?: ReactNode;
 }) {
   return (
-    <div className="not-prose my-6 overflow-x-auto rounded-lg border border-fd-border">
+    <div className="@container not-prose my-6 overflow-x-auto rounded-lg border border-fd-border">
       <table className="w-full border-collapse text-sm [&_code]:[overflow-wrap:anywhere]">
         <thead>
           <tr className="bg-fd-card">
@@ -224,7 +224,7 @@ export function Matrix({
                     <td
                       // biome-ignore lint/suspicious/noArrayIndexKey: static table
                       key={c}
-                      className="min-w-40 px-3 py-2 align-top"
+                      className="min-w-40 px-3 py-2 align-top @2xl:min-w-0"
                     >
                       <div className="flex items-start gap-2">
                         {style ? (
