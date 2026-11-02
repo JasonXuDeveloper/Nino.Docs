@@ -15,6 +15,7 @@ bun install            # install dependencies (runs fumadocs-mdx)
 bun run dev            # dev server
 bun run check          # tsc + Biome + internal link and icon check: run before committing
 bun run check:csharp   # compile every v4 C# fence against a Nino checkout (NINO_DIR, default ../Nino; .NET 10 SDK)
+bun run check:bytes    # every byte figure and playground row against Nino's spec dumps and conformance corpus (NINO_DIR)
 bun run build          # prerender everything into build/client
 bun run preview        # build, then wrangler pages dev (static site + functions)
 bun run deploy         # build + wrangler pages deploy
@@ -42,8 +43,10 @@ Cloudflare Pages builds with the Node version in `.node-version` and the Bun ver
 │   ├── v3/, v2/               # archived versions, EN + ZH
 │   └── <version>/meta.json, meta.zh.json   # sidebars
 ├── src/
-│   ├── components/            # charts/ (visx bar charts), feedback/ (GitHub Discussions), ai/page-actions, showcase (reveal, CountUp, Segmented), search, bytes (Bytes, Matrix), mermaid
-│   ├── data/                  # bench-v4.json, bench-v4-arm64.json, bench-v3-runtime.json, bench-runtimes.json, bench-unity.json (synced), v2/v3 benchmark JSON
+│   ├── components/            # charts/ (visx bar charts), feedback/ (GitHub Discussions), ai/page-actions, showcase (reveal, CountUp, Segmented), search,
+│   │                          # bytes (Bytes, Matrix), analyzer-rules, release (changelog timeline), glossary (Term, Glossary), byte-playground, bytes (Bytes, Matrix), mermaid
+│   ├── data/                  # bench-v4.json, bench-v4-arm64.json, bench-v3-runtime.json, bench-runtimes.json, bench-unity.json (synced), v2/v3 benchmark JSON,
+│   │                          # analyzer-rules.json, glossary.json, byte-examples.json (EN+ZH data of the components; WRITING.md, Visual forms)
 │   ├── lib/benchmarks.ts      # every benchmark number the site shows (runtime from data/bench-v4.json, bench-v4-arm64.json, bench-v3-runtime.json)
 │   ├── lib/versions.ts        # version list, latestVersion, latestIsPrerelease (the install banner)
 │   ├── lib/mermaid.ts         # build-time Mermaid: remarkMermaidSource, rehypeMermaid, the SVG cache

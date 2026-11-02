@@ -3,12 +3,69 @@
 How a page of https://nino.xgamedev.net is written. The audit that checks every page against it is Nino's
 `audit-docs` skill (`.claude/skills/audit-docs/SKILL.md` in JasonXuDeveloper/Nino).
 
+## The reader first
+
+**Every docs pass audits and optimizes the site from the reader's experience; every other rule here (order, visual
+forms, components, the IA checklist) serves this one.** Before and after a change, walk the site as three readers and
+count the friction (clicks and scrolls to the answer, dead ends, a word used before it is explained, a wall of text,
+anything read twice):
+
+1. **The newcomer** who wants a first type serialized in five minutes: home → Quick Start → Serialize and
+   Deserialize → Defining Types.
+2. **The fact hunter** with one question ("how do I version a type", "is X supported on IL2CPP", "what does NINO007
+   mean"): from search or the sidebar to the sentence that answers it.
+3. **The evaluator** comparing Nino with MemoryPack: home → Nino vs MemoryPack → the benchmarks → Limitations.
+
+A change that makes a page richer but not easier to read is not made. Why: the owner's rule (round 107): the main
+goal is the reader's reading experience. Evidence: round 107's walk found the newcomer path behind six "Overview"
+pages and at the bottom of the introduction, "Versioning" (Nino's format history) next to "Evolving Your Data" (how
+to version your types), and the evaluator's pages split between "Overview" and "Reference".
+
 ## Order
 
-The sidebar (`content/docs/v4/meta.json`, `meta.zh.json`) is the reading order: overview, getting started (install,
-first type, serialize and deserialize), defining types, features (evolving data, polymorphism, references, pooling,
-custom formatters, security), guides and integrations (`advanced/`), reference (analyzers, platforms, wire format,
-benchmarks, limits). A page never relies on a feature taught later; it links forward instead of explaining twice.
+The sidebar (`content/docs/v4/meta.json`, `meta.zh.json`, same order) is the reader's path: **Get Started**
+(introduction, quick start, serialize and deserialize), **Define Types**, **Features**, **Guides** (the `advanced/`
+folder, collapsed: best practices, performance, use cases, engines and languages), **Compare** (vs MemoryPack, the
+three benchmark pages, limitations), **Reference** (analyzers, platforms, wire format, struct layouts, SIMD,
+performance internals, glossary), **Project** (what's new, migration, format versions, changelog, FAQ). A page never
+relies on a feature taught later; it links forward instead of explaining twice.
+
+## Information architecture (every docs pass)
+
+Check each item, in both languages, and fix what fails:
+
+- **One home per fact.** Grep the pages for the same fact or explanation (whats-new, changelog, migration and format
+  versions; vs-memorypack and benchmarks; performance internals, high-performance, zero-allocation and best
+  practices; platforms, struct layouts, wire format and limitations; defining types, supported types and
+  constructors; security and limitations; FAQ and the pages it answers from). The owner explains it; the others say
+  it in a sentence and link. A page that only repeats others is merged into its owner. Round 107: v3-vs-v4 was
+  whats-new's charts plus a feature table (merged into whats-new#features); best practices carried a second copy
+  of the zero-allocation recipes (moved to zero-allocation#message-loop); format versions repeated whats-new's
+  v4 feature list; Limitations listed v3 problems that whats-new's table already covers.
+- **The sidebar is the reader's path** (above): sections of about 3 to 7 pages; a cluster bigger than that is a
+  folder (`defaultOpen: false`), a page of another folder can join it with `"../slug"` in its `meta.json`; folders and
+  pages carry an icon. A new folder that would move URLs is worth it only when a section passes about 7 pages
+  (round 107 kept the four Compare pages a section: a folder would have moved two URLs for a collapse arrow).
+- **Titles are short nouns** that say what the page is, the same in the sidebar, the `<h1>`, link texts and cards
+  (`Reuse and Pooling`, not `Reuse Deserialization and Pooling`); the long form goes into `seoTitle`. Two titles that
+  read alike for different things are a finding ("Versioning" vs "Evolving Your Data" became "Format Versions").
+- **Within a page, common before rare**: the recommended form before alternatives, everyday sections before edge
+  cases, history last. Every page opens with a lead of one to three sentences saying what it answers, and ends with
+  "Next steps" (or "Related") that follow the sidebar path; no dead ends (a page without a way on).
+- **Length**: a page past about 3,000 words is split or folds its rare detail into `<Accordions>`, tabs or a
+  collapsed component; a page under about 300 words is merged into its neighbour unless it is a landing page or a reference list drawn from data (the glossary).
+- **Moved pages and anchors**: a moved or merged page gets 301s for its URL and `.md` copy in `public/_redirects`
+  without a fragment in the target (the browser keeps the old one), entries in `public/_routes.json`'s `exclude`, and
+  an `<AnchorRedirect>` on the new page for anchors that changed name; every inbound link moves to the new anchor
+  (`bun run lint:links`), including `src/`, `scripts/`, the home page and Nino's README.
+- **No orphan pages, no duplicate examples**: every page is in a `meta.json`; one example per idea (a second copy of
+  a code sample drifts); one term per concept (the glossary below and `src/data/glossary.json`).
+- **The newcomer path from the home page**: the home page's first screen and the introduction's first section point
+  to Quick Start, Serialize and Deserialize and Defining Types, then to the comparison and the migration guide.
+- **Search and llms.txt**: every `title` and `description` reads well alone (the search result and the llms.txt
+  line); after a rename, check `build/client/llms.txt` and the sitemap.
+- **Mobile**: look at changed pages at 390px wide: no horizontal page scroll, tables scroll inside their box, filters
+  and pills wrap.
 
 ## Frontmatter
 
@@ -65,7 +122,8 @@ Overview, FAQ and reference pages answer the questions their readers search for,
   'partial: when', 'n/a', ['yes', <>JSX note</>]] }]} />` for any table whose cells are yes, no or partly with a short
   note; lucide icons on the palette's tints, a ✓/✗/⚠/– table in the Markdown copy. Not for tables of values.
 - **The category palette** (`--nino-cat-1` to `--nino-cat-5` in `app/app.css`, light and dark) is for byte figures
-  and matrices only; everything else keeps the single accent. Why: the owner allowed a small calm palette for
+  and matrices, and for the two marks that share their meanings: the analyzer rules' severity pills (5 error, 4
+  warning) and the changelog's wire-format badge (5 changed); everything else keeps the single accent. Why: the owner allowed a small calm palette for
   these two forms (round 105), where colour carries the meaning (which bytes are a header); elsewhere it would only
   decorate. A colour's meaning is fixed site-wide (1 header, 2 length and yes, 3 id or key, 4 value and partly,
   5 changed and no), and the Markdown copy never depends on it.
@@ -78,6 +136,39 @@ Overview, FAQ and reference pages answer the questions their readers search for,
   diamond trees were taller than a screen), no styles or colours, Chinese labels on Chinese pages; write `<` and `>`
   in a label as `#lt;` and `#gt;`. Use one for a flow or an architecture, never for a list. Why: the owner chose EasyEcs docs' build-time rendering
   (round 105) over hand-drawn SVG, and a client-side renderer prerenders empty.
+
+- **Interactive components are for finding and comparing, and work without JavaScript.** Each renders its full
+  content in the prerendered HTML (filters only hide, a collapsed part is prerendered open and folds once mounted,
+  as `hidden="until-found"`, which React cannot write; a popover's word is still there), has one data source shared with its Markdown form in `src/lib/markdown.tsx`, and is used only where
+  it shortens the reader's way to an answer (the reader first, above). Round 107 added five:
+  - **`<AnalyzerRules lang>`** (`src/components/analyzer-rules.tsx`, data `src/data/analyzer-rules.json`, English and
+    Chinese in one row): the analyzers page's rules as one list with a search box, severity, code-fix and category
+    filters, severity pills (tints 5 error, 4 warning) and a wrench for a code fix; each row's id is its anchor
+    (`#nino007`, highlighted when targeted), the old category anchors stay. A rule added to Nino is a row in the JSON,
+    nowhere else. Use it only there.
+  - **Ratio bars** in `RuntimeTable`, `ExtraRuntimeTables` and `ReuseTable` (`TimeBars` in
+    `src/components/bench-data.tsx`): two thin bars per row, Nino in the accent and the other library grey, scaled to
+    the larger time, so the shorter is the faster and the gap is the ratio; drawn from the same `Measure`s as the
+    numbers, never typed, with a legend line under the table; the Markdown copy keeps only the numbers.
+  - **`<Release date collapsed lang>`** around each `## version` of the changelog (`src/components/release.tsx`): a
+    timeline step with the date and a badge per subsection (wire format tinted 5, new, performance, fixes) whose
+    count is taken from the entries themselves; releases older than the two newest are `collapsed` (a link to one of
+    their anchors, find-in-page and the button open them). The next, unreleased version has no `date`. The release
+    date is the GitHub release's `published_at`.
+  - **`<Term id lang>`** (`src/components/glossary.tsx`, data `src/data/glossary.json`, rendered in full by
+    `<Glossary>` on the glossary page): a dotted underline whose definition opens on mouse hover, tap, or Enter after
+    Tab (Escape closes); the Markdown copy links the word to its glossary entry. Use it once per page, at the first use
+    of a word whose meaning in these docs is specific (top-level call, scratch buffer, type id, presence byte), never on
+    every occurrence and never in headings. A new term goes into the JSON in both languages, with its links absolute.
+  - **`<BytePlayground lang>`** (`src/components/byte-playground.tsx`, data `src/data/byte-examples.json`) on the wire
+    format page: pick an example of the specification's Appendix A (and a string value and encoding) and see the
+    labelled bytes in a `<Bytes>` figure. Its bytes are the spec's dumps of a real run, never computed or typed from
+    memory; `bun run check:bytes` (below) checks every row. Add an example only when the spec has its dump.
+- **Every byte figure is checked**: `bun run check:bytes` (`scripts/check-bytes.ts`, `NINO_DIR` like
+  `check:csharp`) finds each `<Bytes>` row of the v4 pages and each playground row in a hex dump of Nino's
+  `docs/spec/wire-format.md` or in a file of `conformance/corpus/valid`; a figure derived from the rules rather than
+  dumped carries `derived="which rule"` and is listed, not failed. Run it after any change to a figure and after a
+  wire-format change in Nino.
 
 ## Code
 
@@ -156,5 +247,6 @@ page):
 ```bash
 bun run check          # types, Biome, links, anchors and icons
 bun run check:csharp   # every C# fence compiles against Nino (NINO_DIR or ../Nino), Chinese fences match English
+bun run check:bytes    # every byte figure and playground row is in the spec's dumps or the conformance corpus
 bun run build          # prerender, static files, sitemap, llms.txt, social cards
 ```
