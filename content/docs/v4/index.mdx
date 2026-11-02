@@ -5,7 +5,7 @@ description: "Nino is a general-purpose, high-performance binary serializer for 
 icon: BookOpen
 ---
 
-import { ArrowRightLeft, ChartColumn, Compass, Rocket, Sparkles, Swords } from 'lucide-react';
+import { ArrowRightLeft, Braces, Compass, Play, Rocket, Swords } from 'lucide-react';
 
 ## What Is Nino?
 
@@ -36,15 +36,40 @@ flowchart LR
   F --> B(Bytes)
 ```
 
+## Start Here
+
+New to Nino? Read these three in order (about ten minutes), then pick what your project needs.
+
+<Cards>
+  <Card icon={<Rocket />} title="Quick Start" href="/en/docs/v4/start">
+    Install Nino in a .NET, Unity or Godot project and serialize your first type.
+  </Card>
+  <Card icon={<Play />} title="Serialize and Deserialize" href="/en/docs/v4/basic">
+    Buffers, spans, several values in one buffer, runtime types and invalid data.
+  </Card>
+  <Card icon={<Braces />} title="Defining Types" href="/en/docs/v4/defining-types">
+    Which members are written, in what order, and the options of `[NinoType]`.
+  </Card>
+  <Card icon={<Swords />} title="Nino vs MemoryPack" href="/en/docs/v4/vs-memorypack">
+    Evaluating? Where Nino is ahead, where MemoryPack still is, with the numbers.
+  </Card>
+  <Card icon={<ArrowRightLeft />} title="Migrating from v3" href="/en/docs/v4/migration">
+    Coming from v3: API and attribute changes, and what to do with v3 data.
+  </Card>
+  <Card icon={<Compass />} title="Guides" href="/en/docs/v4/advanced">
+    Hot paths, networking, ASP.NET Core, queues, caching, storage, Unity, Godot and other languages.
+  </Card>
+</Cards>
+
 ## Why Nino
 
-- **Fast.** Against MemoryPack in the same run, Nino serializes up to <BenchValue k="serialize.max" /> faster and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; on arrays of unmanaged structs, which both copy as one block, the two are at least on par. See [Benchmarks](/en/docs/v4/benchmarks).
+- **Fast.** Against MemoryPack in the same run, Nino serializes up to <BenchValue k="serialize.max" /> faster and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; on arrays of unmanaged structs, which both copy as one block, the two are at least on par. See [.NET Benchmarks](/en/docs/v4/benchmarks).
 - **Safe for untrusted data.** Data from a network peer or a user's file cannot crash the process, allocate out of proportion to its size or make Nino create a type you did not declare: every invalid input throws one `NinoDataException`. See [Untrusted Data](/en/docs/v4/security).
 - **Zero GC on hot paths.** Serializing [into a reused buffer](/en/docs/v4/basic#reusing-a-buffer) allocates nothing. Deserializing [into existing objects and pooled instances](/en/docs/v4/pooling) allocates nothing either: a string whose text is unchanged is kept, and only changed text is read into a new string.
-- **Everything at compile time.** The generator writes one formatter per type, so Nino works on IL2CPP, NativeAOT and HybridCLR. On the .NET 8 SDK and later, [interceptors](/en/docs/v4/performance#interceptors) route each call straight to the right formatter. The generator is incremental: editing a type regenerates that type only, and the generated code compiles far faster than v3's ([build times](/en/docs/v4/v3-vs-v4#build-time-and-generated-code)).
+- **Everything at compile time.** The generator writes one formatter per type, so Nino works on IL2CPP, NativeAOT and HybridCLR. On the .NET 8 SDK and later, [interceptors](/en/docs/v4/performance#interceptors) route each call straight to the right formatter. The generator is incremental: editing a type regenerates that type only, and the generated code compiles far faster than v3's ([build times](/en/docs/v4/whats-new#faster-to-build)).
 - **Polymorphism without tags.** Values declared as a base class or interface are read back as their runtime type. Type ids are hashes of type names, so there is no tag table to maintain, and Nino finds subtypes in other assemblies on its own. See [Polymorphism](/en/docs/v4/polymorphism).
 - **Data that evolves.** Per type, choose [version tolerance](/en/docs/v4/evolving-data#version-tolerance) (append members), [keyed members](/en/docs/v4/evolving-data#keyed-members) (add, remove and reorder members) or [reference tracking](/en/docs/v4/reference-tracking) (shared references and cycles). Types that don't opt in pay nothing.
-- **The same bytes everywhere.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` write identical bytes on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, x64 and Arm64, so a Unity client and a .NET server can read each other's data. See [Platforms and Binary Format](/en/docs/v4/platforms).
+- **The same bytes everywhere.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` write identical bytes on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, x64 and Arm64, so a Unity client and a .NET server can read each other's data. See [Platforms](/en/docs/v4/platforms).
 - **Thread safe.** Every `NinoSerializer` and `NinoDeserializer` method can be called from any number of threads, with no locks on the hot path.
 - **Mistakes caught while you type.** 29 [analyzer diagnostics](/en/docs/v4/analyzers) (NINO001–NINO029), many with a one-click code fix.
 
@@ -74,29 +99,6 @@ flowchart LR
 - **A program in another language (Java, Python, C++...) reads the data.** The format is defined by your C# types; there is no schema file and no code generator for those languages, so use Protocol Buffers, FlatBuffers or MessagePack. TypeScript, JavaScript, Go and Rust are the exception: [Nino.Codegen](/en/docs/v4/advanced/codegen) generates their codecs from your types, and the types themselves also run in the browser on [.NET WebAssembly](/en/docs/v4/advanced/browser).
 - **You must read Nino v3 data directly.** v4 has a new binary format, so old data has to be converted once. See [Migrating from v3](/en/docs/v4/migration#converting-v3-data).
 
-## Start Here
-
-<Cards>
-  <Card icon={<Rocket />} title="Quick Start" href="/en/docs/v4/start">
-    Install Nino in a .NET, Unity or Godot project and serialize your first type.
-  </Card>
-  <Card icon={<Sparkles />} title="What's New in v4" href="/en/docs/v4/whats-new">
-    A rewrite of the runtime and the generator: faster to run and to build.
-  </Card>
-  <Card icon={<Swords />} title="Nino vs MemoryPack" href="/en/docs/v4/vs-memorypack">
-    Where Nino is ahead, and where MemoryPack still is.
-  </Card>
-  <Card icon={<ArrowRightLeft />} title="Migrating from v3" href="/en/docs/v4/migration">
-    API changes, attribute changes and what to do with data written by v3.
-  </Card>
-  <Card icon={<ChartColumn />} title="Benchmarks" href="/en/docs/v4/benchmarks">
-    Build time and runtime against v3 and MemoryPack, with the full tables.
-  </Card>
-  <Card icon={<Compass />} title="Advanced Guides" href="/en/docs/v4/advanced">
-    Complete patterns for hot paths, networking and RPC, ASP.NET Core, TypeScript clients, message queues, caching, persistence and Unity.
-  </Card>
-</Cards>
-
 ## Older Versions
 
-The documentation of Nino [v3](/en/docs/v3) and [v2](/en/docs/v2) is still available. Their binary formats are not compatible with v4. See [Versioning](/en/docs/v4/versioning).
+The documentation of Nino [v3](/en/docs/v3) and [v2](/en/docs/v2) is still available. Their binary formats are not compatible with v4. See [Format Versions](/en/docs/v4/versioning).

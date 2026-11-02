@@ -51,7 +51,7 @@ Nino 在设计上就能读取不可信数据，快路径也守住了这些保证
 
 </Callout>
 
-每个用例的具体数字、多态与池化测试以及基准测试代码，见[基准测试](/zh/docs/v4/benchmarks#runtime)。
+每个用例的具体数字、多态与池化测试以及基准测试代码，见[.NET 基准测试](/zh/docs/v4/benchmarks#runtime)。
 
 ### 带填充的结构体和元组 [#padded-values]
 
@@ -122,7 +122,7 @@ Nino 的字节在所有平台上都相同：[原始值](/zh/docs/v4/wire-format#
 - **`Type` 值。** MemoryPack 可以序列化 `System.Type`；Nino 有意不支持：由数据指定要创建的类型，是一种广为人知的反序列化攻击手段。MemoryPack 列出的其他内置类型（`BigInteger`、`Uri`、`Lazy<T>`、`Memory<T>`、`ILookup<,>`、所有不可变集合等）从 4.0.0-rc.5 起 [Nino 也都内置支持](/zh/docs/v4/types#other-built-in-types)，`MemoryPack.Unity` 支持的 Unity 类（`AnimationCurve`、`Gradient`、`RectOffset`）也一样（参见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)）。*变通方法：*自己保存类型 ID 或名称，再映射到你允许的类型。
 - **依赖注入与选项。** MemoryPack 的每次调用都可以传入 `MemoryPackSerializerOptions`（字符串编码、`IServiceProvider`）。Nino 没有按调用传入的选项：设置要么是进程级的（`NinoSettings`），要么是标在类型上的特性。
 
-流、异步 I/O、`ReadOnlySequence<byte>` 输入、序列化回调和压缩不在这个列表里：它们都只需在 Nino 的 `IBufferWriter<byte>` 和 `ReadOnlySpan<byte>` API 之上写几行代码。可以直接复制的写法参见[流、异步、回调与压缩](/zh/docs/v4/advanced/streams)。
+流、异步 I/O、`ReadOnlySequence<byte>` 输入、序列化回调和压缩不在这个列表里：它们都只需在 Nino 的 `IBufferWriter<byte>` 和 `ReadOnlySpan<byte>` API 之上写几行代码。可以直接复制的写法参见[流与压缩](/zh/docs/v4/advanced/streams)。
 
 ## 基准测试中发现的 MemoryPack 问题 [#memorypack-bugs-found-while-benchmarking]
 

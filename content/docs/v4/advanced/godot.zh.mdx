@@ -51,7 +51,7 @@ public sealed class PlayerState
 - 用 .NET 8 或更高版本的 SDK 构建时（Godot 4.4 起必须如此），**拦截器**会生效：调用处类型已知的调用直达生成的格式化器。参见[拦截器](/zh/docs/v4/performance#interceptors)。
 - **`partial`**：目标为 .NET 8 的项目通过 `[UnsafeAccessor]` 访问私有成员，只有泛型类型才需要 `partial`。目标为 .NET 6 时（Godot 4.0–4.3），每个序列化非公共成员的类型都必须声明为 `partial`（NINO002）。`[NinoPooled]` 类则始终要声明为 `partial`。
 - **不需要初始化调用。** 生成的注册表会自行注册，并在第一次使用时被找到。
-- **文档中的其他内容同样适用**：[格式](/zh/docs/v4/evolving-data)、[多态](/zh/docs/v4/polymorphism)、[复用反序列化与对象池](/zh/docs/v4/pooling)、[零分配模式](/zh/docs/v4/advanced/zero-allocation)。写出的字节与 .NET 服务器或 Unity 客户端上的完全相同。
+- **文档中的其他内容同样适用**：[格式](/zh/docs/v4/evolving-data)、[多态](/zh/docs/v4/polymorphism)、[复用与对象池](/zh/docs/v4/pooling)、[零分配模式](/zh/docs/v4/advanced/zero-allocation)。写出的字节与 .NET 服务器或 Unity 客户端上的完全相同。
 
 ## Godot 的结构体 [#godot-structs]
 
@@ -231,7 +231,7 @@ public static class UnloadCleanup
 
 ## 导出 [#exports]
 
-- 导出的游戏运行的 Nino 代码与编辑器中相同，Nino 在每种运行时、CPU 和指针宽度上写出的字节都相同：存档和消息可以在游戏的桌面版和移动版之间互通，也可以发给 .NET 服务器。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+- 导出的游戏运行的 Nino 代码与编辑器中相同，Nino 在每种运行时、CPU 和指针宽度上写出的字节都相同：存档和消息可以在游戏的桌面版和移动版之间互通，也可以发给 .NET 服务器。参见[平台](/zh/docs/v4/platforms)。
 - 如果导出时做了裁剪或用 Native AOT 编译，你序列化的每个类型都必须出现在生成器能看到的代码中，作为成员类型，或作为 `NinoSerializer`/`NinoDeserializer` 调用的类型参数或 `typeof` 参数：参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
 - 双精度版本写出的 Godot 结构体与单精度版本不同：参见 [Godot 的结构体](#godot-structs)。
 

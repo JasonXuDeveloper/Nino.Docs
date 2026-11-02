@@ -6,6 +6,15 @@ icon: Sparkles
 
 import { Cpu, Recycle, ScanSearch, ShieldCheck, Share2, Zap, Layers, KeyRound, Boxes, Server, Globe } from 'lucide-react';
 
+<AnchorRedirect
+  map={{
+    runtime: '/zh/docs/v4/whats-new#faster-than-v3',
+    'build-time-and-generated-code': '/zh/docs/v4/whats-new#faster-to-build',
+    '330-types-n--30': '/zh/docs/v4/benchmarks#build-time-and-generated-code',
+    '1100-types-n--100': '/zh/docs/v4/benchmarks#build-time-and-generated-code',
+  }}
+/>
+
 Nino v4 重写了运行时和源生成器。运行速度超过 v3 和 MemoryPack，构建速度大幅提升，并新增了键控与版本容错类型、引用追踪、对象池、分析器以及大量内置类型。本页按领域介绍截至 **4.0.0-rc.5** 已发布的全部 v4 内容，以及 **4.0.0-rc.6**、**4.0.0-rc.7** 和 **4.0.0-rc.8** 新增的内容（标为 *rc.6*、*rc.7* 和 *rc.8*）；每个版本各自改了什么，见[更新日志](/zh/docs/v4/changelog)。
 
 <Callout type="warn">
@@ -52,6 +61,36 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
   </Card>
 </Cards>
 
+## 逐项对比 [#features]
+
+v3（3.3.13）与 v4 的全部差异列在一张表里，下面各节再按领域展开。
+
+| | v3 | v4 |
+| --- | --- | --- |
+| API | 每个程序集各自生成 `Serializer` / `Deserializer`，外加扩展方法 | `Nino.Core` 中的 `NinoSerializer` / `NinoDeserializer` |
+| 二进制格式 | 按位置 | 默认按位置，可按类型改为 `VersionTolerant` 或 `Keyed`；所有目标框架写出的字节相同；填充字节清零 |
+| 版本容错 | 用 `WEAK_VERSION_TOLERANCE` 对整个项目统一开启，只能在末尾追加 | 按类型设置 `NinoFormat.VersionTolerant`；可以向最末端的派生类型追加，嵌套多深都可以；旧代码会跳过新成员 |
+| 键控成员（调整顺序 / 删除 / 插入） | 不支持 | `[NinoType(format: NinoFormat.Keyed)]` |
+| 共享引用与循环引用 | 不支持 | `[NinoType(trackReferences: true)]` |
+| 反序列化到已有实例 | 不支持 | `Deserialize(data, ref value)`，并回收被丢弃的实例 |
+| 对象池 | 不支持 | `[NinoPooled]`、`[NinoFactory]` 工厂方法、`NinoSettings.SetRecycler<T>` |
+| `[NinoType]` 的子类型 | 需要各自标记 `[NinoType]` | 自动继承 |
+| 自定义集合（`List<T>`、`Dictionary<,>` 等的子类） | 字典子类需要公共索引器 | 直接支持，无需特性 |
+| `PriorityQueue<,>`、不可变集合、`BigInteger`、`Uri`、`Memory<T>` 等 | 不支持 | .NET 8+ 支持 `PriorityQueue<,>`；安装 `Nino.Immutable` 后支持所有不可变集合；BCL 类型见[支持的类型](/zh/docs/v4/types) |
+| 自定义格式化器 | 不支持 | 针对成员用 `[NinoMemberFormatter]`，针对类型用 `[assembly: NinoFormatter]` |
+| 成员顺序 | 声明顺序、`[NinoMember(index)]` 或 `[NinoExplicitOrder]` | 声明顺序或 `[NinoMember(index)]`；`[NinoExplicitOrder]` 已移除 |
+| 固定大小的类型 | 不支持 | `Serialize(value)` 直接写入大小正好的数组；`NinoSerializer.GetFixedSize<T>()` |
+| 装箱 / 运行时类型 API | 不支持 | `SerializeBoxed(value, type)`、`DeserializeBoxed(data, type)`，用于运行时才知道、且没有共同 `[NinoType]` 基类型的类型 |
+| 诊断 | 生成代码中的编译错误 | 29 条分析器诊断（NINO001–NINO029），许多带代码修复 |
+| 增量生成 | 否：每次都扫描整个 Compilation，任何修改都会重新生成全部类型 | 每个类型一个文件，只重新生成改动过的类型 |
+| 拦截器 | 不支持 | Roslyn 4.8+（.NET 8 SDK 及以上）下始终开启 |
+| 热更新（HybridCLR） | 支持 | 支持，无需初始化调用 |
+| Unity | 2022.3+，需手动安装 `Microsoft.CodeAnalysis` | 2022.3+，生成器随包附带 |
+| 线程安全 | 内联缓存在高并发下可能出现竞争 | 注册表无锁，采用写时复制 |
+| `ValueTuple`、`KeyValuePair`、`Nullable<T>` | 在 .NET Core 与 Unity/Mono 上布局不同 | 所有运行时同一种格式 |
+| 深层嵌套的数据 | 可能栈溢出 | 超过 128 层的对象会推迟写入和读取，栈深有界 |
+| 不可信输入 | 没有为此设计 | 任何无效输入都抛同一个 `NinoDataException`，分配和深度都有上限（[不可信数据](#untrusted-data)） |
+
 ## 性能 [#performance]
 
 ### 比 v3 更快 [#faster-than-v3]
@@ -60,7 +99,10 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 
 <BenchmarkChart chart={['v3-serialize', 'v3-deserialize']} lang="zh" />
 
-类的序列化明显更快，反序列化与 v3 一样快或略快，非托管结构体数组两者持平。原因分析见 [v3 与 v4 对比](/zh/docs/v4/v3-vs-v4#runtime)。
+- **类的序列化**明显更快。
+- **类的反序列化**与 v3 一样快或略快。耗时主要花在分配结果对象上，而 v4 还要校验数据，并支持引用追踪和复用反序列化。
+- **非托管结构体数组**两者持平：两个版本都整块拷贝。v4 还会把填充字节清零，保证输出是确定的（没有填充的结构体会跳过这一步，参见[结构体布局](/zh/docs/v4/performance#struct-layout)）。
+- **复用反序列化**是 v3 没有的：填充已有实例或池化实例，每次调用分配 **0 B**。参见[内存分配与对象池](#allocation-and-pooling)。
 
 ### 比 MemoryPack 更快 [#faster-than-memorypack]
 
@@ -86,9 +128,9 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 - **JIT 和 AOT 编译器能内联的结构体格式化器**；小型类的主体也会内联到容纳它们的集合循环中。参见[可内联的结构体格式化器](/zh/docs/v4/performance#struct-formatters-inlined)。
 - **整块处理，而不是逐个循环**：非托管 `[NinoType]` 结构体及其数组和列表按原始内存拷贝。由这类元素组成的 `Stack<T>`、`Queue<T>` 和声明为接口的集合也一样；`DateTimeOffset` 的数组和列表，以及由非托管值组成的值元组和 `KeyValuePair` 的数组和列表也整块处理，内存与字节不一致时用 SIMD 重排。参见[非托管数据按原始内存处理](/zh/docs/v4/performance#raw-memory-for-unmanaged-data)和[集合类型](/zh/docs/v4/types#collection-types)。
 - **每种集合走它自己的内部结构**：`SortedSet<T>`、`SortedDictionary<TKey, TValue>`、`SortedList<TKey, TValue>`、`LinkedList<T>`、并发集合和不可变集合，都通过它们的字段、构造函数和批量方法读写，而不是逐个元素循环。这些字段在不同运行时（.NET Framework 和 Mono）上不同，所以布局会在启动时检查一次，不匹配时改用公开 API。参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
-- **CPU 有 SIMD 就用**：AVX-512 上用 64 字节向量和掩码拷贝，AVX2 上用 32 字节向量，Arm64 上用查表指令，.NET 10 的 WebAssembly SIMD 上用字节重排。参见[各平台的 SIMD](/zh/docs/v4/simd#dotnet)。
+- **CPU 有 SIMD 就用**：AVX-512 上用 64 字节向量和掩码拷贝，AVX2 上用 32 字节向量，Arm64 上用查表指令，.NET 10 的 WebAssembly SIMD 上用字节重排。参见[SIMD](/zh/docs/v4/simd#dotnet)。
 - **固定大小的类型**直接写进大小正好的 `byte[]`；`NinoSerializer.GetFixedSize<T>()` 返回这个大小。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
-- **在 x64 和 Arm64 上测量**：每个版本都会在 x64 和 GitHub 的 Arm64 运行器上跑基准测试；见[基准测试](/zh/docs/v4/benchmarks)。
+- **在 x64 和 Arm64 上测量**：每个版本都会在 x64 和 GitHub 的 Arm64 运行器上跑基准测试；见[.NET 基准测试](/zh/docs/v4/benchmarks)。
 
 这些都不会改变字节：每条路径写出的内容都与普通路径相同。
 
@@ -136,7 +178,7 @@ Nino v4 本来就是为读取不可信来源的数据而设计的：网络对端
 - **池化反序列化**：给类加上 `[NinoPooled]`，Nino 就会把数据反序列化到你用 `ReturnToPool()` 归还的实例中，并复用实例里的列表、数组和字典。被丢弃的实例（数据为 `null`、列表变短、类型改变）会交给用 `NinoSettings.SetRecycler<T>` 注册的处理器；没有注册时，回到各自的池。
 - **`[NinoFactory]` 工厂方法**让 Nino 从你自己的对象池中获取新实例。
 
-参见[复用反序列化与对象池](/zh/docs/v4/pooling)。
+参见[复用与对象池](/zh/docs/v4/pooling)。
 
 ## API [#api]
 
@@ -152,14 +194,14 @@ Nino v4 本来就是为读取不可信来源的数据而设计的：网络对端
 - **ASP.NET Core**（*rc.6*）：`Nino.AspNetCore` 包提供用于 `application/x-nino` 的 MVC 输入输出格式化器（`AddNinoFormatters()`），以及 Minimal API 的请求体（`NinoBody<T>`）和结果（`NinoResults`），直接基于请求和响应管道读写。参见 [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)。
 - **TypeScript 客户端**（*rc.6*）：`Nino.TypeScript` 包在每次构建后为你的 `[NinoType]` 生成 TypeScript 类、枚举和编解码器，并附带 `nino.ts` 运行时，浏览器和 Node 读写的字节与 .NET 完全相同。参见 [TypeScript](/zh/docs/v4/advanced/codegen#typescript)；自 rc.8 起这个包是 Nino.Codegen。
 - **Go、Rust 与 nino-gen**（*rc.8*）：Nino 仓库中的 Go 和 Rust 运行时读写同样的字节，Nino.Codegen（每次构建后）或 `nino-gen` 工具（Nino.Codegen.Tool，基于构建好的程序集）把你的 `[NinoType]` 写成 TypeScript、Go 或 Rust。参见 [TypeScript、Go 与 Rust](/zh/docs/v4/advanced/codegen)、[Go](/zh/docs/v4/advanced/codegen#go) 和 [Rust](/zh/docs/v4/advanced/codegen#rust)。
-- **浏览器中的 .NET**：你的类型本身也可以运行在 .NET WebAssembly 上。参见[浏览器与 JavaScript 客户端](/zh/docs/v4/advanced/browser)。
+- **浏览器中的 .NET**：你的类型本身也可以运行在 .NET WebAssembly 上。参见[浏览器客户端](/zh/docs/v4/advanced/browser)。
 
 ## 平台 [#platforms]
 
-- **处处同一格式**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出完全相同的字节，数据在 CoreCLR、Mono、IL2CPP 之间，64 位和 32 位之间，x64 和 Arm64 之间通用。在运行时内存布局不一致的地方（`Nullable<T>`、元组、`decimal`、32 位对齐），Nino 自己定义字节而不是拷贝内存，并清零填充字节，所以相等的值总是序列化为相同的字节。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+- **处处同一格式**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出完全相同的字节，数据在 CoreCLR、Mono、IL2CPP 之间，64 位和 32 位之间，x64 和 Arm64 之间通用。在运行时内存布局不一致的地方（`Nullable<T>`、元组、`decimal`、32 位对齐），Nino 自己定义字节而不是拷贝内存，并清零填充字节，所以相等的值总是序列化为相同的字节。参见[平台](/zh/docs/v4/platforms)。
 - **裁剪与 Native AOT**：Nino.Core 带有相应标注，用 `PublishTrimmed` 和 `PublishAot` 发布时 Nino 不会产生警告。参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
 - **Unity 2022.3+**：从 OpenUPM 安装，包内附带源生成器和 `Nino.UnityTypes.dll`。参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)。
-- **Unity 中的代码修复**（*rc.7*）：Unity 包附带分析器的代码修复，Rider 和 Visual Studio 提供与 .NET 项目相同的快速修复。参见[分析器诊断](/zh/docs/v4/analyzers)。
+- **Unity 中的代码修复**（*rc.7*）：Unity 包附带分析器的代码修复，Rider 和 Visual Studio 提供与 .NET 项目相同的快速修复。参见[分析器](/zh/docs/v4/analyzers)。
 - **HybridCLR 热更新**无需初始化调用，**Godot 4** 以普通 NuGet 包安装。参见 [HybridCLR 与热更新](/zh/docs/v4/platforms#hybridclr-and-hot-update)和 [Godot](/zh/docs/v4/platforms#godot)。
 - **程序集可卸载**：可回收 `AssemblyLoadContext` 中的程序集能随上下文一起卸载，Nino 会清除相关缓存（.NET 8 及以上自动完成；.NET Core 3.0 到 .NET 7 需调用 `NinoRegistry.Remove`）。参见[卸载程序集](/zh/docs/v4/platforms#unloading-assemblies)。
 
@@ -167,7 +209,7 @@ Nino v4 本来就是为读取不可信来源的数据而设计的：网络对端
 
 - **真正的增量源生成器**：每个 `[NinoType]` 一个文件，模型可判等（equatable），不再扫描整个 Compilation。改一个类型只重新生成这个类型；不改变模型的修改（例如注释、方法体）不会触发任何重新生成。
 - **生成的代码大幅减少**：集合、字符串、可空类型、元组等内置类型，都在 `Nino.Core` 里以泛型格式化器的形式统一实现；生成器只为你的 `[NinoType]` 生成代码。
-- **29 条分析器规则**（NINO001–NINO029）在写代码时就报告错误，例如不支持的成员类型、缺少 `partial`、一个类型上有两个 `[NinoFormerName]`，许多都带一键代码修复。参见[分析器诊断](/zh/docs/v4/analyzers)。
+- **29 条分析器规则**（NINO001–NINO029）在写代码时就报告错误，例如不支持的成员类型、缺少 `partial`、一个类型上有两个 `[NinoFormerName]`，许多都带一键代码修复。参见[分析器](/zh/docs/v4/analyzers)。
 
 ## 已移除 [#removed]
 

@@ -106,7 +106,7 @@ The header (the presence byte or type id before the value) depends on the **decl
 
 The same `Circle { Id = 1, R = 1f }` behind each declared type (bytes from the [specification's](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#a2-polymorphism) examples, namespace `Spec`):
 
-<Bytes rows={[
+<Bytes derived="A.2's Circle body behind the presence byte of a sealed class (A.1)" rows={[
   { title: <>declared <code>Circle</code> (sealed)</>, fields: [{ hex: '01', kind: 'header', label: 'presence byte' }, { hex: '01 00 00 00 00 00 80 3F', kind: 'value', label: 'Id = 1, R = 1f' }] },
   { title: <>declared <code>Shape</code> (abstract)</>, fields: [{ hex: 'AC 2B C0 ED', kind: 'id', label: 'type id of Spec.Circle' }, { hex: '01 00 00 00 00 00 80 3F', kind: 'value', label: 'Id = 1, R = 1f' }] },
   { title: <>null, declared <code>Circle</code></>, fields: [{ hex: '00', kind: 'header', label: 'presence byte 0' }] },
@@ -151,7 +151,7 @@ When reading, Nino checks that the type in the data really derives from the decl
 
 ## Dispatching Through a Common Base [#dispatching-through-a-common-base]
 
-For RPC or message dispatch, plugin systems and editor tooling, give the types a common `[NinoType]` base class or interface, and serialize and deserialize through it with `Serialize<TBase>` / `Deserialize<TBase>`. The type id is written and dispatched on by generated code, which is faster than the alternatives below, and it works with [reuse deserialization](#reuse-deserialization) and `[NinoPooled]`, so a receive loop allocates nothing but strings whose text changed. For a complete example, see [Network Layer](/en/docs/v4/advanced/networking).
+For RPC or message dispatch, plugin systems and editor tooling, give the types a common `[NinoType]` base class or interface, and serialize and deserialize through it with `Serialize<TBase>` / `Deserialize<TBase>`. The type id is written and dispatched on by generated code, which is faster than the alternatives below, and it works with [reuse deserialization](#reuse-deserialization) and `[NinoPooled]`, so a receive loop allocates nothing but strings whose text changed. For a complete example, see [Networking](/en/docs/v4/advanced/networking).
 
 ```csharp
 [NinoType]

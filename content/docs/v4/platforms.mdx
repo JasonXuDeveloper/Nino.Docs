@@ -1,5 +1,6 @@
 ---
-title: Platforms and Binary Format
+title: Platforms
+seoTitle: "Supported Platforms – Nino v4 Docs"
 description: "Where Nino runs, why every platform writes the same bytes, and what the format looks like."
 icon: Cpu
 ---
@@ -29,7 +30,7 @@ Every platform writes the format the [Wire Format](/en/docs/v4/wire-format) page
 
 ## Portable by Design
 
-Nino defines its bytes instead of copying whatever a runtime has in memory. Runtimes do not always agree on memory layout, so these cases are handled explicitly ([Struct Layouts Across Runtimes](/en/docs/v4/struct-layouts) has the rule and the measured layouts):
+Nino defines its bytes instead of copying whatever a runtime has in memory. Runtimes do not always agree on memory layout, so these cases are handled explicitly ([Struct Layouts](/en/docs/v4/struct-layouts) has the rule and the measured layouts):
 
 | Case | What runtimes do differently | What Nino writes |
 | --- | --- | --- |
@@ -63,7 +64,7 @@ Nino reads and writes the fields of `List<T>`, `Stack<T>`, `Queue<T>`, `SortedLi
 
 ## SIMD by Platform [#simd]
 
-The net8.0 and net10.0 builds of `Nino.Core` use hardware intrinsics where the CPU has them (AVX-512, AVX2 and SSSE3 on x64, AdvSimd on Arm64, SIMD on WebAssembly) and portable code where it does not. Unity, .NET Framework and .NET Core 3.0 to .NET 7 load the netstandard builds, which have none; in Unity, [Burst-compiled kernels](/en/docs/v4/advanced/unity#burst-kernels) take their place. Every path writes the same bytes: the tests run with AVX-512, without it, without AVX2, with all SIMD turned off, and on Arm64. What each instruction set does in .NET, Unity, Go, Rust and TypeScript is in [SIMD on Every Platform](/en/docs/v4/simd).
+The net8.0 and net10.0 builds of `Nino.Core` use hardware intrinsics where the CPU has them (AVX-512, AVX2 and SSSE3 on x64, AdvSimd on Arm64, SIMD on WebAssembly) and portable code where it does not. Unity, .NET Framework and .NET Core 3.0 to .NET 7 load the netstandard builds, which have none; in Unity, [Burst-compiled kernels](/en/docs/v4/advanced/unity#burst-kernels) take their place. Every path writes the same bytes: the tests run with AVX-512, without it, without AVX2, with all SIMD turned off, and on Arm64. What each instruction set does in .NET, Unity, Go, Rust and TypeScript is in [SIMD](/en/docs/v4/simd).
 
 ## Unity
 

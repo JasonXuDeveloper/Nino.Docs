@@ -7,13 +7,14 @@ icon: Play
 
 <AnchorRedirect
   map={{
+    terms: '/en/docs/v4/glossary',
     'recommended-usage': '/en/docs/v4/basic#reusing-a-buffer',
     'using-a-writer': '/en/docs/v4/basic#several-values-in-one-buffer',
     'deserializing-into-an-existing-value': '/en/docs/v4/basic#into-an-existing-value',
   }}
 />
 
-`NinoSerializer` and `NinoDeserializer` (namespace `Nino.Core`) are the whole runtime API. Both are static and **thread safe**: call them from any number of threads without locking. Per-call state (the [scratch buffer](#terms) Nino serializes into, reference tables) is kept per thread, and no hot path writes shared memory.
+`NinoSerializer` and `NinoDeserializer` (namespace `Nino.Core`) are the whole runtime API. Both are static and **thread safe**: call them from any number of threads without locking. Per-call state (the <Term id="scratch-buffer">scratch buffer</Term> Nino serializes into, reference tables) is kept per thread, and no hot path writes shared memory.
 
 The examples on this page serialize an `Order` like this one:
 
@@ -151,7 +152,7 @@ foreach (var message in messages)
 }
 ```
 
-Instances that are dropped along the way (the data holds `null`, a list shrinks, a dictionary key disappears, the polymorphic type changes) can go back to an object pool. There is no `out` overload: use the return value for a new instance, or `ref` to reuse one. See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
+Instances that are dropped along the way (the data holds `null`, a list shrinks, a dictionary key disappears, the polymorphic type changes) can go back to an object pool. There is no `out` overload: use the return value for a new instance, or `ref` to reuse one. See [Reuse and Pooling](/en/docs/v4/pooling).
 
 ### Several Values from One Buffer
 
@@ -227,7 +228,7 @@ field.SetValue(target, current);
 
 <Callout type="warn" title="Don't use object as T">
 
-`NinoSerializer.Serialize(value)` with a variable declared as `object` calls `Serialize<object>`, not the boxed API. It accepts only `[NinoType]` values, writes a type id and dispatches through the global registry of every `[NinoType]`, which costs more than the generated dispatch of a common base. Declare the variable as the common base type instead, or call `SerializeBoxed` with the `Type`.
+`NinoSerializer.Serialize(value)` with a variable declared as `object` calls `Serialize<object>`, not the boxed API. It accepts only `[NinoType]` values, writes a <Term id="type-id">type id</Term> and dispatches through the global registry of every `[NinoType]`, which costs more than the generated dispatch of a common base. Declare the variable as the common base type instead, or call `SerializeBoxed` with the `Type`.
 
 </Callout>
 
@@ -277,7 +278,7 @@ Invalid data throws a `NinoDataException` (namespace `Nino.Core`, derived from `
 - an unknown type id, or one that is not a subtype of the declared type;
 - data nested deeper than the limits above;
 - a `[NinoUtf8]` string whose bytes are not valid UTF-8 or do not match its char and byte counts;
-- bytes Nino never writes: a `bool` or presence byte other than 0 or 1, a string header longer than it needs to be or with a first byte of `0x82` or above, a keyed member whose entry holds more bytes than its value, a section of deferred bodies that does not match its region;
+- bytes Nino never writes: a `bool` or <Term id="presence-byte">presence byte</Term> other than 0 or 1, a string header longer than it needs to be or with a first byte of `0x82` or above, a keyed member whose entry holds more bytes than its value, a section of deferred bodies that does not match its region;
 - a key repeated in a dictionary or set, or keys built to collide in a hash table ([hash flooding](/en/docs/v4/security#hash-flooding)).
 
 The limits can be tightened in `NinoSettings`, and `NinoSettings.Untrusted` adds checks that cost time on every read; see [Untrusted Data](/en/docs/v4/security).
@@ -288,26 +289,7 @@ Catch it where the data comes in and treat the input as bad. What Nino cannot ch
 - **The type.** The bytes carry no schema, so data written for a **different** type with a compatible layout reads without error. Version your payloads yourself (see [Evolving Your Data](/en/docs/v4/evolving-data) and the [file header](/en/docs/v4/advanced/persistence#add-a-file-header) pattern); `Deserialize<object>` accepts any registered type.
 - **The size of a message.** Allocation is bounded relative to the input, so bound the input: cap the size of a frame or request before you buffer it (see [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream)). Elements that really are in the data cost their size in memory: a large version-tolerant struct whose members are all left out takes 4 bytes on the wire.
 
-## Terms [#terms]
-
-Words these docs use with a specific meaning:
-
-- **Top-level call**: a `NinoSerializer.Serialize(...)` or `NinoDeserializer.Deserialize(...)` call that takes your value and a `byte[]`, span or buffer writer, as opposed to a call that passes a `Writer` or `Reader` you created yourself, and to the values Nino reads and writes inside a call. Each top-level call is self-contained: it starts and ends its own [reference tracking](/en/docs/v4/reference-tracking).
-- **Boxed API**: `SerializeBoxed` and `DeserializeBoxed`, the overloads that take an `object` and a `Type`, for a type known only at run time that shares no common `[NinoType]` base with the others; see [The Boxed API](#the-boxed-api).
-- **Formatter**: the code that writes and reads one type: generated for each `[NinoType]`, built into Nino for the BCL types, or [written by you](/en/docs/v4/custom-formatters). The **formatter cache** is `NinoFormatterCache<T>`, the static field through which a call finds the formatter of `T`.
-- **Intercepted call**: on the .NET 8 SDK and later, the generator redirects each call whose type is known at compile time straight to that type's formatter, skipping the formatter cache; see [Interceptors](/en/docs/v4/performance#interceptors).
-- **Scratch buffer**: a `NinoArrayBufferWriter` that Nino keeps per thread. A call that returns a `byte[]`, or writes into a buffer writer other than `NinoArrayBufferWriter`, serializes into it first and then copies the bytes out.
-- **Raw** (raw value, raw struct): an unmanaged value that Nino writes as its memory, in one copy, with padding bytes zeroed: primitives, enums, `DateTime`, `Guid`, and unmanaged structs that qualify (see [Structs](/en/docs/v4/defining-types#structs)). Arrays and lists of raw values are one block copy.
-- **Fixed-size type**: a struct or sealed class whose values always take the same number of bytes, returned by `NinoSerializer.GetFixedSize<T>()`; see [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types).
-- **Positional**: the default format of a `[NinoType]`: members in declaration order, with no names or lengths. Smallest and fastest, but any change to the members changes the format; see [Evolving Your Data](/en/docs/v4/evolving-data#positional).
-- **Version-tolerant** and **keyed**: the two other formats (`NinoFormat.VersionTolerant` and `NinoFormat.Keyed`). A version-tolerant object writes its length in bytes first, so members can be appended later; a keyed object writes each member with a key (a hash of its name) and a length, so members can be added, removed, reordered or renamed. See [Evolving Your Data](/en/docs/v4/evolving-data).
-- **Slot**: a place that holds a value: a member, a collection element, a dictionary value, or the variable you pass by `ref`. What Nino writes for a value depends on the slot's declared type.
-- **Header**: the bytes Nino writes before a class value: a presence byte for a sealed class, a 4-byte type id for a type that can have subtypes; a struct has none. See [How a Polymorphic Value Is Written](/en/docs/v4/polymorphism#how-a-polymorphic-value-is-written).
-- **Reuse deserialization**: `Deserialize(data, ref value)`, which fills the value you pass, and the objects, lists and dictionaries it holds, in place instead of creating new ones; see [Into an Existing Value](#into-an-existing-value).
-- **Pooled class**: a `[NinoType]` class marked `[NinoPooled]`: Nino takes new instances of it from a built-in pool and returns dropped ones to it; see [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled).
-- **Recycler**: what receives an instance that [reuse deserialization](/en/docs/v4/pooling) drops from a slot: a handler registered with `NinoSettings.SetRecycler<T>`, otherwise the instance's own pool (`ReturnToPool()`), otherwise nobody. See [Where Dropped Instances Go](/en/docs/v4/pooling#where-dropped-instances-go).
-- **Registry**: the code the generator emits into each assembly to list its `[NinoType]`s, their formatters and their type ids. Nino loads it the first time it meets a type of that assembly, or a type id it does not know, so no initialization call is needed; `NinoRegistry.EnsureInitialized(assembly)` loads it ahead of time. The **global registry** is the table of every `[NinoType]` through which values declared as `object` are dispatched; see [Dispatch](/en/docs/v4/polymorphism#dispatch).
-- **Deferred object**: an object nested more than 128 levels deep, written and read later from a shallower level so that the stack stays bounded; see [Deep Object Graphs](#deep-object-graphs).
+Words these docs use with a specific meaning (top-level call, formatter, raw, slot and more) are in the [Glossary](/en/docs/v4/glossary).
 
 ## Next Steps
 

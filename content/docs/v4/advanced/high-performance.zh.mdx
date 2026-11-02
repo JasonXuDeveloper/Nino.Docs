@@ -12,7 +12,7 @@ icon: Gauge
 
 `NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 本身已经很快，但每次调用都要为结果分配内存。本页先讲解让序列化和反序列化都降到**每次调用 0 B** 的机制（每种调用写到哪里、从哪里读、有什么开销），再介绍你自己的类型中哪些选择能让调用保持快速：格式、密封类与多态类、集合、字符串和自定义格式化器，最后是启动和如何测量。[下表](#levers)把所有手段列在一处。
 
-基于这些机制、可以直接复制的做法和检查清单见[零分配模式](/zh/docs/v4/advanced/zero-allocation)；内部实现（内联的格式化器、结构体布局）见[性能指南](/zh/docs/v4/performance)。构建里该设置什么（Release、分层编译、Native AOT、Unity 的 IL2CPP 与 Burst），见[推荐的构建配置](/zh/docs/v4/advanced/build-configuration)。
+基于这些机制、可以直接复制的做法和检查清单见[零分配模式](/zh/docs/v4/advanced/zero-allocation)；内部实现（内联的格式化器、结构体布局）见[性能原理](/zh/docs/v4/performance)。构建里该设置什么（Release、分层编译、Native AOT、Unity 的 IL2CPP 与 Burst），见[构建配置](/zh/docs/v4/advanced/build-configuration)。
 
 ## 手段一览 [#levers]
 
@@ -85,7 +85,7 @@ reader.ReleaseReferences();
 
 ## 序列化到任意 IBufferWriter [#serialize-into-any-ibufferwriter]
 
-任何 `IBufferWriter<byte>` 都可以作为写入目标：`PipeWriter`、Kestrel 的响应体写入器、`ArrayBufferWriter<byte>`。Nino 先写入每个线程各自的[暂存缓冲区](/zh/docs/v4/basic#terms)，再一次性拷贝到目标写入器，因此每次调用都不分配内存：
+任何 `IBufferWriter<byte>` 都可以作为写入目标：`PipeWriter`、Kestrel 的响应体写入器、`ArrayBufferWriter<byte>`。Nino 先写入每个线程各自的<Term id="scratch-buffer" lang="zh">暂存缓冲区</Term>，再一次性拷贝到目标写入器，因此每次调用都不分配内存：
 
 ```csharp
 NinoSerializer.Serialize(message, pipeWriter); // one copy into the pipe's memory
@@ -118,7 +118,7 @@ if (NinoSerializer.GetFixedSize<Tick>() < 0)
 
 `NinoDeserializer` 读取的是 `ReadOnlySpan<byte>`，字节在哪个缓冲区里（池化的接收缓冲区、管道的一段内存、内存映射文件），就直接传那块缓冲区的切片，不必再拷贝到新的 `byte[]`；读取时只分配它返回的对象（见[哪些调用会分配内存](/zh/docs/v4/advanced/zero-allocation#what-allocates)）。[接收循环](/zh/docs/v4/advanced/zero-allocation#receive-loop)每个 socket 只租一次缓冲区，而不是每条消息租一次。
 
-`ReadOnlySequence<byte>`（来自 `System.IO.Pipelines`）的处理方式见[网络层](/zh/docs/v4/advanced/networking#reading-frames)。
+`ReadOnlySequence<byte>`（来自 `System.IO.Pipelines`）的处理方式见[网络](/zh/docs/v4/advanced/networking#reading-frames)。
 
 ## 反序列化到已有对象 [#deserialize-into-existing-objects]
 
@@ -134,7 +134,7 @@ NinoDeserializer.Deserialize(payload, ref batch);   // later calls fill it: 0 B
 - 非托管结构体的数组和列表，读写都是一次整块拷贝。
 - 无法原地填充的类型（位置记录、只有 `init` 或只有 getter 的成员）会重新创建。
 - 内容不变的字符串会直接保留，不产生分配；内容变化时读成新字符串。非 ASCII 的 `[NinoUtf8]` 文本无论是否变化，每次都会解码成新字符串。
-- 已有实例被**丢弃**时（数据中为 `null`、列表变短、某个键消失、多态类型改变），存放它的成员或元素所对应的[回收器](/zh/docs/v4/pooling#where-dropped-instances-go)会收到它（只收一次），而不是让它被悄悄覆盖掉。正因如此，复用反序列化才能安全地和对象池配合使用；参见[复用反序列化与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
+- 已有实例被**丢弃**时（数据中为 `null`、列表变短、某个键消失、多态类型改变），存放它的成员或元素所对应的[回收器](/zh/docs/v4/pooling#where-dropped-instances-go)会收到它（只收一次），而不是让它被悄悄覆盖掉。正因如此，复用反序列化才能安全地和对象池配合使用；参见[复用与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
 
 外层的循环怎么写、如何让字符串和条数变化不再分配内存，见[复用反序列化的结果](/zh/docs/v4/advanced/zero-allocation#reuse-what-you-deserialize)。什么时候按 `ref` 填充、什么时候用对象池、什么时候用自己的池，见[选哪种复用方式](/zh/docs/v4/pooling#which-mechanism)。
 
@@ -215,7 +215,7 @@ NinoSettings.SetPoolMaxRetained<TelemetryEvent>(4096);
 
 <Callout type="idea">
 
-已经有自己的对象池了？给一个公共静态工厂方法加上 `[NinoFactory]`，Nino 就会通过它创建实例；再用 `NinoSettings.SetRecycler<T>(...)` 注册处理函数，接收 Nino 丢弃的实例。参见[复用反序列化与对象池](/zh/docs/v4/pooling#creating-instances-with-ninofactory)。
+已经有自己的对象池了？给一个公共静态工厂方法加上 `[NinoFactory]`，Nino 就会通过它创建实例；再用 `NinoSettings.SetRecycler<T>(...)` 注册处理函数，接收 Nino 丢弃的实例。参见[复用与对象池](/zh/docs/v4/pooling#creating-instances-with-ninofactory)。
 
 </Callout>
 

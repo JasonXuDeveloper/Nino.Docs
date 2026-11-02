@@ -1,5 +1,5 @@
 ---
-title: 跨运行时的结构体布局
+title: 结构体布局
 seoTitle: "跨运行时的结构体布局 – Nino v4 文档"
 description: "为什么 Nino 在 .NET 上写的原始结构体，能在 Mono、IL2CPP、.NET Framework、32 位平台以及 Go、Rust、TypeScript 里读回来：统一用 64 位 CoreCLR 的规范布局，并附上每个 BCL 结构体在各运行时实测的布局。"
 icon: LayoutGrid
@@ -24,7 +24,7 @@ flowchart LR
 
 `struct { int A; (int, long) B; }` 存 `{1, (2, 3)}` 时，在每个运行时上都是 24 字节：元组的 `long` 在 `int` 前面，和 64 位 .NET 的放法一样；Mono 在内存里把 `int` 放在前面，写出的字节也照样如此。
 
-<Bytes rows={[{ fields: [
+<Bytes derived="the canonical layout of the spec's B.2" rows={[{ fields: [
   { hex: '01 00 00 00', kind: 'value', label: 'A = 1' },
   { hex: '00 00 00 00', kind: 'pad', label: '填充到 8' },
   { hex: '03 00 00 00 00 00 00 00', kind: 'value', label: 'B.Item2（long）= 3' },
@@ -309,7 +309,7 @@ Unity 的测试记录了几个类型的布局（CI：Unity 2022.3 和 6000.3，�
 ## 相关页面 [#related]
 
 <Cards>
-  <Card title="平台与二进制格式" href="/zh/docs/v4/platforms" description="Nino 能在哪里运行，为什么每个目标写出相同的字节。" />
+  <Card title="平台" href="/zh/docs/v4/platforms" description="Nino 能在哪里运行，为什么每个目标写出相同的字节。" />
   <Card title="二进制格式" href="/zh/docs/v4/wire-format#raw-values" description="原始值和规范布局，逐字节说明。" />
   <Card title="Nino 对比 MemoryPack" href="/zh/docs/v4/vs-memorypack" description="原样复制内存，对比一种定义好的布局。" />
 </Cards>

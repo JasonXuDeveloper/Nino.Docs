@@ -423,13 +423,13 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
           title={zh ? '对比 MemoryPack' : 'vs MemoryPack'}
           rows={memorypackRows(zh)}
           link={zh ? '全部基准测试' : 'All benchmarks'}
-          href={`${docs}/perf`}
+          href={`${docs}/benchmarks`}
         />
         <Panel
           title={zh ? '对比 Nino v3' : 'vs Nino v3'}
           rows={v3Rows(zh)}
-          link={zh ? 'v3 与 v4 对比' : 'v3 vs v4 in detail'}
-          href={`${docs}/v3-vs-v4`}
+          link={zh ? 'v4 相比 v3 的变化' : 'What changed since v3'}
+          href={`${docs}/whats-new#features`}
         />
       </div>
     </div>

@@ -90,7 +90,7 @@ public sealed class Invoice : Document
 
 After its header, an `Invoice { Id = 1, Revision = 2, CustomerId = 5 }` is written as:
 
-<Bytes rows={[
+<Bytes derived="the spec's version-tolerant rule (A.3): one int32 body length, then the members" rows={[
   { title: 'Version 1', fields: [{ hex: '08 00 00 00', kind: 'length', label: 'length 8' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '05 00 00 00', kind: 'value', label: 'CustomerId' }] },
   { title: 'Version 2', fields: [{ hex: '0C 00 00 00', kind: 'length', label: 'length 12' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '02 00 00 00', kind: 'changed', label: 'Revision: where version 1 expects CustomerId' }, { hex: '05 00 00 00', kind: 'value', label: 'CustomerId: skipped by version 1' }] },
 ]} />
@@ -184,12 +184,12 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
 <Accordions type="single">
 <Accordion title="Messages between a client and a server">
 
-Positional, when both sides always run the same build. If clients and servers are upgraded at different times (rolling upgrades, old app versions in the wild), use `NinoFormat.VersionTolerant` and only ever **append** fields to the message classes themselves (not to their shared base class), or `NinoFormat.Keyed` if you also need to retire fields or add them to the base. See [Network Layer](/en/docs/v4/advanced/networking).
+Positional, when both sides always run the same build. If clients and servers are upgraded at different times (rolling upgrades, old app versions in the wild), use `NinoFormat.VersionTolerant` and only ever **append** fields to the message classes themselves (not to their shared base class), or `NinoFormat.Keyed` if you also need to retire fields or add them to the base. See [Networking](/en/docs/v4/advanced/networking).
 
 </Accordion>
 <Accordion title="Saved documents and user files">
 
-`NinoFormat.VersionTolerant` if you only add fields over time, to classes without subclasses; `NinoFormat.Keyed` if you want the freedom to remove and reorder them. Add [`trackReferences`](/en/docs/v4/reference-tracking) when the saved graph shares objects or has cycles. See [Persistence and Storage](/en/docs/v4/advanced/persistence).
+`NinoFormat.VersionTolerant` if you only add fields over time, to classes without subclasses; `NinoFormat.Keyed` if you want the freedom to remove and reorder them. Add [`trackReferences`](/en/docs/v4/reference-tracking) when the saved graph shares objects or has cycles. See [Persistence](/en/docs/v4/advanced/persistence).
 
 </Accordion>
 <Accordion title="Configuration edited by people">
@@ -214,5 +214,5 @@ The options can be mixed: a keyed settings file can hold positional raw structs 
 
 <Cards>
   <Card title="Reference Tracking" href="/en/docs/v4/reference-tracking">Shared references and cycles, opted in per type.</Card>
-  <Card title="Persistence and Storage" href="/en/docs/v4/advanced/persistence">Files that survive updates, file headers, safe writes and append-only logs.</Card>
+  <Card title="Persistence" href="/en/docs/v4/advanced/persistence">Files that survive updates, file headers, safe writes and append-only logs.</Card>
 </Cards>

@@ -1,5 +1,5 @@
 ---
-title: Overview
+title: Guides
 seoTitle: "Advanced Guides: Nino in Real Systems – Nino v4 Docs"
 description: "Guides for using Nino in real systems: hot paths, networking and RPC, ASP.NET Core, TypeScript, Go, Rust and browser clients, message queues, caching, persistence and storage, plus Unity, HybridCLR and Godot."
 icon: Map
@@ -29,19 +29,37 @@ import { ArrowDownUp, DatabaseZap, Gamepad2, Gauge, Globe, Joystick, Languages, 
 
 The feature pages explain what each option does. These guides put them together for the systems you actually build, with complete patterns you can copy. Every snippet uses only Nino's public API and standard .NET types; where a third-party client appears (Redis, Kafka, gRPC), it is shown minimally, as an illustration.
 
-## Hot Paths and I/O [#hot-paths-and-io]
+## Which Guide Do I Need? [#which-guide-do-i-need]
+
+| You are building | Start with |
+| --- | --- |
+| A service protocol, a real-time server (trading, collaboration, games), a WebSocket or UDP link | [Networking](/en/docs/v4/advanced/networking) |
+| gRPC services without `.proto` files, between .NET peers | [gRPC](/en/docs/v4/advanced/networking#grpc) |
+| An ASP.NET Core API (MVC or Minimal APIs) that takes and returns Nino bodies | [ASP.NET Core](/en/docs/v4/advanced/aspnetcore) |
+| A web or Node front end (JavaScript or TypeScript) that talks to a Nino server | [TypeScript](/en/docs/v4/advanced/codegen#typescript), or [Browser Clients](/en/docs/v4/advanced/browser) to run the C# types themselves |
+| A Go or Rust service that exchanges data with .NET | [Go](/en/docs/v4/advanced/codegen#go) or [Rust](/en/docs/v4/advanced/codegen#rust) |
+| Producers and consumers on Kafka, RabbitMQ or another broker | [Message Queues](/en/docs/v4/advanced/message-queues) |
+| Telemetry, metrics or market-data feeds | [Telemetry and Tick Streams](/en/docs/v4/advanced/message-queues#telemetry-and-tick-streams) |
+| A Redis or `IDistributedCache` layer, or an in-process cache of blobs | [Caching](/en/docs/v4/advanced/caching) |
+| Files, documents, save data, local key-value stores | [Persistence](/en/docs/v4/advanced/persistence) |
+| An event store, a journal, snapshots or checkpoints | [Append-Only Logs](/en/docs/v4/advanced/persistence#append-only-logs) |
+| IPC over named pipes or sockets | [Framed Streams](/en/docs/v4/advanced/zero-allocation#framed-streams) |
+| Records in shared or memory-mapped files | [Fixed-Size Records](/en/docs/v4/advanced/zero-allocation#fixed-size-records) |
+| A Unity, Godot or HybridCLR project | [Unity and HybridCLR](/en/docs/v4/advanced/unity), [Godot](/en/docs/v4/advanced/godot) |
+
+## Performance [#hot-paths-and-io]
 
 <Cards>
   <Card icon={<Gauge />} title="High-Performance Serialization" href="/en/docs/v4/advanced/high-performance">
     Every lever for Nino's speed and what it costs: buffer writers, exact-size arrays, Writer and Reader, reuse deserialization, pools, raw structs, formats, sealed classes, collections, strings, custom formatters, startup and measuring.
   </Card>
-  <Card icon={<Wrench />} title="Recommended Build Configuration" href="/en/docs/v4/advanced/build-configuration">
+  <Card icon={<Wrench />} title="Build Configuration" href="/en/docs/v4/advanced/build-configuration">
     What to set in your own builds for the fastest machine code: Release, tiered compilation and Dynamic PGO, ReadyToRun, Native AOT, IL2CPP and Burst, Cargo profiles, Go PGO and GOAMD64, browsers and bundlers.
   </Card>
   <Card icon={<Leaf />} title="Zero-Allocation Patterns" href="/en/docs/v4/advanced/zero-allocation">
     Copy-paste recipes for 0 B hot paths: buffers, batches, receive loops, framed streams, fixed-size records, and the checklist.
   </Card>
-  <Card icon={<ArrowDownUp />} title="Streams, Async, Callbacks and Compression" href="/en/docs/v4/advanced/streams">
+  <Card icon={<ArrowDownUp />} title="Streams and Compression" href="/en/docs/v4/advanced/streams">
     Ready-to-copy helpers: framed `Stream` I/O, async reads and writes, `ReadOnlySequence` input, before/after hooks, Brotli and GZip.
   </Card>
 </Cards>
@@ -49,16 +67,13 @@ The feature pages explain what each option does. These guides put them together 
 ## Use Cases [#use-cases]
 
 <Cards>
-  <Card icon={<Network />} title="Network Layer" href="/en/docs/v4/advanced/networking">
+  <Card icon={<Network />} title="Networking" href="/en/docs/v4/advanced/networking">
     Service-to-service and real-time protocols: TCP framing, WebSocket and UDP, gRPC marshallers, polymorphic messages, rolling upgrades.
   </Card>
   <Card icon={<Server />} title="ASP.NET Core" href="/en/docs/v4/advanced/aspnetcore">
     `application/x-nino` request and response bodies: MVC formatters, `NinoBody<T>` and `NinoResults` for Minimal APIs, straight from the pipes.
   </Card>
-  <Card icon={<Globe />} title="Browser and JavaScript Clients" href="/en/docs/v4/advanced/browser">
-    The same `[NinoType]` types in the browser: a .NET WebAssembly module with `[JSExport]` functions, called from JavaScript or TypeScript.
-  </Card>
-  <Card icon={<MessagesSquare />} title="Message Queues and Event Streams" href="/en/docs/v4/advanced/message-queues">
+  <Card icon={<MessagesSquare />} title="Message Queues" href="/en/docs/v4/advanced/message-queues">
     Kafka and other brokers, event hierarchies, batching, telemetry and tick streams, long-lived topics.
   </Card>
   <Card icon={<DatabaseZap />} title="Caching" href="/en/docs/v4/advanced/caching">
@@ -67,41 +82,26 @@ The feature pages explain what each option does. These guides put them together 
   <Card icon={<Save />} title="Persistence" href="/en/docs/v4/advanced/persistence">
     Files that survive updates, key-value stores, append-only logs, snapshots and checkpoints.
   </Card>
+</Cards>
+
+## Engines and Languages [#other-languages]
+
+Unity and Godot take Nino with a setup of their own, and a browser can run your C# types on .NET WebAssembly. Clients and services in other languages read and write the same bytes as .NET, from the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) of your built assembly. The format they share is described in [Wire Format](/en/docs/v4/wire-format).
+
+<Cards>
   <Card icon={<Gamepad2 />} title="Unity and HybridCLR" href="/en/docs/v4/advanced/unity">
     Project setup, assembly definitions, Unity classes, IL2CPP, hot update and frame-time tips.
   </Card>
   <Card icon={<Joystick />} title="Godot" href="/en/docs/v4/advanced/godot">
     Godot 4 .NET projects: Godot's structs, nodes and resources, save games, multiplayer messages, rebuilding in the editor.
   </Card>
-</Cards>
-
-## Other Languages [#other-languages]
-
-Clients and services in other languages read and write the same bytes as .NET, from the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) of your built assembly. The format they share is described in [Wire Format](/en/docs/v4/wire-format).
-
-<Cards>
+  <Card icon={<Globe />} title="Browser Clients" href="/en/docs/v4/advanced/browser">
+    The same `[NinoType]` types in the browser: a .NET WebAssembly module with `[JSExport]` functions, called from JavaScript or TypeScript.
+  </Card>
   <Card icon={<Languages />} title="TypeScript, Go and Rust" href="/en/docs/v4/advanced/codegen">
     Nino.Codegen writes your `[NinoType]`s as TypeScript, Go or Rust types and codecs after each build (or `nino-gen` from a built assembly), with the same bytes as .NET. Go struct tags, Rust derive, readers safe on untrusted data.
   </Card>
 </Cards>
-
-## Which Guide Do I Need? [#which-guide-do-i-need]
-
-| You are building | Start with |
-| --- | --- |
-| A service protocol, a real-time server (trading, collaboration, games), a WebSocket or UDP link | [Network Layer](/en/docs/v4/advanced/networking) |
-| gRPC services without `.proto` files, between .NET peers | [gRPC](/en/docs/v4/advanced/networking#grpc) |
-| An ASP.NET Core API (MVC or Minimal APIs) that takes and returns Nino bodies | [ASP.NET Core](/en/docs/v4/advanced/aspnetcore) |
-| A web or Node front end (JavaScript or TypeScript) that talks to a Nino server | [TypeScript](/en/docs/v4/advanced/codegen#typescript), or [Browser and JavaScript Clients](/en/docs/v4/advanced/browser) to run the C# types themselves |
-| A Go or Rust service that exchanges data with .NET | [Go](/en/docs/v4/advanced/codegen#go) or [Rust](/en/docs/v4/advanced/codegen#rust) |
-| Producers and consumers on Kafka, RabbitMQ or another broker | [Message Queues and Event Streams](/en/docs/v4/advanced/message-queues) |
-| Telemetry, metrics or market-data feeds | [Telemetry and Tick Streams](/en/docs/v4/advanced/message-queues#telemetry-and-tick-streams) |
-| A Redis or `IDistributedCache` layer, or an in-process cache of blobs | [Caching](/en/docs/v4/advanced/caching) |
-| Files, documents, save data, local key-value stores | [Persistence](/en/docs/v4/advanced/persistence) |
-| An event store, a journal, snapshots or checkpoints | [Append-Only Logs](/en/docs/v4/advanced/persistence#append-only-logs) |
-| IPC over named pipes or sockets | [Framed Streams](/en/docs/v4/advanced/zero-allocation#framed-streams) |
-| Records in shared or memory-mapped files | [Fixed-Size Records](/en/docs/v4/advanced/zero-allocation#fixed-size-records) |
-| A Unity, Godot or HybridCLR project | [Unity and HybridCLR](/en/docs/v4/advanced/unity), [Godot](/en/docs/v4/advanced/godot) |
 
 ## Which Feature Do I Need?
 

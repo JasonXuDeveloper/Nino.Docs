@@ -4,7 +4,7 @@ description: "What to know before choosing Nino v4: it needs its source generato
 icon: TriangleAlert
 ---
 
-What to know before choosing Nino v4, and the limitations of earlier versions that v4 removed.
+What to know before choosing Nino v4: what it needs, what it does not do, and where to go instead.
 
 ## Current Limitations
 - **Source generator required.** Nino needs its source generator (Roslyn 4.3 or later) and C# 9 or later in the project that declares `[NinoType]`s.
@@ -16,59 +16,8 @@ What to know before choosing Nino v4, and the limitations of earlier versions th
 
 ## Platform Notes
 
-Nino defines its bytes instead of copying memory, so data is portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit. How `Nullable<T>`, `ValueTuple`, `decimal`, `DateTimeOffset`, 32-bit alignment and padding are handled is described in [Platforms and Binary Format](/en/docs/v4/platforms#portable-by-design). Bytes are little-endian; on a big-endian host, which no current .NET or Unity platform is, Nino throws instead of writing them.
+Nino defines its bytes instead of copying memory, so data is portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit. How `Nullable<T>`, `ValueTuple`, `decimal`, `DateTimeOffset`, 32-bit alignment and padding are handled is described in [Platforms](/en/docs/v4/platforms#portable-by-design). Bytes are little-endian; on a big-endian host, which no current .NET or Unity platform is, Nino throws instead of writing them.
 
-## Resolved Limitations
+## Resolved Limitations [#resolved-limitations]
 
-<Accordions type="multiple">
-<Accordion value="resolved-1" title={<><code>ValueTuple</code> behaves differently in .NET Core and Unity/Mono</>}>
-
-Resolved in v4: `ValueTuple`, `KeyValuePair` and `Nullable<T>` have a defined, runtime-independent format, so data is compatible between .NET Core and Unity/Mono/IL2CPP.
-
-</Accordion>
-<Accordion value="resolved-2" title={<><code>WEAK_VERSION_TOLERANCE</code> projects cannot read data from projects without it, and vice versa</>}>
-
-Resolved in v4: version tolerance is an option of each type (`[NinoType(format: NinoFormat.VersionTolerant)]`) and is part of the type's own format, so it no longer depends on project settings. `WEAK_VERSION_TOLERANCE` still exists for compatibility and only affects the types declared in the project that defines it.
-
-</Accordion>
-<Accordion value="resolved-3" title={<>Members can only be appended at the end; no removing or reordering</>}>
-
-Resolved in v4: `[NinoType(format: NinoFormat.Keyed)]` allows reordering, removing and inserting members, in any class of a hierarchy. Version-tolerant types still accept appended members only, in the most derived type.
-
-</Accordion>
-<Accordion value="resolved-4" title={<>Unsupported types cause a compilation error</>}>
-
-Resolved in v4: the analyzer reports them as warning NINO007 on your code (with a code fix), and the member is skipped.
-
-</Accordion>
-<Accordion value="resolved-5" title={<>Shared references and cycles are not preserved</>}>
-
-Resolved in v4 with `[NinoType(trackReferences: true)]`.
-
-</Accordion>
-<Accordion value="resolved-6" title={<>Dictionary subtypes need a public indexer</>}>
-
-Resolved in v4: user collections derived from `List<T>`, `Dictionary<TKey, TValue>` and friends, or implementing the collection interfaces, work without any extra code.
-
-</Accordion>
-<Accordion value="resolved-7" title={<>Cannot rename type name/namespace after serialization</>}>
-
-Resolved since v3.2.2 with `[NinoFormerName]`.
-
-</Accordion>
-<Accordion value="resolved-8" title={<>Cannot serialize/deserialize non-public fields/properties</>}>
-
-Resolved since v3.0.6 with `containNonPublicMembers` (`includeNonPublicMembers` in v4). On .NET 8 and later no `partial` is needed (generic types: .NET 9 and later); before that the type must be `partial`.
-
-</Accordion>
-<Accordion value="resolved-9" title={<>Polymorphic unmanaged structs serialized differently with and without casting to their interface</>}>
-
-Resolved since v3.0.3.
-
-</Accordion>
-<Accordion value="resolved-10" title={<>Deeply nested data overflows the stack</>}>
-
-Resolved in v4: objects nested more than 128 levels deep are deferred, then written and read from a shallower level, so recursive types of any depth (and hostile data) use a bounded amount of stack, and an untracked cycle throws instead of recursing forever. See [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
-
-</Accordion>
-</Accordions>
+The limitations of v3 that v4 removed (shared references, keyed members, deep nesting, runtime-dependent tuple layouts and more) are rows of the v3-versus-v4 table in [What's New in v4](/en/docs/v4/whats-new#features).

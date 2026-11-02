@@ -90,7 +90,7 @@ public sealed class Invoice : Document
 
 `Invoice { Id = 1, Revision = 2, CustomerId = 5 }` 在头之后写成：
 
-<Bytes rows={[
+<Bytes derived="the spec's version-tolerant rule (A.3): one int32 body length, then the members" rows={[
   { title: '版本 1', fields: [{ hex: '08 00 00 00', kind: 'length', label: '长度 8' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '05 00 00 00', kind: 'value', label: 'CustomerId' }] },
   { title: '版本 2', fields: [{ hex: '0C 00 00 00', kind: 'length', label: '长度 12' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '02 00 00 00', kind: 'changed', label: 'Revision：正是版本 1 期待 CustomerId 的位置' }, { hex: '05 00 00 00', kind: 'value', label: 'CustomerId：版本 1 当作未知成员跳过' }] },
 ]} />
@@ -184,12 +184,12 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
 <Accordions type="single">
 <Accordion title="客户端与服务器之间的消息">
 
-两端始终运行同一构建版本时，用按位置格式。如果客户端和服务器的升级时间不一致（滚动升级、用户手里还有旧版本），用 `NinoFormat.VersionTolerant`，并且只向各个消息类本身**追加**字段（不要加到它们共同的基类上）；如果还需要删除字段，或要向基类添加字段，就用 `NinoFormat.Keyed`。参见[网络层](/zh/docs/v4/advanced/networking)。
+两端始终运行同一构建版本时，用按位置格式。如果客户端和服务器的升级时间不一致（滚动升级、用户手里还有旧版本），用 `NinoFormat.VersionTolerant`，并且只向各个消息类本身**追加**字段（不要加到它们共同的基类上）；如果还需要删除字段，或要向基类添加字段，就用 `NinoFormat.Keyed`。参见[网络](/zh/docs/v4/advanced/networking)。
 
 </Accordion>
 <Accordion title="保存的文档与用户文件">
 
-如果只会陆续向没有子类的类添加字段，用 `NinoFormat.VersionTolerant`；想自由地删除和重排字段，用 `NinoFormat.Keyed`。如果保存的对象图有共享对象或循环，再加上 [`trackReferences`](/zh/docs/v4/reference-tracking)。参见[持久化与存储](/zh/docs/v4/advanced/persistence)。
+如果只会陆续向没有子类的类添加字段，用 `NinoFormat.VersionTolerant`；想自由地删除和重排字段，用 `NinoFormat.Keyed`。如果保存的对象图有共享对象或循环，再加上 [`trackReferences`](/zh/docs/v4/reference-tracking)。参见[持久化](/zh/docs/v4/advanced/persistence)。
 
 </Accordion>
 <Accordion title="由人手工维护的配置">
@@ -214,5 +214,5 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
 
 <Cards>
   <Card title="引用追踪" href="/zh/docs/v4/reference-tracking">按类型开启，保留共享引用和循环引用。</Card>
-  <Card title="持久化与存储" href="/zh/docs/v4/advanced/persistence">能跨版本读取的文件、文件头、安全写入和追加日志。</Card>
+  <Card title="持久化" href="/zh/docs/v4/advanced/persistence">能跨版本读取的文件、文件头、安全写入和追加日志。</Card>
 </Cards>

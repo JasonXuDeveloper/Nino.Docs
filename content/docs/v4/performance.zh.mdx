@@ -1,12 +1,12 @@
 ---
-title: 性能指南
+title: 性能原理
 description: "Nino v4 的速度从何而来，怎样保持：拦截器、原始结构体、缓冲区复用、多线程。"
 icon: Zap
 ---
 
 <AnchorRedirect map={{ buffers: '/zh/docs/v4/advanced/zero-allocation#what-allocates' }} />
 
-Nino 不用任何调优就很快。本页介绍它的内部机制，帮你让类型和调用始终留在快速路径上。实测数据见[基准测试](/zh/docs/v4/benchmarks)，如何在自己的代码中用好这些路径，见[高性能序列化](/zh/docs/v4/advanced/high-performance)和[零分配模式](/zh/docs/v4/advanced/zero-allocation)中的做法。
+Nino 不用任何调优就很快。本页介绍它的内部机制，帮你让类型和调用始终留在快速路径上。实测数据见[.NET 基准测试](/zh/docs/v4/benchmarks)，如何在自己的代码中用好这些路径，见[高性能序列化](/zh/docs/v4/advanced/high-performance)和[零分配模式](/zh/docs/v4/advanced/zero-allocation)中的做法。
 
 ## 拦截器 [#interceptors]
 
@@ -64,7 +64,7 @@ Nino 仓库在每次修改读写路径时都会检查这一点：`benchmarks/asm
 - 满足原始内存条件的 `[NinoType]` 结构体（参见[结构体](/zh/docs/v4/defining-types#structs)），无论单独出现还是在数组、列表中；
 - 大小固定但不满足原始内存条件的 `[NinoType]` 结构体（含值元组或 `KeyValuePair` 成员、`LayoutKind.Auto`、自动属性，或内含这样的结构体）的数组、列表和 span：它的生成格式化器也按块读写它，每个成员位于固定偏移，所以整个集合只做一次边界检查，并在 .NET 8+ 上走元组的向量路径（没有 SIMD 时是一个循环），而不是逐个值处理。条件是每个成员都是原始值、由原始值组成的元组或键值对，或另一个这样的结构体，并且都能就地赋值（没有 `[NinoConstructor]` 或仅 `init` 的成员）；可空成员不是固定大小。写出的字节不变。
 
-写入时会把填充字节清零，所以相等的值总是产生相同的字节，即使结构体位于从未清零的内存中（`ArrayPool` 租来的数组、`[SkipLocalsInit]` 下的 `stackalloc`）。Nino 在运行时第一次写入某个类型时识别填充：只读取一次字段偏移，结果会成为 JIT 期常量，所以没有填充的结构体不会为这项检查付出任何开销。带填充的结构体数组会在同一趟拷贝中用 SIMD 掩码处理，比普通 `memcpy` 多一点开销。如果某个运行时在内存里排布结构体的方式和规范布局不同（部分结构体在 Mono、IL2CPP、.NET Framework 和 32 位平台上），就改为逐字段转换（[跨运行时的结构体布局](/zh/docs/v4/struct-layouts#cost)）。
+写入时会把填充字节清零，所以相等的值总是产生相同的字节，即使结构体位于从未清零的内存中（`ArrayPool` 租来的数组、`[SkipLocalsInit]` 下的 `stackalloc`）。Nino 在运行时第一次写入某个类型时识别填充：只读取一次字段偏移，结果会成为 JIT 期常量，所以没有填充的结构体不会为这项检查付出任何开销。带填充的结构体数组会在同一趟拷贝中用 SIMD 掩码处理，比普通 `memcpy` 多一点开销。如果某个运行时在内存里排布结构体的方式和规范布局不同（部分结构体在 Mono、IL2CPP、.NET Framework 和 32 位平台上），就改为逐字段转换（[结构体布局](/zh/docs/v4/struct-layouts#cost)）。
 
 ### 结构体布局 [#struct-layout]
 
@@ -108,7 +108,7 @@ public partial struct PackedSample // 12 bytes, no padding
 
 <Callout type="info">
 
-原始布局以 64 位平台的规范布局为准。在结构体布局不同的运行时上（32 位平台、旧版 Mono），Nino 会逐个字段转换成相同的字节，数据依然可移植，只是会有一些速度上的代价。参见[平台与二进制格式](/zh/docs/v4/platforms)。
+原始布局以 64 位平台的规范布局为准。在结构体布局不同的运行时上（32 位平台、旧版 Mono），Nino 会逐个字段转换成相同的字节，数据依然可移植，只是会有一些速度上的代价。参见[平台](/zh/docs/v4/platforms)。
 
 </Callout>
 
@@ -158,10 +158,10 @@ int size = NinoSerializer.GetFixedSize<SensorReading>();  // 22
 
 - **序列化不分配内存**，唯一的例外是你要的那个 `byte[]`。序列化到复用的 `NinoArrayBufferWriter`（或任意 `IBufferWriter<byte>`）时，每次调用分配 0 B。
 - **返回的 `byte[]` 大小正好**：写入前就能知道大小时（固定大小的值，以及元素固定大小的数组和列表），Nino 按这个大小分配并直接写入；其他值先写入池化的临时缓冲区，再拷贝出来一次。
-- **反序列化只分配结果对象**，而这些对象也可以复用：用 `ref` 反序列化到已有实例，新实例从 `[NinoPooled]` 对象池中取。复用实例时分配 0 B，只有内容变化的字符串例外：内容不变的字符串会直接保留，变化的文本才读成新实例（非 ASCII 的 `[NinoUtf8]` 文本总是读成新实例）。参见[复用反序列化与对象池](/zh/docs/v4/pooling)。
+- **反序列化只分配结果对象**，而这些对象也可以复用：用 `ref` 反序列化到已有实例，新实例从 `[NinoPooled]` 对象池中取。复用实例时分配 0 B，只有内容变化的字符串例外：内容不变的字符串会直接保留，变化的文本才读成新实例（非 ASCII 的 `[NinoUtf8]` 文本总是读成新实例）。参见[复用与对象池](/zh/docs/v4/pooling)。
 - 默认情况下，所有字符都不超过 U+00FF 的字符串每个字符写一个字节，其他文本按 UTF-16 写出，都只需一遍收窄、扩宽或复制字符。`[NinoUtf8]` 要做转码，非空字符串在字符数之后还要多写字节数（UTF-8 不超过 127 字节时占 1 字节）；只有以 ASCII 为主、夹杂少量更宽字符的文本，用它才更小（参见[字符串](/zh/docs/v4/wire-format#strings)）。
 
-每种写入目标是直接写入、还是先写入线程独享的[暂存缓冲区](/zh/docs/v4/basic#terms)再拷贝一次，以及每种调用分配什么，见[哪些调用会分配内存](/zh/docs/v4/advanced/zero-allocation#what-allocates)。读取方面，`NinoDeserializer` 接受 `ReadOnlySpan<byte>`：直接传入你已有内存的切片即可（池化数组、管道分段、内存映射文件），无需拷贝。
+每种写入目标是直接写入、还是先写入线程独享的<Term id="scratch-buffer" lang="zh">暂存缓冲区</Term>再拷贝一次，以及每种调用分配什么，见[哪些调用会分配内存](/zh/docs/v4/advanced/zero-allocation#what-allocates)。读取方面，`NinoDeserializer` 接受 `ReadOnlySpan<byte>`：直接传入你已有内存的切片即可（池化数组、管道分段、内存映射文件），无需拷贝。
 
 ## 线程安全 [#thread-safety]
 

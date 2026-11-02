@@ -1,5 +1,5 @@
 ---
-title: 基准测试
+title: .NET 基准测试
 seoTitle: "基准测试：Nino 对比 MemoryPack、MessagePack、protobuf-net 与 v3 – Nino v4 文档"
 description: "Nino v4 与 v3（3.3.13）、MemoryPack 1.21.4、MessagePack 3.1.12 和 protobuf-net 3.4.30 的构建时间与运行时基准测试，以及复现方法。"
 icon: ChartColumn
@@ -17,7 +17,7 @@ icon: ChartColumn
   }}
 />
 
-文档中引用的所有基准测试数据都在本页，同时附上产生这些数据的代码，以及自己运行的方法。其他页面只做概括，并链接到这里。Go、Rust 和 TypeScript 的结果见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes)，Unity 的 Burst 内核见 [Unity 基准测试](/zh/docs/v4/benchmarks-unity)；[各平台的 SIMD](/zh/docs/v4/simd) 说明了它们各自测到的是哪些向量路径。
+文档中引用的所有基准测试数据都在本页，同时附上产生这些数据的代码，以及自己运行的方法。其他页面只做概括，并链接到这里。Go、Rust 和 TypeScript 的结果见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes)，Unity 的 Burst 内核见 [Unity 基准测试](/zh/docs/v4/benchmarks-unity)；[SIMD](/zh/docs/v4/simd) 说明了它们各自测到的是哪些向量路径。
 
 ## 对比对象 [#what-is-compared]
 
@@ -27,7 +27,7 @@ icon: ChartColumn
 | Nino v3 **3.3.13** | v3 API 的最后一个版本，也就是你升级之前所用的版本 | 运行时性能，与 v4 在同一台机器上背靠背测量（运行时表格中的 **v4 对比 v3** 列），以及[构建时间](#build-time-and-generated-code) |
 | [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) **3.1.12** 和 [protobuf-net](https://github.com/protobuf-net/protobuf-net) **3.4.30** | .NET 中最常用的二进制格式，以及 .NET 中最常用的 Protocol Buffers 库 | 运行时性能，同一次 BenchmarkDotNet 运行，覆盖格式能写出相同数据的每个用例：运行时表格中各占一列，[全部测量结果](#results)中各占若干行（参见 [MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)）。它们加入基准测试之前的发布报告没有这些行，表格这时只显示 Nino 和 MemoryPack |
 
-绝对耗时取决于机器，请比较倍数。Go、Rust 和 TypeScript 中的 Nino 对比 Protocol Buffers、MessagePack 和各语言常用序列化库的结果，参见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes)。功能而非速度方面的对比，参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)和 [v3 与 v4 对比](/zh/docs/v4/v3-vs-v4)。
+绝对耗时取决于机器，请比较倍数。Go、Rust 和 TypeScript 中的 Nino 对比 Protocol Buffers、MessagePack 和各语言常用序列化库的结果，参见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes)。功能而非速度方面的对比，参见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)和 [v3 与 v4 对比](/zh/docs/v4/whats-new#features)。
 
 ## 测量方法 [#setup]
 

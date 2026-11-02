@@ -47,7 +47,7 @@ var loaded = NinoDeserializer.Deserialize<List<Employee>>(bytes);
 - 每个被追踪的对象前面都有 4 字节的引用头部；同一次调用中已经写过的对象，只写它的序号。
 - 无论槽位的声明类型是什么（包括 `object` 和接口），共享引用都能保持对象身份。
 - 追踪只针对 `[NinoType]` 类，不包括集合：同一个 `List<T>` 出现在两个成员中，仍然会写两次。
-- 开销：你每调用一次 `NinoSerializer`/`NinoDeserializer`（[顶层调用](/zh/docs/v4/basic#terms)），有一小笔固定开销；每个被追踪的对象再多 4 字节和一次身份查找。不涉及追踪类型的调用没有任何开销。
+- 开销：你每调用一次 `NinoSerializer`/`NinoDeserializer`（<Term id="top-level-call" lang="zh">顶层调用</Term>），有一小笔固定开销；每个被追踪的对象再多 4 字节和一次身份查找。不涉及追踪类型的调用没有任何开销。
 
 一个 `Node { V = 5 }` 被密封类 `Holder` 引用两次（先是 `object` 成员，再是 `Node` 成员），字节取自[规范](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#a5-reference-tracking)：
 
@@ -93,6 +93,6 @@ var loaded = NinoDeserializer.Deserialize<List<Employee>>(bytes);
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="复用反序列化与对象池" href="/zh/docs/v4/pooling">原地填充已有实例，新实例从对象池中取。</Card>
+  <Card title="复用与对象池" href="/zh/docs/v4/pooling">原地填充已有实例，新实例从对象池中取。</Card>
   <Card title="自定义格式化器" href="/zh/docs/v4/custom-formatters">用另一种方式编码某个成员，或让 Nino 支持新的类型。</Card>
 </Cards>

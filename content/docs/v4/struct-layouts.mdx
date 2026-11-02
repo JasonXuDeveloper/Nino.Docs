@@ -1,5 +1,5 @@
 ---
-title: Struct Layouts Across Runtimes
+title: Struct Layouts
 seoTitle: "Struct Layouts Across Runtimes – Nino v4 Docs"
 description: "Why a raw struct written by Nino on .NET reads back on Mono, IL2CPP, .NET Framework, 32-bit hosts and in Go, Rust and TypeScript: one canonical layout, 64-bit CoreCLR's, and the measured layout of every BCL struct on each runtime."
 icon: LayoutGrid
@@ -24,7 +24,7 @@ flowchart LR
 
 `struct { int A; (int, long) B; }` holding `{1, (2, 3)}` is 24 bytes on every runtime: the tuple's `long` comes before its `int`, as 64-bit .NET places them, even on Mono, which keeps the `int` first in memory.
 
-<Bytes rows={[{ fields: [
+<Bytes derived="the canonical layout of the spec's B.2" rows={[{ fields: [
   { hex: '01 00 00 00', kind: 'value', label: 'A = 1' },
   { hex: '00 00 00 00', kind: 'pad', label: 'padding to 8' },
   { hex: '03 00 00 00 00 00 00 00', kind: 'value', label: 'B.Item2 (long) = 3' },
@@ -309,7 +309,7 @@ Unity's tests log the layouts of a few types (CI: Unity 2022.3 and 6000.3, the e
 ## Related [#related]
 
 <Cards>
-  <Card title="Platforms and Binary Format" href="/en/docs/v4/platforms" description="Where Nino runs and why every target writes the same bytes." />
+  <Card title="Platforms" href="/en/docs/v4/platforms" description="Where Nino runs and why every target writes the same bytes." />
   <Card title="Wire Format" href="/en/docs/v4/wire-format#raw-values" description="Raw values and the canonical layout, byte by byte." />
   <Card title="Nino vs MemoryPack" href="/en/docs/v4/vs-memorypack" description="Copies of memory against one defined layout." />
 </Cards>

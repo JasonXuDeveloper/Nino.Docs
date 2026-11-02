@@ -5,7 +5,7 @@ description: "可直接复制的做法，让稳定运行时保持 0 B：按归�
 icon: Leaf
 ---
 
-这是一份面向热路径的做法手册，适用于不允许分配内存的场景：消息循环、行情与遥测数据流、游戏 tick、缓存层。每种做法都是可以直接复制的代码，在**预热之后每次调用都是 0 B**（缓冲区已经增长到位、对象池已经填满）。每种做法为什么有效、开销在哪里，请顺着它的链接去看[高性能序列化](/zh/docs/v4/advanced/high-performance)；复用的具体规则见[复用反序列化与对象池](/zh/docs/v4/pooling)。页面最后有一份[检查清单](#checklist)，可用来逐项检查热路径。
+这是一份面向热路径的做法手册，适用于不允许分配内存的场景：消息循环、行情与遥测数据流、游戏 tick、缓存层。每种做法都是可以直接复制的代码，在**预热之后每次调用都是 0 B**（缓冲区已经增长到位、对象池已经填满）。每种做法为什么有效、开销在哪里，请顺着它的链接去看[高性能序列化](/zh/docs/v4/advanced/high-performance)；复用的具体规则见[复用与对象池](/zh/docs/v4/pooling)。页面最后有一份[检查清单](#checklist)，可用来逐项检查热路径。
 
 ## 哪些调用会分配内存 [#what-allocates]
 
@@ -151,7 +151,7 @@ while (!reader.Eof)
 reader.ReleaseReferences(); // [!code highlight]
 ```
 
-类记录和多种类型混写也一样，只要按写入顺序读取即可。两处 `ReleaseReferences` 都要保留：缺了它们，含 `trackReferences` 类型的批次每次调用都会分配内存（[原因](/zh/docs/v4/advanced/high-performance#several-values-back-to-back)）。多态事件的批量写入见[消息队列与事件流](/zh/docs/v4/advanced/message-queues#batching)。
+类记录和多种类型混写也一样，只要按写入顺序读取即可。两处 `ReleaseReferences` 都要保留：缺了它们，含 `trackReferences` 类型的批次每次调用都会分配内存（[原因](/zh/docs/v4/advanced/high-performance#several-values-back-to-back)）。多态事件的批量写入见[消息队列](/zh/docs/v4/advanced/message-queues#batching)。
 
 ## 接收到租来的缓冲区 [#receive-loop]
 
@@ -314,6 +314,91 @@ unsafe
 - 需要按下标访问的记录用**结构体**：密封类也是固定大小的，但 `null` 实例只写 1 个字节。
 - 把类型改为 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，或者加上 `string` 成员后，它就不再是固定大小的。按下标访问的记录要固定布局，并在文件头里写上格式版本（见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）。
 - 需要 `byte[]` 时，`NinoSerializer.Serialize(tick)` 会按记录的大小正好分配一个并直接写入（[原因](/zh/docs/v4/performance#fixed-size-types)）；不需要数组时用上面的做法。
+
+## 完整的消息循环 [#message-loop]
+
+把上面的做法用在一个连接上，并让消息类型的读取不分配内存：
+
+- **热数据放在非托管结构体中**，单个或放在数组和 `List<T>` 里：它们按原始内存拷贝，一个列表就是一次块拷贝。调整字段顺序或设置 `Pack`，让它们没有填充字节。参见[结构体布局](/zh/docs/v4/performance#struct-layout)。
+- **让字符串保持不变。** 读入已有实例时，文本没变的字符串会被保留，只有变化了的文本才分配新字符串。每条消息都会变的值用数字、枚举或 ID 表示，而不是文本。非 ASCII 的 `[NinoUtf8]` 字符串每次都会解码成新字符串。
+- **数量会变化时用 `List<T>`。** 列表复用时保留容量；数组只有长度不变时才会被复用。
+- **消息中不要用 `object` 和装箱 API。** `object` 成员会把值类型装箱，并通过全局注册表分派；`SerializeBoxed` 和 `DeserializeBoxed` 要按 `Type` 查找格式化器。成员声明为它们自己的类型或共同的 `[NinoType]` 基类，没有子类型的类声明为 `sealed`。
+
+一个游戏服务器通过已连接的 UDP 套接字向每个客户端发送状态。每条消息是一个 `StateUpdate`，其中每个实体都是非托管结构体：
+
+```csharp title="StateUpdate.cs"
+using System.Collections.Generic;
+using System.Linq;
+using Nino.Core;
+
+[NinoType]
+public struct EntityState                // 非托管：按原始内存拷贝
+{
+    public int Id;
+    public float X, Y, Z;
+    public uint Flags;
+}
+
+[NinoType, NinoPooled]
+public sealed partial class StateUpdate
+{
+    public long Tick;
+    public string Zone;                  // 文本不变时，复用会保留它
+    public List<EntityState> Entities;   // 一次块拷贝；复用时保留容量
+
+    private static partial IEnumerable<StateUpdate> OnNinoPoolWarmup() =>
+        Enumerable.Range(0, 32).Select(_ => new StateUpdate { Entities = new List<EntityState>(256) });
+
+    private partial void OnNinoPoolReturn() { }
+}
+```
+
+每个客户端一个 `Connection`，持有一个发送缓冲区和一个接收缓冲区。发送时序列化到复用的缓冲区；接收时把每个数据报读入上一条消息，或者为另一个线程上的消费者读入从池中取出的实例：
+
+```csharp title="Connection.cs"
+using System;
+using System.Collections.Concurrent;
+using System.Net.Sockets;
+using Nino.Core;
+
+public sealed class Connection : IDisposable
+{
+    private readonly Socket _socket;                                // 已连接的 UDP 套接字
+    private readonly NinoArrayBufferWriter _send = new(16 * 1024);  // 每个连接一个
+    private readonly byte[] _receive = new byte[64 * 1024];         // 每个连接一个
+    private StateUpdate _latest;                                    // 每个数据报都原地填充它
+
+    public Connection(Socket socket) => _socket = socket;
+
+    // 发送：缓冲区增长到最大消息之后为 0 B。
+    public void Send(StateUpdate update)
+    {
+        _send.ResetWrittenCount();
+        NinoSerializer.Serialize(update, _send); // [!code highlight]
+        _socket.Send(_send.WrittenSpan);
+    }
+
+    // 接收后立即处理：每次都是同一个 StateUpdate。
+    public void ReceiveAndApply(Action<StateUpdate> apply)
+    {
+        int received = _socket.Receive(_receive);
+        NinoDeserializer.Deserialize(_receive.AsSpan(0, received), ref _latest); // [!code highlight]
+        apply(_latest);
+    }
+
+    // 接收后交给另一个线程：每条消息是独立的实例，从池中取出。
+    // 消费者用完后调用 update.ReturnToPool()。
+    public void ReceiveInto(ConcurrentQueue<StateUpdate> inbox)
+    {
+        int received = _socket.Receive(_receive);
+        inbox.Enqueue(NinoDeserializer.Deserialize<StateUpdate>(_receive.AsSpan(0, received))); // [!code highlight]
+    }
+
+    public void Dispose() => _send.Dispose();   // 把发送缓冲区的数组还给它的池
+}
+```
+
+预热之后，Nino 在 `Send`、`ReceiveAndApply` 和 `ReceiveInto` 中都不分配内存：实体列表连同容量一起被复用，区域名在不变时被保留，池化的 `StateUpdate` 回来时列表仍然挂在上面。用下面的[分配测试](#verify-it)把它固定下来；复用的确切规则参见[复用与对象池](/zh/docs/v4/pooling)。
 
 ## 验证 [#verify-it]
 

@@ -5,7 +5,7 @@ description: "Copy-paste recipes for a 0 B steady state: per-owner and caller-pr
 icon: Leaf
 ---
 
-A recipe book for hot paths that must not allocate: message loops, market data and telemetry feeds, game ticks, cache layers. Each recipe is code to copy, and allocates **0 B per call once warmed up** (after the buffers have grown and the pools are filled). For why each one works and what it costs, follow its link to [High-Performance Serialization](/en/docs/v4/advanced/high-performance); [Reuse Deserialization and Pooling](/en/docs/v4/pooling) has the exact rules for reuse. The page ends with a [checklist](#checklist) for reviewing a hot path.
+A recipe book for hot paths that must not allocate: message loops, market data and telemetry feeds, game ticks, cache layers. Each recipe is code to copy, and allocates **0 B per call once warmed up** (after the buffers have grown and the pools are filled). For why each one works and what it costs, follow its link to [High-Performance Serialization](/en/docs/v4/advanced/high-performance); [Reuse and Pooling](/en/docs/v4/pooling) has the exact rules for reuse. The page ends with a [checklist](#checklist) for reviewing a hot path.
 
 ## What Allocates [#what-allocates]
 
@@ -151,7 +151,7 @@ while (!reader.Eof)
 reader.ReleaseReferences(); // [!code highlight]
 ```
 
-The same works for class records and mixed types, as long as the reader reads them in the order they were written. Keep both `ReleaseReferences` calls: without them, a batch with a `trackReferences` type allocates on every call ([why](/en/docs/v4/advanced/high-performance#several-values-back-to-back)). A batch of polymorphic events is shown in [Message Queues and Event Streams](/en/docs/v4/advanced/message-queues#batching).
+The same works for class records and mixed types, as long as the reader reads them in the order they were written. Keep both `ReleaseReferences` calls: without them, a batch with a `trackReferences` type allocates on every call ([why](/en/docs/v4/advanced/high-performance#several-values-back-to-back)). A batch of polymorphic events is shown in [Message Queues](/en/docs/v4/advanced/message-queues#batching).
 
 ## Receive into a Rented Buffer [#receive-loop]
 
@@ -314,6 +314,91 @@ Another process can write the same file (or a shared-memory map created with `Me
 - Use a **struct** for records you index: a sealed class is fixed-size too, but a `null` instance is written as 1 byte.
 - Switching a type to `NinoFormat.VersionTolerant` or `NinoFormat.Keyed`, or adding a `string` member, makes it variable-size. Fix the layout of indexed records, and put a format version in the file header (see [Add a File Header](/en/docs/v4/advanced/persistence#add-a-file-header)).
 - When you need a `byte[]`, `NinoSerializer.Serialize(tick)` allocates one of exactly the record's size and writes straight into it ([why](/en/docs/v4/performance#fixed-size-types)); use the recipes above when you do not.
+
+## A Complete Message Loop [#message-loop]
+
+The recipes above, put together for one connection, with message types shaped so that reading them allocates nothing:
+
+- **Keep hot data in unmanaged structs**, alone or in arrays and `List<T>`s: they are copied as raw memory, a list of them as one block. Order their fields, or set `Pack`, so that they have no padding. See [Struct Layout](/en/docs/v4/performance#struct-layout).
+- **Let strings stay the same.** Reading into an existing instance keeps a string whose text did not change, and only changed text allocates a new string. Carry values that change with every message as numbers, enums or ids, not text. A non-ASCII `[NinoUtf8]` string is decoded into a new string every time.
+- **Use `List<T>` for counts that vary.** A list keeps its capacity on reuse; an array is reused only when its length is unchanged.
+- **Keep `object` and the boxed API out of messages.** An `object` member boxes value types and dispatches through the global registry; `SerializeBoxed` and `DeserializeBoxed` find the formatter by `Type`. Declare members as their own types, or as a common `[NinoType]` base, and seal the classes that have no subtypes.
+
+A game server sends each client its state over a connected UDP socket. Each message is a `StateUpdate`, and every entity in it is an unmanaged struct:
+
+```csharp title="StateUpdate.cs"
+using System.Collections.Generic;
+using System.Linq;
+using Nino.Core;
+
+[NinoType]
+public struct EntityState                // unmanaged: copied as raw memory
+{
+    public int Id;
+    public float X, Y, Z;
+    public uint Flags;
+}
+
+[NinoType, NinoPooled]
+public sealed partial class StateUpdate
+{
+    public long Tick;
+    public string Zone;                  // kept on reuse while its text is unchanged
+    public List<EntityState> Entities;   // one block copy; keeps its capacity on reuse
+
+    private static partial IEnumerable<StateUpdate> OnNinoPoolWarmup() =>
+        Enumerable.Range(0, 32).Select(_ => new StateUpdate { Entities = new List<EntityState>(256) });
+
+    private partial void OnNinoPoolReturn() { }
+}
+```
+
+One `Connection` per client owns a send buffer and a receive buffer. The send path serializes into the reused buffer; the receive path reads each datagram into the last message, or, for a consumer on another thread, into an instance from the pool:
+
+```csharp title="Connection.cs"
+using System;
+using System.Collections.Concurrent;
+using System.Net.Sockets;
+using Nino.Core;
+
+public sealed class Connection : IDisposable
+{
+    private readonly Socket _socket;                                // a connected UDP socket
+    private readonly NinoArrayBufferWriter _send = new(16 * 1024);  // one per connection
+    private readonly byte[] _receive = new byte[64 * 1024];         // one per connection
+    private StateUpdate _latest;                                    // filled in place by every datagram
+
+    public Connection(Socket socket) => _socket = socket;
+
+    // Send: 0 B once the buffer has grown to the largest message.
+    public void Send(StateUpdate update)
+    {
+        _send.ResetWrittenCount();
+        NinoSerializer.Serialize(update, _send); // [!code highlight]
+        _socket.Send(_send.WrittenSpan);
+    }
+
+    // Receive and handle now: the same StateUpdate every time.
+    public void ReceiveAndApply(Action<StateUpdate> apply)
+    {
+        int received = _socket.Receive(_receive);
+        NinoDeserializer.Deserialize(_receive.AsSpan(0, received), ref _latest); // [!code highlight]
+        apply(_latest);
+    }
+
+    // Receive for another thread: each message is its own instance, from the pool.
+    // The consumer calls update.ReturnToPool() when it is done with it.
+    public void ReceiveInto(ConcurrentQueue<StateUpdate> inbox)
+    {
+        int received = _socket.Receive(_receive);
+        inbox.Enqueue(NinoDeserializer.Deserialize<StateUpdate>(_receive.AsSpan(0, received))); // [!code highlight]
+    }
+
+    public void Dispose() => _send.Dispose();   // returns the send buffer's array to its pool
+}
+```
+
+Once warmed up, Nino allocates nothing in `Send`, `ReceiveAndApply` or `ReceiveInto`: the entity list is reused with its capacity, the zone name is kept while it does not change, and pooled `StateUpdate`s come back with their lists attached. Pin it with an [allocation test](#verify-it), below; [Reuse and Pooling](/en/docs/v4/pooling) has the exact rules of reuse.
 
 ## Verify It [#verify-it]
 

@@ -7,13 +7,14 @@ icon: Play
 
 <AnchorRedirect
   map={{
+    terms: '/zh/docs/v4/glossary',
     'recommended-usage': '/zh/docs/v4/basic#reusing-a-buffer',
     'using-a-writer': '/zh/docs/v4/basic#several-values-in-one-buffer',
     'deserializing-into-an-existing-value': '/zh/docs/v4/basic#into-an-existing-value',
   }}
 />
 
-`NinoSerializer` 和 `NinoDeserializer`（命名空间 `Nino.Core`）就是全部的运行时 API。两者都是静态类，并且**线程安全**：可以在任意多个线程上同时调用，无需加锁。每次调用用到的临时状态（暂存缓冲区、引用表）按线程保存，热路径上不会写共享内存。
+`NinoSerializer` 和 `NinoDeserializer`（命名空间 `Nino.Core`）就是全部的运行时 API。两者都是静态类，并且**线程安全**：可以在任意多个线程上同时调用，无需加锁。每次调用用到的临时状态（<Term id="scratch-buffer" lang="zh">暂存缓冲区</Term>、引用表）按线程保存，热路径上不会写共享内存。
 
 本页的例子序列化下面这个 `Order`：
 
@@ -151,7 +152,7 @@ foreach (var message in messages)
 }
 ```
 
-过程中被丢弃的实例（数据中为 `null`、列表变短、字典少了某个键、多态类型变了）可以归还到对象池。Nino 没有 `out` 重载：要新实例就用返回值，要复用就用 `ref`。详见[复用反序列化与对象池](/zh/docs/v4/pooling)。
+过程中被丢弃的实例（数据中为 `null`、列表变短、字典少了某个键、多态类型变了）可以归还到对象池。Nino 没有 `out` 重载：要新实例就用返回值，要复用就用 `ref`。详见[复用与对象池](/zh/docs/v4/pooling)。
 
 ### 从一个缓冲区读多个值 [#several-values-from-one-buffer]
 
@@ -227,7 +228,7 @@ field.SetValue(target, current);
 
 <Callout type="warn" title="不要把 object 当作 T">
 
-变量声明为 `object` 时，`NinoSerializer.Serialize(value)` 调用的是 `Serialize<object>`，而不是装箱 API。它只接受 `[NinoType]` 的值，会写入类型 ID，并通过包含所有 `[NinoType]` 的全局注册表分派，开销比共同基类型的生成分派更大。请把变量声明为共同的基类型，或者带上 `Type` 调用 `SerializeBoxed`。
+变量声明为 `object` 时，`NinoSerializer.Serialize(value)` 调用的是 `Serialize<object>`，而不是装箱 API。它只接受 `[NinoType]` 的值，会写入<Term id="type-id" lang="zh">类型 ID</Term>，并通过包含所有 `[NinoType]` 的全局注册表分派，开销比共同基类型的生成分派更大。请把变量声明为共同的基类型，或者带上 `Type` 调用 `SerializeBoxed`。
 
 </Callout>
 
@@ -277,7 +278,7 @@ Nino 本来就是为读取不可信来源的数据而设计的：网络对端、
 - 类型 ID 未知，或不是声明类型的子类型；
 - 嵌套超过上面的上限；
 - `[NinoUtf8]` 字符串的字节不是合法的 UTF-8，或与它记录的字符数和字节数对不上；
-- Nino 从不写出的字节：不是 0 或 1 的 `bool` 或存在字节、比所需更长或第一个字节为 `0x82` 及以上的字符串头、条目中的字节多于其值的键控成员、与所在区域不符的推迟的主体段；
+- Nino 从不写出的字节：不是 0 或 1 的 `bool` 或<Term id="presence-byte" lang="zh">存在字节</Term>、比所需更长或第一个字节为 `0x82` 及以上的字符串头、条目中的字节多于其值的键控成员、与所在区域不符的推迟的主体段；
 - 字典或集合中的重复键，或在哈希表中刻意构造的冲突键（[哈希洪泛](/zh/docs/v4/security#hash-flooding)）。
 
 这些限制可以在 `NinoSettings` 中收紧，`NinoSettings.Untrusted` 会加上每次读取都要花时间的检查；参见[不可信数据](/zh/docs/v4/security)。
@@ -288,26 +289,7 @@ Nino 本来就是为读取不可信来源的数据而设计的：网络对端、
 - **类型。** 字节里不带 schema，所以按**另一个**布局兼容的类型写出的数据也能读出来而不报错。请自己给数据加上版本信息（参见[数据演进](/zh/docs/v4/evolving-data)和[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）；`Deserialize<object>` 接受任何已注册的类型。
 - **消息大小。** 分配量相对于输入是有界的，所以要限制输入：在缓冲之前限制帧或请求的大小（参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）。确实存在于数据中的元素会按其内存大小占用内存：一个成员全部省略的大型版本容错结构体，在数据里只占 4 字节。
 
-## 术语 [#terms]
-
-本文档中有特定含义的词：
-
-- **顶层调用**：你直接传入值和 `byte[]`、span 或缓冲区写入器的 `NinoSerializer.Serialize(...)` 或 `NinoDeserializer.Deserialize(...)` 调用；与之相对的是传入你自己创建的 `Writer` 或 `Reader` 的调用，以及 Nino 在一次调用内部读写的那些值。每次顶层调用都自成一体：它自己开始并结束[引用追踪](/zh/docs/v4/reference-tracking)。
-- **装箱 API**：`SerializeBoxed` 和 `DeserializeBoxed`，即接收 `object` 和 `Type` 的那些重载，用于运行时才知道、并且与其他类型没有共同 `[NinoType]` 基类型的类型；参见[装箱 API](#the-boxed-api)。
-- **格式化器**：负责读写某一种类型的代码：每个 `[NinoType]` 都有生成的格式化器，BCL 类型的格式化器内置在 Nino 中，也可以[自己编写](/zh/docs/v4/custom-formatters)。**格式化器缓存**是 `NinoFormatterCache<T>`，调用通过这个静态字段找到 `T` 的格式化器。
-- **拦截的调用**：使用 .NET 8 SDK 及以上版本时，源生成器会把编译期就知道类型的每个调用直接转给该类型的格式化器，跳过格式化器缓存；参见[拦截器](/zh/docs/v4/performance#interceptors)。
-- **暂存缓冲区**：Nino 为每个线程保留的一个 `NinoArrayBufferWriter`。返回 `byte[]` 的调用，以及写入 `NinoArrayBufferWriter` 以外的缓冲区写入器的调用，会先序列化到这里，再把字节拷贝出去。
-- **原始值**（原始结构体）：Nino 按内存原样写入的非托管值，只需一次拷贝，填充字节清零：基元类型、枚举、`DateTime`、`Guid`，以及符合条件的非托管结构体（参见[结构体](/zh/docs/v4/defining-types#structs)）。原始值的数组和列表是一次整块拷贝。
-- **固定大小的类型**：每个值都占用相同字节数的结构体或密封类，字节数由 `NinoSerializer.GetFixedSize<T>()` 返回；参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
-- **按位置**：`[NinoType]` 的默认格式：成员按声明顺序写入，不带名称和长度。最小、最快，但成员的任何改动都会改变格式；参见[数据演进](/zh/docs/v4/evolving-data#positional)。
-- **版本容错**与**键控**：另外两种格式（`NinoFormat.VersionTolerant` 和 `NinoFormat.Keyed`）。版本容错的对象先写入自己的字节长度，以后可以追加成员；键控的对象为每个成员写入一个键（成员名的哈希）和长度，成员可以增删、重排和改名。参见[数据演进](/zh/docs/v4/evolving-data)。
-- **槽位**：存放一个值的地方：一个成员、一个集合元素、一个字典值，或者你按 `ref` 传入的变量。Nino 为一个值写出什么，取决于槽位的声明类型。
-- **头部**：Nino 在类的值之前写入的字节：密封类是一个存在字节，可能有子类型的类型是 4 字节的类型 ID；结构体没有头部。参见[多态值的写入方式](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)。
-- **复用反序列化**：`Deserialize(data, ref value)`，原地填充你传入的值以及其中的对象、列表和字典，而不是新建它们；参见[反序列化到已有值](#into-an-existing-value)。
-- **池化类**：标记了 `[NinoPooled]` 的 `[NinoType]` 类：Nino 需要新实例时从内置的对象池中取，丢弃的实例还回池中；参见 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)。
-- **回收器**：接收[复用反序列化](/zh/docs/v4/pooling)从槽位中丢弃的实例的地方：用 `NinoSettings.SetRecycler<T>` 注册的处理函数；没有的话，交给实例自己的对象池（`ReturnToPool()`）；再没有就不处理。参见[被丢弃的实例去哪里](/zh/docs/v4/pooling#where-dropped-instances-go)。
-- **注册表**：生成器在每个程序集中生成的代码，列出这个程序集的 `[NinoType]`、它们的格式化器和类型 ID。Nino 第一次遇到这个程序集里的类型，或者遇到不认识的类型 ID 时才加载它，所以不需要初始化调用；`NinoRegistry.EnsureInitialized(assembly)` 可以提前加载。**全局注册表**是包含所有 `[NinoType]` 的那张表，声明为 `object` 的值通过它分派；参见[分派](/zh/docs/v4/polymorphism#dispatch)。
-- **推迟的对象**：嵌套超过 128 层的对象，会在较浅的层级稍后写入和读取，让栈的用量保持有界；参见[深层对象图](#deep-object-graphs)。
+本文档中有特定含义的词（顶层调用、格式化器、原始值、槽位等）见[术语表](/zh/docs/v4/glossary)。
 
 ## 下一步 [#next-steps]
 

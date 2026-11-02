@@ -18,17 +18,17 @@ In a .NET or Godot project, run `dotnet add package Nino --prerelease` (v4 is st
 
 ## Which platforms and .NET versions does Nino support?
 
-The runtime targets `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0`. Nino runs on .NET servers and desktop apps, Unity 2022.3 and later (Mono and IL2CPP, every player platform), Godot 4 .NET projects and HybridCLR hot update, and every target writes identical bytes. The generator needs Roslyn 4.3 or later and the project must use C# 9 or later. See [Platforms and Binary Format](/en/docs/v4/platforms).
+The runtime targets `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0`. Nino runs on .NET servers and desktop apps, Unity 2022.3 and later (Mono and IL2CPP, every player platform), Godot 4 .NET projects and HybridCLR hot update, and every target writes identical bytes. The generator needs Roslyn 4.3 or later and the project must use C# 9 or later. See [Platforms](/en/docs/v4/platforms).
 
 ## Does Nino use reflection? Does it work with IL2CPP and NativeAOT?
 
-No reflection: the generator writes one formatter per type at compile time, so Nino works under IL2CPP, NativeAOT and HybridCLR, where runtime code generation is unavailable. See [Performance Guide](/en/docs/v4/performance).
+No reflection: the generator writes one formatter per type at compile time, so Nino works under IL2CPP, NativeAOT and HybridCLR, where runtime code generation is unavailable. See [Performance Internals](/en/docs/v4/performance).
 
 Nino.Core's net8.0 and net10.0 builds are also annotated for trimming and Native AOT: publishing with `PublishTrimmed` or `PublishAot` gives no warnings from Nino. Under Native AOT, Nino uses only the formatters the generator wrote, so every type you serialize must appear in code the generator sees (as a member type, or as the type argument or `typeof` argument of a `NinoSerializer`/`NinoDeserializer` call). A type that only exists at run time fails with an error that names it, never with wrong data. See [Trimming and Native AOT](/en/docs/v4/platforms#trimming-and-native-aot).
 
 ## How fast is Nino compared with MemoryPack?
 
-In the same benchmark run, Nino v4 serializes up to <BenchValue k="serialize.max" /> faster than MemoryPack and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; on raw struct arrays the two are at least on par. Serializing into a reused buffer allocates nothing. See [Benchmarks](/en/docs/v4/benchmarks) and [Nino vs MemoryPack](/en/docs/v4/vs-memorypack).
+In the same benchmark run, Nino v4 serializes up to <BenchValue k="serialize.max" /> faster than MemoryPack and deserializes classes and polymorphic graphs up to <BenchValue k="deserialize.max" /> faster; on raw struct arrays the two are at least on par. Serializing into a reused buffer allocates nothing. See [.NET Benchmarks](/en/docs/v4/benchmarks) and [Nino vs MemoryPack](/en/docs/v4/vs-memorypack).
 
 ## What can I use Nino for?
 
@@ -56,7 +56,7 @@ No. v4 has a new binary format and cannot read data written by v3 or by the v4 b
 
 ## Can I use Nino from JavaScript or TypeScript?
 
-Yes. [Nino.Codegen](/en/docs/v4/advanced/codegen#typescript) generates TypeScript classes, enums and codecs for your `[NinoType]`s after each build, with the `nino.ts` runtime, so browsers and Node read and write exactly the bytes .NET writes, without the .NET runtime. It leaves out generic types, reference tracking and a few built-in types ([What TypeScript Leaves Out](/en/docs/v4/advanced/codegen#not-supported)). For those, run the C# types themselves in the browser: a .NET `browser-wasm` app that references Nino, called from JavaScript through `[JSExport]`, at the cost of downloading the .NET runtime. See [Browser and JavaScript Clients](/en/docs/v4/advanced/browser).
+Yes. [Nino.Codegen](/en/docs/v4/advanced/codegen#typescript) generates TypeScript classes, enums and codecs for your `[NinoType]`s after each build, with the `nino.ts` runtime, so browsers and Node read and write exactly the bytes .NET writes, without the .NET runtime. It leaves out generic types, reference tracking and a few built-in types ([What TypeScript Leaves Out](/en/docs/v4/advanced/codegen#not-supported)). For those, run the C# types themselves in the browser: a .NET `browser-wasm` app that references Nino, called from JavaScript through `[JSExport]`, at the cost of downloading the .NET runtime. See [Browser Clients](/en/docs/v4/advanced/browser).
 
 ## Can ASP.NET Core read and write Nino bodies?
 

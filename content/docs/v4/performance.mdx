@@ -1,12 +1,13 @@
 ---
-title: Performance Guide
+title: Performance Internals
+seoTitle: "How Nino Is Fast: Performance Internals – Nino v4 Docs"
 description: "How Nino v4 gets its speed, and what you can do to keep it: interceptors, raw structs, buffer reuse, threading."
 icon: Zap
 ---
 
 <AnchorRedirect map={{ buffers: '/en/docs/v4/advanced/zero-allocation#what-allocates' }} />
 
-Nino is fast with no tuning at all. This page explains what happens under the hood, so you can keep your types and calls on the fast paths. For measurements, see [Benchmarks](/en/docs/v4/benchmarks); for how to use these paths in your own code, see [High-Performance Serialization](/en/docs/v4/advanced/high-performance) and the recipes in [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation).
+Nino is fast with no tuning at all. This page explains what happens under the hood, so you can keep your types and calls on the fast paths. For measurements, see [.NET Benchmarks](/en/docs/v4/benchmarks); for how to use these paths in your own code, see [High-Performance Serialization](/en/docs/v4/advanced/high-performance) and the recipes in [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation).
 
 ## Interceptors
 
@@ -64,7 +65,7 @@ Unmanaged values are copied as raw memory:
 - a `[NinoType]` struct that qualifies as raw (see [Structs](/en/docs/v4/defining-types#structs)), alone or in arrays and lists;
 - arrays, lists and spans of a `[NinoType]` struct of fixed size that is not raw (a value tuple or `KeyValuePair` member, `LayoutKind.Auto`, auto-properties, another such struct inside): its generated formatter also reads and writes it as a block, each member at a constant offset, so the collection takes one bounds check and the vector paths of tuples on .NET 8+ (a loop without SIMD) instead of one value at a time. This needs every member to be a raw value, a tuple or pair of them, or another such struct, all assignable in place (no `[NinoConstructor]` or `init`-only members); a nullable member is not fixed-size. The bytes are the same.
 
-Padding bytes are zeroed on write, so equal values always produce equal bytes, even when the struct sits in memory that was never cleared (an `ArrayPool` array, `stackalloc` under `[SkipLocalsInit]`). Nino finds the padding at runtime, the first time it writes the type: it reads the field offsets once, and the result becomes a JIT-time constant, so a struct without padding pays nothing for the check. Arrays of padded structs are copied through a SIMD mask in the same pass, which costs a little more than a plain `memcpy`. On a runtime whose memory layout of a struct differs from the canonical one (Mono, IL2CPP, .NET Framework and 32-bit hosts for some structs), values are converted field by field instead ([Struct Layouts Across Runtimes](/en/docs/v4/struct-layouts#cost)).
+Padding bytes are zeroed on write, so equal values always produce equal bytes, even when the struct sits in memory that was never cleared (an `ArrayPool` array, `stackalloc` under `[SkipLocalsInit]`). Nino finds the padding at runtime, the first time it writes the type: it reads the field offsets once, and the result becomes a JIT-time constant, so a struct without padding pays nothing for the check. Arrays of padded structs are copied through a SIMD mask in the same pass, which costs a little more than a plain `memcpy`. On a runtime whose memory layout of a struct differs from the canonical one (Mono, IL2CPP, .NET Framework and 32-bit hosts for some structs), values are converted field by field instead ([Struct Layouts](/en/docs/v4/struct-layouts#cost)).
 
 ### Struct Layout [#struct-layout]
 
@@ -108,7 +109,7 @@ How to keep your own types on this path (which collections to use, what turns ra
 
 <Callout type="info">
 
-The raw layout is the canonical 64-bit layout. Where a runtime lays a struct out differently (32-bit platforms, old Mono), Nino converts field by field into the same bytes, so data stays portable at some cost in speed. See [Platforms and Binary Format](/en/docs/v4/platforms).
+The raw layout is the canonical 64-bit layout. Where a runtime lays a struct out differently (32-bit platforms, old Mono), Nino converts field by field into the same bytes, so data stays portable at some cost in speed. See [Platforms](/en/docs/v4/platforms).
 
 </Callout>
 
@@ -158,10 +159,10 @@ A `string`, an array or collection, a class, a `T?`, a tuple, `DateTimeOffset` o
 
 - **Serializing allocates nothing** except the `byte[]` you ask for. Serialize into a reused `NinoArrayBufferWriter` (or any `IBufferWriter<byte>`) and a call allocates 0 B.
 - **The `byte[]` is exactly the bytes**: where the size is known before writing (fixed-size values, and arrays and lists of fixed-size elements), Nino allocates it at that size and writes straight into it; other values are written into a pooled scratch buffer and copied out once.
-- **Deserializing allocates only the result objects**, and even those can be reused: deserialize into an existing instance with `ref`, and take new instances from `[NinoPooled]` pools. Reusing instances allocates 0 B, apart from strings whose text changed: an unchanged string is kept, and only changed text is read into a new instance (non-ASCII `[NinoUtf8]` text always is). See [Reuse Deserialization and Pooling](/en/docs/v4/pooling).
+- **Deserializing allocates only the result objects**, and even those can be reused: deserialize into an existing instance with `ref`, and take new instances from `[NinoPooled]` pools. Reusing instances allocates 0 B, apart from strings whose text changed: an unchanged string is kept, and only changed text is read into a new instance (non-ASCII `[NinoUtf8]` text always is). See [Reuse and Pooling](/en/docs/v4/pooling).
 - By default a string whose chars are all at most U+00FF is written in one byte a char and other text as UTF-16, each in one pass that narrows, widens or copies the chars. `[NinoUtf8]` has to transcode, and a non-empty string carries a byte count after its char count (one byte up to 127 bytes of UTF-8); it is smaller only for text that is mostly ASCII with a few wider chars ([Strings](/en/docs/v4/wire-format#strings)).
 
-Where each destination writes (in place, or through a per-thread [scratch buffer](/en/docs/v4/basic#terms) and one copy) and what each call allocates is listed in [What Allocates](/en/docs/v4/advanced/zero-allocation#what-allocates). On the reading side, `NinoDeserializer` takes a `ReadOnlySpan<byte>`: pass a slice of whatever memory you already have (a pooled array, a pipe segment, a memory-mapped file) without copying it.
+Where each destination writes (in place, or through a per-thread <Term id="scratch-buffer">scratch buffer</Term> and one copy) and what each call allocates is listed in [What Allocates](/en/docs/v4/advanced/zero-allocation#what-allocates). On the reading side, `NinoDeserializer` takes a `ReadOnlySpan<byte>`: pass a slice of whatever memory you already have (a pooled array, a pipe segment, a memory-mapped file) without copying it.
 
 ## Thread Safety
 
