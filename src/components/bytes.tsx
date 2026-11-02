@@ -182,10 +182,10 @@ export function Matrix({
 }) {
   return (
     <div className="not-prose my-6 overflow-x-auto rounded-lg border border-fd-border">
-      <table className="w-full border-collapse text-sm">
+      <table className="w-full border-collapse text-sm [&_code]:[overflow-wrap:anywhere]">
         <thead>
           <tr className="bg-fd-card">
-            <th className="sticky left-0 bg-fd-card px-3 py-2 text-left font-medium">
+            <th className="sticky left-0 z-10 bg-fd-card px-3 py-2 text-left font-medium shadow-[inset_-1px_0_0_var(--color-fd-border)]">
               {corner}
             </th>
             {columns.map((column, i) => (
@@ -211,7 +211,7 @@ export function Matrix({
                   colSpan={columns.length + 1}
                   className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-fd-muted-foreground"
                 >
-                  {row.group}
+                  <span className="sticky left-3">{row.group}</span>
                 </th>
               </tr>
             ) : (
@@ -220,7 +220,7 @@ export function Matrix({
                 key={r}
                 className="border-t border-fd-border"
               >
-                <th className="sticky left-0 bg-fd-background px-3 py-2 text-left align-top font-normal">
+                <th className="sticky left-0 z-10 min-w-32 bg-fd-background px-3 py-2 text-left align-top font-normal shadow-[inset_-1px_0_0_var(--color-fd-border)]">
                   {row.label}
                 </th>
                 {row.cells.map((cell, c) => {
@@ -230,7 +230,7 @@ export function Matrix({
                     <td
                       // biome-ignore lint/suspicious/noArrayIndexKey: static table
                       key={c}
-                      className="px-3 py-2 align-top"
+                      className="min-w-40 px-3 py-2 align-top"
                     >
                       <div className="flex items-start gap-2">
                         {style ? (
