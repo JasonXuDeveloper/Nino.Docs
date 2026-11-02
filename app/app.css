@@ -183,3 +183,27 @@
 .prose td code.nino-bytes {
   white-space: nowrap;
 }
+
+/*
+ * The copy button of a code block without a title bar (Fumadocs places it at
+ * the top right, over the code) hid the end of the first line. With a mouse
+ * it shows while the block is hovered or focused; on a touch screen, which
+ * cannot hover, the code starts below it instead. Titled blocks keep the
+ * button in their title bar.
+ */
+@media (hover: hover) {
+  figure.shiki > .absolute:has(> button) {
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+  }
+
+  figure.shiki:is(:hover, :focus-within) > .absolute:has(> button) {
+    opacity: 1;
+  }
+}
+
+@media (hover: none) {
+  figure.shiki:has(> .absolute > button) > [role="region"] {
+    padding-top: 2.5rem;
+  }
+}
