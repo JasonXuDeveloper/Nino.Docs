@@ -266,6 +266,8 @@ const llmsCopy: Record<
       'Install: `dotnet add package Nino --prerelease` (NuGet: https://www.nuget.org/packages/Nino); Unity: `openupm add com.jasonxudeveloper.nino`',
       'Optional packages: `Nino.Immutable` (System.Collections.Immutable types), `Nino.AspNetCore` (ASP.NET Core MVC formatters and Minimal API bodies for `application/x-nino`) and `Nino.Codegen` (TypeScript, Go and Rust types and codecs, generated after each build; the same as the `nino-gen` tool, `Nino.Codegen.Tool`)',
       'v4 is still a prerelease on NuGet: without `--prerelease`, NuGet installs the stable 3.9.x, a test build of v4 features that is not compatible with v4.',
+      'Go, Rust and TypeScript: code that nino-gen generates from your C# `[NinoType]`s, with the runtimes published with every release from 4.0.0-rc.8: `go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4`, `cargo add nino-serialization` (crate `nino-serialization`, library `nino`), `npm install nino-serialization`',
+      'AI coding agents: `npx skills add JasonXuDeveloper/Nino` installs the `nino-serialization` skill (Claude Code, Codex, Cursor, Copilot and other agents)',
       'Usage: mark a class, struct, record or interface with `[NinoType]`, then call `NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)`',
       ...(headlineSerialize
         ? [
@@ -288,6 +290,8 @@ const llmsCopy: Record<
       '安装：`dotnet add package Nino --prerelease`（[NuGet](https://www.nuget.org/packages/Nino)）；Unity：`openupm add com.jasonxudeveloper.nino`',
       '可选包：`Nino.Immutable`（System.Collections.Immutable 中的类型）、`Nino.AspNetCore`（用于 `application/x-nino` 的 ASP.NET Core MVC 格式化器与 Minimal API 请求体）和 `Nino.Codegen`（每次构建后生成 TypeScript、Go 和 Rust 类型与编解码器；命令行工具 `nino-gen` 即 `Nino.Codegen.Tool`）',
       'v4 在 NuGet 上仍是预发行版：不加 `--prerelease` 时 NuGet 会安装稳定版 3.9.x，它是测试 v4 功能的过渡版本，与 v4 不兼容。',
+      'Go、Rust 和 TypeScript：使用 nino-gen 从你的 C# `[NinoType]` 生成的代码，运行时从 4.0.0-rc.8 起随每个版本发布：`go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4`、`cargo add nino-serialization`（crate `nino-serialization`，库名 `nino`）、`npm install nino-serialization`',
+      'AI 编程助手：`npx skills add JasonXuDeveloper/Nino` 安装 `nino-serialization` skill（Claude Code、Codex、Cursor、Copilot 等）',
       '用法：用 `[NinoType]` 标记类、结构体、记录或接口，然后调用 `NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)`',
       ...(headlineSerialize
         ? [

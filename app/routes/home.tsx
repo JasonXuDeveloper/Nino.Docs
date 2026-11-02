@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { HomeCompare } from '@/components/home-compare';
+import { HomeInstall } from '@/components/home-install';
 import {
   HomeAbout,
   HomeFaq,
@@ -159,7 +160,7 @@ const copy: Record<
       },
       {
         icon: FileCode,
-        label: 'TypeScript 与 ASP.NET Core',
+        label: 'TypeScript、Go、Rust 与 ASP.NET Core',
         text: 'Nino.Codegen 在每次构建后为你的 [NinoType] 生成 TypeScript、Go 或 Rust 编解码代码；Nino.AspNetCore 为 MVC 和 Minimal API 读写 application/x-nino 请求体。',
       },
     ],
@@ -211,7 +212,7 @@ export default function HomePage({ params }: Route.ComponentProps) {
             aria-hidden="true"
             className="nino-hero-glow pointer-events-none absolute inset-0 -z-10"
           />
-          <div className="flex max-w-5xl flex-col items-center text-center">
+          <div className="flex w-full max-w-5xl flex-col items-center text-center">
             <span className="mb-4 rounded-full border border-fd-border bg-fd-secondary/50 px-3 py-1 text-xs font-medium text-fd-muted-foreground">
               {t.pill}
             </span>
@@ -253,9 +254,7 @@ export default function HomePage({ params }: Route.ComponentProps) {
               </a>
             </div>
 
-            <code className="mt-4 rounded-md border bg-fd-secondary/50 px-3 py-1.5 font-mono text-sm text-fd-muted-foreground">
-              dotnet add package Nino --prerelease
-            </code>
+            <HomeInstall lang={lang} docs={docs} />
           </div>
         </section>
 

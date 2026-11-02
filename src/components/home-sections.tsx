@@ -94,9 +94,14 @@ const text: Record<
         code: true,
       },
       {
+        label: 'AI coding agents',
+        value: 'npx skills add JasonXuDeveloper/Nino',
+        code: true,
+      },
+      {
         label: 'Runs on',
         value:
-          '.NET Standard 2.0+, .NET 8, .NET 10, NativeAOT, ASP.NET Core, Unity 2022.3+ (Mono, IL2CPP, HybridCLR), Godot 4; browsers and Node through generated TypeScript',
+          '.NET Standard 2.0+, .NET 8, .NET 10, NativeAOT, ASP.NET Core, Unity 2022.3+ (Mono, IL2CPP, HybridCLR), Godot 4; browsers and Node through generated TypeScript, Go and Rust through generated code',
       },
       ...(serializeRange
         ? [
@@ -204,7 +209,7 @@ const text: Record<
       {
         question: 'How do I install Nino?',
         answer:
-          'Run dotnet add package Nino --prerelease in a .NET project, or openupm add com.jasonxudeveloper.nino in a Unity project. Nino is free and MIT licensed.',
+          'Run dotnet add package Nino --prerelease in a .NET project, or openupm add com.jasonxudeveloper.nino in a Unity project. Go, Rust and TypeScript programs use code that nino-gen (Nino.Codegen) generates from your C# types, with the runtime from go get, cargo add or npm install. For AI coding agents, npx skills add JasonXuDeveloper/Nino installs the nino-serialization skill. Nino is free and MIT licensed.',
         href: 'start',
       },
     ],
@@ -227,9 +232,14 @@ const text: Record<
         code: true,
       },
       {
+        label: 'AI 编程助手',
+        value: 'npx skills add JasonXuDeveloper/Nino',
+        code: true,
+      },
+      {
         label: '运行环境',
         value:
-          '.NET Standard 2.0+、.NET 8、.NET 10、NativeAOT、ASP.NET Core、Unity 2022.3+（Mono、IL2CPP、HybridCLR）、Godot 4；通过生成的 TypeScript 支持浏览器和 Node',
+          '.NET Standard 2.0+、.NET 8、.NET 10、NativeAOT、ASP.NET Core、Unity 2022.3+（Mono、IL2CPP、HybridCLR）、Godot 4；通过生成的 TypeScript 支持浏览器和 Node，通过生成的代码支持 Go 和 Rust',
       },
       ...(serializeRange
         ? [
@@ -334,7 +344,7 @@ const text: Record<
       {
         question: '如何安装 Nino？',
         answer:
-          '在 .NET 项目中运行 dotnet add package Nino --prerelease；Unity 项目中运行 openupm add com.jasonxudeveloper.nino。Nino 免费，采用 MIT 协议。',
+          '在 .NET 项目中运行 dotnet add package Nino --prerelease；Unity 项目中运行 openupm add com.jasonxudeveloper.nino。Go、Rust 和 TypeScript 程序使用 nino-gen（Nino.Codegen）从你的 C# 类型生成的代码，运行时用 go get、cargo add 或 npm install 安装。给 AI 编程助手用的 nino-serialization skill 用 npx skills add JasonXuDeveloper/Nino 安装。Nino 免费，采用 MIT 协议。',
         href: 'start',
       },
     ],
