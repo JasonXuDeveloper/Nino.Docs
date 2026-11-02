@@ -6,6 +6,7 @@
  * run; nothing is computed here. The first example is prerendered; the
  * Markdown copy lists every example (src/lib/markdown.tsx).
  */
+import { DynamicCodeBlock } from 'fumadocs-ui/components/dynamic-codeblock';
 import { useState } from 'react';
 import data from '@/data/byte-examples.json';
 import { cn } from '@/lib/cn';
@@ -146,20 +147,23 @@ export function BytePlayground({ lang = 'en' }: { lang?: Locale }) {
         ) : null}
       </div>
       <div className="flex flex-col gap-3 p-3 sm:p-4">
-        <pre className="overflow-x-auto rounded-lg bg-fd-muted p-3 text-xs leading-relaxed">
-          <code>{example.code}</code>
-        </pre>
+        <DynamicCodeBlock
+          lang="csharp"
+          code={example.code}
+          codeblock={{ className: 'my-0' }}
+        />
         <p className="text-sm text-fd-muted-foreground">{example[lang].note}</p>
         <div aria-live="polite">
           <Bytes
+            stacked
             rows={rows.map((row) => ({
               title: (
                 <>
                   <code className="text-[0.75rem]">{row.title}</code>
-                  <span className="block font-normal">
+                  <span className="font-normal">
                     {zh
-                      ? `${byteCount(row.fields)} 字节`
-                      : `${byteCount(row.fields)} bytes`}
+                      ? ` · ${byteCount(row.fields)} 字节`
+                      : ` · ${byteCount(row.fields)} bytes`}
                   </span>
                 </>
               ),

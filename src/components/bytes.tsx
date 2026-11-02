@@ -50,9 +50,15 @@ export function byteCells(hex: string) {
 export function Bytes({
   rows,
   caption,
+  stacked = false,
 }: {
   rows: ByteRow[];
   caption?: ReactNode;
+  /**
+   * Titles above their bytes instead of in a column to the left: for long
+   * titles (a C# value), which a narrow column would wrap.
+   */
+  stacked?: boolean;
   /**
    * Why these bytes are derived from the specification's rules instead of
    * copied from one of its dumps or the corpus: `bun run check:bytes` then
@@ -61,19 +67,29 @@ export function Bytes({
   derived?: string;
 }) {
   return (
-    <figure className="not-prose my-6 flex flex-col gap-4">
+    <figure
+      className={cn('not-prose flex flex-col gap-4', stacked ? 'my-1' : 'my-6')}
+    >
       {rows.map((row, r) => (
         <div
           // biome-ignore lint/suspicious/noArrayIndexKey: static figure
           key={r}
-          className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-3"
+          className={cn(
+            'flex flex-col gap-1.5',
+            !stacked && 'sm:flex-row sm:items-start sm:gap-4',
+          )}
         >
           {row.title ? (
-            <div className="shrink-0 pt-1 text-xs font-medium text-fd-muted-foreground sm:w-40">
+            <div
+              className={cn(
+                'text-xs font-medium text-fd-muted-foreground',
+                !stacked && 'shrink-0 pt-1 sm:w-40',
+              )}
+            >
               {row.title}
             </div>
           ) : null}
-          <div className="flex flex-wrap gap-x-1.5 gap-y-2">
+          <div className="flex flex-wrap gap-x-3 gap-y-2">
             {row.fields.map((field, f) => (
               <div
                 // biome-ignore lint/suspicious/noArrayIndexKey: static figure

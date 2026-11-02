@@ -12,7 +12,7 @@
         "title": "一个小类型",
         "note": "密封类：先是存在字节，再按声明顺序写成员，不带名称和长度。"
       },
-      "code": "[NinoType] public sealed class Small { public int A; public string B; }\n\nnew Small { A = 1, B = \"a\" }",
+      "code": "[NinoType]\npublic sealed class Small\n{\n    public int A;\n    public string B;\n}\n\nnew Small { A = 1, B = \"a\" }",
       "rows": [
         {
           "en": "new Small { A = 1, B = \"a\" }",
@@ -63,7 +63,7 @@
         "title": "多态",
         "note": "声明为抽象基类的每个元素都以运行时类型的类型 ID 开头；null 写成四个 0 字节。"
       },
-      "code": "[NinoType] public abstract class Shape { public int Id; }\n[NinoType] public sealed class Circle : Shape { public float R; }\n[NinoType] public sealed class Square : Shape { public float Side; }\n\nnew List<Shape> { new Circle { Id = 1, R = 1f }, new Square { Id = 2, Side = 2f }, null }",
+      "code": "[NinoType]\npublic abstract class Shape { public int Id; }\n\n[NinoType]\npublic sealed class Circle : Shape { public float R; }\n\n[NinoType]\npublic sealed class Square : Shape { public float Side; }\n\nnew List<Shape>\n{\n    new Circle { Id = 1, R = 1f },\n    new Square { Id = 2, Side = 2f },\n    null,\n}",
       "rows": [
         {
           "en": "List<Shape>",
@@ -127,7 +127,7 @@
         "title": "键控",
         "note": "先是主体长度，再为每个成员写一项：成员名的 FNV-1a 哈希、长度和值。各项顺序任意，所以成员可以重排、删除或插入。"
       },
-      "code": "[NinoType(format: NinoFormat.Keyed)]\npublic sealed class Keyed { public int Id; [NinoFormerName(\"Title\")] public string Name; public long Score; }\n\nnew Keyed { Id = 1, Name = \"n\", Score = 2 }",
+      "code": "[NinoType(format: NinoFormat.Keyed)]\npublic sealed class Keyed\n{\n    public int Id;\n    [NinoFormerName(\"Title\")] public string Name;\n    public long Score;\n}\n\nnew Keyed { Id = 1, Name = \"n\", Score = 2 }",
       "rows": [
         {
           "en": "new Keyed { Id = 1, Name = \"n\", Score = 2 }",
@@ -214,7 +214,7 @@
         "title": "版本容错",
         "note": "整个继承体系只写一个长度，旧的读取方可以跳过它不认识的成员。声明为基类时，值以类型 ID 开头，而不是存在字节。"
       },
-      "code": "[NinoType(format: NinoFormat.VersionTolerant)] public class TolBase { public int A; }\n[NinoType(format: NinoFormat.VersionTolerant)] public sealed class TolLeaf : TolBase { public int B; }\n\nnew TolLeaf { A = 1, B = 7 }",
+      "code": "[NinoType(format: NinoFormat.VersionTolerant)]\npublic class TolBase { public int A; }\n\n[NinoType(format: NinoFormat.VersionTolerant)]\npublic sealed class TolLeaf : TolBase { public int B; }\n\nnew TolLeaf { A = 1, B = 7 }",
       "rows": [
         {
           "en": "as TolLeaf",
@@ -289,7 +289,7 @@
         "title": "字符串",
         "note": "默认编码下，所有字符都不超过 U+00FF 的文本每个字符一个字节，其他文本按 UTF-16 写；[NinoUtf8] 按 UTF-8 写，并带字节数。头的第一个字节给出头的大小。"
       },
-      "code": "[NinoType] public sealed class Strings { public string Def; [NinoUtf8] public string U8; }",
+      "code": "[NinoType]\npublic sealed class Strings\n{\n    public string Def;\n    [NinoUtf8] public string U8;\n}",
       "strings": [
         {
           "value": "null",
@@ -440,7 +440,7 @@
         "title": "引用追踪",
         "note": "被追踪的对象只在引用头之后写一次；持有它的第二个槽位只写它的编号。"
       },
-      "code": "[NinoType(trackReferences: true)] public sealed class Node { public int V; public Node Next; }\n[NinoType] public sealed class Holder { public object Any; public Node N; }\n\nvar n = new Node { V = 5 };\nnew Holder { Any = n, N = n }",
+      "code": "[NinoType(trackReferences: true)]\npublic sealed class Node\n{\n    public int V;\n    public Node Next;\n}\n\n[NinoType]\npublic sealed class Holder\n{\n    public object Any;\n    public Node N;\n}\n\nvar n = new Node { V = 5 };\nnew Holder { Any = n, N = n }",
       "rows": [
         {
           "en": "new Holder { Any = n, N = n }",
@@ -497,7 +497,7 @@
         "title": "原始结构体",
         "note": "非托管结构体按内存原样写入，填充字节清零；它的数组是数量加一次整块拷贝。"
       },
-      "code": "[NinoType] public struct RawPoint { public int X; public byte Y; }\n\nnew RawPoint[] { new() { X = 1, Y = 2 }, new() { X = 3, Y = 4 } }",
+      "code": "[NinoType]\npublic struct RawPoint\n{\n    public int X;\n    public byte Y;\n}\n\nnew RawPoint[] { new() { X = 1, Y = 2 }, new() { X = 3, Y = 4 } }",
       "rows": [
         {
           "en": "RawPoint { X = 1, Y = 2 }",
