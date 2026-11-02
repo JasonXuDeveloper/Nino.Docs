@@ -136,3 +136,28 @@
     var(--color-fd-border) 3px 4px
   );
 }
+
+/*
+ * Inline code in prose breaks inside a long name, path or MSBuild element
+ * when it cannot fit a line of its own, instead of running past the column
+ * on a phone (the page clips it). `break-word`, unlike `anywhere`, leaves a
+ * table column's minimum width alone, so tables still scroll. In the base
+ * layer, so a component's own rule (the matrix's `anywhere`) still wins.
+ */
+@layer base {
+  .prose :not(pre) > code {
+    overflow-wrap: break-word;
+  }
+
+  /*
+   * A long token in a table cell (src/mdx-components.tsx) breaks anywhere
+   * from tablet width up, so a three-column table fits the column instead of
+   * scrolling for one cell. Short tokens keep their width, so a table of
+   * short code (struct layouts) is not crushed; phones still scroll.
+   */
+  @media (min-width: 768px) {
+    .prose td code.nino-long-code {
+      overflow-wrap: anywhere;
+    }
+  }
+}
