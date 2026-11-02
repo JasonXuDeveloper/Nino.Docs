@@ -44,7 +44,7 @@ flowchart LR
 | `DateTimeOffset` | .NET 10：0 处是 `int` 型分钟数，8 处是时间 | .NET 8：0 处是 `short`；Mono、IL2CPP、.NET Framework：先放时间，8 处放 `short` |
 | `decimal` | 按 8 对齐（Mono 也是） | .NET Framework 和 IL2CPP 上按 4 对齐 |
 | 含元组或 `DateTime` 的结构体 | 顺序布局 | .NET Framework 把它当成自动布局：`{ byte A; DateTime B; int C; }` 的字段会换位置 |
-| `nint`、`nuint`、指针、函数指针（`delegate*`） | 8 字节（`nint` 符号扩展，其余零扩展） | 32 位运行时上是 4 字节，部分 8 字节字段也按 4 对齐（Windows x86 上的 `DateTime` 字段）；Mono 和 IL2CPP 把 `delegate*` 字段当成 `IntPtr` 做符号扩展，只在 32 位 Unity 播放器上、地址最高位为 1 时才有差别 |
+| `nint`、`nuint`、指针、函数指针（`delegate*`） | 8 字节（`nint` 符号扩展，其余零扩展） | 32 位运行时上是 4 字节，部分 8 字节字段也按 4 对齐（Windows x86 上的 `DateTime` 字段）；`delegate*` 字段在所有运行时（包括 Mono 和 IL2CPP）都零扩展，因为生成的代码记录了它（生成器看不到的结构体，即来自未使用 Nino 生成器的项目、只经由泛型代码到达的，在那里仍会符号扩展：[常见陷阱](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/pitfalls.md)） |
 | `Vector256<T>`、`Vector512<T>` | 按 32 和 64 对齐（x64） | Arm64 上按 16 对齐 |
 | `Vector<T>` | 16、32 或 64 字节，由 CPU 决定 | [不能序列化](#vector-t) |
 | `KeyValuePair`、`Nullable<T>`、`Guid`、`DateTime`、`TimeSpan` | 顺序布局，自然对齐 | 各处一致，除非它们的项或运行时的对齐不同 |
