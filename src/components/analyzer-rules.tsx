@@ -190,7 +190,7 @@ export function AnalyzerRules({ lang = 'en' }: { lang?: Locale }) {
       </div>
 
       <div className="overflow-hidden rounded-lg border border-fd-border text-sm">
-        <div className="hidden grid-cols-[7.5rem_6rem_1fr_1fr_4.5rem] gap-3 bg-fd-card px-3 py-2 text-xs font-medium text-fd-muted-foreground md:grid">
+        <div className="hidden grid-cols-[7rem_5.5rem_minmax(0,3fr)_minmax(0,2fr)_4.5rem] gap-3 bg-fd-card px-3 py-2 text-xs font-medium text-fd-muted-foreground md:grid">
           {t.head.map((h) => (
             <div key={h}>{h}</div>
           ))}
@@ -209,7 +209,7 @@ export function AnalyzerRules({ lang = 'en' }: { lang?: Locale }) {
                 <div
                   key={rule.id}
                   id={rule.id.toLowerCase()}
-                  className="grid scroll-mt-24 grid-cols-[auto_auto_1fr] items-center gap-x-3 gap-y-1.5 border-t border-fd-border px-3 py-2.5 target:bg-fd-primary/10 md:grid-cols-[7.5rem_6rem_1fr_1fr_4.5rem] md:items-start [&_code]:rounded [&_code]:bg-fd-muted [&_code]:px-1 [&_code]:text-[0.8em] [&_a]:underline [&_a]:underline-offset-2"
+                  className="grid scroll-mt-24 grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 border-t border-fd-border px-3 py-2.5 target:bg-fd-primary/10 md:grid-cols-[7rem_5.5rem_minmax(0,3fr)_minmax(0,2fr)_4.5rem] md:items-start [&_code]:rounded [&_code]:bg-fd-muted [&_code]:px-1 [&_code]:text-[0.8em] [&_code]:[overflow-wrap:anywhere] [&_a]:underline [&_a]:underline-offset-2"
                 >
                   <a
                     href={ruleHref(rule, lang)}
@@ -231,10 +231,10 @@ export function AnalyzerRules({ lang = 'en' }: { lang?: Locale }) {
                       </span>
                     ) : null}
                   </div>
-                  <div className="col-span-3 md:col-span-1">
+                  <div className="col-span-3 min-w-0 md:col-span-1">
                     {inlineMd(rule[lang].problem)}
                   </div>
-                  <div className="col-span-3 text-fd-muted-foreground md:col-span-1">
+                  <div className="col-span-3 min-w-0 text-fd-muted-foreground md:col-span-1">
                     <span className="md:hidden">→ </span>
                     {inlineMd(rule[lang].fix)}
                   </div>

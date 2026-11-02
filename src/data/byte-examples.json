@@ -434,13 +434,13 @@
       "spec": "A.5",
       "en": {
         "title": "Reference tracking",
-        "note": "A tracked object is written once, after a reference header; the second slot that holds it writes only its number."
+        "note": "A tracked object is written once, after a reference header; every later slot that holds it, another member or its own Next (a cycle), writes only its number."
       },
       "zh": {
         "title": "引用追踪",
-        "note": "被追踪的对象只在引用头之后写一次；持有它的第二个槽位只写它的编号。"
+        "note": "被追踪的对象只在引用头之后写一次；之后再持有它的槽位（另一个成员，或它自己的 Next，即循环）只写它的编号。"
       },
-      "code": "[NinoType(trackReferences: true)]\npublic sealed class Node\n{\n    public int V;\n    public Node Next;\n}\n\n[NinoType]\npublic sealed class Holder\n{\n    public object Any;\n    public Node N;\n}\n\nvar n = new Node { V = 5 };\nnew Holder { Any = n, N = n }",
+      "code": "[NinoType(trackReferences: true)]\npublic sealed class Node\n{\n    public int V;\n    public Node Next;\n}\n\n[NinoType]\npublic sealed class Holder\n{\n    public object Any;\n    public Node N;\n}\n\nvar n = new Node { V = 5 };\nn.Next = n;\nnew Holder { Any = n, N = n }",
       "rows": [
         {
           "en": "new Holder { Any = n, N = n }",
@@ -471,10 +471,10 @@
               "zh": "V = 5"
             },
             {
-              "hex": "00 00 00 00",
-              "kind": "header",
-              "en": "Next: null",
-              "zh": "Next：null"
+              "hex": "01 00 00 00",
+              "kind": "changed",
+              "en": "Next: object #1 again (the cycle)",
+              "zh": "Next：再次指向对象 #1（循环）"
             },
             {
               "hex": "01 00 00 00",
