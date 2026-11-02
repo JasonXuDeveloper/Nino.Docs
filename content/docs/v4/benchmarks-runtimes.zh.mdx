@@ -9,11 +9,13 @@ Nino 在 Go、Rust 和 TypeScript 中读写的字节与 .NET 完全相同，所�
 
 ## 对比对象 [#what-is-compared]
 
-| 语言 | 计时工具 | Nino | Protocol Buffers | MessagePack | 其他 |
-| --- | --- | --- | --- | --- | --- |
-| Go | `testing.B`，由 benchstat 汇总 | 与 nino-gen 生成代码形式相同的编解码器，以及[结构体标签](/zh/docs/v4/advanced/codegen#struct-tags) | google.golang.org/protobuf | vmihailenco/msgpack | `encoding/json`、`encoding/gob` |
-| Rust | criterion | 与 nino-gen 生成代码形式相同的编解码器 | prost | rmp-serde | bincode、postcard、serde_json |
-| TypeScript | tinybench，在 Node 中运行 | nino-gen 生成的代码 | protobuf-es | msgpackr | `JSON` |
+| | Go | Rust | TypeScript |
+| --- | --- | --- | --- |
+| 计时工具 | `testing.B`，由 benchstat 汇总 | criterion | tinybench，在 Node 中运行 |
+| Nino | 与 nino-gen 生成代码形式相同的编解码器，以及[结构体标签](/zh/docs/v4/advanced/codegen#struct-tags) | 与 nino-gen 生成代码形式相同的编解码器 | nino-gen 生成的代码 |
+| Protocol Buffers | `google.golang.org/protobuf` | `prost` | `protobuf-es` |
+| MessagePack | `vmihailenco/msgpack` | `rmp-serde` | `msgpackr` |
+| 其他 | `encoding/json`、`encoding/gob` | `bincode`、`postcard`、`serde_json` | `JSON` |
 
 每个用例中各序列化库拿到的数据都相同：protobuf 消息与类型逐字段对应；计时之前，每个序列化库都要先验证能读回自己写出的内容。
 
