@@ -4,9 +4,8 @@
  * (src/data/byte-examples.json) must appear, in order, in a dump of Nino's
  * specification (docs/spec/wire-format.md: Appendix A's dumps of a real run,
  * and every other hex run in it) or in a file of the conformance corpus
- * (conformance/corpus/valid/*.bin, written by Nino itself). A figure whose
- * bytes are derived from the rules rather than dumped says so with
- * `derived="why"` on `<Bytes>`; it is listed, not failed.
+ * (conformance/corpus/valid/*.bin, written by Nino itself). A row found in
+ * neither fails: a figure the spec has no dump for gets one there first.
  *
  *   bun run check:bytes          # Nino from $NINO_DIR, else ../Nino
  */
@@ -25,8 +24,9 @@ if (!existsSync(specPath)) {
 const byte = /^[0-9A-Fa-f]{2}$/;
 
 /**
- * The bytes of a run of hex tokens: `01 00×7` repeats a byte, `|` and
- * `...` separate (an ellipsis ends the run: what follows is abbreviated).
+ * The bytes of a run of hex tokens: `01 00×7` repeats a byte, `|` (`\|` in a
+ * table cell) separates fields, and any other word ends the run (`...`: what
+ * follows is abbreviated).
  */
 function tokens(text: string): string[][] {
   const runs: string[][] = [];
@@ -36,7 +36,7 @@ function tokens(text: string): string[][] {
     run = [];
   };
   for (const raw of text.split(/\s+/)) {
-    const word = raw.replace(/[`,;]/g, '');
+    const word = raw.replace(/[`,;\\]/g, '');
     if (word === '|' || word === '') continue;
     const repeat = /^([0-9A-Fa-f]{2})×(\d+)$/.exec(word);
     if (repeat) {
@@ -83,23 +83,18 @@ const found = (needle: string) =>
   haystacks.some((hay) => ` ${hay} `.includes(` ${needle} `));
 
 const errors: string[] = [];
-const derived: string[] = [];
 let checked = 0;
 
 /** `<Bytes ... />` blocks of an MDX file: each `fields: [...]` is a row. */
 function checkMdx(file: string) {
   const text = readFileSync(file, 'utf8');
   for (const block of text.matchAll(/<Bytes\b([\s\S]*?)\/>\n/g)) {
-    const why = /derived="([^"]+)"/.exec(block[1])?.[1];
     for (const row of block[1].split(/fields:\s*\[/).slice(1)) {
       const hex = [...row.matchAll(/hex:\s*'([^']*)'/g)].map((m) => m[1]);
       if (hex.length === 0) continue;
       const needle = tokens(hex.join(' ')).flat().join(' ');
       checked++;
-      if (found(needle)) continue;
-      const where = `${relative(root, file)}: ${needle}`;
-      if (why) derived.push(`${where} (${why})`);
-      else errors.push(where);
+      if (!found(needle)) errors.push(`${relative(root, file)}: ${needle}`);
     }
   }
 }
@@ -146,8 +141,6 @@ for (const example of examples.examples) {
   }
 }
 
-for (const line of derived)
-  console.warn(`derived, not in the spec or corpus: ${line}`);
 if (errors.length > 0) {
   console.error(
     `${errors.join('\n')}\n\n${errors.length} row(s) whose bytes appear in no dump of ${relative(root, specPath)} nor in the corpus`,
@@ -155,5 +148,5 @@ if (errors.length > 0) {
   process.exit(1);
 }
 console.log(
-  `Checked ${checked} byte rows against ${relative(root, specPath)} and the corpus: all found${derived.length ? ` (${derived.length} derived)` : ''}.`,
+  `Checked ${checked} byte rows against ${relative(root, specPath)} and the corpus: all found.`,
 );

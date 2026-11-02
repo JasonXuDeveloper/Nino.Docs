@@ -59,12 +59,6 @@ export function Bytes({
    * titles (a C# value), which a narrow column would wrap.
    */
   stacked?: boolean;
-  /**
-   * Why these bytes are derived from the specification's rules instead of
-   * copied from one of its dumps or the corpus: `bun run check:bytes` then
-   * lists the figure instead of failing it.
-   */
-  derived?: string;
 }) {
   return (
     <figure

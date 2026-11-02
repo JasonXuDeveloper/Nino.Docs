@@ -88,11 +88,11 @@ public sealed class Invoice : Document
 }
 ```
 
-`Invoice { Id = 1, Revision = 2, CustomerId = 5 }` 在头之后写成：
+`Invoice { Id = 1, Revision = 2, CustomerId = 7 }` 在头之后写成：
 
-<Bytes derived="the spec's version-tolerant rule (A.3): one int32 body length, then the members" rows={[
-  { title: '版本 1', fields: [{ hex: '08 00 00 00', kind: 'length', label: '长度 8' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '05 00 00 00', kind: 'value', label: 'CustomerId' }] },
-  { title: '版本 2', fields: [{ hex: '0C 00 00 00', kind: 'length', label: '长度 12' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '02 00 00 00', kind: 'changed', label: 'Revision：正是版本 1 期待 CustomerId 的位置' }, { hex: '05 00 00 00', kind: 'value', label: 'CustomerId：版本 1 当作未知成员跳过' }] },
+<Bytes rows={[
+  { title: '版本 1', fields: [{ hex: '08 00 00 00', kind: 'length', label: '长度 8' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '07 00 00 00', kind: 'value', label: 'CustomerId' }] },
+  { title: '版本 2', fields: [{ hex: '0C 00 00 00', kind: 'length', label: '长度 12' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '02 00 00 00', kind: 'changed', label: 'Revision：正是版本 1 期待 CustomerId 的位置' }, { hex: '07 00 00 00', kind: 'value', label: 'CustomerId：版本 1 当作未知成员跳过' }] },
 ]} />
 
 - **版本 2 读取版本 1 的数据：** `Revision` 读到的是 `CustomerId` 的字节；数据在 `CustomerId` 之前就结束了，`CustomerId` 像其他缺少的成员一样保留原有的值（新建的 `Invoice` 中为 `0`）。

@@ -116,8 +116,8 @@ Overview, FAQ and reference pages answer the questions their readers search for,
   (`src/components/bytes.tsx`). Kinds: `header` (header, presence byte, reference header), `length` (lengths and
   counts), `id` (type ids and keys), `value`, `pad` (hatched), `changed` (the bytes a comparison is about). Stack rows
   to compare encodings or versions. The bytes come from the specification's worked examples
-  (`docs/spec/wire-format.md`, Appendix A, dumps of a real run) or are derived from its rules and checked there;
-  never typed from memory.
+  (`docs/spec/wire-format.md`, Appendix A and the sections' examples, dumps of a real run), never typed from memory
+  or worked out from the rules: a figure the spec has no dump for gets one in Nino's spec first.
 - **Support matrices**: `<Matrix columns={[...]} rows={[{ group: 'Platforms' }, { label, cells: ['yes', 'no: why',
   'partial: when', 'n/a', ['yes', <>JSX note</>]] }]} />` for any table whose cells are yes, no or partly with a short
   note; lucide icons on the palette's tints, a ✓/✗/⚠/– table in the Markdown copy. Not for tables of values.
@@ -166,9 +166,8 @@ Overview, FAQ and reference pages answer the questions their readers search for,
     memory; `bun run check:bytes` (below) checks every row. Add an example only when the spec has its dump.
 - **Every byte figure is checked**: `bun run check:bytes` (`scripts/check-bytes.ts`, `NINO_DIR` like
   `check:csharp`) finds each `<Bytes>` row of the v4 pages and each playground row in a hex dump of Nino's
-  `docs/spec/wire-format.md` or in a file of `conformance/corpus/valid`; a figure derived from the rules rather than
-  dumped carries `derived="which rule"` and is listed, not failed. Run it after any change to a figure and after a
-  wire-format change in Nino.
+  `docs/spec/wire-format.md` or in a file of `conformance/corpus/valid`, and fails on any row it cannot find. Run it
+  after any change to a figure and after a wire-format change in Nino.
 
 ## Code
 

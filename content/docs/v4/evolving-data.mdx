@@ -88,11 +88,11 @@ public sealed class Invoice : Document
 }
 ```
 
-After its header, an `Invoice { Id = 1, Revision = 2, CustomerId = 5 }` is written as:
+After its header, an `Invoice { Id = 1, Revision = 2, CustomerId = 7 }` is written as:
 
-<Bytes derived="the spec's version-tolerant rule (A.3): one int32 body length, then the members" rows={[
-  { title: 'Version 1', fields: [{ hex: '08 00 00 00', kind: 'length', label: 'length 8' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '05 00 00 00', kind: 'value', label: 'CustomerId' }] },
-  { title: 'Version 2', fields: [{ hex: '0C 00 00 00', kind: 'length', label: 'length 12' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '02 00 00 00', kind: 'changed', label: 'Revision: where version 1 expects CustomerId' }, { hex: '05 00 00 00', kind: 'value', label: 'CustomerId: skipped by version 1' }] },
+<Bytes rows={[
+  { title: 'Version 1', fields: [{ hex: '08 00 00 00', kind: 'length', label: 'length 8' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '07 00 00 00', kind: 'value', label: 'CustomerId' }] },
+  { title: 'Version 2', fields: [{ hex: '0C 00 00 00', kind: 'length', label: 'length 12' }, { hex: '01 00 00 00', kind: 'value', label: 'Id' }, { hex: '02 00 00 00', kind: 'changed', label: 'Revision: where version 1 expects CustomerId' }, { hex: '07 00 00 00', kind: 'value', label: 'CustomerId: skipped by version 1' }] },
 ]} />
 
 - **Version 2 reads version 1 data:** `Revision` gets the bytes of `CustomerId`, and the data ends before `CustomerId`, which keeps its value like any missing member (`0` in a new `Invoice`).
