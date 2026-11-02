@@ -312,8 +312,10 @@ function runtimeTable(
                   {caseName(row, zh)}
                   {row.rerun && ' *'}
                 </td>
-                <td className="text-right tabular-nums">{row.v4.text}</td>
-                <td className="text-right tabular-nums">
+                <td className="text-right tabular-nums whitespace-nowrap">
+                  {row.v4.text}
+                </td>
+                <td className="text-right tabular-nums whitespace-nowrap">
                   {row.memorypack.text}
                 </td>
                 <td className="text-right tabular-nums">
@@ -328,7 +330,10 @@ function runtimeTable(
                   )}
                 </td>
                 {others.map((lib) => (
-                  <td key={lib.key} className="text-right tabular-nums">
+                  <td
+                    key={lib.key}
+                    className="text-right tabular-nums whitespace-nowrap"
+                  >
                     {otherCell(row.others[lib.key], zh)}
                   </td>
                 ))}
@@ -497,8 +502,10 @@ function libraryTables(
                   return (
                     <tr key={row.key}>
                       <td>{caseName(row, zh)}</td>
-                      <td className="text-right tabular-nums">{row.v4.text}</td>
-                      <td className="text-right tabular-nums">
+                      <td className="text-right tabular-nums whitespace-nowrap">
+                        {row.v4.text}
+                      </td>
+                      <td className="text-right tabular-nums whitespace-nowrap">
                         {vs.time.text}
                       </td>
                       <td className="text-right tabular-nums">
@@ -569,14 +576,16 @@ function reuseTable(ds: BenchDataset, zh: boolean, markdown?: boolean) {
           return (
             <tr key={row.name}>
               <td>{zh ? row.zh : row.name}</td>
-              <td className="text-right tabular-nums">{row.ninoNew.text}</td>
-              <td className="text-right tabular-nums">
+              <td className="text-right tabular-nums whitespace-nowrap">
+                {row.ninoNew.text}
+              </td>
+              <td className="text-right tabular-nums whitespace-nowrap">
                 {best ? <strong>{reused}</strong> : reused}
               </td>
-              <td className="text-right tabular-nums">
+              <td className="text-right tabular-nums whitespace-nowrap">
                 {row.memorypackNew.text}
               </td>
-              <td className="text-right tabular-nums">
+              <td className="text-right tabular-nums whitespace-nowrap">
                 {row.memorypackOverwrite.text} (
                 {formatBytes(row.memorypackOverwriteBytes)})
                 {!markdown && (
@@ -656,13 +665,13 @@ function resultsTable(ds: BenchDataset, zh: boolean, tabbed: boolean) {
               <td>
                 <code>{row.method}</code>
               </td>
-              <td className="text-right tabular-nums">
+              <td className="text-right tabular-nums whitespace-nowrap">
                 {formatTime(row.meanNs)}
               </td>
-              <td className="text-right tabular-nums">
+              <td className="text-right tabular-nums whitespace-nowrap">
                 {size(row.allocatedBytes)}
               </td>
-              <td className="text-right tabular-nums">
+              <td className="text-right tabular-nums whitespace-nowrap">
                 {payloadSize(row.payloadBytes || null)}
               </td>
             </tr>
@@ -758,7 +767,7 @@ export function RuntimesTables({
                         return (
                           <td
                             key={column.key}
-                            className="text-right tabular-nums"
+                            className="text-right tabular-nums whitespace-nowrap"
                           >
                             {cell ? (
                               <>
@@ -892,10 +901,12 @@ export function UnityTables({
                       <code>{row.case}</code>
                     </td>
                     <td>{unityOperation(row.operation, zh)}</td>
-                    <td className="text-right tabular-nums">
+                    <td className="text-right tabular-nums whitespace-nowrap">
                       {row.without.text}
                     </td>
-                    <td className="text-right tabular-nums">{row.with.text}</td>
+                    <td className="text-right tabular-nums whitespace-nowrap">
+                      {row.with.text}
+                    </td>
                     <td className="text-right tabular-nums">
                       {speedupCell(row, zh)}
                     </td>

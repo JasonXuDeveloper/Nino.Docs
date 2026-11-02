@@ -363,7 +363,9 @@ export function BarChart({
           />
           <Group top={plotBottom + 38}>
             <text
-              x={plotWidth / 2}
+              // Centred under the plot, but never past the chart's left edge
+              // (a narrow plot is shorter than the label on a phone).
+              x={Math.max(plotWidth / 2, textWidth(axisLabel, 11) / 2)}
               fontSize={11}
               textAnchor="middle"
               fill="var(--color-fd-muted-foreground)"
