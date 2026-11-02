@@ -1,0 +1,548 @@
+{
+  "source": "Nino's docs/spec/wire-format.md, Appendix A: dumps of a real run of Nino 4.0.0-rc.8 (net10.0, x64). bun run check:bytes checks every row against it.",
+  "examples": [
+    {
+      "id": "small",
+      "spec": "A.1",
+      "en": {
+        "title": "A small type",
+        "note": "A sealed class: a presence byte, then its members in declaration order, with no names or lengths."
+      },
+      "zh": {
+        "title": "一个小类型",
+        "note": "密封类：先是存在字节，再按声明顺序写成员，不带名称和长度。"
+      },
+      "code": "[NinoType] public sealed class Small { public int A; public string B; }\n\nnew Small { A = 1, B = \"a\" }",
+      "rows": [
+        {
+          "en": "new Small { A = 1, B = \"a\" }",
+          "zh": "new Small { A = 1, B = \"a\" }",
+          "fields": [
+            {
+              "hex": "01",
+              "kind": "header",
+              "en": "presence byte",
+              "zh": "存在字节"
+            },
+            {
+              "hex": "01 00 00 00",
+              "kind": "value",
+              "en": "A = 1",
+              "zh": "A = 1"
+            },
+            {
+              "hex": "03 61",
+              "kind": "value",
+              "en": "B = \"a\" (header 3: one Latin-1 char)",
+              "zh": "B = \"a\"（头 3：一个 Latin-1 字符）"
+            }
+          ]
+        },
+        {
+          "en": "null",
+          "zh": "null",
+          "fields": [
+            {
+              "hex": "00",
+              "kind": "header",
+              "en": "presence byte: null",
+              "zh": "存在字节：null"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "polymorphism",
+      "spec": "A.2",
+      "en": {
+        "title": "Polymorphism",
+        "note": "Each element declared as the abstract base starts with the type id of its runtime type; null is four zero bytes."
+      },
+      "zh": {
+        "title": "多态",
+        "note": "声明为抽象基类的每个元素都以运行时类型的类型 ID 开头；null 写成四个 0 字节。"
+      },
+      "code": "[NinoType] public abstract class Shape { public int Id; }\n[NinoType] public sealed class Circle : Shape { public float R; }\n[NinoType] public sealed class Square : Shape { public float Side; }\n\nnew List<Shape> { new Circle { Id = 1, R = 1f }, new Square { Id = 2, Side = 2f }, null }",
+      "rows": [
+        {
+          "en": "List<Shape>",
+          "zh": "List<Shape>",
+          "fields": [
+            {
+              "hex": "03 00 00 00",
+              "kind": "length",
+              "en": "count 3",
+              "zh": "数量 3"
+            },
+            {
+              "hex": "AC 2B C0 ED",
+              "kind": "id",
+              "en": "type id of Spec.Circle",
+              "zh": "Spec.Circle 的类型 ID"
+            },
+            {
+              "hex": "01 00 00 00",
+              "kind": "value",
+              "en": "Id = 1 (the base's member first)",
+              "zh": "Id = 1（基类的成员在前）"
+            },
+            {
+              "hex": "00 00 80 3F",
+              "kind": "value",
+              "en": "R = 1f",
+              "zh": "R = 1f"
+            },
+            {
+              "hex": "1F 27 E7 8F",
+              "kind": "id",
+              "en": "type id of Spec.Square",
+              "zh": "Spec.Square 的类型 ID"
+            },
+            {
+              "hex": "02 00 00 00",
+              "kind": "value",
+              "en": "Id = 2",
+              "zh": "Id = 2"
+            },
+            {
+              "hex": "00 00 00 40",
+              "kind": "value",
+              "en": "Side = 2f",
+              "zh": "Side = 2f"
+            },
+            { "hex": "00 00 00 00", "kind": "id", "en": "null", "zh": "null" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "keyed",
+      "spec": "A.3",
+      "en": {
+        "title": "Keyed",
+        "note": "A body length, then one entry per member: the FNV-1a hash of its name, its length and its value. Entries may come in any order, so members can be reordered, removed or inserted."
+      },
+      "zh": {
+        "title": "键控",
+        "note": "先是主体长度，再为每个成员写一项：成员名的 FNV-1a 哈希、长度和值。各项顺序任意，所以成员可以重排、删除或插入。"
+      },
+      "code": "[NinoType(format: NinoFormat.Keyed)]\npublic sealed class Keyed { public int Id; [NinoFormerName(\"Title\")] public string Name; public long Score; }\n\nnew Keyed { Id = 1, Name = \"n\", Score = 2 }",
+      "rows": [
+        {
+          "en": "new Keyed { Id = 1, Name = \"n\", Score = 2 }",
+          "zh": "new Keyed { Id = 1, Name = \"n\", Score = 2 }",
+          "fields": [
+            {
+              "hex": "01",
+              "kind": "header",
+              "en": "presence byte",
+              "zh": "存在字节"
+            },
+            {
+              "hex": "26 00 00 00",
+              "kind": "length",
+              "en": "body length 38",
+              "zh": "主体长度 38"
+            },
+            {
+              "hex": "48 19 C4 98",
+              "kind": "id",
+              "en": "key FNV(\"Id\")",
+              "zh": "键 FNV(\"Id\")"
+            },
+            {
+              "hex": "04 00 00 00",
+              "kind": "length",
+              "en": "length 4",
+              "zh": "长度 4"
+            },
+            {
+              "hex": "01 00 00 00",
+              "kind": "value",
+              "en": "Id = 1",
+              "zh": "Id = 1"
+            },
+            {
+              "hex": "E2 B3 85 30",
+              "kind": "id",
+              "en": "key FNV(\"Name\")",
+              "zh": "键 FNV(\"Name\")"
+            },
+            {
+              "hex": "02 00 00 00",
+              "kind": "length",
+              "en": "length 2",
+              "zh": "长度 2"
+            },
+            {
+              "hex": "03 6E",
+              "kind": "value",
+              "en": "Name = \"n\"",
+              "zh": "Name = \"n\""
+            },
+            {
+              "hex": "4D B1 4A 04",
+              "kind": "id",
+              "en": "key FNV(\"Score\")",
+              "zh": "键 FNV(\"Score\")"
+            },
+            {
+              "hex": "08 00 00 00",
+              "kind": "length",
+              "en": "length 8",
+              "zh": "长度 8"
+            },
+            {
+              "hex": "02 00 00 00 00 00 00 00",
+              "kind": "value",
+              "en": "Score = 2",
+              "zh": "Score = 2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "version-tolerant",
+      "spec": "A.3",
+      "en": {
+        "title": "Version-tolerant",
+        "note": "One length for the whole hierarchy, so an older reader skips the members it does not know. Declared as the base, the value starts with its type id instead of a presence byte."
+      },
+      "zh": {
+        "title": "版本容错",
+        "note": "整个继承体系只写一个长度，旧的读取方可以跳过它不认识的成员。声明为基类时，值以类型 ID 开头，而不是存在字节。"
+      },
+      "code": "[NinoType(format: NinoFormat.VersionTolerant)] public class TolBase { public int A; }\n[NinoType(format: NinoFormat.VersionTolerant)] public sealed class TolLeaf : TolBase { public int B; }\n\nnew TolLeaf { A = 1, B = 7 }",
+      "rows": [
+        {
+          "en": "as TolLeaf",
+          "zh": "声明为 TolLeaf",
+          "fields": [
+            {
+              "hex": "01",
+              "kind": "header",
+              "en": "presence byte",
+              "zh": "存在字节"
+            },
+            {
+              "hex": "08 00 00 00",
+              "kind": "length",
+              "en": "body length 8",
+              "zh": "主体长度 8"
+            },
+            {
+              "hex": "01 00 00 00",
+              "kind": "value",
+              "en": "A = 1",
+              "zh": "A = 1"
+            },
+            {
+              "hex": "07 00 00 00",
+              "kind": "changed",
+              "en": "B = 7 (skipped by a TolBase-only reader)",
+              "zh": "B = 7（只认识 TolBase 的读取方会跳过）"
+            }
+          ]
+        },
+        {
+          "en": "as TolBase",
+          "zh": "声明为 TolBase",
+          "fields": [
+            {
+              "hex": "77 30 46 2B",
+              "kind": "id",
+              "en": "type id of Spec.TolLeaf",
+              "zh": "Spec.TolLeaf 的类型 ID"
+            },
+            {
+              "hex": "08 00 00 00",
+              "kind": "length",
+              "en": "body length 8",
+              "zh": "主体长度 8"
+            },
+            {
+              "hex": "01 00 00 00",
+              "kind": "value",
+              "en": "A = 1",
+              "zh": "A = 1"
+            },
+            {
+              "hex": "07 00 00 00",
+              "kind": "changed",
+              "en": "B = 7",
+              "zh": "B = 7"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "strings",
+      "spec": "A.4",
+      "en": {
+        "title": "Strings",
+        "note": "The default encoding writes text whose chars are all at most U+00FF in one byte a char, other text as UTF-16; [NinoUtf8] writes UTF-8 with a byte count. The header's first byte gives its size."
+      },
+      "zh": {
+        "title": "字符串",
+        "note": "默认编码下，所有字符都不超过 U+00FF 的文本每个字符一个字节，其他文本按 UTF-16 写；[NinoUtf8] 按 UTF-8 写，并带字节数。头的第一个字节给出头的大小。"
+      },
+      "code": "[NinoType] public sealed class Strings { public string Def; [NinoUtf8] public string U8; }",
+      "strings": [
+        {
+          "value": "null",
+          "def": [
+            { "hex": "00", "kind": "header", "en": "null", "zh": "null" }
+          ],
+          "utf8": [
+            { "hex": "00", "kind": "header", "en": "null", "zh": "null" }
+          ]
+        },
+        {
+          "value": "\"\"",
+          "def": [
+            { "hex": "01", "kind": "header", "en": "empty", "zh": "空串" }
+          ],
+          "utf8": [
+            { "hex": "01", "kind": "header", "en": "empty", "zh": "空串" }
+          ]
+        },
+        {
+          "value": "\"abc\"",
+          "def": [
+            {
+              "hex": "07",
+              "kind": "header",
+              "en": "header 7: 3 chars, one byte each",
+              "zh": "头 7：3 个字符，每个一字节"
+            },
+            { "hex": "61 62 63", "kind": "value", "en": "a b c", "zh": "a b c" }
+          ],
+          "utf8": [
+            {
+              "hex": "04",
+              "kind": "header",
+              "en": "3 chars (+ 1)",
+              "zh": "3 个字符（+ 1）"
+            },
+            { "hex": "03", "kind": "length", "en": "3 bytes", "zh": "3 字节" },
+            { "hex": "61 62 63", "kind": "value", "en": "a b c", "zh": "a b c" }
+          ]
+        },
+        {
+          "value": "\"é\"",
+          "def": [
+            {
+              "hex": "03",
+              "kind": "header",
+              "en": "header 3: 1 char, one byte",
+              "zh": "头 3：1 个字符，一字节"
+            },
+            {
+              "hex": "E9",
+              "kind": "value",
+              "en": "é (Latin-1)",
+              "zh": "é（Latin-1）"
+            }
+          ],
+          "utf8": [
+            {
+              "hex": "02",
+              "kind": "header",
+              "en": "1 char (+ 1)",
+              "zh": "1 个字符（+ 1）"
+            },
+            { "hex": "02", "kind": "length", "en": "2 bytes", "zh": "2 字节" },
+            {
+              "hex": "C3 A9",
+              "kind": "value",
+              "en": "é (UTF-8)",
+              "zh": "é（UTF-8）"
+            }
+          ]
+        },
+        {
+          "value": "\"a中\"",
+          "def": [
+            {
+              "hex": "04",
+              "kind": "header",
+              "en": "header 4: 2 chars, UTF-16",
+              "zh": "头 4：2 个字符，UTF-16"
+            },
+            {
+              "hex": "61 00 2D 4E",
+              "kind": "value",
+              "en": "a 中 (UTF-16)",
+              "zh": "a 中（UTF-16）"
+            }
+          ],
+          "utf8": [
+            {
+              "hex": "03",
+              "kind": "header",
+              "en": "2 chars (+ 1)",
+              "zh": "2 个字符（+ 1）"
+            },
+            { "hex": "04", "kind": "length", "en": "4 bytes", "zh": "4 字节" },
+            {
+              "hex": "61 E4 B8 AD",
+              "kind": "value",
+              "en": "a 中 (UTF-8)",
+              "zh": "a 中（UTF-8）"
+            }
+          ]
+        },
+        {
+          "value": "\"😀\"",
+          "def": [
+            {
+              "hex": "04",
+              "kind": "header",
+              "en": "header 4: 2 chars (a surrogate pair), UTF-16",
+              "zh": "头 4：2 个字符（代理对），UTF-16"
+            },
+            {
+              "hex": "3D D8 00 DE",
+              "kind": "value",
+              "en": "😀 (UTF-16)",
+              "zh": "😀（UTF-16）"
+            }
+          ],
+          "utf8": [
+            {
+              "hex": "03",
+              "kind": "header",
+              "en": "2 chars (+ 1)",
+              "zh": "2 个字符（+ 1）"
+            },
+            { "hex": "04", "kind": "length", "en": "4 bytes", "zh": "4 字节" },
+            {
+              "hex": "F0 9F 98 80",
+              "kind": "value",
+              "en": "😀 (UTF-8)",
+              "zh": "😀（UTF-8）"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "references",
+      "spec": "A.5",
+      "en": {
+        "title": "Reference tracking",
+        "note": "A tracked object is written once, after a reference header; the second slot that holds it writes only its number."
+      },
+      "zh": {
+        "title": "引用追踪",
+        "note": "被追踪的对象只在引用头之后写一次；持有它的第二个槽位只写它的编号。"
+      },
+      "code": "[NinoType(trackReferences: true)] public sealed class Node { public int V; public Node Next; }\n[NinoType] public sealed class Holder { public object Any; public Node N; }\n\nvar n = new Node { V = 5 };\nnew Holder { Any = n, N = n }",
+      "rows": [
+        {
+          "en": "new Holder { Any = n, N = n }",
+          "zh": "new Holder { Any = n, N = n }",
+          "fields": [
+            {
+              "hex": "01",
+              "kind": "header",
+              "en": "Holder presence byte",
+              "zh": "Holder 的存在字节"
+            },
+            {
+              "hex": "06 2E 6C 29",
+              "kind": "id",
+              "en": "Any: type id of Spec.Node",
+              "zh": "Any：Spec.Node 的类型 ID"
+            },
+            {
+              "hex": "FF FF FF FF",
+              "kind": "header",
+              "en": "reference header: new object #1",
+              "zh": "引用头：新对象 #1"
+            },
+            {
+              "hex": "05 00 00 00",
+              "kind": "value",
+              "en": "V = 5",
+              "zh": "V = 5"
+            },
+            {
+              "hex": "00 00 00 00",
+              "kind": "header",
+              "en": "Next: null",
+              "zh": "Next：null"
+            },
+            {
+              "hex": "01 00 00 00",
+              "kind": "changed",
+              "en": "N: object #1 again",
+              "zh": "N：再次指向对象 #1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "raw",
+      "spec": "A.6",
+      "en": {
+        "title": "Raw structs",
+        "note": "An unmanaged struct is written as its memory, padding zeroed; an array of them is a count and one block copy."
+      },
+      "zh": {
+        "title": "原始结构体",
+        "note": "非托管结构体按内存原样写入，填充字节清零；它的数组是数量加一次整块拷贝。"
+      },
+      "code": "[NinoType] public struct RawPoint { public int X; public byte Y; }\n\nnew RawPoint[] { new() { X = 1, Y = 2 }, new() { X = 3, Y = 4 } }",
+      "rows": [
+        {
+          "en": "RawPoint { X = 1, Y = 2 }",
+          "zh": "RawPoint { X = 1, Y = 2 }",
+          "fields": [
+            {
+              "hex": "01 00 00 00",
+              "kind": "value",
+              "en": "X = 1",
+              "zh": "X = 1"
+            },
+            { "hex": "02", "kind": "value", "en": "Y = 2", "zh": "Y = 2" },
+            {
+              "hex": "00 00 00",
+              "kind": "pad",
+              "en": "padding, zeroed",
+              "zh": "填充，清零"
+            }
+          ]
+        },
+        {
+          "en": "RawPoint[] of two",
+          "zh": "两个元素的 RawPoint[]",
+          "fields": [
+            {
+              "hex": "02 00 00 00",
+              "kind": "length",
+              "en": "count 2",
+              "zh": "数量 2"
+            },
+            {
+              "hex": "01 00 00 00 02 00 00 00",
+              "kind": "value",
+              "en": "(1, 2)",
+              "zh": "(1, 2)"
+            },
+            {
+              "hex": "03 00 00 00 04 00 00 00",
+              "kind": "value",
+              "en": "(3, 4)",
+              "zh": "(3, 4)"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

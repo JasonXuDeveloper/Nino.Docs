@@ -117,6 +117,60 @@ function caseName(row: RuntimeCase, zh: boolean) {
   return row.code ? <code>{name}</code> : name;
 }
 
+/**
+ * Two thin bars under a ratio: each time against the larger of the two, so
+ * the shorter bar is the faster library and the gap is the ratio itself. Only
+ * on the page: the Markdown copy keeps the numbers (the bars carry no others).
+ */
+function TimeBars({
+  bars,
+}: {
+  bars: { label: string; time: { ns: number; text: string }; nino?: boolean }[];
+}) {
+  const max = Math.max(...bars.map((bar) => bar.time.ns));
+  if (!(max > 0)) return null;
+  return (
+    <span
+      className="mt-1 ml-auto flex w-24 flex-col gap-0.5"
+      role="img"
+      aria-label={bars.map((bar) => `${bar.label} ${bar.time.text}`).join(', ')}
+    >
+      {bars.map((bar) => (
+        <span
+          key={bar.label}
+          title={`${bar.label}: ${bar.time.text}`}
+          className={
+            bar.nino
+              ? 'block h-1.5 rounded-full bg-fd-primary'
+              : 'block h-1.5 rounded-full bg-fd-muted-foreground/40'
+          }
+          style={{ width: `${Math.max(2, (bar.time.ns / max) * 100)}%` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function barsLegend(zh: boolean, nino: string, other: string) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fd-muted-foreground">
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-block h-1.5 w-5 rounded-full bg-fd-primary" />
+        {nino}
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-block h-1.5 w-5 rounded-full bg-fd-muted-foreground/40" />
+        {other}
+      </span>
+      <span>
+        {zh
+          ? '条形是每行的时间，越短越快。'
+          : 'Bars: the time of each row, shorter is faster.'}
+      </span>
+    </p>
+  );
+}
+
 function ratioCell(ratio: number | undefined, zh: boolean, tooFast?: boolean) {
   if (tooFast)
     return (
@@ -185,7 +239,7 @@ export function RuntimeTable({
     markdown,
     render: (ds, tabbed) => (
       <>
-        {runtimeTable(ds, op, set, zh)}
+        {runtimeTable(ds, op, set, zh, markdown)}
         {tabbed && sourceLine(ds, zh, true)}
       </>
     ),
@@ -208,6 +262,7 @@ function runtimeTable(
   op: Op,
   set: 'main' | 'extra',
   zh: boolean,
+  markdown?: boolean,
 ) {
   const rows = (set === 'extra' ? ds.extraRuntime : ds.runtime)[op];
   if (rows.length === 0)
@@ -261,6 +316,14 @@ function runtimeTable(
                 </td>
                 <td className="text-right tabular-nums">
                   {ratioCell(row.ratio, zh, row.tooFast)}
+                  {!markdown && (
+                    <TimeBars
+                      bars={[
+                        { label: 'v4', time: row.v4, nino: true },
+                        { label: 'MemoryPack', time: row.memorypack },
+                      ]}
+                    />
+                  )}
                 </td>
                 {others.map((lib) => (
                   <td key={lib.key} className="text-right tabular-nums">
@@ -284,6 +347,7 @@ function runtimeTable(
           </tbody>
         </table>
       </div>
+      {!markdown && barsLegend(zh, 'v4', 'MemoryPack')}
       {others.length > 0 && versusLegend(zh, 'v4')}
       {rerun && (
         <p className="text-sm text-fd-muted-foreground">
@@ -309,7 +373,7 @@ export function ExtraRuntimeTables({ lang = 'en', markdown }: ArchProps) {
     render: (ds, tabbed) => {
       const { serialize, deserialize } = ds.extraRuntime;
       if (serialize.length + deserialize.length === 0)
-        return runtimeTable(ds, 'serialize', 'extra', zh);
+        return runtimeTable(ds, 'serialize', 'extra', zh, markdown);
       return (
         <>
           {serialize.length > 0 && (
@@ -317,7 +381,7 @@ export function ExtraRuntimeTables({ lang = 'en', markdown }: ArchProps) {
               <p>
                 <strong>{zh ? '序列化' : 'Serialize'}</strong>
               </p>
-              {runtimeTable(ds, 'serialize', 'extra', zh)}
+              {runtimeTable(ds, 'serialize', 'extra', zh, markdown)}
             </>
           )}
           {deserialize.length > 0 && (
@@ -325,7 +389,7 @@ export function ExtraRuntimeTables({ lang = 'en', markdown }: ArchProps) {
               <p>
                 <strong>{zh ? '反序列化' : 'Deserialize'}</strong>
               </p>
-              {runtimeTable(ds, 'deserialize', 'extra', zh)}
+              {runtimeTable(ds, 'deserialize', 'extra', zh, markdown)}
             </>
           )}
           {tabbed && sourceLine(ds, zh, true)}
@@ -342,15 +406,15 @@ export function ReuseTable({ lang = 'en', markdown }: ArchProps) {
     markdown,
     render: (ds, tabbed) => (
       <>
-        {reuseTable(ds, zh)}
+        {reuseTable(ds, zh, markdown)}
         {tabbed && sourceLine(ds, zh, true)}
       </>
     ),
   });
 }
 
-function reuseTable(ds: BenchDataset, zh: boolean) {
-  return (
+function reuseTable(ds: BenchDataset, zh: boolean, markdown?: boolean) {
+  const table = (
     <table>
       <thead>
         <tr>
@@ -382,12 +446,38 @@ function reuseTable(ds: BenchDataset, zh: boolean) {
               <td className="text-right tabular-nums">
                 {row.memorypackOverwrite.text} (
                 {formatBytes(row.memorypackOverwriteBytes)})
+                {!markdown && (
+                  <TimeBars
+                    bars={[
+                      {
+                        label: zh ? 'Nino 复用' : 'Nino reusing',
+                        time: row.ninoReuse,
+                        nino: true,
+                      },
+                      {
+                        label: zh ? 'MemoryPack 覆盖' : 'MemoryPack overwrite',
+                        time: row.memorypackOverwrite,
+                      },
+                    ]}
+                  />
+                )}
               </td>
             </tr>
           );
         })}
       </tbody>
     </table>
+  );
+  if (markdown) return table;
+  return (
+    <>
+      {table}
+      {barsLegend(
+        zh,
+        zh ? 'Nino 复用' : 'Nino reusing',
+        zh ? 'MemoryPack 覆盖' : 'MemoryPack overwrite',
+      )}
+    </>
   );
 }
 

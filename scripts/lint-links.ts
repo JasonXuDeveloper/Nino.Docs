@@ -5,12 +5,34 @@
  * `icons` table, which leaves out alias names such as `History`, and only
  * logs a warning for a name it does not find (the sidebar shows no icon).
  *
+ * Links inside the data files components render (`dataFiles`) are checked
+ * too, and anchors a component writes (the analyzer rules' rows) count as
+ * headings of the pages that use it.
+ *
  * Usage: bun run lint:links
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { icons } from 'lucide-react';
+import {
+  analyzerCategories,
+  analyzerRules,
+} from '../src/components/analyzer-rules';
+import { glossary } from '../src/components/glossary';
 import { source } from '../src/lib/source';
+
+/** Data files whose inline Markdown holds site links. */
+const dataFiles = ['src/data/analyzer-rules.json', 'src/data/glossary.json'];
+
+/** Anchors a component writes on the pages that use it. */
+const componentAnchors: Record<string, string[]> = {
+  '<AnalyzerRules': [
+    ...analyzerCategories.map((c) => c.id),
+    ...analyzerRules.map((r) => r.id.toLowerCase()),
+  ],
+  '<Glossary': glossary.map((t) => t.id),
+};
+const extraAnchors = new Map<string, string[]>();
 
 type Page = ReturnType<typeof source.getPages>[number];
 
@@ -21,7 +43,10 @@ const otherPages = new Set(['/en', '/zh']);
 
 function headingsOf(page: Page) {
   const toc = (page.data.toc ?? []) as Array<{ url: string }>;
-  return new Set(toc.map((item) => decodeURIComponent(item.url.slice(1))));
+  return new Set([
+    ...toc.map((item) => decodeURIComponent(item.url.slice(1))),
+    ...(extraAnchors.get(page.url) ?? []),
+  ]);
 }
 
 function linksOf(content: string) {
@@ -55,8 +80,18 @@ function iconErrors(dir = 'content/docs'): string[] {
 async function main() {
   const errors: string[] = iconErrors();
 
+  const sources: { path: string; url: string; content: string }[] = [];
   for (const page of pages) {
     const content = await page.data.getText('raw');
+    sources.push({ path: page.path, url: page.url, content });
+    for (const [tag, anchors] of Object.entries(componentAnchors))
+      if (content.includes(tag)) extraAnchors.set(page.url, anchors);
+  }
+  for (const file of dataFiles)
+    sources.push({ path: file, url: '', content: readFileSync(file, 'utf8') });
+
+  for (const page of sources) {
+    const content = page.content;
     for (const link of linksOf(content)) {
       if (/^(https?:|mailto:)/.test(link)) continue;
 

@@ -1,0 +1,503 @@
+{
+  "categories": [
+    {
+      "id": "the-type",
+      "en": "The Type",
+      "zh": "类型"
+    },
+    {
+      "id": "construction",
+      "en": "Construction",
+      "zh": "实例创建"
+    },
+    {
+      "id": "members",
+      "en": "Members",
+      "zh": "成员"
+    },
+    {
+      "id": "formats-and-references",
+      "en": "Formats and References",
+      "zh": "格式与引用"
+    },
+    {
+      "id": "pooling",
+      "en": "Pooling",
+      "zh": "对象池"
+    },
+    {
+      "id": "formatter-registrations",
+      "en": "Formatter Registrations",
+      "zh": "格式化器注册"
+    },
+    {
+      "id": "code-generation",
+      "en": "Code Generation for Other Languages",
+      "zh": "其他语言的代码生成"
+    }
+  ],
+  "rules": [
+    {
+      "id": "NINO001",
+      "category": "the-type",
+      "severity": "error",
+      "codeFix": true,
+      "en": {
+        "problem": "Generated code cannot name the type (it is not `public`/`internal`, or it is `static` or a `ref struct`)",
+        "fix": "Make the type and its containers `public` or `internal`"
+      },
+      "zh": {
+        "problem": "生成代码无法引用该类型（它不是 `public`/`internal`，或者是 `static` 类或 `ref struct`）",
+        "fix": "把该类型及其外层类型改为 `public` 或 `internal`"
+      }
+    },
+    {
+      "id": "NINO002",
+      "category": "the-type",
+      "severity": "error",
+      "codeFix": true,
+      "en": {
+        "problem": "The type must be `partial`: it serializes non-public members that generated code reaches through an accessor inside the type (before .NET 8; for generic types before .NET 9, or a member of a generic base with other type arguments), or it is `[NinoPooled]`",
+        "fix": "Make the type and its containers `partial`"
+      },
+      "zh": {
+        "problem": "类型必须是 `partial`：它要序列化的非公开成员需要通过类型内部的访问器访问（.NET 8 之前；泛型类型在 .NET 9 之前，或成员来自类型参数不同的泛型基类），或者标了 `[NinoPooled]`",
+        "fix": "把该类型及其外层类型声明为 `partial`"
+      }
+    },
+    {
+      "id": "NINO003",
+      "category": "the-type",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "A subtype of a NinoType with `allowInheritance: false` has no formatter of its own: writing one throws",
+        "fix": "Add `[NinoType]` to the subtype"
+      },
+      "zh": {
+        "problem": "基类设置了 `allowInheritance: false`，子类型没有自己的格式化器：写入它会抛出异常",
+        "fix": "给子类型加上 `[NinoType]`"
+      }
+    },
+    {
+      "id": "NINO004",
+      "category": "construction",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "No usable constructor",
+        "fix": "Add a parameterless constructor, one whose parameters match members, or `[NinoConstructor]`"
+      },
+      "zh": {
+        "problem": "没有可用的构造函数",
+        "fix": "添加无参构造函数、参数与成员对应的构造函数，或使用 `[NinoConstructor]`"
+      }
+    },
+    {
+      "id": "NINO005",
+      "category": "construction",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "A `[NinoConstructor]` parameter matches no serialized member",
+        "fix": "Rename the parameter or list the member names in the attribute"
+      },
+      "zh": {
+        "problem": "`[NinoConstructor]` 的某个参数找不到对应的序列化成员",
+        "fix": "修改参数名，或在特性中列出成员名"
+      }
+    },
+    {
+      "id": "NINO006",
+      "category": "construction",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "A read-only member is not a constructor parameter, so its value is read and dropped",
+        "fix": "Add it to the constructor, make it settable, or `[NinoIgnore]` it"
+      },
+      "zh": {
+        "problem": "只读成员不是构造函数参数，读出的值会被直接丢弃",
+        "fix": "把它加入构造函数、改为可写，或用 `[NinoIgnore]` 忽略"
+      }
+    },
+    {
+      "id": "NINO017",
+      "category": "construction",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "Invalid `[NinoFactory]` method",
+        "fix": "Make it a non-generic `public static` method, callable without arguments, returning the declaring type"
+      },
+      "zh": {
+        "problem": "`[NinoFactory]` 方法无效",
+        "fix": "改为可无参调用、返回声明类型的非泛型 `public static` 方法"
+      }
+    },
+    {
+      "id": "NINO021",
+      "category": "construction",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "`[NinoConstructor]` is `private` or `protected`",
+        "fix": "Make it `public` or `internal`"
+      },
+      "zh": {
+        "problem": "`[NinoConstructor]` 是 `private` 或 `protected` 的",
+        "fix": "改为 `public` 或 `internal`"
+      }
+    },
+    {
+      "id": "NINO025",
+      "category": "construction",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "`[NinoFactory]` next to a `[NinoConstructor]` is never called: the type is always re-created through the constructor",
+        "fix": "Remove `[NinoFactory]` to keep re-creating, or `[NinoConstructor]` to fill factory instances in place"
+      },
+      "zh": {
+        "problem": "类型有 `[NinoConstructor]`，`[NinoFactory]` 永远不会被调用：实例总是通过构造函数重新创建",
+        "fix": "删掉 `[NinoFactory]` 则继续重建实例，删掉 `[NinoConstructor]` 则用工厂创建实例并原地填充"
+      }
+    },
+    {
+      "id": "NINO007",
+      "category": "members",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "Member type cannot be serialized: the member is skipped; or a generic `[NinoType]` in it is closed over such a type that its formatter writes (`Box<Action>`; a type argument it does not write is not counted): writing a value throws",
+        "fix": "`[NinoIgnore]` it, or give it a custom formatter"
+      },
+      "zh": {
+        "problem": "成员类型无法序列化，该成员会被跳过；或其中的泛型 `[NinoType]` 封闭在这样一个它的格式化器会写出的类型上（`Box<Action>`；不写出的类型参数不算），写入值时会抛出异常",
+        "fix": "用 `[NinoIgnore]` 忽略，或为它提供自定义格式化器"
+      }
+    },
+    {
+      "id": "NINO008",
+      "category": "members",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "The `[NinoMemberFormatter]` type is not a struct that implements `INinoFormatter<T>` for exactly the member type",
+        "fix": "Fix the formatter's type"
+      },
+      "zh": {
+        "problem": "`[NinoMemberFormatter]` 指定的类型不是结构体，或没有正好为该成员类型实现 `INinoFormatter<T>`",
+        "fix": "修正格式化器的类型"
+      }
+    },
+    {
+      "id": "NINO009",
+      "category": "members",
+      "severity": "error",
+      "codeFix": true,
+      "en": {
+        "problem": "Non-public `[NinoMember]` in a type without `includeNonPublicMembers`",
+        "fix": "Remove `[NinoMember]` or set `includeNonPublicMembers: true`"
+      },
+      "zh": {
+        "problem": "类型没有设置 `includeNonPublicMembers`，却有非公开的 `[NinoMember]`",
+        "fix": "移除 `[NinoMember]`，或设置 `includeNonPublicMembers: true`"
+      }
+    },
+    {
+      "id": "NINO010",
+      "category": "members",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "Redundant `[NinoMember]` with `autoCollect: true`",
+        "fix": "Remove it"
+      },
+      "zh": {
+        "problem": "`autoCollect: true` 时 `[NinoMember]` 是多余的",
+        "fix": "移除它"
+      }
+    },
+    {
+      "id": "NINO011",
+      "category": "members",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "Redundant `[NinoIgnore]` with `autoCollect: false`",
+        "fix": "Remove it"
+      },
+      "zh": {
+        "problem": "`autoCollect: false` 时 `[NinoIgnore]` 是多余的",
+        "fix": "移除它"
+      }
+    },
+    {
+      "id": "NINO012",
+      "category": "members",
+      "severity": "error",
+      "codeFix": true,
+      "en": {
+        "problem": "Member has both `[NinoMember]` and `[NinoIgnore]`",
+        "fix": "Remove one or both"
+      },
+      "zh": {
+        "problem": "成员同时标记了 `[NinoMember]` 和 `[NinoIgnore]`",
+        "fix": "移除其中一个或两个"
+      }
+    },
+    {
+      "id": "NINO013",
+      "category": "members",
+      "severity": "error",
+      "codeFix": true,
+      "en": {
+        "problem": "Duplicate `[NinoMember]` index",
+        "fix": "Use the next free index"
+      },
+      "zh": {
+        "problem": "`[NinoMember]` 索引重复",
+        "fix": "改用下一个空闲索引"
+      }
+    },
+    {
+      "id": "NINO022",
+      "category": "members",
+      "severity": "warning",
+      "codeFix": false,
+      "en": {
+        "problem": "A non-public base member hidden with `new` cannot be reached (it can through `[UnsafeAccessor]`: .NET 8+, generic types .NET 9+); it is skipped",
+        "fix": "Rename one of the members, or make it public"
+      },
+      "zh": {
+        "problem": "基类中被 `new` 隐藏的非公开成员无法访问（通过 `[UnsafeAccessor]` 可以访问：.NET 8+，泛型类型 .NET 9+），会被跳过",
+        "fix": "重命名其中一个成员，或改为公共成员"
+      }
+    },
+    {
+      "id": "NINO023",
+      "category": "members",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "A struct serializes no members: it would be zero bytes, and a collection of it could not be read back",
+        "fix": "Serialize a member, or make the struct `VersionTolerant` or `Keyed`"
+      },
+      "zh": {
+        "problem": "结构体没有任何成员参与序列化：会被写成 0 字节，由它组成的集合无法读回",
+        "fix": "至少序列化一个成员，或设为 `VersionTolerant` 或 `Keyed`"
+      }
+    },
+    {
+      "id": "NINO028",
+      "category": "members",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "`[NinoMember]` on a member that is never serialized (static, constant, indexer, fixed-size buffer, a property without a getter or implemented explicitly, a property without a setter that no constructor takes, or `[field: NinoMember]`): nothing is written for it; this is the only diagnostic about that attribute",
+        "fix": "Remove `[NinoMember]`; to serialize a get-only auto-property, give a constructor a parameter of its name"
+      },
+      "zh": {
+        "problem": "`[NinoMember]` 标在永远不会被序列化的成员上（静态成员、常量、索引器、固定大小缓冲区、没有 getter 或显式实现接口的属性、没有 setter 且没有构造函数接收的属性，或 `[field: NinoMember]`）：这个成员什么都不写；关于这个特性只报这一条诊断",
+        "fix": "去掉 `[NinoMember]`；要序列化只读自动属性，给构造函数加一个同名参数"
+      }
+    },
+    {
+      "id": "NINO029",
+      "category": "members",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "A member, a `NinoSerializer`/`NinoDeserializer` call, or one of Nino.Core's formatters or `Writer`/`Reader` methods used by hand (`new UnmanagedFormatter<Vector<int>>()`, `[NinoMemberFormatter(typeof(UnmanagedFormatter<Vector<int>>))]`, `writer.Write(vector)`, `reader.Read(out Vector<int> v)`) needs `System.Numerics.Vector<T>` (alone, as an element, a type argument or in a base type, in a plain struct at any depth, or as a type argument of a generic `[NinoType]` that its formatter writes, as `Box<Vector<int>>`; an argument only ignored members or types that do not write it use, as in `Outer<T> { [NinoIgnore] T X; Tag<T> Y; }` with a `Tag<T>` that writes no `T`, is not reported): it is 16, 32 or 64 bytes, chosen by the CPU, so no host could read every other host's bytes, and the runtime throws `NotSupportedException` for it. The message ends `Vector<T> is 16, 32 or 64 bytes by the CPU; store a fixed number of lanes …`. A formatter of your own that writes the lanes is never reported",
+        "fix": "Store a fixed number of lanes (an array, `Vector128<T>`/`Vector256<T>`) and expose the vectors through `[NinoIgnore]` members ([`Vector<T>` Is Not Serializable](/en/docs/v4/struct-layouts#vector-t))"
+      },
+      "zh": {
+        "problem": "成员、`NinoSerializer`/`NinoDeserializer` 调用，或手写使用的 Nino.Core 格式化器与 `Writer`/`Reader` 方法（`new UnmanagedFormatter<Vector<int>>()`、`[NinoMemberFormatter(typeof(UnmanagedFormatter<Vector<int>>))]`、`writer.Write(vector)`、`reader.Read(out Vector<int> v)`）需要 `System.Numerics.Vector<T>`（单独出现、作为元素、类型参数或在基类型里，在任意深度的普通结构体里，或作为泛型 `[NinoType]` 的格式化器会写出的类型参数，如 `Box<Vector<int>>`；只被忽略的成员或不写出它的类型用到的类型参数不报，如 `Outer<T> { [NinoIgnore] T X; Tag<T> Y; }` 中 `Tag<T>` 不写出 `T` 时）：它是 16、32 或 64 字节，由 CPU 决定，没有哪个平台能读回所有其他平台写的字节，运行时也会为它抛 `NotSupportedException`。消息结尾是 `Vector<T> is 16, 32 or 64 bytes by the CPU; store a fixed number of lanes …`。自己写的、自行写出各通道的格式化器不报",
+        "fix": "存固定数量的通道（数组、`Vector128<T>`/`Vector256<T>`），再通过标了 `[NinoIgnore]` 的成员提供向量（见[`Vector<T>` 不能序列化](/zh/docs/v4/struct-layouts#vector-t)）"
+      }
+    },
+    {
+      "id": "NINO014",
+      "category": "formats-and-references",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "Two keyed members (or a member's `[NinoFormerName]`) hash to the same key",
+        "fix": "Rename one of them, or drop the former name"
+      },
+      "zh": {
+        "problem": "两个键控成员（或某个成员的 `[NinoFormerName]`）哈希到同一个键",
+        "fix": "重命名其中一个，或去掉该旧名称"
+      }
+    },
+    {
+      "id": "NINO024",
+      "category": "formats-and-references",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "`[NinoFormerName]` has no effect outside a keyed type: positional and version-tolerant types write no member names",
+        "fix": "Remove it, or give the type `format: NinoFormat.Keyed`"
+      },
+      "zh": {
+        "problem": "`[NinoFormerName]` 只在键控类型中起作用：按位置和版本容错的类型都不写成员名",
+        "fix": "删除它，或给类型设置 `format: NinoFormat.Keyed`"
+      }
+    },
+    {
+      "id": "NINO026",
+      "category": "formats-and-references",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "More than one `[NinoFormerName]` on a type: its type id comes from a single earlier name",
+        "fix": "Keep only the name the data you still read was written under"
+      },
+      "zh": {
+        "problem": "一个类型上有多个 `[NinoFormerName]`：类型 ID 只能由一个旧名称计算",
+        "fix": "只保留仍要读取的数据写出时用的那个名称"
+      }
+    },
+    {
+      "id": "NINO027",
+      "category": "formats-and-references",
+      "severity": "warning",
+      "codeFix": false,
+      "en": {
+        "problem": "`[NinoFormerName]` on a generic type written with a type id: every instantiation takes the same id",
+        "fix": "Remove the former name, or keep former names on non-generic types"
+      },
+      "zh": {
+        "problem": "会带类型 ID 写入的泛型类型上有 `[NinoFormerName]`：它的每个实例化都得到同一个 ID",
+        "fix": "去掉旧名称，或只在非泛型类型上使用旧名称"
+      }
+    },
+    {
+      "id": "NINO015",
+      "category": "formats-and-references",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "`trackReferences` on a struct is ignored",
+        "fix": "Remove `trackReferences`"
+      },
+      "zh": {
+        "problem": "`trackReferences` 用在结构体上会被忽略",
+        "fix": "移除 `trackReferences`"
+      }
+    },
+    {
+      "id": "NINO016",
+      "category": "formats-and-references",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "`trackReferences` on a type re-created from its constructor (e.g. a positional record)",
+        "fix": "Make the members assignable"
+      },
+      "zh": {
+        "problem": "`trackReferences` 用在了要通过构造函数重新创建的类型上（例如位置记录）",
+        "fix": "让成员可以赋值"
+      }
+    },
+    {
+      "id": "NINO018",
+      "category": "pooling",
+      "severity": "error",
+      "codeFix": true,
+      "en": {
+        "problem": "`[NinoPooled]` on a type that cannot be pooled (not a sealed class filled in place)",
+        "fix": "Seal the class and make its members assignable"
+      },
+      "zh": {
+        "problem": "`[NinoPooled]` 用在了无法池化的类型上（不是能原地填充的密封类）",
+        "fix": "把类声明为 `sealed`，并让成员可以赋值"
+      }
+    },
+    {
+      "id": "NINO019",
+      "category": "pooling",
+      "severity": "error",
+      "codeFix": true,
+      "en": {
+        "problem": "`[NinoPooled]` class does not implement `OnNinoPoolWarmup` / `OnNinoPoolReturn`",
+        "fix": "Implement both partial methods (`OnNinoPoolReturn` may be empty; `OnNinoPoolWarmup` may return an empty sequence)"
+      },
+      "zh": {
+        "problem": "`[NinoPooled]` 类没有实现 `OnNinoPoolWarmup` / `OnNinoPoolReturn`",
+        "fix": "实现这两个 partial 方法（`OnNinoPoolReturn` 方法体可以为空；`OnNinoPoolWarmup` 可以返回空序列）"
+      }
+    },
+    {
+      "id": "NINO020",
+      "category": "formatter-registrations",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "Invalid `[assembly: NinoFormatter]` registration; it is ignored",
+        "fix": "Register a struct, not nested in a generic type, that implements `INinoFormatter<P>` once: a generic one as its open definition (`typeof(F<,>)`), with type parameters that can be inferred, a non-generic one as itself (`typeof(F)`)"
+      },
+      "zh": {
+        "problem": "`[assembly: NinoFormatter]` 注册无效，会被忽略",
+        "fix": "注册一个只实现一次 `INinoFormatter<P>`、且没有嵌套在泛型类型中的结构体：泛型结构体以开放泛型定义（`typeof(F<,>)`）传入，所有类型参数都要能推断；非泛型结构体直接传入（`typeof(F)`）"
+      }
+    },
+    {
+      "id": "NINOGEN001",
+      "category": "code-generation",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "Invalid arguments or `<NinoCodegen>` metadata (an unknown option, one given twice or of another language, a value it does not take), or an assembly it cannot read",
+        "fix": "Fix the option or the item"
+      },
+      "zh": {
+        "problem": "参数或 `<NinoCodegen>` 元数据无效（未知选项、重复给出或属于其他语言的选项、不被接受的值），或无法读取程序集",
+        "fix": "修正选项或项"
+      }
+    },
+    {
+      "id": "NINOGEN002",
+      "category": "code-generation",
+      "severity": "warning",
+      "codeFix": false,
+      "en": {
+        "problem": "A type is left out because the language cannot express it",
+        "fix": "See [What Is Not Generated](/en/docs/v4/advanced/codegen#not-generated)"
+      },
+      "zh": {
+        "problem": "某个类型因目标语言无法表达而被跳过",
+        "fix": "见[不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated)"
+      }
+    },
+    {
+      "id": "NINOGEN003",
+      "category": "code-generation",
+      "severity": "warning",
+      "codeFix": false,
+      "en": {
+        "problem": "The project sets Nino.TypeScript's `NinoTypeScript*` properties",
+        "fix": "Declare a `<NinoCodegen>` item instead ([migration](/en/docs/v4/advanced/codegen#from-ninotypescript))"
+      },
+      "zh": {
+        "problem": "项目设置了 Nino.TypeScript 的 `NinoTypeScript*` 属性",
+        "fix": "改为声明 `<NinoCodegen>` 项（[迁移](/zh/docs/v4/advanced/codegen#from-ninotypescript)）"
+      }
+    },
+    {
+      "id": "NINOGEN004",
+      "category": "code-generation",
+      "severity": "warning",
+      "codeFix": false,
+      "en": {
+        "problem": "The project references Nino.Codegen but declares no `<NinoCodegen>` item",
+        "fix": "Add one, or set `NinoCodegenEnabled` to `false`"
+      },
+      "zh": {
+        "problem": "项目引用了 Nino.Codegen，却没有声明 `<NinoCodegen>` 项",
+        "fix": "添加一项，或把 `NinoCodegenEnabled` 设为 `false`"
+      }
+    }
+  ]
+}

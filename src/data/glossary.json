@@ -1,0 +1,202 @@
+{
+  "terms": [
+    {
+      "id": "top-level-call",
+      "en": {
+        "term": "Top-level call",
+        "definition": "A `NinoSerializer.Serialize(...)` or `NinoDeserializer.Deserialize(...)` call that takes your value and a `byte[]`, span or buffer writer, as opposed to a call that passes a `Writer` or `Reader` you created yourself, and to the values Nino reads and writes inside a call. Each top-level call is self-contained: it starts and ends its own [reference tracking](/en/docs/v4/reference-tracking)."
+      },
+      "zh": {
+        "term": "顶层调用",
+        "definition": "你直接传入值和 `byte[]`、span 或缓冲区写入器的 `NinoSerializer.Serialize(...)` 或 `NinoDeserializer.Deserialize(...)` 调用；与之相对的是传入你自己创建的 `Writer` 或 `Reader` 的调用，以及 Nino 在一次调用内部读写的那些值。每次顶层调用都自成一体：它自己开始并结束[引用追踪](/zh/docs/v4/reference-tracking)。"
+      }
+    },
+    {
+      "id": "boxed-api",
+      "en": {
+        "term": "Boxed API",
+        "definition": "`SerializeBoxed` and `DeserializeBoxed`, the overloads that take an `object` and a `Type`, for a type known only at run time that shares no common `[NinoType]` base with the others; see [The Boxed API](/en/docs/v4/basic#the-boxed-api)."
+      },
+      "zh": {
+        "term": "装箱 API",
+        "definition": "`SerializeBoxed` 和 `DeserializeBoxed`，即接收 `object` 和 `Type` 的那些重载，用于运行时才知道、并且与其他类型没有共同 `[NinoType]` 基类型的类型；参见[装箱 API](/zh/docs/v4/basic#the-boxed-api)。"
+      }
+    },
+    {
+      "id": "formatter",
+      "en": {
+        "term": "Formatter",
+        "definition": "The code that writes and reads one type: generated for each `[NinoType]`, built into Nino for the BCL types, or [written by you](/en/docs/v4/custom-formatters). The **formatter cache** is `NinoFormatterCache<T>`, the static field through which a call finds the formatter of `T`."
+      },
+      "zh": {
+        "term": "格式化器",
+        "definition": "负责读写某一种类型的代码：每个 `[NinoType]` 都有生成的格式化器，BCL 类型的格式化器内置在 Nino 中，也可以[自己编写](/zh/docs/v4/custom-formatters)。**格式化器缓存**是 `NinoFormatterCache<T>`，调用通过这个静态字段找到 `T` 的格式化器。"
+      }
+    },
+    {
+      "id": "intercepted-call",
+      "en": {
+        "term": "Intercepted call",
+        "definition": "On the .NET 8 SDK and later, the generator redirects each call whose type is known at compile time straight to that type's formatter, skipping the formatter cache; see [Interceptors](/en/docs/v4/performance#interceptors)."
+      },
+      "zh": {
+        "term": "拦截的调用",
+        "definition": "使用 .NET 8 SDK 及以上版本时，源生成器会把编译期就知道类型的每个调用直接转给该类型的格式化器，跳过格式化器缓存；参见[拦截器](/zh/docs/v4/performance#interceptors)。"
+      }
+    },
+    {
+      "id": "scratch-buffer",
+      "en": {
+        "term": "Scratch buffer",
+        "definition": "A `NinoArrayBufferWriter` that Nino keeps per thread. A call that returns a `byte[]`, or writes into a buffer writer other than `NinoArrayBufferWriter`, serializes into it first and then copies the bytes out."
+      },
+      "zh": {
+        "term": "暂存缓冲区",
+        "definition": "Nino 为每个线程保留的一个 `NinoArrayBufferWriter`。返回 `byte[]` 的调用，以及写入 `NinoArrayBufferWriter` 以外的缓冲区写入器的调用，会先序列化到这里，再把字节拷贝出去。"
+      }
+    },
+    {
+      "id": "raw",
+      "en": {
+        "term": "Raw (raw value, raw struct)",
+        "definition": "An unmanaged value that Nino writes as its memory, in one copy, with padding bytes zeroed: primitives, enums, `DateTime`, `Guid`, and unmanaged structs that qualify (see [Structs](/en/docs/v4/defining-types#structs)). Arrays and lists of raw values are one block copy."
+      },
+      "zh": {
+        "term": "原始值（原始结构体）",
+        "definition": "Nino 按内存原样写入的非托管值，只需一次拷贝，填充字节清零：基元类型、枚举、`DateTime`、`Guid`，以及符合条件的非托管结构体（参见[结构体](/zh/docs/v4/defining-types#structs)）。原始值的数组和列表是一次整块拷贝。"
+      }
+    },
+    {
+      "id": "fixed-size",
+      "en": {
+        "term": "Fixed-size type",
+        "definition": "A struct or sealed class whose values always take the same number of bytes, returned by `NinoSerializer.GetFixedSize<T>()`; see [Fixed-Size Types](/en/docs/v4/performance#fixed-size-types)."
+      },
+      "zh": {
+        "term": "固定大小的类型",
+        "definition": "每个值都占用相同字节数的结构体或密封类，字节数由 `NinoSerializer.GetFixedSize<T>()` 返回；参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。"
+      }
+    },
+    {
+      "id": "positional",
+      "en": {
+        "term": "Positional",
+        "definition": "The default format of a `[NinoType]`: members in declaration order, with no names or lengths. Smallest and fastest, but any change to the members changes the format; see [Evolving Your Data](/en/docs/v4/evolving-data#positional)."
+      },
+      "zh": {
+        "term": "按位置",
+        "definition": "`[NinoType]` 的默认格式：成员按声明顺序写入，不带名称和长度。最小、最快，但成员的任何改动都会改变格式；参见[数据演进](/zh/docs/v4/evolving-data#positional)。"
+      }
+    },
+    {
+      "id": "version-tolerant",
+      "en": {
+        "term": "Version-tolerant and keyed",
+        "definition": "The two other formats (`NinoFormat.VersionTolerant` and `NinoFormat.Keyed`). A version-tolerant object writes its length in bytes first, so members can be appended later; a keyed object writes each member with a key (a hash of its name) and a length, so members can be added, removed, reordered or renamed. See [Evolving Your Data](/en/docs/v4/evolving-data)."
+      },
+      "zh": {
+        "term": "版本容错与键控",
+        "definition": "另外两种格式（`NinoFormat.VersionTolerant` 和 `NinoFormat.Keyed`）。版本容错的对象先写入自己的字节长度，以后可以追加成员；键控的对象为每个成员写入一个键（成员名的哈希）和长度，成员可以增删、重排和改名。参见[数据演进](/zh/docs/v4/evolving-data)。"
+      }
+    },
+    {
+      "id": "slot",
+      "en": {
+        "term": "Slot",
+        "definition": "A place that holds a value: a member, a collection element, a dictionary value, or the variable you pass by `ref`. What Nino writes for a value depends on the slot's declared type."
+      },
+      "zh": {
+        "term": "槽位",
+        "definition": "存放一个值的地方：一个成员、一个集合元素、一个字典值，或者你按 `ref` 传入的变量。Nino 为一个值写出什么，取决于槽位的声明类型。"
+      }
+    },
+    {
+      "id": "header",
+      "en": {
+        "term": "Header",
+        "definition": "The bytes Nino writes before a class value: a presence byte for a sealed class, a 4-byte type id for a type that can have subtypes; a struct has none. See [How a Polymorphic Value Is Written](/en/docs/v4/polymorphism#how-a-polymorphic-value-is-written)."
+      },
+      "zh": {
+        "term": "头部",
+        "definition": "Nino 在类的值之前写入的字节：密封类是一个存在字节，可能有子类型的类型是 4 字节的类型 ID；结构体没有头部。参见[多态值的写入方式](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)。"
+      }
+    },
+    {
+      "id": "presence-byte",
+      "en": {
+        "term": "Presence byte",
+        "definition": "The byte Nino writes before a sealed class or a nullable value: 0 for `null`, 1 when a value follows. See [Wire Format](/en/docs/v4/wire-format#conventions)."
+      },
+      "zh": {
+        "term": "存在字节",
+        "definition": "Nino 在密封类或可空值之前写入的一个字节：0 表示 `null`，1 表示后面跟着值。参见[二进制格式](/zh/docs/v4/wire-format#conventions)。"
+      }
+    },
+    {
+      "id": "type-id",
+      "en": {
+        "term": "Type id",
+        "definition": "The 4-byte hash of a type's name that Nino writes before a value whose declared type can have subtypes, so the reader knows which type to create; it can only be a registered subtype of the declared type. See [Polymorphism](/en/docs/v4/polymorphism#how-a-polymorphic-value-is-written)."
+      },
+      "zh": {
+        "term": "类型 ID",
+        "definition": "类型名的 4 字节哈希。声明类型可能有子类型时，Nino 在值之前写入它，读取方据此知道要创建哪个类型；它只能是声明类型的已注册子类型。参见[多态](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)。"
+      }
+    },
+    {
+      "id": "reuse-deserialization",
+      "en": {
+        "term": "Reuse deserialization",
+        "definition": "`Deserialize(data, ref value)`, which fills the value you pass, and the objects, lists and dictionaries it holds, in place instead of creating new ones; see [Into an Existing Value](/en/docs/v4/basic#into-an-existing-value)."
+      },
+      "zh": {
+        "term": "复用反序列化",
+        "definition": "`Deserialize(data, ref value)`，原地填充你传入的值以及其中的对象、列表和字典，而不是新建它们；参见[反序列化到已有值](/zh/docs/v4/basic#into-an-existing-value)。"
+      }
+    },
+    {
+      "id": "pooled-class",
+      "en": {
+        "term": "Pooled class",
+        "definition": "A `[NinoType]` class marked `[NinoPooled]`: Nino takes new instances of it from a built-in pool and returns dropped ones to it; see [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled)."
+      },
+      "zh": {
+        "term": "池化类",
+        "definition": "标记了 `[NinoPooled]` 的 `[NinoType]` 类：Nino 需要新实例时从内置的对象池中取，丢弃的实例还回池中；参见 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)。"
+      }
+    },
+    {
+      "id": "recycler",
+      "en": {
+        "term": "Recycler",
+        "definition": "What receives an instance that [reuse deserialization](/en/docs/v4/pooling) drops from a slot: a handler registered with `NinoSettings.SetRecycler<T>`, otherwise the instance's own pool (`ReturnToPool()`), otherwise nobody. See [Where Dropped Instances Go](/en/docs/v4/pooling#where-dropped-instances-go)."
+      },
+      "zh": {
+        "term": "回收器",
+        "definition": "接收[复用反序列化](/zh/docs/v4/pooling)从槽位中丢弃的实例的地方：用 `NinoSettings.SetRecycler<T>` 注册的处理函数；没有的话，交给实例自己的对象池（`ReturnToPool()`）；再没有就不处理。参见[被丢弃的实例去哪里](/zh/docs/v4/pooling#where-dropped-instances-go)。"
+      }
+    },
+    {
+      "id": "registry",
+      "en": {
+        "term": "Registry",
+        "definition": "The code the generator emits into each assembly to list its `[NinoType]`s, their formatters and their type ids. Nino loads it the first time it meets a type of that assembly, or a type id it does not know, so no initialization call is needed; `NinoRegistry.EnsureInitialized(assembly)` loads it ahead of time. The **global registry** is the table of every `[NinoType]` through which values declared as `object` are dispatched; see [Dispatch](/en/docs/v4/polymorphism#dispatch)."
+      },
+      "zh": {
+        "term": "注册表",
+        "definition": "生成器在每个程序集中生成的代码，列出这个程序集的 `[NinoType]`、它们的格式化器和类型 ID。Nino 第一次遇到这个程序集里的类型，或者遇到不认识的类型 ID 时才加载它，所以不需要初始化调用；`NinoRegistry.EnsureInitialized(assembly)` 可以提前加载。**全局注册表**是包含所有 `[NinoType]` 的那张表，声明为 `object` 的值通过它分派；参见[分派](/zh/docs/v4/polymorphism#dispatch)。"
+      }
+    },
+    {
+      "id": "deferred-object",
+      "en": {
+        "term": "Deferred object",
+        "definition": "An object nested more than 128 levels deep, written and read later from a shallower level so that the stack stays bounded; see [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs)."
+      },
+      "zh": {
+        "term": "推迟的对象",
+        "definition": "嵌套超过 128 层的对象，会在较浅的层级稍后写入和读取，让栈的用量保持有界；参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。"
+      }
+    }
+  ]
+}

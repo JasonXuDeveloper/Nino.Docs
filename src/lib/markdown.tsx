@@ -5,7 +5,17 @@
  * out as plain Markdown instead of JSX. Build-time only (scripts/).
  */
 import { asMarkdown, md, renderToMarkdown } from 'fumadocs-core/server';
-import type { ComponentProps, ReactNode } from 'react';
+import {
+  type ComponentProps,
+  Children as ReactChildren,
+  type ReactNode,
+} from 'react';
+import {
+  analyzerCategories,
+  analyzerRules,
+  ruleHref,
+  ruleText,
+} from '@/components/analyzer-rules';
 import {
   ArchTabs,
   BenchSource,
@@ -18,6 +28,7 @@ import {
   UnityHighlights,
   UnityTables,
 } from '@/components/bench-data';
+import { byteCount, byteExamples } from '@/components/byte-playground';
 import {
   type ByteRow,
   byteCells,
@@ -26,6 +37,7 @@ import {
 } from '@/components/bytes';
 import { chartProps } from '@/components/charts/benchmark-charts';
 import { type ChartId, isArchChart } from '@/components/charts/ids';
+import { glossary, glossaryHref } from '@/components/glossary';
 import { getMDXComponents } from '@/mdx-components';
 import type { Locale } from './i18n';
 import { siteUrl } from './site';
@@ -82,6 +94,9 @@ function formatNs(ns: number) {
 
 function markdownComponents(lang: Locale, pageUrl: string) {
   const link = (href: string) => absolute(href, pageUrl);
+  // site links inside inline Markdown from a data file
+  const links = (text: string) =>
+    text.replace(/\]\((\/[^)\s]*)\)/g, (_, href) => `](${link(href)})`);
   const zh = lang === 'zh';
   return {
     a({ href, children }: ComponentProps<'a'>) {
@@ -92,6 +107,89 @@ function markdownComponents(lang: Locale, pageUrl: string) {
     FeedbackBlock({ children }: Children) {
       asMarkdown();
       return children;
+    },
+    // The analyzer rules: a table per category, the same rows as the page.
+    AnalyzerRules() {
+      asMarkdown();
+      const t = ruleText[lang];
+      return (
+        <>
+          {analyzerCategories.map((c) => (
+            <div key={c.id}>
+              {md`\n**${c[lang]}**\n\n`}
+              {table(
+                t.head,
+                analyzerRules
+                  .filter((rule) => rule.category === c.id)
+                  .map((rule) => [
+                    md`[${rule.id}](${link(ruleHref(rule, lang))})`,
+                    t[rule.severity],
+                    links(rule[lang].problem),
+                    links(rule[lang].fix),
+                    rule.codeFix ? '✅' : '',
+                  ]),
+              )}
+            </div>
+          ))}
+        </>
+      );
+    },
+    // The byte playground: every example, its code and its bytes.
+    BytePlayground() {
+      asMarkdown();
+      const meaning = [zh ? '字节' : 'Bytes', zh ? '含义' : 'Meaning'];
+      return (
+        <>
+          {byteExamples.map((e) => (
+            <div key={e.id}>
+              {md`\n**${e[lang].title}** (${zh ? '规范附录' : 'specification, Appendix'} ${e.spec})\n\n\`\`\`csharp\n${e.code}\n\`\`\`\n\n${e[lang].note}\n\n`}
+              {e.rows?.map((row) => (
+                <div key={row.en}>
+                  {md`\n\`${row[lang]}\` (${byteCount(row.fields)} ${zh ? '字节' : 'bytes'}):\n\n`}
+                  {table(
+                    meaning,
+                    row.fields.map((f) => [md`\`${f.hex}\``, f[lang]]),
+                  )}
+                </div>
+              ))}
+              {e.strings
+                ? table(
+                    [
+                      zh ? '值' : 'Value',
+                      zh ? '默认' : 'Default',
+                      '`[NinoUtf8]`',
+                    ],
+                    e.strings.map((s) => [
+                      md`\`${s.value}\``,
+                      md`\`${s.def.map((f) => f.hex).join(' ')}\``,
+                      md`\`${s.utf8.map((f) => f.hex).join(' ')}\``,
+                    ]),
+                  )
+                : null}
+            </div>
+          ))}
+        </>
+      );
+    },
+    // The glossary as a list; a term in prose links to its entry.
+    Glossary() {
+      asMarkdown();
+      return glossary
+        .map(
+          (t) =>
+            `- **${t[lang].term}**${zh ? '：' : ': '}${links(t[lang].definition)}\n`,
+        )
+        .join('');
+    },
+    Term({ id, children }: Children & { id: string }) {
+      asMarkdown();
+      return md`[${children}](${link(glossaryHref(id, lang))})`;
+    },
+    // A changelog release: its heading, the date, then the entries as they are.
+    Release({ date, children }: Children & { date?: string }) {
+      asMarkdown();
+      const [heading, ...body] = ReactChildren.toArray(children);
+      return md`${heading}${date ? (zh ? `发布于 ${date}\n\n` : `Released ${date}\n\n`) : ''}${body}`;
     },
     AnchorRedirect() {
       asMarkdown();
