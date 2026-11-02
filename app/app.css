@@ -161,3 +161,25 @@
     }
   }
 }
+
+/*
+ * Prose tables on a phone: every cell keeps at least 6rem, so a narrow column
+ * is not squeezed to a word (or a Chinese character) per line, and a cell of
+ * running text (src/mdx-components.tsx) keeps 10rem; a table wider
+ * than the screen scrolls inside its box, as Fumadocs' table wrapper allows.
+ * Component tables (`not-prose`: the matrices) set their own widths.
+ */
+@media (max-width: 767px) {
+  .prose table:not(.not-prose *) :is(th, td) {
+    min-width: 6rem;
+  }
+
+  .prose table:not(.not-prose *) td.nino-long-cell {
+    min-width: 10rem;
+  }
+}
+
+/* A run of hex bytes in a table cell is read as one value (src/mdx-components.tsx). */
+.prose td code.nino-bytes {
+  white-space: nowrap;
+}
