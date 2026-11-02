@@ -29,7 +29,7 @@ import {
   UnityHighlights,
   UnityTables,
 } from '@/components/bench-data';
-import { byteCount, byteExamples } from '@/components/byte-playground';
+import { byteCountText, byteExamples } from '@/components/byte-playground';
 import {
   type ByteRow,
   byteCells,
@@ -146,7 +146,7 @@ function markdownComponents(lang: Locale, pageUrl: string) {
               {md`\n**${e[lang].title}** (${zh ? '规范附录' : 'specification, Appendix'} ${e.spec})\n\n\`\`\`csharp\n${e.code}\n\`\`\`\n\n${e[lang].note}\n\n`}
               {e.rows?.map((row) => (
                 <div key={row.en}>
-                  {md`\n\`${row[lang]}\` (${byteCount(row.fields)} ${zh ? '字节' : 'bytes'}):\n\n`}
+                  {md`\n\`${row[lang]}\` (${byteCountText(row.fields, zh)}):\n\n`}
                   {table(
                     meaning,
                     row.fields.map((f) => [md`\`${f.hex}\``, f[lang]]),

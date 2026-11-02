@@ -56,8 +56,14 @@ export function splitCode(code: string) {
     : { type: code.slice(0, at), value: code.slice(at + 2) };
 }
 
-export function byteCount(fields: ExampleField[]) {
+function byteCount(fields: ExampleField[]) {
   return fields.reduce((n, f) => n + f.hex.trim().split(/\s+/).length, 0);
+}
+
+/** "1 byte", "7 bytes", "7 字节". */
+export function byteCountText(fields: ExampleField[], zh: boolean) {
+  const n = byteCount(fields);
+  return zh ? `${n} 字节` : `${n} ${n === 1 ? 'byte' : 'bytes'}`;
 }
 
 function Pick<T extends string>({
@@ -191,9 +197,7 @@ export function BytePlayground({ lang = 'en' }: { lang?: Locale }) {
                   <>
                     <code className="text-[0.75rem]">{row.title}</code>
                     <span className="font-normal">
-                      {zh
-                        ? ` · ${byteCount(row.fields)} 字节`
-                        : ` · ${byteCount(row.fields)} bytes`}
+                      {` · ${byteCountText(row.fields, zh)}`}
                     </span>
                   </>
                 ),
