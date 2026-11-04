@@ -48,6 +48,8 @@ export const ruleText = {
     warning: 'Warning',
     all: 'All',
     fixOnly: 'Has a code fix',
+    severity: 'Severity',
+    category: 'Category',
     search: 'Filter by id or text (e.g. 007, partial)',
     shown: (n: number, total: number) => `${n} of ${total} rules`,
     none: 'No rule matches.',
@@ -59,6 +61,8 @@ export const ruleText = {
     warning: '警告',
     all: '全部',
     fixOnly: '有代码修复',
+    severity: '级别',
+    category: '类别',
     search: '按编号或文字筛选（如 007、partial）',
     shown: (n: number, total: number) => `共 ${total} 条，显示 ${n} 条`,
     none: '没有匹配的规则。',
@@ -156,33 +160,51 @@ export function AnalyzerRules({ lang = 'en' }: { lang?: Locale }) {
             className="w-full rounded-lg border border-fd-border bg-fd-background py-2 pl-8 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-fd-primary"
           />
         </label>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Chip active={severity === null} onClick={() => setSeverity(null)}>
-            {t.all}
-          </Chip>
-          {(['error', 'warning'] as const).map((s) => (
-            <Chip
-              key={s}
-              active={severity === s}
-              onClick={() => setSeverity(severity === s ? null : s)}
-            >
-              {t[s]}
+        {/* Three groups, each wrapping inside its own box: severity, code fix
+            (stacked under severity from sm, so the categories get the width),
+            then the categories, which wrap under their own first chip right of
+            the divider, and take lines of their own on phones. */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+          <div className="flex shrink-0 flex-wrap gap-1.5 sm:flex-col sm:items-start">
+            <fieldset className="flex min-w-0 flex-wrap gap-1.5">
+              <legend className="sr-only">{t.severity}</legend>
+              <Chip
+                active={severity === null}
+                onClick={() => setSeverity(null)}
+              >
+                {t.all}
+              </Chip>
+              {(['error', 'warning'] as const).map((s) => (
+                <Chip
+                  key={s}
+                  active={severity === s}
+                  onClick={() => setSeverity(severity === s ? null : s)}
+                >
+                  {t[s]}
+                </Chip>
+              ))}
+            </fieldset>
+            <Chip active={fixOnly} onClick={() => setFixOnly(!fixOnly)}>
+              <Wrench className="size-3" aria-hidden />
+              {t.fixOnly}
             </Chip>
-          ))}
-          <Chip active={fixOnly} onClick={() => setFixOnly(!fixOnly)}>
-            <Wrench className="size-3" aria-hidden />
-            {t.fixOnly}
-          </Chip>
-          <span className="mx-1 h-4 w-px bg-fd-border" aria-hidden />
-          {analyzerCategories.map((c) => (
-            <Chip
-              key={c.id}
-              active={category === c.id}
-              onClick={() => setCategory(category === c.id ? null : c.id)}
-            >
-              {c[lang]}
-            </Chip>
-          ))}
+          </div>
+          <span
+            className="hidden w-px self-stretch bg-fd-border sm:block"
+            aria-hidden
+          />
+          <fieldset className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+            <legend className="sr-only">{t.category}</legend>
+            {analyzerCategories.map((c) => (
+              <Chip
+                key={c.id}
+                active={category === c.id}
+                onClick={() => setCategory(category === c.id ? null : c.id)}
+              >
+                {c[lang]}
+              </Chip>
+            ))}
+          </fieldset>
         </div>
         <p className="text-xs text-fd-muted-foreground" aria-live="polite">
           {t.shown(visible.size, analyzerRules.length)}
