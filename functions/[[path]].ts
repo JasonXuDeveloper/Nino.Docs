@@ -87,9 +87,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     return new Response(null, {
+      // 302, not 301: the target depends on the visitor's language (cookie, Accept-Language, country), so it
+      // must not be cached as the URL's permanent home; Vary says so to caches.
       status: 302,
       headers: {
         Location: `${target.pathname}${target.search}`,
+        Vary: 'Cookie, Accept-Language',
         'Set-Cookie': serializeLocaleCookie(locale),
       },
     });

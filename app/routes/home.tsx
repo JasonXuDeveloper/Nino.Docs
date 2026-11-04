@@ -170,8 +170,8 @@ const copy: Record<
 
 // Search result titles: the product and the category people search for. The page copy above keeps its own headline.
 const seoTitle: Record<Locale, string> = {
-  en: 'Nino – High-Performance C# Binary Serializer for .NET and Unity',
-  zh: 'Nino – 高性能 C# 二进制序列化库，支持 .NET 与 Unity',
+  en: 'Nino – The Fastest Binary Serializer for C#, .NET and Unity',
+  zh: 'Nino – 最快的 C# 二进制序列化库，支持 .NET 与 Unity',
 };
 
 export function meta({ params }: Route.MetaArgs) {

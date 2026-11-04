@@ -128,11 +128,11 @@ function xmlEscape(value: string) {
 }
 
 /** hreflang alternates, the same set as the pages' <link rel="alternate"> */
-function alternateLinks(urls: Partial<Record<Locale, string>>) {
+function alternateLinks(urls: Partial<Record<Locale | 'xDefault', string>>) {
   const links: [string, string][] = [];
   if (urls.en) links.push([languageTag.en, urls.en]);
   if (urls.zh) links.push(['zh', urls.zh], [languageTag.zh, urls.zh]);
-  const fallback = urls.en ?? urls.zh;
+  const fallback = urls.xDefault ?? urls.en ?? urls.zh;
   if (fallback) links.push(['x-default', fallback]);
   return links
     .map(
@@ -177,7 +177,7 @@ function sitemap() {
   sitemapUrls.length = 0;
   const entry = (
     url: string,
-    alternates: Partial<Record<Locale, string>>,
+    alternates: Partial<Record<Locale | 'xDefault', string>>,
     date: Date | undefined,
     priority: string,
   ) => {
@@ -202,7 +202,7 @@ function sitemap() {
     .filter((date): date is Date => date !== undefined)
     .sort((a, b) => b.getTime() - a.getTime())[0];
   for (const locale of locales)
-    entry(`/${locale}`, { en: '/en', zh: '/zh' }, newest, '1.0');
+    entry(`/${locale}`, { en: '/en', zh: '/zh', xDefault: '/' }, newest, '1.0');
 
   for (const locale of locales) {
     for (const page of source.getPages(locale).filter(isLatest)) {

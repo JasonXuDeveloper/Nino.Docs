@@ -88,6 +88,7 @@ Cloudflare Pages builds with the Node version in `.node-version` and the Bun ver
 - Metadata and JSON-LD: `src/lib/seo.ts`; site facts (domain, links, the one-paragraph `productSummary`): `src/lib/site.ts`. Never put a value there that is not true per the Nino repository.
 - `scripts/generate-static.ts` moves pages to `x.html` (slash-less URLs serve 200), and writes the sitemap (v4 only), robots.txt (all crawlers, AI included), llms.txt, Markdown copies (`<page>.md`, rendered by `src/lib/markdown.tsx`; give every new MDX component a Markdown form there) and the social cards (`scripts/og.ts`, run under Node, not Bun).
 - Archived versions are `noindex` and out of the sitemap; see README.md, "Search engines and AI answer engines".
+- The root `/` redirects each visitor to `/en` or `/zh` with a 302 (the target depends on the visitor, so never a 301) and `Vary: Cookie, Accept-Language`; the home pages' `x-default` hreflang is `/` (Google's guidance for an auto-redirecting home page), every docs page's is its English page. The home `<title>` (`seoTitle` in `app/routes/home.tsx`) leads with "The Fastest Binary Serializer for C#" / "最快的 C# 二进制序列化库", as the headline does: the owner's choice, backed by the benchmark pages.
 
 ## Redirects
 

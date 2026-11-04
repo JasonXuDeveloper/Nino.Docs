@@ -82,6 +82,8 @@ function websiteNode() {
 interface Alternates {
   en?: string;
   zh?: string;
+  /** The x-default page; the English page when not given. */
+  xDefault?: string;
 }
 
 function hreflangLinks(alternates: Alternates): MetaDescriptor[] {
@@ -99,7 +101,7 @@ function hreflangLinks(alternates: Alternates): MetaDescriptor[] {
     link('zh', alternates.zh);
     link(languageTag.zh, alternates.zh);
   }
-  const fallback = alternates.en ?? alternates.zh;
+  const fallback = alternates.xDefault ?? alternates.en ?? alternates.zh;
   if (fallback) link('x-default', fallback);
   return links;
 }
@@ -253,7 +255,9 @@ export function homeMeta({
       title,
       description,
       imageAlt: title,
-      alternates: { en: '/en', zh: '/zh' },
+      // x-default is the root, which sends each visitor to their language (functions/[[path]].ts): Google's
+      // recommendation for an auto-redirecting home page.
+      alternates: { en: '/en', zh: '/zh', xDefault: '/' },
       type: 'website',
       indexable: true,
     }),
