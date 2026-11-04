@@ -294,7 +294,9 @@ const llmsCopy: Record<
       'Install: `dotnet add package Nino --prerelease` (NuGet: https://www.nuget.org/packages/Nino); Unity: `openupm add com.jasonxudeveloper.nino`',
       'Optional packages: `Nino.Immutable` (System.Collections.Immutable types), `Nino.AspNetCore` (ASP.NET Core MVC formatters and Minimal API bodies for `application/x-nino`) and `Nino.Codegen` (TypeScript, Go and Rust types and codecs, generated after each build; the same as the `nino-gen` tool, `Nino.Codegen.Tool`)',
       'v4 is still a prerelease on NuGet: without `--prerelease`, NuGet installs the stable 3.9.x, a test build of v4 features that is not compatible with v4.',
-      'Go, Rust and TypeScript: code that nino-gen generates from your C# `[NinoType]`s, with the runtimes published with every release from 4.0.0-rc.8: `go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4`, `cargo add nino-serialization` (crate `nino-serialization`, library `nino`), `npm install nino-serialization`',
+      'Go, Rust and TypeScript: code that nino-gen generates from your C# `[NinoType]`s, with the runtimes published with every release from 4.0.0-rc.8: `go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4` ([Go module](https://pkg.go.dev/github.com/JasonXuDeveloper/Nino/runtimes/go/v4)), `cargo add nino-serialization` ([crates.io](https://crates.io/crates/nino-serialization); library `nino`), `npm install nino-serialization` ([npm](https://www.npmjs.com/package/nino-serialization)); they read and write the same bytes as .NET',
+      'Unity 2022.3+ on Mono and IL2CPP, and HybridCLR hot-update assemblies with no initialization call; with `com.unity.burst` installed, Burst-compiled SIMD kernels move arrays of tuples and structs and Latin-1 strings. Godot 4 .NET projects use the NuGet package',
+      'Analyzer: diagnostics NINO001 to NINO029 while you type, many with a code fix, in the `Nino` package; nino-gen adds NINOGEN001 to NINOGEN004',
       'AI coding agents: `npx skills add JasonXuDeveloper/Nino` installs the `nino-serialization` skill (Claude Code, Codex, Cursor, Copilot and other agents)',
       'Usage: mark a class, struct, record or interface with `[NinoType]`, then call `NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)`',
       ...(headlineSerialize
@@ -318,7 +320,9 @@ const llmsCopy: Record<
       '安装：`dotnet add package Nino --prerelease`（[NuGet](https://www.nuget.org/packages/Nino)）；Unity：`openupm add com.jasonxudeveloper.nino`',
       '可选包：`Nino.Immutable`（System.Collections.Immutable 中的类型）、`Nino.AspNetCore`（用于 `application/x-nino` 的 ASP.NET Core MVC 格式化器与 Minimal API 请求体）和 `Nino.Codegen`（每次构建后生成 TypeScript、Go 和 Rust 类型与编解码器；命令行工具 `nino-gen` 即 `Nino.Codegen.Tool`）',
       'v4 在 NuGet 上仍是预发行版：不加 `--prerelease` 时 NuGet 会安装稳定版 3.9.x，它是测试 v4 功能的过渡版本，与 v4 不兼容。',
-      'Go、Rust 和 TypeScript：使用 nino-gen 从你的 C# `[NinoType]` 生成的代码，运行时从 4.0.0-rc.8 起随每个版本发布：`go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4`、`cargo add nino-serialization`（crate `nino-serialization`，库名 `nino`）、`npm install nino-serialization`',
+      'Go、Rust 和 TypeScript：使用 nino-gen 从你的 C# `[NinoType]` 生成的代码，运行时从 4.0.0-rc.8 起随每个版本发布：`go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4`（[Go 模块](https://pkg.go.dev/github.com/JasonXuDeveloper/Nino/runtimes/go/v4)）、`cargo add nino-serialization`（[crates.io](https://crates.io/crates/nino-serialization)，库名 `nino`）、`npm install nino-serialization`（[npm](https://www.npmjs.com/package/nino-serialization)），读写的字节与 .NET 相同',
+      'Unity 2022.3+ 的 Mono 与 IL2CPP，以及 HybridCLR 热更新程序集，无需初始化调用；安装 `com.unity.burst` 后，元组和结构体数组以及 Latin-1 字符串由 Burst 编译的 SIMD 内核搬运。Godot 4 的 .NET 项目直接使用 NuGet 包',
+      '分析器：写代码时报告 NINO001 至 NINO029 诊断，多数附带代码修复，包含在 `Nino` 包中；nino-gen 另有 NINOGEN001 至 NINOGEN004',
       'AI 编程助手：`npx skills add JasonXuDeveloper/Nino` 安装 `nino-serialization` skill（Claude Code、Codex、Cursor、Copilot 等）',
       '用法：用 `[NinoType]` 标记类、结构体、记录或接口，然后调用 `NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)`',
       ...(headlineSerialize
@@ -473,7 +477,7 @@ function cards(): Card[] {
       eyebrow: 'Nino',
       title: 'High-performance binary serializer for C# and .NET',
       description:
-        'Source-generated, no reflection, zero GC on hot paths. For RPC, microservices, message queues, caching, storage and IPC, with Unity and Godot support.',
+        'Source-generated, no reflection, zero GC on hot paths. For RPC, messaging, caching and storage on .NET, Unity (IL2CPP, HybridCLR) and Godot, with the same bytes in TypeScript, Go and Rust.',
     },
     {
       url: '/zh',
@@ -481,7 +485,7 @@ function cards(): Card[] {
       eyebrow: 'Nino',
       title: '高性能 C# / .NET 二进制序列化库',
       description:
-        '基于源生成器，零反射，热路径零 GC 分配。适用于 RPC、微服务、消息队列、缓存、存储与进程间通信，同时支持 Unity 和 Godot。',
+        '基于源生成器，零反射，热路径零 GC 分配。适用于 RPC、消息、缓存与存储，支持 .NET、Unity（IL2CPP、HybridCLR）和 Godot，TypeScript、Go 与 Rust 读写相同的字节。',
     },
   ];
   for (const page of source.getPages()) {

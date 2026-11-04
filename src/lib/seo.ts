@@ -13,9 +13,13 @@ import type { MetaDescriptor } from 'react-router';
 import type { Locale } from './i18n';
 import {
   author,
+  codegenNugetUrl,
+  cratesUrl,
   githubUrl,
+  goModuleUrl,
   languageTag,
   licenseUrl,
+  npmUrl,
   nugetUrl,
   ogLocale,
   openUpmUrl,
@@ -46,7 +50,14 @@ const softwareRef = {
   '@id': ids.software,
   name: 'Nino',
   codeRepository: githubUrl,
-  programmingLanguage: 'C#',
+  // C# for .NET, Unity and Godot; the other three through nino-gen's code
+  programmingLanguage: ['C#', 'TypeScript', 'Go', 'Rust'],
+};
+
+/** What people search for, per language: categories and platforms, no superlatives */
+const keywords: Record<Locale, string> = {
+  en: 'C# binary serializer, .NET serialization, high-performance serializer, source generator, zero allocation, MemoryPack alternative, MessagePack alternative, protobuf-net alternative, Unity serializer, IL2CPP, HybridCLR, Burst, Godot, NativeAOT, ASP.NET Core, cross-language binary serialization, TypeScript, Go, Rust, RPC, message queue, cache, IPC',
+  zh: 'C# 序列化, .NET 序列化, 二进制序列化, 高性能序列化, 源生成器, 零 GC, MemoryPack 替代, MessagePack 替代, Unity 序列化, IL2CPP, HybridCLR 热更新, Burst, Godot, NativeAOT, ASP.NET Core, 跨语言序列化, TypeScript, Go, Rust, RPC, 消息队列, 缓存, 进程间通信',
 };
 
 const authorNode = {
@@ -182,21 +193,37 @@ export function homeMeta({
         url: `${siteUrl}/en`,
         license: licenseUrl,
         author: { '@id': ids.author },
-        runtimePlatform: ['.NET', '.NET Standard 2.0', 'Unity', 'Godot'],
-        keywords:
-          'C# serializer, .NET binary serialization, high-performance serializer, source generator, zero allocation, RPC, microservices, message queue, cache, IPC, MemoryPack alternative, ASP.NET Core, TypeScript, Unity, Godot, HybridCLR, IL2CPP, NativeAOT',
-        sameAs: [githubUrl, nugetUrl, openUpmUrl],
+        runtimePlatform: [
+          '.NET',
+          '.NET Standard 2.0',
+          'Unity',
+          'Godot',
+          'Node.js',
+          'Web browsers',
+          'Go',
+          'Rust',
+        ],
+        keywords: keywords[lang],
+        sameAs: [
+          githubUrl,
+          nugetUrl,
+          openUpmUrl,
+          codegenNugetUrl,
+          npmUrl,
+          cratesUrl,
+          goModuleUrl,
+        ],
         targetProduct: {
           '@type': 'SoftwareApplication',
           name: 'Nino',
           applicationCategory: 'DeveloperApplication',
           applicationSubCategory: 'Serialization library',
           operatingSystem:
-            'Cross-platform (any .NET Standard 2.0 runtime, Unity, Godot)',
+            'Cross-platform (any .NET Standard 2.0 runtime, Unity, Godot; Node.js and browsers, Go and Rust through generated code)',
           downloadUrl: nugetUrl,
           installUrl: nugetUrl,
           softwareRequirements:
-            '.NET Standard 2.0 or later; Unity 2022.3 or later; Roslyn 4.3 or later and C# 9 or later for the source generator',
+            '.NET Standard 2.0 or later; Unity 2022.3 or later; Roslyn 4.3 or later and C# 9 or later for the source generator; TypeScript 5.7+, Go 1.22+ or Rust 1.88+ for generated code',
           offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
         },
       },

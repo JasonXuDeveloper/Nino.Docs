@@ -53,7 +53,7 @@ const copy: Record<
   }
 > = {
   en: {
-    description: `Nino is a general-purpose, high-performance binary serializer for C# and .NET: source-generated, ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack, ` : ''}zero GC on hot paths. For RPC, microservices, message queues, caching, storage and IPC, with Unity and Godot support.`,
+    description: `Nino is a high-performance binary serializer for C# and .NET: source-generated, ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack, ` : ''}zero GC on hot paths. For RPC, messaging, caching and storage on .NET, Unity (IL2CPP, HybridCLR) and Godot, with the same bytes in TypeScript, Go and Rust.`,
     pill: 'Nino v4 · C# binary serializer',
     headline: ['The fastest binary serializer', 'for C#.'],
     sub: 'Nino is source-generated and SIMD-accelerated (AVX-512, AVX2, Arm64, WebAssembly), with zero GC on hot paths. For services, networking and RPC, message queues, caching, storage and IPC, on .NET, Unity and Godot alike.',
@@ -110,7 +110,7 @@ const copy: Record<
     older: 'Older versions:',
   },
   zh: {
-    description: `Nino 是通用的高性能 C# / .NET 二进制序列化库：基于源生成器，${headlineSerialize ? `最高比 MemoryPack 快 ${headlineSerialize} 倍，` : ''}热路径零 GC 分配。适用于 RPC、微服务、消息队列、缓存、存储与进程间通信，同时支持 Unity 和 Godot。`,
+    description: `Nino 是高性能 C# / .NET 二进制序列化库：基于源生成器，${headlineSerialize ? `最高比 MemoryPack 快 ${headlineSerialize} 倍，` : ''}热路径零 GC 分配。适用于 RPC、消息、缓存与存储，支持 .NET、Unity（IL2CPP、HybridCLR）和 Godot，TypeScript、Go 与 Rust 读写相同的字节。`,
     pill: 'Nino v4 · C# 二进制序列化库',
     headline: ['最快的二进制序列化库', '为 C# 而生。'],
     sub: 'Nino 基于源生成器，用 SIMD 加速（AVX-512、AVX2、Arm64、WebAssembly），热路径零 GC 分配。适用于服务端、网络与 RPC、消息队列、缓存、存储和进程间通信，.NET、Unity 与 Godot 均可使用。',
@@ -170,8 +170,8 @@ const copy: Record<
 
 // Search result titles: the product and the category people search for. The page copy above keeps its own headline.
 const seoTitle: Record<Locale, string> = {
-  en: 'Nino – High-Performance Binary Serializer for C# and .NET',
-  zh: 'Nino – 高性能 C# / .NET 二进制序列化库',
+  en: 'Nino – High-Performance C# Binary Serializer for .NET and Unity',
+  zh: 'Nino – 高性能 C# 二进制序列化库，支持 .NET 与 Unity',
 };
 
 export function meta({ params }: Route.MetaArgs) {

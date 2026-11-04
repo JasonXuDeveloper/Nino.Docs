@@ -12,6 +12,12 @@ export const docsRepoUrl = 'https://github.com/JasonXuDeveloper/Nino.Docs';
 export const nugetUrl = 'https://www.nuget.org/packages/Nino';
 export const openUpmUrl =
   'https://openupm.com/packages/com.jasonxudeveloper.nino/';
+/** nino-gen (Nino.Codegen) and the runtimes of the code it generates */
+export const codegenNugetUrl = 'https://www.nuget.org/packages/Nino.Codegen';
+export const npmUrl = 'https://www.npmjs.com/package/nino-serialization';
+export const cratesUrl = 'https://crates.io/crates/nino-serialization';
+export const goModuleUrl =
+  'https://pkg.go.dev/github.com/JasonXuDeveloper/Nino/runtimes/go/v4';
 export const licenseUrl =
   'https://github.com/JasonXuDeveloper/Nino/blob/main/LICENSE';
 export const author = {
@@ -46,6 +52,6 @@ export const siteVerification = {
  * it true to the Nino source (README, csproj files) and to the docs.
  */
 export const productSummary: Record<Locale, string> = {
-  en: 'Nino is a general-purpose, high-performance binary serializer for C# and .NET. A Roslyn source generator writes the serialization code for every [NinoType] at compile time, so there is no reflection and no runtime code generation, and serializing into a reused buffer allocates nothing. Use it wherever .NET code turns objects into bytes and back: RPC and network protocols, microservices, message queues and event streams, caches, files and other storage, inter-process communication and data pipelines. The runtime targets netstandard2.0, netstandard2.1, net8.0 and net10.0, and Nino also supports Unity 2022.3+ (Mono, IL2CPP, HybridCLR), Godot 4 (.NET), ASP.NET Core (Nino.AspNetCore), browsers and Node through generated TypeScript or .NET WebAssembly, and Go and Rust through generated code (Nino.Codegen); every platform writes the same bytes. MIT licensed.',
-  zh: 'Nino 是通用的高性能 C# / .NET 二进制序列化库。Roslyn 源生成器在编译期为每个 [NinoType] 生成序列化代码，因此没有反射、没有运行时代码生成；序列化到复用的缓冲区时零 GC 分配。凡是 .NET 代码需要在对象和字节之间转换的地方都能使用：RPC 与网络协议、微服务、消息队列与事件流、缓存、文件等存储、进程间通信以及数据管道。运行时面向 netstandard2.0、netstandard2.1、net8.0 和 net10.0，同时支持 Unity 2022.3+（Mono、IL2CPP、HybridCLR）、Godot 4（.NET）、ASP.NET Core（Nino.AspNetCore），通过生成的 TypeScript 或 .NET WebAssembly 支持浏览器和 Node，并通过生成的代码（Nino.Codegen）支持 Go 和 Rust，各平台写出的字节完全相同。MIT 开源协议。',
+  en: 'Nino is a general-purpose, high-performance binary serializer for C# and .NET. A Roslyn source generator writes the serialization code for every [NinoType] at compile time, so there is no reflection and no runtime code generation, and serializing into a reused buffer allocates nothing; its analyzer reports mistakes as you type, many with a code fix. Use it wherever .NET code turns objects into bytes and back: RPC and network protocols, microservices, message queues and event streams, caches, files and other storage, inter-process communication and data pipelines. The runtime (NuGet package Nino) targets netstandard2.0, netstandard2.1, net8.0 and net10.0, and runs in Unity 2022.3+ (Mono, IL2CPP, HybridCLR, with optional Burst-compiled SIMD kernels), Godot 4 (.NET) and ASP.NET Core (Nino.AspNetCore). For other languages, nino-gen (Nino.Codegen, Nino.Codegen.Tool) generates TypeScript, Go and Rust code from the same [NinoType]s, with runtimes on npm and crates.io (both nino-serialization) and as a Go module, so browsers, Node, Go and Rust programs read and write the same bytes as .NET. MIT licensed.',
+  zh: 'Nino 是通用的高性能 C# / .NET 二进制序列化库。Roslyn 源生成器在编译期为每个 [NinoType] 生成序列化代码，因此没有反射、没有运行时代码生成；序列化到复用的缓冲区时零 GC 分配；分析器在你写代码时报告错误，多数附带代码修复。凡是 .NET 代码需要在对象和字节之间转换的地方都能使用：RPC 与网络协议、微服务、消息队列与事件流、缓存、文件等存储、进程间通信以及数据管道。运行时（NuGet 包 Nino）面向 netstandard2.0、netstandard2.1、net8.0 和 net10.0，可用于 Unity 2022.3+（Mono、IL2CPP、HybridCLR，可选 Burst 编译的 SIMD 内核）、Godot 4（.NET）和 ASP.NET Core（Nino.AspNetCore）。对其他语言，nino-gen（Nino.Codegen、Nino.Codegen.Tool）从同一批 [NinoType] 生成 TypeScript、Go 和 Rust 代码，运行时发布在 npm 和 crates.io（都叫 nino-serialization）以及 Go 模块中，浏览器、Node、Go 和 Rust 程序读写的字节与 .NET 完全相同。MIT 开源协议。',
 };

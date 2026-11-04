@@ -195,6 +195,12 @@ const text: Record<
         href: 'platforms',
       },
       {
+        question: 'Does Nino work in Unity with IL2CPP and HybridCLR?',
+        answer:
+          'Yes. Nino supports Unity 2022.3 and later on Mono and IL2CPP and every player platform. The generated code uses no reflection, and types in HybridCLR hot-update assemblies are found with no initialization call. Vector3, Quaternion and other unmanaged structs are copied as raw memory, AnimationCurve, Gradient and RectOffset are built in, and with com.unity.burst installed, Burst-compiled SIMD kernels move arrays of tuples and structs and Latin-1 strings. Install it from OpenUPM.',
+        href: 'advanced/unity',
+      },
+      {
         question: 'Does Nino use reflection?',
         answer:
           'No. A Roslyn source generator writes the serialization code for every [NinoType] at compile time, so there is no reflection and no runtime code generation, and the code works under IL2CPP and NativeAOT.',
@@ -328,6 +334,12 @@ const text: Record<
         answer:
           '运行时面向 netstandard2.0、netstandard2.1、net8.0 和 net10.0，因此可运行于 .NET Framework 4.6.1+、.NET Core、.NET 5–10 与 NativeAOT，也支持 Unity 2022.3 及以上（Mono、IL2CPP、HybridCLR）和 Godot 4。所有平台，无论 64 位还是 32 位，写出的字节都相同。Nino.AspNetCore 负责在 ASP.NET Core 中读写请求体与响应，Nino.Codegen 生成的 TypeScript、Go 和 Rust 编解码器让浏览器、Node、Go 和 Rust 读写相同的字节。',
         href: 'platforms',
+      },
+      {
+        question: 'Nino 能在 Unity 的 IL2CPP 和 HybridCLR 下使用吗？',
+        answer:
+          '能。Nino 支持 Unity 2022.3 及以上版本的 Mono 和 IL2CPP 以及所有 Player 平台。生成的代码不用反射，HybridCLR 热更新程序集里的类型无需初始化调用就能识别。Vector3、Quaternion 等非托管结构体按原始内存拷贝，AnimationCurve、Gradient 和 RectOffset 内置支持；安装 com.unity.burst 后，元组和结构体数组以及 Latin-1 字符串由 Burst 编译的 SIMD 内核搬运。从 OpenUPM 安装。',
+        href: 'advanced/unity',
       },
       {
         question: 'Nino 使用反射吗？',

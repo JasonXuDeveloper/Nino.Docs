@@ -58,7 +58,7 @@ Everything is generated at build time; nothing costs anything at run time.
 | What | Where |
 | --- | --- |
 | `<title>` ("Page – Nino v4 Docs", or the page's `seoTitle` frontmatter), description, canonical, hreflang (`en`, `zh`, `zh-CN`, `x-default`), Open Graph and Twitter cards, `robots` | `src/lib/seo.ts`, used by the `meta` exports of `app/routes/home.tsx` and `app/routes/docs.tsx` |
-| JSON-LD: `WebSite`, `TechArticle` (with `dateModified` from git), `BreadcrumbList` on every docs page; `FAQPage` on pages with `faq: true`; `SoftwareSourceCode` / `SoftwareApplication` (GitHub, NuGet, OpenUPM, MIT) on the home pages | `src/lib/seo.ts` |
+| JSON-LD: `WebSite`, `TechArticle` (with `dateModified` from git), `BreadcrumbList` on every docs page; `FAQPage` on pages with `faq: true`; `SoftwareSourceCode` / `SoftwareApplication` (C#, TypeScript, Go and Rust; GitHub, NuGet, OpenUPM, Nino.Codegen, npm, crates.io and the Go module, MIT; keywords per language) on the home pages, with the home FAQ as `FAQPage` | `src/lib/seo.ts` |
 | Social cards: one 1200×630 PNG per page (`/og/en/docs/v4/start.png`), drawn with sharp; `public/og.png` is the fallback (`bun run og:default` redraws it) | `scripts/og.ts` |
 | `sitemap.xml` (home and every v4 page in both languages, `lastmod` from git, `xhtml:link` alternates), `robots.txt` | `scripts/generate-static.ts` |
 | `llms.txt` / `llms-full.txt` ([llmstxt.org](https://llmstxt.org)), Chinese at `llms.zh.txt` / `llms-full.zh.txt` (also `/zh/llms.txt`); a Markdown copy of every page at `<page>.md` (`.mdx` kept for old links) with the title, URL, version and last-updated date, components rendered to Markdown tables and text | `scripts/generate-static.ts`, `src/lib/markdown.tsx` |
