@@ -63,6 +63,7 @@ Everything is generated at build time; nothing costs anything at run time.
 | `sitemap.xml` (home and every v4 page in both languages, `lastmod` from git, `xhtml:link` alternates), `robots.txt` | `scripts/generate-static.ts` |
 | `llms.txt` / `llms-full.txt` ([llmstxt.org](https://llmstxt.org)), Chinese at `llms.zh.txt` / `llms-full.zh.txt` (also `/zh/llms.txt`); a Markdown copy of every page at `<page>.md` (`.mdx` kept for old links) with the title, URL, version and last-updated date, components rendered to Markdown tables and text | `scripts/generate-static.ts`, `src/lib/markdown.tsx` |
 | Markdown responses: `.md` files are served as `text/markdown` with a `Link: <page>; rel="canonical"` header; a page requested with `Accept: text/markdown` gets its Markdown; `.data` files are `noindex` | `functions/[[path]].ts` |
+| Not-found pages: unknown URLs, the not-found pages' own URLs (`/404`, `/en/404`, `/zh/404`) and unknown URLs without a locale answer 404 (never a redirect to a 404, never a 200 not-found page); the build checks that every sitemap entry is a page whose canonical is itself | `functions/[[path]].ts`, `scripts/generate-static.ts` |
 
 **Archived versions** (v3, v2) are `noindex, follow`, left out of the sitemap and listed only under "Optional" in `llms.txt`. Their APIs and binary formats differ from v4, so they must not rank for, or be quoted in answers about, the current version; they keep a self-referencing canonical (a canonical to the v4 page would be ignored, as the content differs) and the "old version" banner links to the v4 page.
 

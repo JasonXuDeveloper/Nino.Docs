@@ -2,7 +2,11 @@ interface Env {
   ASSETS: Fetcher;
 }
 
-const localizedPathPattern = /^\/(en|zh)(?:\/|$)/;
+// /en, /en/..., and /en.html (which Pages redirects to /en)
+const localizedPathPattern = /^\/(en|zh)(?:\/|\.html$|$)/;
+// The not-found pages themselves (/404, /en/404, /zh/404.html, ...): Pages
+// would serve them with 200, a soft 404 to search engines.
+const notFoundPathPattern = /^\/(?:(en|zh)\/)?404(?:\.html)?\/?$/;
 const docsMarkdownPattern = /^\/(en|zh)\/docs\/.+/;
 const markdownMime = 'text/markdown; charset=utf-8';
 const markdownFilePattern = /^\/(en|zh)\/docs\/.+\.mdx?$/;
@@ -47,6 +51,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return context.next();
   }
 
+  const notFoundPath = url.pathname.match(notFoundPathPattern);
+  if (notFoundPath) {
+    return notFound(context, url, notFoundPath[1] as Locale | undefined);
+  }
+
   // Markdown copies of the docs pages (/en/docs/v4/start.md, legacy .mdx)
   if (markdownFilePattern.test(url.pathname)) {
     return withMarkdownHeaders(await context.next(), url.pathname);
@@ -68,6 +77,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     const target = new URL(request.url);
     target.pathname = localizePath(url.pathname, locale);
 
+    // Only redirect to a page that exists: a redirect to a 404 (/random ->
+    // /en/random) is a chain search engines report instead of a plain 404.
+    if (url.pathname !== '/' && url.pathname !== '/index.html') {
+      const probe = await context.env.ASSETS.fetch(
+        new Request(target, { method: 'HEAD', redirect: 'manual' }),
+      );
+      if (probe.status === 404) return notFound(context, url);
+    }
+
     return new Response(null, {
       status: 302,
       headers: {
@@ -84,6 +102,31 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   return context.next();
 };
+
+type Locale = 'en' | 'zh';
+
+/**
+ * The not-found page with status 404: /en/404.html or /zh/404.html for a
+ * locale, else the bilingual /404.html. Pages serves those files with 200 at
+ * their own URLs, so the status is set here.
+ */
+async function notFound(
+  context: EventContext<Env, string, unknown>,
+  url: URL,
+  locale?: Locale,
+) {
+  const page = await context.env.ASSETS.fetch(
+    new URL(locale ? `/${locale}/404` : '/404', url),
+  );
+  return new Response(context.request.method === 'HEAD' ? null : page.body, {
+    status: 404,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      'X-Robots-Tag': 'noindex',
+    },
+  });
+}
 
 function shouldBypass(pathname: string) {
   if (
@@ -156,7 +199,7 @@ function withMarkdownHeaders(response: Response, pathname: string) {
   });
 }
 
-function getLocale(request: Request) {
+function getLocale(request: Request): Locale {
   const cookieLocale = request.headers
     .get('cookie')
     ?.split(';')
@@ -175,12 +218,12 @@ function getLocale(request: Request) {
   return country && zhCountries.has(country.toUpperCase()) ? 'zh' : 'en';
 }
 
-function localizePath(pathname: string, locale: 'en' | 'zh') {
+function localizePath(pathname: string, locale: Locale) {
   // `/index.html` is the root page, not a page under /en (which would 404)
   if (pathname === '/' || pathname === '/index.html') return `/${locale}`;
   return `/${locale}${pathname}`;
 }
 
-function serializeLocaleCookie(locale: 'en' | 'zh') {
+function serializeLocaleCookie(locale: Locale) {
   return `${localeCookieName}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax; Secure`;
 }

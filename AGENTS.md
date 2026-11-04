@@ -91,7 +91,8 @@ Cloudflare Pages builds with the Node version in `.node-version` and the Bun ver
 
 ## Redirects
 
-- Old site URLs: `public/_redirects` (Cloudflare `_redirects` syntax).
+- Old site URLs: `public/_redirects` (Cloudflare `_redirects` syntax), each a 301 straight to a page that exists (no chain through another rule, no redirect to a 404), with its path in `public/_routes.json`'s `exclude` (Pages applies `_redirects` only to requests the Function does not handle).
+- **No soft 404s** (Google Search Console reports them): every unknown URL answers 404 with a not-found page. `functions/[[path]].ts` serves `/404`, `/en/404` and `/zh/404` with status 404 (Pages would answer 200 at their own URLs) and answers 404 for a URL without a locale whose localized page does not exist, instead of redirecting to a 404; `scripts/generate-static.ts` deletes React Router's `__spa-fallback.html` and fails the build when a sitemap entry is not a page whose canonical is itself.
 - Old anchors that moved to another page: `<AnchorRedirect map={{ ... }} />` on the old page.
 
 ## Adding a New Version (e.g. v5)

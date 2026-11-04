@@ -142,6 +142,31 @@ function alternateLinks(urls: Partial<Record<Locale, string>>) {
     .join('\n');
 }
 
+/** The site paths `sitemap()` listed, checked by `checkSitemap()` */
+const sitemapUrls: string[] = [];
+
+/**
+ * Every sitemap entry must be a page that answers 200 at that URL and names
+ * it as its canonical: a URL that redirects or 404s is reported by Search
+ * Console (and a not-found page answering 200 as a soft 404).
+ */
+async function checkSitemap() {
+  const problems: string[] = [];
+  for (const url of sitemapUrls) {
+    const file = path.join(outDir, `${url.slice(1)}.html`);
+    const html = await fs.readFile(file, 'utf8').catch(() => undefined);
+    if (html === undefined) problems.push(`${url}: no ${file}`);
+    else if (!html.includes(`<link rel="canonical" href="${siteUrl}${url}"/>`))
+      problems.push(`${url}: its canonical is another URL`);
+    else if (/<meta name="robots" content="noindex/.test(html))
+      problems.push(`${url}: noindex`);
+  }
+  if (problems.length > 0)
+    throw new Error(
+      `Sitemap entries that are not pages:\n${problems.join('\n')}`,
+    );
+}
+
 /**
  * The home pages and every page of the latest version, in both languages,
  * with the date of the last commit to the page and its language alternates.
@@ -149,12 +174,14 @@ function alternateLinks(urls: Partial<Record<Locale, string>>) {
  */
 function sitemap() {
   const entries: string[] = [];
+  sitemapUrls.length = 0;
   const entry = (
     url: string,
     alternates: Partial<Record<Locale, string>>,
     date: Date | undefined,
     priority: string,
-  ) =>
+  ) => {
+    sitemapUrls.push(url);
     entries.push(
       [
         '  <url>',
@@ -165,6 +192,7 @@ function sitemap() {
         '  </url>',
       ].join('\n'),
     );
+  };
 
   // The home pages change with the latest docs and the benchmark data.
   const newest = source
@@ -500,6 +528,9 @@ async function main() {
     );
     await fs.rm(dir, { recursive: true, force: true });
   }
+  // React Router's fallback for paths it did not prerender: nothing serves it
+  // (unknown paths get a 404.html), so it would only be a stray 200 page.
+  await fs.rm(path.join(outDir, '__spa-fallback.html'), { force: true });
 
   const moved = await flattenPages(outDir);
 
@@ -536,6 +567,7 @@ async function main() {
   // The social cards are independent of everything above: draw them meanwhile.
   tasks.push(writeCards(cards(), outDir, path.resolve('public/og.png')));
   await Promise.all(tasks);
+  await checkSitemap();
 
   console.log(
     `Wrote static files to ${path.relative('.', outDir)} (${moved} pages moved to .html)`,
