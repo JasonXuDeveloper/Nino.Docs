@@ -477,7 +477,7 @@ function cards(): Card[] {
       eyebrow: 'Nino',
       title: 'High-performance binary serializer for C# and .NET',
       description:
-        'Source-generated, no reflection, zero GC on hot paths. For RPC, messaging, caching and storage on .NET, Unity (IL2CPP, HybridCLR) and Godot, with the same bytes in TypeScript, Go and Rust.',
+        'Source-generated, zero GC on hot paths. For .NET, Unity (IL2CPP, HybridCLR) and Godot, with the same bytes in TypeScript, Go and Rust.',
     },
     {
       url: '/zh',
@@ -485,7 +485,7 @@ function cards(): Card[] {
       eyebrow: 'Nino',
       title: '高性能 C# / .NET 二进制序列化库',
       description:
-        '基于源生成器，零反射，热路径零 GC 分配。适用于 RPC、消息、缓存与存储，支持 .NET、Unity（IL2CPP、HybridCLR）和 Godot，TypeScript、Go 与 Rust 读写相同的字节。',
+        '基于源生成器，热路径零 GC。支持 .NET、Unity（IL2CPP、HybridCLR）和 Godot，TypeScript、Go 与 Rust 读写相同的字节。',
     },
   ];
   for (const page of source.getPages()) {
