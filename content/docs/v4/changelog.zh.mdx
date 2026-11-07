@@ -26,6 +26,7 @@ icon: RotateCcwClock
 
 ### 修复 [#fixes-6]
 
+- **不可信模式读取值为普通结构体的字典**：开启 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 时，读取值为普通结构体的 `Dictionary`（如 `Dictionary<long, DateTime>`）不再越过输入末尾最多读一个键的长度；输入恰好结束在内存页边界时，这曾可能让进程崩溃。被越界读到的字节不参与判断，所以不会误收非法值。
 - **每个成员错误只报一次**：基类成员的 NINO007 和 NINO029 只由声明它的类型报告一次，不再在同一位置为每个子类型各报一次。参见[分析器](/zh/docs/v4/analyzers)。
 - **`[NinoType]` 接口成员的显式实现**：显式实现 `[NinoType]` 接口属性的类型（`int IFoo.X { get; set; }`）不再因 CS1061 编译失败。接口的成员通过接口写出（结构体不装箱），用接口成员上的 `[NinoUtf8]`、`[NinoMemberFormatter]` 和 `[NinoIgnore]`，布局与隐式实现相同。参见[哪些成员会被序列化](/zh/docs/v4/defining-types#which-members-are-serialized)。
 - **生成的 Rust 代码中的类型 ID**：nino-gen 写出的 Rust 代码把 `NinoReadBody::TYPE_ID` 和 `NinoWriteBody::TYPE_ID` 设为类型的 ID，和 `#[derive]` 一样；之前是 0，泛型代码通过 `<T as NinoReadBody>::TYPE_ID` 取到的都是 0。参见 [Rust：生成的代码](/zh/docs/v4/advanced/codegen#rust-generated-code)。
