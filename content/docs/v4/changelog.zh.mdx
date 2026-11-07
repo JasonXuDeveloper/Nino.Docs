@@ -21,7 +21,7 @@ icon: RotateCcwClock
 
 ### 性能 [#performance-4]
 
-- **不可信模式下带 `bool` 的普通结构体列表**：开启 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 时，`bool` 字段与相邻字段在同一轮 SIMD 检查中完成：x64 上快 12-23%（1,000 个值：GitHub 的 AMD EPYC 7763 运行器上 2.72 → 2.35 µs，EPYC 9V45 上 1.48 → 1.16 µs），Arm64 上持平。
+- **不可信模式下带 `bool` 的普通结构体列表**：开启 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 时，`bool` 字段与相邻字段在同一轮 SIMD 检查中完成：x64 上快 11-20%，已计入本版本的越界读取修复（1,000 个值：GitHub 的 AMD EPYC 7763 运行器上 2.70 → 2.40 µs，EPYC 9V45 上 1.40 → 1.11 µs），Arm64 上持平。
 - **IDE 中的源生成器**：没有改动任何声明的编辑，不再让生成器重新绑定每一处顶层 `Serialize`/`Deserialize` 调用；调用很多的项目里，每次输入时生成器的开销小得多。
 
 ### 修复 [#fixes-6]
