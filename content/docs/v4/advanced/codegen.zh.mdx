@@ -616,7 +616,7 @@ nino-gen 生成的代码需要 `indexmap` 功能和 `indexmap` 本身：映射�
 
 ### 生成的代码 [#rust-generated-code]
 
-编解码器完整写出（每个类型实现 `NinoRead`、`NinoWrite`、`NinoReadBody` 和 `NinoWriteBody`），而不是 `#[derive]` 属性，所以代码既不需要 derive crate，也不需要构建它的过程宏，并按布局中带的哈希检查旧键。每个类型都有 `TYPE_ID`、`NINO_TYPE_NAME` 和 `NINO_LAYOUT` 常量。容纳多种类型的槽位是一个枚举 `<Base>Ref`，每个允许的类型一个装箱变体；`object` 槽位是 `AnyObject`。枚举是整数，另有一个单元结构体以常量形式持有各个具名取值。`with_nino_type(name, visitor)` 用某个 .NET 名字对应的类型调用 `NinoVisit` 访问者。生成的文件请关闭 rustfmt 后引入：
+编解码器完整写出（每个类型实现 `NinoRead`、`NinoWrite`、`NinoReadBody` 和 `NinoWriteBody`），而不是 `#[derive]` 属性，所以代码既不需要 derive crate，也不需要构建它的过程宏，并按布局中带的哈希检查旧键。每个类型都有 `TYPE_ID`、`NINO_TYPE_NAME` 和 `NINO_LAYOUT` 常量，通过 `nino::type_consts!(id, name, layout)` 声明，文档只在 crate 里写一次（泛型类型没有 `TYPE_ID`）；它的 `NinoReadBody` 和 `NinoWriteBody` impl 也带同一个 `TYPE_ID`，和 derive 一样。原始结构体的 `NinoRead` 和 `NinoWrite` impl 是 `nino::raw_read!()` 和 `nino::raw_write!()`。容纳多种类型的槽位是一个枚举 `<Base>Ref`，每个允许的类型一个装箱变体；`object` 槽位是 `AnyObject`。枚举是整数，另有一个单元结构体以常量形式持有各个具名取值。`with_nino_type(name, visitor)` 用某个 .NET 名字对应的类型调用 `NinoVisit` 访问者。生成的文件请关闭 rustfmt 后引入：
 
 ```rust title="lib.rs"
 #[rustfmt::skip]
@@ -697,7 +697,7 @@ pub struct Vec2 { pub x: f32, pub y: f32 }
 | `deferrable = false` | .NET 从不推迟的类型（记录、通过构造函数创建的类型）。未给出时取自 `layout`。 |
 | `layout = "…"` | 类型发布的[布局](/zh/docs/v4/evolving-data#layout-metadata)，在编译时核对：成员名字和顺序、键、旧键、`[NinoUtf8]`、原始值的大小和偏移。格式、种类、类型 ID 和可推迟性未给出时取自它。 |
 
-手写 impl 时，`nino::sealed_read!()` 和 `nino::sealed_write!()` 写出密封类 `NinoRead` 与 `NinoWrite` impl 中的方法，和生成的代码、derive 一样；`NinoWrite::PREFETCH_BYTES`（默认 0）估计写一个值时经由它的指针读取的字节数，长列表据此边写边预取。
+手写 impl 时，`nino::sealed_read!()` 和 `nino::sealed_write!()` 写出密封类 `NinoRead` 与 `NinoWrite` impl 中的方法，`nino::raw_read!()` 和 `nino::raw_write!()` 根据原始结构体的 `nino::Raw` impl（大小、解码和编码）写出它的这两个 impl，和生成的代码、derive 一样；`NinoWrite::PREFETCH_BYTES`（默认 0）估计写一个值时经由它的指针读取的字节数，长列表据此边写边预取。
 
 字段属性有 `index`、`name`（.NET 中的名字；默认是字段名的 PascalCase 形式）、`key`、`former`、`utf8` 和 `skip`。枚举是多态的声明类型，每个具体类型一个变体；其他类型 ID 都会被拒绝。二进制格式无法表达的内容（`usize`、Rust 的 `char`、引用、冲突的键、不匹配的 `layout`）都是指明字段的编译错误。
 

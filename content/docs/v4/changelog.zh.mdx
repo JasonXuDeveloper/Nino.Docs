@@ -17,6 +17,7 @@ icon: RotateCcwClock
 - **移除 `WEAK_VERSION_TOLERANCE`。** 项目仍定义它时，错误 NINO032 会标出它曾变为版本容错的每个按位置格式类型，代码修复给它加上 `format: NinoFormat.VersionTolerant`，字节不变（可一次修复整个解决方案）；之后删掉这个符号。参见[版本容错](/zh/docs/v4/evolving-data#version-tolerance)。
 - **UTF-8 只有一种写法**：字符串成员上的 `[NinoMemberFormatter(typeof(Utf8StringFormatter))]` 按 `[NinoUtf8]` 处理（字节相同，发布的布局中为 `utf8`）；提示 NINO031 及其代码修复会把它改写成 `[NinoUtf8]`。警告 NINO030 报告不起作用的 `[NinoUtf8]`：成员类型里没有内置格式化器会写出的字符串，成员由 `[NinoMemberFormatter]` 写出，或者成员根本不会被序列化（`[NinoIgnore]`、非公共、只读、静态、显式接口实现，或 `autoCollect: false` 时没有 `[NinoMember]`）；代码修复会去掉它。参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)。
 - **NINO033**：接口成员上的 `[NinoUtf8]`、`[NinoMemberFormatter]` 或 `[NinoIgnore]` 不起作用，报警告：实现类型写出的是自己的成员，用的是它自己的特性，接口成员上只有 `[NinoMember(index)]` 有效。编译中有类型显式实现该成员或使用其默认实现时（那里写出的是接口成员，这些特性会生效）不报。代码修复会把特性移到实现成员上；没有实现成员时直接去掉。参见[接口与抽象类](/zh/docs/v4/polymorphism#interfaces-and-abstract-classes)。
+- **手写 impl 用的 Rust 宏**：`nino::raw_read!()` 和 `nino::raw_write!()` 根据原始结构体的 `nino::Raw` impl 写出它的 `NinoRead` 和 `NinoWrite` impl，和 nino-gen 生成的代码、derive 一样；`nino::type_consts!(id, name, layout)` 声明 nino-gen 给每个类型的 `TYPE_ID`、`NINO_TYPE_NAME` 和 `NINO_LAYOUT` 常量，文档只在 crate 里写一次。参见 [Rust：生成的代码](/zh/docs/v4/advanced/codegen#rust-generated-code)。
 
 ### 性能 [#performance-4]
 
@@ -26,6 +27,7 @@ icon: RotateCcwClock
 
 - **每个成员错误只报一次**：基类成员的 NINO007 和 NINO029 只由声明它的类型报告一次，不再在同一位置为每个子类型各报一次。参见[分析器](/zh/docs/v4/analyzers)。
 - **`[NinoType]` 接口成员的显式实现**：显式实现 `[NinoType]` 接口属性的类型（`int IFoo.X { get; set; }`）不再因 CS1061 编译失败。接口的成员通过接口写出（结构体不装箱），用接口成员上的 `[NinoUtf8]`、`[NinoMemberFormatter]` 和 `[NinoIgnore]`，布局与隐式实现相同。参见[哪些成员会被序列化](/zh/docs/v4/defining-types#which-members-are-serialized)。
+- **生成的 Rust 代码中的类型 ID**：nino-gen 写出的 Rust 代码把 `NinoReadBody::TYPE_ID` 和 `NinoWriteBody::TYPE_ID` 设为类型的 ID，和 `#[derive]` 一样；之前是 0，泛型代码通过 `<T as NinoReadBody>::TYPE_ID` 取到的都是 0。参见 [Rust：生成的代码](/zh/docs/v4/advanced/codegen#rust-generated-code)。
 
 </Release>
 
