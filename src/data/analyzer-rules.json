@@ -295,11 +295,11 @@
       "severity": "warning",
       "codeFix": true,
       "en": {
-        "problem": "`[NinoMember]` on a member that is never serialized (static, constant, indexer, fixed-size buffer, a property without a getter or implemented explicitly, a property without a setter that no constructor takes, or `[field: NinoMember]`): nothing is written for it; this is the only diagnostic about that attribute",
+        "problem": "`[NinoMember]` on a member that is never serialized (static, constant, indexer, fixed-size buffer, a property without a getter or implemented explicitly (for a `[NinoType]` interface, the interface's member is written in its place: mark that one), a property without a setter that no constructor takes, or `[field: NinoMember]`): nothing is written for it; this is the only diagnostic about that attribute",
         "fix": "Remove `[NinoMember]`; to serialize a get-only auto-property, give a constructor a parameter of its name"
       },
       "zh": {
-        "problem": "`[NinoMember]` 标在永远不会被序列化的成员上（静态成员、常量、索引器、固定大小缓冲区、没有 getter 或显式实现接口的属性、没有 setter 且没有构造函数接收的属性，或 `[field: NinoMember]`）：这个成员什么都不写；关于这个特性只报这一条诊断",
+        "problem": "`[NinoMember]` 标在永远不会被序列化的成员上（静态成员、常量、索引器、固定大小缓冲区、没有 getter 或显式实现接口的属性（`[NinoType]` 接口时写出的是接口的成员，请标在它上面）、没有 setter 且没有构造函数接收的属性，或 `[field: NinoMember]`）：这个成员什么都不写；关于这个特性只报这一条诊断",
         "fix": "去掉 `[NinoMember]`；要序列化只读自动属性，给构造函数加一个同名参数"
       }
     },
@@ -323,11 +323,11 @@
       "severity": "warning",
       "codeFix": true,
       "en": {
-        "problem": "`[NinoUtf8]` has no effect: the member's type holds no string the built-in formatters write (an `int`; a `[NinoType]`, `object` or type parameter writes its own strings), a `[NinoMemberFormatter]` writes the member, or the member is never serialized (`[NinoIgnore]`, non-public, get-only, static, no `[NinoMember]` under `autoCollect: false`). The bytes are the same without it",
+        "problem": "`[NinoUtf8]` has no effect: the member's type holds no string the built-in formatters write (an `int`; a `[NinoType]`, `object` or type parameter writes its own strings), a `[NinoMemberFormatter]` writes the member, or the member is never serialized (`[NinoIgnore]`, non-public, get-only, static, an explicit interface implementation, no `[NinoMember]` under `autoCollect: false`). The bytes are the same without it",
         "fix": "Remove `[NinoUtf8]`; for the strings of a `[NinoType]` member, put it on that type's own string members"
       },
       "zh": {
-        "problem": "`[NinoUtf8]` 不起作用：成员类型里没有内置格式化器会写出的字符串（`int`；`[NinoType]`、`object` 或类型参数自己写出它们的字符串），成员由 `[NinoMemberFormatter]` 写出，或者成员根本不会被序列化（`[NinoIgnore]`、非公共、只读、静态、`autoCollect: false` 时没有 `[NinoMember]`）。去掉它字节也一样",
+        "problem": "`[NinoUtf8]` 不起作用：成员类型里没有内置格式化器会写出的字符串（`int`；`[NinoType]`、`object` 或类型参数自己写出它们的字符串），成员由 `[NinoMemberFormatter]` 写出，或者成员根本不会被序列化（`[NinoIgnore]`、非公共、只读、静态、显式接口实现、`autoCollect: false` 时没有 `[NinoMember]`）。去掉它字节也一样",
         "fix": "去掉 `[NinoUtf8]`；要让 `[NinoType]` 成员里的字符串用 UTF-8，把它标在那个类型自己的字符串成员上"
       }
     },
@@ -351,12 +351,12 @@
       "severity": "warning",
       "codeFix": true,
       "en": {
-        "problem": "`[NinoUtf8]`, `[NinoMemberFormatter]` or `[NinoIgnore]` on an interface member has no effect: implementing types write their own member, with its own attributes; only `[NinoMember(index)]` on the interface counts",
-        "fix": "Move the attribute to the implementing members, or remove it when nothing implements the member"
+        "problem": "`[NinoUtf8]`, `[NinoMemberFormatter]` or `[NinoIgnore]` on an interface member has no effect: implementing types write their own member, with its own attributes; only `[NinoMember(index)]` on the interface counts. Not reported when a type of the compilation implements the member explicitly or by its default implementation, which writes the interface member with its attributes",
+        "fix": "Move the attribute to the implementing members, or remove it when nothing implements the member; with an explicit implementation in the solution, the fix copies it to the implicit ones and keeps it on the interface"
       },
       "zh": {
-        "problem": "接口成员上的 `[NinoUtf8]`、`[NinoMemberFormatter]` 或 `[NinoIgnore]` 不起作用：实现类型写出的是自己的成员，用的是它自己的特性；接口上只有 `[NinoMember(index)]` 有效",
-        "fix": "把特性移到实现成员上；没有实现成员时直接去掉"
+        "problem": "接口成员上的 `[NinoUtf8]`、`[NinoMemberFormatter]` 或 `[NinoIgnore]` 不起作用：实现类型写出的是自己的成员，用的是它自己的特性；接口上只有 `[NinoMember(index)]` 有效。编译中有类型显式实现该成员或使用其默认实现时不报：那里写出的是接口成员，用的是它的特性",
+        "fix": "把特性移到实现成员上；没有实现成员时直接去掉；解决方案中有显式实现时，修复会把它复制到隐式实现上，并保留在接口上"
       }
     },
     {
