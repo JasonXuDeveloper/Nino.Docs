@@ -760,7 +760,52 @@ function unitySummary(file: UnityFile) {
 }
 
 function write(out: string, data: unknown) {
-  writeFileSync(out, `${JSON.stringify(data, null, 2)}\n`);
+  writeFileSync(out, `${formatJson(data)}\n`);
+}
+
+/** Biome's line width: an array of plain values that fits on a line is written on one. */
+const LINE_WIDTH = 80;
+
+/**
+ * JSON as `biome format` writes it (2-space indent, objects expanded, an array of plain values on one line when
+ * the line fits), so `bun run check` passes on the files a sync writes.
+ */
+function formatJson(
+  value: unknown,
+  indent = '',
+  prefix = '',
+  suffix = '',
+): string {
+  if (Array.isArray(value) && value.length > 0) {
+    if (value.every((v) => v === null || typeof v !== 'object')) {
+      const line = `[${value.map((v) => JSON.stringify(v)).join(', ')}]`;
+      if (
+        indent.length + prefix.length + line.length + suffix.length <=
+        LINE_WIDTH
+      )
+        return line;
+    }
+    const inner = `${indent}  `;
+    const items = value.map(
+      (v, i) =>
+        `${inner}${formatJson(v, inner, '', i < value.length - 1 ? ',' : '')}`,
+    );
+    return `[\n${items.join(',\n')}\n${indent}]`;
+  }
+  if (
+    value !== null &&
+    typeof value === 'object' &&
+    Object.keys(value).length > 0
+  ) {
+    const inner = `${indent}  `;
+    const entries = Object.entries(value).filter(([, v]) => v !== undefined);
+    const items = entries.map(([k, v], i) => {
+      const key = `${JSON.stringify(k)}: `;
+      return `${inner}${key}${formatJson(v, inner, key, i < entries.length - 1 ? ',' : '')}`;
+    });
+    return `{\n${items.join(',\n')}\n${indent}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function message(error: unknown) {
