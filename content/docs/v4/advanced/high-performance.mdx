@@ -271,7 +271,6 @@ Each `[NinoType]` picks its [format](/en/docs/v4/evolving-data) and whether it t
 
 - Keep messages and caches that are written and read by the same build positional, and give version tolerance or keys only to the data that outlives a release: see [Choosing](/en/docs/v4/evolving-data#choosing).
 - Track references only on the types that are actually shared or form cycles: in the [organization chart](/en/docs/v4/reference-tracking), only `Department` is tracked, and `Employee` pays nothing. Tree-shaped data needs no tracking, however deep it is.
-- Prefer the per-type `format` to `WEAK_VERSION_TOLERANCE`: the symbol makes every positional type of the project version-tolerant, so its structs are no longer copied as raw memory.
 
 ## Seal Classes, and Dispatch Through a Base [#sealed-and-polymorphic]
 
@@ -298,7 +297,7 @@ What Nino writes in front of a class value depends on the declared type of its s
 A [custom formatter](/en/docs/v4/custom-formatters) is a struct that Nino calls directly and the JIT inlines, like a generated one. Keep it on the same fast paths:
 
 - **Copy unmanaged runs as one block**: `Writer.Write<T>(ReadOnlySpan<T>)` writes a length and the elements in one copy, and `WriteUnmanagedRaw` / `ReadUnmanagedRaw` move them without a length into memory you already have. Mark a generic formatter's element parameter `[NinoRaw]` so it is bound only to types Nino copies as raw bytes ([example](/en/docs/v4/custom-formatters#example-grid)).
-- **Read into the current value.** `Deserialize(ref T value, ref Reader reader)` receives the instance the caller holds: fill it when its shape fits, and keep its strings with `reader.ReadString(current)`, which returns `current` itself when the text is unchanged. Reuse deserialization then stays at 0 B through your type.
+- **Read into the current value.** `Deserialize(ref Reader reader, ref T value)` receives the instance the caller holds: fill it when its shape fits, and keep its strings with `reader.ReadString(current)`, which returns `current` itself when the text is unchanged. Reuse deserialization then stays at 0 B through your type.
 - **Check lengths before allocating** with `ReadLength(minElementSize)`, which throws when the bytes left cannot hold that many elements.
 - **Cost:** a `[NinoMemberFormatter]` on a member means its type is no longer copied as raw memory and is no longer fixed-size. Give hot structs built-in member types where you can.
 

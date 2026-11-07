@@ -7,6 +7,27 @@ icon: RotateCcwClock
 
 What changed from one v4 release to the next, newest first. For everything v4 changed since v3, see [What's New in v4](/en/docs/v4/whats-new). Each GitHub release also lists every commit it contains.
 
+<Release>
+
+## 4.0.0-rc.9
+
+### New [#new-7]
+
+- **Renamed and reordered before 4.0** (no aliases; the bytes do not change): `[NinoType(allowInheritance)]` is `inheritedBySubtypes` (`NinoTypeAttribute.InheritedBySubtypes`), and a code fix renames the argument, as it now renames v3's `containNonPublicMembers` to `includeNonPublicMembers`; `NinoPolymorphic.Register<T>()` and `Register(Type)` are `TryRegister<T>()` and `TryRegister(Type)`, which return `false` when the type cannot be registered; `NinoHeader.NullFlag` is `NinoHeader.Presence`, and published layouts say `header=Presence` and `id=0x...` (was `typeId=`, also `NinoTypeLayoutAttribute`'s constructor parameter), in .NET, Go and Rust. Every read API takes the reader first: `NinoDeserializer.Deserialize(ref reader, ref value)`, `DeserializeBoxed(ref reader, ref value, type)`, and `INinoFormatter<T>.Deserialize(ref Reader reader, ref T value)`, so swap the two parameters in your own formatters. See [Upgrading from an Earlier Release Candidate](/en/docs/v4/migration#upgrading-from-an-earlier-release-candidate).
+- **`WEAK_VERSION_TOLERANCE` is removed.** Where a project still defines it, error NINO032 marks each positional type it made version-tolerant, and its code fix adds `format: NinoFormat.VersionTolerant`, which keeps the bytes (fix all covers the solution); then remove the symbol. See [Version Tolerance](/en/docs/v4/evolving-data#version-tolerance).
+- **One way to write UTF-8**: `[NinoMemberFormatter(typeof(Utf8StringFormatter))]` on a string member is read as `[NinoUtf8]` (the same bytes, `utf8` in the published layout); info NINO031 and its code fix rewrite it to `[NinoUtf8]`. Warning NINO030 reports a `[NinoUtf8]` that has no effect: the member's type holds no string the built-in formatters write, a `[NinoMemberFormatter]` writes the member, or the member is never serialized (`[NinoIgnore]`, non-public, get-only, static, or no `[NinoMember]` under `autoCollect: false`); its code fix removes it. See [String Encoding](/en/docs/v4/defining-types#string-encoding).
+- **NINO033**: a warning for `[NinoUtf8]`, `[NinoMemberFormatter]` or `[NinoIgnore]` on an interface member, where they have no effect: implementing types write their own member with its own attributes, and only the interface member's `[NinoMember(index)]` counts. Its code fix moves the attribute to the implementing members, or removes it when nothing implements the member. See [Interfaces and Abstract Classes](/en/docs/v4/polymorphism#interfaces-and-abstract-classes).
+
+### Performance [#performance-4]
+
+- **Untrusted lists of plain structs with a `bool`**: with [`NinoSettings.Untrusted`](/en/docs/v4/security#untrusted-mode), a `bool` field is checked in the same SIMD pass as its neighbours: 12-23% faster on x64 (1,000 values: 2.72 → 2.35 µs on GitHub's AMD EPYC 7763 runner, 1.48 → 1.16 µs on the EPYC 9V45), on par on Arm64.
+
+### Fixes [#fixes-6]
+
+- **One diagnostic per member mistake**: NINO007 and NINO029 are reported once for a member of a base type, by the type that declares it, instead of once per subtype at the same location. See [Analyzers](/en/docs/v4/analyzers).
+
+</Release>
+
 <Release date="2026-11-04">
 
 ## 4.0.0-rc.8
@@ -135,7 +156,7 @@ What changed from one v4 release to the next, newest first. For everything v4 ch
 
 </Release>
 
-<Release date="2026-10-23">
+<Release date="2026-10-23" collapsed>
 
 ## 4.0.0-rc.7
 

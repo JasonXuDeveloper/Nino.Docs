@@ -548,7 +548,7 @@ type Monster struct {
 }
 
 func (Monster) NinoLayout() string { // .NET 为该类型发布的布局，或其中一部分
-	return "format=Keyed; header=NullFlag"
+	return "format=Keyed; header=Presence"
 }
 
 data, err := nino.Marshal(m)          // m 是 *Monster：一个密封类
@@ -565,7 +565,7 @@ data, err = nino.MarshalAs[Animal](a) // 多态根，按类型 ID 写出
 | `,utf8` | `[NinoUtf8]` 字符串。 |
 | `,former=Old` | 键控成员的旧名称，每个名称写一次。 |
 
-类型用 `NinoLayout() string` 方法声明它在 .NET 中的形状：.NET 为它发布的[布局](/zh/docs/v4/evolving-data#layout-metadata)（`format=`、`header=`、`typeId=`、`deferrable=`、`members=`），或其中的部分。给出 `members=` 时，标签会与之核对：成员数量、每个字段的编码和键。多态类型用 `nino.Register` 注册一次，槽位只读取实现了它的接口的已注册类型。
+类型用 `NinoLayout() string` 方法声明它在 .NET 中的形状：.NET 为它发布的[布局](/zh/docs/v4/evolving-data#layout-metadata)（`format=`、`header=`、`id=`、`deferrable=`、`members=`），或其中的部分。给出 `members=` 时，标签会与之核对：成员数量、每个字段的编码和键。多态类型用 `nino.Register` 注册一次，槽位只读取实现了它的接口的已注册类型。
 
 二进制格式无法表达的内容（没有固定大小的 `int` 字段、`omitempty`、`trackReferences=true` 的类型）会在读写任何字节之前返回一个指明字段的 `*nino.TagError`。每个类型的计划只构建一次并缓存；之后序列化的耗时是生成代码的几倍，仍然比 `encoding/json` 快。结构体标签方式还拒绝多维数组、分组、`BitArray`、`TimeZoneInfo`、自定义格式化器，以及带成员的 `[NinoType]` 集合。完整的标签说明和每种编码对应的 Go 类型见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go#struct-tags)。
 
@@ -767,7 +767,7 @@ public sealed class Box<T>
 
 ### 槽位中的封闭泛型类型 [#closed-generic-types-in-slots]
 
-泛型子类型（`sealed class Box<T> : Animal`，或实现了 `[NinoType]` 接口的泛型结构体）在多态槽位或 `object` 槽位中，按其封闭 .NET 名称（`Shop.Box<System.Int32>`）的哈希写出。布局只带有定义（`Box<T>`），所以 nino-gen 从程序集的元数据中读取封闭类型：签名、`new Box<int>()`、`typeof(Box<int>)` 或泛型方法的类型实参（`NinoPolymorphic.Register<Box<int>>()`）提到的每个封闭类型。其中定义是具体泛型 `[NinoType]` 的，都成为它可赋值到的槽位的一种情况（`object` 槽位接受全部），并用其类型实参的编解码器读写：
+泛型子类型（`sealed class Box<T> : Animal`，或实现了 `[NinoType]` 接口的泛型结构体）在多态槽位或 `object` 槽位中，按其封闭 .NET 名称（`Shop.Box<System.Int32>`）的哈希写出。布局只带有定义（`Box<T>`），所以 nino-gen 从程序集的元数据中读取封闭类型：签名、`new Box<int>()`、`typeof(Box<int>)` 或泛型方法的类型实参（`NinoPolymorphic.TryRegister<Box<int>>()`）提到的每个封闭类型。其中定义是具体泛型 `[NinoType]` 的，都成为它可赋值到的槽位的一种情况（`object` 槽位接受全部），并用其类型实参的编解码器读写：
 
 | | `Animal` 槽位中的 `Box<int>` |
 | --- | --- |
@@ -777,7 +777,7 @@ public sealed class Box<T>
 
 <Callout type="warn" title="与 .NET 接受的集合不完全相同">
 
-程序集中没有任何代码提到的封闭类型无法读取：它的类型 ID 对每个目标语言都是未知的，就像对一个从未注册或写出它的 .NET 进程一样。反过来，目标语言接受程序集提到的每个封闭类型，而一个新启动的 .NET 进程只接受它已[注册](/zh/docs/v4/defining-types#generic-types)或已写出过的类型：.NET 因尚未见过某个类型 ID 而拒绝的数据，在 TypeScript、Go 和 Rust 中可以读取。调用了 `NinoPolymorphic.Register<...>()` 之后，.NET 接受的集合就与之相同。
+程序集中没有任何代码提到的封闭类型无法读取：它的类型 ID 对每个目标语言都是未知的，就像对一个从未注册或写出它的 .NET 进程一样。反过来，目标语言接受程序集提到的每个封闭类型，而一个新启动的 .NET 进程只接受它已[注册](/zh/docs/v4/defining-types#generic-types)或已写出过的类型：.NET 因尚未见过某个类型 ID 而拒绝的数据，在 TypeScript、Go 和 Rust 中可以读取。调用了 `NinoPolymorphic.TryRegister<...>()` 之后，.NET 接受的集合就与之相同。
 
 </Callout>
 

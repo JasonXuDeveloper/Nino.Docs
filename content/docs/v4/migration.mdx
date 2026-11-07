@@ -27,7 +27,7 @@ Replace `Serializer`/`Deserializer` calls with `NinoSerializer`/`NinoDeserialize
 </Step>
 <Step>
 
-Replace `WEAK_VERSION_TOLERANCE` with `[NinoType(format: NinoFormat.VersionTolerant)]` on the types that need it (optional, see below).
+Replace `WEAK_VERSION_TOLERANCE` with `[NinoType(format: NinoFormat.VersionTolerant)]` on the types that need it (see below): v4 removed the symbol, and where a project still defines it, error NINO032's code fix does this for you.
 
 </Step>
 <Step>
@@ -37,7 +37,7 @@ Update `[NinoFormerName]` arguments to the runtime type name form.
 </Step>
 <Step>
 
-Build, and fix what the analyzer reports (`NINO001`–`NINO029`); many diagnostics come with a code fix.
+Build, and fix what the analyzer reports (`NINO001`–`NINO033`); many diagnostics come with a code fix.
 
 </Step>
 <Step>
@@ -107,9 +107,9 @@ v3's generated `Serialize` accepted `Span<T>` values. In v4, `T` is a generic ty
 
 | v3 | v4 |
 | --- | --- |
-| `[NinoType]`, `[NinoType(autoCollect, containNonPublicMembers)]` | `containNonPublicMembers` is now `includeNonPublicMembers`; new optional parameters `allowInheritance`, `format` (`NinoFormat.Positional`, `NinoFormat.VersionTolerant` or `NinoFormat.Keyed`), `trackReferences` |
-| every subtype needs its own `[NinoType]` | subtypes **inherit** `[NinoType]` from their base class or interface (unless it sets `allowInheritance: false`) |
-| `WEAK_VERSION_TOLERANCE` (whole project) | `[NinoType(format: NinoFormat.VersionTolerant)]` per type; the symbol still exists and makes every `NinoFormat.Positional` type of the project version-tolerant |
+| `[NinoType]`, `[NinoType(autoCollect, containNonPublicMembers)]` | `containNonPublicMembers` is now `includeNonPublicMembers`; new optional parameters `inheritedBySubtypes`, `format` (`NinoFormat.Positional`, `NinoFormat.VersionTolerant` or `NinoFormat.Keyed`), `trackReferences` |
+| every subtype needs its own `[NinoType]` | subtypes **inherit** `[NinoType]` from their base class or interface (unless it sets `inheritedBySubtypes: false`) |
+| `WEAK_VERSION_TOLERANCE` (whole project) | `[NinoType(format: NinoFormat.VersionTolerant)]` per type; the symbol is removed, and error NINO032's code fix adds the format to each positional type of a project that still defines it |
 | `[NinoFormerName("global::Old.Namespace.Type")]` (name copied from `NinoTypeConst.g.cs`) | `[NinoFormerName("Old.Namespace.Type")]`: runtime form, no `global::`, `+` for nested types |
 | `[NinoMember(index)]`, `[NinoIgnore]`, `[NinoUtf8]`, `[NinoConstructor(...)]` | unchanged; `[NinoConstructor]` can also mark a static factory method |
 | `[NinoExplicitOrder(...)]` | removed; use `[NinoType(false)]` and give each member a `[NinoMember(index)]`, numbered in the order the members were written (see [Member Order](/en/docs/v4/defining-types#member-order)) |
@@ -243,7 +243,7 @@ Code written against an early v4 beta uses names that changed before the release
 | `[NinoRefDeserialization]` | `[NinoFactory]` |
 | `NinoFactory<T>` | `NinoActivator<T>` |
 | `NinoDeserializer.DeserializeRef(ref value, data)` | `NinoDeserializer.Deserialize(data, ref value)` |
-| `NinoDeserializer.DeserializeRef(ref value, ref reader)` | `NinoDeserializer.Deserialize(ref value, ref reader)` |
+| `NinoDeserializer.DeserializeRef(ref value, ref reader)` | `NinoDeserializer.Deserialize(ref reader, ref value)` |
 | `NinoSerializer.Serialize(object value)` | `Serialize<TBase>` with a common `[NinoType]` base; `NinoSerializer.SerializeBoxed(value, type)` only for a type known only at run time with no common base (see below) |
 | `NinoDeserializer.Deserialize(data, type)` | `NinoDeserializer.DeserializeBoxed(data, type)` |
 | `NinoDeserializer.Deserialize(data, type, ref value)` | `NinoDeserializer.DeserializeBoxed(data, ref value, type)` |
@@ -287,7 +287,19 @@ The release candidates keep the format of 4.0.0-rc.1, except for the changes the
 | `NinoSettings.DefaultPoolMaxRetained` | `NinoSettings.PoolMaxRetained` |
 | `Nino.Core.NinoBody` (the trait flags of `INinoBodyFormatter<T>.Traits`) | `Nino.Core.CompilerServices.NinoBodyTraits` |
 | `INinoBlockFormatter<T>.BlockSize`, `WriteBlock(ref destination, in value)`, `ReadBlock(ref source, ref value)` | `INinoBlockFormatter<T>` extends `INinoFixedSizeFormatter<T>`: `FixedSize`, `WriteFixed(in value, ref destination)`, `ReadBlock(ref value, ref source)` |
-| `Nino.Core.NinoPolymorphic<TBase>` (the subtype registry generated code calls) | `Nino.Core.CompilerServices.NinoSubtypes<TBase>` (`NinoPolymorphic.Register` keeps its name) |
+| `Nino.Core.NinoPolymorphic<TBase>` (the subtype registry generated code calls) | `Nino.Core.CompilerServices.NinoSubtypes<TBase>` (`NinoPolymorphic.Register` kept its name; rc.9 renames it, below) |
 | TypeScript: `NinoReader.region()` and `NinoWriter.region()` (called by generated code) | `beginRegion()`, as .NET's `BeginRegion`: regenerate code that Nino.TypeScript or an earlier nino-gen wrote |
 | TypeScript: `NinoReader.notNull()` (called by generated code) | `present()`, as .NET's `ReadPresent`: regenerate |
 | TypeScript: `NinoRegistry` (the registry of subtypes behind a type id) | `NinoSubtypes` (in .NET, `NinoRegistry` is the per-assembly registrations): regenerate |
+
+**4.0.0-rc.9 renames** these APIs, without an alias (code that names the old ones stops compiling; the bytes do not change):
+
+| Before (rc.8 and earlier) | rc.9 |
+| --- | --- |
+| `[NinoType(allowInheritance: false)]`, `NinoTypeAttribute.AllowInheritance` | `[NinoType(inheritedBySubtypes: false)]`, `InheritedBySubtypes` (a code fix renames the argument) |
+| `NinoPolymorphic.Register<T>()`, `Register(Type)` | `NinoPolymorphic.TryRegister<T>()`, `TryRegister(Type)`: `false` when the type cannot be registered |
+| `NinoDeserializer.Deserialize(ref value, ref reader)`, `DeserializeBoxed(ref value, ref reader, type)` | `NinoDeserializer.Deserialize(ref reader, ref value)`, `DeserializeBoxed(ref reader, ref value, type)`: the reader first |
+| `INinoFormatter<T>.Deserialize(ref T value, ref Reader reader)` in your formatters | `Deserialize(ref Reader reader, ref T value)`: swap the two parameters |
+| `NinoHeader.NullFlag`; layout text `header=NullFlag` and `typeId=0x...`; `NinoTypeLayoutAttribute`'s constructor parameter `typeId` | `NinoHeader.Presence`; `header=Presence` and `id=0x...`; `id`. Record stored layouts again |
+| `WEAK_VERSION_TOLERANCE` | removed: error [NINO032](/en/docs/v4/analyzers#nino032)'s code fix adds `format: NinoFormat.VersionTolerant` to each type it made version-tolerant (the same bytes); then remove the symbol |
+| `[NinoMemberFormatter(typeof(Utf8StringFormatter))]` | `[NinoUtf8]` (the old form still compiles and writes the same bytes; [NINO031](/en/docs/v4/analyzers#nino031) rewrites it) |

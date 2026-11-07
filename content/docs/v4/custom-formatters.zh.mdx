@@ -14,11 +14,11 @@ Nino 为[内置类型](/zh/docs/v4/types)提供了格式化器，并为每个 `[
 public interface INinoFormatter<T>
 {
     void Serialize(T value, ref Writer writer);
-    void Deserialize(ref T value, ref Reader reader);
+    void Deserialize(ref Reader reader, ref T value);
 }
 ```
 
-`Deserialize` 通过 `ref` 接收当前值：`default` 表示要创建新值，已有实例则可以复用。格式化器以 `default(TFormatter)` 的形式调用，所以没有实例状态；需要保存的状态请放在静态字段里。
+`Deserialize` 和所有读取 API 一样先接收读取器，再通过 `ref` 接收当前值：`default` 表示要创建新值，已有实例则可以复用。格式化器以 `default(TFormatter)` 的形式调用，所以没有实例状态；需要保存的状态请放在静态字段里。
 
 ## 用于单个成员 [#for-one-member]
 
@@ -41,7 +41,7 @@ public struct ZigZagLongFormatter : INinoFormatter<long>
         writer.Write((byte)v);
     }
 
-    public void Deserialize(ref long value, ref Reader reader)
+    public void Deserialize(ref Reader reader, ref long value)
     {
         ulong v = 0;
         int shift = 0;
@@ -98,7 +98,7 @@ public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
             default(TFormatter).Serialize(item, ref writer); // inlined element formatter
     }
 
-    public void Deserialize(ref Ring<T> value, ref Reader reader)
+    public void Deserialize(ref Reader reader, ref Ring<T> value)
     {
         int count = reader.ReadLength();       // validated against the bytes left
         if (count < 0)
@@ -115,7 +115,7 @@ public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
         for (int i = 0; i < count; i++)
         {
             T item = default;
-            default(TFormatter).Deserialize(ref item, ref reader);
+            default(TFormatter).Deserialize(ref reader, ref item);
             value.Push(item);
         }
     }
@@ -206,7 +206,7 @@ public struct GridFormatter<[NinoRaw] T> : INinoFormatter<Grid<T>>
         writer.Write<T>(value.Cells.AsSpan());                     // length, then one block copy
     }
 
-    public void Deserialize(ref Grid<T> value, ref Reader reader)
+    public void Deserialize(ref Reader reader, ref Grid<T> value)
     {
         int width = reader.Read<int>();
         if (width < 0)
@@ -285,11 +285,11 @@ public void Serialize(Contract value, ref Writer writer)
     NinoSerializer.Serialize(value.Owner, ref writer); // [!code highlight]
 }
 
-public void Deserialize(ref Contract value, ref Reader reader)
+public void Deserialize(ref Reader reader, ref Contract value)
 {
     value ??= new Contract();
     reader.Read(out value.Id);
-    NinoDeserializer.Deserialize(ref value.Owner, ref reader); // [!code highlight]
+    NinoDeserializer.Deserialize(ref reader, ref value.Owner); // [!code highlight]
 }
 ```
 
@@ -298,6 +298,6 @@ public void Deserialize(ref Contract value, ref Reader reader)
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="分析器" href="/zh/docs/v4/analyzers">NINO001 到 NINO029 每条诊断的含义和修复方法。</Card>
+  <Card title="分析器" href="/zh/docs/v4/analyzers">NINO001 到 NINO033 每条诊断的含义和修复方法。</Card>
   <Card title="性能原理" href="/zh/docs/v4/performance">Nino 为什么快，以及怎样让你的代码留在快速路径上。</Card>
 </Cards>

@@ -78,7 +78,7 @@ Nino.Core 的 net8.0 和 net10.0 版本还带有裁剪和 Native AOT 标注：�
 
 ## 为什么读取时报错说某个类型 ID 不是已注册的子类型？ [#unknown-type-id]
 
-数据里记录的类型，读取方在声明类型之下找不到。常见原因：子类型所在的程序集还没有加载（先加载它即可，不需要注册）；类型改名或移动了命名空间却没有加 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)；或者数据是按另一个声明类型写入的。进程只读取、从不写出的封闭泛型子类型，需要在启动时调用 `NinoPolymorphic.Register<T>()`。如果是*写入*时报错说某个类型不是已注册的子类型，说明这个运行时类型不是 `[NinoType]`：它的基类设置了 `allowInheritance: false`（NINO003），或者它所在的程序集没有运行源生成器。参见[其他程序集中的子类型](/zh/docs/v4/polymorphism#subtypes-in-other-assemblies)。
+数据里记录的类型，读取方在声明类型之下找不到。常见原因：子类型所在的程序集还没有加载（先加载它即可，不需要注册）；类型改名或移动了命名空间却没有加 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)；或者数据是按另一个声明类型写入的。进程只读取、从不写出的封闭泛型子类型，需要在启动时调用 `NinoPolymorphic.TryRegister<T>()`。如果是*写入*时报错说某个类型不是已注册的子类型，说明这个运行时类型不是 `[NinoType]`：它的基类设置了 `inheritedBySubtypes: false`（NINO003），或者它所在的程序集没有运行源生成器。参见[其他程序集中的子类型](/zh/docs/v4/polymorphism#subtypes-in-other-assemblies)。
 
 ## 为什么序列化时报错说对象图中有环？ [#cycle]
 

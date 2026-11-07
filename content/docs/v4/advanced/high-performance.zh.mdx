@@ -271,7 +271,6 @@ if (hash != lastHash) { Send(buffer.WrittenSpan); lastHash = hash; }
 
 - 由同一版本写入和读取的消息和缓存保持按位置格式；只有要跨版本保留的数据才用版本容错或键控成员，参见[如何选择](/zh/docs/v4/evolving-data#choosing)。
 - 只给真正被共享、或者构成环的类型开启引用追踪：在[组织结构图](/zh/docs/v4/reference-tracking)的例子里，只有 `Department` 被追踪，`Employee` 不付出任何开销。树形数据不论多深都不需要追踪。
-- 优先使用按类型设置的 `format`，而不是 `WEAK_VERSION_TOLERANCE`：这个符号会把项目里所有按位置格式的类型都变成版本容错，其中的结构体也就不再按原始内存拷贝。
 
 ## 密封类，以及通过基类分派 [#sealed-and-polymorphic]
 
@@ -298,7 +297,7 @@ Nino 在类的值前面写什么，取决于存放它的位置的声明类型（
 [自定义格式化器](/zh/docs/v4/custom-formatters)是一个结构体，Nino 直接调用它，JIT 会把它内联，和生成的格式化器一样。让它也走同样的快速路径：
 
 - **连续的非托管数据整块拷贝**：`Writer.Write<T>(ReadOnlySpan<T>)` 一次拷贝写出长度和全部元素；`WriteUnmanagedRaw` / `ReadUnmanagedRaw` 不带长度，直接读写你已有的内存。泛型格式化器的元素参数标上 `[NinoRaw]`，它就只会绑定到 Nino 按原始字节拷贝的类型（[示例](/zh/docs/v4/custom-formatters#example-grid)）。
-- **读入当前的值。** `Deserialize(ref T value, ref Reader reader)` 收到的是调用方持有的实例：结构合适时就填充它，并用 `reader.ReadString(current)` 保留它的字符串，文本没变时它直接返回 `current` 本身。这样复用反序列化经过你的类型时仍然是 0 B。
+- **读入当前的值。** `Deserialize(ref Reader reader, ref T value)` 收到的是调用方持有的实例：结构合适时就填充它，并用 `reader.ReadString(current)` 保留它的字符串，文本没变时它直接返回 `current` 本身。这样复用反序列化经过你的类型时仍然是 0 B。
 - **分配之前先检查长度**：用 `ReadLength(minElementSize)`，剩余字节容纳不下那么多元素时它会抛出异常。
 - **开销：** 成员上的 `[NinoMemberFormatter]` 会让它所在的类型不再按原始内存拷贝，也不再是固定大小。热点结构体尽量使用内置的成员类型。
 

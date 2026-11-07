@@ -73,7 +73,7 @@ A `[NinoType]` and every type containing it must be `public` or `internal` (`pro
 public NinoTypeAttribute(
     bool autoCollect = true,
     bool includeNonPublicMembers = false,
-    bool allowInheritance = true,
+    bool inheritedBySubtypes = true,
     NinoFormat format = NinoFormat.Positional,
     bool trackReferences = false)
 ```
@@ -90,7 +90,7 @@ public NinoTypeAttribute(
       type: 'bool',
       default: 'false',
     },
-    allowInheritance: {
+    inheritedBySubtypes: {
       description: <>Subtypes inherit the attribute and are serializable through this type. With <code>false</code>, a subtype must declare <code>[NinoType]</code> itself (NINO003).</>,
       type: 'bool',
       default: 'true',
@@ -216,7 +216,7 @@ public class ChatMessage
 }
 ```
 
-The attribute applies to every string the member's own formatter writes: the member itself, and the `string` elements, keys, values and tuple items of a collection or tuple member (`List<string>`, `string[]`, `Dictionary<string, int>`, `(string, int)`). Strings inside a nested `[NinoType]` keep that type's own encoding, and on a member that holds no strings the attribute does nothing.
+The attribute applies to every string the member's own formatter writes: the member itself, and the `string` elements, keys, values and tuple items of a collection or tuple member (`List<string>`, `string[]`, `Dictionary<string, int>`, `(string, int)`). Strings inside a nested `[NinoType]` keep that type's own encoding. Where the attribute changes nothing (a member that holds no strings, one a `[NinoMemberFormatter]` writes, or one that is never serialized) the analyzer reports warning [NINO030](/en/docs/v4/analyzers#nino030), and on an interface member [NINO033](/en/docs/v4/analyzers#nino033): put it on the implementing member. `[NinoUtf8]` is the one way to ask for UTF-8; a hand-written `[NinoMemberFormatter(typeof(Utf8StringFormatter))]` is read as it (NINO031).
 
 Writer and reader must agree: data written as UTF-8 cannot be read by a type that declares the member without `[NinoUtf8]`. A UTF-8 string is written with its length in chars and its length in bytes, so the reader allocates the string at its final size and transcodes exactly its bytes into it in one pass (see [Strings](/en/docs/v4/wire-format#strings)).
 
@@ -303,7 +303,7 @@ A closed generic `[NinoType]` struct is written by its definition's formatter wh
 
 <Callout type="warn">
 
-A closed generic type that a process only **reads** polymorphically (by type id) and never names or writes must be registered at startup: `NinoPolymorphic.Register<Box<int>>()`. This only matters for instantiations created by reflection or in another assembly.
+A closed generic type that a process only **reads** polymorphically (by type id) and never names or writes must be registered at startup: `NinoPolymorphic.TryRegister<Box<int>>()`. This only matters for instantiations created by reflection or in another assembly.
 
 </Callout>
 

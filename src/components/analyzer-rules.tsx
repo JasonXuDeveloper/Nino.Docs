@@ -1,19 +1,21 @@
 /**
- * The analyzer rules (NINO001-NINO029 and nino-gen's NINOGEN ids) as one
+ * The analyzer rules (NINO001-NINO033 and nino-gen's NINOGEN ids) as one
  * filterable list, from src/data/analyzer-rules.json, the single source of the
  * analyzers page and its Markdown copy (src/lib/markdown.tsx). The prerendered
  * HTML holds every rule; filtering only hides rows, so the page reads the same
  * without JavaScript. Each rule's row has the id `nino007`, so
  * `/en/docs/v4/analyzers#nino007` lands on it and highlights it.
  */
-import { CircleX, Search, TriangleAlert, Wrench } from 'lucide-react';
+import { CircleX, Info, Search, TriangleAlert, Wrench } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import data from '@/data/analyzer-rules.json';
 import { cn } from '@/lib/cn';
 import type { Locale } from '@/lib/i18n';
 import { inlineMd, inlineText } from '@/lib/inline-md';
 
-export type Severity = 'error' | 'warning';
+export type Severity = 'error' | 'warning' | 'info';
+
+const severities: readonly Severity[] = ['error', 'warning', 'info'];
 
 export interface AnalyzerRule {
   id: string;
@@ -46,6 +48,7 @@ export const ruleText = {
     head: ['Id', 'Severity', 'Problem', 'What to do', 'Code fix'],
     error: 'Error',
     warning: 'Warning',
+    info: 'Info',
     all: 'All',
     fixOnly: 'Has a code fix',
     severity: 'Severity',
@@ -59,6 +62,7 @@ export const ruleText = {
     head: ['编号', '级别', '问题', '怎么改', '代码修复'],
     error: '错误',
     warning: '警告',
+    info: '提示',
     all: '全部',
     fixOnly: '有代码修复',
     severity: '级别',
@@ -77,12 +81,21 @@ export function SeverityPill({
   severity: Severity;
   lang: Locale;
 }) {
-  const Icon = severity === 'error' ? CircleX : TriangleAlert;
+  const Icon =
+    severity === 'error'
+      ? CircleX
+      : severity === 'warning'
+        ? TriangleAlert
+        : Info;
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
-        severity === 'error' ? 'bg-(--nino-cat-5)' : 'bg-(--nino-cat-4)',
+        severity === 'error'
+          ? 'bg-(--nino-cat-5)'
+          : severity === 'warning'
+            ? 'bg-(--nino-cat-4)'
+            : 'bg-fd-muted',
       )}
     >
       <Icon className="size-3.5" aria-hidden />
@@ -174,7 +187,7 @@ export function AnalyzerRules({ lang = 'en' }: { lang?: Locale }) {
               >
                 {t.all}
               </Chip>
-              {(['error', 'warning'] as const).map((s) => (
+              {severities.map((s) => (
                 <Chip
                   key={s}
                   active={severity === s}

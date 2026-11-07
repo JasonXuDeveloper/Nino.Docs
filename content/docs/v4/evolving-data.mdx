@@ -63,7 +63,7 @@ Not tolerated: appending members to a base class that has `[NinoType]` subclasse
 
 <Callout type="info">
 
-Defining the symbol `WEAK_VERSION_TOLERANCE` in a project makes every `NinoFormat.Positional` type declared in that project `NinoFormat.VersionTolerant`; types from referenced assemblies keep their own format. Prefer the per-type option.
+Up to 4.0.0-rc.8, defining the symbol `WEAK_VERSION_TOLERANCE` made every positional type of a project version-tolerant. The symbol is removed: where a project still defines it, error [NINO032](/en/docs/v4/analyzers#nino032) marks each such type, and its code fix adds `format: NinoFormat.VersionTolerant`, which keeps the bytes. Then remove the symbol.
 
 </Callout>
 
@@ -144,7 +144,7 @@ public class UserProfile
 
 ## Layout Metadata
 
-For every `[NinoType]`, the generator records how the type is written in the assembly's metadata, as an `[assembly: NinoTypeLayout]`: the format, the header in front of the body (`None` for a struct, `NullFlag` for a sealed class, `TypeId` otherwise), whether references are tracked, whether the type is a raw struct, its type id, whether a body nested too deep is [deferred](/en/docs/v4/basic#deep-object-graphs) (`deferrable`, which readers in other languages need), and its members in the order they are written. Tools that check data compatibility (a schema check in CI, a diff between two builds, a migration tool) can read it instead of re-implementing Nino's rules:
+For every `[NinoType]`, the generator records how the type is written in the assembly's metadata, as an `[assembly: NinoTypeLayout]`: the format, the header in front of the body (`None` for a struct, `Presence` for a sealed class, `TypeId` otherwise), whether references are tracked, whether the type is a raw struct, its type id, whether a body nested too deep is [deferred](/en/docs/v4/basic#deep-object-graphs) (`deferrable`, which readers in other languages need), and its members in the order they are written. Tools that check data compatibility (a schema check in CI, a diff between two builds, a migration tool) can read it instead of re-implementing Nino's rules:
 
 ```csharp
 using System.Reflection; // GetCustomAttributes<T>()
@@ -152,7 +152,7 @@ using System.Reflection; // GetCustomAttributes<T>()
 foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutAttribute>())
     Console.WriteLine($"{layout.Type}: {layout}");
 
-// Game.Move: format=Positional; header=None; trackReferences=false; raw=true; typeId=0x…; deferrable=false;
+// Game.Move: format=Positional; header=None; trackReferences=false; raw=true; id=0x…; deferrable=false;
 //            members=raw(8){VelocityX:float@0:raw(4),VelocityY:float@4:raw(4)}
 ```
 

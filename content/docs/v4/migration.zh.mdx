@@ -27,7 +27,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 </Step>
 <Step>
 
-在需要的类型上用 `[NinoType(format: NinoFormat.VersionTolerant)]` 取代 `WEAK_VERSION_TOLERANCE`（可选，见下文）。
+在需要的类型上用 `[NinoType(format: NinoFormat.VersionTolerant)]` 取代 `WEAK_VERSION_TOLERANCE`（见下文）：v4 移除了这个符号，项目仍定义它时，错误 NINO032 的代码修复会替你完成这一步。
 
 </Step>
 <Step>
@@ -37,7 +37,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 </Step>
 <Step>
 
-构建项目，修复分析器报告的问题（`NINO001`–`NINO029`），许多诊断都带代码修复。
+构建项目，修复分析器报告的问题（`NINO001`–`NINO033`），许多诊断都带代码修复。
 
 </Step>
 <Step>
@@ -107,9 +107,9 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 
 | v3 | v4 |
 | --- | --- |
-| `[NinoType]`、`[NinoType(autoCollect, containNonPublicMembers)]` | `containNonPublicMembers` 改名为 `includeNonPublicMembers`；新增可选参数 `allowInheritance`、`format`（`NinoFormat.Positional`、`NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`）、`trackReferences` |
-| 每个子类型都要单独标记 `[NinoType]` | 子类型从基类或接口**继承** `[NinoType]`（除非基类设置了 `allowInheritance: false`） |
-| `WEAK_VERSION_TOLERANCE`（整个项目） | 按类型使用 `[NinoType(format: NinoFormat.VersionTolerant)]`；该符号仍然有效，会让项目中所有 `NinoFormat.Positional` 的类型改为版本容错 |
+| `[NinoType]`、`[NinoType(autoCollect, containNonPublicMembers)]` | `containNonPublicMembers` 改名为 `includeNonPublicMembers`；新增可选参数 `inheritedBySubtypes`、`format`（`NinoFormat.Positional`、`NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`）、`trackReferences` |
+| 每个子类型都要单独标记 `[NinoType]` | 子类型从基类或接口**继承** `[NinoType]`（除非基类设置了 `inheritedBySubtypes: false`） |
+| `WEAK_VERSION_TOLERANCE`（整个项目） | 按类型使用 `[NinoType(format: NinoFormat.VersionTolerant)]`；这个符号已移除，项目仍定义它时，错误 NINO032 的代码修复会给每个按位置格式的类型加上这个格式 |
 | `[NinoFormerName("global::Old.Namespace.Type")]`（名称从 `NinoTypeConst.g.cs` 复制） | `[NinoFormerName("Old.Namespace.Type")]`：运行时写法，不带 `global::`，嵌套类型用 `+` 分隔 |
 | `[NinoMember(index)]`、`[NinoIgnore]`、`[NinoUtf8]`、`[NinoConstructor(...)]` | 不变；`[NinoConstructor]` 也可以标记静态工厂方法 |
 | `[NinoExplicitOrder(...)]` | 已移除；改用 `[NinoType(false)]`，并按成员原来的写入顺序给每个成员编上 `[NinoMember(index)]`（参见[成员顺序](/zh/docs/v4/defining-types#member-order)） |
@@ -243,7 +243,7 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 | `[NinoRefDeserialization]` | `[NinoFactory]` |
 | `NinoFactory<T>` | `NinoActivator<T>` |
 | `NinoDeserializer.DeserializeRef(ref value, data)` | `NinoDeserializer.Deserialize(data, ref value)` |
-| `NinoDeserializer.DeserializeRef(ref value, ref reader)` | `NinoDeserializer.Deserialize(ref value, ref reader)` |
+| `NinoDeserializer.DeserializeRef(ref value, ref reader)` | `NinoDeserializer.Deserialize(ref reader, ref value)` |
 | `NinoSerializer.Serialize(object value)` | 借助共同的 `[NinoType]` 基类型调用 `Serialize<TBase>`；只有运行时才知道、且没有共同基类型的类型才用 `NinoSerializer.SerializeBoxed(value, type)`（见下文） |
 | `NinoDeserializer.Deserialize(data, type)` | `NinoDeserializer.DeserializeBoxed(data, type)` |
 | `NinoDeserializer.Deserialize(data, type, ref value)` | `NinoDeserializer.DeserializeBoxed(data, ref value, type)` |
@@ -287,7 +287,19 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 | `NinoSettings.DefaultPoolMaxRetained` | `NinoSettings.PoolMaxRetained` |
 | `Nino.Core.NinoBody`（`INinoBodyFormatter<T>.Traits` 的特征标志） | `Nino.Core.CompilerServices.NinoBodyTraits` |
 | `INinoBlockFormatter<T>.BlockSize`、`WriteBlock(ref destination, in value)`、`ReadBlock(ref source, ref value)` | `INinoBlockFormatter<T>` 继承 `INinoFixedSizeFormatter<T>`：`FixedSize`、`WriteFixed(in value, ref destination)`、`ReadBlock(ref value, ref source)` |
-| `Nino.Core.NinoPolymorphic<TBase>`（生成代码调用的子类型注册表） | `Nino.Core.CompilerServices.NinoSubtypes<TBase>`（`NinoPolymorphic.Register` 名称不变） |
+| `Nino.Core.NinoPolymorphic<TBase>`（生成代码调用的子类型注册表） | `Nino.Core.CompilerServices.NinoSubtypes<TBase>`（`NinoPolymorphic.Register` 当时名称不变，rc.9 改名，见下表） |
 | TypeScript：`NinoReader.region()` 和 `NinoWriter.region()`（由生成代码调用） | `beginRegion()`，与 .NET 的 `BeginRegion` 一致：Nino.TypeScript 或旧版 nino-gen 生成的代码请重新生成 |
 | TypeScript：`NinoReader.notNull()`（由生成代码调用） | `present()`，与 .NET 的 `ReadPresent` 一致：请重新生成 |
 | TypeScript：`NinoRegistry`（类型 ID 背后的子类型注册表） | `NinoSubtypes`（在 .NET 中，`NinoRegistry` 指每个程序集的注册）：请重新生成 |
+
+**4.0.0-rc.9 改名**了以下 API，没有保留旧名（用到旧名的代码无法编译；字节不变）：
+
+| 之前（rc.8 及更早） | rc.9 |
+| --- | --- |
+| `[NinoType(allowInheritance: false)]`、`NinoTypeAttribute.AllowInheritance` | `[NinoType(inheritedBySubtypes: false)]`、`InheritedBySubtypes`（代码修复会改参数名） |
+| `NinoPolymorphic.Register<T>()`、`Register(Type)` | `NinoPolymorphic.TryRegister<T>()`、`TryRegister(Type)`：类型无法注册时返回 `false` |
+| `NinoDeserializer.Deserialize(ref value, ref reader)`、`DeserializeBoxed(ref value, ref reader, type)` | `NinoDeserializer.Deserialize(ref reader, ref value)`、`DeserializeBoxed(ref reader, ref value, type)`：读取器在前 |
+| 自己的格式化器里的 `INinoFormatter<T>.Deserialize(ref T value, ref Reader reader)` | `Deserialize(ref Reader reader, ref T value)`：交换两个参数 |
+| `NinoHeader.NullFlag`；布局文本 `header=NullFlag` 和 `typeId=0x...`；`NinoTypeLayoutAttribute` 的构造函数参数 `typeId` | `NinoHeader.Presence`；`header=Presence` 和 `id=0x...`；`id`。存下来的布局需要重新记录 |
+| `WEAK_VERSION_TOLERANCE` | 已移除：错误 [NINO032](/zh/docs/v4/analyzers#nino032) 的代码修复给它变为版本容错的每个类型加上 `format: NinoFormat.VersionTolerant`（字节不变），之后删掉这个符号 |
+| `[NinoMemberFormatter(typeof(Utf8StringFormatter))]` | `[NinoUtf8]`（旧写法仍能编译，写出相同的字节；[NINO031](/zh/docs/v4/analyzers#nino031) 会改写它） |

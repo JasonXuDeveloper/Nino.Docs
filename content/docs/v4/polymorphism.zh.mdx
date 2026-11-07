@@ -50,7 +50,7 @@ List<OrderEvent> events = NinoDeserializer.Deserialize<List<OrderEvent>>(bytes);
 
 <Callout type="info">
 
-在 v4 中，子类型会从最近的 `[NinoType]` 基类或接口**继承** `[NinoType]`（连同选项），除非基类设置了 `allowInheritance: false`。如果想给子类型单独设置选项，可以在子类型上再加 `[NinoType]`。
+在 v4 中，子类型会从最近的 `[NinoType]` 基类或接口**继承** `[NinoType]`（连同选项），除非基类设置了 `inheritedBySubtypes: false`。如果想给子类型单独设置选项，可以在子类型上再加 `[NinoType]`。
 
 </Callout>
 
@@ -89,7 +89,7 @@ public class Derived : Base
 }
 ```
 
-`[NinoType]` 接口的成员通过实现类型中同名的成员来序列化。通过声明为接口或 `object` 的成员读取结构体时，结构体会被装箱。
+`[NinoType]` 接口的成员通过实现类型中同名的成员来序列化，用的是这些成员自己的特性：接口成员上的 `[NinoUtf8]`、`[NinoMemberFormatter]` 或 `[NinoIgnore]` 不起作用（警告 [NINO033](/zh/docs/v4/analyzers#nino033)，代码修复会把它移到实现成员上），只有它的 `[NinoMember(index)]` 有效。通过声明为接口或 `object` 的成员读取结构体时，结构体会被装箱。
 
 泛型接口和泛型抽象类（`IRepository<T>`、`abstract class Box<T>`），以及嵌套在泛型类型里的抽象类，用法完全相同：`Serialize<Box<int>>(new IntBox())` 写入的是子类型，读取时会检查数据中的类型是 `Box<int>` 的子类型。类型参数可以是任何类型：基元类型、元组（`Box<(int, string)>`）、密封类，或者本身有子类型的类。每个封闭基类型（`Box<int>`、`Box<Order>`）对其所在程序集中声明的子类型，都和非泛型基类型一样使用生成的分派（见[分派](#dispatch)）。
 
@@ -192,14 +192,14 @@ public sealed class CommandChannel
 唯一的例外是封闭泛型子类型（如 `Box<int>`）：如果进程只会**读取**它，代码里既不出现它的名字，也从不写入它，就需要在启动时注册：
 
 ```csharp
-NinoPolymorphic.Register<Box<int>>();
+NinoPolymorphic.TryRegister<Box<int>>();
 ```
 
-只有 `Type` 对象的类型（例如用 `MakeGenericType` 构造出来的），用 `NinoPolymorphic.Register(Type)` 注册，效果相同。对于无法多态写入的类型（抽象类型、开放泛型类型，或者不是 `[NinoType]` 的类型），两者都返回 `false`。
+只有 `Type` 对象的类型（例如用 `MakeGenericType` 构造出来的），用 `NinoPolymorphic.TryRegister(Type)` 注册，效果相同。类型注册成功（包括之前已注册）时两者返回 `true`；对于无法多态写入的类型（抽象类型、开放泛型类型，或者不是 `[NinoType]` 的类型），以及没有动态代码（Native AOT）时没有生成代码注册的类型，返回 `false`。
 
 ## 关闭继承 [#opting-out]
 
-`[NinoType(allowInheritance: false)]` 会阻止子类型继承该特性：子类型除非自己声明 `[NinoType]`，否则不能通过基类序列化（NINO003，提供代码修复）。
+`[NinoType(inheritedBySubtypes: false)]` 会阻止子类型继承该特性：子类型除非自己声明 `[NinoType]`，否则不能通过基类序列化（NINO003，提供代码修复）。
 
 ## 复用反序列化 [#reuse-deserialization]
 

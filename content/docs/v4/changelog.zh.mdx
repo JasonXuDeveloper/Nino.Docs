@@ -7,6 +7,27 @@ icon: RotateCcwClock
 
 这里按从新到旧的顺序，列出 v4 各版本之间的变化。v4 相对 v3 的全部变化见 [v4 新特性](/zh/docs/v4/whats-new)。每个 GitHub Release 也会列出它包含的全部提交。
 
+<Release lang="zh">
+
+## 4.0.0-rc.9
+
+### 新功能 [#new-7]
+
+- **4.0 之前改名和调整参数顺序**（没有保留旧名；字节不变）：`[NinoType(allowInheritance)]` 改为 `inheritedBySubtypes`（`NinoTypeAttribute.InheritedBySubtypes`），代码修复会改写这个参数，也会把 v3 的 `containNonPublicMembers` 改成 `includeNonPublicMembers`；`NinoPolymorphic.Register<T>()` 和 `Register(Type)` 改为 `TryRegister<T>()` 和 `TryRegister(Type)`，类型无法注册时返回 `false`；`NinoHeader.NullFlag` 改为 `NinoHeader.Presence`，.NET、Go 和 Rust 发布的布局写作 `header=Presence` 和 `id=0x...`（原来是 `typeId=`，`NinoTypeLayoutAttribute` 的构造函数参数也一样）。所有读取 API 都先接收读取器：`NinoDeserializer.Deserialize(ref reader, ref value)`、`DeserializeBoxed(ref reader, ref value, type)`，以及 `INinoFormatter<T>.Deserialize(ref Reader reader, ref T value)`，自己写的格式化器要交换这两个参数。参见[从更早的候选版本升级](/zh/docs/v4/migration#upgrading-from-an-earlier-release-candidate)。
+- **移除 `WEAK_VERSION_TOLERANCE`。** 项目仍定义它时，错误 NINO032 会标出它曾变为版本容错的每个按位置格式类型，代码修复给它加上 `format: NinoFormat.VersionTolerant`，字节不变（可一次修复整个解决方案）；之后删掉这个符号。参见[版本容错](/zh/docs/v4/evolving-data#version-tolerance)。
+- **UTF-8 只有一种写法**：字符串成员上的 `[NinoMemberFormatter(typeof(Utf8StringFormatter))]` 按 `[NinoUtf8]` 处理（字节相同，发布的布局中为 `utf8`）；提示 NINO031 及其代码修复会把它改写成 `[NinoUtf8]`。警告 NINO030 报告不起作用的 `[NinoUtf8]`：成员类型里没有内置格式化器会写出的字符串，成员由 `[NinoMemberFormatter]` 写出，或者成员根本不会被序列化（`[NinoIgnore]`、非公共、只读、静态，或 `autoCollect: false` 时没有 `[NinoMember]`）；代码修复会去掉它。参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)。
+- **NINO033**：接口成员上的 `[NinoUtf8]`、`[NinoMemberFormatter]` 或 `[NinoIgnore]` 不起作用，报警告：实现类型写出的是自己的成员，用的是它自己的特性，接口成员上只有 `[NinoMember(index)]` 有效。代码修复会把特性移到实现成员上；没有实现成员时直接去掉。参见[接口与抽象类](/zh/docs/v4/polymorphism#interfaces-and-abstract-classes)。
+
+### 性能 [#performance-4]
+
+- **不可信模式下带 `bool` 的普通结构体列表**：开启 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 时，`bool` 字段与相邻字段在同一轮 SIMD 检查中完成：x64 上快 12-23%（1,000 个值：GitHub 的 AMD EPYC 7763 运行器上 2.72 → 2.35 µs，EPYC 9V45 上 1.48 → 1.16 µs），Arm64 上持平。
+
+### 修复 [#fixes-6]
+
+- **每个成员错误只报一次**：基类成员的 NINO007 和 NINO029 只由声明它的类型报告一次，不再在同一位置为每个子类型各报一次。参见[分析器](/zh/docs/v4/analyzers)。
+
+</Release>
+
 <Release date="2026-11-04" lang="zh">
 
 ## 4.0.0-rc.8
@@ -135,7 +156,7 @@ icon: RotateCcwClock
 
 </Release>
 
-<Release date="2026-10-23" lang="zh">
+<Release date="2026-10-23" lang="zh" collapsed>
 
 ## 4.0.0-rc.7
 

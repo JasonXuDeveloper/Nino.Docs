@@ -71,11 +71,11 @@
       "severity": "warning",
       "codeFix": true,
       "en": {
-        "problem": "A subtype of a NinoType with `allowInheritance: false` has no formatter of its own: writing one throws",
+        "problem": "A subtype of a NinoType with `inheritedBySubtypes: false` has no formatter of its own: writing one throws",
         "fix": "Add `[NinoType]` to the subtype"
       },
       "zh": {
-        "problem": "基类设置了 `allowInheritance: false`，子类型没有自己的格式化器：写入它会抛出异常",
+        "problem": "基类设置了 `inheritedBySubtypes: false`，子类型没有自己的格式化器：写入它会抛出异常",
         "fix": "给子类型加上 `[NinoType]`"
       }
     },
@@ -169,11 +169,11 @@
       "severity": "warning",
       "codeFix": true,
       "en": {
-        "problem": "Member type cannot be serialized: the member is skipped; or a generic `[NinoType]` in it is closed over such a type that its formatter writes (`Box<Action>`; a type argument it does not write is not counted): writing a value throws",
+        "problem": "Member type cannot be serialized: the member is skipped; or a generic `[NinoType]` in it is closed over such a type that its formatter writes (`Box<Action>`; a type argument it does not write is not counted): writing a value throws; a member of a base type is reported once, by the type that declares it",
         "fix": "`[NinoIgnore]` it, or give it a custom formatter"
       },
       "zh": {
-        "problem": "成员类型无法序列化，该成员会被跳过；或其中的泛型 `[NinoType]` 封闭在这样一个它的格式化器会写出的类型上（`Box<Action>`；不写出的类型参数不算），写入值时会抛出异常",
+        "problem": "成员类型无法序列化，该成员会被跳过；或其中的泛型 `[NinoType]` 封闭在这样一个它的格式化器会写出的类型上（`Box<Action>`；不写出的类型参数不算），写入值时会抛出异常；基类的成员只报一次，由声明它的类型报告",
         "fix": "用 `[NinoIgnore]` 忽略，或为它提供自定义格式化器"
       }
     },
@@ -309,12 +309,54 @@
       "severity": "error",
       "codeFix": false,
       "en": {
-        "problem": "A member or a `NinoSerializer`/`NinoDeserializer` call needs `System.Numerics.Vector<T>`: directly, as an element or type argument, inside a plain struct at any depth, or through a generic `[NinoType]` that writes it (`Box<Vector<int>>`); Nino.Core formatters and `Writer`/`Reader` methods used by hand are checked too, made or only held in a field, property or local. `Vector<T>` is 16, 32 or 64 bytes depending on the CPU, so no host reads every other host's bytes, and the runtime throws `NotSupportedException`. Ignored members, type arguments a type never writes and your own formatter that writes the lanes are not reported",
+        "problem": "A member or a `NinoSerializer`/`NinoDeserializer` call needs `System.Numerics.Vector<T>`: directly, as an element or type argument, inside a plain struct at any depth, or through a generic `[NinoType]` that writes it (`Box<Vector<int>>`); Nino.Core formatters and `Writer`/`Reader` methods used by hand are checked too, made or only held in a field, property or local. `Vector<T>` is 16, 32 or 64 bytes depending on the CPU, so no host reads every other host's bytes, and the runtime throws `NotSupportedException`. Ignored members, type arguments a type never writes and your own formatter that writes the lanes are not reported. A member of a base type is reported once, by the type that declares it",
         "fix": "Store a fixed number of lanes (an array, `Vector128<T>`/`Vector256<T>`) and expose the vectors through `[NinoIgnore]` members ([`Vector<T>` Is Not Serializable](/en/docs/v4/struct-layouts#vector-t))"
       },
       "zh": {
-        "problem": "成员或 `NinoSerializer`/`NinoDeserializer` 调用需要 `System.Numerics.Vector<T>`：直接出现，作为元素或类型参数，在任意深度的普通结构体里，或经由会写出它的泛型 `[NinoType]`（`Box<Vector<int>>`）；手写使用的 Nino.Core 格式化器和 `Writer`/`Reader` 方法同样检查，无论是创建出来还是只放在字段、属性或局部变量里。`Vector<T>` 的大小由 CPU 决定（16、32 或 64 字节），没有哪个平台能读回所有其他平台写的字节，运行时也会抛 `NotSupportedException`。被忽略的成员、类型从不写出的类型参数，以及自行写出各通道的格式化器不报",
+        "problem": "成员或 `NinoSerializer`/`NinoDeserializer` 调用需要 `System.Numerics.Vector<T>`：直接出现，作为元素或类型参数，在任意深度的普通结构体里，或经由会写出它的泛型 `[NinoType]`（`Box<Vector<int>>`）；手写使用的 Nino.Core 格式化器和 `Writer`/`Reader` 方法同样检查，无论是创建出来还是只放在字段、属性或局部变量里。`Vector<T>` 的大小由 CPU 决定（16、32 或 64 字节），没有哪个平台能读回所有其他平台写的字节，运行时也会抛 `NotSupportedException`。被忽略的成员、类型从不写出的类型参数，以及自行写出各通道的格式化器不报。基类的成员只报一次，由声明它的类型报告",
         "fix": "存固定数量的通道（数组、`Vector128<T>`/`Vector256<T>`），再通过标了 `[NinoIgnore]` 的成员提供向量（见[`Vector<T>` 不能序列化](/zh/docs/v4/struct-layouts#vector-t)）"
+      }
+    },
+    {
+      "id": "NINO030",
+      "category": "members",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "`[NinoUtf8]` has no effect: the member's type holds no string the built-in formatters write (an `int`; a `[NinoType]`, `object` or type parameter writes its own strings), a `[NinoMemberFormatter]` writes the member, or the member is never serialized (`[NinoIgnore]`, non-public, get-only, static, no `[NinoMember]` under `autoCollect: false`). The bytes are the same without it",
+        "fix": "Remove `[NinoUtf8]`; for the strings of a `[NinoType]` member, put it on that type's own string members"
+      },
+      "zh": {
+        "problem": "`[NinoUtf8]` 不起作用：成员类型里没有内置格式化器会写出的字符串（`int`；`[NinoType]`、`object` 或类型参数自己写出它们的字符串），成员由 `[NinoMemberFormatter]` 写出，或者成员根本不会被序列化（`[NinoIgnore]`、非公共、只读、静态、`autoCollect: false` 时没有 `[NinoMember]`）。去掉它字节也一样",
+        "fix": "去掉 `[NinoUtf8]`；要让 `[NinoType]` 成员里的字符串用 UTF-8，把它标在那个类型自己的字符串成员上"
+      }
+    },
+    {
+      "id": "NINO031",
+      "category": "members",
+      "severity": "info",
+      "codeFix": true,
+      "en": {
+        "problem": "`[NinoMemberFormatter(typeof(Utf8StringFormatter))]` on a string member: it is read as `[NinoUtf8]` (the same bytes and layout), but `Utf8StringFormatter` is for generated code",
+        "fix": "Write `[NinoUtf8]` instead"
+      },
+      "zh": {
+        "problem": "字符串成员上的 `[NinoMemberFormatter(typeof(Utf8StringFormatter))]`：它会按 `[NinoUtf8]` 处理（字节和布局相同），但 `Utf8StringFormatter` 是给生成代码用的",
+        "fix": "改写成 `[NinoUtf8]`"
+      }
+    },
+    {
+      "id": "NINO033",
+      "category": "members",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "`[NinoUtf8]`, `[NinoMemberFormatter]` or `[NinoIgnore]` on an interface member has no effect: implementing types write their own member, with its own attributes; only `[NinoMember(index)]` on the interface counts",
+        "fix": "Move the attribute to the implementing members, or remove it when nothing implements the member"
+      },
+      "zh": {
+        "problem": "接口成员上的 `[NinoUtf8]`、`[NinoMemberFormatter]` 或 `[NinoIgnore]` 不起作用：实现类型写出的是自己的成员，用的是它自己的特性；接口上只有 `[NinoMember(index)]` 有效",
+        "fix": "把特性移到实现成员上；没有实现成员时直接去掉"
       }
     },
     {
@@ -399,6 +441,20 @@
       "zh": {
         "problem": "`trackReferences` 用在了要通过构造函数重新创建的类型上（例如位置记录）",
         "fix": "让成员可以赋值"
+      }
+    },
+    {
+      "id": "NINO032",
+      "category": "formats-and-references",
+      "severity": "error",
+      "codeFix": true,
+      "en": {
+        "problem": "The project still defines `WEAK_VERSION_TOLERANCE`, removed in 4.0.0-rc.9: a positional type it made version-tolerant is now written positionally and cannot read the data it wrote",
+        "fix": "Add `format: NinoFormat.VersionTolerant` to each reported type (the same bytes; fix all covers the solution), then remove the symbol"
+      },
+      "zh": {
+        "problem": "项目仍定义了 4.0.0-rc.9 移除的 `WEAK_VERSION_TOLERANCE`：它曾变为版本容错的按位置格式类型，现在按位置写出，读不了自己以前写的数据",
+        "fix": "给每个报告的类型加上 `format: NinoFormat.VersionTolerant`（字节不变；可一次修复整个解决方案），再删掉这个符号"
       }
     },
     {

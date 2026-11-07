@@ -548,7 +548,7 @@ type Monster struct {
 }
 
 func (Monster) NinoLayout() string { // what .NET publishes for the type, or a part of it
-	return "format=Keyed; header=NullFlag"
+	return "format=Keyed; header=Presence"
 }
 
 data, err := nino.Marshal(m)          // m is a *Monster: a sealed class
@@ -565,7 +565,7 @@ data, err = nino.MarshalAs[Animal](a) // a polymorphic root, written behind its 
 | `,utf8` | A `[NinoUtf8]` string. |
 | `,former=Old` | A former name of a keyed member, once per name. |
 
-A type declares its .NET shape with a `NinoLayout() string` method: the [layout](/en/docs/v4/evolving-data#layout-metadata) .NET publishes for it (`format=`, `header=`, `typeId=`, `deferrable=`, `members=`), or a subset of its parts. With `members=`, the tags are checked against it: the number of members, each field's encoding and the keys. Polymorphic types are registered once with `nino.Register`, and a slot only reads the registered types that implement its interface.
+A type declares its .NET shape with a `NinoLayout() string` method: the [layout](/en/docs/v4/evolving-data#layout-metadata) .NET publishes for it (`format=`, `header=`, `id=`, `deferrable=`, `members=`), or a subset of its parts. With `members=`, the tags are checked against it: the number of members, each field's encoding and the keys. Polymorphic types are registered once with `nino.Register`, and a slot only reads the registered types that implement its interface.
 
 Anything the wire format cannot express (an `int` field, which has no fixed size, an `omitempty`, a type with `trackReferences=true`) is a `*nino.TagError` naming the field, returned before a byte is read or written. A plan is built once per type and cached; marshalling then takes a few times as long as generated code, and is still faster than `encoding/json`. The struct-tag path also rejects multi-dimensional arrays, groupings, `BitArray`, `TimeZoneInfo`, custom formatters and `[NinoType]` collections with members. The full tag reference and the Go type for each encoding are in the runtime's [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go#struct-tags).
 
@@ -767,7 +767,7 @@ A value whose type id the slot does not allow (another closed type, an unknown i
 
 ### Closed Generic Types in Slots [#closed-generic-types-in-slots]
 
-A generic subtype (`sealed class Box<T> : Animal`, or a generic struct implementing a `[NinoType]` interface) is written in a polymorphic or `object` slot behind the hash of its closed .NET name (`Shop.Box<System.Int32>`). The layouts carry only the definition (`Box<T>`), so nino-gen reads the closed types from the assembly's metadata: every closed type that a signature, a `new Box<int>()`, a `typeof(Box<int>)` or the type arguments of a generic method (`NinoPolymorphic.Register<Box<int>>()`) name. Each one whose definition is a concrete generic `[NinoType]` is a case of the slots it is assignable to (`object` slots take them all), read and written with the codecs of its arguments:
+A generic subtype (`sealed class Box<T> : Animal`, or a generic struct implementing a `[NinoType]` interface) is written in a polymorphic or `object` slot behind the hash of its closed .NET name (`Shop.Box<System.Int32>`). The layouts carry only the definition (`Box<T>`), so nino-gen reads the closed types from the assembly's metadata: every closed type that a signature, a `new Box<int>()`, a `typeof(Box<int>)` or the type arguments of a generic method (`NinoPolymorphic.TryRegister<Box<int>>()`) name. Each one whose definition is a concrete generic `[NinoType]` is a case of the slots it is assignable to (`object` slots take them all), read and written with the codecs of its arguments:
 
 | | `Box<int>` in an `Animal` slot |
 | --- | --- |
@@ -777,7 +777,7 @@ A generic subtype (`sealed class Box<T> : Animal`, or a generic struct implement
 
 <Callout type="warn" title="Not quite the set .NET accepts">
 
-A closed type that no code in the assembly names cannot be read: its id is unknown to every target, as it is to .NET in a process that never registered or wrote it. The other way round, the targets accept every closed type the assembly names, where .NET in a fresh process accepts only those it has [registered](/en/docs/v4/defining-types#generic-types) or already written: data that .NET would reject for an id it has not seen yet reads in TypeScript, Go and Rust. With its `NinoPolymorphic.Register<...>()` calls made, .NET accepts the same set.
+A closed type that no code in the assembly names cannot be read: its id is unknown to every target, as it is to .NET in a process that never registered or wrote it. The other way round, the targets accept every closed type the assembly names, where .NET in a fresh process accepts only those it has [registered](/en/docs/v4/defining-types#generic-types) or already written: data that .NET would reject for an id it has not seen yet reads in TypeScript, Go and Rust. With its `NinoPolymorphic.TryRegister<...>()` calls made, .NET accepts the same set.
 
 </Callout>
 

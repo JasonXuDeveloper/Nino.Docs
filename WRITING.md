@@ -143,7 +143,7 @@ Overview, FAQ and reference pages answer the questions their readers search for,
   it shortens the reader's way to an answer (the reader first, above). Round 107 added five:
   - **`<AnalyzerRules lang>`** (`src/components/analyzer-rules.tsx`, data `src/data/analyzer-rules.json`, English and
     Chinese in one row): the analyzers page's rules as one list with a search box, severity, code-fix and category
-    filters, severity pills (tints 5 error, 4 warning) and a wrench for a code fix; each row's id is its anchor
+    filters, severity pills (tints 5 error, 4 warning; info untinted) and a wrench for a code fix; each row's id is its anchor
     (`#nino007`, highlighted when targeted), the old category anchors stay. A rule added to Nino is a row in the JSON,
     nowhere else. Use it only there.
   - **Ratio bars** in `RuntimeTable`, `ExtraRuntimeTables` and `ReuseTable` (`TimeBars` in

@@ -14,11 +14,11 @@ A formatter is a **struct** implementing `INinoFormatter<T>`:
 public interface INinoFormatter<T>
 {
     void Serialize(T value, ref Writer writer);
-    void Deserialize(ref T value, ref Reader reader);
+    void Deserialize(ref Reader reader, ref T value);
 }
 ```
 
-`Deserialize` receives the current value by `ref`: `default` means "create a new value", and an existing instance may be reused. Formatters are called as `default(TFormatter)`, so they have no instance state; keep any state in static fields.
+`Deserialize` takes the reader first, as every read API does, and receives the current value by `ref`: `default` means "create a new value", and an existing instance may be reused. Formatters are called as `default(TFormatter)`, so they have no instance state; keep any state in static fields.
 
 ## For One Member
 
@@ -41,7 +41,7 @@ public struct ZigZagLongFormatter : INinoFormatter<long>
         writer.Write((byte)v);
     }
 
-    public void Deserialize(ref long value, ref Reader reader)
+    public void Deserialize(ref Reader reader, ref long value)
     {
         ulong v = 0;
         int shift = 0;
@@ -98,7 +98,7 @@ public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
             default(TFormatter).Serialize(item, ref writer); // inlined element formatter
     }
 
-    public void Deserialize(ref Ring<T> value, ref Reader reader)
+    public void Deserialize(ref Reader reader, ref Ring<T> value)
     {
         int count = reader.ReadLength();       // validated against the bytes left
         if (count < 0)
@@ -115,7 +115,7 @@ public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
         for (int i = 0; i < count; i++)
         {
             T item = default;
-            default(TFormatter).Deserialize(ref item, ref reader);
+            default(TFormatter).Deserialize(ref reader, ref item);
             value.Push(item);
         }
     }
@@ -206,7 +206,7 @@ public struct GridFormatter<[NinoRaw] T> : INinoFormatter<Grid<T>>
         writer.Write<T>(value.Cells.AsSpan());                     // length, then one block copy
     }
 
-    public void Deserialize(ref Grid<T> value, ref Reader reader)
+    public void Deserialize(ref Reader reader, ref Grid<T> value)
     {
         int width = reader.Read<int>();
         if (width < 0)
@@ -285,11 +285,11 @@ public void Serialize(Contract value, ref Writer writer)
     NinoSerializer.Serialize(value.Owner, ref writer); // [!code highlight]
 }
 
-public void Deserialize(ref Contract value, ref Reader reader)
+public void Deserialize(ref Reader reader, ref Contract value)
 {
     value ??= new Contract();
     reader.Read(out value.Id);
-    NinoDeserializer.Deserialize(ref value.Owner, ref reader); // [!code highlight]
+    NinoDeserializer.Deserialize(ref reader, ref value.Owner); // [!code highlight]
 }
 ```
 
@@ -298,6 +298,6 @@ Always read exactly what you wrote, in the same order: the bytes carry no schema
 ## Next Steps
 
 <Cards>
-  <Card title="Analyzers" href="/en/docs/v4/analyzers">Every diagnostic, NINO001 to NINO029, and how to fix it.</Card>
+  <Card title="Analyzers" href="/en/docs/v4/analyzers">Every diagnostic, NINO001 to NINO033, and how to fix it.</Card>
   <Card title="Performance Internals" href="/en/docs/v4/performance">How Nino gets its speed, and how to keep your code on the fast paths.</Card>
 </Cards>

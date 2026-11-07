@@ -73,7 +73,7 @@ public class OrderShipped : IEvent // inherits [NinoType]
 public NinoTypeAttribute(
     bool autoCollect = true,
     bool includeNonPublicMembers = false,
-    bool allowInheritance = true,
+    bool inheritedBySubtypes = true,
     NinoFormat format = NinoFormat.Positional,
     bool trackReferences = false)
 ```
@@ -90,7 +90,7 @@ public NinoTypeAttribute(
       type: 'bool',
       default: 'false',
     },
-    allowInheritance: {
+    inheritedBySubtypes: {
       description: <>子类型继承此特性，可以通过此类型序列化。设为 <code>false</code> 时，子类型必须自己声明 <code>[NinoType]</code>（NINO003）。</>,
       type: 'bool',
       default: 'true',
@@ -216,7 +216,7 @@ public class ChatMessage
 }
 ```
 
-该特性作用于这个成员的格式化器直接写出的所有字符串：成员本身，以及集合或元组成员中的 `string` 元素、键、值和元组项（`List<string>`、`string[]`、`Dictionary<string, int>`、`(string, int)`）。嵌套的 `[NinoType]` 里的字符串仍按那个类型自己的设置编码；成员中不含字符串时，该特性不起作用。
+该特性作用于这个成员的格式化器直接写出的所有字符串：成员本身，以及集合或元组成员中的 `string` 元素、键、值和元组项（`List<string>`、`string[]`、`Dictionary<string, int>`、`(string, int)`）。嵌套的 `[NinoType]` 里的字符串仍按那个类型自己的设置编码。该特性不起作用时（成员不含字符串、成员由 `[NinoMemberFormatter]` 写出，或成员根本不会被序列化），分析器报警告 [NINO030](/zh/docs/v4/analyzers#nino030)；标在接口成员上时报 [NINO033](/zh/docs/v4/analyzers#nino033)，应改标在实现成员上。要用 UTF-8 只需 `[NinoUtf8]`；手写的 `[NinoMemberFormatter(typeof(Utf8StringFormatter))]` 会按它处理（NINO031）。
 
 读写双方必须一致：以 UTF-8 写出的数据，不能由一个没有给该成员标 `[NinoUtf8]` 的类型读取。UTF-8 字符串会同时写入字符数和字节数，所以读取时可以按最终长度分配字符串，再一次性把这些字节转码进去（参见[字符串](/zh/docs/v4/wire-format#strings)）。
 
@@ -303,7 +303,7 @@ public record struct Pair<TKey, TValue>(TKey Key, TValue Value);
 
 <Callout type="warn">
 
-如果进程只会多态地**读取**某个封闭泛型类型（按类型 ID），代码中既不出现它的名字，也从不写入它，就需要在启动时注册：`NinoPolymorphic.Register<Box<int>>()`。只有通过反射或在其他程序集中构造的实例化，才会遇到这种情况。
+如果进程只会多态地**读取**某个封闭泛型类型（按类型 ID），代码中既不出现它的名字，也从不写入它，就需要在启动时注册：`NinoPolymorphic.TryRegister<Box<int>>()`。只有通过反射或在其他程序集中构造的实例化，才会遇到这种情况。
 
 </Callout>
 

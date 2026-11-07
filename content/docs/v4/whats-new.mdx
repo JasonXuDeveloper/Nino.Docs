@@ -50,7 +50,7 @@ The v4 binary format is **not compatible** with v3 or the earlier v4 betas/previ
   <Card icon={<Cpu />} title="Identical bytes everywhere" href="/en/docs/v4/platforms">
     `netstandard2.0` to `net10.0`, CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, x64 and Arm64; trimming and Native AOT included.
   </Card>
-  <Card icon={<ScanSearch />} title="Analyzers NINO001–NINO029" href="/en/docs/v4/analyzers">
+  <Card icon={<ScanSearch />} title="Analyzers NINO001–NINO033" href="/en/docs/v4/analyzers">
     Mistakes reported while you type, many with a one-click code fix.
   </Card>
   <Card icon={<Server />} title="ASP.NET Core (rc.6)" href="/en/docs/v4/advanced/aspnetcore">
@@ -81,7 +81,7 @@ Every difference between v3 (3.3.13) and v4 in one table; the sections below exp
 | Member order | declaration order, `[NinoMember(index)]` or `[NinoExplicitOrder]` | declaration order or `[NinoMember(index)]`; `[NinoExplicitOrder]` is removed |
 | Fixed-size types | no | `Serialize(value)` writes straight into an array of the exact size; `NinoSerializer.GetFixedSize<T>()` |
 | Boxed / runtime-typed API | no | `SerializeBoxed(value, type)`, `DeserializeBoxed(data, type)`, for types known only at run time that share no common `[NinoType]` base |
-| Diagnostics | compile errors in generated code | 29 analyzer diagnostics (NINO001–NINO029), many with code fixes |
+| Diagnostics | compile errors in generated code | 33 analyzer diagnostics (NINO001–NINO033), many with code fixes |
 | Incremental generator | no: scans the whole compilation and re-generates every type on every edit | one file per type, only edited types re-generated |
 | Interceptors | no | always on with Roslyn 4.8+ (the .NET 8 SDK and later) |
 | Hot update (HybridCLR) | supported | supported, no initialization call |
@@ -149,7 +149,7 @@ Values themselves are not validated (a negative health reads as it is written), 
 
 ## Evolving Data and Object Graphs [#data-and-object-graphs]
 
-- **One option for the format**: `[NinoType(format: ...)]` takes a `NinoFormat`. `Positional` (the default) is the fastest; `VersionTolerant` lets you append members to the most derived type at any nesting depth, at 4 bytes per object, and old code skips the members it does not know; `Keyed` writes members by name hash, so they can be reordered, removed and inserted in any class of a hierarchy. Defining `WEAK_VERSION_TOLERANCE` in a project turns its `Positional` types into `VersionTolerant` ones. See [Evolving Your Data](/en/docs/v4/evolving-data).
+- **One option for the format**: `[NinoType(format: ...)]` takes a `NinoFormat`. `Positional` (the default) is the fastest; `VersionTolerant` lets you append members to the most derived type at any nesting depth, at 4 bytes per object, and old code skips the members it does not know; `Keyed` writes members by name hash, so they can be reordered, removed and inserted in any class of a hierarchy. v3's project-wide `WEAK_VERSION_TOLERANCE` is gone (error NINO032 and its code fix move a project off it). See [Evolving Your Data](/en/docs/v4/evolving-data).
 - **Layout metadata**: the generator records how each `[NinoType]` is written as an `[assembly: NinoTypeLayout]`, including the size and field offsets of every value copied as raw memory, so tools can compare layouts between builds and catch a change in the bytes before it ships. Since *rc.6* each member is described by the bytes it is written as (`seq(string)`, `map(K,V)`, `type(T)`...), with its key in keyed types. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata).
 - **Renamed types** keep their data with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name), and so do renamed keyed members.
 - **Reference tracking**: `[NinoType(trackReferences: true)]` keeps shared references and cycles: an object reached twice is written once and read back as one instance, at 4 bytes per tracked object. See [Reference Tracking](/en/docs/v4/reference-tracking).
@@ -187,7 +187,7 @@ See [Reuse and Pooling](/en/docs/v4/pooling).
 - **`Writer` and `Reader`** write several values into one buffer and read them back, and are the API of custom formatters. See [Writer and Reader](/en/docs/v4/custom-formatters#writer-and-reader).
 - **A boxed API for runtime types**: `SerializeBoxed(value, type)` and `DeserializeBoxed(data, type)` write exactly what `Serialize<T>` writes, for types known only as a `Type`. Types with a common `[NinoType]` base are faster through `Serialize<TBase>`. See [Runtime Types](/en/docs/v4/basic#runtime-types).
 - **`NinoSerializer.IsSupported(Type)`** (*rc.6*) tells whether Nino can serialize and deserialize a type, for code that has only a `Type`, such as the ASP.NET Core formatters. See [The Boxed API](/en/docs/v4/basic#the-boxed-api).
-- **No initialization**: generated registries register themselves and are found lazily; `NinoSettings`, `NinoPolymorphic.Register<T>()` and `NinoRegistry.EnsureInitialized` are optional. See [At Startup](/en/docs/v4/start#at-startup).
+- **No initialization**: generated registries register themselves and are found lazily; `NinoSettings`, `NinoPolymorphic.TryRegister<T>()` and `NinoRegistry.EnsureInitialized` are optional. See [At Startup](/en/docs/v4/start#at-startup).
 
 ## Web and ASP.NET Core [#web-and-aspnet-core]
 
@@ -209,7 +209,7 @@ See [Reuse and Pooling](/en/docs/v4/pooling).
 
 - **Truly incremental source generator**: one file per `[NinoType]`, equatable models, no whole-compilation scans. Editing a type re-generates only that type, and an edit that changes no model (a comment, a method body) re-generates nothing.
 - **Much less generated code**: collections, strings, nullables, tuples and the other built-in types are implemented once in `Nino.Core` as generic formatters; the generator only emits code for your `[NinoType]`s.
-- **29 analyzer rules** (NINO001–NINO029) report mistakes while you type, such as an unsupported member type, a missing `partial` or two `[NinoFormerName]`s on one type, many with a one-click code fix. See [Analyzers](/en/docs/v4/analyzers).
+- **33 analyzer rules** (NINO001–NINO033) report mistakes while you type, such as an unsupported member type, a missing `partial` or two `[NinoFormerName]`s on one type, many with a one-click code fix. See [Analyzers](/en/docs/v4/analyzers).
 
 ## Removed [#removed]
 

@@ -182,7 +182,7 @@ Unity 的结构体（`Vector3`、`Quaternion`、`Color32`、`Bounds` 等）是�
 - 生成的代码是普通 C#：序列化时不使用反射，也不使用 `System.Reflection.Emit`。
 - 每个生成的注册表都标记了 `[RuntimeInitializeOnLoadMethod]`（编辑器中还有 `[InitializeOnLoadMethod]`），因此注册表会在启动时运行，也不会被 IL2CPP 链接器裁剪掉。即使没有这一步，注册也会在第一次用到时按需完成。
 - 代码中**写出名字**的泛型 `[NinoType]` 实例化和内置泛型集合（成员类型、`NinoSerializer.Serialize<List<MyStruct>>` 调用）都会由生成器注册，因此 IL2CPP 会提前编译它们。
-- 只通过反射创建、并且只会多态**读取**的实例化，需要在启动时加一行：`NinoPolymorphic.Register<Box<MyStruct>>()`。
+- 只通过反射创建、并且只会多态**读取**的实例化，需要在启动时加一行：`NinoPolymorphic.TryRegister<Box<MyStruct>>()`。
 
 ## HybridCLR 热更新 [#hybridclr-hot-update]
 
@@ -210,7 +210,7 @@ Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
 | HybridCLR 补充元数据 | 热更新代码用到了 AOT 程序集中定义的泛型。按 HybridCLR 的规则处理即可，Nino 没有额外要求。 | 没有热更新。 |
 | 用 `Assembly.Load` 加载热更新 DLL | 在读取包含其中类型的数据之前。 | |
 | `NinoRegistry.EnsureInitialized(assembly)` 或 `EnsureAllInitialized()` | 想把一次性的注册表加载放到加载界面，而不是第一次用到该程序集的调用。 | 始终是可选的：注册表在首次使用时自动加载。 |
-| `NinoPolymorphic.Register<T>()` | 某个封闭泛型 `[NinoType]`（如 `Box<MyStruct>`）在本进程中只会通过基类型**读取**，代码里从未写出它的名字，也从未写入过它。 | 普通子类型，无论在哪个程序集（包括热更新程序集），都会自动找到。 |
+| `NinoPolymorphic.TryRegister<T>()` | 某个封闭泛型 `[NinoType]`（如 `Box<MyStruct>`）在本进程中只会通过基类型**读取**，代码里从未写出它的名字，也从未写入过它。 | 普通子类型，无论在哪个程序集（包括热更新程序集），都会自动找到。 |
 
 ```csharp
 public static class GameStartup
@@ -219,7 +219,7 @@ public static class GameStartup
     private static void Init()
     {
         NinoSettings.SetPoolMaxRetained<Bullet>(1024); // only if the defaults do not fit
-        NinoPolymorphic.Register<Box<MyStruct>>();     // only for read-only closed generics
+        NinoPolymorphic.TryRegister<Box<MyStruct>>();     // only for read-only closed generics
     }
 }
 

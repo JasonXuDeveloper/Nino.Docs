@@ -182,7 +182,7 @@ Unity's structs (`Vector3`, `Quaternion`, `Color32`, `Bounds`...) are unmanaged,
 - Generated code is plain C#: no reflection at serialization time, no `System.Reflection.Emit`.
 - Each generated registry is marked `[RuntimeInitializeOnLoadMethod]` (and `[InitializeOnLoadMethod]` in the editor), which runs it at startup and keeps it from being stripped by the IL2CPP linker. Without it, registration would still happen lazily on first use.
 - Generic `[NinoType]` instantiations and built-in generic collections that your code **names** (member types, `NinoSerializer.Serialize<List<MyStruct>>` calls) are registered by the generator, so IL2CPP compiles them ahead of time.
-- An instantiation that you only create through reflection and only **read** polymorphically needs one line at startup: `NinoPolymorphic.Register<Box<MyStruct>>()`.
+- An instantiation that you only create through reflection and only **read** polymorphically needs one line at startup: `NinoPolymorphic.TryRegister<Box<MyStruct>>()`.
 
 ## HybridCLR Hot Update
 
@@ -210,7 +210,7 @@ Most projects need none of these steps. Run the ones you need once, before the f
 | HybridCLR supplementary metadata | Hot-update code instantiates generics defined in AOT assemblies. Follow HybridCLR's rules; Nino adds none of its own. | There is no hot update. |
 | `Assembly.Load` of hot-update DLLs | Before reading data that contains their types. | |
 | `NinoRegistry.EnsureInitialized(assembly)` or `EnsureAllInitialized()` | You want the one-time registry load on a loading screen instead of the first call that meets the assembly. | Always optional: registries load on first use. |
-| `NinoPolymorphic.Register<T>()` | A closed generic `[NinoType]` such as `Box<MyStruct>` that this process only **reads** through a base type, and never names in code or writes. | Ordinary subtypes in any assembly, hot update included: they are found automatically. |
+| `NinoPolymorphic.TryRegister<T>()` | A closed generic `[NinoType]` such as `Box<MyStruct>` that this process only **reads** through a base type, and never names in code or writes. | Ordinary subtypes in any assembly, hot update included: they are found automatically. |
 
 ```csharp
 public static class GameStartup
@@ -219,7 +219,7 @@ public static class GameStartup
     private static void Init()
     {
         NinoSettings.SetPoolMaxRetained<Bullet>(1024); // only if the defaults do not fit
-        NinoPolymorphic.Register<Box<MyStruct>>();     // only for read-only closed generics
+        NinoPolymorphic.TryRegister<Box<MyStruct>>();     // only for read-only closed generics
     }
 }
 
