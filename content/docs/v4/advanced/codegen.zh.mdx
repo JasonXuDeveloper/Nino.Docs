@@ -616,7 +616,7 @@ nino-gen 生成的代码需要 `indexmap` 功能和 `indexmap` 本身：映射�
 
 ### 生成的代码 [#rust-generated-code]
 
-编解码器完整写出（每个类型实现 `NinoRead`、`NinoWrite`、`NinoReadBody` 和 `NinoWriteBody`），而不是 `#[derive]` 属性，所以代码既不需要 derive crate，也不需要构建它的过程宏，并按布局中带的哈希检查旧键。每个类型都有 `TYPE_ID`、`NINO_TYPE_NAME` 和 `NINO_LAYOUT` 常量，通过 `nino::type_consts!(id, name, layout)` 声明，文档只在 crate 里写一次（泛型类型没有 `TYPE_ID`）；它的 `NinoReadBody` 和 `NinoWriteBody` impl 也带同一个 `TYPE_ID`，和 derive 一样。原始结构体的 `NinoRead` 和 `NinoWrite` impl 是 `nino::raw_read!()` 和 `nino::raw_write!()`。容纳多种类型的槽位是一个枚举 `<Base>Ref`，每个允许的类型一个装箱变体；`object` 槽位是 `AnyObject`。枚举是整数，另有一个单元结构体以常量形式持有各个具名取值。`with_nino_type(name, visitor)` 用某个 .NET 名字对应的类型调用 `NinoVisit` 访问者。生成的文件请关闭 rustfmt 后引入：
+编解码器完整写出（每个类型实现 `NinoRead`、`NinoWrite`、`NinoReadBody` 和 `NinoWriteBody`），而不是 `#[derive]` 属性，所以代码既不需要 derive crate，也不需要构建它的过程宏，并按布局中带的哈希检查旧键。每个类型都有 `NINO_TYPE_ID`、`NINO_TYPE_NAME` 和 `NINO_LAYOUT` 常量（`Cat::NINO_TYPE_ID`），通过 `nino::type_consts!(id, name, layout)` 声明，文档只在 crate 里写一次（泛型类型没有 `NINO_TYPE_ID`）；它的 `NinoReadBody` 和 `NinoWriteBody` impl 把各自的 `TYPE_ID` 设为同一个 ID，和 derive 一样。原始结构体的 `NinoRead` 和 `NinoWrite` impl 是 `nino::raw_read!()` 和 `nino::raw_write!()`。容纳多种类型的槽位是一个枚举 `<Base>Ref`，每个允许的类型一个装箱变体；`object` 槽位是 `AnyObject`。枚举是整数，另有一个单元结构体以常量形式持有各个具名取值。`with_nino_type(name, visitor)` 用某个 .NET 名字对应的类型调用 `NinoVisit` 访问者。生成的文件请关闭 rustfmt 后引入：
 
 ```rust title="lib.rs"
 #[rustfmt::skip]

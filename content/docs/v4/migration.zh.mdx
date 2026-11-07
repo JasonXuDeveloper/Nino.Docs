@@ -303,3 +303,5 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 | `NinoHeader.NullFlag`；布局文本 `header=NullFlag` 和 `typeId=0x...`；`NinoTypeLayoutAttribute` 的构造函数参数 `typeId` | `NinoHeader.Presence`；`header=Presence` 和 `id=0x...`；`id`。存下来的布局需要重新记录 |
 | `WEAK_VERSION_TOLERANCE` | 已移除：错误 [NINO032](/zh/docs/v4/analyzers#nino032) 的代码修复给它变为版本容错的每个类型加上 `format: NinoFormat.VersionTolerant`（字节不变），之后删掉这个符号 |
 | `[NinoMemberFormatter(typeof(Utf8StringFormatter))]` | `[NinoUtf8]`（旧写法仍能编译，写出相同的字节；[NINO031](/zh/docs/v4/analyzers#nino031) 会改写它） |
+| 只有生成代码才调用的 `NinoPolymorphic.Register<TSub, TFormatter>(id)`、`RegisterTracked`、`NinoFormatterCache<T>.TryRegisterFixed`、`TryRegisterTop` | `Nino.Core.CompilerServices.NinoTypes.Register`、`RegisterFixed`、`RegisterTop`、`RegisterTracked<T, TFormatter>(id)`：由更早版本生成代码的程序集都要重新编译 |
+| Rust：生成类型的 `Cat::TYPE_ID` | `Cat::NINO_TYPE_ID`，和 `NINO_TYPE_NAME`、`NINO_LAYOUT` 一致：重新生成即可（`<Cat as NinoReadBody>::TYPE_ID` 不变） |
