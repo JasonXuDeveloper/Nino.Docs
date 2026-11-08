@@ -46,7 +46,9 @@ export function useReveal<T extends Element>() {
           observer.disconnect();
         }
       },
-      { threshold: 0.25 },
+      // A margin, not a share of the element: a chart taller than the
+      // screen would never show a quarter of itself at once.
+      { rootMargin: '0px 0px -10% 0px' },
     );
     observer.observe(element);
     return () => observer.disconnect();

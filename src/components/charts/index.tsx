@@ -7,6 +7,7 @@
  */
 import { lazy, Suspense } from 'react';
 import { ArchTabs } from '@/components/bench-data';
+import type { Locale } from '@/lib/i18n';
 import type { BenchmarkChartProps } from './benchmark-charts';
 import { isArchChart } from './ids';
 
@@ -41,4 +42,43 @@ export function BenchmarkChart(props: BenchmarkChartProps) {
       <Chart {...props} arch={tabbed ? ds.arch : undefined} />
     ),
   });
+}
+
+// The runtime and Unity explorers: their own chunk, loaded where they are used.
+const Explorers = import.meta.env.SSR
+  ? (await import('./explorers')).default
+  : {
+      RuntimesChart: lazy(() =>
+        import('./explorers').then((m) => ({ default: m.RuntimesChart })),
+      ),
+      UnityChart: lazy(() =>
+        import('./explorers').then((m) => ({ default: m.UnityChart })),
+      ),
+    };
+
+function Fallback() {
+  return (
+    <div
+      className="not-prose my-6 h-96 animate-pulse rounded-2xl border bg-fd-card motion-reduce:animate-none"
+      aria-hidden="true"
+    />
+  );
+}
+
+/** Go, Rust and TypeScript against their competitors, relative to Nino */
+export function RuntimesChart(props: { lang?: Locale }) {
+  return (
+    <Suspense fallback={<Fallback />}>
+      <Explorers.RuntimesChart {...props} />
+    </Suspense>
+  );
+}
+
+/** Unity: with Burst against without, per Unity version */
+export function UnityChart(props: { lang?: Locale }) {
+  return (
+    <Suspense fallback={<Fallback />}>
+      <Explorers.UnityChart {...props} />
+    </Suspense>
+  );
 }

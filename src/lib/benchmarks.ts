@@ -714,6 +714,8 @@ const runtimeNino: Record<RuntimeLang, string> = {
 };
 
 export interface RuntimeTableCell {
+  /** As measured: nanoseconds, bytes or allocations (the charts plot it) */
+  value: number;
   /** As shown: "7.45 µs ±2%", "28.5 KiB", "0" */
   text: string;
   /** Times of the serializers other than Nino: Nino against this one */
@@ -770,11 +772,17 @@ export const runtimes: RuntimeLangTable[] = runtimesFile.languages.map(
         for (const [key, cell] of Object.entries(row.cells)) {
           if (!cell) continue;
           if (row.kind === 'size') {
-            cells[key] = { text: formatRuntimeSize(cell.value) };
+            cells[key] = {
+              value: cell.value,
+              text: formatRuntimeSize(cell.value),
+            };
             continue;
           }
           if (row.kind === 'allocs') {
-            cells[key] = { text: cell.value.toLocaleString('en-US') };
+            cells[key] = {
+              value: cell.value,
+              text: cell.value.toLocaleString('en-US'),
+            };
             continue;
           }
           const text = `${formatTime(cell.value)}${cell.spread ? ` ${cell.spread}` : ''}`;
@@ -785,7 +793,7 @@ export const runtimes: RuntimeLangTable[] = runtimesFile.languages.map(
                   { text: formatTime(cell.value), ns: cell.value },
                 )
               : undefined;
-          cells[key] = { text, vs: compared };
+          cells[key] = { value: cell.value, text, vs: compared };
         }
         return {
           case: row.case,

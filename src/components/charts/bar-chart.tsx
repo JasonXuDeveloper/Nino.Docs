@@ -143,6 +143,8 @@ export function BarChart({
     domain: [0, domainMax],
     range: [0, plotWidth],
     nice: max === undefined,
+    // A given max may cut long bars: they stop at the edge, their labels give the value.
+    clamp: max !== undefined,
   });
 
   // Vertical layout of each row: label (+ badge), then one bar per series.

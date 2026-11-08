@@ -406,6 +406,14 @@ function markdownComponents(lang: Locale, pageUrl: string) {
       asMarkdown();
       return ReuseTable({ ...props, markdown: true });
     },
+    // The interactive charts draw the tables that follow them: the Markdown
+    // copy (llms.txt, AI readers) keeps the tables only.
+    RuntimesChart() {
+      return null;
+    },
+    UnityChart() {
+      return null;
+    },
     RuntimesTables(props: ComponentProps<typeof RuntimesTables>) {
       asMarkdown();
       return RuntimesTables({ ...props, markdown: true });
