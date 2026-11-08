@@ -1,12 +1,12 @@
 ---
 title: 自定义格式化器
-description: "为某个成员（[NinoMemberFormatter]）或 Nino 不支持的类型（[assembly: NinoFormatter]，含泛型类型）编写格式化器，使用 Writer 与 Reader API。"
+description: "用 Writer 和 Reader API 自己写 Nino 格式化器：用于单个成员（[NinoMemberFormatter]），或用于 Nino 不支持的类型（[assembly: NinoFormatter]，泛型类型也可以）。"
 icon: Puzzle
 ---
 
 <AnchorRedirect map={{ 'example-memory': '/zh/docs/v4/types#collection-types' }} />
 
-Nino 为[内置类型](/zh/docs/v4/types)提供了格式化器，并为每个 `[NinoType]` 生成一个。想换一种方式编码某个成员（变长整数、定点数），或者要序列化 Nino 不认识的类型（第三方集合、其他库里的类型）时，就自己写一个格式化器。
+Nino 自带[内置类型](/zh/docs/v4/types)的格式化器，并为每个 `[NinoType]` 生成一个。想换种方式编码某个成员（变长整数、定点数），或者要序列化 Nino 不认识的类型（第三方集合、别的库里的类型），就自己写一个格式化器。
 
 格式化器是实现了 `INinoFormatter<T>` 的**结构体**：
 
@@ -18,13 +18,13 @@ public interface INinoFormatter<T>
 }
 ```
 
-`Deserialize` 和所有读取 API 一样先接收读取器，再通过 `ref` 接收当前值：`default` 表示要创建新值，已有实例则可以复用。格式化器以 `default(TFormatter)` 的形式调用，所以没有实例状态；需要保存的状态请放在静态字段里。
+`Deserialize` 和所有读取 API 一样，第一个参数是 reader，再通过 `ref` 拿到当前值：`default` 表示要创建新值，已有实例则可以复用。格式化器总是以 `default(TFormatter)` 调用，没有实例状态；要保存状态，请放进静态字段。
 
 ## 用于单个成员 [#for-one-member]
 
-用 `[NinoMemberFormatter]` 让某个成员使用你自己的格式化器。格式化器实现的 `INinoFormatter<T>` 中，`T` 必须**正好**是成员类型（NINO008）。
+用 `[NinoMemberFormatter]` 让某个成员改用你自己的格式化器。格式化器实现的 `INinoFormatter<T>` 里，`T` 必须**正好**是成员类型（NINO008）。
 
-典型的例子是账本或指标流：每条记录保存各个数值的变化量。变化量通常很小，而 `long` 总是占 8 字节。改用 zig-zag 变长整数后，-64 到 63 之间的值只占 1 字节，±8191 以内只占 2 字节：
+典型的例子是账本或指标流：每条记录存的是各个数值的变化量。变化量通常很小，`long` 却总要占 8 字节。改用 zig-zag 变长整数后，-64 到 63 的值只占 1 字节，±8191 以内只占 2 字节：
 
 ```csharp
 /// 把 long 写成 zig-zag varint。
@@ -65,16 +65,16 @@ public sealed class BalanceChange
 }
 ```
 
-这个特性作用于单个字段或属性，无论外层类型在哪里序列化都会生效。使用自定义格式化器的成员，不会作为[原始内存](/zh/docs/v4/defining-types#structs)的一部分被整块拷贝。格式化器不是结构体，或者针对的类型不对时，分析器会报告 NINO008。
+这个特性作用于单个字段或属性，外层类型不管在哪里序列化都生效。用了自定义格式化器的成员，不会跟着[原始内存](/zh/docs/v4/defining-types#structs)整块拷贝。格式化器不是结构体，或者针对的类型不对，分析器报 NINO008。
 
 ## 用于整个类型：`[assembly: NinoFormatter]` [#for-a-type-assembly-ninoformatter]
 
-要让 Nino 支持它不认识的类型（你自己的或第三方的），就在程序集上注册一个格式化器。类型参数和元素格式化器都会自动推断：约束为 `INinoFormatter<E>` 的类型参数会得到 Nino 为 `E` 解析出的格式化器，因此元素的序列化和反序列化都能内联。生成代码直接调用这个格式化器，运行时也使用同一份注册信息。
+要让 Nino 支持它不认识的类型（你自己的或第三方的），就在程序集上注册一个格式化器。类型参数和元素格式化器都自动推断：约束为 `INinoFormatter<E>` 的类型参数，拿到的是 Nino 为 `E` 解析出的格式化器，所以元素的读写都能内联。生成代码直接调用这个格式化器，运行时用的也是同一份注册信息。
 
 ```csharp
 [assembly: NinoFormatter(typeof(RingFormatter<,>))]
 
-// 来自你无法加特性的库：一个容量固定的缓冲区，它的结构体枚举器让 foreach 不分配内存
+// 来自一个你没法加特性的库：容量固定的缓冲区，结构体枚举器让 foreach 不分配内存
 //   public sealed class Ring<T> : IEnumerable<T>
 //   {
 //       public Ring(int capacity); public int Count { get; } public int Capacity { get; }
@@ -129,55 +129,55 @@ public sealed class RingHolder
 }
 ```
 
-- 格式化器必须是结构体，不能嵌套在泛型类型中，并且只实现一次 `INinoFormatter<P>`。泛型格式化器以开放定义注册（`typeof(F<,>)`），非泛型格式化器直接注册（`typeof(F)`）。每个类型参数都必须能推断出来：要么出现在 `P` 中，要么出现在类型约束中（`where TList : List<T>`），要么受 `INinoFormatter<E>` 约束。无法使用的注册会被忽略，并报告 NINO020。
-- `Deserialize` 丢弃实例时（数据为 `null`，或旧实例无法复用），请交给 `NinoRecycler`，不要直接覆盖，这样[回收处理器和对象池](/zh/docs/v4/pooling)才能拿到它：数据为 `null` 时用 `Discard(ref value)`；换成新实例时用 `Replace(ref value, replacement)`；要把旧实例交给更具体类型的格式化器时用 `Reuse<TDeclared, TConcrete>(ref value)`（返回这个实例，或者回收它并返回 `null`）；集合丢掉的每个元素用 `NinoRecycler<T>.Recycle(element)`，`NinoRecycler<T>.MayRecycle` 为 false 时可以跳过。
-- 如果格式化的目标是一个裸类型参数（`INinoFormatter<TCollection>`），可以列出适用的类型定义：`[assembly: NinoFormatter(typeof(F<,,>), typeof(IList<>))]`。不列出时，它适用于约束允许的所有类型。
-- 查找顺序：先找为该类型自身定义（以及数组）注册的格式化器，然后是原始非托管值，然后是 `[NinoType]`，最后是裸类型参数的格式化器。多个注册同时匹配时，`Priority` 高的优先（例如 `Priority = 10`）；优先级相同时，取完整名称按序数排序靠前的那个。
+- 格式化器必须是结构体，不能嵌套在泛型类型里，并且只实现一次 `INinoFormatter<P>`。泛型格式化器按开放定义注册（`typeof(F<,>)`），非泛型格式化器直接注册（`typeof(F)`）。每个类型参数都必须推断得出：要么出现在 `P` 里，要么出现在类型约束里（`where TList : List<T>`），要么受 `INinoFormatter<E>` 约束。用不了的注册直接忽略，并报 NINO020。
+- `Deserialize` 要丢弃实例时（数据是 `null`，或者旧实例没法复用），请交给 `NinoRecycler`，不要直接覆盖，[回收处理器和对象池](/zh/docs/v4/pooling)才能拿到它：数据是 `null` 时用 `Discard(ref value)`；换成新实例时用 `Replace(ref value, replacement)`；要把旧实例交给更具体类型的格式化器时用 `Reuse<TDeclared, TConcrete>(ref value)`（返回这个实例，或者回收它并返回 `null`）；集合丢掉的每个元素用 `NinoRecycler<T>.Recycle(element)`，`NinoRecycler<T>.MayRecycle` 为 false 时可以跳过。
+- 格式化的目标是裸类型参数（`INinoFormatter<TCollection>`）时，可以列出适用的类型定义：`[assembly: NinoFormatter(typeof(F<,,>), typeof(IList<>))]`。不列时，约束允许的所有类型都适用。
+- 查找顺序：先找为类型自身的定义（以及数组）注册的格式化器，再是原始非托管值，再是 `[NinoType]`，最后是裸类型参数的格式化器。多个注册同时匹配时，`Priority` 高的胜出（例如 `Priority = 10`）；优先级相同时，取完整名称按序数排在前面的那个。
 
 <Callout type="info" title="声明式注册，无需启动代码">
 
-`[assembly: NinoFormatter]` 是一个特性，而不是一次调用：没有模块初始化器，启动时也不需要执行任何代码。运行时第一次遇到某个程序集里的类型时，会读取该程序集的注册信息（查找失败时则读取所有已加载的程序集）。因此，HybridCLR 热更新程序集里声明的格式化器，程序集一加载就能用。Nino 自带的 BCL 格式化器也是这样声明的。
+`[assembly: NinoFormatter]` 是特性，不是方法调用：没有模块初始化器，启动时什么都不用执行。运行时第一次遇到某个程序集里的类型，就读取这个程序集的注册信息（查找落空时，读取所有已加载的程序集）。所以 HybridCLR 热更新程序集里声明的格式化器，程序集一加载就能用。Nino 自带的 BCL 格式化器也是这样声明的。
 
-没有在运行时注册或替换格式化器的 API：所有格式化器都用 `[assembly: NinoFormatter]` 声明，单个成员则用 `[NinoMemberFormatter]`。因此进程运行期间，一个类型的格式化器不会改变，生成代码和运行时用的始终是同一个。
+没有在运行时注册或替换格式化器的 API：格式化器一律用 `[assembly: NinoFormatter]` 声明，单个成员则用 `[NinoMemberFormatter]`。所以进程运行期间，一个类型的格式化器不会变，生成代码和运行时用的始终是同一个。
 
 </Callout>
 
-你自己的格式化器写出什么字节，只有它的代码知道：[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)把它写出的成员显示为 `formatter(F)`，[生成的 TypeScript](/zh/docs/v4/advanced/typescript#not-supported) 也会略过包含这类成员的类型。
+自己写的格式化器写出什么字节，只有它的代码知道：[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)把它负责的成员显示为 `formatter(F)`，[生成的 TypeScript](/zh/docs/v4/advanced/typescript#not-supported) 也会跳过含有这类成员的类型。
 
-### 格式化器类型参数的绑定 [#binding-the-formatters-type-parameters]
+### 绑定格式化器的类型参数 [#binding-the-formatters-type-parameters]
 
-Nino 遇到一个格式化器能处理的类型时，会这样绑定格式化器的每个类型参数：
+Nino 遇到注册的格式化器能处理的类型时，按下面的方式绑定格式化器的每个类型参数：
 
 <TypeTable
   type={{
     '出现在 P 中': {
-      description: '用格式化的模式 P 与目标类型匹配来绑定，例如 INinoFormatter<Ring<T>> 中的 T。',
+      description: '拿格式化的模式 P 去匹配目标类型来绑定，例如 INinoFormatter<Ring<T>> 里的 T。',
       type: 'RingFormatter<T, ...>',
     },
     '类型约束': {
-      description: '形如 where TList : List<T> 的约束，通过与已绑定的类型、它的基类或接口匹配，绑定其中出现的类型参数。',
+      description: '形如 where TList : List<T> 的约束，拿已绑定的类型、它的基类或接口去匹配，绑定约束里出现的类型参数。',
       type: 'where TList : List<T>',
     },
     'INinoFormatter<E> 约束': {
-      description: '绑定为 Nino 为 E 解析出的格式化器，因此元素格式化器可以组合并内联（它们都是结构体）。',
+      description: '绑定为 Nino 为 E 解析出的格式化器，所以元素格式化器可以组合、内联（它们都是结构体）。',
       type: 'where TFormatter : struct, INinoFormatter<T>',
     },
     '[NinoRaw]': {
-      description: '用于非托管类型参数：格式化器按原始内存拷贝它的值，因此只绑定 Nino 按原始字节写入的类型（不包括 Nullable、元组、nint、DateTimeOffset，以及不按原始内存写入的 [NinoType] 结构体）。',
+      description: '用在非托管类型参数上：格式化器按原始内存拷贝它的值，所以只绑定 Nino 按原始字节写的类型（不含 Nullable、元组、nint、DateTimeOffset，以及不按原始内存写的 [NinoType] 结构体）。',
       type: '[NinoRaw] T, where T : unmanaged',
     },
     '[NinoCreated]': {
-      description: '格式化器通过 NinoActivator<T>.Create() 创建实例，因此只绑定非抽象类，且该类要有公共静态的 [NinoFactory] 工厂方法或可无参调用的公共构造函数。请用它代替 new() 约束：new() 只接受无参构造函数，并且会编译成 Activator.CreateInstance<T>()。',
+      description: '格式化器用 NinoActivator<T>.Create() 创建实例，所以只绑定非抽象类，并且这个类要有公共静态的 [NinoFactory] 方法，或不传参数就能调用的公共构造函数。请用它代替 new() 约束：new() 只认无参构造函数，而且会编译成 Activator.CreateInstance<T>()。',
       type: '[NinoCreated] TCollection',
     },
   }}
 />
 
-其他约束保持 C# 原有的含义（`class`、`struct`、`unmanaged`、`new()`）。
+其他约束（`class`、`struct`、`unmanaged`、`new()`）保持 C# 原本的含义。
 
-### 示例：其他库中的泛型类型 [#example-grid]
+### 示例：别的库里的泛型类型 [#example-grid]
 
-下面的 `Grid<T>` 代表一个来自其他库、无法加上 `[NinoType]` 的类型。这个格式化器支持元素为任意原始类型的 `Grid<T>`：写入宽度，再把所有格子作为一整块写入；读取时如果大小不变，就直接读进现有的网格，所以[复用反序列化](/zh/docs/v4/pooling)不会分配内存：
+下面的 `Grid<T>` 代表别的库里的类型，你没法给它加 `[NinoType]`。这个格式化器支持元素为任意原始类型的 `Grid<T>`：先写宽度，再把所有格子整块写出；读取时如果大小没变，就直接读进现有的网格，所以[复用反序列化](/zh/docs/v4/pooling)不分配内存：
 
 ```csharp title="GridFormatter.cs"
 using System;
@@ -185,7 +185,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using Nino.Core;
 
-// 来自你无法加特性的库：
+// 来自一个你没法加特性的库：
 //   public sealed class Grid<T> { public Grid(int width, int height); public int Width { get; } public T[] Cells { get; } }
 
 [assembly: NinoFormatter(typeof(GridFormatter<>))]
@@ -233,13 +233,13 @@ public sealed class Level
 }
 ```
 
-- `[NinoRaw]` 只把 `T` 绑定到 Nino 按原始字节拷贝的类型：`Grid<byte>`、`Grid<Vector2>` 会用这个格式化器，而 `Grid<string>` 成员没有格式化器（NINO007）。运行时才遇到的类型也按同样的规则绑定，Unity 的 IL2CPP 播放器里也是：IL2CPP 不保留类型参数上的特性，所以你的程序集生成的注册表会为它注册的格式化器登记 `[NinoRaw]`、`[NinoCreated]` 和 `unmanaged`。
-- `Writer.Write<T>(ReadOnlySpan<T>)` 和 `Reader.ReadUnmanagedRaw<T>(Span<T>)` 把元素作为一整块拷贝；如果运行时的内存布局与规范布局不同，会逐字段转换。
-- 剩余字节放不下这么多格子时，`ReadLength` 会抛出异常，所以损坏的数据不会让格式化器分配一个巨大的网格。
+- `[NinoRaw]` 只把 `T` 绑定到 Nino 按原始字节拷贝的类型：`Grid<byte>`、`Grid<Vector2>` 用这个格式化器，`Grid<string>` 成员则没有格式化器（NINO007）。运行时才遇到的类型按同样的规则绑定，Unity 的 IL2CPP 播放器里也一样：IL2CPP 不保留类型参数上的特性，所以你的程序集生成的注册表，会为它注册的格式化器记下 `[NinoRaw]`、`[NinoCreated]` 和 `unmanaged`。
+- `Writer.Write<T>(ReadOnlySpan<T>)` 和 `Reader.ReadUnmanagedRaw<T>(Span<T>)` 把元素整块拷贝；运行时的内存布局和规范布局不同时，逐字段转换。
+- 剩下的字节装不下这么多格子时，`ReadLength` 抛出异常，损坏的数据就没法让格式化器分配一个巨大的网格。
 
 ## Writer 与 Reader [#writer-and-reader]
 
-格式化器用 `Writer` 写入、用 `Reader` 读取，两者都是 `ref struct`。最常用的方法：
+格式化器用 `Writer` 写、用 `Reader` 读，两者都是 `ref struct`。最常用的方法：
 
 | Writer | Reader | 数据 |
 | --- | --- | --- |
@@ -247,18 +247,18 @@ public sealed class Level
 | `Write<T>(T? value)` | `Read(out T? value)` | 可空的非托管值 |
 | `Write<T>(T[] values)`、`Write<T>(ReadOnlySpan<T>)` | `Read(out T[] values)` | 非托管数组：长度加一整块数据 |
 | `WriteUnmanagedRaw<T>(ReadOnlySpan<T>)` | `ReadUnmanagedRaw<T>(Span<T>)` | 不带长度的一整块非托管值，可以读进你已有的内存 |
-| `Write(string)`、`WriteUtf8(string)` | `Read(out string)`、`ReadUtf8(out string)` | 字符串：逐个选择每字符一个字节或 UTF-16，或者 UTF-8 |
-| | `ReadString(string current)`、`ReadUtf8(string current)` | 字符串；数据中的文本与 `current` 相同时直接返回 `current`，生成代码读入已有实例时就是这样做的 |
-| `WriteLength(int)`、`WriteNullLength()` | `ReadLength(minElementSize = 1)` | 集合长度，`-1` 表示 null；如果剩余字节装不下这么多个至少 `minElementSize` 字节的元素，`ReadLength` 会抛出异常 |
-| `ReserveInt32()`、`PatchInt32(...)`、`PatchLength(...)` | | 预留 4 字节稍后回填，例如字节长度 |
+| `Write(string)`、`WriteUtf8(string)` | `Read(out string)`、`ReadUtf8(out string)` | 字符串：每个字符串自动选每字符一个字节或 UTF-16；或者 UTF-8 |
+| | `ReadString(string current)`、`ReadUtf8(string current)` | 字符串；数据里的文本和 `current` 相同时直接返回 `current`，生成代码读入已有实例时就是这么做的 |
+| `WriteLength(int)`、`WriteNullLength()` | `ReadLength(minElementSize = 1)` | 集合长度，`-1` 表示 null；剩下的字节装不下这么多个至少 `minElementSize` 字节的元素时，`ReadLength` 抛出异常 |
+| `ReserveInt32()`、`PatchInt32(...)`、`PatchLength(...)` | | 先占 4 字节，稍后回填，例如字节长度 |
 | `WriteRaw(ReadOnlySpan<byte>)` | `ReadRaw(int)`、`Advance(int)` | 原始字节，或跳过若干字节 |
 | `Position` | `Position`、`Remaining`、`Eof` | 当前位置：`Position` 是绝对偏移，`Remaining` 是剩余字节数 |
 
-`Write(string)` 写入一个 1、3 或 5 字节的头和字符：`null` 为 `0`；所有字符都不超过 U+00FF 时为 `2 × 长度 + 1`，然后每个字符一个字节（空串为 `1`，之后不再有内容）；否则为 `2 × 长度`，然后是 UTF-16 码元。`WriteUtf8` 先以头写入字符数加一（`null` 为 `0`，空串为 `1`），再以第二个头写入字节数，然后正好是这么多个 UTF-8 字节：`"é😀"` 写成 `04` `06` `C3 A9 F0 9F 98 80`。不成对的代理项写成 U+FFFD。参见[字符串](/zh/docs/v4/wire-format#strings)。
+`Write(string)` 先写一个 1、3 或 5 字节的头，再写字符：`null` 的头是 `0`；所有字符都不超过 U+00FF 时，头是 `2 × 长度 + 1`，后面每个字符一个字节（空串的头是 `1`，后面没有内容）；否则头是 `2 × 长度`，后面是 UTF-16 码元。`WriteUtf8` 的第一个头是字符数加一（`null` 为 `0`，空串为 `1`），第二个头是字节数，后面正好是这么多 UTF-8 字节：`"é😀"` 写成 `04` `06` `C3 A9 F0 9F 98 80`。未配对的代理项写成 U+FFFD。参见[字符串](/zh/docs/v4/wire-format#strings)。
 
-### 切片中的位置 [#positions-in-a-slice]
+### 切片里的位置 [#positions-in-a-slice]
 
-`Reader.ReadSlice()` 读取一个 `int32` 字节长度，并返回覆盖其后数据块的 reader（`ReserveInt32()` 加 `PatchLength(...)` 写出的就是这种数据块）。它的 `Position` **不会**从 `0` 重新开始：与父 reader 一样，它是相对整个输入起点的偏移。`Remaining` 和 `Eof` 则以切片末尾为界。要统计切片内读了多少字节，先记下起始位置，再相减：
+`Reader.ReadSlice()` 读一个 `int32` 字节长度，返回只覆盖后面那个数据块的 reader（`ReserveInt32()` 加 `PatchLength(...)` 写出的就是这种数据块）。它的 `Position` **不会**从 `0` 重新算：和父 reader 一样，是相对整个输入开头的偏移。`Remaining` 和 `Eof` 则以切片末尾为界。要统计切片里读了多少字节，先记下起始位置，再相减：
 
 ```csharp
 static void ReadBlock(ref Reader reader)
@@ -269,13 +269,13 @@ static void ReadBlock(ref Reader reader)
     // ...
     int consumed = slice.Position - start; // 切片内读取的字节数
     bool complete = slice.Eof;             // Remaining == 0：切片已读完
-    reader.EndSlice(in slice);             // 切片中读出的对象对之后的反向引用依然可见
+    reader.EndSlice(in slice);             // 切片里读出的对象，之后的反向引用仍然能找到
 }
 ```
 
-`Writer.Position` 同样是在 `NinoArrayBufferWriter` 中的绝对位置。
+`Writer.Position` 同样是在 `NinoArrayBufferWriter` 里的绝对位置。
 
-如果要写入的值有自己的格式化器（`[NinoType]`、`List<T>` 等），就把 writer 或 reader 传给常规 API，这样引用和多态都能照常处理：
+要写的值有自己的格式化器时（`[NinoType]`、`List<T>` 等），就把 writer 或 reader 传给常规 API，引用和多态都会照常处理：
 
 ```csharp
 // Contract 的格式化器里，它的 Owner 字段是 [NinoType]
@@ -293,11 +293,11 @@ public void Deserialize(ref Reader reader, ref Contract value)
 }
 ```
 
-读取时必须按写入的顺序，读回完全相同的内容：字节里不带 schema。
+读的时候必须按写的顺序、一项不差地读回来：字节里不带 schema。
 
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="分析器" href="/zh/docs/v4/analyzers">NINO001 到 NINO033 每条诊断的含义和修复方法。</Card>
-  <Card title="性能原理" href="/zh/docs/v4/performance">Nino 为什么快，以及怎样让你的代码留在快速路径上。</Card>
+  <Card title="分析器" href="/zh/docs/v4/analyzers">NINO001 到 NINO033，每条诊断的含义和修法。</Card>
+  <Card title="性能原理" href="/zh/docs/v4/performance">Nino 为什么快，怎样让你的代码一直走快速路径。</Card>
 </Cards>

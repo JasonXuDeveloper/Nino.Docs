@@ -1,7 +1,7 @@
 ---
 title: 多态
 seoTitle: "C# 多态序列化 – Nino v4 文档"
-description: "基类、接口与抽象类：值读回时仍是它的运行时类型。"
+description: "基类、接口和抽象类：声明为基类型的值，读回来仍是它运行时的实际类型。"
 icon: GitFork
 ---
 
@@ -11,7 +11,7 @@ icon: GitFork
   }}
 />
 
-Nino 会写入值的运行时类型，所以声明为基类或接口的值，读回来仍是它真正的类型。事件溯源中一个订单的事件历史、一张图纸里的各种图形、网络协议里的各种消息，都需要这一点：声明的是一个类型，实际存放的是多种具体类型。
+Nino 会把值的运行时类型一起写出，所以声明为基类或接口的值，读回来仍是它实际的类型。事件溯源里一个订单的事件历史、一张图纸里的各种图形、网络协议里的各种消息，都要靠这一点：声明的是一个类型，实际装的是多种具体类型。
 
 ```csharp title="OrderEvents.cs"
 using System;
@@ -50,13 +50,13 @@ List<OrderEvent> events = NinoDeserializer.Deserialize<List<OrderEvent>>(bytes);
 
 <Callout type="info">
 
-在 v4 中，子类型会从最近的 `[NinoType]` 基类或接口**继承** `[NinoType]`（连同选项），除非基类设置了 `inheritedBySubtypes: false`。如果想给子类型单独设置选项，可以在子类型上再加 `[NinoType]`。
+在 v4 中，子类型从最近的 `[NinoType]` 基类或接口**继承** `[NinoType]`（连同选项），除非基类设了 `inheritedBySubtypes: false`。想给子类型单独设选项，在子类型上再加 `[NinoType]` 就行。
 
 </Callout>
 
 ## 接口与抽象类 [#interfaces-and-abstract-classes]
 
-接口和抽象类的用法完全一样：给接口或抽象类加上 `[NinoType]`，实现它的类和结构体会自动继承这个特性：
+接口和抽象类用法一样：给接口或抽象类加上 `[NinoType]`，实现它的类和结构体自动继承这个特性：
 
 ```csharp tab="接口示例"
 [NinoType] // [!code highlight]
@@ -89,20 +89,20 @@ public class Derived : Base
 }
 ```
 
-`[NinoType]` 接口的成员由每个实现类型写出，有两种情况：
+`[NinoType]` 接口的成员由各个实现类型写出，分两种情况：
 
 | 实现类型有 | 写出什么 | 用谁的特性 |
 | --- | --- | --- |
-| 同名的成员（`public int A { get; set; }`） | 这个成员 | 实现成员的。接口成员上只有 `[NinoMember(index)]` 有效，它决定成员的位置；那里的 `[NinoUtf8]`、`[NinoMemberFormatter]` 或 `[NinoIgnore]` 会报警告 [NINO033](/zh/docs/v4/analyzers#nino033)，代码修复把它移到实现成员上 |
+| 同名的成员（`public int A { get; set; }`） | 这个成员 | 实现成员的。接口成员上只有 `[NinoMember(index)]` 算数，它决定成员的位置；标在那里的 `[NinoUtf8]`、`[NinoMemberFormatter]` 或 `[NinoIgnore]` 会报警告 [NINO033](/zh/docs/v4/analyzers#nino033)，代码修复会把它移到实现成员上 |
 | 显式实现（`int IBase.A { get; set; }`）或接口的默认实现 | 接口的这个成员，通过接口访问（结构体不装箱） | 接口成员的 |
 
-通过声明为接口或 `object` 的成员读取结构体时，结构体会被装箱。
+通过声明为接口或 `object` 的成员读结构体时，结构体会装箱。
 
-泛型接口和泛型抽象类（`IRepository<T>`、`abstract class Box<T>`），以及嵌套在泛型类型里的抽象类，用法完全相同：`Serialize<Box<int>>(new IntBox())` 写入的是子类型，读取时会检查数据中的类型是 `Box<int>` 的子类型。类型参数可以是任何类型：基元类型、元组（`Box<(int, string)>`）、密封类，或者本身有子类型的类。每个封闭基类型（`Box<int>`、`Box<Order>`）对其所在程序集中声明的子类型，都和非泛型基类型一样使用生成的分派（见[分派](#dispatch)）。
+泛型接口和泛型抽象类（`IRepository<T>`、`abstract class Box<T>`），以及嵌套在泛型类型里的抽象类，用法也一样：`Serialize<Box<int>>(new IntBox())` 写出的是子类型，读取时检查数据里的类型确实是 `Box<int>` 的子类型。类型实参可以是任何类型：基元类型、元组（`Box<(int, string)>`）、密封类，或者本身有子类型的类。每个封闭基类型（`Box<int>`、`Box<Order>`）都和非泛型基类型一样，对同一程序集里声明的子类型使用生成的分派（见[分派](#dispatch)）。
 
-## 多态值的写入方式 [#how-a-polymorphic-value-is-written]
+## 多态值怎么写 [#how-a-polymorphic-value-is-written]
 
-头部（值之前的存在字节或类型 ID）取决于槽位（成员、集合元素，或者你调用 `Serialize<T>`/`Deserialize<T>` 时的类型参数）的**声明**类型：
+头部（值前面的存在字节或类型 ID）由槽位的**声明**类型决定（槽位指成员、集合元素，或者你调用 `Serialize<T>`/`Deserialize<T>` 时的类型参数）：
 
 | 声明类型 | 头部 | 是否多态 |
 | --- | --- | :---: |
@@ -111,7 +111,7 @@ public class Derived : Base
 | 非密封类、抽象类、接口 | 4 字节类型 ID（`0` 表示 null） | 是 |
 | `object` | 4 字节类型 ID | 是，可以是任意 `[NinoType]` |
 
-同一个 `Circle { Id = 1, R = 1f }` 在不同声明类型下的字节（取自[规范](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#a2-polymorphism)的例子，命名空间 `Spec`）：
+同一个 `Circle { Id = 1, R = 1f }` 在不同声明类型下写出的字节（取自[规范](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#a2-polymorphism)的例子，命名空间 `Spec`）：
 
 <Bytes rows={[
   { title: <>声明为 <code>Circle</code>（密封）</>, fields: [{ hex: '01', kind: 'header', label: '存在字节' }, { hex: '01 00 00 00 00 00 80 3F', kind: 'value', label: 'Id = 1，R = 1f' }] },
@@ -120,17 +120,17 @@ public class Derived : Base
   { title: <>null，声明为 <code>Shape</code></>, fields: [{ hex: '00 00 00 00', kind: 'id', label: '类型 ID 0' }] },
 ]} />
 
-类型 ID 是运行时类型全名的 FNV-1a 哈希，由生成器计算，所以不用分配标签，也不用在多个程序集之间保持同步。类型改名或换命名空间时，请使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
+类型 ID 是运行时类型全名的 FNV-1a 哈希，由生成器算出，所以不用手动分配标签，也不用在多个程序集之间保持同步。类型改名或换命名空间时，请用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
 
 <Callout type="idea">
 
-没有子类型的类请声明为 `sealed`。密封类只占 1 字节，也不需要分派；非密封类即使没有任何子类型，也要占 4 字节并做一次类型检查。
+没有子类型的类请声明为 `sealed`。密封类只占 1 字节，也不用分派；非密封类哪怕一个子类型都没有，也要占 4 字节，还要做一次类型检查。
 
 </Callout>
 
 ### 查看类型 ID [#inspecting-type-ids]
 
-`NinoTypeId` 在运行时算出同样的 ID，可以用于日志、协议校验，或者在握手时比对双方的消息集合：
+`NinoTypeId` 在运行时算出同样的 ID，可以用来打日志、校验协议，或者在握手时比对双方的消息集合：
 
 ```csharp
 int id = NinoTypeId.Of(typeof(OrderShipped));                   // 写出 OrderShipped 时用的 ID（会考虑 [NinoFormerName]）
@@ -139,7 +139,7 @@ string hashed = NinoTypeId.GetHashedName(typeof(OrderShipped)); // 计算 ID 所
 int same = NinoTypeId.Compute(hashed);                          // == id：运行时形式名称的哈希
 ```
 
-ID 永远不会是 `0`，`0` 表示 null。
+ID 永远不会是 `0`，`0` 用来表示 null。
 
 ## 分派 [#dispatch]
 
@@ -151,14 +151,14 @@ flowchart LR
   B(其他程序集、泛型、引用追踪) -->|无锁注册表| F
 ```
 
-- **生成的分派代码**：用于和基类声明在同一程序集里的子类型。写入时是一串精确的类型判断，读取时是对类型 ID 的 `switch`，两者都直接调用子类型的格式化器。泛型基类型（`abstract class Box<T>`、`IRepository<T>`）为其子类型继承的每个封闭基类型（`IntBox : Box<int>`）各生成一份这样的分派，通过比较类型选中；类型参数是值类型时，JIT 会把这个比较消除掉。
-- **无锁注册表**：用于其余所有情况，包括其他程序集中的子类型、泛型子类型（`class Leaf<T> : Box<T>` 的 `Leaf<int>`）、开启了引用追踪的类型，以及子类型超过 64 个的继承体系中的写入（读取仍使用生成的 `switch`）。
+- **生成的分派代码**：用于和基类声明在同一程序集里的子类型。写入时是一串精确的类型判断，读取时是对类型 ID 的 `switch`，两边都直接调用子类型的格式化器。泛型基类型（`abstract class Box<T>`、`IRepository<T>`）为子类型派生自的每个封闭基类型（`IntBox : Box<int>`）各生成一份这样的分派，通过比较类型选出；类型实参是值类型时，JIT 会把这次比较优化掉。
+- **无锁注册表**：用于其余所有情况，包括其他程序集里的子类型、泛型子类型（`class Leaf<T> : Box<T>` 的 `Leaf<int>`）、开了引用追踪的类型，以及子类型超过 64 个的继承体系里的写入（读取仍用生成的 `switch`）。
 
-读取时，Nino 会检查数据中的类型确实派生自声明类型；如果数据指向一个无关的类型，会直接抛出异常，而不会把它存进去。
+读取时，Nino 会检查数据里的类型确实派生自声明类型；数据指向不相关的类型时直接抛异常，不会把它存进去。
 
 ## 通过共同基类型分派 [#dispatching-through-a-common-base]
 
-RPC 或消息分派、插件系统、编辑器工具，都应该给相关类型一个共同的 `[NinoType]` 基类或接口，再用 `Serialize<TBase>` / `Deserialize<TBase>` 通过它来序列化和反序列化。类型 ID 的写入和分派都由生成代码完成，比下面两种做法都快，而且能配合[复用反序列化](#reuse-deserialization)和 `[NinoPooled]` 使用，接收循环除了内容变化的字符串之外不分配内存。完整示例参见[网络](/zh/docs/v4/advanced/networking)。
+做 RPC 或消息分派、插件系统、编辑器工具时，给相关类型一个共同的 `[NinoType]` 基类或接口，再用 `Serialize<TBase>` / `Deserialize<TBase>` 通过它序列化和反序列化。写类型 ID 和按它分派都由生成代码完成，比下面两种做法都快，还能配合[复用反序列化](#reuse-deserialization)和 `[NinoPooled]`，接收循环除了内容变了的字符串，什么都不分配。完整示例见[网络](/zh/docs/v4/advanced/networking)。
 
 ```csharp
 [NinoType]
@@ -181,40 +181,40 @@ public sealed class CommandChannel
         _socket.Send(_buffer.WrittenSpan);
     }
 
-    // 数据中是同一类型时原地填充 `command`，否则替换它（并回收旧的）
+    // 数据里是同一类型时原地填充 `command`，否则替换它（并回收旧的）
     public void Receive(ReadOnlySpan<byte> message, ref ICommand command) =>
         NinoDeserializer.Deserialize(message, ref command); // [!code highlight]
 }
 ```
 
-另外还有两种做法，但开销都更大：
+另有两种做法，开销都更大：
 
-- **把 `object` 作为声明类型**（成员、元素，或 `Serialize<object>` 调用）：只接受 `[NinoType]` 的值，会写入类型 ID，读取时通过包含所有 `[NinoType]` 的全局注册表分派，而不是某个基类型的生成分派。请优先使用共同基类型。
-- **[装箱 API](/zh/docs/v4/basic#the-boxed-api)**（带 `Type` 的 `SerializeBoxed` / `DeserializeBoxed`）：按 `Type` 查找格式化器，值类型会被装箱。只有当类型要到运行时才以 `Type` 的形式得知、并且这些类型没有共同的 `[NinoType]` 基类型时才使用，例如基于反射、面向任意类型的工具。
+- **把 `object` 作为声明类型**（成员、元素，或 `Serialize<object>` 调用）：只接受 `[NinoType]` 的值，会写类型 ID，读取时通过包含所有 `[NinoType]` 的全局注册表分派，用不上某个基类型生成的分派。请优先用共同基类型。
+- **[装箱 API](/zh/docs/v4/basic#the-boxed-api)**（带 `Type` 的 `SerializeBoxed` / `DeserializeBoxed`）：按 `Type` 查找格式化器，值类型会装箱。只在类型要到运行时才以 `Type` 的形式知道、而且这些类型没有共同的 `[NinoType]` 基类型时才用，比如基于反射、处理任意类型的工具。
 
-## 其他程序集中的子类型 [#subtypes-in-other-assemblies]
+## 其他程序集里的子类型 [#subtypes-in-other-assemblies]
 
-无论子类型声明在哪里，Nino 都能自动找到，包括之后才加载的程序集（插件、HybridCLR 热更新 DLL）：遇到未知的类型 ID 时，Nino 会先查找新加载程序集的注册表，找不到才报错。不需要任何注册调用。例如，一个插件或热更新 DLL 新增了 `public sealed class OrderRefunded : OrderEvent`。DLL 加载之后，主程序集（AOT 程序集）里的代码不用做任何改动，就能读取包含 `OrderRefunded` 的 `List<OrderEvent>`。源生成器也必须在子类型所在的程序集中运行（在该项目中安装 `Nino` 包；在 Unity 中，该程序集必须引用 `Nino.Core`）；如果类型 ID 对应的类型不在任何已加载的程序集中，会抛出 `NinoDataException`。
+子类型不管声明在哪里，Nino 都能自动找到，包括之后才加载的程序集（插件、HybridCLR 热更新 DLL）：遇到不认识的类型 ID，Nino 先去新加载的程序集的注册表里找，找不到才报错。不需要任何注册调用。比如某个插件或热更新 DLL 新增了 `public sealed class OrderRefunded : OrderEvent`。DLL 加载后，主程序集（AOT 程序集）里的代码一行不改，就能读取含有 `OrderRefunded` 的 `List<OrderEvent>`。源生成器也必须在子类型所在的程序集里运行（在那个项目里安装 `Nino` 包；在 Unity 里，那个程序集必须引用 `Nino.Core`）；类型 ID 对应的类型不在任何已加载的程序集里时，抛出 `NinoDataException`。
 
-唯一的例外是封闭泛型子类型（如 `Box<int>`）：如果进程只会**读取**它，代码里既不出现它的名字，也从不写入它，就需要在启动时注册：
+唯一的例外是封闭泛型子类型（如 `Box<int>`）：如果进程只会**读取**它，代码里既不出现它的名字，也从不写它，就要在启动时注册：
 
 ```csharp
 NinoPolymorphic.TryRegister<Box<int>>();
 ```
 
-只有 `Type` 对象的类型（例如用 `MakeGenericType` 构造出来的），用 `NinoPolymorphic.TryRegister(Type)` 注册，效果相同。类型注册成功（包括之前已注册）时两者返回 `true`；对于无法多态写入的类型（抽象类型、开放泛型类型，或者不是 `[NinoType]` 的类型），以及没有动态代码（Native AOT）时没有生成代码注册的类型，返回 `false`。
+手里只有 `Type` 对象的类型（比如用 `MakeGenericType` 构造的），用 `NinoPolymorphic.TryRegister(Type)` 注册，效果一样。类型注册上了（包括之前已经注册过）时，两者都返回 `true`；不能多态写出的类型（抽象类型、开放泛型类型，或者不是 `[NinoType]` 的类型），以及没有动态代码（Native AOT）时生成代码没有注册的类型，返回 `false`。
 
 ## 关闭继承 [#opting-out]
 
-`[NinoType(inheritedBySubtypes: false)]` 会阻止子类型继承该特性：子类型除非自己声明 `[NinoType]`，否则不能通过基类序列化（NINO003，提供代码修复）。
+`[NinoType(inheritedBySubtypes: false)]` 不让子类型继承这个特性：子类型除非自己声明 `[NinoType]`，否则不能通过基类序列化（NINO003，带代码修复）。
 
 ## 复用反序列化 [#reuse-deserialization]
 
-反序列化到已有值时，如果它的运行时类型与数据中的类型不同，旧实例会被丢弃（并回收，参见[对象池](/zh/docs/v4/pooling)），然后创建一个类型正确的新实例。类型一致时则原地填充。
+读入已有值时，如果它的运行时类型和数据里的类型不同，就丢掉旧实例（并回收，见[对象池](/zh/docs/v4/pooling)），再创建一个类型正确的新实例。类型一致时原地填充。
 
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="数据演进" href="/zh/docs/v4/evolving-data">按位置、版本容错和键控三种格式，以及各自允许哪些改动。</Card>
-  <Card title="引用追踪" href="/zh/docs/v4/reference-tracking">按类型开启，保留共享引用和循环引用。</Card>
+  <Card title="数据演进" href="/zh/docs/v4/evolving-data">按位置、版本容错和键控三种格式，以及各自允许怎样改动。</Card>
+  <Card title="引用追踪" href="/zh/docs/v4/reference-tracking">共享引用和循环引用，按类型开启。</Card>
 </Cards>

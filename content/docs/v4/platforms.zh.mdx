@@ -1,11 +1,11 @@
 ---
 title: 平台
 seoTitle: "支持的平台：.NET、Unity IL2CPP、HybridCLR 与 Godot – Nino v4 文档"
-description: "Nino 能在哪些平台运行（.NET Standard 2.0 及以上、Native AOT、Unity 的 Mono 与 IL2CPP、HybridCLR、Godot 4，以及通过生成的代码支持的 TypeScript、Go 和 Rust），为什么各平台写出的字节都相同，以及二进制格式的具体结构。"
+description: "Nino 能在哪些平台运行（.NET Standard 2.0 及以上、Native AOT、Unity 的 Mono 与 IL2CPP、HybridCLR、Godot 4，以及借助生成代码的 TypeScript、Go 和 Rust），为什么跨平台、跨运行时字节一致，以及二进制格式长什么样。"
 icon: Cpu
 ---
 
-Nino 支持 .NET Standard 2.0 及以上、Unity 2022.3+（Mono 和 IL2CPP）以及 Godot 4，在任何运行时、CPU 和指针宽度下写出的字节都相同。本页列出支持的目标平台，并说明二进制格式。
+Nino 支持 .NET Standard 2.0 及以上、Unity 2022.3+（Mono 和 IL2CPP）以及 Godot 4，不管什么运行时、CPU 和指针宽度，写出的字节都一致。本页列出支持的目标平台，并介绍二进制格式。
 
 ## 支持的平台 [#supported-platforms]
 
@@ -15,99 +15,99 @@ Nino 支持 .NET Standard 2.0 及以上、Unity 2022.3+（Mono 和 IL2CPP）以�
 | `Nino.Generator`（源生成器、分析器） | Roslyn 4.3 及以上；同一个包内含 Roslyn 4.3、4.8 和 4.12 三个版本 |
 | `Nino.Immutable`（不可变集合） | `netstandard2.0`、`net8.0` |
 | `Nino.AspNetCore`（[ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)） | `net8.0`、`net10.0` |
-| `Nino.Codegen`、`Nino.Codegen.Tool`（[TypeScript、Go 与 Rust](/zh/docs/v4/advanced/codegen)） | 构建工具（适用于任意目标框架的项目）和 .NET 工具，在 .NET 8 或更高版本上运行；生成的代码需要 TypeScript 5.7+（ES2020 环境）、Go 1.22+ 或 Rust 1.88+ |
+| `Nino.Codegen`、`Nino.Codegen.Tool`（[TypeScript、Go 与 Rust](/zh/docs/v4/advanced/codegen)） | 构建工具（任意目标框架的项目都能用）和 .NET 工具，运行在 .NET 8 或更高版本上；生成的代码需要 TypeScript 5.7+（ES2020 环境）、Go 1.22+ 或 Rust 1.88+ |
 | 生成的代码 | C# 9 及以上 |
 | Unity | 2022.3 及以上，Mono 和 IL2CPP，所有 Player 平台 |
 | Godot | Godot 4 .NET 项目（4.4 起为 .NET 8，之前为 .NET 6） |
 | 热更新 | HybridCLR，无需初始化调用 |
 | 裁剪与 Native AOT | `net8.0` 和 `net10.0` 版本带有相应标注（[详情](#trimming-and-native-aot)） |
 
-**所有目标写出的字节完全相同。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 各自使用该平台上最好的底层实现（[SIMD](#simd)，.NET 8+ 上的 `[UnsafeAccessor]`），测试套件会用同一组标准样本数据校验每个版本。.NET 10 服务器写出的数据，32 位 Android 手机上的 Unity IL2CPP 客户端可以直接读取，反过来也一样。
+**所有目标写出的字节完全一致。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 各用本平台上最好的底层手段（[SIMD](#simd)，.NET 8+ 上的 `[UnsafeAccessor]`），测试套件用同一组标准样本数据校验每个版本。.NET 10 服务器写出的数据，32 位 Android 手机上的 Unity IL2CPP 客户端可以直接读，反过来也一样。
 
 ## 二进制格式 [#binary-format]
 
-每个平台写出的都是[二进制格式](/zh/docs/v4/wire-format)页面描述的格式，逐字节的定义见它链接的规范：多字节值按小端序写入，不做对齐，没有外层封装、schema 和字段名，怎么读由声明类型决定。字符串带一个 1、3 或 5 字节的头，所有字符都不超过 U+00FF 时每个字符写一个字节，否则按 UTF-16 写出（[字符串](/zh/docs/v4/wire-format#strings)）；非托管值按统一的标准布局写出它的字节（[原始值](/zh/docs/v4/wire-format#raw-values)）；对象先写由声明类型决定的头，再按类型的格式写主体（[对象](/zh/docs/v4/wire-format#objects)）。读出的每个长度都先和剩余字节数比对，然后才分配内存（[不可信数据](/zh/docs/v4/security)）。各运行时内存布局不同时，Nino 怎样保证字节相同，见下一节。
+每个平台写的都是[二进制格式](/zh/docs/v4/wire-format)页面讲的格式，逐字节的定义见那里链接的规范：多字节值按小端序写，不对齐，没有外层封装、schema 和字段名，怎么读由声明类型决定。字符串带一个 1、3 或 5 字节的头，所有字符都不超过 U+00FF 时每个字符写一个字节，否则写成 UTF-16（[字符串](/zh/docs/v4/wire-format#strings)）；非托管值按统一的规范布局写出字节（[原始值](/zh/docs/v4/wire-format#raw-values)）；对象先写由声明类型决定的头，再按类型的格式写主体（[对象](/zh/docs/v4/wire-format#objects)）。读到的每个长度都先和剩余字节数比对，再分配内存（[不可信数据](/zh/docs/v4/security)）。各运行时内存布局不同时，Nino 怎样保证字节一致，见下一节。
 
 ## 可移植的设计 [#portable-by-design]
 
-Nino 自己定义字节格式，而不是照搬运行时内存里的内容。各运行时的内存布局并不总是一致，以下情况都做了专门处理（规则和实测布局见[结构体布局](/zh/docs/v4/struct-layouts)）：
+Nino 自己定义写出的字节，不照搬运行时内存里的内容。各运行时的内存布局并不总是一致，下面这些情况都专门处理过（规则和实测布局见[结构体布局](/zh/docs/v4/struct-layouts)）：
 
 | 情况 | 各运行时哪里不同 | Nino 写什么 |
 | --- | --- | --- |
-| `T?` | 旧版 Mono（Unity 2019.4 及更早）把值放在标志前面 | 单个 `T?` 写存在字节，再写值；`T?` 的数组和列表用规范布局，运行时不同时逐个转换 |
-| `ValueTuple`、`KeyValuePair` | 元组是 `LayoutKind.Auto`：每个运行时各排各的 | 单独出现时按声明顺序写各项，从不复制内存（它们的数组仍按块移动，布局不同时用 [SIMD 重排](#simd)）；在普通结构体里，用 64 位 CoreCLR 的布局 |
+| `T?` | 旧版 Mono（Unity 2019.4 及更早）把值放在标志之前 | 单个 `T?` 先写存在字节，再写值；`T?` 的数组和列表用规范布局，运行时布局不同时逐个转换 |
+| `ValueTuple`、`KeyValuePair` | 元组是 `LayoutKind.Auto`：每个运行时各排各的 | 单独出现时按声明顺序写各项，从不拷贝内存（它们的数组仍然整块搬，布局不同时用 [SIMD 重排](#simd)）；在普通结构体里，用 64 位 CoreCLR 的布局 |
 | `decimal` | CoreCLR 和 Mono 上按 8 对齐，.NET Framework 和 IL2CPP 上按 4 对齐 | 在结构体里用规范布局（按 8 对齐） |
 | `DateTimeOffset` | .NET 10、.NET 8、.NET Framework 和 Mono 各存各的 | 单独出现时写 UTC 刻度加分钟偏移（10 字节）；在结构体里按 .NET 10 的存法写 16 字节 |
-| `nint`、`nuint`、指针、函数指针 | 32 位运行时上是 4 字节 | 一律 8 字节；32 位运行时负责扩宽，放不下的值会被拒绝 |
-| 32 位和 .NET Framework 的结构体 | x86 .NET 把 `DateTime` 字段按 4 对齐（`struct { int a; DateTime b; }` 在那里是 12 字节，x64 上是 16）；.NET Framework 会重排含 `DateTime` 的结构体 | 规范的 64 位布局，运行时不同时逐字段转换（那里不做整块复制） |
+| `nint`、`nuint`、指针、函数指针 | 32 位运行时上是 4 字节 | 一律 8 字节；32 位运行时负责展宽，放不下的值直接拒绝 |
+| 32 位和 .NET Framework 的结构体 | x86 .NET 把 `DateTime` 字段按 4 对齐（`struct { int a; DateTime b; }` 在那里是 12 字节，x64 上是 16）；.NET Framework 会重排含 `DateTime` 的结构体 | 规范的 64 位布局，运行时布局不同时逐字段转换（那里不做整块拷贝） |
 | `Vector<T>` | 16、32 或 64 字节，由 CPU 决定 | 不写：不能序列化（错误 NINO029）；改存固定数量的通道（[原因](/zh/docs/v4/struct-layouts#vector-t)） |
 
 <Accordions type="multiple">
 <Accordion title="填充字节" value="padding">
 
-在未初始化的内存中构造结构体（`SkipLocalsInit`、`stackalloc`、`GC.AllocateUninitializedArray`），填充字节里可能留有旧数据。Nino 写入时会把填充字节清零，所以相等的值总是序列化成相同的字节，旧内存也不会混进数据里。
+在未初始化的内存里构造结构体（`SkipLocalsInit`、`stackalloc`、`GC.AllocateUninitializedArray`），填充字节里可能残留旧数据。Nino 写的时候把填充清零，所以相等的值总是序列化成相同的字节，旧内存也不会混进数据里。
 
 </Accordion>
 <Accordion title="大端序主机" value="endian">
 
-不支持。在大端序主机上构造 `Writer` 或 `Reader` 会抛出 `PlatformNotSupportedException`，Nino 不会按错误的字节序读写。目前 .NET 和 Unity 运行的所有平台都是小端序。
+不支持。在大端序主机上构造 `Writer` 或 `Reader` 会抛出 `PlatformNotSupportedException`，Nino 绝不会按错误的字节序读写。目前 .NET 和 Unity 能跑的平台都是小端序。
 
 </Accordion>
 <Accordion title="集合的内部字段" value="collection-layouts">
 
-Nino 直接读写 `List<T>`、`Stack<T>`、`Queue<T>`、`SortedList<TKey, TValue>`、`SortedSet<T>` 和 `SortedDictionary<TKey, TValue>` 的字段，而这些字段的布局因运行时而异（.NET Framework 和 Mono 多一个 `_syncRoot` 字段）。每种布局在启动时用内容已知的实例检查一次；布局无法识别的集合改走它的公共方法。两种方式写出的字节相同。（在 .NET 8 及以上，`List<T>` 通过 `CollectionsMarshal` 访问。）
+Nino 直接读写 `List<T>`、`Stack<T>`、`Queue<T>`、`SortedList<TKey, TValue>`、`SortedSet<T>` 和 `SortedDictionary<TKey, TValue>` 的字段，而这些字段的布局因运行时而异（.NET Framework 和 Mono 多一个 `_syncRoot` 字段）。每种布局在启动时用内容已知的实例检查一次；认不出布局的集合改走它的公共方法。两种方式写出的字节一致。（在 .NET 8 及以上，`List<T>` 通过 `CollectionsMarshal` 访问。）
 
-由非托管元素组成的 `HashSet<T>` 和 `Dictionary<TKey, TValue>`，在没有删除过元素时直接从它们的 entries 数组写出。可识别的布局有三种（.NET 5 及以上的 64 位和 32 位；.NET Framework、Mono 和 Unity），每种都在启动时用一个删除了元素又重新填入的集合检查。删除过元素的集合，或运行时的布局无法识别（例如布局不同的 IL2CPP 版本）时，改走枚举器，写出的字节相同。读取时新建的集合或字典（默认比较器）反过来以同样方式填充：按 `Add` 的写法直接写入条目和桶。运行时的哈希方式（哈希码是否截成 31 位、空桶存什么）在启动时确定：填充一个集合，再用公开 API 检查它；都不通过时，以及 netstandard2.0 构建里的集合（没有 `EnsureCapacity` 来预设容量），每个元素都经过 `Add`。
+非托管元素的 `HashSet<T>` 和 `Dictionary<TKey, TValue>`，没删过元素时直接从 entries 数组写出。能识别的布局有三种（.NET 5 及以上的 64 位和 32 位；.NET Framework、Mono 和 Unity），每种都在启动时用一个删过元素又重新填满的集合检查。删过元素的 Set 或字典，或者运行时的布局认不出来（比如布局不同的 IL2CPP 版本），就改走枚举器，写出的字节一致。读取时新建的 Set 或字典（默认比较器）反过来用同样的方式填充：按 `Add` 的方式直接写入条目和桶。运行时怎么算哈希（哈希码是否截成 31 位、空桶存什么）在启动时确定：先填一个集合，再用公开 API 检查；全都不通过时，以及 netstandard2.0 构建里的 Set（没有 `EnsureCapacity` 预设容量），每个元素都走 `Add`。
 
 </Accordion>
 </Accordions>
 
 ## 各平台的 SIMD [#simd]
 
-`Nino.Core` 的 net8.0 和 net10.0 版本在 CPU 支持时使用硬件指令集（x64 上的 AVX-512、AVX2 和 SSSE3，Arm64 上的 AdvSimd，WebAssembly 上的 SIMD），不支持时回退到可移植的代码。Unity、.NET Framework 以及 .NET Core 3.0 到 .NET 7 加载 netstandard 版本，其中没有硬件指令集代码；在 Unity 中由 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)补上。每条路径写出的字节都相同：测试会在开启 AVX-512、关闭 AVX-512、关闭 AVX2、关闭全部 SIMD 的情况下以及在 Arm64 上运行。每种指令集在 .NET、Unity、Go、Rust 和 TypeScript 中具体做什么，见[SIMD](/zh/docs/v4/simd)。
+`Nino.Core` 的 net8.0 和 net10.0 版本在 CPU 支持时用硬件指令集（x64 上的 AVX-512、AVX2 和 SSSE3，Arm64 上的 AdvSimd，WebAssembly 上的 SIMD），不支持时回退到可移植的代码。Unity、.NET Framework 以及 .NET Core 3.0 到 .NET 7 加载的是 netstandard 版本，里面没有硬件指令集代码；Unity 里由 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)补上。每条路径写出的字节都一致：测试分别在开 AVX-512、不开 AVX-512、关掉 AVX2、关掉全部 SIMD 时以及 Arm64 上运行。每种指令集在 .NET、Unity、Go、Rust 和 TypeScript 里具体做什么，见 [SIMD](/zh/docs/v4/simd)。
 
 ## Unity [#unity]
 
-- 从 [OpenUPM](/zh/docs/v4/start#unity-project) 安装。包中含有 `Nino.Core.dll` 和源生成器（`Nino.Generator.dll`，已标记为 `RoslynAnalyzer`）、`Nino.UnityTypes.dll`（[`AnimationCurve`、`Gradient` 和 `RectOffset`](/zh/docs/v4/advanced/unity#unity-classes) 的格式化器），以及 `System.Buffers`、`System.Memory` 和 `System.Runtime.CompilerServices.Unsafe`。
-- Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员或标了 `[NinoPooled]` 的类型必须是 `partial`（NINO002），在 Rider 或 Visual Studio 中可用代码修复加上。
-- Unity 包附带的是源生成器的 Roslyn 4.3 版本，所以调用不会被拦截，而是走常规路径，写出的字节相同。
-- 生成的注册表标记了 `[RuntimeInitializeOnLoadMethod]`（编辑器中还有 `[InitializeOnLoadMethod]`），会在启动时运行，也不会被 IL2CPP 裁剪掉。
+- 从 [OpenUPM](/zh/docs/v4/start#unity-project) 安装。包里有 `Nino.Core.dll` 和源生成器（`Nino.Generator.dll`，已标记为 `RoslynAnalyzer`）、`Nino.UnityTypes.dll`（[`AnimationCurve`、`Gradient` 和 `RectOffset`](/zh/docs/v4/advanced/unity#unity-classes) 的格式化器），以及 `System.Buffers`、`System.Memory` 和 `System.Runtime.CompilerServices.Unsafe`。
+- Unity 按 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员或标了 `[NinoPooled]` 的类型必须是 `partial`（NINO002），在 Rider 或 Visual Studio 里用代码修复就能加上。
+- Unity 包带的是源生成器的 Roslyn 4.3 版本，所以调用不会被拦截，走常规路径，写出的字节一致。
+- 生成的注册表标记了 `[RuntimeInitializeOnLoadMethod]`（编辑器里还有 `[InitializeOnLoadMethod]`），启动时就会运行，IL2CPP 也不会把它裁掉。
 - `Vector3`、`Quaternion`、`Matrix4x4` 等 Unity 类型是非托管类型，按原始内存写入。
 
-项目配置和 IL2CPP 注意事项参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)。
+项目配置和 IL2CPP 注意事项见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)。
 
 ## Godot [#godot]
 
-- Godot 4 的 C# 项目就是普通的 .NET 项目（`Godot.NET.Sdk`，Godot 4.4 起目标框架为 .NET 8，之前为 .NET 6）：从 NuGet 安装 Nino。源生成器、分析器，以及用 .NET 8 SDK 构建时的拦截器，都与在其他 .NET 项目中一样运行；目标为 .NET 6 时，序列化非公共成员的类型必须声明为 `partial`。
-- Godot 的数学结构体（`Vector3`、`Transform3D`、`Color` 等）按原始内存拷贝。它们在双精度版本中的布局不同，所以含有它们的数据不能在双精度版本和单精度版本之间互通。
-- 引擎对象（`Node`、`Resource`）不会被序列化：改为保存 ID、路径或数值。
+- Godot 4 的 C# 项目就是普通的 .NET 项目（`Godot.NET.Sdk`，Godot 4.4 起目标框架为 .NET 8，之前为 .NET 6）：从 NuGet 安装 Nino。源生成器、分析器，以及用 .NET 8 SDK 构建时的拦截器，都和在普通 .NET 项目里一样工作；目标为 .NET 6 时，序列化非公共成员的类型必须是 `partial`。
+- Godot 的数学结构体（`Vector3`、`Transform3D`、`Color` 等）按原始内存拷贝。它们在双精度版本里布局不同，所以含有它们的数据不能在双精度和单精度版本之间互通。
+- 引擎对象（`Node`、`Resource`）不参与序列化：改存 ID、路径或数值。
 
-配置、存档、联网以及在编辑器中重新构建，参见 [Godot](/zh/docs/v4/advanced/godot)。
+配置、存档、联网以及在编辑器里重新构建，见 [Godot](/zh/docs/v4/advanced/godot)。
 
 ## HybridCLR 与热更新 [#hybridclr-and-hot-update]
 
-生成的注册表是按需查找的：Nino 第一次遇到某个程序集中的类型，或者读取时遇到不认识的类型 ID，才会去找该程序集的注册表。所以用 `Assembly.Load` 加载的热更新程序集**不需要任何初始化调用**，其中的类型（包括继承自 AOT 程序集基类的子类型）在第一次使用时就能找到。
+生成的注册表是按需查找的：Nino 第一次遇到某个程序集里的类型，或者读取时碰到不认识的类型 ID，才去找这个程序集的注册表。所以用 `Assembly.Load` 加载的热更新程序集**不需要任何初始化调用**，其中的类型（包括继承 AOT 程序集里基类的子类型）第一次用到时就能找到。
 
-生成的代码有意不加转发层：HybridCLR 和 Mono 的解释器不会内联，每多一层调用都有实打实的开销。
+生成的代码特意不加转发层：HybridCLR 和 Mono 的解释器不做内联，每多一层调用都是实打实的开销。
 
 ## 裁剪与 Native AOT [#trimming-and-native-aot]
 
-`Nino.Core` 的 `net8.0` 和 `net10.0` 版本标记了 `IsTrimmable` 和 `IsAotCompatible`，每次构建都会经过裁剪和 AOT 分析器的检查，所以用 `PublishTrimmed` 或 `PublishAot` 发布时，Nino 不会产生任何警告。目标框架为 .NET 8 及以上的项目用的就是这两个版本之一。
+`Nino.Core` 的 `net8.0` 和 `net10.0` 版本标记了 `IsTrimmable` 和 `IsAotCompatible`，每次构建都经过裁剪和 AOT 分析器检查，所以用 `PublishTrimmed` 或 `PublishAot` 发布时，Nino 不产生任何警告。目标框架为 .NET 8 及以上的项目，用的就是这两个版本之一。
 
-- **Native AOT**（以及其他无法在运行时编译代码的环境）：Nino 只使用生成器写好的格式化器。因此要序列化的每个类型，都必须出现在生成器能看到的代码里：作为成员的类型，作为 `NinoSerializer`/`NinoDeserializer` 调用（`Serialize`、`Deserialize`、`GetFixedSize<T>()`）的类型参数，或者作为 `SerializeBoxed`、`DeserializeBoxed`、`IsSupported` 的 `typeof` 参数。运行时才算出的 `Type`（`value.GetType()`）不会注册任何类型：像 `Pair<int, int>` 这样的封闭泛型类型，如果只以这种方式交给 Nino，在 Native AOT 下会抛异常，而 JIT 会在运行时构造它的格式化器。只在运行时才出现的类型会抛出指明该类型的错误，绝不会读写出错误的数据。
-- **在 JIT 上运行的裁剪应用**会保留为这类类型构建格式化器的运行时路径；它对裁剪器的要求都已标注。
-- **Native AOT 下的 CPU 特性**：在 x64 上，Native AOT 按 SSE2 编译，并在启动时检测其后的几个指令集，其中包括 SSSE3，所以在支持 SSSE3 的 CPU 上，Nino 会走它的 [SSSE3 路径](#simd)。AVX2 和 AVX-512 路径需要更高的基线，这同时也要求运行的 CPU 支持它：AVX2 用 `<IlcInstructionSet>x86-64-v3</IlcInstructionSet>`，AVX-512 用 `x86-64-v4`，或用 `native` 取构建机器的 CPU。在 Arm64 上，AdvSimd 属于 Native AOT 的基线，所有 Arm64 路径都会被采用。
+- **Native AOT**（以及其他不能在运行时编译代码的环境）：Nino 只用生成器写好的格式化器。所以要序列化的每个类型，都必须出现在生成器看得到的代码里：作为成员的类型，作为 `NinoSerializer`/`NinoDeserializer` 调用（`Serialize`、`Deserialize`、`GetFixedSize<T>()`）的类型参数，或者作为 `SerializeBoxed`、`DeserializeBoxed`、`IsSupported` 的 `typeof` 参数。运行时才算出来的 `Type`（`value.GetType()`）不会让生成器看到任何类型：像 `Pair<int, int>` 这样的封闭泛型类型，如果只通过这种方式交给 Nino，在 Native AOT 下会抛异常，而 JIT 会在运行时构造它的格式化器。只在运行时才出现的类型会报错并指明是哪个类型，绝不会读写出错误的数据。
+- **跑在 JIT 上的裁剪应用**保留了为这类类型构建格式化器的运行时路径；这条路径对裁剪器的要求都已标注。
+- **Native AOT 下的 CPU 特性**：在 x64 上，Native AOT 按 SSE2 编译，启动时再检测之后的几个指令集，其中有 SSSE3，所以在支持 SSSE3 的 CPU 上，Nino 会走 [SSSE3 路径](#simd)。AVX2 和 AVX-512 路径需要更高的基线，而提高基线也就要求运行的 CPU 必须支持：AVX2 用 `<IlcInstructionSet>x86-64-v3</IlcInstructionSet>`，AVX-512 用 `x86-64-v4`，或用 `native` 取构建机器的 CPU。在 Arm64 上，AdvSimd 属于 Native AOT 的基线，所有 Arm64 路径都会用上。
 
-生成器也为 IL2CPP 写出同样的格式化器，所以 Nino 在 IL2CPP 上同样不需要反射。参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity#il2cpp)。
+生成器为 IL2CPP 写的也是同样的格式化器，所以 Nino 在 IL2CPP 上同样不需要反射。参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity#il2cpp)。
 
 ## 卸载程序集 [#unloading-assemblies]
 
-支持热重载的服务器通常把业务逻辑加载到可回收的 `AssemblyLoadContext` 里，重载时卸载旧的上下文。在 .NET 8 及以上版本，含有 Nino 生成代码的程序集所在的上下文开始卸载时，Nino 会自动清除与这个程序集有关的全部缓存：注册表，其中类型的格式化器、类型 ID 和内存布局，多态子类型的登记，以及它的 `[assembly: NinoFormatter]` 注册。这样旧的上下文就能被 GC 回收，新版本的同名类型加载进来也不会报类型 ID 冲突。
+支持热重载的服务器通常把业务逻辑加载到可回收的 `AssemblyLoadContext` 里，每次重载时卸载旧的上下文。在 .NET 8 及以上版本，程序集里有 Nino 生成的代码时，它的上下文一开始卸载，Nino 就自动清掉为这个程序集缓存的一切：它的注册表，它的类型的格式化器、类型 ID 和原始内存布局，它的多态子类型，以及它的 `[assembly: NinoFormatter]` 注册。这样旧的上下文就能被 GC 回收，新版本的同名类型加载进来也不会出现类型 ID 冲突。
 
 ```csharp
 var context = new AssemblyLoadContext("logic", isCollectible: true);
 var logic = context.LoadFromAssemblyPath(path);
-// ……序列化和反序列化 logic 程序集中的 [NinoType] 类型……
+// ……序列化、反序列化 logic 程序集里的 [NinoType] 类型……
 
 context.Unload(); // Nino 在这里清除它为这个程序集缓存的内容
 ```
@@ -119,13 +119,13 @@ NinoRegistry.Remove(logic); // .NET Core 3.0 到 .NET 7
 context.Unload();
 ```
 
-在 .NET 8 及以上版本，`Remove` 做的事和自动清理一样，只在想确认卸载前已经清理干净时才需要调用。Unity（Mono 和 IL2CPP）、HybridCLR 和 .NET Framework 本身就不能单独卸载某个程序集，调用 `Remove` 也不会让程序集变得可以卸载。
+在 .NET 8 及以上版本，`Remove` 做的事不比自动清理多，只在想确保卸载前已经清理干净时才需要调用。Unity（Mono 和 IL2CPP）、HybridCLR 和 .NET Framework 本来就不能单独卸载某个程序集，调用 `Remove` 也不会让它变得能卸载。
 
-调用 `Remove` 前要确保已经没有代码在序列化或反序列化这个程序集的类型，调用之后 Nino 就不能再处理这些类型了。另外，被卸载的程序集如果为**其他**程序集的类型声明了格式化器（例如为共享库里的类型写的 `[assembly: NinoFormatter]`），只要 Nino 用过，它就会一直保留，所以这类格式化器应该放在共享库里。
+调用 `Remove` 前要确保已经没有代码在序列化或反序列化这个程序集的类型，调用之后 Nino 就处理不了这些类型了。另外，被卸载的程序集如果为**其他**程序集的类型声明了格式化器（比如为共享库里的类型写的 `[assembly: NinoFormatter]`），Nino 用过一次后它就一直保持注册，所以这种格式化器应该放进共享库。
 
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="二进制格式" href="/zh/docs/v4/wire-format">Nino 写出的字节，按类型逐一说明。</Card>
-  <Card title="构建配置" href="/zh/docs/v4/advanced/build-configuration">按平台列出影响 Nino 速度的编译器、运行时和引擎设置。</Card>
+  <Card title="二进制格式" href="/zh/docs/v4/wire-format">Nino 写出的字节，按类型逐个说明。</Card>
+  <Card title="构建配置" href="/zh/docs/v4/advanced/build-configuration">按平台列出会影响 Nino 速度的编译器、运行时和引擎设置。</Card>
 </Cards>
