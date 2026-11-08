@@ -1,0 +1,51 @@
+---
+title: Nino 如何测试
+seoTitle: "Nino 如何测试：CI、模糊测试与一致性语料库 – Nino v4 文档"
+description: "Nino 每次改动都会跑的测试：各种 CPU 和运行时上的单元测试、Unity IL2CPP 与 WebGL 播放器、模糊测试、跨语言一致性语料库，以及去哪里看结果。"
+icon: FlaskConical
+---
+
+文档里关于字节跨平台一致、抵御恶意输入和性能的每一条说法，都有公开的 GitHub Actions 工作流在检查。每次推送到 `main`，只要改到了某个工作流负责的内容，它就会运行；任何人都能打开它的运行记录和日志。
+
+## 各种 CPU 和运行时 [#runtimes]
+
+[CI - Build and Test](https://github.com/JasonXuDeveloper/Nino/actions/workflows/ci.yml) 构建整个解决方案并运行单元测试：
+
+- .NET 10 在 x64（Linux 和 Windows）与 Arm64 上运行，.NET 8 在 Arm64 上运行；
+- 分别关掉 AVX-512、关掉 AVX2、关掉所有 SIMD 指令再跑一遍，确保每条向量路径都和写出相同字节的标量路径对得上；
+- 用 Roslyn 4.8 编译的 netstandard2.0 版本，以及不用[拦截器](/zh/docs/v4/performance#interceptors)的 netstandard2.1 版本（也就是 Unity 用的版本）。
+
+通过字段直接读写运行时自带集合的那些路径，会在每个有这些集合的运行时上测试：x64、Arm64、32 位 Windows 和 Arm32（用 qemu）上的 .NET，x64 和 Arm64 上的 Mono，以及 64 位和 32 位的 .NET Framework 4.8。同一个任务还会把测试程序分别做裁剪发布和 NativeAOT 发布，再运行一遍。
+
+## Unity [#unity]
+
+[Unity](https://github.com/JasonXuDeveloper/Nino/actions/workflows/unity.yml) 在编辑器和 IL2CPP 播放器里运行包的测试，覆盖 Unity 2022.3（支持的最低版本）和 Unity 6 LTS，并启用 Burst。另有一个 WebGL 播放器在无头 Chrome 里运行，逐字节核对 WebAssembly SIMD 内核和标量代码的结果。
+
+## 恶意输入 [#fuzzing]
+
+[Fuzz](https://github.com/JasonXuDeveloper/Nino/actions/workflows/fuzz.yml) 在反序列化器每次改动时都会对它做模糊测试，每晚还会跑更长时间：
+
+- 变异式模糊测试：把输入紧贴在保护页前面，读过输入末尾就会立即崩溃；同时在每条 SIMD 路径上检查不变量（x64 分别开关 AVX-512、AVX2 和 SIMD，以及 Arm64）；
+- 通过 SharpFuzz 运行的覆盖率引导的 libFuzzer。
+
+Go 和 Rust 运行时的模糊测试在 [Runtimes](https://github.com/JasonXuDeveloper/Nino/actions/workflows/runtimes.yml) 里，Rust 运行时的 unsafe 代码还会在 Miri 下运行。[CodeQL](https://github.com/JasonXuDeveloper/Nino/actions/workflows/codeql.yml) 扫描仓库里的每种语言。一次读取到底保证什么，见[安全](/zh/docs/v4/security#guarantees)。
+
+## 每种语言都是同样的字节 [#conformance]
+
+[一致性语料库](https://github.com/JasonXuDeveloper/Nino/tree/main/conformance)是一组由 .NET 写出的输入：
+
+- 合法用例：每个运行时都必须读出预期的值，再写回完全相同的字节；
+- 恶意用例，以及每个合法用例截断后的所有前缀：每个运行时都必须拒绝，而且不能崩溃、卡死或占用与输入不成比例的内存。
+
+TypeScript、Go、Rust 运行时，以及 nino-gen 为语料库类型生成的代码，都在 [Runtimes](https://github.com/JasonXuDeveloper/Nino/actions/workflows/runtimes.yml) 里跑完整个语料库；CI 还会检查仓库里提交的语料库就是 .NET 现在写出的结果。所有读取方都遵守的规则见[线格式](/zh/docs/v4/wire-format)。
+
+## 基准测试 [#benchmarks]
+
+[基准测试页](/zh/docs/v4/benchmarks)上的数字来自 [Benchmark and Performance Report](https://github.com/JasonXuDeveloper/Nino/actions/workflows/report.yml)：每次发版都会在 GitHub 的 x64 和 Arm64 runner 上运行，结果写进发版说明。Unity 的数字来自同一个工作流构建的 IL2CPP 播放器。想自己跑一遍，见[基准测试](/zh/docs/v4/benchmarks)。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="安全" href="/zh/docs/v4/security">面对恶意输入时一次读取保证什么，以及各项限制和不可信模式。</Card>
+  <Card title="平台" href="/zh/docs/v4/platforms">Nino 支持的所有平台，以及它们之间的差异。</Card>
+</Cards>

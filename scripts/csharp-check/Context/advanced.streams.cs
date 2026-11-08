@@ -14,6 +14,7 @@ public partial class Snippets
     public static Checkpoint checkpoint;
     public static Stream stream;
     public static NinoArrayBufferWriter buffer;
+    public static ReadOnlySequence<byte> sequence;
 
     public static void Index(AuditEvent auditEvent) { }
 }

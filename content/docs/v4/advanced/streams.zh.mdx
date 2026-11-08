@@ -198,7 +198,14 @@ public static partial class StreamFrames
 
 ## 多段输入（`ReadOnlySequence`） [#readonlysequence-input]
 
-`PipeReader` 或 `SequenceReader` 给出的是 `ReadOnlySequence<byte>`。只有一段时直接从它反序列化；有多段时，先拷贝一次到池化的缓冲区。`ref` 重载会填充你保留的实例：
+`PipeReader` 或 `SequenceReader` 给出的是 `ReadOnlySequence<byte>`。从 rc.10 起，`NinoDeserializer` 可以直接读它：只有一段时原地反序列化，有多段时先拷贝一次到池化的缓冲区；`ref` 重载会填充你保留的实例。
+
+```csharp
+Checkpoint read = NinoDeserializer.Deserialize<Checkpoint>(sequence);
+NinoDeserializer.Deserialize(sequence, ref checkpoint); // 填充同一个实例
+```
+
+rc.9 及更早的版本没有这两个重载，自己加上即可：
 
 ```csharp
 public static T Deserialize<T>(in ReadOnlySequence<byte> data)
@@ -230,7 +237,7 @@ public static void Deserialize<T>(in ReadOnlySequence<byte> data, ref T value)
 }
 ```
 
-把这两个方法也加到 `StreamFrames` 中。管道每次读取通常只返回一段，所以大多数帧走第一个分支，不需要任何拷贝。
+把这两个方法也加到 `StreamFrames` 中。不管用哪种写法，管道每次读取通常只返回一段，所以大多数帧走第一个分支，不需要任何拷贝。
 
 ## 回调 [#callbacks]
 

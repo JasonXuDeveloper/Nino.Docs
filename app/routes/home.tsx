@@ -68,7 +68,7 @@ const copy: Record<
     description: `Nino is a high-performance binary serializer for C# and .NET: source-generated, ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack, ` : ''}zero GC on hot paths. For RPC, messaging, caching and storage on .NET, Unity (IL2CPP, HybridCLR) and Godot, with the same bytes in TypeScript, Go and Rust.`,
     pill: 'Nino v4 · C# binary serializer',
     headline: ['The fastest binary serializer', 'for C#.'],
-    sub: 'Nino is source-generated and SIMD-accelerated (AVX-512, AVX2, Arm64, WebAssembly), with zero GC on hot paths. For services, networking and RPC, message queues, caching, storage and IPC, on .NET, Unity and Godot alike.',
+    sub: 'One binary format, the same bytes on .NET, Unity, Godot, TypeScript, Go and Rust. Source-generated and SIMD-accelerated (AVX-512, AVX2, Arm64, WebAssembly), with zero GC on hot paths and safe on untrusted input: for services, networking and RPC, message queues, caching, storage and IPC.',
     start: 'Get Started',
     github: 'View on GitHub',
     why: 'Why Nino',
@@ -168,7 +168,7 @@ const copy: Record<
     pill: 'Nino v4 · C# 二进制序列化库',
     // U+200B: the one place the first line may break on a phone (break-keep keeps the words whole)
     headline: ['最快的\u200b二进制序列化库', '为 C# 而生。'],
-    sub: 'Nino 基于源生成器，用 SIMD 加速（AVX-512、AVX2、Arm64、WebAssembly），热路径零 GC 分配。适用于服务端、网络与 RPC、消息队列、缓存、存储和进程间通信，.NET、Unity 与 Godot 均可使用。',
+    sub: '一套字节格式，.NET、Unity、Godot 与 TypeScript、Go、Rust 读写的字节完全相同。基于源生成器，用 SIMD 加速（AVX-512、AVX2、Arm64、WebAssembly），热路径零 GC 分配，不可信的输入也能放心读取。适用于服务端、网络与 RPC、消息队列、缓存、存储和进程间通信。',
     start: '快速开始',
     github: '在 GitHub 上查看',
     why: '为什么选择 Nino',

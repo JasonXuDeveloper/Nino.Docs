@@ -1,0 +1,51 @@
+---
+title: How Nino Is Tested
+seoTitle: "How Nino Is Tested: CI, Fuzzing and Conformance – Nino v4 Docs"
+description: "What runs on every change to Nino: unit tests on each CPU and runtime, Unity IL2CPP and WebGL players, fuzzing, the cross-language conformance corpus, and where to see the results."
+icon: FlaskConical
+---
+
+Every claim in these docs about portable bytes, hostile input and speed is checked by a public GitHub Actions workflow. The workflows run on each push to `main` that touches what they test, and anyone can open their runs and logs.
+
+## Every CPU and Runtime [#runtimes]
+
+[CI - Build and Test](https://github.com/JasonXuDeveloper/Nino/actions/workflows/ci.yml) builds the solution and runs the unit tests:
+
+- on .NET 10 for x64 (Linux and Windows) and Arm64, and on .NET 8 for Arm64;
+- with AVX-512 turned off, with AVX2 turned off, and with every SIMD instruction turned off, so each vector path is checked against the scalar path that writes the same bytes;
+- on the netstandard2.0 build compiled with Roslyn 4.8, and on the netstandard2.1 build without [interceptors](/en/docs/v4/performance#interceptors), the build Unity uses.
+
+The paths that read and build a runtime's own collections through their fields are tested on every runtime that has them: .NET on x64, Arm64, 32-bit Windows and Arm32 (under qemu), Mono on x64 and Arm64, and .NET Framework 4.8 in 64-bit and 32-bit. The same job publishes a test app trimmed and with NativeAOT and runs it.
+
+## Unity [#unity]
+
+[Unity](https://github.com/JasonXuDeveloper/Nino/actions/workflows/unity.yml) runs the package's tests in the editor and in an IL2CPP player, on Unity 2022.3 (the oldest supported) and Unity 6 LTS, with Burst. A WebGL player runs in headless Chrome to check the WebAssembly SIMD kernels against the scalar code, byte for byte.
+
+## Hostile Input [#fuzzing]
+
+[Fuzz](https://github.com/JasonXuDeveloper/Nino/actions/workflows/fuzz.yml) attacks the deserializer on every change to it, and for longer every night:
+
+- a mutational fuzzer that places the input against a guard page, so any read past its end crashes, and checks invariants on each SIMD path (x64 with and without AVX-512, AVX2 and SIMD, and Arm64);
+- coverage-guided libFuzzer runs through SharpFuzz.
+
+The Go and Rust runtimes are fuzzed in [Runtimes](https://github.com/JasonXuDeveloper/Nino/actions/workflows/runtimes.yml), and the Rust runtime's unsafe code also runs under Miri. [CodeQL](https://github.com/JasonXuDeveloper/Nino/actions/workflows/codeql.yml) scans every language in the repository. What a read guarantees is listed in [Security](/en/docs/v4/security#guarantees).
+
+## The Same Bytes in Every Language [#conformance]
+
+The [conformance corpus](https://github.com/JasonXuDeveloper/Nino/tree/main/conformance) is a set of inputs written by .NET:
+
+- valid cases, which every runtime must read to the expected value and write back to the same bytes;
+- malicious cases, and every truncated prefix of each valid case, which every runtime must reject without crashing, hanging or using memory out of proportion.
+
+The TypeScript, Go and Rust runtimes, and the code nino-gen generates for the corpus's types, run the whole corpus in [Runtimes](https://github.com/JasonXuDeveloper/Nino/actions/workflows/runtimes.yml), and CI checks that the committed corpus is what .NET writes today. The rules every reader follows are in the [wire format](/en/docs/v4/wire-format).
+
+## Benchmarks [#benchmarks]
+
+The numbers on the [benchmark pages](/en/docs/v4/benchmarks) come from [Benchmark and Performance Report](https://github.com/JasonXuDeveloper/Nino/actions/workflows/report.yml), which runs for each release on GitHub's x64 and Arm64 runners and publishes the results in the release notes. The Unity numbers come from an IL2CPP player built by the same workflow. To run them yourself, see [Benchmarks](/en/docs/v4/benchmarks).
+
+## Next Steps [#next-steps]
+
+<Cards>
+  <Card title="Security" href="/en/docs/v4/security">What a read guarantees on hostile input, the limits and untrusted mode.</Card>
+  <Card title="Platforms" href="/en/docs/v4/platforms">Every platform Nino runs on, and what differs between them.</Card>
+</Cards>

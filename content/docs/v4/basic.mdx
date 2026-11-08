@@ -131,7 +131,7 @@ void NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, ref object value
 void NinoDeserializer.DeserializeBoxed(ref Reader reader, ref object value, Type type);
 ```
 
-The data is a `ReadOnlySpan<byte>`: pass a `byte[]`, an `ArraySegment<byte>`, a `Span<byte>`, `Memory<byte>.Span` or a slice of any buffer you already have, without copying it. A `ReadOnlySequence<byte>` (from `System.IO.Pipelines`) has no overload: [Multi-Segment Input](/en/docs/v4/advanced/streams#readonlysequence-input) reads one with at most one copy.
+The data is a `ReadOnlySpan<byte>`: pass a `byte[]`, an `ArraySegment<byte>`, a `Span<byte>`, `Memory<byte>.Span` or a slice of any buffer you already have, without copying it. A `ReadOnlySequence<byte>` (from `System.IO.Pipelines`) has overloads of its own since rc.10, which copy only data that spans several segments: [Multi-Segment Input](/en/docs/v4/advanced/streams#readonlysequence-input).
 
 ```csharp
 Order order = NinoDeserializer.Deserialize<Order>(bytes);

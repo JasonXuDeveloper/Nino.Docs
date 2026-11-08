@@ -131,7 +131,7 @@ void NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, ref object value
 void NinoDeserializer.DeserializeBoxed(ref Reader reader, ref object value, Type type);
 ```
 
-输入数据是 `ReadOnlySpan<byte>`：`byte[]`、`ArraySegment<byte>`、`Span<byte>`、`Memory<byte>.Span`，或者现有缓冲区的任意切片，都可以直接传入，不用拷贝。`ReadOnlySequence<byte>`（来自 `System.IO.Pipelines`）没有对应的重载，读法见[多段输入](/zh/docs/v4/advanced/streams#readonlysequence-input)，最多拷贝一次。
+输入数据是 `ReadOnlySpan<byte>`：`byte[]`、`ArraySegment<byte>`、`Span<byte>`、`Memory<byte>.Span`，或者现有缓冲区的任意切片，都可以直接传入，不用拷贝。`ReadOnlySequence<byte>`（来自 `System.IO.Pipelines`）从 rc.10 起有自己的重载，只有数据跨多段时才拷贝一次，见[多段输入](/zh/docs/v4/advanced/streams#readonlysequence-input)。
 
 ```csharp
 Order order = NinoDeserializer.Deserialize<Order>(bytes);
