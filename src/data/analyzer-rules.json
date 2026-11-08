@@ -47,8 +47,8 @@
         "fix": "Make the type and its containers `public` or `internal`"
       },
       "zh": {
-        "problem": "生成代码无法引用该类型（它不是 `public`/`internal`，或者是 `static` 类或 `ref struct`）",
-        "fix": "把该类型及其外层类型改为 `public` 或 `internal`"
+        "problem": "生成的代码无法引用这个类型（它不是 `public`/`internal`，或者是 `static` 类或 `ref struct`）",
+        "fix": "把这个类型及其外层类型改为 `public` 或 `internal`"
       }
     },
     {
@@ -62,7 +62,7 @@
       },
       "zh": {
         "problem": "类型必须是 `partial`：它要序列化的非公开成员需要通过类型内部的访问器访问（.NET 8 之前；泛型类型在 .NET 9 之前，或成员来自类型参数不同的泛型基类），或者标了 `[NinoPooled]`",
-        "fix": "把该类型及其外层类型声明为 `partial`"
+        "fix": "把这个类型及其外层类型声明为 `partial`"
       }
     },
     {
@@ -117,7 +117,7 @@
         "fix": "Add it to the constructor, make it settable, or `[NinoIgnore]` it"
       },
       "zh": {
-        "problem": "只读成员不是构造函数参数，读出的值会被直接丢弃",
+        "problem": "只读成员不是构造函数参数，读出的值直接丢弃",
         "fix": "把它加入构造函数、改为可写，或用 `[NinoIgnore]` 忽略"
       }
     },
@@ -159,7 +159,7 @@
         "fix": "Remove `[NinoFactory]` to keep re-creating, or `[NinoConstructor]` to fill factory instances in place"
       },
       "zh": {
-        "problem": "类型有 `[NinoConstructor]`，`[NinoFactory]` 永远不会被调用：实例总是通过构造函数重新创建",
+        "problem": "类型有 `[NinoConstructor]`，`[NinoFactory]` 永远调用不到：实例总是用构造函数重新创建",
         "fix": "删掉 `[NinoFactory]` 则继续重建实例，删掉 `[NinoConstructor]` 则用工厂创建实例并原地填充"
       }
     },
@@ -173,7 +173,7 @@
         "fix": "`[NinoIgnore]` it, or give it a custom formatter"
       },
       "zh": {
-        "problem": "成员类型无法序列化，该成员会被跳过；或其中的泛型 `[NinoType]` 封闭在这样一个它的格式化器会写出的类型上（`Box<Action>`；不写出的类型参数不算），写入值时会抛出异常；基类的成员只报一次，由声明它的类型报告",
+        "problem": "成员类型无法序列化，这个成员直接跳过；或者其中的泛型 `[NinoType]` 以这种类型为类型参数，且格式化器会写出这个参数（`Box<Action>`；不写出的类型参数不算），写入值时抛出异常；基类的成员只报一次，由声明它的类型报告",
         "fix": "用 `[NinoIgnore]` 忽略，或为它提供自定义格式化器"
       }
     },
@@ -187,7 +187,7 @@
         "fix": "Fix the formatter's type"
       },
       "zh": {
-        "problem": "`[NinoMemberFormatter]` 指定的类型不是结构体，或没有正好为该成员类型实现 `INinoFormatter<T>`",
+        "problem": "`[NinoMemberFormatter]` 指定的类型不是结构体，或没有恰好为这个成员的类型实现 `INinoFormatter<T>`",
         "fix": "修正格式化器的类型"
       }
     },
@@ -271,7 +271,7 @@
         "fix": "Rename one of the members, or make it public"
       },
       "zh": {
-        "problem": "基类中被 `new` 隐藏的非公开成员无法访问（通过 `[UnsafeAccessor]` 可以访问：.NET 8+，泛型类型 .NET 9+），会被跳过",
+        "problem": "基类中用 `new` 隐藏的非公开成员访问不到（通过 `[UnsafeAccessor]` 可以：.NET 8+，泛型类型 .NET 9+），直接跳过",
         "fix": "重命名其中一个成员，或改为公共成员"
       }
     },
@@ -285,7 +285,7 @@
         "fix": "Serialize a member, or make the struct `VersionTolerant` or `Keyed`"
       },
       "zh": {
-        "problem": "结构体没有任何成员参与序列化：会被写成 0 字节，由它组成的集合无法读回",
+        "problem": "结构体没有任何成员参与序列化：写出来是 0 字节，由它组成的集合读不回来",
         "fix": "至少序列化一个成员，或设为 `VersionTolerant` 或 `Keyed`"
       }
     },
@@ -299,7 +299,7 @@
         "fix": "Remove `[NinoMember]`; to serialize a get-only auto-property, give a constructor a parameter of its name"
       },
       "zh": {
-        "problem": "`[NinoMember]` 标在永远不会被序列化的成员上（静态成员、常量、索引器、固定大小缓冲区、没有 getter 或显式实现接口的属性（`[NinoType]` 接口时写出的是接口的成员，请标在它上面）、没有 setter 且没有构造函数接收的属性，或 `[field: NinoMember]`）：这个成员什么都不写；关于这个特性只报这一条诊断",
+        "problem": "`[NinoMember]` 标在永远不会序列化的成员上（静态成员、常量、索引器、固定大小缓冲区、没有 getter 或显式实现接口的属性（`[NinoType]` 接口时写出的是接口的成员，请标在它上面）、没有 setter 且没有构造函数接收的属性，或 `[field: NinoMember]`）：这个成员什么都不写；关于这个特性只报这一条诊断",
         "fix": "去掉 `[NinoMember]`；要序列化只读自动属性，给构造函数加一个同名参数"
       }
     },
@@ -313,7 +313,7 @@
         "fix": "Store a fixed number of lanes (an array, `Vector128<T>`/`Vector256<T>`) and expose the vectors through `[NinoIgnore]` members ([`Vector<T>` Is Not Serializable](/en/docs/v4/struct-layouts#vector-t))"
       },
       "zh": {
-        "problem": "成员或 `NinoSerializer`/`NinoDeserializer` 调用需要 `System.Numerics.Vector<T>`：直接出现，作为元素或类型参数，在任意深度的普通结构体里，或经由会写出它的泛型 `[NinoType]`（`Box<Vector<int>>`）；手写使用的 Nino.Core 格式化器和 `Writer`/`Reader` 方法同样检查，无论是创建出来还是只放在字段、属性或局部变量里。`Vector<T>` 的大小由 CPU 决定（16、32 或 64 字节），没有哪个平台能读回所有其他平台写的字节，运行时也会抛 `NotSupportedException`。被忽略的成员、类型从不写出的类型参数，以及自行写出各通道的格式化器不报。基类的成员只报一次，由声明它的类型报告",
+        "problem": "成员或 `NinoSerializer`/`NinoDeserializer` 调用需要 `System.Numerics.Vector<T>`：直接出现，作为元素或类型参数，在任意深度的普通结构体里，或经由会写出它的泛型 `[NinoType]`（`Box<Vector<int>>`）；手写使用的 Nino.Core 格式化器和 `Writer`/`Reader` 方法同样检查，无论是创建出来还是只放在字段、属性或局部变量里。`Vector<T>` 的大小由 CPU 决定（16、32 或 64 字节），没有哪个平台能读回所有其他平台写的字节，运行时也会抛 `NotSupportedException`。忽略的成员、类型从不写出的类型参数，以及自行写出各通道的格式化器不报。基类的成员只报一次，由声明它的类型报告",
         "fix": "存固定数量的通道（数组、`Vector128<T>`/`Vector256<T>`），再通过标了 `[NinoIgnore]` 的成员提供向量（见[`Vector<T>` 不能序列化](/zh/docs/v4/struct-layouts#vector-t)）"
       }
     },
@@ -370,7 +370,7 @@
       },
       "zh": {
         "problem": "两个键控成员（或某个成员的 `[NinoFormerName]`）哈希到同一个键",
-        "fix": "重命名其中一个，或去掉该旧名称"
+        "fix": "重命名其中一个，或去掉这个旧名称"
       }
     },
     {
@@ -425,7 +425,7 @@
         "fix": "Remove `trackReferences`"
       },
       "zh": {
-        "problem": "`trackReferences` 用在结构体上会被忽略",
+        "problem": "`trackReferences` 用在结构体上不起作用",
         "fix": "移除 `trackReferences`"
       }
     },
@@ -495,7 +495,7 @@
         "fix": "Register a struct, not nested in a generic type, that implements `INinoFormatter<P>` once: a generic one as its open definition (`typeof(F<,>)`), with type parameters that can be inferred, a non-generic one as itself (`typeof(F)`)"
       },
       "zh": {
-        "problem": "`[assembly: NinoFormatter]` 注册无效，会被忽略",
+        "problem": "`[assembly: NinoFormatter]` 注册无效，不起作用",
         "fix": "注册一个只实现一次 `INinoFormatter<P>`、且没有嵌套在泛型类型中的结构体：泛型结构体以开放泛型定义（`typeof(F<,>)`）传入，所有类型参数都要能推断；非泛型结构体直接传入（`typeof(F)`）"
       }
     },
@@ -523,7 +523,7 @@
         "fix": "See [What Is Not Generated](/en/docs/v4/advanced/codegen#not-generated)"
       },
       "zh": {
-        "problem": "某个类型因目标语言无法表达而被跳过",
+        "problem": "目标语言表达不了某个类型，这个类型直接跳过",
         "fix": "见[不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated)"
       }
     },

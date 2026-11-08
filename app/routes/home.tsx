@@ -110,7 +110,7 @@ const copy: Record<
     older: 'Older versions:',
   },
   zh: {
-    description: `Nino 是高性能 C# / .NET 二进制序列化库：基于源生成器，${headlineSerialize ? `最高比 MemoryPack 快 ${headlineSerialize} 倍，` : ''}热路径零 GC 分配。适用于 RPC、消息、缓存与存储，支持 .NET、Unity（IL2CPP、HybridCLR）和 Godot，TypeScript、Go 与 Rust 读写相同的字节。`,
+    description: `Nino 是高性能 C# / .NET 二进制序列化库：基于源生成器，${headlineSerialize ? `最高比 MemoryPack 快 ${headlineSerialize} 倍，` : ''}热路径零 GC 分配。适用于 RPC、消息、缓存与存储，支持 .NET、Unity（IL2CPP、HybridCLR）和 Godot，可与 TypeScript、Go 和 Rust 互通。`,
     pill: 'Nino v4 · C# 二进制序列化库',
     headline: ['最快的二进制序列化库', '为 C# 而生。'],
     sub: 'Nino 基于源生成器，用 SIMD 加速（AVX-512、AVX2、Arm64、WebAssembly），热路径零 GC 分配。适用于服务端、网络与 RPC、消息队列、缓存、存储和进程间通信，.NET、Unity 与 Godot 均可使用。',
@@ -125,8 +125,8 @@ const copy: Record<
       },
       {
         icon: ShieldCheck,
-        label: '可读取不可信数据',
-        text: '伪造的字节无法让进程崩溃，无法分配不成比例的内存，也无法指定要创建的类型：只会抛出同一种异常。',
+        label: '放心读取不可信数据',
+        text: '伪造的字节不会让进程崩溃，不会分配与输入不成比例的内存，也无法指定要创建的类型，最多抛出同一种异常。',
       },
       {
         icon: Recycle,
@@ -141,7 +141,7 @@ const copy: Record<
       {
         icon: GitBranch,
         label: '数据可演进',
-        text: '键控成员、版本容错与引用追踪，按类型选择。',
+        text: '键控成员、版本容错、引用追踪，每个类型按需选择。',
       },
       {
         icon: Hammer,
@@ -150,13 +150,13 @@ const copy: Record<
       },
       {
         icon: Globe,
-        label: '处处同一格式',
-        text: 'CoreCLR、Mono 与 IL2CPP，64 位与 32 位，读写的都是同一种格式。',
+        label: '跨平台字节一致',
+        text: 'CoreCLR、Mono 还是 IL2CPP，64 位还是 32 位，读写的格式都一样。',
       },
       {
         icon: Zap,
-        label: '各类 CPU 都用 SIMD',
-        text: 'x64 上用 AVX-512、AVX2 和 SSSE3，Arm64 上用查表指令，.NET 10 上用 WebAssembly SIMD，Unity 中用 Burst 编译的内核；每条路径写出的字节都相同。',
+        label: '每种 CPU 都有 SIMD',
+        text: 'x64 上用 AVX-512、AVX2 和 SSSE3，Arm64 上用查表指令，.NET 10 上用 WebAssembly SIMD，Unity 中用 Burst 编译的内核；无论走哪条路径，写出的字节都一样。',
       },
       {
         icon: FileCode,

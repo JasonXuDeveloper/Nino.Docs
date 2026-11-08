@@ -320,8 +320,8 @@ const llmsCopy: Record<
       '安装：`dotnet add package Nino --prerelease`（[NuGet](https://www.nuget.org/packages/Nino)）；Unity：`openupm add com.jasonxudeveloper.nino`',
       '可选包：`Nino.Immutable`（System.Collections.Immutable 中的类型）、`Nino.AspNetCore`（用于 `application/x-nino` 的 ASP.NET Core MVC 格式化器与 Minimal API 请求体）和 `Nino.Codegen`（每次构建后生成 TypeScript、Go 和 Rust 类型与编解码器；命令行工具 `nino-gen` 即 `Nino.Codegen.Tool`）',
       'v4 在 NuGet 上仍是预发行版：不加 `--prerelease` 时 NuGet 会安装稳定版 3.9.x，它是测试 v4 功能的过渡版本，与 v4 不兼容。',
-      'Go、Rust 和 TypeScript：使用 nino-gen 从你的 C# `[NinoType]` 生成的代码，运行时从 4.0.0-rc.8 起随每个版本发布：`go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4`（[Go 模块](https://pkg.go.dev/github.com/JasonXuDeveloper/Nino/runtimes/go/v4)）、`cargo add nino-serialization`（[crates.io](https://crates.io/crates/nino-serialization)，库名 `nino`）、`npm install nino-serialization`（[npm](https://www.npmjs.com/package/nino-serialization)），读写的字节与 .NET 相同',
-      'Unity 2022.3+ 的 Mono 与 IL2CPP，以及 HybridCLR 热更新程序集，无需初始化调用；安装 `com.unity.burst` 后，元组和结构体数组以及 Latin-1 字符串由 Burst 编译的 SIMD 内核搬运。Godot 4 的 .NET 项目直接使用 NuGet 包',
+      'Go、Rust 和 TypeScript：使用 nino-gen 从你的 C# `[NinoType]` 生成的代码，运行时从 4.0.0-rc.8 起随每个版本发布：`go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4`（[Go 模块](https://pkg.go.dev/github.com/JasonXuDeveloper/Nino/runtimes/go/v4)）、`cargo add nino-serialization`（[crates.io](https://crates.io/crates/nino-serialization)，库名 `nino`）、`npm install nino-serialization`（[npm](https://www.npmjs.com/package/nino-serialization)），与 .NET 字节一致、可以互通',
+      'Unity 2022.3+ 的 Mono 与 IL2CPP，以及 HybridCLR 热更新程序集，无需初始化调用；安装 `com.unity.burst` 后，元组数组、结构体数组和 Latin-1 字符串交给 Burst 编译的 SIMD 内核搬运。Godot 4 的 .NET 项目直接使用 NuGet 包',
       '分析器：写代码时报告 NINO001 至 NINO029 诊断，多数附带代码修复，包含在 `Nino` 包中；nino-gen 另有 NINOGEN001 至 NINOGEN004',
       'AI 编程助手：`npx skills add JasonXuDeveloper/Nino` 安装 `nino-serialization` skill（Claude Code、Codex、Cursor、Copilot 等）',
       '用法：用 `[NinoType]` 标记类、结构体、记录或接口，然后调用 `NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)`',
@@ -331,13 +331,13 @@ const llmsCopy: Record<
           ]
         : []),
       `源码与问题反馈：[GitHub](${githubUrl})（MIT 协议）`,
-      `本文档对应当前版本 Nino ${latestVersion}，其二进制格式与 v3 不兼容。`,
+      `本文档对应当前版本 Nino ${latestVersion}，它的二进制格式与 v3 不兼容。`,
       `${latestVersion} 文档全文：[llms-full.zh.txt](${siteUrl}/llms-full.zh.txt)。英文版：[llms.txt](${siteUrl}/llms.txt)`,
       '下列每个页面去掉 `.md` 即为对应的 HTML 页面。',
     ],
     optional: 'Optional',
     archived: (version) =>
-      `仍在使用 Nino ${version} 的项目可参考的旧版本文档；其 API 与二进制格式均与 ${latestVersion} 不同。`,
+      `旧版本文档，供仍在使用 Nino ${version} 的项目参考；API 和二进制格式都与 ${latestVersion} 不同。`,
   },
 };
 
@@ -485,7 +485,7 @@ function cards(): Card[] {
       eyebrow: 'Nino',
       title: '高性能 C# / .NET 二进制序列化库',
       description:
-        '基于源生成器，热路径零 GC。支持 .NET、Unity（IL2CPP、HybridCLR）和 Godot，TypeScript、Go 与 Rust 读写相同的字节。',
+        '基于源生成器，热路径零 GC。支持 .NET、Unity（IL2CPP、HybridCLR）和 Godot，可与 TypeScript、Go 和 Rust 互通。',
     },
   ];
   for (const page of source.getPages()) {

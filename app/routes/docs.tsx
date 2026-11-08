@@ -167,7 +167,7 @@ function OldVersionBanner({
     <Banner>
       {lang === 'zh' ? (
         <span>
-          你正在阅读旧版本 Nino {version} 的文档。最新版本为 {latestVersion}：
+          这是旧版 Nino {version} 的文档，最新版本是 {latestVersion}：
           <Link to={latestUrl} className="font-semibold underline">
             切换到最新文档
           </Link>
@@ -192,7 +192,7 @@ function PrereleaseBanner({ lang }: { lang: Locale }) {
     <Banner id={`${latestVersion}-prerelease`}>
       {lang === 'zh' ? (
         <span>
-          Nino {latestVersion} 仍是预发布版本：用{' '}
+          Nino {latestVersion} 仍是预发行版：用{' '}
           <code>dotnet add package Nino --prerelease</code> 安装。
           <Link to={start} className="font-semibold underline">
             安装说明

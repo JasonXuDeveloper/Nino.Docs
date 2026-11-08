@@ -79,7 +79,7 @@ function seriesFor(zh: boolean) {
 
 const gcNote = {
   en: '† Vector4[10000] allocates a 160 KB array on the large object heap per call, so it mostly measures gen-2 garbage collections and varies between runs. The copy itself is one memcpy in both.',
-  zh: '† Vector4[10000] 每次调用都在大对象堆上分配 160 KB 的数组，因此主要测量的是第 2 代垃圾回收，结果随运行波动。拷贝本身在两个库中都是一次 memcpy。',
+  zh: '† Vector4[10000] 每次调用都在大对象堆上分配 160 KB 的数组，测到的主要是第 2 代垃圾回收，每次运行结果都有波动。拷贝本身在两个库里都是一次 memcpy。',
 };
 
 /** v4 under FLOOR_NS against a measurable time; `than` names the other side where the badges do */
@@ -160,7 +160,7 @@ function reuseChart(zh: boolean, { ds, tabbed }: ChartData): BarChartProps {
   const reuse = ds.reuse;
   return {
     title: zh
-      ? '反序列化到已有对象：Nino 复用 对比 MemoryPack 覆盖'
+      ? '反序列化到已有对象：Nino 复用对比 MemoryPack 覆盖模式'
       : 'Deserialize into existing objects: Nino reusing vs MemoryPack overwrite',
     subtitle: zh
       ? 'Nino 用 ref 反序列化到已有对象图，新实例取自 [NinoPooled] 对象池；MemoryPack 使用覆盖模式。条形为相对 MemoryPack 新建实例的耗时，数字为实测耗时与每次调用分配的内存。'
@@ -475,7 +475,7 @@ function Pending({ zh }: { zh: boolean }) {
   return (
     <p className="not-prose my-6 rounded-xl border bg-fd-card p-4 text-sm text-fd-muted-foreground sm:p-5">
       {zh
-        ? '运行时对比 v3（3.3.13）的数据将来自一次与 v4 背靠背的直接测量，测量完成后在此显示。'
+        ? '与 v3（3.3.13）的运行时对比，将来自与 v4 背靠背的一次直接测量，测完后显示在这里。'
         : 'Runtime numbers against v3 (3.3.13) will come from a direct back-to-back measurement with v4 and appear here once measured.'}
     </p>
   );
