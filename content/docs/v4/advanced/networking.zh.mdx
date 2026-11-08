@@ -167,23 +167,34 @@ public static class FrameReader
         return true;
     }
 
-    public static T Decode<T>(in ReadOnlySequence<byte> frame)
+    public static T Decode<T>(in ReadOnlySequence<byte> frame) // 新建一个实例
+    {
+        T value = default;
+        Decode(frame, ref value);
+        return value;
+    }
+
+    public static void Decode<T>(in ReadOnlySequence<byte> frame, ref T value) // 读入 value：同类型时原地填充
     {
         if (frame.IsSingleSegment)                       // 常见情况：不复制
-            return NinoDeserializer.Deserialize<T>(frame.First.Span); // [!code highlight]
+        {
+            NinoDeserializer.Deserialize(frame.First.Span, ref value); // [!code highlight]
+            return;
+        }
 
         int length = checked((int)frame.Length);         // 跨多个段：复制一次
         if (length <= 512)
         {
             Span<byte> stack = stackalloc byte[length];
             frame.CopyTo(stack);
-            return NinoDeserializer.Deserialize<T>(stack);
+            NinoDeserializer.Deserialize(stack, ref value);
+            return;
         }
         byte[] rented = ArrayPool<byte>.Shared.Rent(length);
         try
         {
             frame.CopyTo(rented);
-            return NinoDeserializer.Deserialize<T>(rented.AsSpan(0, length));
+            NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
         }
         finally { ArrayPool<byte>.Shared.Return(rented); }
     }
@@ -351,7 +362,7 @@ public static class MessageTransports
         return socket.SendAsync(buffer.WrittenMemory, WebSocketMessageType.Binary, endOfMessage: true, ct);
     }
 
-    public static async ValueTask<T> ReceiveAsync<T>(WebSocket socket, NinoArrayBufferWriter buffer,
+    public static async ValueTask ReceiveAsync(WebSocket socket, NinoArrayBufferWriter buffer,
         CancellationToken ct)
     {
         buffer.ResetWrittenCount();
@@ -367,7 +378,18 @@ public static class MessageTransports
             buffer.Advance(result.Count);
         } while (!result.EndOfMessage);
 
-        return NinoDeserializer.Deserialize<T>(buffer.WrittenSpan);
+    }
+
+    public static async Task ReceiveLoopAsync<T>(WebSocket socket, NinoArrayBufferWriter buffer, Action<T> handle,
+        CancellationToken ct) where T : class
+    {
+        T message = null;                                   // 每条消息都读进同一个实例
+        while (true)
+        {
+            await ReceiveAsync(socket, buffer, ct);         // 只收字节，不反序列化
+            NinoDeserializer.Deserialize(buffer.WrittenSpan, ref message);
+            handle(message);
+        }
     }
 
     // UDP：每个数据报一个 Nino 负载
@@ -401,7 +423,7 @@ public static class MessageTransports
 ```
 
 - 一条 WebSocket 消息可能分几次 `ReceiveAsync` 才收完；循环把它们收集到缓冲区里，缓冲区按需增长，之后一直复用。`MaxMessageSize` 防止不可信的对端让缓冲区无限增长。
-- 套接字同步完成时，两个方法都不会分配任务对象：它们都返回 `ValueTask`，而 `SendAsync` 本身根本不是 `async` 方法。
+- 套接字同步完成时，`SendAsync` 和 `ReceiveAsync` 都不会分配任务对象：它们都返回 `ValueTask`，而 `SendAsync` 本身根本不是 `async` 方法。`ReceiveAsync` 只负责收字节，反序列化留在 `ReceiveLoopAsync` 里同步进行，这样每条消息都能用 `ref` 读进同一个实例（`async` 方法不能带 `ref` 参数）。
 - 一个 UDP 数据报的负载在 IPv4 上最多 65,507 字节（IPv6 上 65,527 字节）。消息要远小于路径 MTU（常见的预算是 1,200 字节左右），以免 IP 分片；如果在意顺序或丢包，请自己加序号。
 - 用 `SocketAddress` 指定目标地址，用 `remoteEndPoint.Serialize()` 生成一次即可：传 `EndPoint` 的 `SendTo` 每次调用都会把它转换成一个新的 `SocketAddress`。`SocketAddress` 重载需要 .NET 8 或更高版本。
 - UDP 循环复用了接收数组和消息实例：收到第一个数据报之后，持续接收同一类型的消息，只会为文本变了的字符串和消息里的数组分配内存。
@@ -444,9 +466,9 @@ if (message is INinoPooled pooled)
 ```csharp
 private Message _last; // 每个连接一个，同一时间只由一个线程使用
 
-void OnFrame(ReadOnlySpan<byte> frame)
+void OnFrame(in ReadOnlySequence<byte> frame) // TryReadFrame 取出的每一帧
 {
-    NinoDeserializer.Deserialize(frame, ref _last);
+    FrameReader.Decode(frame, ref _last);
     Handle(_last);
 }
 ```

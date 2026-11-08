@@ -175,11 +175,11 @@ public sealed class OrderPublisher
     public OrderPublisher(IChannel channel) => _channel = channel;
 
     // 每次调用都要 await 完再发下一条：缓冲区是复用的
-    public async ValueTask PublishAsync(OrderEvent evt)
+    public ValueTask PublishAsync(OrderEvent evt) // 不加 async：直接返回客户端的 ValueTask
     {
         _buffer.ResetWrittenCount();
         NinoSerializer.Serialize(evt, _buffer); // [!code highlight]
-        await _channel.BasicPublishAsync(exchange: "orders", routingKey: "", body: _buffer.WrittenMemory);
+        return _channel.BasicPublishAsync(exchange: "orders", routingKey: "", body: _buffer.WrittenMemory);
     }
 }
 ```

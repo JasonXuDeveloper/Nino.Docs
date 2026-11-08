@@ -41,7 +41,7 @@ public sealed class RedisProfileCache
 
     public RedisProfileCache(IConnectionMultiplexer redis) => _db = redis.GetDatabase();
 
-    private static RedisKey Key(long id) => "profile:v1:" + id; // 键里带着schema 版本
+    private static RedisKey Key(long id) => $"profile:v1:{id}"; // 键里带着schema 版本
 
     public void Set(UserProfile profile, TimeSpan ttl)
     {
@@ -96,7 +96,7 @@ public static class DistributedCacheExtensions
 }
 ```
 
-这个接口按数组收发数据，所以每次调用都会分配一个 `byte[]`：这是缓存 API 的开销，不是 Nino 的。
+这个接口按数组收发数据，所以每次调用都会分配一个 `byte[]`：这是缓存 API 的开销，不是 Nino 的。如果提供程序还实现了 `IBufferDistributedCache`（Microsoft.Extensions.Caching.StackExchangeRedis 10 就实现了），就能直接用缓冲区读写；下面的 `HybridCache` 在提供程序支持时会自动走这个接口，所以访问频繁的缓存用 `HybridCache`，不要用这两个方法。
 
 ## HybridCache [#hybridcache]
 
@@ -177,7 +177,8 @@ builder.Services.AddHybridCache()
 
 var app = builder.Build();
 app.MapGet("/profiles/{id}", (long id, HybridCache cache, CancellationToken ct) =>
-    cache.GetOrCreateAsync($"profile:v1:{id}", token => LoadProfileAsync(id, token), cancellationToken: ct));
+    cache.GetOrCreateAsync($"profile:v1:{id}", id, static (profileId, token) => LoadProfileAsync(profileId, token), // 带 state 的重载：每个请求都不必分配闭包
+        cancellationToken: ct));
 // HybridCache 在 IDistributedCache 的同一个键下存自己的封装格式：直接读的条目用另一个键（由 SetNinoAsync 写入）
 app.MapGet("/profiles/{id}/stored", (long id, IDistributedCache cache, CancellationToken ct) =>
     cache.GetNinoAsync<UserProfile>($"profile-blob:v1:{id}", ct));

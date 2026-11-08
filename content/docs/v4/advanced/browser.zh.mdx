@@ -120,29 +120,37 @@ public static partial class OrderCodec
     }
 
     // 传入 Nino 字节，返回界面需要的数据
+    // WebAssembly 只有一个线程：所有导出函数共用一个 Order 和它的列表，每次调用都原地重新填充
+    private static Order _order = new();
+
     [JSExport]
-    public static string GetCustomer(byte[] data) => NinoDeserializer.Deserialize<Order>(data).Customer;
+    public static string GetCustomer(byte[] data)
+    {
+        NinoDeserializer.Deserialize(data, ref _order); // [!code highlight]
+        return _order.Customer;
+    }
 
     [JSExport]
     [return: JSMarshalAs<JSType.Number>]
-    public static long GetId(byte[] data) => NinoDeserializer.Deserialize<Order>(data).Id;
+    public static long GetId(byte[] data)
+    {
+        NinoDeserializer.Deserialize(data, ref _order);
+        return _order.Id;
+    }
 
     [JSExport]
     public static double GetTotal(byte[] data)
     {
-        Order order = NinoDeserializer.Deserialize<Order>(data);
+        NinoDeserializer.Deserialize(data, ref _order);
         double total = 0;
-        foreach (OrderLine line in order.Lines) total += line.Quantity * line.UnitPrice;
+        foreach (OrderLine line in _order.Lines) total += line.Quantity * line.UnitPrice;
         return total;
     }
-
-    // 复用反序列化：只有一个 Order 和它的列表，每次调用都原地重新填充
-    private static Order _order = new();
 
     [JSExport]
     public static int CountLines(byte[] data)
     {
-        NinoDeserializer.Deserialize(data, ref _order); // [!code highlight]
+        NinoDeserializer.Deserialize(data, ref _order);
         return _order.Lines.Count;
     }
 }
@@ -269,7 +277,7 @@ socket.binaryType = 'arraybuffer';
 socket.onopen = () => socket.send(codec.EncodeOrder(7, 'Grace', [1], [3], [2.5]));
 socket.onmessage = (e) => {
   const data = new Uint8Array(e.data);
-  console.log(codec.GetCustomer(data), codec.GetTotal(data));
+  console.log(codec.GetTotal(data)); // 每条消息只调一次、只解码一次
 };
 ```
 

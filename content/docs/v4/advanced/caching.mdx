@@ -41,7 +41,7 @@ public sealed class RedisProfileCache
 
     public RedisProfileCache(IConnectionMultiplexer redis) => _db = redis.GetDatabase();
 
-    private static RedisKey Key(long id) => "profile:v1:" + id; // the key carries a schema version
+    private static RedisKey Key(long id) => $"profile:v1:{id}"; // the key carries a schema version
 
     public void Set(UserProfile profile, TimeSpan ttl)
     {
@@ -96,7 +96,7 @@ public static class DistributedCacheExtensions
 }
 ```
 
-The interface takes and returns arrays, so each call allocates one `byte[]`: that is the cache API's cost, not Nino's.
+The interface takes and returns arrays, so each call allocates one `byte[]`: that is the cache API's cost, not Nino's. Providers that also implement `IBufferDistributedCache` (Microsoft.Extensions.Caching.StackExchangeRedis 10 does) read and write through buffers instead; `HybridCache`, below, uses that interface when the provider has it, so for a hot cache use `HybridCache` rather than these two methods.
 
 ## HybridCache [#hybridcache]
 
@@ -177,7 +177,8 @@ builder.Services.AddHybridCache()
 
 var app = builder.Build();
 app.MapGet("/profiles/{id}", (long id, HybridCache cache, CancellationToken ct) =>
-    cache.GetOrCreateAsync($"profile:v1:{id}", token => LoadProfileAsync(id, token), cancellationToken: ct));
+    cache.GetOrCreateAsync($"profile:v1:{id}", id, static (profileId, token) => LoadProfileAsync(profileId, token), // the state overload: no closure per request
+        cancellationToken: ct));
 // HybridCache stores its own envelope under its key in the same IDistributedCache: read raw entries under keys SetNinoAsync writes
 app.MapGet("/profiles/{id}/stored", (long id, IDistributedCache cache, CancellationToken ct) =>
     cache.GetNinoAsync<UserProfile>($"profile-blob:v1:{id}", ct));

@@ -198,7 +198,32 @@ public partial class StateSync : Node
 }
 ```
 
-- Godot's lower-level APIs take and return `byte[]` too: `SceneMultiplayer.SendBytes` and its `PeerPacket` signal, `PacketPeer.PutPacket` and `GetPacket`. A `StreamPeer` (TCP) is a stream of bytes, so put a length in front of each message: see [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream).
+`NinoSerializer.Serialize(state)` allocates one array per broadcast. To send without it, use the lower-level APIs, which also take a `ReadOnlySpan<byte>` (`SceneMultiplayer.SendBytes`, `PacketPeer.PutPacket`; GodotSharp 4.7 has both overloads), and serialize into a buffer you keep:
+
+```csharp title="StateBroadcast.cs"
+using Godot;
+using Nino.Core;
+
+public partial class StateBroadcast : Node
+{
+    private readonly NinoArrayBufferWriter _send = new(4096); // reused for every broadcast
+    private WorldState _latest;
+
+    public override void _Ready() =>
+        ((SceneMultiplayer)Multiplayer).PeerPacket += (id, packet) =>
+            NinoDeserializer.Deserialize(packet, ref _latest); // the byte[] is Godot's
+
+    public void Broadcast(WorldState state)
+    {
+        _send.ResetWrittenCount();
+        NinoSerializer.Serialize(state, _send);
+        ((SceneMultiplayer)Multiplayer).SendBytes(_send.WrittenSpan, 0, // [!code highlight]
+            MultiplayerPeer.TransferModeEnum.UnreliableOrdered, 0);
+    }
+}
+```
+
+- Received packets still arrive as a `byte[]` (the `PeerPacket` signal, `PacketPeer.GetPacket`), allocated by Godot. A `StreamPeer` (TCP) is a stream of bytes, so put a length in front of each message: see [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream).
 - Reading into `_latest` reuses the same `WorldState` and its list on every packet, so Nino allocates nothing once warmed up; see [Handle Messages Without Allocating](/en/docs/v4/advanced/zero-allocation#message-loop).
 - Clients and servers that are updated separately need `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` messages: see [Rolling Upgrades](/en/docs/v4/advanced/networking#rolling-upgrades). Peers running the same build can keep messages positional.
 - For a polymorphic message type, send the base class (`Serialize<Message>(...)`) and read it as the base: [Polymorphism](/en/docs/v4/polymorphism).

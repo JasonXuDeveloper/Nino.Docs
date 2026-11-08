@@ -175,11 +175,11 @@ public sealed class OrderPublisher
     public OrderPublisher(IChannel channel) => _channel = channel;
 
     // Await each call before the next one: the buffer is reused
-    public async ValueTask PublishAsync(OrderEvent evt)
+    public ValueTask PublishAsync(OrderEvent evt) // not async: the client's ValueTask is returned as is
     {
         _buffer.ResetWrittenCount();
         NinoSerializer.Serialize(evt, _buffer); // [!code highlight]
-        await _channel.BasicPublishAsync(exchange: "orders", routingKey: "", body: _buffer.WrittenMemory);
+        return _channel.BasicPublishAsync(exchange: "orders", routingKey: "", body: _buffer.WrittenMemory);
     }
 }
 ```

@@ -120,29 +120,37 @@ public static partial class OrderCodec
     }
 
     // Nino bytes in, what the UI needs out
+    // WebAssembly runs one thread: one Order and its list, refilled in place on every call
+    private static Order _order = new();
+
     [JSExport]
-    public static string GetCustomer(byte[] data) => NinoDeserializer.Deserialize<Order>(data).Customer;
+    public static string GetCustomer(byte[] data)
+    {
+        NinoDeserializer.Deserialize(data, ref _order); // [!code highlight]
+        return _order.Customer;
+    }
 
     [JSExport]
     [return: JSMarshalAs<JSType.Number>]
-    public static long GetId(byte[] data) => NinoDeserializer.Deserialize<Order>(data).Id;
+    public static long GetId(byte[] data)
+    {
+        NinoDeserializer.Deserialize(data, ref _order);
+        return _order.Id;
+    }
 
     [JSExport]
     public static double GetTotal(byte[] data)
     {
-        Order order = NinoDeserializer.Deserialize<Order>(data);
+        NinoDeserializer.Deserialize(data, ref _order);
         double total = 0;
-        foreach (OrderLine line in order.Lines) total += line.Quantity * line.UnitPrice;
+        foreach (OrderLine line in _order.Lines) total += line.Quantity * line.UnitPrice;
         return total;
     }
-
-    // Reuse deserialization: one Order and its list, refilled in place on every call
-    private static Order _order = new();
 
     [JSExport]
     public static int CountLines(byte[] data)
     {
-        NinoDeserializer.Deserialize(data, ref _order); // [!code highlight]
+        NinoDeserializer.Deserialize(data, ref _order);
         return _order.Lines.Count;
     }
 }
@@ -269,7 +277,7 @@ socket.binaryType = 'arraybuffer';
 socket.onopen = () => socket.send(codec.EncodeOrder(7, 'Grace', [1], [3], [2.5]));
 socket.onmessage = (e) => {
   const data = new Uint8Array(e.data);
-  console.log(codec.GetCustomer(data), codec.GetTotal(data));
+  console.log(codec.GetTotal(data)); // one call, one decode per message
 };
 ```
 

@@ -167,23 +167,34 @@ public static class FrameReader
         return true;
     }
 
-    public static T Decode<T>(in ReadOnlySequence<byte> frame)
+    public static T Decode<T>(in ReadOnlySequence<byte> frame) // a new instance
+    {
+        T value = default;
+        Decode(frame, ref value);
+        return value;
+    }
+
+    public static void Decode<T>(in ReadOnlySequence<byte> frame, ref T value) // into value: filled in place when it is the same type
     {
         if (frame.IsSingleSegment)                       // the common case: no copy
-            return NinoDeserializer.Deserialize<T>(frame.First.Span); // [!code highlight]
+        {
+            NinoDeserializer.Deserialize(frame.First.Span, ref value); // [!code highlight]
+            return;
+        }
 
         int length = checked((int)frame.Length);         // spans segments: copy once
         if (length <= 512)
         {
             Span<byte> stack = stackalloc byte[length];
             frame.CopyTo(stack);
-            return NinoDeserializer.Deserialize<T>(stack);
+            NinoDeserializer.Deserialize(stack, ref value);
+            return;
         }
         byte[] rented = ArrayPool<byte>.Shared.Rent(length);
         try
         {
             frame.CopyTo(rented);
-            return NinoDeserializer.Deserialize<T>(rented.AsSpan(0, length));
+            NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
         }
         finally { ArrayPool<byte>.Shared.Return(rented); }
     }
@@ -351,7 +362,7 @@ public static class MessageTransports
         return socket.SendAsync(buffer.WrittenMemory, WebSocketMessageType.Binary, endOfMessage: true, ct);
     }
 
-    public static async ValueTask<T> ReceiveAsync<T>(WebSocket socket, NinoArrayBufferWriter buffer,
+    public static async ValueTask ReceiveAsync(WebSocket socket, NinoArrayBufferWriter buffer,
         CancellationToken ct)
     {
         buffer.ResetWrittenCount();
@@ -367,7 +378,18 @@ public static class MessageTransports
             buffer.Advance(result.Count);
         } while (!result.EndOfMessage);
 
-        return NinoDeserializer.Deserialize<T>(buffer.WrittenSpan);
+    }
+
+    public static async Task ReceiveLoopAsync<T>(WebSocket socket, NinoArrayBufferWriter buffer, Action<T> handle,
+        CancellationToken ct) where T : class
+    {
+        T message = null;                                   // reused for every message
+        while (true)
+        {
+            await ReceiveAsync(socket, buffer, ct);         // only fills the buffer
+            NinoDeserializer.Deserialize(buffer.WrittenSpan, ref message);
+            handle(message);
+        }
     }
 
     // UDP: one Nino payload per datagram
@@ -401,7 +423,7 @@ public static class MessageTransports
 ```
 
 - A WebSocket message can arrive in several `ReceiveAsync` parts; the loop collects them into the buffer, which grows as needed and is then reused. `MaxMessageSize` stops an untrusted peer from making it grow without bound.
-- Neither method allocates a task when the socket completes synchronously: both return a `ValueTask`, and `SendAsync` is not `async` at all.
+- Neither `SendAsync` nor `ReceiveAsync` allocates a task when the socket completes synchronously: both return a `ValueTask`, and `SendAsync` is not `async` at all. `ReceiveAsync` only fills the buffer; `ReceiveLoopAsync` deserializes synchronously after it, so every message is read by `ref` into one instance (an `async` method cannot take a `ref` parameter).
 - A UDP datagram carries at most 65,507 bytes of payload over IPv4 (65,527 over IPv6). Keep messages well below the path MTU (about 1,200 bytes is a common budget) to avoid IP fragmentation, and add your own sequence numbers if order or loss matters.
 - Pass the destination as a `SocketAddress`, made once with `remoteEndPoint.Serialize()`: `SendTo` with an `EndPoint` converts it into a new `SocketAddress` on every call. The `SocketAddress` overload needs .NET 8 or later.
 - In the UDP loop, the receive array and the message instance are reused: after the first datagram, a stream of messages of the same type allocates nothing but the strings whose text changed and the arrays they contain.
@@ -444,9 +466,9 @@ If messages are handled synchronously and never kept, deserialize into the last 
 ```csharp
 private Message _last; // per connection, used by one thread at a time
 
-void OnFrame(ReadOnlySpan<byte> frame)
+void OnFrame(in ReadOnlySequence<byte> frame) // each frame TryReadFrame returns
 {
-    NinoDeserializer.Deserialize(frame, ref _last);
+    FrameReader.Decode(frame, ref _last);
     Handle(_last);
 }
 ```
