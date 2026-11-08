@@ -13,7 +13,7 @@ icon: ListChecks
   }}
 />
 
-Nino 用默认设置就能工作，下面的大多数建议都是可选的。第一节是热路径上最重要的做法：处理消息时不分配内存。其余几节是数据写出之后就很难再改的决定，以及让调用保持快速的习惯。每一条都链接到详细说明它的页面。
+Nino 用默认设置就能工作，下面的大多数建议都是可选的。第一节是热路径上最重要的做法：处理消息时不分配内存。其余几节是数据写出之后就很难再改的决定，以及让调用保持快速的习惯。每条都附有详细说明的链接。
 
 ## 处理消息时不分配内存 [#zero-gc-messages]
 
@@ -39,7 +39,7 @@ Nino 用默认设置就能工作，下面的大多数建议都是可选的。第
 - **用写入时的类型来读取。** 多态值按基类序列化（`Serialize<TBase>`），再用 `Deserialize<TBase>` 读取；[装箱 API](/zh/docs/v4/basic#the-boxed-api) 只用于运行时才以 `Type` 形式得知的类型。
 - **在热路径上复用缓冲区和实例**，做法见[处理消息时不分配内存](#zero-gc-messages)。
 - **自己创建的 `Writer` 或 `Reader` 要收尾**：每条逻辑消息结束时调用 `Flush()` 和 `ReleaseReferences()`（`Reader` 调用 `ReleaseReferences()`）。参见[一个缓冲区中的多个值](/zh/docs/v4/basic#several-values-in-one-buffer)。
-- **在启动时配置 `NinoSettings`**，早于任何线程上的第一次调用：它的值在读取时不做同步。参见[设置](/zh/docs/v4/pooling#settings)。
+- **在启动时配置 `NinoSettings`**，赶在任何线程第一次调用之前：读取这些值时不加同步。参见[设置](/zh/docs/v4/pooling#settings)。
 
 这些选择在速度上的影响，参见[高性能序列化](/zh/docs/v4/advanced/high-performance)。
 
@@ -53,21 +53,21 @@ Nino 用默认设置就能工作，下面的大多数建议都是可选的。第
 
 ## 不可信的输入 [#untrusted-input]
 
-- Nino 本来就是为读取不可信数据而设计的：分配内存之前会检查每个长度是否超出剩余字节（一个集合在读到元素之前最多预先分配剩余字节数的 16 倍），无论数据嵌套多深栈的用量都有上限，只会创建派生自声明类型的类型。所有无效输入都会抛出消息以 `Nino:` 开头的 `NinoDataException`（一种 `InvalidOperationException`）：在边界处捕获它，把输入当作坏数据处理。参见[不可信数据](/zh/docs/v4/security)。
-- 读取外部数据时，在启动时、第一次调用 Nino 之前设置 `NinoSettings.Untrusted = true`：它用每个进程的密钥对常见键类型做哈希，检查原始结构体中的值，并拒绝值之后的字节。如果有效消息不会包含那么多元素，就调低 `NinoSettings.MaxCollectionLength`。参见[限制](/zh/docs/v4/security#limits)。
-- 在缓冲之前限制帧或请求的大小（参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）：一次读取的分配量相对于输入是有界的。
-- 校验你的逻辑依赖的值，就像对待被用户改过的存档：Nino 检查的是数据的结构，而不是它的含义。
-- 字节里不带 schema，所以 Nino 分辨不出按另一个布局兼容的类型写出的数据。请自己为数据加上版本。
+- Nino 本来就是为读取不可信数据而设计的：分配内存之前会检查每个长度是否超出剩余字节（一个集合在读到元素之前最多预先分配剩余字节数的 16 倍），数据嵌套再深，栈的用量也有上限；只创建派生自声明类型的类型。任何无效输入都抛出 `NinoDataException`（一种 `InvalidOperationException`），消息以 `Nino:` 开头：在边界处捕获它，把这份输入当作坏数据处理。参见[不可信数据](/zh/docs/v4/security)。
+- 读取外部数据时，在启动时、第一次调用 Nino 之前设置 `NinoSettings.Untrusted = true`：它会用进程级的密钥对常见键类型做哈希，检查原始结构体的值，并拒绝值后面多出的字节。合法消息用不到那么多元素的话，就调低 `NinoSettings.MaxCollectionLength`。参见[限制](/zh/docs/v4/security#limits)。
+- 在缓冲之前限制帧或请求的大小（参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）：一次读取分配多少内存，受它输入的大小约束。
+- 校验你的逻辑依赖的值，就像对待用户改过的存档：Nino 只检查数据的结构，不管它的含义。
+- 字节里不带 schema，如果另一个类型的布局恰好兼容，Nino 分辨不出数据其实是为它写的。请自己给数据加上版本。
 
 ## 项目配置 [#project-setup]
 
-- **每个声明了 `[NinoType]` 的项目都要安装 `Nino`**，源生成器才会在那里运行。在 Unity 中，每个声明了这些类型的程序集定义都要引用 `Nino.Core`。参见[快速开始](/zh/docs/v4/start)。
-- **用 .NET 8 SDK 或更高版本构建**，以启用[拦截器](/zh/docs/v4/performance#interceptors)。如果项目自己设置了 `InterceptorsNamespaces`，请在原值后追加。
-- **不要忽略分析器的警告。** NINO006 和 NINO007 意味着某个成员的值被丢弃或跳过。参见[分析器](/zh/docs/v4/analyzers)。
+- **每个声明了 `[NinoType]` 的项目都要安装 `Nino`**，源生成器才会在这个项目里运行。在 Unity 中，每个声明了这些类型的程序集定义都要引用 `Nino.Core`。参见[快速开始](/zh/docs/v4/start)。
+- **用 .NET 8 SDK 或更高版本构建**，才能用上[拦截器](/zh/docs/v4/performance#interceptors)。项目自己设置了 `InterceptorsNamespaces` 的话，在原值后面追加。
+- **不要忽略分析器的警告。** NINO006 和 NINO007 表示某个成员的值会丢掉或跳过。参见[分析器](/zh/docs/v4/analyzers)。
 
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="高性能序列化" href="/zh/docs/v4/advanced/high-performance">如何让 Nino 跑出最快速度，以及每条热路径的开销。</Card>
-  <Card title="常见问题" href="/zh/docs/v4/faq">简短的回答，以及最常见错误的解决办法。</Card>
+  <Card title="高性能序列化" href="/zh/docs/v4/advanced/high-performance">怎样让 Nino 跑到最快，以及每条热路径的开销。</Card>
+  <Card title="常见问题" href="/zh/docs/v4/faq">简短解答，以及最常见报错的解决办法。</Card>
 </Cards>

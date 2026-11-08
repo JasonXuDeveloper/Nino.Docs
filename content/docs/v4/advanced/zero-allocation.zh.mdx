@@ -5,7 +5,7 @@ description: "可直接复制的做法，让稳定运行时保持 0 B：按归�
 icon: Leaf
 ---
 
-这是一份面向热路径的做法手册，适用于不允许分配内存的场景：消息循环、行情与遥测数据流、游戏 tick、缓存层。每种做法都是可以直接复制的代码，在**预热之后每次调用都是 0 B**（缓冲区已经增长到位、对象池已经填满）。每种做法为什么有效、开销在哪里，请顺着它的链接去看[高性能序列化](/zh/docs/v4/advanced/high-performance)；复用的具体规则见[复用与对象池](/zh/docs/v4/pooling)。页面最后有一份[检查清单](#checklist)，可用来逐项检查热路径。
+这是一份面向热路径的做法手册，适用于不允许分配内存的场景：消息循环、行情与遥测数据流、游戏 tick、缓存层。每种做法都是可以直接复制的代码，**预热之后每次调用分配 0 B**（缓冲区已经增长到位、对象池已经填满）。每种做法为什么有效、开销在哪里，请顺着它的链接去看[高性能序列化](/zh/docs/v4/advanced/high-performance)；复用的具体规则见[复用与对象池](/zh/docs/v4/pooling)。页面最后有一份[检查清单](#checklist)，可用来逐项检查热路径。
 
 ## 哪些调用会分配内存 [#what-allocates]
 
@@ -64,7 +64,7 @@ static class ScratchBuffer
 
 <Callout type="warn">
 
-在缓冲区被再次使用之前，先拷贝或发送 `WrittenSpan`；也不要把线程静态缓冲区交给可能在用完之前再次调用 `Get()` 的代码（重入问题）。
+缓冲区再次使用之前，先拷贝或发送 `WrittenSpan`；也不要把线程静态缓冲区交给可能在用完之前再次调用 `Get()` 的代码（重入问题）。
 
 </Callout>
 
@@ -189,8 +189,8 @@ while (TryReceive(out ReadOnlySpan<byte> frame))
 ```
 
 - 条数会变化时用 `List<T>`：列表保留原有容量，而数组只在新数据长度相同时复用。
-- 每条消息都会变化的文本，每次都要分配新字符串，所以必须保持 0 B 的数据里，会变化的值应使用数字或 id，而不是文本。
-- Nino 需要新建的类（列表变长、`null` 成员有了值）标记为 [`[NinoPooled]`](/zh/docs/v4/advanced/high-performance#pool-what-you-create)，这样新实例从对象池里取，被丢弃的实例也会回到池中。
+- 每条消息都会变的文本，每次都要分配新字符串，所以要保持 0 B，会变的值就用数字或 ID 表示，不要用文本。
+- Nino 需要新建的类（列表变长、`null` 成员有了值）标记为 [`[NinoPooled]`](/zh/docs/v4/advanced/high-performance#pool-what-you-create)，这样新实例从对象池里取，丢弃的实例也回到池中。
 
 [零 GC 状态同步示例](/zh/docs/v4/pooling#example)把这些做法组合在了一起；按 `ref` 填充、`[NinoPooled]` 和自己的对象池怎么选，见[选哪种复用方式](/zh/docs/v4/pooling#which-mechanism)。
 
@@ -320,8 +320,8 @@ unsafe
 把上面的做法用在一个连接上，并让消息类型的读取不分配内存：
 
 - **热数据放在非托管结构体中**，单个或放在数组和 `List<T>` 里：它们按原始内存拷贝，一个列表就是一次块拷贝。调整字段顺序或设置 `Pack`，让它们没有填充字节。参见[结构体布局](/zh/docs/v4/performance#struct-layout)。
-- **让字符串保持不变。** 读入已有实例时，文本没变的字符串会被保留，只有变化了的文本才分配新字符串。每条消息都会变的值用数字、枚举或 ID 表示，而不是文本。非 ASCII 的 `[NinoUtf8]` 字符串每次都会解码成新字符串。
-- **数量会变化时用 `List<T>`。** 列表复用时保留容量；数组只有长度不变时才会被复用。
+- **让字符串保持不变。** 读入已有实例时，文本没变的字符串直接保留，只有变化了的文本才分配新字符串。每条消息都会变的值用数字、枚举或 ID 表示，而不是文本。非 ASCII 的 `[NinoUtf8]` 字符串每次都会解码成新字符串。
+- **数量会变化时用 `List<T>`。** 列表复用时保留容量；数组只有长度不变时才复用。
 - **消息中不要用 `object` 和装箱 API。** `object` 成员会把值类型装箱，并通过全局注册表分派；`SerializeBoxed` 和 `DeserializeBoxed` 要按 `Type` 查找格式化器。成员声明为它们自己的类型或共同的 `[NinoType]` 基类，没有子类型的类声明为 `sealed`。
 
 一个游戏服务器通过已连接的 UDP 套接字向每个客户端发送状态。每条消息是一个 `StateUpdate`，其中每个实体都是非托管结构体：
@@ -398,7 +398,7 @@ public sealed class Connection : IDisposable
 }
 ```
 
-预热之后，Nino 在 `Send`、`ReceiveAndApply` 和 `ReceiveInto` 中都不分配内存：实体列表连同容量一起被复用，区域名在不变时被保留，池化的 `StateUpdate` 回来时列表仍然挂在上面。用下面的[分配测试](#verify-it)把它固定下来；复用的确切规则参见[复用与对象池](/zh/docs/v4/pooling)。
+预热之后，Nino 在 `Send`、`ReceiveAndApply` 和 `ReceiveInto` 中都不分配内存：实体列表连同容量一起复用，区域名不变就保留，池化的 `StateUpdate` 回来时列表仍然挂在上面。用下面的[分配测试](#verify-it)把它固定下来；复用的确切规则参见[复用与对象池](/zh/docs/v4/pooling)。
 
 ## 验证 [#verify-it]
 
@@ -451,8 +451,8 @@ public class AllocationTests
 - [ ] 高频创建和丢弃的类标记为 `[NinoPooled]`。
 - [ ] 批量数据放在非托管结构体的数组或列表中；按下标访问的记录是非托管结构体，大小用 `GetFixedSize<T>()` 确定。
 - [ ] 没有子类型的类声明为 `sealed`（1 字节头部，无需分派）。
-- [ ] 热路径上的类型保持按位置格式，除非数据要跨版本保留；只有被共享的类型才追踪引用（参见[格式](/zh/docs/v4/advanced/high-performance#choose-the-cheapest-format)）。
-- [ ] 项目用 .NET 8 SDK 或更高版本编译，以启用[拦截器](/zh/docs/v4/performance#interceptors)。
+- [ ] 热路径上的类型保持按位置格式，除非数据要跨版本保留；只有共享的类型才追踪引用（参见[格式](/zh/docs/v4/advanced/high-performance#choose-the-cheapest-format)）。
+- [ ] 项目用 .NET 8 SDK 或更高版本编译，才能用上[拦截器](/zh/docs/v4/performance#interceptors)。
 - [ ] 有一个测试把热路径钉在 0 B。
 
 ## 下一步 [#next-steps]

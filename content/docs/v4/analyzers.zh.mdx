@@ -4,15 +4,15 @@ description: "Nino 在你写代码时报告的全部诊断（NINO001 至 NINO033
 icon: ShieldCheck
 ---
 
-Nino 的分析器在你写代码时报告的全部规则，问题总是标在你自己的代码上（不会在生成的文件里）：按编号或关键词搜索，或按级别、代码修复和领域筛选。带扳手图标的规则有代码修复，可以一次性应用到整个文档、项目或解决方案。
+这里列出 Nino 分析器在你写代码时报告的全部规则，只报在你自己的代码上，从不报在生成的文件里。可以按编号或关键词搜索，也可以按级别、有无代码修复或领域筛选。带扳手图标的规则有代码修复，可以一次应用到整个文档、项目或解决方案。
 
 ## 诊断列表 [#diagnostics]
 
 <AnalyzerRules lang="zh" />
 
-每个编号链接到 [诊断参考](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)中的完整说明，在本页地址后加 `#nino007` 可以直接定位到那一行。NINOGEN 开头的编号由把类型写成 TypeScript、Go 或 Rust 的 [Nino.Codegen 和 nino-gen](/zh/docs/v4/advanced/codegen#diagnostics) 在构建中报告，不经过分析器；Nino.TypeScript 的 `NINOTS001` 和 `NINOTS002`（直到 4.0.0-rc.7）现在是 `NINOGEN001` 和 `NINOGEN002`。
+每个编号都链接到[诊断参考](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/diagnostics.md)里的完整说明；在本页地址后加 `#nino007`，就能直接定位到那一行。NINOGEN 开头的编号不是分析器报的，而是 [Nino.Codegen 和 nino-gen](/zh/docs/v4/advanced/codegen#diagnostics) 在构建时报的，它们把你的类型写成 TypeScript、Go 或 Rust。Nino.TypeScript 的 `NINOTS001` 和 `NINOTS002`（到 4.0.0-rc.7 为止）现已改为 `NINOGEN001` 和 `NINOGEN002`。
 
-分析器随源生成器一起发布（`Nino.Generator` 包和 Unity 包里都有），在 Visual Studio、Rider 和 VS Code 里实时显示，Unity 编译脚本时显示在控制台。代码修复随 `Nino.Generator` NuGet 包和 Unity 包提供（Unity 包中的 `Nino.Generator.CodeFixes.dll`，Unity 会把它写进为 Rider 和 Visual Studio 生成的项目）。
+分析器随源生成器一起发布（`Nino.Generator` 包和 Unity 包里都有），在 Visual Studio、Rider 和 VS Code 里实时显示，Unity 编译脚本时显示在控制台。代码修复同样在 `Nino.Generator` NuGet 包和 Unity 包里（即 `Nino.Generator.CodeFixes.dll`，Unity 为 Rider 和 Visual Studio 生成项目时会把它列进去）。
 
 ## 修改严重级别 [#changing-severities]
 
@@ -23,13 +23,13 @@ Nino 的分析器在你写代码时报告的全部规则，问题总是标在你
 dotnet_diagnostic.NINO006.severity = none
 ```
 
-## 被屏蔽的编译器警告 [#suppressed-compiler-warnings]
+## 屏蔽的编译器警告 [#suppressed-compiler-warnings]
 
-生成代码会读写 Nino 要序列化的私有成员，而编译器和 IDE 不一定看得到这种访问（在 .NET 8 及以上，访问通过 `[UnsafeAccessor]` 进行）。所以对于 Nino 要序列化的私有成员，以下警告会被屏蔽：CS0169、CS0414 和 CS0649（“从未使用 / 从未赋值”），以及 IDE0044、IDE0051 和 IDE0052（“设为只读”“删除未使用的成员”）。
+生成代码会读写 Nino 要序列化的私有成员，而编译器和 IDE 不一定看得出这种访问（在 .NET 8 及以上，它走的是 `[UnsafeAccessor]`）。所以 Nino 会在它序列化的私有成员上屏蔽这些警告：CS0169、CS0414 和 CS0649（“从未使用 / 从未赋值”），以及 IDE0044、IDE0051 和 IDE0052（“设为只读”“删除未使用的成员”）。
 
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="平台" href="/zh/docs/v4/platforms">Nino 支持的每个运行时，裁剪与 Native AOT。</Card>
-  <Card title="常见问题" href="/zh/docs/v4/faq">简短的回答，以及最常见错误的解决办法。</Card>
+  <Card title="平台" href="/zh/docs/v4/platforms">Nino 支持的所有运行时，以及裁剪和 Native AOT。</Card>
+  <Card title="常见问题" href="/zh/docs/v4/faq">简短解答，以及最常见报错的解决办法。</Card>
 </Cards>
