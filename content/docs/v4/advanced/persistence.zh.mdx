@@ -299,8 +299,13 @@ public sealed class EventLog : IDisposable
     private readonly FileStream _file;
     private readonly NinoArrayBufferWriter _buffer = new(1024);
 
-    public EventLog(string path) =>
-        _file = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
+    /// <summary>从 validEnd 接着写：Replay 返回的位置，残缺的末尾记录在这里被截掉。</summary>
+    public EventLog(string path, long validEnd)
+    {
+        _file = new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read);
+        _file.SetLength(validEnd);
+        _file.Position = validEnd;
+    }
 
     public void Append(AccountEvent evt)
     {
@@ -322,19 +327,24 @@ public sealed class EventLog : IDisposable
     }
 
     /// <summary>
-    /// 按顺序把每条完整的记录交给 apply；末尾残缺的记录（写到一半时崩溃）直接忽略。
-    /// apply 收到的是复用的实例：不要保留它。
+    /// 按顺序把每条完整的记录交给 apply，返回最后一条完整记录之后的位置；末尾残缺的记录（写到一半时崩溃）
+    /// 不交给 apply，用这个位置打开 EventLog 时会被截掉。apply 收到的是复用的实例：不要保留它。
     /// </summary>
-    public static void Replay(string path, Action<AccountEvent> apply)
+    public static long Replay(string path, Action<AccountEvent> apply)
     {
+        if (!File.Exists(path))
+            return 0;
         using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         byte[] record = ArrayPool<byte>.Shared.Rent(4096);
+        long end = 0;
         AccountEvent evt = null;                  // 下一条记录类型相同时原地填充
         try
         {
             while (file.ReadAtLeast(record.AsSpan(0, 4), 4, throwOnEndOfStream: false) == 4)
             {
                 int length = BinaryPrimitives.ReadInt32LittleEndian(record);
+                if (length == 0)
+                    break;                        // 文件系统补零的末尾
                 if ((uint)length > MaxRecordSize)
                     throw new InvalidDataException($"Record of {length} bytes");
                 if (length > record.Length)
@@ -347,18 +357,21 @@ public sealed class EventLog : IDisposable
                     break;                        // 末尾不完整
                 NinoDeserializer.Deserialize(record.AsSpan(0, length), ref evt); // [!code highlight]
                 apply(evt);
+                end = file.Position;
             }
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(record);
         }
+        return end;
     }
 }
 ```
 
 - `Append` 用复用的缓冲区写每条记录，不分配内存。`Replay` 用一个池化数组读文件，并读入同一个复用的事件实例，所以只有事件类型和上一条不同时，这条记录才要分配（另外就是事件里的数组和变了的字符串）。`ReadAtLeast` 要求 .NET 7 或更高版本；其他平台循环调用 `Read`。
 - 每条记录都 `Flush(flushToDisk: true)` 是最安全的默认做法，也最慢。愿意拿持久性换吞吐量的话，追加几条记录再刷一次（组提交）。
+- 先重放，再在 `Replay` 返回的位置打开日志：`using var log = new EventLog(path, EventLog.Replay(path, state.Apply));`。这样追加下一条记录之前，残缺的末尾就被截掉了；如果直接接在它后面追加，下次重放会按残缺记录的长度把新记录读进去。
 - 长度前缀只能发现被截断的**末尾**。要发现文件中间的损坏，在每条记录的长度之后加一个校验和（例如 `System.IO.Hashing.Crc32`）。
 - 读回事件的版本，在写入时可能还不存在：[消息队列的规则](/zh/docs/v4/advanced/message-queues#topics-that-outlive-a-deployment)原样适用。
 - 这些记录的帧格式 `[int32 长度][负载]` 和 [`Stream` 辅助类](/zh/docs/v4/advanced/streams#streams)、[网络层指南](/zh/docs/v4/advanced/networking#frame-the-stream)一样，所以也能用它们读写这份日志。

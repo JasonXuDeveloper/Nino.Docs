@@ -165,7 +165,15 @@ try
     while (!ct.IsCancellationRequested)
     {
         int received = socket.Receive(datagram);
-        NinoDeserializer.Deserialize(datagram.AsSpan(0, received), ref message); // [!code highlight]
+        try
+        {
+            NinoDeserializer.Deserialize(datagram.AsSpan(0, received), ref message); // [!code highlight]
+        }
+        catch (NinoDataException)
+        {
+            message = null; // anyone can send a datagram: drop a malformed one and go on
+            continue;
+        }
         Handle(message);
     }
 }
@@ -208,7 +216,7 @@ using Nino.Core;
 /// <summary>[int32 length][payload] frames on a Stream. One instance per connection; not thread safe.</summary>
 public sealed class FrameStream : IDisposable
 {
-    public const int MaxFrameSize = 16 << 20;
+    public const int MaxFrameSize = 16 << 20; // also the most memory one peer can make the reader hold
 
     private readonly Stream _stream;
     private readonly NinoArrayBufferWriter _out = new(4096);

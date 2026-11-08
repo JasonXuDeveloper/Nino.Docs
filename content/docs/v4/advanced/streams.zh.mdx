@@ -21,7 +21,7 @@ using Nino.Core;
 
 public static partial class StreamFrames
 {
-    public const int MaxFrameSize = 16 << 20; // 租用缓冲区之前拒绝离谱的长度
+    public const int MaxFrameSize = 16 << 20; // 一帧（也就是一个对端）最多能让读取方租用的内存
 
     // [int32 长度][负载]，在 buffer 中构建
     public static void Frame<T>(T value, NinoArrayBufferWriter buffer)
@@ -305,16 +305,37 @@ public static class BrotliPayload
         if ((uint)compressed > (uint)(data.Length - 8) || (uint)length > MaxSize)
             throw new InvalidDataException("Bad frame header");
 
-        byte[] rented = ArrayPool<byte>.Shared.Rent(length);
+        // 头部的长度只是声明：缓冲区只随真正解压出来的数据增长
+        var decoder = new BrotliDecoder();
+        byte[] rented = ArrayPool<byte>.Shared.Rent(Math.Min(length, 4 * compressed + 256));
         try
         {
-            if (!BrotliDecoder.TryDecompress(data.Slice(8, compressed), rented.AsSpan(0, length), out int written)
-                || written != length)
+            ReadOnlySpan<byte> source = data.Slice(8, compressed);
+            int written = 0;
+            while (true)
+            {
+                var status = decoder.Decompress(source, rented.AsSpan(written, Math.Min(rented.Length, length) - written),
+                    out int read, out int produced);
+                source = source.Slice(read);
+                written += produced;
+                if (status == OperationStatus.Done)
+                    break;
+                if (status != OperationStatus.DestinationTooSmall)
+                    throw new InvalidDataException("Corrupt data");
+                if (written == length)
+                    throw new InvalidDataException("Corrupt data"); // 超出了头部声明的长度：数据损坏
+                byte[] larger = ArrayPool<byte>.Shared.Rent(Math.Min(length, rented.Length * 2));
+                rented.AsSpan(0, written).CopyTo(larger);
+                ArrayPool<byte>.Shared.Return(rented);
+                rented = larger;
+            }
+            if (written != length)
                 throw new InvalidDataException("Corrupt data");
             NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
         }
         finally
         {
+            decoder.Dispose();
             ArrayPool<byte>.Shared.Return(rented);
         }
         return 8 + compressed;

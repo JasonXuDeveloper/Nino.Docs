@@ -140,6 +140,7 @@ using var request = new HttpRequestMessage(HttpMethod.Post, "/orders") { Content
 request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(NinoMediaType));
 
 using HttpResponseMessage response = await http.SendAsync(request);
+response.EnsureSuccessStatusCode(); // an error response is problem+json, not Nino
 Order saved = NinoDeserializer.Deserialize<Order>(await response.Content.ReadAsByteArrayAsync());
 ```
 

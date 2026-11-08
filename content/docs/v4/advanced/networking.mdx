@@ -137,7 +137,12 @@ public static class FrameReader
                 input.AdvanceTo(buffer.Start, buffer.End);
                 if (replies != null)
                     await replies.FlushAsync(cancel);        // every reply to this read, in one send
-                if (result.IsCompleted) break;
+                if (result.IsCompleted)
+                {
+                    if (!buffer.IsEmpty)
+                        throw new EndOfStreamException("Connection closed mid-frame");
+                    break;
+                }
             }
         }
         finally
@@ -380,7 +385,15 @@ public static class MessageTransports
         while (true)
         {
             int received = socket.Receive(datagram);
-            NinoDeserializer.Deserialize(datagram.AsSpan(0, received), ref message);
+            try
+            {
+                NinoDeserializer.Deserialize(datagram.AsSpan(0, received), ref message);
+            }
+            catch (NinoDataException)
+            {
+                message = null; // anyone can send a datagram: drop a malformed one and go on
+                continue;
+            }
             handle(message);
         }
     }

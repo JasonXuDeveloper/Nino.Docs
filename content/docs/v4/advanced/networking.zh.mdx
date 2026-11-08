@@ -137,7 +137,12 @@ public static class FrameReader
                 input.AdvanceTo(buffer.Start, buffer.End);
                 if (replies != null)
                     await replies.FlushAsync(cancel);        // 这次读取的所有回复，一次发出
-                if (result.IsCompleted) break;
+                if (result.IsCompleted)
+                {
+                    if (!buffer.IsEmpty)
+                        throw new EndOfStreamException("Connection closed mid-frame");
+                    break;
+                }
             }
         }
         finally
@@ -380,7 +385,15 @@ public static class MessageTransports
         while (true)
         {
             int received = socket.Receive(datagram);
-            NinoDeserializer.Deserialize(datagram.AsSpan(0, received), ref message);
+            try
+            {
+                NinoDeserializer.Deserialize(datagram.AsSpan(0, received), ref message);
+            }
+            catch (NinoDataException)
+            {
+                message = null; // 任何人都能发数据报：丢掉格式不对的那个，接着收
+                continue;
+            }
             handle(message);
         }
     }

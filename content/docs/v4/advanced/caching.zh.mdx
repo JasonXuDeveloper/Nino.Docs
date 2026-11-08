@@ -48,7 +48,15 @@ public sealed class RedisProfileCache
         var buffer = t_buffer ??= new NinoArrayBufferWriter(1024);
         buffer.ResetWrittenCount();
         NinoSerializer.Serialize(profile, buffer); // [!code highlight]
-        _db.StringSet(Key(profile.Id), buffer.WrittenMemory, ttl); // 同步调用：缓冲区复用之前已经写完
+        try
+        {
+            _db.StringSet(Key(profile.Id), buffer.WrittenMemory, ttl); // 同步调用：返回之后才复用缓冲区
+        }
+        catch
+        {
+            t_buffer = null; // 超时的命令之后仍可能发出：它的缓冲区不再复用
+            throw;
+        }
     }
 
     public UserProfile Get(long id)
@@ -157,7 +165,11 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer
 builder.Services.AddSingleton<RedisProfileCache>();
 
 // 基于 Redis 的 IDistributedCache
-builder.Services.AddStackExchangeRedisCache(options => options.Configuration = redis);
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = redis;
+    options.InstanceName = "dc:"; // 自己的键空间：RedisProfileCache 在同一个 Redis 里写 profile:v1:*
+});
 
 // HybridCache：在这个 IDistributedCache 前面加一层内存缓存，用户资料用 Nino 读写
 builder.Services.AddHybridCache()
@@ -166,8 +178,9 @@ builder.Services.AddHybridCache()
 var app = builder.Build();
 app.MapGet("/profiles/{id}", (long id, HybridCache cache, CancellationToken ct) =>
     cache.GetOrCreateAsync($"profile:v1:{id}", token => LoadProfileAsync(id, token), cancellationToken: ct));
+// HybridCache 在 IDistributedCache 的同一个键下存自己的封装格式：直接读的条目用另一个键（由 SetNinoAsync 写入）
 app.MapGet("/profiles/{id}/stored", (long id, IDistributedCache cache, CancellationToken ct) =>
-    cache.GetNinoAsync<UserProfile>($"profile:v1:{id}", ct));
+    cache.GetNinoAsync<UserProfile>($"profile-blob:v1:{id}", ct));
 app.Run();
 ```
 

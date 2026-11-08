@@ -133,7 +133,19 @@ public static class OrderConsumer
         try
         {
             while (true)
-                handle(consumer.Consume(cancel).Message.Value);
+            {
+                ConsumeResult<Guid, OrderEvent> result;
+                try
+                {
+                    result = consumer.Consume(cancel);
+                }
+                catch (ConsumeException e) when (e.Error.Code is ErrorCode.Local_KeyDeserialization
+                                                     or ErrorCode.Local_ValueDeserialization)
+                {
+                    continue; // 这个版本读不了的消息：跳过（或转到死信主题，e.ConsumerRecord 里有原始字节）
+                }
+                handle(result.Message.Value);
+            }
         }
         catch (OperationCanceledException) { }
         finally

@@ -133,7 +133,19 @@ public static class OrderConsumer
         try
         {
             while (true)
-                handle(consumer.Consume(cancel).Message.Value);
+            {
+                ConsumeResult<Guid, OrderEvent> result;
+                try
+                {
+                    result = consumer.Consume(cancel);
+                }
+                catch (ConsumeException e) when (e.Error.Code is ErrorCode.Local_KeyDeserialization
+                                                     or ErrorCode.Local_ValueDeserialization)
+                {
+                    continue; // a message this build cannot read: skip it (or dead-letter e.ConsumerRecord, which holds its bytes)
+                }
+                handle(result.Message.Value);
+            }
         }
         catch (OperationCanceledException) { }
         finally

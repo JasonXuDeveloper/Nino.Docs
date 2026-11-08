@@ -36,7 +36,7 @@ public sealed class SampleBlock
 
 ### 确定性的字节 [#deterministic-bytes]
 
-Nino 会把填充字节清零，所以相等的值总是产生相同的字节，即使结构体是在未初始化的内存中构造的（`stackalloc`、`SkipLocalsInit`）。因此可以直接对数据做哈希或比较，例如跳过发送没有变化的状态：
+Nino 会把填充字节清零，所以相等的结构体总是产生相同的字节，即使它是在未初始化的内存中构造的（`stackalloc`、`SkipLocalsInit`）。（字典和集合按枚举顺序写出，`-0.0` 和 `0.0` 的字节也不同，所以这些值相等时字节仍可能不同。）因此可以直接对数据做哈希或比较，例如跳过发送没有变化的状态：
 
 ```csharp
 buffer.ResetWrittenCount();
