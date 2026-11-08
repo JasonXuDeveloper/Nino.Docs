@@ -1,11 +1,11 @@
 ---
 title: Unity 与 HybridCLR
 seoTitle: "Unity 序列化：IL2CPP、HybridCLR 热更新与 Burst – Nino v4 文档"
-description: "在 Unity 中配置 Nino，用可选的 Burst 编译 SIMD 内核加速，序列化 AnimationCurve、Gradient 和 RectOffset，配合程序集定义、IL2CPP 和 HybridCLR 热更新使用，并让每一帧都不产生 GC。"
+description: "在 Unity 里配置 Nino：用可选的 Burst SIMD 内核提速，序列化 AnimationCurve、Gradient 和 RectOffset，配合程序集定义、IL2CPP 和 HybridCLR 热更新使用，让每一帧都不产生 GC。"
 icon: Gamepad2
 ---
 
-Nino 支持 Unity 2022.3 及以上版本的 Mono 和 IL2CPP、所有 Player 平台，以及 HybridCLR 热更新程序集，且无需任何初始化调用。本指南介绍安装、程序集定义、可选的 Burst 内核、Nino 支持的 Unity 类、IL2CPP 构建、热更新，以及如何让每一帧都不产生 GC。
+Nino 支持 Unity 2022.3 及以上版本，Mono 和 IL2CPP 都行，覆盖所有 Player 平台，也支持 HybridCLR 热更新程序集，不需要任何初始化调用。这篇讲安装、程序集定义、可选的 Burst 内核、Nino 能序列化的 Unity 类、IL2CPP 构建、热更新，以及怎样让每一帧都不产生 GC。
 
 ## 配置 [#setup]
 
@@ -22,14 +22,14 @@ openupm add com.jasonxudeveloper.nino
 
 OpenUPM 把每个候选版本 rc.N 编号为 preview.(200 + N)，见[版本对照表](/zh/docs/v4/start#openupm-versions)。
 
-包中含有 `Nino.Core.dll`、源生成器 `Nino.Generator.dll`（已标记为 `RoslynAnalyzer`，Unity 会在编译脚本时运行它）、它的代码修复 `Nino.Generator.CodeFixes.dll`（供 Rider 和 Visual Studio 使用）、`Nino.UnityTypes.dll`（下文 [Unity 的类](#unity-classes)的格式化器），以及 Nino.Core 依赖的 `System.Buffers`、`System.Memory` 和 `System.Runtime.CompilerServices.Unsafe` 程序集。
+包里有 `Nino.Core.dll`、源生成器 `Nino.Generator.dll`（带 `RoslynAnalyzer` 标签，Unity 编译脚本时会运行它）、它的代码修复 `Nino.Generator.CodeFixes.dll`（给 Rider 和 Visual Studio 用）、`Nino.UnityTypes.dll`（下文 [Unity 的类](#unity-classes)的格式化器），以及 Nino.Core 依赖的 `System.Buffers`、`System.Memory` 和 `System.Runtime.CompilerServices.Unsafe` 程序集。
 
 </Step>
 <Step>
 
 ### 在程序集定义中引用 [#reference-it-from-your-assembly-definitions]
 
-使用 `.asmdef` 的程序集，在勾选 **Auto Referenced** 时能直接看到 `Nino.Core.dll`。如果程序集启用了 **Override References**，需要把 `Nino.Core.dll` 手动加进列表。源生成器会在每个引用了 `Nino.Core` 的程序集上运行。
+带 `.asmdef` 的程序集，只要勾选了 **Auto Referenced**，就能直接用到 `Nino.Core.dll`。程序集开了 **Override References** 的话，要手动把 `Nino.Core.dll` 加进列表。凡是引用了 `Nino.Core` 的程序集，源生成器都会处理。
 
 </Step>
 <Step>
@@ -55,17 +55,17 @@ public class PlayerState
 
 ## 与 .NET 的区别 [#what-differs-from-net]
 
-- **私有成员需要 `partial`。** Unity 基于 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员（或标记了 `[NinoPooled]`）的类型必须声明为 `partial`，包含它的外层类型也一样。分析器会报告 NINO002。自动加上 `partial` 的代码修复在 Rider 和 Visual Studio 中同样可用；其他编辑器中需要手动添加。
-- **没有拦截器。** Unity 包附带的是源生成器的 Roslyn 4.3 版本（Unity 支持的最低编译器版本），所以调用走常规路径。写出的字节完全相同，每次调用只差几纳秒。
-- **字节与 .NET 一致。** .NET 服务器写出的数据，Unity 客户端可以直接读取，反过来也一样，32 位的 IL2CPP Player 和旧版 Mono 运行时也不例外。参见[平台](/zh/docs/v4/platforms)。
+- **私有成员要 `partial`。** Unity 按 .NET Standard 编译，没有 `[UnsafeAccessor]`，所以序列化非公开成员（或标了 `[NinoPooled]`）的类型必须是 `partial`，包含它的外层类型也一样。分析器会报 NINO002。在 Rider 和 Visual Studio 里，代码修复能自动加上 `partial`；其他编辑器要手动加。
+- **没有拦截器。** Unity 包里是源生成器的 Roslyn 4.3 版本（Unity 支持的最老的编译器），所以调用走常规路径。字节完全一样，每次调用只差几纳秒。
+- **字节和 .NET 一致。** .NET 服务器写的数据，Unity 客户端能读，反过来也一样，32 位的 IL2CPP Player 和老版本的 Mono 运行时也不例外。见[平台](/zh/docs/v4/platforms)。
 
 ## 与 .NET 服务端共享类型 [#shared-types]
 
-Unity 客户端和 .NET 服务端交换 Nino 数据时，两边必须编译同一份 `[NinoType]` 声明：字节由成员及其顺序决定，手工同步的两份代码迟早会对不上。把类型放在一个地方，让两边的构建都编译它。
+Unity 客户端和 .NET 服务端交换 Nino 数据，两边必须编译同一份 `[NinoType]` 声明：字节跟着成员和成员顺序走，手工同步的两份代码迟早对不上。把类型放在一处，两边的构建都编译它。
 
 ### 目标框架 [#shared-target-framework]
 
-共享项目做成面向 `netstandard2.1` 的类库，这是 Unity 2022.3 及以后编译所用的 API：
+共享项目做成 `netstandard2.1` 类库，Unity 2022.3 及以后的版本就按这套 API 编译：
 
 ```xml title="Game.Shared/Game.Shared.csproj"
 <Project Sdk="Microsoft.NET.Sdk">
@@ -79,21 +79,21 @@ Unity 客户端和 .NET 服务端交换 Nino 数据时，两边必须编译同�
 </Project>
 ```
 
-一个目标框架就够了。服务端引用这个类库，运行的仍是适合它自己运行时的 Nino.Core（.NET 10 的版本，带 SIMD 路径），因为 NuGet 按应用程序、而不是按类库挑选 Nino.Core 的程序集。`netstandard2.1` 构建改变的是生成的代码：它没有 `[UnsafeAccessor]`，所以序列化非公开成员的类型要声明为 `partial`（NINO002），这本来也是 Unity 的要求。只有类库自己需要 .NET Standard 2.1 以外的 API 时，才用多目标（`<TargetFrameworks>netstandard2.1;net10.0</TargetFrameworks>`）。
+一个目标框架就够了。服务端引用这个类库，跑的仍是对应它自己运行时的 Nino.Core（.NET 10 版，带 SIMD 路径），因为 NuGet 是按应用程序、不是按类库挑选 Nino.Core 的程序集。`netstandard2.1` 影响的是生成的代码：没有 `[UnsafeAccessor]`，所以序列化非公开成员的类型要声明为 `partial`（NINO002），反正 Unity 也要求这样。只有类库自己要用 .NET Standard 2.1 以外的 API，才需要多目标（`<TargetFrameworks>netstandard2.1;net10.0</TargetFrameworks>`）。
 
 ### 生成器在哪里运行 [#shared-generator]
 
-- **在共享项目的 .NET 构建中**，NuGet 包里的生成器（.NET 8 SDK 及以后用它的 Roslyn 4.8 或 4.12 版本）把格式化器写进共享程序集。服务端对共享类型的调用使用这些格式化器。这些调用不会被拦截，因为服务端的生成器通过缓存的格式化器访问其他程序集的类型：调用走常规路径，多花几纳秒。
-- **在 Unity 中**，包里的生成器（Unity 编译器加载的 Roslyn 4.3 版本）对每个引用 `Nino.Core.dll`、并由 Unity 从源码编译的程序集运行。它不生成拦截器。
+- **共享项目的 .NET 构建里**，NuGet 包里的生成器（.NET 8 SDK 及以后用的是它的 Roslyn 4.8 或 4.12 版本）把格式化器写进共享程序集。服务端调用共享类型时用的就是这些格式化器。拦截器接管不了这些调用，因为服务端的生成器要经过缓存的格式化器才能用到别的程序集里的类型：调用走常规路径，多花几纳秒。
+- **Unity 里**，包里的生成器（Unity 编译器加载的 Roslyn 4.3 版本）处理每个引用了 `Nino.Core.dll`、由 Unity 从源码编译的程序集。它不生成拦截器。
 
-无论哪边的构建写出的字节，都完全相同。
+不管哪边的构建写的，字节都一样。
 
 ### 把类型放进 Unity [#shared-into-unity]
 
 <Tabs items={["源码文件夹（推荐）", "预编译 DLL"]}>
 <Tab value="源码文件夹（推荐）">
 
-把 `.cs` 文件放在 Unity 项目里一个有自己程序集定义的文件夹中（`Assets/Shared/Game.Shared.asmdef`，开启 Auto Referenced，这样它能看到 `Nino.Core.dll`），再让 .NET 项目编译同一批文件：
+把 `.cs` 文件放进 Unity 项目里一个单独的文件夹，给它配自己的程序集定义（`Assets/Shared/Game.Shared.asmdef`，勾选 Auto Referenced，这样它能用到 `Nino.Core.dll`），再让 .NET 项目编译同一批文件：
 
 ```xml title="Game.Shared/Game.Shared.csproj"
 <ItemGroup>
@@ -101,12 +101,12 @@ Unity 客户端和 .NET 服务端交换 Nino 数据时，两边必须编译同�
 </ItemGroup>
 ```
 
-Unity 自己编译这个文件夹，并在上面运行它的生成器，所以客户端的格式化器由 Unity 的编译器生成，IL2CPP 把它们当作普通脚本处理。文件夹放在 `Assets` 外面也可以，作为本地包使用：在 asmdef 旁边加一个 `package.json`，在 `Packages/manifest.json` 里用 `"com.mygame.shared": "file:../../Shared"` 引用它。
+这个文件夹由 Unity 自己编译，也由它运行生成器，所以客户端的格式化器出自 Unity 的编译器，IL2CPP 把它们当普通脚本对待。文件夹放在 `Assets` 外面也行，当作本地包：在 asmdef 旁边加一个 `package.json`，再在 `Packages/manifest.json` 里用 `"com.mygame.shared": "file:../../Shared"` 引用。
 
 </Tab>
 <Tab value="预编译 DLL">
 
-构建共享项目，**只**把 `Game.Shared.dll` 复制到 `Assets/Plugins`。DLL 里的格式化器由 .NET 构建生成，Unity 的生成器不会处理 DLL。不要从构建输出里复制 `Nino.Core.dll`、`System.Memory.dll` 等依赖：Unity 包里已经有了，同一个程序集有两份，Unity 构建会失败。DLL 中生成的代码调用的是构建时所用的 `Nino.Core`，所以要用与 Unity 包相同的 Nino 版本构建，两边任何一边升级都要重新构建。
+构建共享项目，**只**把 `Game.Shared.dll` 复制到 `Assets/Plugins`。DLL 里的格式化器是 .NET 构建生成的，Unity 的生成器不处理 DLL。别从构建输出里复制 `Nino.Core.dll`、`System.Memory.dll` 这些依赖：Unity 包里已经有了，同一个程序集出现两份，Unity 构建会失败。DLL 里生成的代码调用的是构建时的那个 `Nino.Core`，所以构建用的 Nino 版本要和 Unity 包一致，任何一边升级都要重新构建。
 
 </Tab>
 </Tabs>
@@ -115,37 +115,37 @@ Unity 自己编译这个文件夹，并在上面运行它的生成器，所以�
 
 | 错误做法 | 后果 | 由谁发现 |
 | --- | --- | --- |
-| 类型有两份，分别修改 | 成员逐渐对不上，一边读另一边的数据时读错或抛异常 | 好的情况下是 `NinoDataException`；只保留一份源码 |
-| 序列化的非公开成员所在的类型没有 `partial` | `netstandard2.1` 和 Unity 的构建访问不到它 | NINO002 |
-| 共享源码里用了 C# 9 以后的语法（`required`、文件范围的 `namespace X;`） | .NET 构建能编译，Unity 不能 | 共享项目中的 `<LangVersion>9.0</LangVersion>` |
-| 把 `Nino.Core.dll` 复制进 `Assets`，和包里的那份并存 | Unity 报告程序集重复 | Unity 的编译器 |
-| 预编译 DLL 所用的 Nino 版本与 Unity 包不同 | 生成的代码调用了那个版本可能没有的 API | 运行时的 `MissingMethodException` 或 `TypeLoadException` |
-| 同一批类型既以源码、又以 DLL 形式放进项目 | 每个类型都有两份定义 | Unity 的编译器 |
+| 类型有两份，各改各的 | 成员慢慢对不上，一边读另一边的数据时读错或抛异常 | 运气好是 `NinoDataException`；只留一份源码 |
+| 有非公开的序列化成员，类型却没有 `partial` | `netstandard2.1` 和 Unity 的构建访问不到它 | NINO002 |
+| 共享源码里用了 C# 9 以后的语法（`required`、文件范围的 `namespace X;`） | .NET 构建能编译，Unity 编译不过 | 共享项目里的 `<LangVersion>9.0</LangVersion>` |
+| 把 `Nino.Core.dll` 复制进 `Assets`，和包里那份并存 | Unity 报程序集重复 | Unity 的编译器 |
+| 预编译 DLL 用的 Nino 版本和 Unity 包不同 | 生成的代码调用了那个版本可能没有的 API | 运行时的 `MissingMethodException` 或 `TypeLoadException` |
+| 同一批类型既有源码、又有 DLL | 每个类型都有两份定义 | Unity 的编译器 |
 
 ## Burst 加速内核 [#burst-kernels]
 
-Unity 运行的是 `Nino.Core` 的 netstandard 构建，其中没有硬件内联函数（hardware intrinsics）：单靠它自己，元组、带填充的结构体和 Latin-1 文本只能一个字段或一个字（word）地搬运，`[NinoUtf8]` 字符串用 .NET 的 UTF-8 编码器转码。没有 Burst 的 IL2CPP 和 Mono 播放器只走这些标量路径，所以**想要速度，请安装 Burst**：之后 Nino 会改用 SIMD 搬运它们，你的代码无需任何改动：
+Unity 跑的是 `Nino.Core` 的 netstandard 构建，里面没有硬件内部函数（hardware intrinsics）：单靠它自己，元组、带填充的结构体和 Latin-1 文本只能一个字段、一个字（word）地搬，`[NinoUtf8]` 字符串用 .NET 的 UTF-8 编码器转码。没有 Burst 的 IL2CPP 和 Mono Player 只能走这些标量路径，所以**要速度，就装 Burst**：装上之后 Nino 改用 SIMD 搬这些数据，代码一行都不用改：
 
-1. 打开 **Window > Package Manager**，选择 **Unity Registry**，安装 **Burst**（`com.unity.burst`）1.8 或更高版本。用到 Entities 或 Collections 的项目已经有它了，因为两者都依赖 Burst。
-2. 就这样。只要项目中有 Burst，Nino 包里的 `Nino.Burst` 程序集就会参与编译（没有 Burst 时跳过），并在启动时（第一个场景加载之前）以及编辑器中每次域重载（domain reload）后注册它的内核。
+1. 打开 **Window > Package Manager**，选 **Unity Registry**，安装 **Burst**（`com.unity.burst`）1.8 或更高版本。用了 Entities 或 Collections 的项目已经有 Burst，这两个包都依赖它。
+2. 没有了。项目里一有 Burst，Nino 包里的 `Nino.Burst` 程序集就会参与编译（没有 Burst 就跳过），并在启动时（第一个场景加载之前）和编辑器里每次域重载（domain reload）之后注册内核。
 
-| 内核 | 加速的内容 | 起始长度 |
+| 内核 | 加速什么 | 起用长度 |
 | --- | --- | --- |
-| Permute | 读写值元组、`KeyValuePair` 以及字节与内存布局不同（有填充、含元组或键值对成员）的 `[NinoType]` 结构体的数组和列表，以及复制带填充的原始结构体数组（顺带清零填充）；每个值最多 64 字节。在支持 AVX2 的 x64 CPU 上，最多 16 字节的值每个 32 字节向量放两个或更多 | 2 个值（带填充的原始结构体：16 个；AVX2：256 个） |
-| Narrow、Widen | 读写单字节（Latin-1）形式的字符串（包括 ASCII）：一次 16 个字符 | 16 个字符 |
-| NarrowAscii、WidenAscii | 读写 [`[NinoUtf8]` 字符串](/zh/docs/v4/defining-types#string-encoding)：其中直到第一个非 ASCII 字符为止的 ASCII 文本，一次 16 个字符；其余部分交给编码器（或严格的解码器），因此无效的 UTF-8 被拒绝的方式与没有 Burst 时完全相同 | 16 个字符 |
+| Permute | 读写这几类元素的数组和列表：值元组、`KeyValuePair`、字节和内存布局不一样的 `[NinoType]` 结构体（有填充，或含元组、键值对成员）；以及复制带填充的原始结构体数组，复制时顺带把填充清零。每个值最多 64 字节。在支持 AVX2 的 x64 CPU 上，16 字节以内的值一个 32 字节向量能放两个或更多 | 2 个值（带填充的原始结构体：16 个；AVX2：256 个） |
+| Narrow、Widen | 读写单字节（Latin-1）形式的字符串，ASCII 也算：一次 16 个字符 | 16 个字符 |
+| NarrowAscii、WidenAscii | 读写 [`[NinoUtf8]` 字符串](/zh/docs/v4/defining-types#string-encoding)：开头一段 ASCII 文本（到第一个非 ASCII 字符为止），一次 16 个字符；剩下的交给编码器（或严格的解码器），所以无效 UTF-8 的拒绝方式和没有 Burst 时完全一样 | 16 个字符 |
 
-更短的数组和字符串继续走标量路径，因为调用内核的开销会超过它省下的时间：这些阈值就是内核在 Unity 2022.3 和 6000.3 的 IL2CPP 播放器中开始变快的地方。`Nino.Core` 把每个内核的 Burst 函数指针存进静态字段并直接调用，这是调用 Burst 代码最便宜的方式：先把长度和阈值比较一次，然后直接调用，中间没有对象，也没有虚调用（运行时无法调用 Burst 函数指针时，不注册任何内核）。没有填充的原始结构体数组（`Vector3[]`、`Color32[]`、你自己的非托管结构体）无论有没有 Burst 都是一次内存复制。
+更短的数组和字符串照旧走标量路径，因为调用内核的开销比它省下的还多：这些阈值就是在 Unity 2022.3 和 6000.3 的 IL2CPP Player 里实测内核开始变快的长度。`Nino.Core` 把每个内核的 Burst 函数指针存在静态字段里，直接调用，这是调用 Burst 代码最省的方式：长度和阈值比一次，然后调用，中间没有对象，也没有虚调用（运行时调用不了 Burst 函数指针时，一个内核也不注册）。没有填充的原始结构体数组（`Vector3[]`、`Color32[]`、你自己的非托管结构体）有没有 Burst 都是一次内存复制。
 
 <UnityHighlights lang="zh" />
 
-**指令集。** 内核在 x86 和 x64 上使用 AVX2（`vpshufb`）和 SSSE3（`pshufb`），在 Arm64 上使用 Neon（`tbl`），适用于编辑器、Mono 和 IL2CPP 播放器，以及通过 AOT 的 `Nino.Core` 调用它们的 HybridCLR 热更新代码。在内核无法运行的地方，Nino 不注册任何内核，继续使用标量路径：Armv7（32 位 Android）、WebGL（它有自己的内核，见[下文](#webgl-kernels)）、不支持 SSSE3 的 x86 和 x64 CPU、Burst 不运行的播放器，以及关闭了 Burst 编译的编辑器（**Jobs > Burst > Enable Compilation**）。
+**指令集。** 内核在 x86 和 x64 上用 AVX2（`vpshufb`）和 SSSE3（`pshufb`），在 Arm64 上用 Neon（`tbl`）；编辑器、Mono 和 IL2CPP Player 都能用，HybridCLR 热更新代码也能经由 AOT 的 `Nino.Core` 用上。内核跑不了的地方，Nino 一个都不注册，继续走标量路径：Armv7（32 位 Android）、WebGL（它有自己的内核，见[下文](#webgl-kernels)）、不支持 SSSE3 的 x86 和 x64 CPU、Burst 不运行的 Player，以及关了 Burst 编译（**Jobs > Burst > Enable Compilation**）的编辑器。
 
-**x64 播放器：启用 SSE4 和 AVX2。** Burst 为 **Edit > Project Settings > Burst AOT Settings** 中的每个 x64 CPU 目标各编译一次播放器代码，启动时选出 CPU 能运行的版本。AVX2 目标让支持 AVX2 的 CPU 使用 32 字节置换；SSE4 目标让支持 SSSE3 但不支持 AVX2 的 CPU 使用 16 字节内核。SSE2 版本没有字节重排，所以没有 SSE4 目标时，这类 CPU 完全用不上内核。默认的目标列表因 Burst 版本而异（1.8.29 的是 SSE2 和 AVX2），所以请确认其中包含 SSE4 和 AVX2，Nino 自己的测试工程就是这样设置的（SSE2、SSE4 和 AVX2）。
+**x64 Player：勾上 SSE4 和 AVX2。** **Edit > Project Settings > Burst AOT Settings** 里列了几个 x64 CPU 目标，Burst 就把 Player 的代码编译几份，启动时挑 CPU 能跑的那份。AVX2 目标让支持 AVX2 的 CPU 用上 32 字节置换；SSE4 目标让支持 SSSE3、不支持 AVX2 的 CPU 用上 16 字节内核。SSE2 那份没有字节重排，所以没有 SSE4 目标时，这类 CPU 一个内核也用不上。默认列表随 Burst 版本而变（1.8.29 默认是 SSE2 和 AVX2），请确认列表里有 SSE4 和 AVX2；Nino 自己的测试工程就是这么配的（SSE2、SSE4 和 AVX2）。
 
-**字节相同。** 每个内核写出的字节与它替代的标量路径完全相同，因此有 Burst 和没有 Burst 的播放器、.NET 服务器以及 [Go、Rust 和 TypeScript 运行时](/zh/docs/v4/advanced/codegen)都能互相读取对方的数据。Nino 的 CI 在编辑器和 IL2CPP 播放器中、在 Unity 2022.3 和 6000.3 上逐字节比较每个内核与它的标量参考实现。[Unity 基准测试](/zh/docs/v4/benchmarks-unity)在每个版本中对 IL2CPP 播放器分别在使用和不用内核时计时。
+**字节一致。** 每个内核写出的字节和它替代的标量路径一模一样，所以有没有 Burst 的 Player、.NET 服务器，以及 [Go、Rust 和 TypeScript 运行时](/zh/docs/v4/advanced/codegen)之间数据互通。Nino 的 CI 在 Unity 2022.3 和 6000.3 上，在编辑器和 IL2CPP Player 里，把每个内核和它的标量参考实现逐字节比对。每次发布，[Unity 基准测试](/zh/docs/v4/benchmarks-unity)都会给 IL2CPP Player 分别测不用和使用内核时的耗时。
 
-要在运行时检查或切换内核，使用 `Nino.Burst.NinoBurst` 类（你自己的程序集定义中的代码需要引用 `Nino.Burst` 程序集定义才能调用它）：
+运行时要检查或切换内核，用 `Nino.Burst.NinoBurst` 类（代码在你自己的程序集定义里的话，要先引用 `Nino.Burst` 程序集定义才能调用）：
 
 ```csharp nocheck
 using Nino.Burst;
@@ -158,59 +158,59 @@ NinoBurst.Register(NinoBurst.Ssse3); // 让支持 AVX2 的 CPU 只用 16 字节�
 
 ### WebGL [#webgl-kernels]
 
-Burst 不能为 WebGL 编译，因此 Unity 包为它提供了用 C 和 WebAssembly SIMD 写成的同样的内核（`Nino.WebGL`，由 Unity 编译进播放器，无需安装任何东西）。播放器用 WebAssembly SIMD 构建时，它们在启动时注册；没有 SIMD 的播放器继续走标量路径：
+Burst 编译不了 WebGL，所以 Unity 包为 WebGL 另备了一套同样的内核，用 C 和 WebAssembly SIMD 写成（`Nino.WebGL`，由 Unity 编译进 Player，什么都不用装）。Player 用 WebAssembly SIMD 构建时，它们在启动时注册；不带 SIMD 的 Player 继续走标量路径：
 
-- **Unity 6**：开启 **Player Settings > Publishing Settings > Target WebAssembly 2023**（`PlayerSettings.WebGL.wasm2023`），整个播放器就会带 SIMD 构建。
-- **Unity 2022.3** 没有这个设置。在 **Player Settings > Other Settings > Additional IL2CPP Arguments** 中加上 `--compiler-flags=-msimd128`。这样的播放器需要浏览器支持 WebAssembly SIMD：Chrome 91、Firefox 89、Safari 16.4 或更高版本，而 Unity 2022.3 本身支持 Safari 15，所以如果你的玩家还在用更旧的 Safari，请不要开启。
+- **Unity 6**：打开 **Player Settings > Publishing Settings > Target WebAssembly 2023**（`PlayerSettings.WebGL.wasm2023`），整个 Player 就带 SIMD 构建。
+- **Unity 2022.3** 没有这个设置。在 **Player Settings > Other Settings > Additional IL2CPP Arguments** 里加上 `--compiler-flags=-msimd128`。这样构建的 Player 要求浏览器支持 WebAssembly SIMD：Chrome 91、Firefox 89、Safari 16.4 或更高版本；而 Unity 2022.3 本身支持到 Safari 15，所以玩家里还有人用更老的 Safari，就别开。
 
-它们处理 16 个字符及以上的 Latin-1 字符串和 `[NinoUtf8]` 字符串中的 ASCII 文本，以及 32 个值及以上的带填充原始结构体数组；元组数组在那里测不出收益，同样从 32 个起。写出的字节与不用它们时相同，CI 在两个 Unity 版本上都会在 Chrome 中把它们与标量路径逐一比对。`Nino.WebGL.NinoWasm` 可以查询它们是否启用（`Simd`、`Registered`），并提供 `Register` 和 `Unregister`。这些 C 内核只用于 WebGL：其他平台上的内核都来自 Burst。
+它们处理 16 个字符及以上的 Latin-1 字符串和 `[NinoUtf8]` 字符串里的 ASCII 文本，以及 32 个值及以上的带填充原始结构体数组；元组数组在 WebGL 上测不出收益，也从 32 个起。写出的字节和不用它们时一样，CI 在两个 Unity 版本上都会在 Chrome 里拿它们和标量路径比对。`Nino.WebGL.NinoWasm` 能查它们是否启用（`Simd`、`Registered`），也有 `Register` 和 `Unregister`。这套 C 内核只用于 WebGL：其他平台的内核都来自 Burst。
 
 ## Unity 的类 [#unity-classes]
 
-Unity 的结构体（`Vector3`、`Quaternion`、`Color32`、`Bounds` 等）是非托管类型，Nino 不需要格式化器，直接按内存写入。有三个 Unity 类的格式化器位于 `Nino.UnityTypes.dll` 中，它和 `Nino.Core.dll` 一起随 Unity 包提供，因此这些类可以作为成员、列表元素或顶层值使用：
+Unity 的结构体（`Vector3`、`Quaternion`、`Color32`、`Bounds` 等）是非托管类型，Nino 直接按内存写，不需要格式化器。有三个 Unity 类的格式化器在 `Nino.UnityTypes.dll` 里，它和 `Nino.Core.dll` 一起随 Unity 包提供，所以这三个类可以当成员、列表元素或顶层值用：
 
 | 类 | 写入内容 |
 | --- | --- |
-| `AnimationCurve` | 它的关键帧（每个关键帧的时间、值、切线、权重和权重模式），然后是前后循环模式 |
-| `Gradient` | 它的颜色关键帧、透明度关键帧，然后是模式 |
-| `RectOffset` | 它的 left、right、top 和 bottom |
+| `AnimationCurve` | 关键帧（每个关键帧的时间、值、切线、权重和权重模式），然后是前后循环模式 |
+| `Gradient` | 颜色关键帧、透明度关键帧，然后是模式 |
+| `RectOffset` | left、right、top 和 bottom |
 
-支持 `null`；用 `ref` 反序列化到已有实例时会就地重新填充。如果程序集启用了 **Override References**，也要把 `Nino.UnityTypes.dll` 加进列表。其他 Unity 类（`Texture2D`、`Material`、`ScriptableObject` 等）是资源而不是数据：序列化你需要的那些值，或者编写[自定义格式化器](/zh/docs/v4/custom-formatters)。
+支持 `null`；用 `ref` 读入已有实例时，会把实例重新填一遍。程序集开了 **Override References** 的话，也要把 `Nino.UnityTypes.dll` 加进列表。其他 Unity 类（`Texture2D`、`Material`、`ScriptableObject` 等）是资源，不是数据：序列化你要用的那些值，或者写一个[自定义格式化器](/zh/docs/v4/custom-formatters)。
 
 ## IL2CPP [#il2cpp]
 
-- 生成的代码是普通 C#：序列化时不使用反射，也不使用 `System.Reflection.Emit`。
-- 每个生成的注册表都标记了 `[RuntimeInitializeOnLoadMethod]`（编辑器中还有 `[InitializeOnLoadMethod]`），因此注册表会在启动时运行，也不会被 IL2CPP 链接器裁剪掉。即使没有这一步，注册也会在第一次用到时按需完成。
-- 代码中**写出名字**的泛型 `[NinoType]` 实例化和内置泛型集合（成员类型、`NinoSerializer.Serialize<List<MyStruct>>` 调用）都会由生成器注册，因此 IL2CPP 会提前编译它们。
-- 只通过反射创建、并且只会多态**读取**的实例化，需要在启动时加一行：`NinoPolymorphic.TryRegister<Box<MyStruct>>()`。
+- 生成的代码是普通 C#：序列化时不用反射，也不用 `System.Reflection.Emit`。
+- 每个生成的注册表都标了 `[RuntimeInitializeOnLoadMethod]`（编辑器里还有 `[InitializeOnLoadMethod]`），所以启动时就会运行，IL2CPP 链接器也不会把它裁掉。就算没有这一步，第一次用到时也会按需注册。
+- 代码里**写出了名字**的泛型 `[NinoType]` 实例化和内置泛型集合（成员类型、`NinoSerializer.Serialize<List<MyStruct>>` 调用），生成器都会注册，IL2CPP 会提前编译它们。
+- 只靠反射创建、又只会多态**读取**的实例化，要在启动时加一行：`NinoPolymorphic.TryRegister<Box<MyStruct>>()`。
 
 ## HybridCLR 热更新 [#hybridclr-hot-update]
 
-在热更新代码中，Nino **不需要任何初始化调用**。生成的注册表是按需查找的：Nino 第一次遇到新加载程序集中的类型，或者遇到还不认识的类型 ID 时，就会找到该程序集的注册表。所以：
+热更新代码里，Nino **不需要任何初始化调用**。生成的注册表按需查找：Nino 第一次碰到新加载程序集里的类型，或者还不认识的类型 ID 时，就去找那个程序集的注册表。所以：
 
 ```csharp
 Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
-// 不需要做别的：hotUpdate 中的类型都能序列化，包括 AOT 基类的子类型
+// 不用再做别的：hotUpdate 里的类型都能序列化，包括 AOT 基类的子类型
 ```
 
-常见的划分方式是：AOT 主包（启动器、网络层）声明 `Message` 基类，所有帧都按 `Message` 读取；热更新 DLL 声明玩法消息和配置类型。某次更新新增了 `public sealed class EnterDungeon : Message` 之后，只要加载了新的 DLL，主包中的网络代码就能读到它，既不需要注册调用，也不需要重新打主包。
+常见的划分：AOT 主包（启动器、网络层）声明 `Message` 基类，所有帧都按 `Message` 读；热更新 DLL 声明玩法消息和配置类型。某次更新加了 `public sealed class EnterDungeon : Message`，新 DLL 一加载，主包的网络代码就能读到它，不用调注册，也不用重新打主包。
 
-- 把热更新类型放在引用了 `Nino.Core` 的程序集定义中，或者放在通过 NuGet 安装 Nino 的独立 C# 项目中编译，然后照常加载 DLL。
-- 遵循 HybridCLR 自己的 AOT 泛型规则：热更新代码用到了哪些 AOT 程序集中的泛型，就为这些程序集加载补充元数据。
-- 热更新代码运行在 HybridCLR 的解释器中，解释器不会内联调用。正因如此，Nino 生成的代码直接调用 `Nino.Core`，不经过任何包装层。
-- 注册是按需完成的，所以热更新类型第一次序列化时要承担加载注册表的开销。如果想把这部分开销放到加载界面中，可以在加载程序集后调用 `NinoRegistry.EnsureInitialized(hotUpdate)`（或用 `NinoRegistry.EnsureAllInitialized()` 处理所有已加载的程序集）。两者都是可选的。
+- 热更新类型放进引用了 `Nino.Core` 的程序集定义；或者放进一个从 NuGet 安装 Nino 的独立 C# 项目里编译，再照常加载 DLL。
+- 按 HybridCLR 自己的 AOT 泛型规则来：热更新代码实例化了哪些 AOT 程序集里的泛型，就给这些程序集加载补充元数据。
+- 热更新代码跑在 HybridCLR 的解释器里，解释器不内联调用。所以 Nino 生成的代码直接调用 `Nino.Core`，中间不套包装层。
+- 注册是按需的，所以热更新类型第一次序列化时，要付加载注册表的开销。想把这笔开销挪到加载界面，就在加载程序集之后调用 `NinoRegistry.EnsureInitialized(hotUpdate)`（或用 `NinoRegistry.EnsureAllInitialized()` 处理所有已加载的程序集）。两个都可以不调。
 
 ## 启动检查清单 [#startup-checklist]
 
-大多数项目一步都不需要。需要的步骤，在第一次序列化调用之前执行一次即可：
+大多数项目一步都用不着。用得着的，在第一次序列化之前执行一次就行：
 
 | 步骤 | 什么时候需要 | 什么时候不需要 |
 | --- | --- | --- |
-| `NinoSettings`（`PoolMaxRetained`、`SetPoolMaxRetained<T>`、`SetRecycler<T>`） | 想改变默认的池大小（共享栈 256、每个线程 64），或者想让自己的对象池接收被丢弃的实例。请**最先**设置：这些值的读取不做同步。 | 默认值够用。 |
-| HybridCLR 补充元数据 | 热更新代码用到了 AOT 程序集中定义的泛型。按 HybridCLR 的规则处理即可，Nino 没有额外要求。 | 没有热更新。 |
-| 用 `Assembly.Load` 加载热更新 DLL | 在读取包含其中类型的数据之前。 | |
-| `NinoRegistry.EnsureInitialized(assembly)` 或 `EnsureAllInitialized()` | 想把一次性的注册表加载放到加载界面，而不是第一次用到该程序集的调用。 | 始终是可选的：注册表在首次使用时自动加载。 |
-| `NinoPolymorphic.TryRegister<T>()` | 某个封闭泛型 `[NinoType]`（如 `Box<MyStruct>`）在本进程中只会通过基类型**读取**，代码里从未写出它的名字，也从未写入过它。 | 普通子类型，无论在哪个程序集（包括热更新程序集），都会自动找到。 |
+| `NinoSettings`（`PoolMaxRetained`、`SetPoolMaxRetained<T>`、`SetRecycler<T>`） | 想要不同于默认值的池大小（共享 256、每个线程 64），或者想让自己的对象池接收被丢弃的实例。**最先**设置：读取这些值时不做同步。 | 默认值够用。 |
+| HybridCLR 补充元数据 | 热更新代码实例化了 AOT 程序集里定义的泛型。按 HybridCLR 的规则来，Nino 没有额外要求。 | 没有热更新。 |
+| 用 `Assembly.Load` 加载热更新 DLL | 读取含有其中类型的数据之前。 | |
+| `NinoRegistry.EnsureInitialized(assembly)` 或 `EnsureAllInitialized()` | 想把一次性的注册表加载放到加载界面，而不是留给第一次用到这个程序集的调用。 | 永远可以不调：注册表第一次用到时自动加载。 |
+| `NinoPolymorphic.TryRegister<T>()` | 某个封闭泛型 `[NinoType]`（如 `Box<MyStruct>`）在本进程里只会经由基类型**读取**，代码里从没写出它的名字，也从没写过它。 | 普通子类型，不管在哪个程序集（热更新程序集也算），都能自动找到。 |
 
 ```csharp
 public static class GameStartup
@@ -218,19 +218,19 @@ public static class GameStartup
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Init()
     {
-        NinoSettings.SetPoolMaxRetained<Bullet>(1024); // 仅在默认值不合适时
-        NinoPolymorphic.TryRegister<Box<MyStruct>>();     // 仅用于只读的封闭泛型
+        NinoSettings.SetPoolMaxRetained<Bullet>(1024); // 默认值不合适时才需要
+        NinoPolymorphic.TryRegister<Box<MyStruct>>();     // 只有只读的封闭泛型才需要
     }
 }
 
 // HybridCLR 加载完补充元数据之后：
 Assembly hotUpdate = Assembly.Load(dllBytes);
-NinoRegistry.EnsureInitialized(hotUpdate);             // 可选：现在就承担注册表的加载开销
+NinoRegistry.EnsureInitialized(hotUpdate);             // 可选：现在就把注册表加载好
 ```
 
 ## 配置表 [#config-tables]
 
-在表格或编辑器中编辑的游戏数据（道具、关卡、掉落表）很适合用 Nino：导出一次 `.bytes` 文件，运行时直接加载，不需要任何解析。把表的类型设为 `format: NinoFormat.Keyed`，这样新增或调整列不会让之前导出的文件失效：
+在表格或编辑器里编的游戏数据（道具、关卡、掉落表）很适合用 Nino：导出一次 `.bytes` 文件，运行时直接加载，不用解析。表的类型用 `format: NinoFormat.Keyed`，这样加列、调列的顺序，都不会让以前导出的文件失效：
 
 ```csharp title="ItemTable.cs"
 using System.Collections.Generic;
@@ -252,7 +252,7 @@ public sealed class ItemRow
 ```
 
 ```csharp
-// 编辑器：表格编辑后导出（一个菜单项，或者表格的导入步骤）
+// 编辑器：表改完后导出（做成一个菜单项，或者放进表格的导入步骤）
 File.WriteAllBytes("Assets/Resources/Config/items.bytes", NinoSerializer.Serialize(table));
 
 // Player：.bytes 文件导入为 TextAsset
@@ -262,13 +262,13 @@ ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
 
 ## 降低帧耗时的技巧 [#frame-time-tips]
 
-- **网络或回放数据不引起 GC 峰值：** 每个 tick 都用 `ref` 反序列化到上一个 tick 的对象中，并给批量创建的类（子弹、事件）加上 `[NinoPooled]`。参见[零分配模式](/zh/docs/v4/advanced/zero-allocation)。
-- **每个发送方复用一个 `NinoArrayBufferWriter`** 来写出数据，而不是每帧调用 `Serialize(value)` 分配一个 `byte[]`。
-- **批量数据保持非托管：** `Vector3`、`Color32` 或你自己的非托管 `[NinoType]` 结构体组成的数组，只需一次内存拷贝。
+- **网络和回放数据不再引起 GC 尖峰：** 每个 tick 都用 `ref` 读入上一个 tick 的对象，并给批量创建的类（子弹、事件）加上 `[NinoPooled]`。见[零分配模式](/zh/docs/v4/advanced/zero-allocation)。
+- **每个发送方复用一个 `NinoArrayBufferWriter`** 写出数据，别每帧调用 `Serialize(value)` 分配一个 `byte[]`。
+- **批量数据用非托管类型：** `Vector3`、`Color32` 或你自己的非托管 `[NinoType]` 结构体组成的数组，只要一次内存拷贝。
 
 <Callout type="warn">
 
-启用 **Enter Play Mode Options** 并关闭域重载后，静态状态会在多次运行之间保留，包括 `[NinoPooled]` 对象池和 `NinoSettings`。如果残留的实例会带来问题，请在进入运行模式时清空用到的池：`NinoPool<Bullet>.Shared.Clear()`。
+开了 **Enter Play Mode Options** 又关掉域重载后，静态状态会在多次运行之间保留下来，包括 `[NinoPooled]` 对象池和 `NinoSettings`。残留的实例会出问题的话，就在进入运行模式时清空用到的池：`NinoPool<Bullet>.Shared.Clear()`。
 
 </Callout>
 
@@ -277,17 +277,17 @@ ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
 <Accordions type="single">
 <Accordion title="类型没有被序列化 / 源生成器没有运行">
 
-确认程序集引用了 `Nino.Core.dll`（勾选了 Auto Referenced，或在 Override References 中列出），并且 `Nino.Generator.dll` 在导入设置中仍标记为 `RoslynAnalyzer`。然后试试 GitHub 仓库中的 `Nino.Unity` 示例项目，它附带一套可以用 Test Runner 运行的测试。
+确认程序集引用了 `Nino.Core.dll`（勾选了 Auto Referenced，或者列在 Override References 里），并且 `Nino.Generator.dll` 的导入设置里还带着 `RoslynAnalyzer` 标签。再试试 GitHub 仓库里的 `Nino.Unity` 示例项目，它带一套能用 Test Runner 跑的测试。
 
 </Accordion>
 <Accordion title="error NINO002：类型必须是 partial">
 
-该类型序列化了私有成员，或者标记了 `[NinoPooled]`，而 Unity 没有 `[UnsafeAccessor]`。把该类型及其所有外层类型声明为 `partial`（在 Rider 和 Visual Studio 中可用代码修复完成）。
+这个类型序列化了私有成员，或者标了 `[NinoPooled]`，而 Unity 没有 `[UnsafeAccessor]`。把它和所有外层类型都声明为 `partial`（Rider 和 Visual Studio 里可以用代码修复一键完成）。
 
 </Accordion>
 <Accordion title="读取不了旧版本的数据">
 
-Nino 默认按位置写入：修改类型的成员会破坏旧数据。需要保存的数据请使用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，参见[数据演进](/zh/docs/v4/evolving-data)。Nino v3 写出的数据 v4 完全无法读取，参见[从 v3 迁移](/zh/docs/v4/migration)。
+Nino 默认按位置写：改了类型的成员，旧数据就读不了。要存下来的数据，用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，见[数据演进](/zh/docs/v4/evolving-data)。Nino v3 写的数据，v4 完全读不了，见[从 v3 迁移](/zh/docs/v4/migration)。
 
 </Accordion>
 </Accordions>
@@ -296,5 +296,5 @@ Nino 默认按位置写入：修改类型的成员会破坏旧数据。需要保
 
 <Cards>
   <Card title="构建配置" href="/zh/docs/v4/advanced/build-configuration">按平台列出影响 Nino 速度的编译器、运行时和引擎设置。</Card>
-  <Card title="Unity 基准测试" href="/zh/docs/v4/benchmarks-unity">IL2CPP 播放器中，每个用例不用和使用 Burst 内核的耗时。</Card>
+  <Card title="Unity 基准测试" href="/zh/docs/v4/benchmarks-unity">IL2CPP Player 里每个用例不用和使用 Burst 内核的耗时。</Card>
 </Cards>

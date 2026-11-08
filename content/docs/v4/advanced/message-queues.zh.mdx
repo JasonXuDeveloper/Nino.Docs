@@ -1,17 +1,17 @@
 ---
 title: 消息队列
 seoTitle: "C# 消息队列序列化：Kafka 与事件流 – Nino v4 文档"
-description: "在 Kafka 等消息中间件上使用 Nino：多态事件类型、序列化器、批量发送、遥测与行情数据流，以及跨越多次部署的主题。"
+description: "在 Kafka 等消息中间件上用 Nino 做消息负载：多态事件类型、序列化器、批量发送、遥测与行情数据流，以及比一次部署活得更久的主题。"
 icon: MessagesSquare
 ---
 
-Kafka、RabbitMQ、Azure Service Bus、NATS 这类消息中间件传递的都是不透明的字节负载，Nino 正好用来填充它们：生产者序列化事件，消费者从收到的字节反序列化，负载紧凑，两端读写都快。自建的事件流（走 socket 或写文件）也是一样。
+Kafka、RabbitMQ、Azure Service Bus、NATS 这类消息中间件只管搬运字节，不关心内容。负载交给 Nino：生产者序列化事件，消费者把收到的字节反序列化，负载紧凑，两端读起来都快。自建的事件流（走 socket 或写文件）也一样。
 
-本指南关注它和请求/响应式通信的不同之处：消息会在主题里保留好几天，消费者运行的代码可能比生产者旧也可能比它新，事件的速率也很高。
+这篇讲它和请求/响应式通信不一样的地方：消息会在主题里留好几天，消费者跑的代码可能比生产者旧，也可能更新，事件量也大。
 
 ## 定义事件 [#define-the-events]
 
-一个流里的事件从同一个基类派生。Nino 会随每个值写入它的运行时类型，所以消费者按 `OrderEvent` 读取，得到的就是 `OrderPlaced`，不需要自己写类型头：
+一个流里的事件都从同一个基类派生。Nino 随每个值写入它的运行时类型，所以消费者按 `OrderEvent` 读，拿到的就是 `OrderPlaced`，不用自己加类型头：
 
 ```csharp title="OrderEvents.cs"
 using System;
@@ -60,11 +60,11 @@ switch (NinoDeserializer.Deserialize<OrderEvent>(payload))
 }
 ```
 
-类型 ID 是类型全名的哈希：给事件改名时要加上 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)，否则主题里的旧消息就读不出来了。详见[多态](/zh/docs/v4/polymorphism)。
+类型 ID 是类型全名的哈希：事件改名时要加 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)，否则主题里的旧消息就读不出来了。见[多态](/zh/docs/v4/polymorphism)。
 
 ## Kafka [#kafka]
 
-[Confluent.Kafka](https://github.com/confluentinc/confluent-kafka-dotnet) 为键和值的类型各接收一个序列化器和反序列化器。它的反序列化器拿到的是 `ReadOnlySpan<byte>`，Nino 可以直接读取：
+[Confluent.Kafka](https://github.com/confluentinc/confluent-kafka-dotnet) 要求键和值的类型各配一个序列化器和反序列化器。它的反序列化器拿到的是 `ReadOnlySpan<byte>`，Nino 直接就能读：
 
 ```shell
 dotnet add package Nino --prerelease
@@ -144,11 +144,11 @@ public static class OrderConsumer
 }
 ```
 
-Kafka 的 `ISerializer<T>` 必须返回 `byte[]`，所以每生产一条消息都会分配一个数组：`NinoSerializer.Serialize(data)` 先写入每个线程一份的暂存缓冲区，再只把写入的字节拷贝出来，所以这个数组就是唯一的分配。消费时不需要拷贝：反序列化器直接读取客户端交给它的 span。`Guid` 键是原始值：16 字节，一次拷贝完成读写。
+Kafka 的 `ISerializer<T>` 必须返回 `byte[]`，所以每条消息都要分配一个数组。`NinoSerializer.Serialize(data)` 先写进当前线程的暂存缓冲区，再把写好的字节原样拷出来，这个数组就是唯一的分配。消费时不用拷贝：反序列化器直接读客户端给的 span。`Guid` 键是原始值：16 字节，读写各一次拷贝。
 
 ## 其他消息中间件 [#other-brokers]
 
-其他客户端大多以 `ReadOnlyMemory<byte>` 接收消息体。序列化到复用的 `NinoArrayBufferWriter`，传入 `WrittenMemory`：你这一侧每条消息都不分配内存。以 RabbitMQ.Client 7 为例（`dotnet add package RabbitMQ.Client`）：
+其他客户端大多用 `ReadOnlyMemory<byte>` 接收消息体。序列化到复用的 `NinoArrayBufferWriter`，再把 `WrittenMemory` 传进去，你这边每条消息都不分配内存。以 RabbitMQ.Client 7 为例（`dotnet add package RabbitMQ.Client`）：
 
 ```csharp title="OrderPublisher.cs"
 using System.Threading.Tasks;
@@ -216,20 +216,20 @@ await publisher.PublishAsync(new OrderShipped
 Console.ReadLine(); // 一直消费，直到按下回车
 ```
 
-- 等发布调用完成后（`await` 之后）再重置缓冲区，因为客户端可能还在读取它。在多个线程上使用的发布者，每个线程需要一个缓冲区，或者加锁。
-- Azure Service Bus 的做法相同：`new ServiceBusMessage(buffer.WrittenMemory)` 直接包装这段内存，不做拷贝；收到的消息用 `NinoDeserializer.Deserialize<OrderEvent>(message.Body.ToMemory().Span)` 读取。
-- 只接受 `byte[]` 消息体的客户端，传 `NinoSerializer.Serialize(evt)`：和 Kafka 一样，是一个大小正好等于负载的数组。
-- 消费端把收到的消息体（`ReadOnlyMemory<byte>.Span` 或数组）交给 `NinoDeserializer.Deserialize<T>`，不需要先拷贝一份。如果中间件在处理函数返回后会复用消息体的内存，就在处理函数内部完成反序列化；反序列化的结果不会引用输入的字节。
+- 发布调用完成后（`await` 之后）才能重置缓冲区，因为客户端可能还在读它。多个线程共用的发布者，要么每个线程一个缓冲区，要么加锁。
+- Azure Service Bus 也一样：`new ServiceBusMessage(buffer.WrittenMemory)` 直接包住这段内存，不拷贝；收到的消息用 `NinoDeserializer.Deserialize<OrderEvent>(message.Body.ToMemory().Span)` 读。
+- 只收 `byte[]` 消息体的客户端，就传 `NinoSerializer.Serialize(evt)`：和 Kafka 一样，一个数组，大小正好是负载的长度。
+- 消费端把收到的消息体（`ReadOnlyMemory<byte>.Span` 或数组）直接交给 `NinoDeserializer.Deserialize<T>`，不用先拷贝。如果中间件在处理函数返回后会复用消息体的内存，就在处理函数里反序列化；反序列化的结果不引用输入的字节。
 
 <Callout type="info" title="这些代码测试过什么">
 
-本页的 C# 代码，在本站每次改动时都会针对 Confluent.Kafka 2 和 RabbitMQ.Client 7 编译。Nino 这一侧（`NinoKafkaSerializer`、发布者的缓冲区、下面的批量读写）在没有消息中间件的测试中运行过；与中间件的连接本身（`BootstrapServers`、`ConnectionFactory`、队列和交换机）没有运行过，这些设置请对照你所用中间件的文档检查。
+本站每次改动，都会用 Confluent.Kafka 2 和 RabbitMQ.Client 7 编译本页的 C# 代码。Nino 这一侧（`NinoKafkaSerializer`、发布者的缓冲区、下面的批量读写）在不连中间件的测试里实际跑过；和中间件的连接（`BootstrapServers`、`ConnectionFactory`、队列和交换机）没有跑过，这些设置请对照所用中间件的文档核对。
 
 </Callout>
 
 ## 批量发送 [#batching]
 
-小事件（一次点击、一次价格变动、一个指标）往往批量发送更划算：一条中间件消息、一次网络往返、一个消息头。先写入数量，再把各个事件依次写入复用的缓冲区（写一批不分配内存），然后像上面那样发送 `buffer.WrittenMemory`：
+小事件（一次点击、一次价格变动、一个指标）往往攒成一批发更划算：一条消息、一次网络往返、一个消息头。先写数量，再把事件一个接一个写进复用的缓冲区（写一批不分配内存），然后像上面那样发送 `buffer.WrittenMemory`：
 
 ```csharp title="EventBatch.cs"
 using System;
@@ -260,15 +260,15 @@ public static class EventBatch
 }
 ```
 
-- 每个事件保留各自的类型，所以同一批里可以混合 `OrderPlaced` 和 `OrderShipped`。
-- `ReadLength(minElementSize: 4)` 会拒绝负载不可能容纳的数量，所以损坏的批次在进入循环之前就会抛出异常。
-- 写入器和读取器最后都要调用 `ReleaseReferences`，和 `NinoSerializer` 的做法一样；详见[连续写入多个值](/zh/docs/v4/advanced/high-performance#several-values-back-to-back)。
+- 每个事件保留自己的类型，同一批里可以混着 `OrderPlaced` 和 `OrderShipped`。
+- 数量超出负载能装下的范围时，`ReadLength(minElementSize: 4)` 直接拒绝，损坏的批次在进循环之前就抛异常。
+- 写入器和读取器最后都调用 `ReleaseReferences`，和 `NinoSerializer` 一样；见[连续写入多个值](/zh/docs/v4/advanced/high-performance#several-values-back-to-back)。
 
-在 `[NinoType]` 类里用一个 `List<OrderEvent>` 成员也能达到同样效果，还多了存放批次级字段（生产者 id、序号）的地方。
+在 `[NinoType]` 类里放一个 `List<OrderEvent>` 成员效果一样，还能顺带放批次级的字段（生产者 ID、序号）。
 
 ## 遥测与行情数据流 [#telemetry-and-tick-streams]
 
-指标、链路追踪和行情数据以很高的速率到达，每条都是又小又扁平的记录。把每条记录定义为非托管结构体，放在列表里发送：
+指标、链路追踪和行情数据来得又快又多，每条都是又小又扁平的记录。把记录定义成非托管结构体，放进列表发送：
 
 ```csharp title="Samples.cs"
 using System;
@@ -304,32 +304,32 @@ public sealed class SampleConsumer
 }
 ```
 
-- 无论多长，样本列表的读写都只是**一次整块拷贝**。
-- 反序列化到同一个 `SampleBatch` 会复用对象本身、列表的底层数组和 `Host` 字符串（内容不变时直接保留）：同一台主机持续发来的消息不分配内存，只有来自另一台主机的批次才会把主机名读成新字符串。
-- 需要按位置查找的记录（一个文件里一整天的 tick），见[固定大小的记录](/zh/docs/v4/advanced/zero-allocation#fixed-size-records)。
+- 样本列表不管多长，读写都只是**一次整块拷贝**。
+- 读入同一个 `SampleBatch` 时，对象本身、列表的底层数组和 `Host` 字符串都会复用（字符串内容不变就原样保留）：同一台主机源源不断发来的批次不分配内存，只有换了主机的批次才会把主机名读成新字符串。
+- 要按位置查找的记录（一个文件里一整天的 tick），见[固定大小的记录](/zh/docs/v4/advanced/zero-allocation#fixed-size-records)。
 
-## 跨越多次部署的主题 [#topics-that-outlive-a-deployment]
+## 比部署活得更久的主题 [#topics-that-outlive-a-deployment]
 
-今天写入的消息可能下个月才被消费，读取它的代码在写入时还不存在；消费者也可能从头重放整个主题。
+今天写的消息可能下个月才有人消费，读它的代码在写的时候还不存在；消费者也可能从头重放整个主题。
 
-- 每个事件类型都设为 [`NinoFormat.VersionTolerant`](/zh/docs/v4/evolving-data#version-tolerance)（追加字段）或 [`NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)（任意修改）。这样消费者会跳过不认识的字段，旧消息中缺少的字段保留构造函数或字段初始化器给出的值。
-- 在 `NinoFormat.VersionTolerant` 的继承体系中，只向具体的事件类（`OrderPlaced` 等）追加成员，不要加到 `OrderEvent` 上：追加到基类的成员会把每个子类的成员往后挤。如果基类需要新成员，请改用 `NinoFormat.Keyed`。参见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
-- 消费者收到不认识的事件**类型**时无法读取：反序列化会抛出 `NinoDataException`（未知的类型 ID）。先部署消费者，再部署会产生新事件类型的生产者；或者把新类型放到新的主题里。
-- 在同一次部署内就会被消费掉的消息（几秒内清空的任务队列）用[按位置](/zh/docs/v4/evolving-data#positional)的类型（不带参数的 `[NinoType]`）即可。它们的字节会随成员的每次改动而变化。
+- 每个事件类型都用 [`NinoFormat.VersionTolerant`](/zh/docs/v4/evolving-data#version-tolerance)（追加字段）或 [`NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)（任意修改）。这样消费者会跳过不认识的字段，旧消息里没有的字段保留构造函数或初始化器给的值。
+- `NinoFormat.VersionTolerant` 的继承体系里，只往具体的事件类（`OrderPlaced` 等）追加成员，别加到 `OrderEvent` 上：基类追加一个成员，每个子类的成员都会往后挪。基类确实要加成员，就改用 `NinoFormat.Keyed`。见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
+- 消费者收到不认识的事件**类型**就读不了：反序列化抛 `NinoDataException`（未知的类型 ID）。先部署消费者，再部署发新事件类型的生产者；或者把新类型放到新主题上。
+- 同一次部署内就消费完的消息（几秒内清空的任务队列），用[按位置](/zh/docs/v4/evolving-data#positional)的类型（不带参数的 `[NinoType]`）就行。成员一改，它们的字节就变。
 
-文件中的追加日志（基于本地存储的事件溯源）见[追加日志](/zh/docs/v4/advanced/persistence#append-only-logs)。
+文件里的追加日志（在本地存储上做事件溯源）见[追加日志](/zh/docs/v4/advanced/persistence#append-only-logs)。
 
 ## 检查清单 [#checklist]
 
-- [ ] 事件从同一个 `[NinoType]` 基类派生；改过名的事件带有 `[NinoFormerName]`。
-- [ ] 长期保留的主题上的事件类型是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed` 的。
-- [ ] 新的事件类型先到达消费者，生产者再开始发送。
-- [ ] 小而频繁的事件批量发送；记录是放在列表里的非托管结构体。
-- [ ] 热点主题上的消费者反序列化到复用的实例中。
+- [ ] 事件都从同一个 `[NinoType]` 基类派生；改过名的事件带 `[NinoFormerName]`。
+- [ ] 长期保留的主题上，事件类型用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`。
+- [ ] 新事件类型先部署到消费者，生产者再开始发。
+- [ ] 小而频繁的事件批量发送；记录是列表里的非托管结构体。
+- [ ] 热点主题上的消费者读入复用的实例。
 
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="缓存" href="/zh/docs/v4/advanced/caching">用于 Redis、IDistributedCache、HybridCache 和进程内缓存的值。</Card>
+  <Card title="缓存" href="/zh/docs/v4/advanced/caching">Redis、IDistributedCache、HybridCache 和进程内缓存里的值。</Card>
   <Card title="数据演进" href="/zh/docs/v4/evolving-data">按位置、版本容错和键控三种格式，以及各自允许哪些改动。</Card>
 </Cards>

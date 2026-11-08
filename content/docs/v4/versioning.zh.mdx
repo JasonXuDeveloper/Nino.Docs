@@ -1,7 +1,7 @@
 ---
 title: 格式版本
 seoTitle: "版本与数据兼容性 – Nino v4 文档"
-description: "哪些 Nino 版本改变了二进制格式，以及如何读取旧版本写出的数据。"
+description: "哪些 Nino 版本改了二进制格式，以及怎样读取旧版本写的数据。"
 icon: Milestone
 ---
 
@@ -12,29 +12,29 @@ icon: Milestone
   }}
 />
 
-Nino 至今的每个大版本都使用新的二进制格式。本页列出改变了格式的版本，以及如何把旧版本写出的数据迁移到 v4。
+Nino 到目前为止，每个大版本都换了新的二进制格式。这一页列出改过格式的版本，以及怎样把旧版本写的数据迁到 v4。
 
 ## 格式变更 [#format-changes]
 
-下列每个版本写出的二进制格式，更早的版本都读不了；它们也读不了更早版本写出的数据。格式不会自动转换，处理方法参见[读取旧版本的数据](#reading-data-from-an-older-version)。
+下面每个版本写的二进制格式，更早的版本都读不了；它们也读不了更早版本写的数据。格式不会自动转换，怎么处理见[读取旧版本的数据](#reading-data-from-an-older-version)。
 
 <Accordions type="single" defaultValue="v4.0.0">
 <Accordion title="v4.0.0" value="v4.0.0">
 
-运行时和源生成器全部重写。**二进制格式与 v3 以及更早的 v4 beta/preview 版本不兼容**，公共 API 也有变化。字节层面的变化：
-- 新的数据格式：小端序、不对齐、填充字节清零，`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出的字节完全相同；类型 ID 是运行时类型名的 FNV-1a 哈希。字符串都以字符数作前缀，写在一个 1、3 或 5 字节的头里，头同时区分每个字符写一个字节的默认编码字符串（从 4.0.0-rc.6 开始）和 UTF-16 字符串（这种头从 4.0.0-rc.8 开始，参见[字符串](/zh/docs/v4/wire-format#strings)），`[NinoUtf8]` 字符串还会写入字节数；版本容错的对象整个继承体系只写一个长度（这两项都从 4.0.0-rc.1 开始，参见 [v4 beta 之后的行为变化](/zh/docs/v4/migration#behavior-changes-since-the-v4-betas)）。
+运行时和源生成器全部重写。**二进制格式与 v3 以及更早的 v4 beta/preview 版本不兼容**，公共 API 也变了。字节上的变化：
+- 新的二进制格式：小端序、不对齐、填充字节清零，`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 字节一致；类型 ID 是运行时类型名的 FNV-1a 哈希。字符串前面是字符数，写在一个 1、3 或 5 字节的头里，这个头还能区分两种默认编码：每个字符一个字节（从 4.0.0-rc.6 起）和 UTF-16（这种头从 4.0.0-rc.8 起，见[字符串](/zh/docs/v4/wire-format#strings)）；`[NinoUtf8]` 字符串还要写字节数；版本容错的对象整个继承体系只写一个长度（这两项都从 4.0.0-rc.1 起，见 [v4 beta 之后的行为变化](/zh/docs/v4/migration#behavior-changes-since-the-v4-betas)）。
 
 其余变化（API、选项、对象池、生成器）见 [v4 新特性](/zh/docs/v4/whats-new)，升级步骤见[从 v3 迁移](/zh/docs/v4/migration)。各个 v4 版本改了什么（包括写出的字节），见[更新日志](/zh/docs/v4/changelog)。
 
 </Accordion>
 <Accordion title="v3.3.4" value="v3.3.4">
 
-输出中的非托管字段改为对齐存放，读取更快；写入这些字段的拷贝改为内联，序列化更快。输出体积比之前大。
+输出里的非托管字段改为对齐存放，读得更快；写这些字段的拷贝改成内联，序列化更快。输出比以前大。
 
 </Accordion>
 <Accordion title="v3.2.0" value="v3.2.0">
 
-类型修改成员后，仍能读取修改前写出的数据，列表元素（包括多态元素）也一样。生成的代码与 v3.0.3 不同。
+类型改了成员，照样能读改之前写的数据，列表元素（可以是多态的）也一样。生成的代码和 v3.0.3 不同。
 
 </Accordion>
 <Accordion title="v3.0.3" value="v3.0.3">
@@ -51,17 +51,17 @@ Nino 至今的每个大版本都使用新的二进制格式。本页列出改变
 
 ## 迁移 [#migrating]
 
-- **从 Nino v3 迁移：** 参见[从 v3 迁移](/zh/docs/v4/migration)。
-- **从 Nino v2 迁移到 v3：** 升级到 v3，然后把生成代码的命名空间从 `AssemblyName_Nino` 改为 `AssemblyName.NinoGen`。如果还要升级到 v4，再按 v3 迁移指南操作。
+- **从 Nino v3 迁移：** 见[从 v3 迁移](/zh/docs/v4/migration)。
+- **从 Nino v2 迁到 v3：** 升级到 v3，再把生成代码的命名空间从 `AssemblyName_Nino` 改成 `AssemblyName.NinoGen`。还要继续升到 v4，就接着按 v3 迁移指南做。
 
 ## 读取旧版本的数据 [#reading-data-from-an-older-version]
 
-做法是保留旧的反序列化器，用它读出旧数据，再用新版本重新写入：
+留着旧的反序列化器，用它读出旧数据，再用新版本重新写一遍：
 
 <Steps>
 <Step>
 
-**保留旧的反序列化器。** 在 v3 的各个版本之间升级时，把旧的生成代码（反序列化器及其依赖）复制到项目中，放进单独的命名空间。如果是用 v4 读取 v3 数据，由于 v3 的生成代码依赖 v3 的 `Nino.Core`，只能放在单独的转换程序里，参见[转换 v3 数据](/zh/docs/v4/migration#converting-v3-data)。
+**留着旧的反序列化器。** v3 各版本之间升级时，把旧的生成代码（反序列化器和它依赖的代码）复制到项目里，放进单独的命名空间。用 v4 读 v3 数据时，v3 的生成代码依赖 v3 的 `Nino.Core`，只能放进单独的转换程序，见[转换 v3 数据](/zh/docs/v4/migration#converting-v3-data)。
 
 </Step>
 <Step>
@@ -71,16 +71,16 @@ Nino 至今的每个大版本都使用新的二进制格式。本页列出改变
 </Step>
 <Step>
 
-**转换。** 用旧的反序列化器读出旧数据，再用新的序列化器重新序列化。
+**转换。** 用旧的反序列化器读出旧数据，再用新的序列化器重新序列化一遍。
 
 </Step>
 </Steps>
 
-用户文档、归档记录这类需要保存的数据，应当由新版本在开头写入你自己的文件头（魔数加格式版本）。加载时，带文件头的文件用新的反序列化器读取；没有文件头的就是旧数据，用旧的反序列化器读出后再转换。参见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)。
+用户文档、归档记录这类要存下来的数据，应该由新版本在开头写上你自己的文件头（魔数加格式版本）。加载时，有文件头的用新的反序列化器读；没有文件头的就是旧数据，用旧的反序列化器读出来再转换。见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)。
 
 <Callout type="idea">
 
-从 v4 开始，已保存的文档这类长期保存的数据请标记 `[NinoType(format: NinoFormat.VersionTolerant)]` 或 `[NinoType(format: NinoFormat.Keyed)]`，以后修改自己的类型时就不再需要转换。参见[数据演进](/zh/docs/v4/evolving-data)。
+从 v4 起，存档文档这类长期保存的数据，标上 `[NinoType(format: NinoFormat.VersionTolerant)]` 或 `[NinoType(format: NinoFormat.Keyed)]`，以后改自己的类型就不用再转换了。见[数据演进](/zh/docs/v4/evolving-data)。
 
 </Callout>
 
@@ -88,5 +88,5 @@ Nino 至今的每个大版本都使用新的二进制格式。本页列出改变
 
 <Cards>
   <Card title="更新日志" href="/zh/docs/v4/changelog">v4 每个版本的改动。</Card>
-  <Card title="从 v3 迁移" href="/zh/docs/v4/migration">逐步把 v3 项目升级到 v4，并转换它的数据。</Card>
+  <Card title="从 v3 迁移" href="/zh/docs/v4/migration">一步步把 v3 项目升级到 v4，并转换它的数据。</Card>
 </Cards>
