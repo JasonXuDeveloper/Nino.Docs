@@ -132,6 +132,8 @@ public sealed class NinoHybridSerializer<T> : IHybridCacheSerializer<T>
 }
 ```
 
+从 rc.10 起，`Deserialize` 的方法体只需要一行：`NinoDeserializer.Deserialize<T>(source)` 会直接读取这个序列，做法和上面相同。
+
 - 每种要缓存的类型用 `AddSerializer` 注册一个序列化器（见[注册](#registration)）。
 - `HybridCache` 给的缓冲区写入器不是 `NinoArrayBufferWriter`，所以 Nino 先序列化到当前线程的暂存缓冲区，再一次性复制过去。每次调用都不分配内存。
 - 泛型序列化器里的调用[拦截器](/zh/docs/v4/performance#interceptors)接管不了，因为 `T` 在那里是类型参数；这些调用走常规路径，每次多花几纳秒。

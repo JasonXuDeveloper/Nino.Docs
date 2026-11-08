@@ -201,6 +201,8 @@ public static class FrameReader
 }
 ```
 
+Since rc.10, `NinoDeserializer.Deserialize<T>(frame)` and `Deserialize(frame, ref value)` take the `ReadOnlySequence<byte>` themselves, with the same single-segment path and one copy otherwise: on rc.10 and later, call them instead of the two `Decode` methods.
+
 <Callout type="info">
 
 Nino validates every length inside the payload against the bytes left before allocating, and a collection allocates ahead of its elements at most 16 times the bytes left, so a malicious frame cannot make it allocate out of proportion to its size; truncated data throws instead of reading past the end. Still cap the frame size yourself, as above, so a peer cannot make the pipe buffer gigabytes. Deeply nested payloads cannot overflow the server's stack either: objects nested more than 128 levels deep are deferred and read from a shallower level, and what cannot be deferred is limited to `NinoSettings.MaxDepth` (512 by default). See [Invalid Data](/en/docs/v4/basic#invalid-data) and [Deep Object Graphs](/en/docs/v4/reference-tracking#deep-object-graphs).
