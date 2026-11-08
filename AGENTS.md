@@ -63,7 +63,7 @@ Cloudflare Pages builds with the Node version in `.node-version` and the Bun ver
 
 ## Content Conventions
 
-- English `page.mdx`, Chinese `page.zh.mdx`. **Every v4 page exists in both languages** with the same structure.
+- English `page.mdx`, Chinese `page.zh.mdx`. **Every v4 page exists in both languages** with the same structure. The Chinese is written natively, never translated word for word: `WRITING.md`, Tone: Chinese (its list of the marks of a translation and the term table).
 - Frontmatter: `title`, `description`, optional `icon` (a lucide-react name), optional `seoTitle` (the full `<title>` when "Title – Nino v4 Docs" would be too generic, e.g. an "Overview" page; the heading keeps `title`) and `faq: true` (its `##` questions become FAQPage JSON-LD). Descriptions are the search snippet and the llms.txt summary: one or two sentences, specific, true to the source.
 - Sidebars: `meta.json` / `meta.zh.json`, with `---Section---` separators.
 - **Chinese headings carry an English id**: `## 键控成员 [#keyed-members]`. Links in both languages use the same English anchors, so `/zh/...#keyed-members` works. The link checker validates anchors.
