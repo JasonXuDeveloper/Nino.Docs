@@ -1,7 +1,7 @@
 ---
 title: SIMD
 seoTitle: "SIMD in Nino on .NET, Unity, Go, Rust and TypeScript – Nino v4 Docs"
-description: "Which vector instructions Nino uses on each platform (.NET's AVX-512, AVX2, SSSE3, Arm64 and WebAssembly paths, Unity's Burst kernels, Go's and Rust's string transcoding, TypeScript's WebAssembly text module), how each is detected, what falls back to portable code, and where each is benchmarked."
+description: "Which vector instructions Nino uses on each platform (.NET's AVX-512, AVX2, SSSE3, Arm64 and WebAssembly paths, Unity's Burst kernels, Go's and Rust's string transcoding, TypeScript's WebAssembly text module), how each is detected, what falls back to portable code, where each is benchmarked, and how to register native kernels with NinoKernels on the netstandard builds."
 icon: Cpu
 ---
 
@@ -47,7 +47,7 @@ On every build and runtime:
 
 ## Unity [#unity]
 
-Unity loads the netstandard build of `Nino.Core`. With `com.unity.burst` 1.8 or later installed, the Unity package registers [Burst-compiled kernels](/en/docs/v4/advanced/unity#burst-kernels) at startup through `NinoKernels`, a table of native function pointers that only the netstandard builds call (each pointer is kept in a static field and called directly, after one compare against its threshold) (every build declares it, so a library that registers kernels loads on .NET 8 and later too, which keep their own paths). Burst compiles the kernels for each CPU target of its AOT settings, picks the variant the CPU runs at startup, and each checks its instruction set when it is registered.
+Unity loads the netstandard build of `Nino.Core`. With `com.unity.burst` 1.8 or later installed, the Unity package registers [Burst-compiled kernels](/en/docs/v4/advanced/unity#burst-kernels) at startup through `NinoKernels`, a table of native function pointers that only the netstandard builds call (each pointer is kept in a static field and called directly, after one compare against its threshold) (every build declares it, so a library that registers kernels loads on .NET 8 and later too, which keep their own paths). Other hosts of the netstandard builds can [register kernels of their own](#registering-kernels). Burst compiles the kernels for each CPU target of its AOT settings, picks the variant the CPU runs at startup, and each checks its instruction set when it is registered.
 
 | Hardware | Vector paths | Benchmark |
 | --- | --- | --- |
@@ -91,6 +91,90 @@ The TypeScript runtime reads and writes with `DataView` and typed arrays. Its ve
 | Browsers and Deno with WebAssembly SIMD, GC and the JS String Builtins | longer UTF-16 and Latin-1 text read, and text of more than 64 chars written, 8 or 16 chars at a time in SIMD registers (`useWasm(false)` turns it off) | — |
 | Node, Bun, Deno with Node's `Buffer` | none of Nino's: `Buffer`'s native Latin-1 and UTF-16 methods | [Other-Language Benchmarks](/en/docs/v4/benchmarks-runtimes#typescript) |
 | Engines without them, or a Content Security Policy that blocks compiling WebAssembly | none: the JavaScript paths and the engine's built-in decoders; the same bytes | — |
+
+## Registering Your Own Kernels [#registering-kernels]
+
+The kernels Unity's package registers ([above](#unity)) go through a public API, `NinoKernels`, which any host of the netstandard builds can use: .NET Framework, Mono, and .NET Core 3.0 to .NET 7. It helps where those builds have no vector path of their own: arrays and lists of tuples, `KeyValuePair`s and blocked `[NinoType]` structs, arrays of raw structs with padding, Latin-1 strings and the ASCII text of `[NinoUtf8]` strings. Skip it on .NET 8 and later: their builds use their own vector paths and never call the kernels (registering there does nothing).
+
+Each kernel is a native `cdecl` function you pass as a function pointer; `NinoKernels.Register` copies the pointers into static fields, and Nino calls them directly. A pointer left `null` keeps Nino's own path for that work.
+
+| Kernel | Signature | Must do (reference: `NinoKernels.PermuteScalar`, `NarrowScalar`, ...) |
+| --- | --- | --- |
+| `Permute` | `void (byte* source, int sourceStride, byte* destination, int destinationStride, byte* table, int count)` | For each of `count` values, `sourceStride` bytes apart at `source` and `destinationStride` bytes apart at `destination`: destination byte `j` = source byte `table[j]`, or `0` where `table[j]` is `0xFF`. Writes every destination byte. Strides are 1 to 64; the ranges do not overlap. |
+| `Narrow` | `int (ushort* source, byte* destination, int length)` | Writes each of the `length` UTF-16 chars as one byte (Latin-1); returns `1` when all are at most U+00FF, `0` when one is above (having written any part of them: Nino then writes the string as UTF-16). |
+| `Widen` | `void (byte* source, ushort* destination, int length)` | Widens `length` Latin-1 bytes to UTF-16 chars. |
+| `NarrowAscii` | `int (ushort* source, byte* destination, int length)` | Writes the leading chars below U+0080 as a byte each and returns how many (`length` when all are); it may write bytes past those, up to `length`. Nino encodes the rest. |
+| `WidenAscii` | `int (byte* source, ushort* destination, int length)` | Widens the leading bytes below `0x80` to a char each and returns how many (`length` when all are); it may write chars past those, up to `length`. Nino decodes and validates the rest. |
+
+On .NET Framework, Nino already narrows and widens long Latin-1 strings with `Vector<T>` where the JIT accelerates it; a registered `Narrow` or `Widen` is called instead of that path, so measure both.
+
+The rules every kernel follows:
+
+- **The same bytes.** A kernel must produce exactly what its reference produces: the wire format does not depend on which path ran, and data written with kernels reads without them, and in every other runtime. Test each kernel against its `...Scalar` reference on random input and every length around your vector width.
+- **No alignment, no state, no exceptions.** Pointers have any alignment. Every thread that serializes may call them at the same time, so they keep no mutable state. Nothing may unwind out of them.
+- **Thresholds.** Nino calls a kernel only for runs long enough to pay for the call: `MinBlocks` values for `Permute` (default 16, at least 1; copies of raw structs with padding start at 16 whatever you set), `MinChars` chars for the four text kernels (default 32, at least 16). Unity's Burst kernels use 2 and 16, its WebGL kernels 32 and 16: measure on your target and set the lengths where your kernel starts to win.
+
+A minimal example: the two Latin-1 kernels in C, built as a DLL and loaded on Windows (C# 9 or later for function pointers).
+
+```c title="nino_kernels.c"
+#include <stdint.h>
+
+/* Loops simple enough for an optimizing compiler (-O3, /O2) to vectorize. */
+__declspec(dllexport) int nino_narrow(const uint16_t* source, uint8_t* destination, int32_t length)
+{
+    uint16_t all = 0;
+    for (int32_t i = 0; i < length; i++)
+    {
+        all |= source[i];
+        destination[i] = (uint8_t)source[i];
+    }
+    return all <= 0xFF; /* 1: every char was Latin-1 */
+}
+
+__declspec(dllexport) void nino_widen(const uint8_t* source, uint16_t* destination, int32_t length)
+{
+    for (int32_t i = 0; i < length; i++)
+        destination[i] = source[i];
+}
+```
+
+```csharp title="NinoNativeKernels.cs"
+using System;
+using System.Runtime.InteropServices;
+using Nino.Core;
+
+// .NET Framework on Windows: register at startup, before the first serialization.
+public static unsafe class NinoNativeKernels
+{
+    [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr LoadLibrary(string path);
+
+    [DllImport("kernel32", CharSet = CharSet.Ansi, ExactSpelling = true)]
+    private static extern IntPtr GetProcAddress(IntPtr module, string name);
+
+    public static bool Register(string path)
+    {
+        IntPtr library = LoadLibrary(path); // never freed: Nino may call the kernels until the process exits
+        if (library == IntPtr.Zero)
+            return false;                   // Nino keeps its own paths
+
+        NinoKernels.Register(new NinoKernels
+        {
+            MinChars = 64, // the length from which your kernels measure faster
+            Narrow = (delegate* unmanaged[Cdecl]<ushort*, byte*, int, int>)GetProcAddress(library, "nino_narrow"),
+            Widen = (delegate* unmanaged[Cdecl]<byte*, ushort*, int, void>)GetProcAddress(library, "nino_widen"),
+            // Permute, NarrowAscii and WidenAscii left null: Nino's own paths
+        });
+        return true;
+    }
+}
+```
+
+<Callout type="warn" title="Register once, at startup, from one thread">
+
+`NinoKernels.Register(kernels)` replaces whatever was registered (`null` goes back to Nino's own paths), and `NinoKernels.Current` returns the instance registered last. It is not frozen like the settings: a call while other threads serialize switches them over safely, but two `Register` calls at once may leave a mix of both. Changing the instance after registering it changes nothing until it is registered again. A call already in flight may still run the old kernels, so keep their code loaded for the life of the process. In Unity, the package's Burst or WebGL kernels register before the first scene loads, and in the editor after each domain reload: kernels you registered before that are replaced, so register yours after them.
+
+</Callout>
 
 ## Next Steps [#next-steps]
 

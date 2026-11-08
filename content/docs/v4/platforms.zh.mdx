@@ -1,7 +1,7 @@
 ---
 title: 平台
 seoTitle: "支持的平台：.NET、Unity IL2CPP、HybridCLR 与 Godot – Nino v4 文档"
-description: "Nino 能在哪些平台运行（.NET Standard 2.0 及以上、Native AOT、Unity 的 Mono 与 IL2CPP、HybridCLR、Godot 4，以及借助生成代码的 TypeScript、Go 和 Rust），为什么跨平台、跨运行时字节一致，以及二进制格式长什么样。"
+description: "Nino 能在哪些平台运行（.NET Standard 2.0 及以上、Native AOT、Unity 的 Mono 与 IL2CPP、HybridCLR、Godot 4，以及借助生成代码的 TypeScript、Go 和 Rust），为什么跨平台、跨运行时字节一致，二进制格式长什么样，以及如何查看 Nino 已经注册了什么。"
 icon: Cpu
 ---
 
@@ -99,6 +99,30 @@ Nino 直接读写 `List<T>`、`Stack<T>`、`Queue<T>`、`SortedList<TKey, TValue
 - **Native AOT 下的 CPU 特性**：在 x64 上，Native AOT 按 SSE2 编译，启动时再检测之后的几个指令集，其中有 SSSE3，所以在支持 SSSE3 的 CPU 上，Nino 会走 [SSSE3 路径](#simd)。AVX2 和 AVX-512 路径需要更高的基线，而提高基线也就要求运行的 CPU 必须支持：AVX2 用 `<IlcInstructionSet>x86-64-v3</IlcInstructionSet>`，AVX-512 用 `x86-64-v4`，或用 `native` 取构建机器的 CPU。在 Arm64 上，AdvSimd 属于 Native AOT 的基线，所有 Arm64 路径都会用上。
 
 生成器为 IL2CPP 写的也是同样的格式化器，所以 Nino 在 IL2CPP 上同样不需要反射。参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity#il2cpp)。
+
+## 查看注册情况 [#checking-registration]
+
+Nino 按需注册格式化器和创建器：第一次遇到某个类型时才注册。所以问“注册了没有”其实是两个问题：Nino 能不能处理这个类型，以及它现在有没有为这个类型准备好。
+
+| 调用 | 何时为 true | 副作用 |
+| --- | --- | --- |
+| `NinoSerializer.IsSupported(typeof(T))` | Nino 能序列化和反序列化 `T`：`[NinoType]`、内置类型，或有注册格式化器的类型。Native AOT 下，生成器没见过的类型返回 false | 和第一次序列化一样，查找或构建格式化器 |
+| `NinoFormatterCache<T>.IsRegistered` | 到目前为止已经存好了 `T` 的格式化器：由生成代码注册，或由运行时构建 | 无：只读一个字段 |
+| `NinoActivator<T>.IsRegistered` | 到目前为止已经存好了集合类 `T` 的创建器（它的 [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) 方法或 `new T()`，Nino 读入 `null` 槽位时调用），由生成代码注册，或通过反射找到 | 无：只读一个字段 |
+
+只在运行时才知道的类型，交给 Nino 之前先问 `IsSupported`；想看预热或测试准备好了哪些类型，就问 `IsRegistered`。比如加载界面把 [HybridCLR](#hybridclr-and-hot-update) 程序集里的每种类型各写、读一个之后，确认 Nino 都已经碰到过它们：
+
+```csharp
+// 加载界面结束后；为 false：还没有任何 Nino 调用碰到这个类型
+bool formatter = NinoFormatterCache<EnterDungeon>.IsRegistered;
+bool creator = NinoActivator<Inventory>.IsRegistered; // Inventory : List<ItemStack>，读入 null 时创建
+```
+
+<Callout type="warn" title="false 不代表不支持">
+
+Nino 还没遇到过的类型，`IsRegistered` 一律是 false，哪怕构建里有它的生成代码；`NinoRegistry.EnsureInitialized` 也改变不了这一点：它只加载程序集的注册表，每个类型仍然要等第一次查找时才注册。不要用它来决定要不要调用 Nino；请用 `IsSupported`，它会注册找到的格式化器。
+
+</Callout>
 
 ## 卸载程序集 [#unloading-assemblies]
 

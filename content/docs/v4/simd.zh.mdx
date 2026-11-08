@@ -1,7 +1,7 @@
 ---
 title: SIMD
 seoTitle: "Nino 在 .NET、Unity、Go、Rust 与 TypeScript 上的 SIMD – Nino v4 文档"
-description: "Nino 在各平台上使用哪些向量指令（.NET 的 AVX-512、AVX2、SSSE3、Arm64 和 WebAssembly 路径，Unity 的 Burst 内核，Go 和 Rust 的字符串转码，TypeScript 的 WebAssembly 文本模块），各自如何检测、什么情况下回退到可移植代码，以及各自在哪里有基准测试。"
+description: "Nino 在各平台上使用哪些向量指令（.NET 的 AVX-512、AVX2、SSSE3、Arm64 和 WebAssembly 路径，Unity 的 Burst 内核，Go 和 Rust 的字符串转码，TypeScript 的 WebAssembly 文本模块），各自如何检测、什么情况下回退到可移植代码，各自在哪里有基准测试，以及如何在 netstandard 版本上用 NinoKernels 注册原生内核。"
 icon: Cpu
 ---
 
@@ -47,7 +47,7 @@ Nino 在每个平台上写出的字节都一样。平台有向量指令时，各
 
 ## Unity [#unity]
 
-Unity 加载 `Nino.Core` 的 netstandard 版本。安装 `com.unity.burst` 1.8 或更高版本后，Unity 包会在启动时通过 `NinoKernels` 注册 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)。`NinoKernels` 是一张原生函数指针表，只有 netstandard 版本会调用它（每个指针存在静态字段里，与阈值比较一次后直接调用；每个版本都声明了 `NinoKernels`，所以注册内核的库在 .NET 8 及更高版本上也能加载，这些版本仍走自己的路径）。Burst 按 AOT 设置里的每个 CPU 目标各编译一份内核，启动时选出 CPU 能跑的那份，每个内核注册时还会检查指令集。
+Unity 加载 `Nino.Core` 的 netstandard 版本。安装 `com.unity.burst` 1.8 或更高版本后，Unity 包会在启动时通过 `NinoKernels` 注册 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)。`NinoKernels` 是一张原生函数指针表，只有 netstandard 版本会调用它（每个指针存在静态字段里，与阈值比较一次后直接调用；每个版本都声明了 `NinoKernels`，所以注册内核的库在 .NET 8 及更高版本上也能加载，这些版本仍走自己的路径）。其他 netstandard 宿主也可以[注册自己的内核](#registering-kernels)。Burst 按 AOT 设置里的每个 CPU 目标各编译一份内核，启动时选出 CPU 能跑的那份，每个内核注册时还会检查指令集。
 
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |
@@ -91,6 +91,90 @@ TypeScript 运行时用 `DataView` 和类型化数组读写。它的向量代码
 | 支持 WebAssembly SIMD、GC 和 JS String Builtins 的浏览器和 Deno | 读取较长的 UTF-16 和 Latin-1 文本、写入超过 64 个字符的文本，在 SIMD 寄存器中每次 8 或 16 个字符（`useWasm(false)` 可关闭） | — |
 | Node、Bun、带 Node `Buffer` 的 Deno | 不用 Nino 自己的：`Buffer` 原生的 Latin-1 和 UTF-16 方法 | [其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#typescript) |
 | 不支持它们的引擎，或阻止编译 WebAssembly 的内容安全策略 | 无：JavaScript 路径和引擎内置的解码器；字节一致 | — |
+
+## 注册自己的内核 [#registering-kernels]
+
+Unity 包注册的内核（[见上文](#unity)）走的是公共 API `NinoKernels`，netstandard 版本的任何宿主都能用：.NET Framework、Mono，以及 .NET Core 3.0 到 .NET 7。这些版本自己没有向量路径的地方，内核才有用：元组、`KeyValuePair` 和按块写的 `[NinoType]` 结构体组成的数组和列表，带填充的原始结构体数组，Latin-1 字符串，以及 `[NinoUtf8]` 字符串里的 ASCII 文本。.NET 8 及以上不用管它：这些版本走自己的向量路径，从不调用内核（在那里注册也没有任何效果）。
+
+每个内核都是原生的 `cdecl` 函数，以函数指针的形式传入；`NinoKernels.Register` 把这些指针复制到静态字段里，Nino 直接调用。留空（`null`）的指针，对应的工作仍走 Nino 自己的路径。
+
+| 内核 | 签名 | 要求（参照实现：`NinoKernels.PermuteScalar`、`NarrowScalar` 等） |
+| --- | --- | --- |
+| `Permute` | `void (byte* source, int sourceStride, byte* destination, int destinationStride, byte* table, int count)` | 处理 `count` 个值，源值在 `source` 处、间隔 `sourceStride` 字节，目标值在 `destination` 处、间隔 `destinationStride` 字节：目标的第 `j` 个字节取源值的第 `table[j]` 个字节，`table[j]` 为 `0xFF` 时写 `0`。目标的每个字节都要写。步长为 1 到 64；两段内存不重叠。 |
+| `Narrow` | `int (ushort* source, byte* destination, int length)` | 把 `length` 个 UTF-16 字符各写成一个字节（Latin-1）；全都不超过 U+00FF 时返回 `1`，有字符超过时返回 `0`（这时写了多少都无所谓：Nino 会改用 UTF-16 写这个字符串）。 |
+| `Widen` | `void (byte* source, ushort* destination, int length)` | 把 `length` 个 Latin-1 字节扩展成 UTF-16 字符。 |
+| `NarrowAscii` | `int (ushort* source, byte* destination, int length)` | 把开头低于 U+0080 的字符各写成一个字节，返回这样的字符有几个（全是就返回 `length`）；之后的字节也可以写，但不超过 `length`。剩下的由 Nino 编码。 |
+| `WidenAscii` | `int (byte* source, ushort* destination, int length)` | 把开头低于 `0x80` 的字节各扩展成一个字符，返回这样的字节有几个（全是就返回 `length`）；之后的字符也可以写，但不超过 `length`。剩下的由 Nino 解码和校验。 |
+
+在 .NET Framework 上，JIT 能加速 `Vector<T>` 时，Nino 已经用它收窄和扩展较长的 Latin-1 字符串；注册了 `Narrow` 或 `Widen` 后，会改为调用内核，所以两者都要测一测。
+
+每个内核都要遵守这些规则：
+
+- **字节一致。** 内核的输出必须和参照实现完全相同：二进制格式不取决于走了哪条路径，用内核写的数据，不用内核也能读，其他语言的运行时也能读。请拿随机输入，以及向量宽度附近的每个长度，和对应的 `...Scalar` 参照实现逐一比对。
+- **不假设对齐，不保存状态，不抛异常。** 指针可能是任意对齐。所有做序列化的线程都可能同时调用内核，所以内核里不能有可变状态。任何异常都不能从内核里抛出来。
+- **阈值。** 只有长度足够、调用划得来时，Nino 才会调用内核：`Permute` 至少 `MinBlocks` 个值（默认 16，最小 1；带填充的原始结构体的复制无论怎么设都从 16 个起），四个文本内核至少 `MinChars` 个字符（默认 32，最小 16）。Unity 的 Burst 内核用 2 和 16，WebGL 内核用 32 和 16：请在目标平台上实测，把阈值设在内核开始变快的长度。
+
+一个最小的例子：用 C 写两个 Latin-1 内核，编译成 DLL，在 Windows 上加载（函数指针需要 C# 9 或更高版本）。
+
+```c title="nino_kernels.c"
+#include <stdint.h>
+
+/* 循环足够简单，开了优化的编译器（-O3、/O2）能把它们向量化。 */
+__declspec(dllexport) int nino_narrow(const uint16_t* source, uint8_t* destination, int32_t length)
+{
+    uint16_t all = 0;
+    for (int32_t i = 0; i < length; i++)
+    {
+        all |= source[i];
+        destination[i] = (uint8_t)source[i];
+    }
+    return all <= 0xFF; /* 1：全是 Latin-1 字符 */
+}
+
+__declspec(dllexport) void nino_widen(const uint8_t* source, uint16_t* destination, int32_t length)
+{
+    for (int32_t i = 0; i < length; i++)
+        destination[i] = source[i];
+}
+```
+
+```csharp title="NinoNativeKernels.cs"
+using System;
+using System.Runtime.InteropServices;
+using Nino.Core;
+
+// Windows 上的 .NET Framework：启动时、第一次序列化之前注册。
+public static unsafe class NinoNativeKernels
+{
+    [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr LoadLibrary(string path);
+
+    [DllImport("kernel32", CharSet = CharSet.Ansi, ExactSpelling = true)]
+    private static extern IntPtr GetProcAddress(IntPtr module, string name);
+
+    public static bool Register(string path)
+    {
+        IntPtr library = LoadLibrary(path); // 永不释放：进程退出前 Nino 随时可能调用这些内核
+        if (library == IntPtr.Zero)
+            return false;                   // Nino 继续走自己的路径
+
+        NinoKernels.Register(new NinoKernels
+        {
+            MinChars = 64, // 从这个长度起，你的内核实测更快
+            Narrow = (delegate* unmanaged[Cdecl]<ushort*, byte*, int, int>)GetProcAddress(library, "nino_narrow"),
+            Widen = (delegate* unmanaged[Cdecl]<byte*, ushort*, int, void>)GetProcAddress(library, "nino_widen"),
+            // Permute、NarrowAscii、WidenAscii 留空：走 Nino 自己的路径
+        });
+        return true;
+    }
+}
+```
+
+<Callout type="warn" title="启动时在一个线程里注册一次">
+
+`NinoKernels.Register(kernels)` 会替换已注册的内核（传 `null` 就回到 Nino 自己的路径），`NinoKernels.Current` 返回最后注册的实例。它不像设置那样会冻结：别的线程正在序列化时调用也是安全的，但两个线程同时调用 `Register`，结果可能是两边的内核混在一起。注册之后再改这个实例，不会生效，除非重新注册。已经在执行的调用可能还在用旧内核，所以旧内核的代码要在整个进程生命周期里保持加载。在 Unity 里，包自带的 Burst 或 WebGL 内核会在第一个场景加载前注册，编辑器里每次域重载后也会重新注册：在这之前注册的内核会被替换，所以请在它们之后注册你自己的。
+
+</Callout>
 
 ## 下一步 [#next-steps]
 

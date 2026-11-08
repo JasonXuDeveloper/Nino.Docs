@@ -1,8 +1,10 @@
 // What content/docs/v4/custom-formatters.mdx leaves to the reader: the third-party Ring<T> and Grid<T> its formatters
-// are for (as their comments describe them) and the Contract its last example reads.
+// are for (as their comments describe them) and the Contract its last example reads; the usings of its Raw Bytes example.
+using System.Buffers.Binary;
 using System.Collections;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace Docs.Page_custom_formatters;
 

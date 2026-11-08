@@ -1,6 +1,6 @@
 ---
 title: Custom Formatters
-description: "Write a Nino formatter for a member ([NinoMemberFormatter]) or a type Nino does not support ([assembly: NinoFormatter], including generic types), using the Writer and Reader APIs."
+description: "Write a Nino formatter for a member ([NinoMemberFormatter]) or a type Nino does not support ([assembly: NinoFormatter], including generic types), using the Writer and Reader APIs, raw byte access and the built-in formatter structs you can compose."
 icon: Puzzle
 ---
 
@@ -237,6 +237,79 @@ public sealed class Level
 - `Writer.Write<T>(ReadOnlySpan<T>)` and `Reader.ReadUnmanagedRaw<T>(Span<T>)` copy the elements as one block, and convert them field by field on a runtime whose layout differs from the canonical one.
 - `ReadLength` throws when the bytes left cannot hold that many cells, so corrupt data cannot make the formatter allocate a huge grid.
 
+## Built-in Formatters [#built-in-formatters]
+
+Nino's own formatters are public structs in `Nino.Core`, generic over their element formatters like the ones above. Pass them as type arguments to build a formatter from parts: a list whose elements are zig-zag varints, a dictionary whose values Nino writes as it always does. Each is a struct, so the composed formatter is still direct calls the JIT can inline, with no allocation.
+
+```csharp
+[NinoType]
+public sealed class PriceHistory
+{
+    public string Symbol;
+
+    // Every delta as a zig-zag varint (ZigZagLongFormatter, above): 1 or 2 bytes instead of 8
+    [NinoMemberFormatter(typeof(ListFormatter<List<long>, long, ZigZagLongFormatter>))] // [!code highlight]
+    public List<long> DeltaCents;
+
+    // Keys as zig-zag varints, values exactly as Nino writes a Trade
+    [NinoMemberFormatter(typeof(DictionaryFormatter<long, Trade, ZigZagLongFormatter, CachedFormatter<Trade>>))] // [!code highlight]
+    public Dictionary<long, Trade> TradesByTime;
+}
+
+[NinoType]
+public sealed class Trade
+{
+    public int Quantity;
+    public long PriceCents;
+}
+```
+
+The element formatter is the last type arguments, after the types: `ListFormatter<TList, T, TFormatter>` takes the list type (`List<T>` or a class derived from it), the element type, then the element's formatter. For an element that has no formatter of yours, pass the one Nino would use:
+
+| Element | Formatter to pass |
+| --- | --- |
+| an unmanaged value (`int`, `long`, an enum, `Vector3`, a raw struct) | `UnmanagedFormatter<T>`: its raw bytes |
+| `string` | `StringFormatter`: one byte a char or UTF-16, as a member is written. For UTF-8, mark the member `[NinoUtf8]` instead (`Utf8StringFormatter` is for generated code; NINO031) |
+| anything else (a `[NinoType]`, a collection, a type of a registered formatter) | `CachedFormatter<T>`: whatever Nino uses for `T`, so it writes what `NinoSerializer.Serialize(value, ref writer)` writes, headers and polymorphism included |
+
+`CachedFormatter<T>` reads the formatter from a static field. Where `T` is a concrete type, the JIT calls it directly and can inline it; in shared generic code (a `T` that is a class) and on AOT runtimes (IL2CPP, Native AOT) each value costs one virtual call. In a generic formatter you register with `[assembly: NinoFormatter]`, take the element formatter as a type parameter (`where TFormatter : struct, INinoFormatter<T>`, as `RingFormatter` does) instead: Nino binds the exact formatter there.
+
+Every built-in formatter, by what it formats (`TF`, `TKF` and `TVF` are element, key and value formatters; `-1` is the length of `null`):
+
+| Formatter | Formats | Writes |
+| --- | --- | --- |
+| `UnmanagedFormatter<T>` | an unmanaged `T` | its raw bytes |
+| `NullableFormatter<T, TF>` | `T?` | a presence byte, then the value |
+| `StringFormatter`, `Utf8StringFormatter` | `string` | Nino's default string encoding, or UTF-8 |
+| `IntPtrFormatter`, `UIntPtrFormatter` | `nint`, `nuint` | 8 bytes on every platform |
+| `DateTimeOffsetFormatter` | `DateTimeOffset` | UTC ticks (`long`), then the offset in minutes (`short`) |
+| `ObjectFormatter` | `object` holding `[NinoType]`s | a type id, then the body |
+| `ArrayFormatter<T, TF>`, `UnmanagedArrayFormatter<T>` | `T[]` | the length (`-1` for `null`), then the elements; the unmanaged one as one block |
+| `NullableArrayFormatter<T>`, `NullableListFormatter<TList, T>` | `T?[]`, `List<T?>` of raw `T` | every element at a fixed stride (not the bytes of `ArrayFormatter` with `NullableFormatter`) |
+| `ArraySegmentFormatter<T, TF>` | `ArraySegment<T>` | as an array; read into a new array |
+| `Array2DFormatter<T, TF>`, `Array3DFormatter<T, TF>`, `Array4DFormatter<T, TF>` | `T[,]`, `T[,,]`, `T[,,,]` | each length (the first `-1` for `null`), then the elements in row-major order |
+| `ListFormatter<TList, T, TF>`, `UnmanagedListFormatter<TList, T>` | `List<T>` or a class derived from it | the count (`-1` for `null`), then the elements; the unmanaged one as one block |
+| `HashSetFormatter<TSet, T, TF>` | `HashSet<T>` or a class derived from it | the count, then the elements |
+| `QueueFormatter<T, TF>`, `QueueFormatter<TQueue, T, TF>` | `Queue<T>`, or a class derived from it | the count, then head to tail |
+| `StackFormatter<T, TF>`, `StackFormatter<TStack, T, TF>` | `Stack<T>`, or a class derived from it | the count, then bottom to top |
+| `CollectionFormatter<TCollection, T, TF>` | any `ICollection<T>` class Nino can create (`SortedSet<T>`, `LinkedList<T>`, your own) | the count, then the elements in enumeration order |
+| `ProducerConsumerFormatter<TCollection, T, TF>` | `ConcurrentQueue<T>`, `ConcurrentStack<T>`, `ConcurrentBag<T>`, other `IProducerConsumerCollection<T>` | the count, then the elements in the order they are added back |
+| `BlockingCollectionFormatter<T, TF>` | `BlockingCollection<T>` | the count, then a snapshot; read over a `ConcurrentQueue<T>` |
+| `InterfaceListFormatter<TInterface, T, TF>`, `InterfaceSetFormatter<TInterface, T, TF>` | `IEnumerable<T>`, `IList<T>`, `IReadOnlyList<T>`...; `ISet<T>`, `IReadOnlySet<T>` | the count, then the elements; read into a `List<T>` or a `HashSet<T>` |
+| `DictionaryFormatter<TKey, TValue, TKF, TVF>`, `DictionaryFormatter<TDictionary, TKey, TValue, TKF, TVF>` | `Dictionary<TKey, TValue>`, or a class derived from it | the count, then key and value pairs |
+| `DictionaryLikeFormatter<TDictionary, TKey, TValue, TKF, TVF>` | any `IDictionary<TKey, TValue>` class Nino can create (`SortedDictionary`, `SortedList`, `ConcurrentDictionary`, your own) | the count, then the pairs |
+| `InterfaceDictionaryFormatter<TInterface, TKey, TValue, TKF, TVF>` | `IDictionary<TKey, TValue>`, `IReadOnlyDictionary<TKey, TValue>`, `ReadOnlyDictionary<TKey, TValue>` | the count, then the pairs; read into a `Dictionary<TKey, TValue>` |
+| `KeyValuePairFormatter<TKey, TValue, TKF, TVF>` | `KeyValuePair<TKey, TValue>` | the key, then the value |
+| `ValueTupleFormatter<T1, ..., TF1, ...>`, `TupleFormatter<T1, ..., TF1, ...>` | value tuples (eight items or more through `TRest`), `Tuple` of 1 to 7 items | the items in order; a `Tuple` after a presence byte |
+| `PriorityQueueFormatter<TElement, TPriority, TEF, TPF>` | `PriorityQueue<TElement, TPriority>` (`net8.0` and `net10.0` builds only) | the count, then element and priority pairs in heap order |
+| `LazyFormatter<T, TF>` | `Lazy<T>` | a presence byte, then the value (created if it was not yet) |
+| `MemoryFormatter<T, TF>`, `ReadOnlyMemoryFormatter<T, TF>`, `ReadOnlySequenceFormatter<T, TF>` | `Memory<T>`, `ReadOnlyMemory<T>`, `ReadOnlySequence<T>` | the bytes of a `T[]` of the elements |
+| `GroupingFormatter<TKey, TElement, TKF, TEF>`, `LookupFormatter<TKey, TElement, TKF, TEF>` | `IGrouping<TKey, TElement>`, `ILookup<TKey, TElement>` | a grouping's count, key and elements; a lookup's count, then its groupings |
+| `BigIntegerFormatter`, `UriFormatter`, `VersionFormatter`, `StringBuilderFormatter`, `BitArrayFormatter`, `CultureInfoFormatter`, `TimeZoneInfoFormatter` | those types | see [Supported Types](/en/docs/v4/types) |
+| `CachedFormatter<T>` | any `T` Nino supports | what Nino uses for `T` (above) |
+
+The type parameters marked `[NinoCreated]` (`TList`, `TSet`, `TDictionary`, ...) are created with `NinoActivator<T>.Create()` when the slot is `null`; reading into an existing collection reuses or refills it, as [reuse deserialization](/en/docs/v4/pooling) does everywhere. A built-in formatter with an element formatter of yours writes bytes only your code knows: give the reading side the same composition.
+
 ## Writer and Reader
 
 A formatter writes with `Writer` and reads with `Reader`, both `ref struct`s. The methods you need most:
@@ -252,9 +325,62 @@ A formatter writes with `Writer` and reads with `Reader`, both `ref struct`s. Th
 | `WriteLength(int)`, `WriteNullLength()` | `ReadLength(minElementSize = 1)` | a collection length, `-1` for null; `ReadLength` throws if the bytes left cannot hold that many elements of at least `minElementSize` bytes |
 | `ReserveInt32()`, `PatchInt32(...)`, `PatchLength(...)` | | 4 bytes to fill in later, such as a byte length |
 | `WriteRaw(ReadOnlySpan<byte>)` | `ReadRaw(int)`, `Advance(int)` | raw bytes, or skipping them |
+| `Reserve(int)` | `ReadBlock(int)` | a fixed number of bytes you encode yourself, through a `ref byte` ([Raw Bytes](#raw-bytes)) |
 | `Position` | `Position`, `Remaining`, `Eof` | where you are: `Position` is an absolute offset, `Remaining` the bytes left |
 
 `Write(string)` writes a header of 1, 3 or 5 bytes and the chars: `0` for `null`; `2 × length + 1` and one byte a char when every char is at most U+00FF (`1` for empty, with nothing after it); otherwise `2 × length` and the UTF-16 code units. `WriteUtf8` writes the length in chars plus one as a header (`0` for `null`, `1` for empty), then the byte count as a second header and exactly that many UTF-8 bytes: `"é😀"` is `04` `06` `C3 A9 F0 9F 98 80`. An unpaired surrogate is written as U+FFFD. See [Strings](/en/docs/v4/wire-format#strings).
+
+### Raw Bytes [#raw-bytes]
+
+For an encoding of a fixed size that the table's methods do not cover, take the bytes directly: `Writer.Reserve(size)` and `Reader.ReadBlock(size)` return a `ref byte` to the first of `size` bytes and move past them. Nino's bytes are little-endian, and `Writer` and `Reader` refuse to run on a big-endian host, so encode explicitly little-endian, as `BinaryPrimitives` does:
+
+```csharp
+/// Unix milliseconds in 6 bytes, little-endian (until the year 10889).
+public struct UnixMillis48Formatter : INinoFormatter<long>
+{
+    public void Serialize(long value, ref Writer writer)
+    {
+        if ((ulong)value >= 1UL << 48)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        Span<byte> bytes = MemoryMarshal.CreateSpan(ref writer.Reserve(6), 6); // [!code highlight]
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes, (uint)value);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.Slice(4), (ushort)(value >> 32));
+    }
+
+    public void Deserialize(ref Reader reader, ref long value)
+    {
+        // NinoDataException when fewer than 6 bytes are left
+        ReadOnlySpan<byte> bytes = MemoryMarshal.CreateReadOnlySpan(ref reader.ReadBlock(6), 6); // [!code highlight]
+        value = BinaryPrimitives.ReadUInt32LittleEndian(bytes) | (long)BinaryPrimitives.ReadUInt16LittleEndian(bytes.Slice(4)) << 32;
+    }
+}
+
+[NinoType]
+public sealed class AuditEntry
+{
+    [NinoMemberFormatter(typeof(UnixMillis48Formatter))]
+    public long AtUnixMs;
+    public string Action;
+}
+```
+
+`MemoryMarshal.CreateSpan` exists on .NET Core 2.1 and later, .NET 5 and later and Unity; on .NET Framework, read and write through the `ref byte` with `Unsafe.ReadUnaligned` and `Unsafe.WriteUnaligned`, which use the host's byte order: little-endian wherever `Writer` and `Reader` run.
+
+| Method | Does | When the size is wrong |
+| --- | --- | --- |
+| `Writer.Reserve(int size)` | Adds `size` bytes to the output, growing the buffer, and returns a `ref` to the first. The bytes are **not cleared**: they hold whatever the pooled buffer held, so write every one | A negative size throws `OverflowException` |
+| `Writer.ReserveInt32()` | Adds 4 bytes and returns their position, for `PatchInt32(position, value)` or `PatchLength(position)` once you know the value | |
+| `Reader.ReadBlock(int size)` | Consumes `size` bytes and returns a `ref` to the first | Negative, or more than `Remaining`: `NinoDataException` ("unexpected end of data"), nothing consumed |
+| `Reader.ReadRaw(int length)` | The same, as a `ReadOnlySpan<byte>` | the same |
+| `Reader.Advance(int count)` | Skips `count` bytes (`ReadBlock` without the `ref`) | the same |
+
+<Callout type="warn" title="These references are unchecked">
+
+- The `ref` from `Reserve` is valid only until the next write to the writer: any write may move the output to a larger buffer and return the old one to the pool, and writing through an old `ref` then corrupts memory something else uses. Fill the bytes right away.
+- The `ref` from `ReadBlock` points into the data you are deserializing. It is not read-only: never write through it, and read only the `size` bytes you asked for. With a size of `0`, it may point past the end of the data.
+- `PatchInt32` writes at the position you pass without checking it: pass only a position `ReserveInt32` returned for this writer.
+
+</Callout>
 
 ### Positions in a Slice [#positions-in-a-slice]
 

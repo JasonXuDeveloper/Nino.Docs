@@ -1,7 +1,7 @@
 ---
 title: Platforms
 seoTitle: "Supported Platforms: .NET, Unity IL2CPP, HybridCLR and Godot – Nino v4 Docs"
-description: "Where Nino runs (.NET Standard 2.0 and later, Native AOT, Unity on Mono and IL2CPP, HybridCLR, Godot 4, and TypeScript, Go and Rust through generated code), why every platform writes the same bytes, and what the format looks like."
+description: "Where Nino runs (.NET Standard 2.0 and later, Native AOT, Unity on Mono and IL2CPP, HybridCLR, Godot 4, and TypeScript, Go and Rust through generated code), why every platform writes the same bytes, what the format looks like, and how to check what Nino has registered."
 icon: Cpu
 ---
 
@@ -99,6 +99,30 @@ The `net8.0` and `net10.0` builds of `Nino.Core` are marked `IsTrimmable` and `I
 - **CPU features under Native AOT**: on x64, Native AOT compiles for SSE2 and checks for a few later instruction sets at startup, among them SSSE3, so Nino takes its [SSSE3 paths](#simd) on CPUs that have it. Its AVX2 and AVX-512 paths need a higher baseline, which also makes the app require it: `<IlcInstructionSet>x86-64-v3</IlcInstructionSet>` for AVX2, `x86-64-v4` for AVX-512, or `native` for the CPU of the build machine. On Arm64, AdvSimd is part of Native AOT's baseline and every Arm64 path is taken.
 
 The generator writes the same formatters for IL2CPP, which is why Nino needs no reflection there either. See [Unity and HybridCLR](/en/docs/v4/advanced/unity#il2cpp).
+
+## Checking What Is Registered [#checking-registration]
+
+Nino registers formatters and creators lazily, the first time it meets a type, so a question about registration has two forms: whether Nino can handle a type, and whether it has set the type up yet.
+
+| Call | True when | Side effects |
+| --- | --- | --- |
+| `NinoSerializer.IsSupported(typeof(T))` | Nino can serialize and deserialize `T`: a `[NinoType]`, a built-in type, or a type with a registered formatter. False under Native AOT for a type the generator never saw | Finds or builds the formatter, as the first serialization would |
+| `NinoFormatterCache<T>.IsRegistered` | A formatter for `T` is stored: registered by generated code or built by the runtime, so far | None: it reads a field |
+| `NinoActivator<T>.IsRegistered` | A creator for the collection class `T` is stored (its [`[NinoFactory]`](/en/docs/v4/pooling#creating-instances-with-ninofactory) method or `new T()`, which Nino calls to read into a `null` slot), registered by generated code or found by reflection, so far | None: it reads a field |
+
+Ask `IsSupported` before handing Nino a type you only know at run time; ask `IsRegistered` to see what a warm-up or a test has set up, for example that the types of a [HybridCLR](#hybridclr-and-hot-update) assembly were reached after a loading screen wrote and read one of each:
+
+```csharp
+// After the loading screen; false: no Nino call has reached that type yet
+bool formatter = NinoFormatterCache<EnterDungeon>.IsRegistered;
+bool creator = NinoActivator<Inventory>.IsRegistered; // Inventory : List<ItemStack>, created when read into null
+```
+
+<Callout type="warn" title="False does not mean unsupported">
+
+`IsRegistered` is false for every type Nino has not met yet, even one whose generated code is in the build, and `NinoRegistry.EnsureInitialized` does not change that: it loads an assembly's registry, which still registers each type on its first lookup. Never use it to decide whether to call Nino; use `IsSupported`, which registers what it finds.
+
+</Callout>
 
 ## Unloading Assemblies
 
