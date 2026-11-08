@@ -35,6 +35,7 @@ const copy: Record<
   Locale,
   {
     description: string;
+    pill: string;
     headline: [string, string];
     sub: string;
     start: string;
@@ -46,6 +47,7 @@ const copy: Record<
 > = {
   en: {
     description: `Nino is a high-performance binary serializer for C# and .NET: source-generated, ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack, ` : ''}zero GC on hot paths. For RPC, messaging, caching and storage on .NET, Unity (IL2CPP, HybridCLR) and Godot, with the same bytes in TypeScript, Go and Rust.`,
+    pill: 'Nino v4, the C# binary serializer',
     headline: ['The fastest binary serializer', 'for C#.'],
     sub: 'Nino is source-generated and SIMD-accelerated (AVX-512, AVX2, Arm64, WebAssembly), with zero GC on hot paths. For services, networking and RPC, message queues, caching, storage and IPC, on .NET, Unity and Godot alike.',
     start: 'Get Started',
@@ -101,6 +103,7 @@ const copy: Record<
   zh: {
     description: `Nino 是高性能 C# / .NET 二进制序列化库：基于源生成器，${headlineSerialize ? `最高比 MemoryPack 快 ${headlineSerialize} 倍，` : ''}热路径零 GC 分配。适用于 RPC、消息、缓存与存储，支持 .NET、Unity（IL2CPP、HybridCLR）和 Godot，可与 TypeScript、Go 和 Rust 互通。`,
     // U+200B: the one place the first line may break (keep-all keeps the words whole)
+    pill: 'Nino v4：C# 二进制序列化库',
     headline: ['最快的\u200b二进制序列化库', '为 C# 而生。'],
     sub: 'Nino 基于源生成器，用 SIMD 加速（AVX-512、AVX2、Arm64、WebAssembly），热路径零 GC 分配。适用于服务端、网络与 RPC、消息队列、缓存、存储和进程间通信，.NET、Unity 与 Godot 均可使用。',
     start: '快速开始',
@@ -194,56 +197,55 @@ export default function HomePage({ params }: Route.ComponentProps) {
   return (
     <HomeLayout {...baseOptions(lang)}>
       <main className="flex flex-1 flex-col items-center">
-        <section className="w-full px-6 pt-10 pb-14 md:pt-16 md:pb-20">
-          <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-14">
-            <div className="flex flex-col items-start">
-              <h1
+        <section className="flex w-full flex-col items-center px-6 pt-12 pb-14 md:pt-20 md:pb-20">
+          <div className="flex w-full max-w-5xl flex-col items-center text-center">
+            <span className="mb-5 rounded-full border border-fd-border bg-fd-secondary/50 px-3 py-1 text-xs font-medium text-fd-muted-foreground">
+              {t.pill}
+            </span>
+
+            <h1 className="text-4xl leading-[1.1] font-extrabold tracking-tight break-keep sm:text-5xl lg:text-6xl">
+              {t.headline[0]}
+              <br />
+              <span className="bg-linear-to-r/oklab from-nino-grad-from from-25% to-nino-grad-to bg-clip-text text-transparent">
+                {t.headline[1]}
+              </span>
+            </h1>
+
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-balance text-fd-muted-foreground md:text-lg">
+              {t.sub}
+            </p>
+
+            <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                to={`${docs}/start`}
                 className={cn(
-                  'leading-[1.08] font-extrabold tracking-tight text-balance',
-                  lang === 'zh'
-                    ? 'break-keep text-4xl sm:text-5xl xl:text-[3.5rem]'
-                    : 'text-[2.6rem] sm:text-6xl lg:text-[4rem]',
+                  'inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-colors',
+                  'bg-fd-primary text-fd-primary-foreground hover:bg-fd-primary/90',
                 )}
               >
-                {t.headline[0]}
-                <br />
-                <span className="bg-linear-to-r/oklab from-nino-grad-from from-25% to-nino-grad-to bg-clip-text text-transparent">
-                  {t.headline[1]}
-                </span>
-              </h1>
-
-              <p className="mt-5 max-w-xl text-base leading-relaxed text-pretty text-fd-muted-foreground md:text-lg">
-                {t.sub}
-              </p>
-
-              <div className="mt-7 flex flex-wrap items-center gap-3">
-                <Link
-                  to={`${docs}/start`}
-                  className={cn(
-                    'inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-colors',
-                    'bg-fd-primary text-fd-primary-foreground hover:bg-fd-primary/90',
-                  )}
-                >
-                  {t.start}
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
-                <a
-                  href={githubUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    'inline-flex items-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors',
-                    'hover:bg-fd-accent hover:text-fd-accent-foreground',
-                  )}
-                >
-                  <GitHubIcon />
-                  {t.github}
-                </a>
-              </div>
-
-              <HomeInstall lang={lang} docs={docs} />
+                {t.start}
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Link>
+              <a
+                href={githubUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors',
+                  'hover:bg-fd-accent hover:text-fd-accent-foreground',
+                )}
+              >
+                <GitHubIcon />
+                {t.github}
+              </a>
             </div>
 
+            <HomeInstall lang={lang} docs={docs} />
+          </div>
+        </section>
+
+        <section className="w-full border-t px-6 py-12 md:py-16">
+          <div className="mx-auto max-w-6xl">
             <HomeBench lang={lang} docs={docs} memoryPack={memoryPackVersion} />
           </div>
         </section>

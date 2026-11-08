@@ -256,15 +256,15 @@ export function HomeBench({
     <div
       ref={ref}
       data-hidden={shown ? undefined : ''}
-      className="nino-chart flex w-full flex-col gap-6 text-left"
+      className="nino-chart flex w-full flex-col"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="font-semibold tracking-tight">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+        <h2 className="text-2xl font-bold tracking-tight">
           {zh
             ? `实测：对比 MemoryPack ${memoryPack}`
             : `Measured against MemoryPack ${memoryPack}`}
         </h2>
-        <p className="flex items-center gap-3 text-xs text-fd-muted-foreground">
+        <p className="flex items-center gap-4 text-sm text-fd-muted-foreground">
           <span className="flex items-center gap-1.5">
             <span className="size-2.5 rounded-full bg-fd-primary" />
             Nino v4
@@ -275,51 +275,51 @@ export function HomeBench({
           </span>
         </p>
       </div>
-      {rows.map((row, i) => (
-        <div key={row.label} className="flex flex-col gap-2.5">
-          <div className="flex items-baseline justify-between gap-4">
-            <p className="flex flex-col">
-              <span className="text-sm font-medium">{row.label}</span>
-              {row.note && (
-                <span className="text-xs text-fd-muted-foreground">
-                  {row.note}
+      <div className="mt-10 grid gap-12 md:grid-cols-3 md:gap-0 md:divide-x">
+        {rows.map((row, i) => {
+          const pooled = alloc && i === rows.length - 1;
+          return (
+            <div
+              key={row.label}
+              className="flex flex-col md:px-8 md:first:pl-0 md:last:pr-0"
+            >
+              <p className="flex items-baseline gap-2">
+                <span className="text-5xl leading-none font-extrabold tracking-tighter text-fd-primary tabular-nums sm:text-6xl">
+                  {formatRatio(row.ratio)}
                 </span>
-              )}
-            </p>
-            <p className="shrink-0 text-sm text-fd-muted-foreground">
-              <span className="text-2xl font-bold tracking-tight text-fd-primary tabular-nums">
-                {formatRatio(row.ratio)}
-              </span>{' '}
-              {zh ? '更快' : 'faster'}
-            </p>
-          </div>
-          <Track
-            nino={row.nino}
-            other={row.other}
-            label={time(row)}
-            caption={
-              alloc && i === rows.length - 1
-                ? zh
-                  ? '耗时'
-                  : 'Time'
-                : undefined
-            }
-          />
-          {alloc && i === rows.length - 1 && (
-            <Track
-              nino={alloc.nino}
-              other={alloc.other}
-              caption={zh ? '分配' : 'Allocated'}
-              label={
-                zh
-                  ? `分配：Nino v4 ${alloc.nino.text}，MemoryPack ${alloc.other.text}`
-                  : `Allocated: Nino v4 ${alloc.nino.text}, MemoryPack ${alloc.other.text}`
-              }
-            />
-          )}
-        </div>
-      ))}
-      <p className="text-xs text-fd-muted-foreground">
+                <span className="text-sm text-fd-muted-foreground">
+                  {zh ? '更快' : 'faster'}
+                </span>
+              </p>
+              <p className="mt-4 text-sm font-medium">{row.label}</p>
+              <p className="min-h-5 text-xs text-fd-muted-foreground">
+                {row.note}
+              </p>
+              <div className="mt-5 flex flex-col gap-4">
+                <Track
+                  nino={row.nino}
+                  other={row.other}
+                  label={time(row)}
+                  caption={pooled ? (zh ? '耗时' : 'Time') : undefined}
+                />
+                {pooled && (
+                  <Track
+                    nino={alloc.nino}
+                    other={alloc.other}
+                    caption={zh ? '分配' : 'Allocated'}
+                    label={
+                      zh
+                        ? `分配：Nino v4 ${alloc.nino.text}，MemoryPack ${alloc.other.text}`
+                        : `Allocated: Nino v4 ${alloc.nino.text}, MemoryPack ${alloc.other.text}`
+                    }
+                  />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-10 text-sm text-fd-muted-foreground">
         {zh
           ? `BenchmarkDotNet，GitHub Actions runner（x64），${sourceNote(true)}`
           : `BenchmarkDotNet on a GitHub Actions runner (x64), ${sourceNote(false)}`}{' '}

@@ -72,8 +72,9 @@ Check each item, in both languages, and fix what fails:
 - **The newcomer path from the home page**: the home page's first screen and the introduction's first section point
   to Quick Start, Serialize and Deserialize and Defining Types, then to the comparison and the migration guide.
 - **The home page proves four claims**: fast, safe, runs everywhere, built for production (the owner's words: a
-  visitor should see at once that Nino is fast, safe, usable anywhere and professional). The first screen pairs the
-  headline and install box with measured bars against MemoryPack (one bar per measure: the grey track is MemoryPack,
+  visitor should see at once that Nino is fast, safe, usable anywhere and professional). The first screen stays
+  centred (headline, install box: the owner found a two-column hero less refined); right below it, the measured cases
+  against MemoryPack side by side, each a large static ratio over one bar per measure (the grey track is MemoryPack,
   the accent fill Nino, so 0 B is an empty track; no cards, no count-up, every number in the HTML); then one column
   per claim, each with its facts and the page that proves them. Chinese headlines break only where a `U+200B` allows
   (`break-keep`), never inside a word.
