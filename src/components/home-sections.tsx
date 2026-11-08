@@ -270,19 +270,19 @@ const text: Record<
       {
         icon: Server,
         title: 'ASP.NET Core',
-        text: '在 MVC 和 Minimal API 中读写 application/x-nino 请求体与响应，直接基于管道读写（Nino.AspNetCore）。',
+        text: 'MVC 和 Minimal API 直接从管道读写 application/x-nino 请求体和响应体（Nino.AspNetCore）。',
         href: 'advanced/aspnetcore',
       },
       {
         icon: FileCode,
         title: 'TypeScript、Go 与 Rust',
-        text: '每次构建后为你的 [NinoType] 生成 TypeScript、Go 和 Rust 类型与编解码器（Nino.Codegen），字节与 .NET 相同。',
+        text: '每次构建后为你的 [NinoType] 生成 TypeScript、Go 和 Rust 类型与编解码器（Nino.Codegen），与 .NET 字节一致、可以互通。',
         href: 'advanced/codegen',
       },
       {
         icon: MessagesSquare,
         title: '消息队列与事件流',
-        text: '所有事件共用一个基类型，消息小巧，生产者和消费者可以在不同时间升级。',
+        text: '所有事件共用一个基类型，消息小巧，生产者和消费者可以分开升级。',
         href: 'advanced/message-queues',
       },
       {
@@ -300,13 +300,13 @@ const text: Record<
       {
         icon: Gauge,
         title: '热路径与进程间通信',
-        text: '线程安全、每次调用零分配，适合后台任务、Actor、进程间通道和数据管道；反序列化到已有对象和 [NinoPooled] 实例，稳定运行的循环零 GC。',
+        text: '线程安全、每次调用零分配，适合后台任务、Actor、进程间通道和数据管道；反序列化到已有对象和 [NinoPooled] 实例，长期运行的循环保持零 GC。',
         href: 'advanced/high-performance',
       },
       {
         icon: Gamepad2,
         title: 'Unity 与 HybridCLR',
-        text: '生成的代码可直接用于 IL2CPP，Vector3 等非托管结构体按原始内存拷贝，可选的 Burst 编译 SIMD 内核，热更新程序集无需初始化调用即可识别。',
+        text: '生成的代码兼容 IL2CPP；Vector3 等非托管结构体按原始内存拷贝；可选用 Burst 编译的 SIMD 内核；热更新程序集无需初始化调用即可识别。',
         href: 'advanced/unity',
       },
       {
@@ -332,13 +332,13 @@ const text: Record<
       {
         question: 'Nino 支持哪些平台？',
         answer:
-          '运行时面向 netstandard2.0、netstandard2.1、net8.0 和 net10.0，因此可运行于 .NET Framework 4.6.1+、.NET Core、.NET 5–10 与 NativeAOT，也支持 Unity 2022.3 及以上（Mono、IL2CPP、HybridCLR）和 Godot 4。所有平台，无论 64 位还是 32 位，写出的字节都相同。Nino.AspNetCore 负责在 ASP.NET Core 中读写请求体与响应，Nino.Codegen 生成的 TypeScript、Go 和 Rust 编解码器让浏览器、Node、Go 和 Rust 读写相同的字节。',
+          '运行时面向 netstandard2.0、netstandard2.1、net8.0 和 net10.0，因此可运行于 .NET Framework 4.6.1+、.NET Core、.NET 5–10 与 NativeAOT，也支持 Unity 2022.3 及以上（Mono、IL2CPP、HybridCLR）和 Godot 4。所有平台，无论 64 位还是 32 位，写出的字节都相同。Nino.AspNetCore 负责在 ASP.NET Core 中读写请求体与响应，借助 Nino.Codegen 生成的 TypeScript、Go 和 Rust 编解码器，浏览器、Node、Go 和 Rust 都能与之互通。',
         href: 'platforms',
       },
       {
         question: 'Nino 能在 Unity 的 IL2CPP 和 HybridCLR 下使用吗？',
         answer:
-          '能。Nino 支持 Unity 2022.3 及以上版本的 Mono 和 IL2CPP 以及所有 Player 平台。生成的代码不用反射，HybridCLR 热更新程序集里的类型无需初始化调用就能识别。Vector3、Quaternion 等非托管结构体按原始内存拷贝，AnimationCurve、Gradient 和 RectOffset 内置支持；安装 com.unity.burst 后，元组和结构体数组以及 Latin-1 字符串由 Burst 编译的 SIMD 内核搬运。从 OpenUPM 安装。',
+          '能。Nino 支持 Unity 2022.3 及以上版本，Mono 和 IL2CPP 均可，覆盖所有 Player 平台。生成的代码不用反射，HybridCLR 热更新程序集里的类型无需初始化调用就能识别。Vector3、Quaternion 等非托管结构体按原始内存拷贝，AnimationCurve、Gradient 和 RectOffset 内置支持；安装 com.unity.burst 后，元组数组、结构体数组和 Latin-1 字符串交给 Burst 编译的 SIMD 内核搬运。从 OpenUPM 安装。',
         href: 'advanced/unity',
       },
       {
@@ -350,13 +350,13 @@ const text: Record<
       {
         question: '数据写入之后还能修改类型吗？',
         answer:
-          '可以。使用 NinoFormat.VersionTolerant 可以追加成员，旧代码仍能读取新数据；使用 NinoFormat.Keyed 可以增加、删除、调整顺序和重命名成员（[NinoFormerName]）。默认的按位置格式最快，适合不跨版本保存的数据。',
+          '可以。用 NinoFormat.VersionTolerant 可以在末尾追加成员，旧代码照样能读新数据；用 NinoFormat.Keyed 可以增删、调序和重命名成员（[NinoFormerName]）。默认的按位置格式最快，适合不跨版本保存的数据。',
         href: 'evolving-data',
       },
       {
         question: '如何安装 Nino？',
         answer:
-          '在 .NET 项目中运行 dotnet add package Nino --prerelease；Unity 项目中运行 openupm add com.jasonxudeveloper.nino。Go、Rust 和 TypeScript 程序使用 nino-gen（Nino.Codegen）从你的 C# 类型生成的代码，运行时用 go get、cargo add 或 npm install 安装。给 AI 编程助手用的 nino-serialization skill 用 npx skills add JasonXuDeveloper/Nino 安装。Nino 免费，采用 MIT 协议。',
+          '在 .NET 项目中运行 dotnet add package Nino --prerelease；Unity 项目中运行 openupm add com.jasonxudeveloper.nino。Go、Rust 和 TypeScript 程序用 nino-gen（Nino.Codegen）从你的 C# 类型生成代码，运行时用 go get、cargo add 或 npm install 安装。给 AI 编程助手用的 nino-serialization skill 用 npx skills add JasonXuDeveloper/Nino 安装。Nino 免费，采用 MIT 协议。',
         href: 'start',
       },
     ],

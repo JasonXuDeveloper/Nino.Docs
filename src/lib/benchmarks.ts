@@ -283,7 +283,7 @@ const extraCases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
   serialize: [
     {
       name: 'Object graph, 200 tracked nodes',
-      zh: '对象图，200 个追踪的节点',
+      zh: '对象图，追踪 200 个节点',
       key: 'Graph',
     },
     { name: 'TolerantClass', code: true, key: 'TolerantClass' },
@@ -293,7 +293,7 @@ const extraCases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
     { name: 'FixedClass[100]', code: true, key: 'FixedClasses' },
     {
       name: 'Subtypes through a non-generic base, 1,000',
-      zh: '经非泛型基类型的子类型，1,000 个',
+      zh: '非泛型基类型下的子类型，1,000 个',
       key: 'NonGenericBase',
     },
     {
@@ -325,7 +325,7 @@ const extraCases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
   deserialize: [
     {
       name: 'Object graph, 200 tracked nodes',
-      zh: '对象图，200 个追踪的节点',
+      zh: '对象图，追踪 200 个节点',
       key: 'Graph',
     },
     { name: 'TolerantClass', code: true, key: 'TolerantClass' },
@@ -335,7 +335,7 @@ const extraCases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
     { name: 'FixedClass[100]', code: true, key: 'FixedClasses' },
     {
       name: 'Subtypes through a non-generic base, 1,000',
-      zh: '经非泛型基类型的子类型，1,000 个',
+      zh: '非泛型基类型下的子类型，1,000 个',
       key: 'NonGenericBase',
     },
     {

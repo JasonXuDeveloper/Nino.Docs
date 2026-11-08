@@ -8,7 +8,7 @@
       },
       "zh": {
         "term": "顶层调用",
-        "definition": "你直接传入值和 `byte[]`、span 或缓冲区写入器的 `NinoSerializer.Serialize(...)` 或 `NinoDeserializer.Deserialize(...)` 调用；与之相对的是传入你自己创建的 `Writer` 或 `Reader` 的调用，以及 Nino 在一次调用内部读写的那些值。每次顶层调用都自成一体：它自己开始并结束[引用追踪](/zh/docs/v4/reference-tracking)。"
+        "definition": "`NinoSerializer.Serialize(...)` 或 `NinoDeserializer.Deserialize(...)` 这类调用：直接传入你的值和 `byte[]`、span 或缓冲区写入器。与之相对的，是传入你自己创建的 `Writer` 或 `Reader` 的调用，以及 Nino 在一次调用内部读写的值。每次顶层调用都自成一体，自己开始、自己结束[引用追踪](/zh/docs/v4/reference-tracking)。"
       }
     },
     {
@@ -19,7 +19,7 @@
       },
       "zh": {
         "term": "装箱 API",
-        "definition": "`SerializeBoxed` 和 `DeserializeBoxed`，即接收 `object` 和 `Type` 的那些重载，用于运行时才知道、并且与其他类型没有共同 `[NinoType]` 基类型的类型；参见[装箱 API](/zh/docs/v4/basic#the-boxed-api)。"
+        "definition": "`SerializeBoxed` 和 `DeserializeBoxed`，即接收 `object` 和 `Type` 的重载。类型到运行时才能确定、又与其他类型没有共同的 `[NinoType]` 基类型时，用它们；参见[装箱 API](/zh/docs/v4/basic#the-boxed-api)。"
       }
     },
     {
@@ -40,8 +40,8 @@
         "definition": "On the .NET 8 SDK and later, the generator redirects each call whose type is known at compile time straight to that type's formatter, skipping the formatter cache; see [Interceptors](/en/docs/v4/performance#interceptors)."
       },
       "zh": {
-        "term": "拦截的调用",
-        "definition": "使用 .NET 8 SDK 及以上版本时，源生成器会把编译期就知道类型的每个调用直接转给该类型的格式化器，跳过格式化器缓存；参见[拦截器](/zh/docs/v4/performance#interceptors)。"
+        "term": "被拦截的调用",
+        "definition": "使用 .NET 8 SDK 及以上版本时，只要调用的类型在编译期已知，源生成器就把这个调用直接转给该类型的格式化器，跳过格式化器缓存；参见[拦截器](/zh/docs/v4/performance#interceptors)。"
       }
     },
     {
@@ -151,7 +151,7 @@
       },
       "zh": {
         "term": "复用反序列化",
-        "definition": "`Deserialize(data, ref value)`，原地填充你传入的值以及其中的对象、列表和字典，而不是新建它们；参见[反序列化到已有值](/zh/docs/v4/basic#into-an-existing-value)。"
+        "definition": "`Deserialize(data, ref value)`：直接填充你传入的值，以及它持有的对象、列表和字典，不新建；参见[反序列化到已有值](/zh/docs/v4/basic#into-an-existing-value)。"
       }
     },
     {
@@ -162,7 +162,7 @@
       },
       "zh": {
         "term": "池化类",
-        "definition": "标记了 `[NinoPooled]` 的 `[NinoType]` 类：Nino 需要新实例时从内置的对象池中取，丢弃的实例还回池中；参见 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)。"
+        "definition": "标记了 `[NinoPooled]` 的 `[NinoType]` 类：Nino 需要新实例时从内置对象池里取，丢弃的实例还回池里；参见 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)。"
       }
     },
     {
@@ -173,7 +173,7 @@
       },
       "zh": {
         "term": "回收器",
-        "definition": "接收[复用反序列化](/zh/docs/v4/pooling)从槽位中丢弃的实例的地方：用 `NinoSettings.SetRecycler<T>` 注册的处理函数；没有的话，交给实例自己的对象池（`ReturnToPool()`）；再没有就不处理。参见[被丢弃的实例去哪里](/zh/docs/v4/pooling#where-dropped-instances-go)。"
+        "definition": "[复用反序列化](/zh/docs/v4/pooling)从槽位中丢弃实例时，由它接手：先交给用 `NinoSettings.SetRecycler<T>` 注册的处理函数；没有就交给实例自己的对象池（`ReturnToPool()`）；再没有就不处理。参见[被丢弃的实例去哪里](/zh/docs/v4/pooling#where-dropped-instances-go)。"
       }
     },
     {
@@ -195,7 +195,7 @@
       },
       "zh": {
         "term": "推迟的对象",
-        "definition": "嵌套超过 128 层的对象，会在较浅的层级稍后写入和读取，让栈的用量保持有界；参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。"
+        "definition": "嵌套超过 128 层的对象。Nino 推迟到较浅的层级再写入和读取它，让栈的用量有上限；参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。"
       }
     }
   ]

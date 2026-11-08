@@ -235,12 +235,22 @@ when not to use it.
 Written for Chinese .NET and Unity developers, as one of them would write it: the same content and structure as the
 English page, each sentence written natively. API and type names stay English. Short sentences; full-width
 punctuation in prose; no 翻译腔 (被 passives, 进行 / 通过……的方式 / 对于……来说 padding, long 的 chains).
+Read each Chinese sentence next to its English one and ask whether a Chinese developer would have written it: keep
+the facts, drop the English word order. The marks of a translation (round 130, owner: "太机翻了"): pre-modifiers
+stacked before a noun with 的 (split into short clauses, main verb early); 被 where Chinese is active or
+topic-comment; 该 / 其 / 所述 / 使得 / 以便 / 从而 / 是……的 padding; 一个 / 一种 before every noun; 它 for every
+"it"; a heading that is an English phrase word for word.
+Keep a technical term in English where Chinese developers say it in English (Set, Span, SIMD, AOT, IL2CPP, schema):
+a coined Chinese word is harder to read than the term readers search for (owner, round 130). Translate only what
+has an established Chinese term (集合 for collection, 字典, 序列化), and keep the term table's choices.
 
 | 别这样写 | 这样写 |
 | --- | --- |
 | 该方法被用于对数据进行序列化。 | 这个方法序列化数据。 |
 | 通过使用 `[NinoUtf8]` 的方式，你可以实现更小的字符串。 | 加上 `[NinoUtf8]`，字符串按 UTF-8 写，更小。 |
 | 对于不可信数据的场景来说，这是一个非常重要的设置。 | 读不可信的数据时，务必打开它。 |
+| Go、Rust 和 TypeScript 读写的也是同样的字节。 | 跨平台、跨运行时字节一致，可与 Go、Rust 和 TypeScript 互通。 |
+| 该成员会被跳过。 | 这个成员直接跳过。 |
 
 One term per concept, on every page, in the changelog and in Nino's README.zh.md (grep the variants when you touch a
 page):
@@ -254,6 +264,12 @@ page):
 | keyed members | 键控成员, 键控类型 | keyed 成员 |
 | the 0/1 byte before a sealed class or nullable value | 存在字节 (English: presence byte) | null 标记, null 标志, 有值字节, null flag, has-value byte |
 | the bytes Nino writes (the wire format page, the specification) | 二进制格式 | 线格式 |
+| other languages read and write the same data | 互通 (可与 Go、Rust 和 TypeScript 互通) | 兼容 (reads as API compatibility), 直接读写 |
+| the same bytes on every platform and runtime | 跨平台、跨运行时字节一致 | 处处同一格式, 读写的也是同样的字节 |
+| prerelease (NuGet, npm) | 预发行版 (Visual Studio's 包括预发行版) | 预发布版本 |
+| hardware intrinsics | 硬件内部函数 (Microsoft Learn) | 硬件内联函数 (内联 is inlining), 硬件内在函数 |
+| a set (`HashSet`, `SortedSet`, `ISet`) | Set (Set 和字典, Set 中的字符串) | 集合 (that is collection) |
+| a case of a polymorphic slot or union | 分支 | 情况 |
 | deserializing into an existing value (`Deserialize(data, ref value)`) | 复用反序列化 (English: reuse deserialization); 读入已有实例 for the act | 原地反序列化, in-place deserialization |
 | formatter, pool, untrusted, interceptor, polymorphism | 格式化器, 对象池, 不可信, 拦截器, 多态 | |
 

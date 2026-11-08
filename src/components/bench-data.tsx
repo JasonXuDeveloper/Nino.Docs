@@ -207,7 +207,7 @@ function versusLegend(zh: boolean, nino: string) {
   return (
     <p className="text-sm text-fd-muted-foreground">
       {zh
-        ? `时间后的 “· 2.00×” 表示该用例中 ${nino} 比这个序列化器快多少倍；相差 5% 以内为持平；只有时间表示 ${nino} 在该用例中没有领先。`
+        ? `时间后的 “· 2.00×” 表示这个用例里 ${nino} 比这个序列化器快多少倍；相差 5% 以内算持平；只有时间表示 ${nino} 在这个用例里没有领先。`
         : `“· 2.00×” after a time: how many times faster ${nino} is than that serializer in that case; within 5% is on par; a time alone means ${nino} is not ahead there.`}
     </p>
   );
@@ -271,7 +271,7 @@ function runtimeTable(
     return (
       <p className="text-sm text-fd-muted-foreground">
         {zh
-          ? '这些用例已经在基准测试项目中，但目前发布的报告还没有包含它们。等某个版本的发布报告包含它们后，结果会显示在这里。'
+          ? '这些用例已在基准测试项目中，但已发布的报告还没有收录。等某个版本的报告收录后，结果会显示在这里。'
           : 'These cases are in the benchmark project, but the published report does not include them yet. Their results appear here once a release report does.'}
       </p>
     );
@@ -359,7 +359,7 @@ function runtimeTable(
       {rerun && (
         <p className="text-sm text-fd-muted-foreground">
           {zh
-            ? '* 将 SimpleStruct 声明为 Pack = 4 后，以相同设置单独重跑。'
+            ? '* 把 SimpleStruct 声明为 Pack = 4 后，按相同设置单独重跑。'
             : '* Re-run separately with the same settings after SimpleStruct was declared with Pack = 4.'}
         </p>
       )}
@@ -425,7 +425,7 @@ export function LibraryTables({
     return (
       <p className="text-sm text-fd-muted-foreground">
         {zh
-          ? `${label} 已经在 Nino 的基准测试项目中，与 Nino 读写相同的数据，但目前发布的报告还没有包含它。等某个版本的发布报告包含它后，结果会显示在这里。`
+          ? `${label} 已在 Nino 的基准测试项目中，读写的数据与 Nino 相同，但已发布的报告还没有收录。等某个版本的报告收录后，结果会显示在这里。`
           : `${label} is in Nino's benchmark project, reading and writing the same data as Nino, but the published report does not include it yet. Its results appear here once a release report does.`}
       </p>
     );
@@ -720,7 +720,7 @@ export function RuntimesTables({
     return (
       <p className="text-sm text-fd-muted-foreground">
         {zh
-          ? '这些基准测试已经在 Nino 的仓库中，每个版本的发布流程都会运行它们，但目前发布的报告还没有包含它们。等某个版本的发布报告包含它们后，结果会显示在这里。'
+          ? '这些基准测试已在 Nino 的仓库中，每次发版都会运行，但已发布的报告还没有收录。等某个版本的报告收录后，结果会显示在这里。'
           : "These benchmarks are in Nino's repository and run for every release, but the published reports do not include them yet. Their results appear here once a release report does."}
       </p>
     );
@@ -851,7 +851,7 @@ function unityNoData(zh: boolean) {
   return (
     <p className="text-sm text-fd-muted-foreground">
       {zh
-        ? 'Unity 基准测试会在每个版本的发布流程中运行，但目前发布的报告还没有包含它。等某个版本的发布报告包含它后，结果会显示在这里。'
+        ? 'Unity 基准测试在 Nino 的发版流程中运行，但已发布的报告还没有收录。等某个版本的报告收录后，结果会显示在这里。'
         : "The Unity benchmark runs in Nino's release workflow, but no published report includes it yet. Its results appear here once a release report does."}
     </p>
   );
