@@ -266,7 +266,7 @@ public static class CallbackSerializer
 
 ## Compression
 
-Compress the bytes Nino writes, and decompress into a pooled buffer before reading. With spans, store the uncompressed length first so the reader knows how much to rent. `Compress` writes into any `IBufferWriter<byte>` (a second `NinoArrayBufferWriter` you keep, a `PipeWriter`), and `Decompress` fills an instance you keep, so neither allocates once the buffers have grown:
+Compress the bytes Nino writes, and decompress into a pooled buffer before reading. With spans, each frame starts with two lengths: the compressed length, which tells the reader where the frame ends (so frames can follow one another in a buffer), and the uncompressed length, which tells it how much to rent. `Compress` writes into any `IBufferWriter<byte>` (a second `NinoArrayBufferWriter` you keep, a `PipeWriter`), and `Decompress` fills an instance you keep, so neither allocates once the buffers have grown:
 
 ```csharp title="BrotliPayload.cs"
 using System;
@@ -280,31 +280,36 @@ public static class BrotliPayload
 {
     public const int MaxSize = 64 << 20;
 
-    /// <summary>Writes [int32 length][Brotli data] to output. scratch holds the uncompressed bytes.</summary>
+    /// <summary>Writes [int32 compressed length][int32 uncompressed length][Brotli data] to output. scratch holds the uncompressed bytes.</summary>
     public static void Compress<T>(T value, NinoArrayBufferWriter scratch, IBufferWriter<byte> output)
     {
         scratch.ResetWrittenCount();
         NinoSerializer.Serialize(value, scratch);
 
         int length = scratch.WrittenCount;
-        Span<byte> target = output.GetSpan(4 + BrotliEncoder.GetMaxCompressedLength(length));
-        BinaryPrimitives.WriteInt32LittleEndian(target, length);
+        Span<byte> target = output.GetSpan(8 + BrotliEncoder.GetMaxCompressedLength(length));
         // quality 1 of 0-11: fast, still compact; window 22 is the default
-        if (!BrotliEncoder.TryCompress(scratch.WrittenSpan, target.Slice(4), out int written, 1, 22))
+        if (!BrotliEncoder.TryCompress(scratch.WrittenSpan, target.Slice(8), out int written, 1, 22))
             throw new InvalidOperationException("Compression failed");
-        output.Advance(4 + written);
+        BinaryPrimitives.WriteInt32LittleEndian(target, written);
+        BinaryPrimitives.WriteInt32LittleEndian(target.Slice(4), length);
+        output.Advance(8 + written);
     }
 
-    public static void Decompress<T>(ReadOnlySpan<byte> data, ref T value)
+    /// <summary>Reads one frame into value and returns its size, so the next frame starts there.</summary>
+    public static int Decompress<T>(ReadOnlySpan<byte> data, ref T value)
     {
-        int length = BinaryPrimitives.ReadInt32LittleEndian(data);
-        if ((uint)length > MaxSize)
-            throw new InvalidDataException($"{length} bytes");
+        if (data.Length < 8)
+            throw new InvalidDataException("Truncated frame");
+        int compressed = BinaryPrimitives.ReadInt32LittleEndian(data);
+        int length = BinaryPrimitives.ReadInt32LittleEndian(data.Slice(4));
+        if ((uint)compressed > (uint)(data.Length - 8) || (uint)length > MaxSize)
+            throw new InvalidDataException("Bad frame header");
 
         byte[] rented = ArrayPool<byte>.Shared.Rent(length);
         try
         {
-            if (!BrotliDecoder.TryDecompress(data.Slice(4), rented.AsSpan(0, length), out int written)
+            if (!BrotliDecoder.TryDecompress(data.Slice(8, compressed), rented.AsSpan(0, length), out int written)
                 || written != length)
                 throw new InvalidDataException("Corrupt data");
             NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
@@ -313,6 +318,7 @@ public static class BrotliPayload
         {
             ArrayPool<byte>.Shared.Return(rented);
         }
+        return 8 + compressed;
     }
 }
 ```

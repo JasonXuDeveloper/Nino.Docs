@@ -265,7 +265,7 @@ public static class CallbackSerializer
 
 ## 压缩 [#compression]
 
-压缩 Nino 写出的字节；读取前先解压到池化的缓冲区。使用 span 时，先写入未压缩的长度，这样读取方才知道要租多大的缓冲区。`Compress` 可以写入任意 `IBufferWriter<byte>`（另一个你保留的 `NinoArrayBufferWriter`、`PipeWriter`），`Decompress` 填充你保留的实例，所以缓冲区增长到位之后两者都不分配内存：
+压缩 Nino 写出的字节；读取前先解压到池化的缓冲区。使用 span 时，每帧开头写两个长度：压缩后的长度告诉读取方这一帧在哪里结束（同一个缓冲区里可以连着放多帧），压缩前的长度告诉它要租多大的缓冲区。`Compress` 可以写入任意 `IBufferWriter<byte>`（另一个你保留的 `NinoArrayBufferWriter`、`PipeWriter`），`Decompress` 填充你保留的实例，所以缓冲区增长到位之后两者都不分配内存：
 
 ```csharp title="BrotliPayload.cs"
 using System;
@@ -279,31 +279,36 @@ public static class BrotliPayload
 {
     public const int MaxSize = 64 << 20;
 
-    /// <summary>把 [int32 长度][Brotli 数据] 写到 output。scratch 存放未压缩的字节。</summary>
+    /// <summary>写出 [int32 压缩后长度][int32 原始长度][Brotli 数据]。scratch 存放未压缩的字节。</summary>
     public static void Compress<T>(T value, NinoArrayBufferWriter scratch, IBufferWriter<byte> output)
     {
         scratch.ResetWrittenCount();
         NinoSerializer.Serialize(value, scratch);
 
         int length = scratch.WrittenCount;
-        Span<byte> target = output.GetSpan(4 + BrotliEncoder.GetMaxCompressedLength(length));
-        BinaryPrimitives.WriteInt32LittleEndian(target, length);
+        Span<byte> target = output.GetSpan(8 + BrotliEncoder.GetMaxCompressedLength(length));
         // 质量取 0-11 中的 1：快，依然紧凑；窗口 22 是默认值
-        if (!BrotliEncoder.TryCompress(scratch.WrittenSpan, target.Slice(4), out int written, 1, 22))
+        if (!BrotliEncoder.TryCompress(scratch.WrittenSpan, target.Slice(8), out int written, 1, 22))
             throw new InvalidOperationException("Compression failed");
-        output.Advance(4 + written);
+        BinaryPrimitives.WriteInt32LittleEndian(target, written);
+        BinaryPrimitives.WriteInt32LittleEndian(target.Slice(4), length);
+        output.Advance(8 + written);
     }
 
-    public static void Decompress<T>(ReadOnlySpan<byte> data, ref T value)
+    /// <summary>读出一帧到 value，返回这一帧的字节数，下一帧从那里开始。</summary>
+    public static int Decompress<T>(ReadOnlySpan<byte> data, ref T value)
     {
-        int length = BinaryPrimitives.ReadInt32LittleEndian(data);
-        if ((uint)length > MaxSize)
-            throw new InvalidDataException($"{length} bytes");
+        if (data.Length < 8)
+            throw new InvalidDataException("Truncated frame");
+        int compressed = BinaryPrimitives.ReadInt32LittleEndian(data);
+        int length = BinaryPrimitives.ReadInt32LittleEndian(data.Slice(4));
+        if ((uint)compressed > (uint)(data.Length - 8) || (uint)length > MaxSize)
+            throw new InvalidDataException("Bad frame header");
 
         byte[] rented = ArrayPool<byte>.Shared.Rent(length);
         try
         {
-            if (!BrotliDecoder.TryDecompress(data.Slice(4), rented.AsSpan(0, length), out int written)
+            if (!BrotliDecoder.TryDecompress(data.Slice(8, compressed), rented.AsSpan(0, length), out int written)
                 || written != length)
                 throw new InvalidDataException("Corrupt data");
             NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
@@ -312,6 +317,7 @@ public static class BrotliPayload
         {
             ArrayPool<byte>.Shared.Return(rented);
         }
+        return 8 + compressed;
     }
 }
 ```
