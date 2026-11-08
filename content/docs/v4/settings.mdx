@@ -1,0 +1,74 @@
+---
+title: Settings
+seoTitle: "NinoSettings Reference: Limits, Untrusted Mode and Pool Sizes – Nino v4 Docs"
+description: "Every member of NinoSettings in one place: the depth, collection-length and hash-collision limits, untrusted mode, pool sizes and recyclers, with each one's type, default, allowed range and when to set it."
+icon: SlidersHorizontal
+---
+
+Every setting of the Nino runtime is a static member of `NinoSettings` (namespace `Nino.Core`). They apply to the whole process: there is no options object to pass per call, and only the pool and recycler members take a type. This page lists them all; each row links the guide that explains when you need it.
+
+## Set Them at Startup [#startup]
+
+```csharp title="Program.cs"
+using Nino.Core;
+
+// Before the first serialization or deserialization on any thread.
+NinoSettings.Untrusted = true;              // the data comes from clients
+NinoSettings.MaxCollectionLength = 100_000; // no message of ours holds more
+NinoSettings.PoolMaxRetained = 1024;        // each pool created from now on keeps up to 1,024
+```
+
+You can read every setting at any time. Every one is optional: Nino needs no initialization call ([At Startup](/en/docs/v4/start#at-startup)).
+
+## Limits for the Data You Read [#limits]
+
+| Setting | Type | Default | Allowed | What it does |
+| --- | --- | --- | --- | --- |
+| `MaxDepth` | `int` | `512` | 128 or more | How deep objects may nest in data being read or written. Too deep throws `NinoDataException` when reading, `InvalidOperationException` when writing. The default is the constant `NinoSettings.DefaultMaxDepth`. [Limits](/en/docs/v4/security#limits), [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs) |
+| `MaxCollectionLength` | `int` | `int.MaxValue` | 0 or more | The most elements (or key/value pairs) one collection or array in the data may claim, checked before anything is allocated. [Limits](/en/docs/v4/security#limits) |
+| `MaxHashCollisions` | `int` | `100` | 1 or more | The most keys a key read from the data may find in its hash bucket. The default is the constant `NinoSettings.DefaultMaxHashCollisions`. [Hash Flooding](/en/docs/v4/security#hash-flooding) |
+| `Untrusted` | `bool` | `false` | | Adds the checks that cost time on every read: seeded hashing, checks of values copied as bytes, no bytes after the value. [Untrusted Mode](/en/docs/v4/security#untrusted-mode) |
+
+<Callout type="warn" title="Set before first use, or they throw">
+
+The read and write paths take these four as constants: all four are frozen the first time Nino uses them, and setting one afterwards throws `InvalidOperationException`, even to the value it already has. A value below the allowed range throws `ArgumentOutOfRangeException`.
+
+</Callout>
+
+## Pools and Recyclers [#pools]
+
+| Member | Type | Default | Allowed | What it does |
+| --- | --- | --- | --- | --- |
+| `PoolMaxRetained` | `int` | `256` | 0 or more | How many instances the shared stack of each `[NinoPooled]` pool keeps, for pools created from now on (a pool is created when its type is first deserialized or returned). [Settings](/en/docs/v4/pooling#settings) |
+| `SetPoolMaxRetained<T>(int maxRetained)` | method | | 0 or more; `T` a `[NinoPooled]` class | The same for `T`'s pool, whether or not it exists yet. Each thread keeps up to 64 more of its own. [Pool Sizes](/en/docs/v4/advanced/high-performance#pool-sizes) |
+| `SetRecycler<T>(Action<T> handler)` | method | none | `null` removes it | Receives each instance that reuse deserialization drops from a slot declared as `T`, instead of the pool. [Why Register a Recycler](/en/docs/v4/pooling#why-setrecycler) |
+
+These are not frozen, but like the limits they are plain fields read without synchronization: a change made while other threads serialize takes effect at some point, not at once for the calls in flight. Set them at startup too. `PoolMaxRetained` is applied when a pool is created, so it leaves the pools that already exist as they are.
+
+## Configured Elsewhere [#elsewhere]
+
+| What | Where |
+| --- | --- |
+| Formatters for your types and members | Attributes, read by the generator: [Custom Formatters](/en/docs/v4/custom-formatters) |
+| The format, members and reference tracking of a type | `[NinoType]` options: [Defining Types](/en/docs/v4/defining-types#ninotype-options) |
+| Prefetching large collections (`NinoPrefetchLargeCollections`) | An MSBuild property: [Nino's Own Options](/en/docs/v4/advanced/build-configuration#nino-options) |
+| TypeScript, Go and Rust code (`<NinoCodegen>` items, nino-gen) | [Options](/en/docs/v4/advanced/codegen#options) |
+| ASP.NET Core | `AddNinoFormatters()`, `NinoBody<T>`, `NinoResults`: [ASP.NET Core](/en/docs/v4/advanced/aspnetcore) |
+| Unity's Burst kernels | Registered by the Unity package on its own: [Burst-Accelerated Kernels](/en/docs/v4/advanced/unity#burst-kernels) |
+
+## Pitfalls [#pitfalls]
+
+| Mistake | What happens | Instead |
+| --- | --- | --- |
+| Setting a limit after the first serialization, such as in a handler that runs later | `InvalidOperationException` | Set it in startup code, before any Nino call |
+| Setting a limit again in a later Unity play session with domain reload disabled | `InvalidOperationException`: static state survives between sessions ([Frame-Time Tips](/en/docs/v4/advanced/unity#frame-time-tips)), the limits stay frozen | Set it only when it differs: `if (!NinoSettings.Untrusted) NinoSettings.Untrusted = true;` |
+| Setting `PoolMaxRetained` to resize a pool that is already in use | Nothing changes for that pool | `SetPoolMaxRetained<T>(...)` |
+| Expecting different limits for two kinds of data in one process | Every call uses the same values | Set the strictest the process needs |
+
+## Next Steps [#next-steps]
+
+<Cards>
+  <Card title="Untrusted Data" href="/en/docs/v4/security">What every read checks, and what the limits and untrusted mode add.</Card>
+  <Card title="Reuse and Pooling" href="/en/docs/v4/pooling">Where the pools and recyclers fit in reuse deserialization.</Card>
+  <Card title="Analyzers" href="/en/docs/v4/analyzers">The diagnostics the generator reports, and their fixes.</Card>
+</Cards>
