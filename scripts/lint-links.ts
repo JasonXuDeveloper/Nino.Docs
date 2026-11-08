@@ -7,7 +7,8 @@
  *
  * Links inside the data files components render (`dataFiles`) are checked
  * too, and anchors a component writes (the analyzer rules' rows) count as
- * headings of the pages that use it.
+ * headings of the pages that use it, as do the `id`s of a page's `<Tab>` and
+ * `<Accordion>` (Fumadocs opens the tab or accordion a link names).
  *
  * Usage: bun run lint:links
  */
@@ -84,8 +85,12 @@ async function main() {
   for (const page of pages) {
     const content = await page.data.getText('raw');
     sources.push({ path: page.path, url: page.url, content });
-    for (const [tag, anchors] of Object.entries(componentAnchors))
-      if (content.includes(tag)) extraAnchors.set(page.url, anchors);
+    const anchors = [
+      ...content.matchAll(/<(?:Tab|Accordion)\s[^>]*?\bid="([^"]+)"/g),
+    ].map((m) => m[1]);
+    for (const [tag, written] of Object.entries(componentAnchors))
+      if (content.includes(tag)) anchors.push(...written);
+    if (anchors.length > 0) extraAnchors.set(page.url, anchors);
   }
   for (const file of dataFiles)
     sources.push({ path: file, url: '', content: readFileSync(file, 'utf8') });

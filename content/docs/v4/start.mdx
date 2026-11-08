@@ -15,36 +15,182 @@ New to v4, or upgrading from v3? Read [What's New in v4](/en/docs/v4/whats-new) 
 
 ## Installation
 
-<Tabs groupId="platform" persist items={['.NET', 'Unity', 'Godot']}>
-<Tab value=".NET">
+<AnchorRedirect map={{ 'installation-details': '/en/docs/v4/start#installation' }} />
 
-```shell
+<Tabs groupId="platform" persist items={['.NET', 'Unity', 'Godot']}>
+<Tab value=".NET" id="net-project" forceMount>
+
+Requirements:
+
+- **Runtime**: any project that can use a .NET Standard 2.0 library. `Nino.Core` targets `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0`, and all targets write identical bytes.
+- **Compiler**: Roslyn 4.3 or later for the source generator (Visual Studio 2022 17.3+, Rider, or the .NET 6.0.400 SDK and later).
+- **Language version**: C# 9 or later, which generated code uses. Older .NET Framework projects default to C# 7.3 and need `<LangVersion>9</LangVersion>` or later.
+
+<Steps>
+<Step>
+
+**Add the package.** In Visual Studio or Rider, tick **Include prerelease** in the NuGet package manager, search for `Nino` and install it. Or:
+
+```shell tab="dotnet CLI"
 dotnet add package Nino --prerelease
 ```
 
-Details: [.NET Project](#net-project).
+```xml tab=".csproj"
+<ItemGroup>
+  <PackageReference Include="Nino" Version="4.0.0-rc.9" />
+</ItemGroup>
+```
+
+<Callout type="info">
+
+Nino v4 is still a prerelease, so `--prerelease` (or **Include prerelease**) is required: without it NuGet installs the latest stable 3.9.x, a test build of v4 features that cannot read or write v4 data.
+
+</Callout>
+
+</Step>
+<Step>
+
+**Build.** The `Nino` package brings in two packages, both required: `Nino.Serialization`, the runtime library (`Nino.Core.dll`), and `Nino.Generator`, the source generator, analyzers and code fixes. With the .NET 8 SDK or later, each `NinoSerializer`/`NinoDeserializer` call whose type is known at compile time is redirected to the generated formatter ([interceptors](/en/docs/v4/performance#interceptors)). This is automatic and writes the same bytes.
+
+</Step>
+<Step>
+
+**Serialize a type**: [First Serialization](#first-serialization), below.
+
+</Step>
+</Steps>
+
+Optional packages, added the same way (with `--prerelease`):
+
+| Package | Adds |
+|---|---|
+| `Nino.Immutable` | Formatters for `System.Collections.Immutable`, from `ImmutableArray<T>` to `ImmutableSortedDictionary<TKey, TValue>` ([Immutable Collections](/en/docs/v4/types#immutable-collections)) |
+| `Nino.AspNetCore` | Request and response bodies in ASP.NET Core: MVC formatters and Minimal API bodies for `application/x-nino` ([ASP.NET Core](/en/docs/v4/advanced/aspnetcore)) |
+| `Nino.Codegen` | Your types and their codecs as TypeScript, Go or Rust, written after each build ([TypeScript, Go and Rust](/en/docs/v4/advanced/codegen)) |
 
 </Tab>
-<Tab value="Unity">
+<Tab value="Unity" id="unity-project" forceMount>
 
-```shell
+Requirements: Unity 2022.3 or later, on every player platform (Mono and IL2CPP).
+
+<Steps>
+<Step>
+
+**Add the package from [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation)**, with the openupm CLI, or by merging its scoped registry and the package into `Packages/manifest.json`:
+
+```shell tab="openupm CLI"
+# in your Unity project's folder (openupm-cli: npm install -g openupm-cli)
 openupm add com.jasonxudeveloper.nino
 ```
 
-Details: [Unity Project](#unity-project).
+```json tab="Packages/manifest.json"
+{
+  "scopedRegistries": [
+    {
+      "name": "package.openupm.com",
+      "url": "https://package.openupm.com",
+      "scopes": ["com.jasonxudeveloper.nino"]
+    }
+  ],
+  "dependencies": {
+    "com.jasonxudeveloper.nino": "4.0.0-preview.209"
+  }
+}
+```
+
+In Unity, 4.0.0-rc.9 is 4.0.0-preview.209 ([OpenUPM versions](#openupm-versions), below).
+
+</Step>
+<Step>
+
+**Let Unity import it.** The package ships `Nino.Core.dll` together with the source generator (`Nino.Generator.dll`, labelled as a `RoslynAnalyzer`) and `Nino.UnityTypes.dll`, the formatters for [Unity's `AnimationCurve`, `Gradient` and `RectOffset`](/en/docs/v4/advanced/unity#unity-classes), so nothing else has to be installed. This is the generator's Roslyn 4.3 build, which matches the oldest compiler Unity supports, so calls are not [intercepted](/en/docs/v4/performance#interceptors) in Unity. They take the regular path and write the same bytes.
+
+</Step>
+<Step>
+
+**Serialize a type**: [First Serialization](#first-serialization), below. Unity compiles against .NET Standard, which has no `[UnsafeAccessor]`, so a type that serializes non-public members (or uses `[NinoPooled]`) must be declared `partial`, and so must every type that contains it. The analyzer reports this (NINO002), and its code fix adds `partial` in Rider or Visual Studio.
+
+</Step>
+</Steps>
+
+<Accordions type="multiple">
+<Accordion title="OpenUPM versions" id="openupm-versions" value="openupm-versions">
+
+OpenUPM cannot order prerelease labels, so each release candidate is published to it as `4.0.0-preview.(200 + N)`: rc.N on NuGet and in these docs is preview.(200 + N) in the Unity Package Manager. A page that says "since rc.6" means preview.206 or later in Unity.
+
+| NuGet and these docs | OpenUPM (Unity) |
+|---|---|
+| 4.0.0-rc.9 | 4.0.0-preview.209 |
+| 4.0.0-rc.8 | 4.0.0-preview.208 |
+| 4.0.0-rc.7 | 4.0.0-preview.207 |
+| 4.0.0-rc.6 | 4.0.0-preview.206 |
+| 4.0.0-rc.5 | 4.0.0-preview.205 |
+| 4.0.0-rc.4 | 4.0.0-preview.204 |
+| 4.0.0-rc.3 | 4.0.0-preview.203 |
+| 4.0.0-rc.2 | 4.0.0-preview.202 |
+| 4.0.0-rc.1 | 4.0.0-preview.201 |
+
+OpenUPM's alpha and beta previews below preview.200 are older v4 test builds; use an rc.
+
+</Accordion>
+<Accordion title="Assembly definitions (asmdef)" id="asmdef" value="asmdef">
+
+If you use `asmdef` files, make sure `Auto Referenced` is enabled. If `Override References` is on, add a reference to `Nino.Core.dll` explicitly.
+
+</Accordion>
+<Accordion title="Hot-update code (HybridCLR)" id="hot-update-code" value="hot-update-code">
+
+- Nino supports **HybridCLR**. Generated registries are found lazily the first time one of their types is used, so a hot-update assembly loaded with `Assembly.Load` needs **no initialization call**. See [Unity and HybridCLR](/en/docs/v4/advanced/unity#hybridclr-hot-update).
+- Hot-update code can live in a Unity `asmdef`, or in an external C# project that installs Nino from NuGet ([.NET](#net-project)); use the compiled DLL in HybridCLR as usual.
+
+</Accordion>
+<Accordion title="Sample project and troubleshooting" id="unity-sample" value="unity-sample">
+
+The `Nino.Unity` sample project on GitHub shows Nino in a Unity project, with unit tests you can run in the Test Runner. If something does not work, check that the sample project runs first; if the problem persists, open an issue on GitHub.
+
+</Accordion>
+</Accordions>
 
 </Tab>
-<Tab value="Godot">
+<Tab value="Godot" id="godot-project" forceMount>
+
+Requirements: Godot 4 with C# (the .NET build of Godot). Its C# projects are regular .NET projects built with `Godot.NET.Sdk` (targeting .NET 8 from Godot 4.4, .NET 6 in 4.0–4.3), so Nino installs like any NuGet package.
+
+<Steps>
+<Step>
+
+**Add the package**, with `--prerelease` as on [.NET](#net-project):
 
 ```shell
 # in the folder with your Godot project's .csproj
 dotnet add package Nino --prerelease
 ```
 
-Details: [Godot Project](#godot-project).
+</Step>
+<Step>
+
+**Build** the project, from Godot's **Build** button, your IDE or `dotnet build`. The generator and the analyzers run as in any .NET project, and the [interceptors](/en/docs/v4/performance#interceptors) run on the .NET 8 SDK and later.
+
+</Step>
+<Step>
+
+**Serialize a type**: [First Serialization](#first-serialization), below. Godot's math structs are copied as raw memory, while engine objects such as `Node` and `Resource` are not serialized. When a type needs `partial`, what to watch for in double-precision builds, save games and networking: [Godot](/en/docs/v4/advanced/godot).
+
+</Step>
+</Steps>
 
 </Tab>
 </Tabs>
+
+### AI Coding Assistants
+
+Claude Code, Codex, Cursor and other coding agents can learn Nino from the `nino-serialization` skill in the Nino repository: the recommended and fast forms, the formats, the pitfalls and what each NINO diagnostic means.
+
+```shell
+npx skills add JasonXuDeveloper/Nino
+```
+
+Agents without skills can read the whole site as text from [llms.txt](https://nino.xgamedev.net/llms.txt) and [llms-full.txt](https://nino.xgamedev.net/llms-full.txt).
 
 ## First Serialization
 
@@ -130,113 +276,6 @@ Nino needs no initialization call: generated code registers itself, and assembli
 - `NinoRegistry.EnsureInitialized(assembly)`, to load a plugin's registry now instead of on first use.
 
 Custom formatters need no call either: they are declared with attributes ([Custom Formatters](/en/docs/v4/custom-formatters)). For Unity and HybridCLR projects, see the [startup checklist](/en/docs/v4/advanced/unity#startup-checklist).
-
-## Installation Details [#installation-details]
-
-### .NET Project
-
-Requirements:
-
-- **Runtime**: `Nino.Core` targets `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0`, so any project that can consume a .NET Standard 2.0 library can use it. All targets write identical bytes.
-- **Compiler**: the source generator needs Roslyn 4.3 or later (Visual Studio 2022 17.3+, Rider, or the .NET 6.0.400 SDK and later).
-- **Language version**: generated code uses C# 9, so the project needs `LangVersion` 9 or later. Older .NET Framework projects default to C# 7.3 and need `<LangVersion>9</LangVersion>` or later.
-
-Install the package:
-
-- search for `Nino` in the NuGet package manager of Visual Studio or Rider with **Include prerelease** ticked, and install it,
-- or use the `dotnet` CLI:
-    ```shell
-    dotnet add package Nino --prerelease
-    # Optional: System.Collections.Immutable types (ImmutableArray<T>, ImmutableDictionary<TKey, TValue>, ...)
-    dotnet add package Nino.Immutable --prerelease
-    # Optional, in an ASP.NET Core project: MVC formatters and Minimal API bodies for application/x-nino
-    dotnet add package Nino.AspNetCore --prerelease
-    # Optional: your types and codecs as TypeScript, Go or Rust, written after each build
-    dotnet add package Nino.Codegen --prerelease
-    ```
-
-<Callout type="info">
-
-Nino v4 is still a prerelease, so `--prerelease` (or **Include prerelease**) is required: without it NuGet installs the latest stable 3.9.x, a test build of v4 features that cannot read or write v4 data.
-
-</Callout>
-
-<Callout type="info">
-
-The `Nino` package brings in two packages, both of which are required:
-- `Nino.Serialization`: the runtime library (`Nino.Core.dll`)
-- `Nino.Generator`: the source generator, analyzers and code fixes
-
-`Nino.Immutable` is optional and adds formatters for the immutable collections of `System.Collections.Immutable`, from `ImmutableArray<T>` to `ImmutableSortedDictionary<TKey, TValue>` (see [Immutable Collections](/en/docs/v4/types#immutable-collections)). `Nino.AspNetCore` reads and writes request and response bodies in ASP.NET Core ([ASP.NET Core](/en/docs/v4/advanced/aspnetcore)), and `Nino.Codegen` writes your types and their codecs as TypeScript, Go or Rust after each build ([TypeScript, Go and Rust](/en/docs/v4/advanced/codegen)); both are optional.
-
-</Callout>
-
-With the .NET 8 SDK or later, each `NinoSerializer`/`NinoDeserializer` call whose type is known at compile time is redirected to the generated formatter ([interceptors](/en/docs/v4/performance#interceptors)). This is automatic and writes the same bytes.
-
-### Unity Project
-
-Nino supports Unity 2022.3 or later on every player platform (Mono and IL2CPP). Install it through the Unity Package Manager from [OpenUPM](https://openupm.com/packages/com.jasonxudeveloper.nino/#modal-manualinstallation), for example:
-
-```shell
-openupm add com.jasonxudeveloper.nino
-```
-
-The package ships `Nino.Core.dll` together with the source generator (`Nino.Generator.dll`, labelled as a `RoslynAnalyzer`) and `Nino.UnityTypes.dll`, the formatters for [Unity's `AnimationCurve`, `Gradient` and `RectOffset`](/en/docs/v4/advanced/unity#unity-classes), so nothing else has to be installed. This is the generator's Roslyn 4.3 build, which matches the oldest compiler Unity supports, so calls are not [intercepted](/en/docs/v4/performance#interceptors) in Unity. They take the regular path and write the same bytes.
-
-#### OpenUPM Versions
-
-OpenUPM cannot order prerelease labels, so each release candidate is published to it as `4.0.0-preview.(200 + N)`: rc.N on NuGet and in these docs is preview.(200 + N) in the Unity Package Manager. A page that says "since rc.6" means preview.206 or later in Unity.
-
-| NuGet and these docs | OpenUPM (Unity) |
-|---|---|
-| 4.0.0-rc.9 | 4.0.0-preview.209 |
-| 4.0.0-rc.8 | 4.0.0-preview.208 |
-| 4.0.0-rc.7 | 4.0.0-preview.207 |
-| 4.0.0-rc.6 | 4.0.0-preview.206 |
-| 4.0.0-rc.5 | 4.0.0-preview.205 |
-| 4.0.0-rc.4 | 4.0.0-preview.204 |
-| 4.0.0-rc.3 | 4.0.0-preview.203 |
-| 4.0.0-rc.2 | 4.0.0-preview.202 |
-| 4.0.0-rc.1 | 4.0.0-preview.201 |
-
-OpenUPM's alpha and beta previews below preview.200 are older v4 test builds; use an rc.
-
-Unity compiles against .NET Standard, which has no `[UnsafeAccessor]`. A type that serializes non-public members (or uses `[NinoPooled]`) must therefore be declared `partial`, and so must every type that contains it. The analyzer reports this (NINO002), and its code fix adds `partial` in Rider or Visual Studio.
-
-<Callout type="warn">
-
-If you use `asmdef` files, make sure `Auto Referenced` is enabled. If `Override References` is on, add a reference to `Nino.Core.dll` explicitly.
-
-</Callout>
-
-The `Nino.Unity` sample project on GitHub shows Nino in a Unity project, with unit tests you can run in the Test Runner. If something does not work, check that the sample project runs first; if the problem persists, open an issue on GitHub.
-
-#### Hot Update Code
-- Nino supports **HybridCLR**. Generated registries are found lazily the first time one of their types is used, so a hot-update assembly loaded with `Assembly.Load` needs **no initialization call**. See [Unity and HybridCLR](/en/docs/v4/advanced/unity#hybridclr-hot-update).
-- Hot-update code can live in a Unity `asmdef`, or in an external C# project that installs Nino from NuGet ([see above](#net-project)); use the compiled DLL in HybridCLR as usual.
-
-### Godot Project
-
-Godot 4 C# projects (the .NET build of Godot) are regular .NET projects built with `Godot.NET.Sdk` (targeting .NET 8 from Godot 4.4, .NET 6 in 4.0–4.3), so Nino installs like any NuGet package:
-
-```shell
-# in the folder with your Godot project's .csproj
-dotnet add package Nino --prerelease
-```
-
-Then build the project (from Godot's **Build** button, your IDE or `dotnet build`).
-
-The generator and the analyzers run as in any .NET project, and the [interceptors](/en/docs/v4/performance#interceptors) run on the .NET 8 SDK and later. Godot's math structs are copied as raw memory, while engine objects such as `Node` and `Resource` are not serialized. When a type needs `partial`, what to watch for in double-precision builds, save games and networking: [Godot](/en/docs/v4/advanced/godot).
-
-### AI Coding Assistants
-
-Claude Code, Codex, Cursor and other coding agents can learn Nino from the `nino-serialization` skill in the Nino repository: the recommended and fast forms, the formats, the pitfalls and what each NINO diagnostic means.
-
-```shell
-npx skills add JasonXuDeveloper/Nino
-```
-
-Agents without skills can read the whole site as text from [llms.txt](https://nino.xgamedev.net/llms.txt) and [llms-full.txt](https://nino.xgamedev.net/llms-full.txt).
 
 ## Next Steps
 

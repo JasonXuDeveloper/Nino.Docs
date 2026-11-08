@@ -112,6 +112,18 @@ Overview, FAQ and reference pages answer the questions their readers search for,
   only wrapped fences), Mermaid and a banner; it kept `<Steps>` JSX because `remarkSteps` runs after
   `remarkHeading`, whose ids and TOC entries would keep the `[step]` tag; it skipped Twoslash and Auto Type Table
   (TypeScript only), Graph View and KaTeX.
+- **Per-platform instructions are one `<Tabs groupId="platform" persist>` section, each tab self-contained**:
+  requirements as a short list, then `<Steps>` (install, build, try it) with bold step leads rather than headings
+  (headings inside tabs would fill the TOC), several install methods as code-block tabs, and the rarely needed detail
+  in `<Accordions>` inside the tab. Give each such `<Tab>` `forceMount` (Radix renders an inactive tab's content
+  only with it, so without it the prerendered page and a link into that tab miss it) and an `id`, and give each
+  `<Accordion>` an `id` (and a `value`): a link to either id selects the tab and opens the accordion, so the id
+  keeps an old heading's anchor working, and `bun run lint:links` counts both ids as anchors. Why: the owner found
+  the quick start's installation "too messy" (round 130): a short tab block at the top, then a long "Installation
+  Details" section after First Serialization with nested lists, two callouts in a row and a version table. Round
+  130 folded both into one tabbed section above First Serialization, kept `#net-project`, `#unity-project`,
+  `#godot-project`, `#openupm-versions` and `#hot-update-code` as tab and accordion ids, and sent
+  `#installation-details` to `#installation` with `<AnchorRedirect>`.
 - **Byte figures**: `<Bytes rows={[{ title, fields: [{ hex: '07', kind: 'header', label: 'header 7' }, ...] }]} />`
   (`src/components/bytes.tsx`). Kinds: `header` (header, presence byte, reference header), `length` (lengths and
   counts), `id` (type ids and keys), `value`, `pad` (hatched), `changed` (the bytes a comparison is about). Stack rows
