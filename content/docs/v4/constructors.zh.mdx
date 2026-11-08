@@ -81,7 +81,7 @@ public sealed class Currency
     [NinoConstructor(nameof(Code), nameof(Decimals))] // [!code highlight]
     public static Currency Of(string code, int decimals)
     {
-        if (code is not { Length: 3 })
+        if (code is not { Length: 3 } || !char.IsAsciiLetter(code[0]) || !char.IsAsciiLetter(code[1]) || !char.IsAsciiLetter(code[2]))
             throw new FormatException($"Invalid currency code '{code}'.");
         if (decimals is < 0 or > 4)
             throw new ArgumentOutOfRangeException(nameof(decimals));

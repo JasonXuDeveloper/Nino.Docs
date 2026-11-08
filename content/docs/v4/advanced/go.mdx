@@ -29,11 +29,12 @@ For every `[NinoType]`, `nino_types.go` holds:
 A sealed class is a `*X` (nil for null), a struct an `X`, and a slot that holds several types (an abstract class, an interface, a class that is not sealed) an interface with one implementation per allowed type. Enums are named integer types with constants. Helper types are named `NinoTuple2`, ..., `NinoGrid`; a user type whose name starts with `Nino` gets a `Type` suffix, and two types with the same simple name are prefixed with their namespace (`ShapesLeftItem`). `[NinoFormerName]`s are not in the `nino` tag: layouts carry only their hashes, which `NinoLayout()` keeps, so a keyed type still reads data written under a former name.
 
 ```go
+var buf []byte
 data, err := nino.Serialize(player, protocol.WritePlayer)      // a new slice
 buf, err = nino.Append(buf[:0], player, protocol.WritePlayer)  // appends; no allocation when buf has room
-player, err := nino.Deserialize(data, protocol.ReadPlayer)      // bytes after the value are ignored, as in .NET
-player, err := nino.DeserializeExact(data, protocol.ReadPlayer) // ... or rejected
-err = nino.DeserializeInto(data, &player, protocol.ReadPlayerInto) // into player, reusing what it holds
+got, err := nino.Deserialize(data, protocol.ReadPlayer)         // bytes after the value are ignored, as in .NET
+got, err = nino.DeserializeExact(data, protocol.ReadPlayer)     // ... or rejected
+err = nino.DeserializeInto(data, &got, protocol.ReadPlayerInto) // into got, reusing what it holds
 ```
 
 Writing a value into a reused buffer allocates nothing. Since the generated structs carry `nino` tags and `NinoLayout()`, the struct-tag functions below read and write them too.

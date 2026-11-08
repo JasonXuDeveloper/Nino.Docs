@@ -197,7 +197,7 @@ alert.ReturnToPool();                                   // 归还两次会抛异
 
 - 类必须是 `sealed`、`partial`，并且能原地填充（没有只能通过构造函数设置的成员或只读成员）；否则会报告 NINO018/NINO002。
 - 生成器会添加 `ReturnToPool()`，以及两个需要你实现的 partial 方法：
-  - `OnNinoPoolWarmup()` 在这个类型第一次反序列化之前运行一次，返回的实例直接放入池中（返回 `null` 或空序列则从空池开始）。
+  - `OnNinoPoolWarmup()` 在这个类型第一次反序列化之前运行一次，返回的实例直接放进第一个反序列化该类型的线程的池（超过 64 个时，较早的一半移到共享栈；返回 `null` 或空序列则从空池开始）。
   - `OnNinoPoolReturn()` 在 `ReturnToPool()` 时运行：释放 Nino 不会反序列化的状态。
 - 同一个实例归还两次会抛出 `InvalidOperationException`。没有归还的实例照常由 GC 回收。
 - `ReturnToPool()` 只归还这一个实例。它的列表、数组和嵌套对象（无论是否池化）仍然挂在它身上，下次借出时一起复用。这也意味着：**带着池化子对象的类型本身也应该池化**，否则它被丢弃时，子对象会跟着它一起交给 GC。如果想把某个子对象归还到它自己的池，请在 `OnNinoPoolReturn()` 中归还，并把字段设为 `null`。
@@ -243,7 +243,7 @@ public sealed class PooledList<T> : List<T>, INinoPooled
 
 ## 完整示例：每条消息 0 GC 的状态同步 [#example]
 
-监控服务器每条消息都发来一组设备的完整状态：设备数量和告警数量每次都在变，设备的最近读数时有时无。下面的文件包含示例用到的全部类型。
+监控服务器每条消息都发来一组设备的完整状态：设备数量和告警数量每次都在变，设备的最近读数时有时无。下面的文件包含示例用到的全部类型，自带 `Alert` 和 `PooledList<T>`：用它替换上面的 `Alert.cs` 和 `ObjectPool.cs`，不要和它们放在同一个项目里。
 
 ```csharp title="Snapshot.cs"
 using System;

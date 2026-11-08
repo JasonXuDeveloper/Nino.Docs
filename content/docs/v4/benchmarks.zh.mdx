@@ -203,7 +203,7 @@ v3 的编译时间涨得比类型数量快得多：类型多到 3.3 倍，编译
 
 ## 基准测试代码 [#benchmark-code]
 
-每张表背后的类型和方法，摘自 [`benchmarks/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)，删掉了 `using` 和重复的用例。每个测试类都带 `[NinoJob]`（.NET 10 上 BenchmarkDotNet 的 `ShortRun` 作业，正式跑时在命令行上设迭代次数）、`[GcServer(true)]` 和 `[MemoryDiagnoser]`；类型上带着参与对比的各个序列化库要求的特性。
+每张表背后的类型和方法，摘自 [`benchmarks/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)，删掉了 `using` 和重复的用例。每个测试类都带 `[NinoJob]`（.NET 10 上启动 3 次，每次 5 轮预热、15 轮测量，作业 ID 沿用 BenchmarkDotNet 的 `ShortRun`）、`[GcServer(true)]` 和 `[MemoryDiagnoser]`；类型上带着参与对比的各个序列化库要求的特性（摘录里省掉了 protobuf-net 的特性，MessagePack 的特性在不影响理解时也省掉了）。
 
 ### SimpleTest [#simpletest]
 
@@ -248,19 +248,33 @@ public partial struct SimpleStruct
 ```
 
 ```csharp title="SimpleBenchmarkData.cs, SimpleTest.cs" nocheck tab="数据" tab-group="bench-code"
+// 种子和日期都固定：每次运行（包括 v3 和 v4 的两次运行）都序列化同样的值
+internal static class BenchmarkRandom
+{
+    public static readonly Random Shared = new Random(20240607);
+    public static readonly DateTime Now = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Local);
+
+    public static Guid NewGuid()
+    {
+        var bytes = new byte[16];
+        Shared.NextBytes(bytes);
+        return new Guid(bytes);
+    }
+}
+
 public static SimpleClass Create()
 {
-    Random random = new Random();
+    Random random = BenchmarkRandom.Shared;
     return new SimpleClass
     {
         Id = random.Next(),
         Tag = random.Next() % 2 == 0,
-        Guid = Guid.NewGuid(),
-        CreateTime = DateTime.Now,
-        Name = Guid.NewGuid().ToString(),
-        Desc = Enumerable.Range(0, 10).Select(_ => Guid.NewGuid().ToString()).Aggregate((a, b) => a + b),
+        Guid = BenchmarkRandom.NewGuid(),
+        CreateTime = BenchmarkRandom.Now,
+        Name = BenchmarkRandom.NewGuid().ToString(),
+        Desc = Enumerable.Range(0, 10).Select(_ => BenchmarkRandom.NewGuid().ToString()).Aggregate((a, b) => a + b),
         Numbers = Enumerable.Range(0, 100).Select(_ => random.Next()).ToArray(),
-        Dates = Enumerable.Range(0, 10).Select(_ => DateTime.Now.AddSeconds(random.Next())).ToList(),
+        Dates = Enumerable.Range(0, 10).Select(_ => BenchmarkRandom.Now.AddSeconds(random.Next())).ToList(),
         Map1 = Enumerable.Range(0, 10).ToDictionary(n => n, n => n.ToString()),
         Map2 = Enumerable.Range(0, 10).ToDictionary(n => n, n => n * 2)
     };
@@ -268,11 +282,11 @@ public static SimpleClass Create()
 
 public static SimpleStruct Create()
 {
-    Random random = new Random();
+    Random random = BenchmarkRandom.Shared;
     return new SimpleStruct
     {
         Id = random.Next(),
-        CreateTime = DateTime.Now.AddSeconds(random.Next())
+        CreateTime = BenchmarkRandom.Now.AddSeconds(random.Next())
     };
 }
 
@@ -281,7 +295,7 @@ SimpleClass = SimpleClass.Create();
 SimpleClasses = Enumerable.Range(0, 100).Select(_ => SimpleClass.Create()).ToArray();
 SimpleStruct = SimpleStruct.Create();
 SimpleStructs = Enumerable.Range(0, 100).Select(_ => SimpleStruct.Create()).ToArray();
-var r = Random.Shared;
+var r = BenchmarkRandom.Shared;
 Vectors = Enumerable.Range(0, 10000)
     .Select(_ => new Vector4(r.NextSingle(), r.NextSingle(),
         r.NextSingle(), r.NextSingle())).ToArray();
@@ -799,8 +813,8 @@ public static FixedStruct Create(Random r) => new()
 {
     Id = r.Next(),
     Position = new Vector3(r.NextSingle(), r.NextSingle(), r.NextSingle()),
-    Ticks = DateTime.Now.AddSeconds(r.Next()).Ticks,
-    Guid = Guid.NewGuid(),
+    Ticks = BenchmarkRandom.Now.AddSeconds(r.Next()).Ticks,
+    Guid = BenchmarkRandom.NewGuid(),
 };
 
 // FixedSizeTest 中：

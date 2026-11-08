@@ -178,7 +178,7 @@ public sealed class CommandChannel
     {
         _buffer.ResetWrittenCount();
         NinoSerializer.Serialize<ICommand>(command, _buffer); // 先写类型 ID，再写命令
-        _socket.Send(_buffer.WrittenSpan);
+        _socket.Send(_buffer.WrittenSpan); // 一条消息一次 Send：用 UDP 这类保留消息边界的套接字；TCP 要加长度前缀（见网络）
     }
 
     // 数据里是同一类型时原地填充 `command`，否则替换它（并回收旧的）
@@ -196,10 +196,10 @@ public sealed class CommandChannel
 
 子类型不管声明在哪里，Nino 都能自动找到，包括之后才加载的程序集（插件、HybridCLR 热更新 DLL）：遇到不认识的类型 ID，Nino 先去新加载的程序集的注册表里找，找不到才报错。不需要任何注册调用。比如某个插件或热更新 DLL 新增了 `public sealed class OrderRefunded : OrderEvent`。DLL 加载后，主程序集（AOT 程序集）里的代码一行不改，就能读取含有 `OrderRefunded` 的 `List<OrderEvent>`。源生成器也必须在子类型所在的程序集里运行（在那个项目里安装 `Nino` 包；在 Unity 里，那个程序集必须引用 `Nino.Core`）；类型 ID 对应的类型不在任何已加载的程序集里时，抛出 `NinoDataException`。
 
-唯一的例外是封闭泛型子类型（如 `Box<int>`）：如果进程只会**读取**它，代码里既不出现它的名字，也从不写它，就要在启动时注册：
+唯一的例外是封闭泛型子类型（如 `Leaf<int>`）：如果进程只会**读取**它，代码里既不出现它的名字，也从不写它，就要在启动时注册：
 
 ```csharp
-NinoPolymorphic.TryRegister<Box<int>>();
+NinoPolymorphic.TryRegister<Leaf<int>>();
 ```
 
 手里只有 `Type` 对象的类型（比如用 `MakeGenericType` 构造的），用 `NinoPolymorphic.TryRegister(Type)` 注册，效果一样。类型注册上了（包括之前已经注册过）时，两者都返回 `true`；不能多态写出的类型（抽象类型、开放泛型类型，或者不是 `[NinoType]` 的类型），以及没有动态代码（Native AOT）时生成代码没有注册的类型，返回 `false`。

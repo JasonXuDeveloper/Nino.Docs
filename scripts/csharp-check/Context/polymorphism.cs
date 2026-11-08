@@ -4,3 +4,4 @@ using System.Net.Sockets;
 namespace Docs.Page_polymorphism;
 
 [NinoType] public class Box<T> { public T Value; }
+public class Leaf<T> : Box<T> { }

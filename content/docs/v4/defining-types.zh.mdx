@@ -283,7 +283,7 @@ public record struct Pair<TKey, TValue>(TKey Key, TValue Value);
 
 每个泛型 `[NinoType]` 定义只生成一个格式化器，不是每个封闭类型各一个。类型实参必须可序列化（`Box<int>`、`Box<List<string>>`、`Box<Order>`）。生成器会注册当前编译里出现的所有封闭类型（成员类型、基类型、`NinoSerializer`/`NinoDeserializer` 调用的类型参数、装箱调用和 `IsSupported` 的 `typeof` 参数），保证 AOT 平台有所需的实例化；其余的由运行时在第一次用到时构造，而 Native AOT 做不到这一点（参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)）。
 
-封闭的泛型 `[NinoType]` 结构体不管出现在哪里（成员、元素、类型实参或顶层），都由它的定义的格式化器写出。只要有字段的类型是类型参数，不管实参是什么，它都逐成员写，所以上面的 `Pair<int, int>` 逐成员写，永远不按原始内存拷贝。
+封闭的泛型 `[NinoType]` 结构体不管出现在哪里（成员、元素、类型实参或顶层），都由它的定义的格式化器写出。只要有字段的类型是类型参数，不管实参是什么，它都逐成员写，所以上面的 `Pair<int, int>` 逐成员写，永远不按原始内存拷贝，也不算固定大小。
 
 <Callout type="warn">
 

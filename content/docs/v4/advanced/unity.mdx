@@ -74,7 +74,7 @@ Make the shared project a class library for `netstandard2.1`, the API Unity 2022
     <LangVersion>9.0</LangVersion> <!-- Unity's C# version: newer syntax fails in Unity, so fail here first -->
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Nino" Version="4.0.0-rc.7" /> <!-- the version of the Unity package -->
+    <PackageReference Include="Nino" Version="%NINO_VERSION%" /> <!-- the version of the Unity package -->
   </ItemGroup>
 </Project>
 ```
@@ -150,7 +150,7 @@ To check or switch them at run time, use the `Nino.Burst.NinoBurst` class (code 
 ```csharp nocheck
 using Nino.Burst;
 
-Debug.Log($"Nino Burst kernels: {NinoBurst.Registered}, {NinoBurst.IsaName}"); // Isa: 3 AVX2, 1 SSSE3, 2 Neon, 0 none
+Debug.Log($"Nino Burst kernels: {NinoBurst.Registered}, {NinoBurst.IsaName}"); // e.g. "True, AVX2"
 NinoBurst.Unregister(); // back to the scalar paths, e.g. to compare frame times
 NinoBurst.Register();   // false where Burst is off or the CPU has none of the instruction sets
 NinoBurst.Register(NinoBurst.Ssse3); // keep an AVX2 CPU on the 16-byte kernels (the same bytes)

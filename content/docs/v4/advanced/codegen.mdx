@@ -132,7 +132,7 @@ Each metadata of a `<NinoCodegen>` item is the nino-gen option of the same name 
 | `Runtime` | `--runtime` | TypeScript | empty | Import the runtime from this module instead of writing `nino.ts` next to the code. |
 | `NumericArrays` | `--numeric-arrays` | TypeScript | `plain` | `plain`: arrays and lists of numbers are `number[]` (`bigint[]` for 64-bit integers). `typed`: [typed arrays](/en/docs/v4/advanced/typescript#typed-arrays) (`Int32Array`, `Float64Array`...). |
 | `Package` | `--package` | Go | the assembly name's letters and digits, lower-cased | The package name. |
-| `Tags` | `--tags` | Go | `json,yaml` | The struct tags written after `nino`, in order; empty for none. |
+| `Tags` | `--tags` | Go | `json,yaml` | The struct tags written after `nino`, in order. For none: `--tags ""` on the command line, `Tags=","` in a build (an empty `Tags` is the same as none set, which takes the default). |
 | `TagNames` | `--tag-names` | Go | `camel` | How those tags name a member: `camel`, `snake` or `original`. |
 | `Serde` | `--serde` | Rust | `false` | `true` adds `#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]` and a rename per field. |
 | `SerdeNames` | `--serde-names` | Rust | `camel` | The serde names: `camel` (as `System.Text.Json` names them), `snake` or `original`. |
@@ -152,7 +152,8 @@ The build passes the assembly it compiled and its references itself. nino-gen ch
 
 ```shell
 dotnet tool install -g Nino.Codegen.Tool --prerelease
-nino-gen --assembly bin/Release/net8.0/Shop.Contracts.dll --lang go --out ../server/protocol
+dotnet publish -c Release -o publish   # the assembly with its dependencies, Nino.Core.dll among them
+nino-gen --assembly publish/Shop.Contracts.dll --lang go --out ../server/protocol
 ```
 
 ```text

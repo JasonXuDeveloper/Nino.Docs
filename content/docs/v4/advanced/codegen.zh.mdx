@@ -132,7 +132,7 @@ dotnet build Shop.Contracts
 | `Runtime` | `--runtime` | TypeScript | 空 | 从这个模块导入运行时，而不是在代码旁边写出 `nino.ts`。 |
 | `NumericArrays` | `--numeric-arrays` | TypeScript | `plain` | `plain`：数字的数组和列表是 `number[]`（64 位整数为 `bigint[]`）。`typed`：[类型化数组](/zh/docs/v4/advanced/typescript#typed-arrays)（`Int32Array`、`Float64Array`……）。 |
 | `Package` | `--package` | Go | 程序集名中的字母和数字，转为小写 | 包名。 |
-| `Tags` | `--tags` | Go | `json,yaml` | 写在 `nino` 之后的结构体标签，按顺序；为空则不写。 |
+| `Tags` | `--tags` | Go | `json,yaml` | 写在 `nino` 之后的结构体标签，按顺序。不要标签：命令行写 `--tags ""`，构建里写 `Tags=","`（空的 `Tags` 等于没设，会用默认值）。 |
 | `TagNames` | `--tag-names` | Go | `camel` | 这些标签如何命名成员：`camel`、`snake` 或 `original`。 |
 | `Serde` | `--serde` | Rust | `false` | `true` 加上 `#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]`，并为每个字段重命名。 |
 | `SerdeNames` | `--serde-names` | Rust | `camel` | serde 名字：`camel`（与 `System.Text.Json` 的命名一致）、`snake` 或 `original`。 |
@@ -152,7 +152,8 @@ dotnet build Shop.Contracts
 
 ```shell
 dotnet tool install -g Nino.Codegen.Tool --prerelease
-nino-gen --assembly bin/Release/net8.0/Shop.Contracts.dll --lang go --out ../server/protocol
+dotnet publish -c Release -o publish   # 和程序集放在一起的依赖，Nino.Core.dll 也在其中
+nino-gen --assembly publish/Shop.Contracts.dll --lang go --out ../server/protocol
 ```
 
 ```text

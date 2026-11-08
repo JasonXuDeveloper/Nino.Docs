@@ -29,11 +29,12 @@ go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4@v%NINO_VERSION%
 密封类生成 `*X`（nil 表示 null），结构体生成 `X`。能放多种类型的槽位（抽象类、接口、非密封类）生成一个接口，每个允许的类型实现一次。枚举是带常量的具名整数类型。辅助类型叫 `NinoTuple2`……`NinoGrid`；用户类型的名字以 `Nino` 开头时加 `Type` 后缀，两个类型简单名相同时加命名空间前缀（`ShapesLeftItem`）。`[NinoFormerName]` 不写进 `nino` 标签：布局里只有旧名称的哈希，`NinoLayout()` 保留了这些哈希，所以键控类型照样能读旧名称下写出的数据。
 
 ```go
+var buf []byte
 data, err := nino.Serialize(player, protocol.WritePlayer)      // 新的切片
 buf, err = nino.Append(buf[:0], player, protocol.WritePlayer)  // 追加；buf 有空间时不分配
-player, err := nino.Deserialize(data, protocol.ReadPlayer)      // 忽略值之后的字节，与 .NET 一致
-player, err := nino.DeserializeExact(data, protocol.ReadPlayer) // ……或拒绝它们
-err = nino.DeserializeInto(data, &player, protocol.ReadPlayerInto) // 读入 player，复用它已有的对象
+got, err := nino.Deserialize(data, protocol.ReadPlayer)         // 忽略值之后的字节，与 .NET 一致
+got, err = nino.DeserializeExact(data, protocol.ReadPlayer)     // ……或拒绝它们
+err = nino.DeserializeInto(data, &got, protocol.ReadPlayerInto) // 读入 got，复用它已有的对象
 ```
 
 写入复用的缓冲区不分配内存。生成的结构体也带 `nino` 标签和 `NinoLayout()`，所以下面的结构体标签函数也能读写它们。

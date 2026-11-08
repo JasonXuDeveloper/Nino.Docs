@@ -52,6 +52,8 @@ public struct ZigZagLongFormatter : INinoFormatter<long>
             v |= (ulong)(b & 0x7F) << shift;
             shift += 7;
         } while ((b & 0x80) != 0 && shift < 70); // 最多 10 字节：一个 64 位值
+        if ((b & 0x80) != 0 || (shift == 70 && b > 1))
+            throw new NinoDataException("Nino: invalid varint."); // 超过 10 字节，或第 10 字节溢出 64 位
         value = (long)(v >> 1) ^ -(long)(v & 1);
     }
 }
@@ -84,6 +86,8 @@ public sealed class BalanceChange
 public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
     where TFormatter : struct, INinoFormatter<T>
 {
+    private const int MaxCapacity = 1 << 20; // 一个环最多容纳的元素数
+
     public void Serialize(Ring<T> value, ref Writer writer)
     {
         if (value == null)
@@ -108,6 +112,9 @@ public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
         }
 
         reader.Read(out int capacity);
+        // 容量不对应数据里的字节：分配之前先限定它
+        if ((uint)capacity < (uint)count || capacity > MaxCapacity)
+            throw new NinoDataException("Nino: invalid ring capacity.");
         if (value != null && value.Capacity == capacity)
             value.Clear();                     // 复用已有的 ring // [!code highlight]
         else
@@ -211,15 +218,15 @@ public struct GridFormatter<[NinoRaw] T> : INinoFormatter<Grid<T>>
         int width = reader.Read<int>();
         if (width < 0)
         {
-            value = null;
+            NinoRecycler.Discard(ref value);
             return;
         }
 
         int length = reader.ReadLength(Unsafe.SizeOf<T>());     // 对照剩余字节检查
         if (width == 0 ? length != 0 : length % width != 0)
-            throw new InvalidOperationException("Not a grid.");
+            throw new NinoDataException("Nino: not a grid.");
         if (value == null || value.Cells.Length != length || value.Width != width)
-            value = new Grid<T>(width, width == 0 ? 0 : length / width); // 大小相同时复用 grid
+            NinoRecycler.Replace(ref value, new Grid<T>(width, width == 0 ? 0 : length / width)); // 大小相同时复用 grid
         reader.ReadUnmanagedRaw(value.Cells.AsSpan());          // 一次整块复制 // [!code highlight]
     }
 }

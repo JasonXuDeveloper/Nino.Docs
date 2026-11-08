@@ -66,8 +66,8 @@ Reading a raw struct copies its block: in the default mode a `bool` field or a `
 
 </Callout>
 
-- **Prefer a `[NinoType]` struct** for data you design: the generator copies it as one block only when its layout is the same on every runtime (checked at compile time), and otherwise writes it member by member with no padding, so no runtime converts anything. A plain struct (no `[NinoType]`) holding tuples, `DateTimeOffset`, `nint` or vectors is still portable, at the cost of a conversion off 64-bit .NET.
-- **Order fields largest first** in plain structs you share: fewer padding bytes on the wire.
+- **A `[NinoType]` struct is raw too**: a positional, unmanaged one with sequential layout is copied as one block in the canonical layout (64-bit .NET's), and runtimes whose layout differs (x86, Arm32) convert to it, as for a plain struct. To write it member by member with no padding, give it `format: NinoFormat.VersionTolerant` (or `[NinoIgnore]` a field). A plain struct (no `[NinoType]`) holding tuples, `DateTimeOffset`, `nint` or vectors is still portable, at the cost of a conversion off 64-bit .NET.
+- **Order fields largest first** in raw structs you share (plain or `[NinoType]`): fewer padding bytes on the wire.
 - **Store fixed lanes, not `Vector<T>`**: it is not serializable; keep a set number of lanes and build the vectors from them ([below](#vector-t)). Go, Rust and TypeScript have no `Vector64<T>` to `Vector512<T>`: nino-gen leaves out types that hold one, with warning NINOGEN002.
 - **Godot's math structs** differ between single- and double-precision builds; that is the build's choice, not the runtime's ([Platforms](/en/docs/v4/platforms#godot)).
 
@@ -81,8 +81,8 @@ public struct Sample
     public float Value;
 }
 
-// The same data as a [NinoType] struct: its layout differs on 32-bit runtimes (20 bytes
-// there, 24 on 64-bit), so the generator writes it member by member (17 bytes) everywhere.
+// The same data as a [NinoType] struct: also raw, 24 bytes in the canonical layout (17 of data,
+// 7 of padding). x86 lays it out in 20 bytes and converts to the canonical 24.
 [NinoType]
 public struct SampleRecord
 {

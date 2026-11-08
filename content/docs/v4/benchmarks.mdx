@@ -203,7 +203,7 @@ v3's compile time grows much faster than the number of types: 3.3× the types to
 
 ## Benchmark Code [#benchmark-code]
 
-The types and methods behind each table, from [`benchmarks/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark), trimmed of `using` lines and repeated cases. Every class runs with `[NinoJob]` (BenchmarkDotNet's `ShortRun` job on .NET 10; the published run sets the iteration counts on the command line), `[GcServer(true)]` and `[MemoryDiagnoser]`; the types carry the attributes of each serializer they are measured with.
+The types and methods behind each table, from [`benchmarks/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark), trimmed of `using` lines and repeated cases. Every class runs with `[NinoJob]` (3 launches of 5 warm-up and 15 measured iterations on .NET 10, under BenchmarkDotNet's `ShortRun` id), `[GcServer(true)]` and `[MemoryDiagnoser]`; the types carry the attributes of each serializer they are measured with (the excerpts leave out protobuf-net's, and MessagePack's where they add nothing).
 
 ### SimpleTest [#simpletest]
 
@@ -248,19 +248,33 @@ public partial struct SimpleStruct
 ```
 
 ```csharp title="SimpleBenchmarkData.cs, SimpleTest.cs" nocheck tab="Data" tab-group="bench-code"
+// Seeded, with a fixed date: every run (the v3 and v4 runs too) serializes the same values
+internal static class BenchmarkRandom
+{
+    public static readonly Random Shared = new Random(20240607);
+    public static readonly DateTime Now = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Local);
+
+    public static Guid NewGuid()
+    {
+        var bytes = new byte[16];
+        Shared.NextBytes(bytes);
+        return new Guid(bytes);
+    }
+}
+
 public static SimpleClass Create()
 {
-    Random random = new Random();
+    Random random = BenchmarkRandom.Shared;
     return new SimpleClass
     {
         Id = random.Next(),
         Tag = random.Next() % 2 == 0,
-        Guid = Guid.NewGuid(),
-        CreateTime = DateTime.Now,
-        Name = Guid.NewGuid().ToString(),
-        Desc = Enumerable.Range(0, 10).Select(_ => Guid.NewGuid().ToString()).Aggregate((a, b) => a + b),
+        Guid = BenchmarkRandom.NewGuid(),
+        CreateTime = BenchmarkRandom.Now,
+        Name = BenchmarkRandom.NewGuid().ToString(),
+        Desc = Enumerable.Range(0, 10).Select(_ => BenchmarkRandom.NewGuid().ToString()).Aggregate((a, b) => a + b),
         Numbers = Enumerable.Range(0, 100).Select(_ => random.Next()).ToArray(),
-        Dates = Enumerable.Range(0, 10).Select(_ => DateTime.Now.AddSeconds(random.Next())).ToList(),
+        Dates = Enumerable.Range(0, 10).Select(_ => BenchmarkRandom.Now.AddSeconds(random.Next())).ToList(),
         Map1 = Enumerable.Range(0, 10).ToDictionary(n => n, n => n.ToString()),
         Map2 = Enumerable.Range(0, 10).ToDictionary(n => n, n => n * 2)
     };
@@ -268,11 +282,11 @@ public static SimpleClass Create()
 
 public static SimpleStruct Create()
 {
-    Random random = new Random();
+    Random random = BenchmarkRandom.Shared;
     return new SimpleStruct
     {
         Id = random.Next(),
-        CreateTime = DateTime.Now.AddSeconds(random.Next())
+        CreateTime = BenchmarkRandom.Now.AddSeconds(random.Next())
     };
 }
 
@@ -281,7 +295,7 @@ SimpleClass = SimpleClass.Create();
 SimpleClasses = Enumerable.Range(0, 100).Select(_ => SimpleClass.Create()).ToArray();
 SimpleStruct = SimpleStruct.Create();
 SimpleStructs = Enumerable.Range(0, 100).Select(_ => SimpleStruct.Create()).ToArray();
-var r = Random.Shared;
+var r = BenchmarkRandom.Shared;
 Vectors = Enumerable.Range(0, 10000)
     .Select(_ => new Vector4(r.NextSingle(), r.NextSingle(),
         r.NextSingle(), r.NextSingle())).ToArray();
@@ -799,8 +813,8 @@ public static FixedStruct Create(Random r) => new()
 {
     Id = r.Next(),
     Position = new Vector3(r.NextSingle(), r.NextSingle(), r.NextSingle()),
-    Ticks = DateTime.Now.AddSeconds(r.Next()).Ticks,
-    Guid = Guid.NewGuid(),
+    Ticks = BenchmarkRandom.Now.AddSeconds(r.Next()).Ticks,
+    Guid = BenchmarkRandom.NewGuid(),
 };
 
 // In FixedSizeTest:

@@ -198,7 +198,7 @@ The typical use is as a collection element: a `List<Alert>` grows and shrinks wi
 
 - The class must be `sealed`, `partial` and populatable in place (no constructor-only or read-only members); NINO018/NINO002 report otherwise.
 - The generator adds `ReturnToPool()` and two partial methods you implement:
-  - `OnNinoPoolWarmup()` runs once, before the type is first deserialized; the instances it returns go straight into the pool (return `null` or an empty sequence to start empty).
+  - `OnNinoPoolWarmup()` runs once, before the type is first deserialized; the instances it returns go straight into the pool of the thread that first deserializes the type (past 64, the older half moves to the shared stack; return `null` or an empty sequence to start empty).
   - `OnNinoPoolReturn()` runs on `ReturnToPool()`: release state that Nino does not deserialize.
 - Returning an instance twice throws `InvalidOperationException`. Instances never returned are collected normally.
 - `ReturnToPool()` returns only that instance. Its lists, arrays and nested objects (pooled or not) stay attached and are reused with it next time. So **a type that holds pooled children should be pooled itself**: otherwise, when it is dropped, its children go to the garbage collector with it. To return a child to its own pool instead, return it in `OnNinoPoolReturn()` and set the field to `null`.
@@ -244,7 +244,7 @@ Declare the member as `PooledList<int>` instead of `List<int>`. Collection types
 
 ## Example: Zero-GC State Sync [#example]
 
-A monitoring server sends the full state of a fleet of devices in every message: the number of devices and alerts changes every time, and a device's recent readings are sometimes there and sometimes not. The file below holds every type the example needs.
+A monitoring server sends the full state of a fleet of devices in every message: the number of devices and alerts changes every time, and a device's recent readings are sometimes there and sometimes not. The file below holds every type the example needs, its own `Alert` and `PooledList<T>` included: use it instead of `Alert.cs` and `ObjectPool.cs` above, not next to them.
 
 ```csharp title="Snapshot.cs"
 using System;

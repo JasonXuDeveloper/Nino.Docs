@@ -178,7 +178,7 @@ public sealed class CommandChannel
     {
         _buffer.ResetWrittenCount();
         NinoSerializer.Serialize<ICommand>(command, _buffer); // the type id, then the command
-        _socket.Send(_buffer.WrittenSpan);
+        _socket.Send(_buffer.WrittenSpan); // one message per Send: a socket that keeps message boundaries (UDP); TCP needs a length prefix (see Networking)
     }
 
     // Fills `command` in place when the data holds the same type, else replaces (and recycles) it
@@ -196,10 +196,10 @@ Two alternatives exist, and both cost more:
 
 Subtypes are found automatically wherever they are declared, including assemblies loaded later (plugins, HybridCLR hot-update DLLs): when a type id is unknown, Nino looks in the registries of newly loaded assemblies before it fails. There is no registration call. For example, a plugin or hot-update DLL adds `public sealed class OrderRefunded : OrderEvent`. Once the DLL is loaded, the code in the main (AOT) assembly reads a `List<OrderEvent>` that contains an `OrderRefunded`, with no change to that code. The generator must run in the subtype's assembly too (install the `Nino` package in that project; in Unity, its assembly must reference `Nino.Core`); an id whose type is in no loaded assembly throws `NinoDataException`.
 
-The one exception is a closed generic subtype (`Box<int>`) that the process only **reads**, and never names in code or writes. Register it at startup:
+The one exception is a closed generic subtype (`Leaf<int>`) that the process only **reads**, and never names in code or writes. Register it at startup:
 
 ```csharp
-NinoPolymorphic.TryRegister<Box<int>>();
+NinoPolymorphic.TryRegister<Leaf<int>>();
 ```
 
 `NinoPolymorphic.TryRegister(Type)` does the same for a type you only have as a `Type` (one built with `MakeGenericType`, for example). Both return `true` once the type is registered, and `false` for a type that cannot be written polymorphically (an abstract or open generic type, or a type that is not a `[NinoType]`) or, without dynamic code (Native AOT), one that no generated code registers.

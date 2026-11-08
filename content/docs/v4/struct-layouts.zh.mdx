@@ -66,8 +66,8 @@ flowchart LR
 
 </Callout>
 
-- **自己设计的数据，优先用 `[NinoType]` 结构体**：只有当它在所有运行时上布局都相同时（编译时检查），生成器才整块复制，否则逐成员写出、没有填充，任何运行时都不用转换。不标 `[NinoType]` 的普通结构体里放元组、`DateTimeOffset`、`nint` 或向量，同样可移植，只是在 64 位 .NET 以外要付转换的开销。
-- **共享的普通结构体，字段按从大到小排**：写出的填充字节更少。
+- **`[NinoType]` 结构体同样是原始值**：按位置序列化、非托管、顺序布局的 `[NinoType]` 结构体，和普通结构体一样按规范布局（64 位 .NET 的布局）整块复制，布局不同的运行时（x86、Arm32）读写时转换。想逐成员写出、不带填充，给它加 `format: NinoFormat.VersionTolerant`（或给某个字段加 `[NinoIgnore]`）。不标 `[NinoType]` 的普通结构体里放元组、`DateTimeOffset`、`nint` 或向量，同样可移植，只是在 64 位 .NET 以外要付转换的开销。
+- **共享的原始结构体（普通的或 `[NinoType]` 的），字段按从大到小排**：写出的填充字节更少。
 - **存固定的通道，不要存 `Vector<T>`**：它不能序列化；存固定数量的通道，再由它们构造向量（见[下文](#vector-t)）。Go、Rust 和 TypeScript 没有 `Vector64<T>` 到 `Vector512<T>`：nino-gen 会跳过含它们的类型，并报 NINOGEN002 警告。
 - **Godot 的数学结构体**在单精度和双精度构建里布局不同；这由构建决定，跟运行时无关（[平台](/zh/docs/v4/platforms#godot)）。
 
@@ -81,8 +81,8 @@ public struct Sample
     public float Value;
 }
 
-// 同样的数据写成 [NinoType] 结构体：它在 32 位运行时上的布局不同（那里 20 字节，64 位上 24 字节），
-// 所以生成器在所有平台上都逐成员写出（17 字节）。
+// 同样的数据写成 [NinoType] 结构体：也是原始值，按规范布局 24 字节（17 字节数据、7 字节填充）。
+// x86 上它的布局是 20 字节，读写时转换成规范的 24 字节。
 [NinoType]
 public struct SampleRecord
 {
