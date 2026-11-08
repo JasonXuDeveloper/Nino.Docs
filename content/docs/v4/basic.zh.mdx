@@ -1,7 +1,7 @@
 ---
 title: 序列化与反序列化
 seoTitle: "C# 序列化与反序列化 – Nino v4 文档"
-description: "用 NinoSerializer 和 NinoDeserializer 序列化与反序列化，复用缓冲区和实例，处理运行时类型。"
+description: "用 NinoSerializer 和 NinoDeserializer 序列化与反序列化，复用缓冲区和实例，处理运行时类型，捕获无效数据。"
 icon: Play
 ---
 
@@ -11,10 +11,14 @@ icon: Play
     'recommended-usage': '/zh/docs/v4/basic#reusing-a-buffer',
     'using-a-writer': '/zh/docs/v4/basic#several-values-in-one-buffer',
     'deserializing-into-an-existing-value': '/zh/docs/v4/basic#into-an-existing-value',
+    'multi-segment-data': '/zh/docs/v4/advanced/streams#readonlysequence-input',
+    'deep-object-graphs': '/zh/docs/v4/reference-tracking#deep-object-graphs',
   }}
 />
 
 `NinoSerializer` 和 `NinoDeserializer`（命名空间 `Nino.Core`）就是全部的运行时 API。两者都是静态类，并且**线程安全**：可以在任意多个线程上同时调用，无需加锁。每次调用用到的临时状态（<Term id="scratch-buffer" lang="zh">暂存缓冲区</Term>、引用表）按线程保存，热路径上不会写共享内存。
+
+这一页讲日常用到的调用。同样这些调用怎样做到完全不分配内存，见[高性能序列化](/zh/docs/v4/advanced/high-performance)。
 
 本页的例子序列化下面这个 `Order`：
 
@@ -64,7 +68,7 @@ byte[] bytes = NinoSerializer.Serialize(order);
 
 ### 复用缓冲区 [#reusing-a-buffer]
 
-`Serialize<T>(value)` 每次都会为结果分配一个 `byte[]`。对于[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)，以及元素大小固定的数组或列表，这个数组按最终大小分配，数据直接写进去；其他值先写入线程独享的暂存缓冲区，再拷贝出来。想做到零分配，就序列化到一个自己长期持有的缓冲区里。
+`Serialize<T>(value)` 每次都会为结果分配一个 `byte[]`。如果是<Term id="fixed-size" lang="zh">固定大小的类型</Term>，或者元素大小固定的数组和列表，这个数组按最终大小分配，数据直接写进去（原理见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)）；其他值先写入线程独享的暂存缓冲区，再拷贝出来。想做到零分配，就序列化到一个自己长期持有的缓冲区里。
 
 `NinoArrayBufferWriter` 是 Nino 自带的 `IBufferWriter<byte>`，底层数组默认租自 `ArrayPool<byte>.Shared`（也可以传入你自己的池），Nino 会**直接写入**其中。换成其他 `IBufferWriter<byte>`（.NET 的 `ArrayBufferWriter<byte>`、`PipeWriter`、包装 `Stream` 的写入器），最后会多一次拷贝。
 
@@ -81,18 +85,13 @@ NinoSerializer.Serialize(order, buffer);       // 这次不分配内存
 
 缓冲区不够用时，会从池里租一个更大的数组。如果大致知道消息有多大，可以用 `new NinoArrayBufferWriter(initialCapacity)` 或 `EnsureCapacity(sizeHint)` 预先分配好；`Capacity` 和 `FreeCapacity` 分别是数组的大小和剩余空间。
 
-如果想让 Nino 直接写进你自己管理的缓冲区，可以传入自己的 `ArrayPool<byte>`：`new NinoArrayBufferWriter(initialCapacity, pool)` 会从这个池租用数组，扩容时换下的数组和 `Dispose()` 时的数组也都还给它。例如，服务器如果把 socket 缓冲区分配在固定对象堆（POH）上，就能把消息直接序列化进去，省掉一次拷贝。扩容时旧数组会还给池，所以要在最后一次写入之后再取 `WrittenMemory`，并且只在下一次写入或 `ResetWrittenCount()` 之前使用。
-
-```csharp
-// pinnedPool：你自己的 ArrayPool<byte>，例如由 GC.AllocateUninitializedArray<byte>(n, pinned: true) 数组组成的池
-var buffer = new NinoArrayBufferWriter(4096, pinnedPool);
-```
-
 <Callout type="warn">
 
 `NinoArrayBufferWriter` **不是**线程安全的：每个线程、每个连接或每次操作各用一个。不再使用时调用 `Dispose()`，把数组还给池。
 
 </Callout>
+
+写进你自己管理的数组（传入自己的池）、精确大小的数组，以及其他所有手段，都在[高性能序列化](/zh/docs/v4/advanced/high-performance#levers)里。
 
 ### 一个缓冲区写多个值 [#several-values-in-one-buffer]
 
@@ -132,16 +131,18 @@ void NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, ref object value
 void NinoDeserializer.DeserializeBoxed(ref Reader reader, ref object value, Type type);
 ```
 
-输入数据是 `ReadOnlySpan<byte>`：`byte[]`、`ArraySegment<byte>`、`Span<byte>`、`Memory<byte>.Span`，或者现有缓冲区的任意切片，都可以直接传入，不用拷贝。
+输入数据是 `ReadOnlySpan<byte>`：`byte[]`、`ArraySegment<byte>`、`Span<byte>`、`Memory<byte>.Span`，或者现有缓冲区的任意切片，都可以直接传入，不用拷贝。`ReadOnlySequence<byte>`（来自 `System.IO.Pipelines`）没有对应的重载，读法见[多段输入](/zh/docs/v4/advanced/streams#readonlysequence-input)，最多拷贝一次。
 
 ```csharp
 Order order = NinoDeserializer.Deserialize<Order>(bytes);
 Order fromSlice = NinoDeserializer.Deserialize<Order>(rented.AsSpan(0, received));
 ```
 
+递归类型（树、链表）嵌套多深都可以，两边都不会栈溢出。同一个对象引用两次就写两次；对象图里有环，序列化时直接抛异常。想保留共享对象和环，见[引用追踪](/zh/docs/v4/reference-tracking)，深层对象图也在那一页讲。
+
 ### 反序列化到已有值 [#into-an-existing-value]
 
-用 `ref` 传入已有的值，Nino 会原地填充它，尽量复用这个实例以及其中的嵌套对象、列表、数组和字典。传入 `null`（或 `default`）则创建新值。字符串会和已有值里的字符串比较：内容相同就直接保留，只有内容变化（或原来为 `null`）的字符串才读成新实例。`[NinoUtf8]` 字符串在文本为 ASCII 时同样会保留；非 ASCII 的 UTF-8 文本总是解码成新字符串。
+用 `ref` 传入已有的值，Nino 会原地填充它（<Term id="reuse-deserialization" lang="zh">复用反序列化</Term>），尽量复用这个实例以及其中的嵌套对象、列表、数组和字典。传入 `null`（或 `default`）则创建新值。字符串会和已有值里的字符串比较：内容相同就直接保留，只有内容变化（或原来为 `null`）的字符串才读成新实例。`[NinoUtf8]` 字符串在文本为 ASCII 时同样会保留；非 ASCII 的 UTF-8 文本总是解码成新字符串。
 
 ```csharp
 Order order = null;
@@ -163,30 +164,6 @@ var reader = new Reader(buffer.WrittenSpan);
 var header = NinoDeserializer.Deserialize<Header>(ref reader);
 var body = NinoDeserializer.Deserialize<Body>(ref reader);
 reader.ReleaseReferences();
-```
-
-### 多段数据 [#multi-segment-data]
-
-Nino 没有 `ReadOnlySequence<byte>` 重载。`System.IO.Pipelines` 给出的序列通常只有一段，直接传入即可；如果有多段，就先拷贝到一块连续内存里：
-
-```csharp
-static Order Read(ReadOnlySequence<byte> data)
-{
-    if (data.IsSingleSegment)
-        return NinoDeserializer.Deserialize<Order>(data.First.Span);
-
-    int length = (int)data.Length;
-    byte[] rented = ArrayPool<byte>.Shared.Rent(length);
-    try
-    {
-        data.CopyTo(rented);
-        return NinoDeserializer.Deserialize<Order>(rented.AsSpan(0, length));
-    }
-    finally
-    {
-        ArrayPool<byte>.Shared.Return(rented);
-    }
-}
 ```
 
 ## 运行时类型 [#runtime-types]
@@ -232,62 +209,9 @@ field.SetValue(target, current);
 
 </Callout>
 
-## 深层对象图 [#deep-object-graphs]
-
-递归类型（链表、树、节点里又包含节点）可以嵌套任意深。前 128 层嵌套的对象，Nino 在原处直接写入；更深的对象则**推迟**：之后从较浅的层级写入，读取时也一样。因此：
-
-- 无论对象图有多深，写入和读取占用的栈都有上限：10 万个节点的链表在 512 KB 栈的线程上也能正常往返。
-- 无法构造出让读取方栈溢出的数据，所以递归类型可以放心用在来自不可信来源的消息里。
-- 嵌套不到 128 层的数据不受影响，写出的字节完全不变。
-
-```csharp
-[NinoType]
-public class TreeNode
-{
-    public int Value;
-    public List<TreeNode> Children;
-}
-
-// 多深都可以：两边都不会 StackOverflowException。
-byte[] bytes = NinoSerializer.Serialize(deepTree);
-var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
-```
-
-像 `TreeNode` 这样的递归类型，只要数据是一棵树（每个节点只引用一次），就不需要 `trackReferences`。如果某个节点出现了两次，或者对象图里有环，就给这个类型加上 [`trackReferences: true`](/zh/docs/v4/reference-tracking)。不加的话，共享的节点会写成多份独立的副本；环（`a.Next = b; b.Next = a;`）在写入时就会检测出来，抛出 `InvalidOperationException`，指明类型并提示 `trackReferences`，不会无限循环下去。
-
-推迟的对象在 Nino 读到存放它的成员或集合元素时就立即创建并放进去，它的成员则在同一次调用中稍后读取，所以复用反序列化和 `[NinoPooled]` 仍然会复用每一个实例。有两种类不能这样推迟，总是在原处嵌套：
-
-- 由**构造函数**创建的类（位置记录、init-only 或只读成员），因为成员读完之前还没有实例；
-- **按值比较**的类（记录、重写了 `GetHashCode` 或实现了 `IComparable` 的类），因为 `HashSet<T>`、字典的键或有序集合可能会在成员读取之前就持有它。
-
-由这两种类组成的对象图，嵌套超过 [`NinoSettings.MaxDepth`](/zh/docs/v4/security#limits)（默认 512 层）就会抛出异常，外围包含自身的结构体里尚未结束的主体也计入层数，写和读都一样：序列化时抛出 `InvalidOperationException`，读取这样的数据时抛出 `NinoDataException`。需要深度递归的类型，请给它无参构造函数和可赋值的成员。
-
 ## 无效数据 [#invalid-data]
 
-Nino 本来就是为读取不可信来源的数据而设计的：网络对端、用户交给你的文件、请求体。专门针对读取器构造的数据，不会让进程崩溃，不会越过输入的末尾读取，不会分配与自身大小不成比例的内存，也不会让 Nino 创建你没有声明的类型：
-
-- **分配之前先检查长度。** 每个元素个数都按元素最少占用的字节数和剩余字节比对；一个集合在读到元素之前，最多预先分配输入剩余字节数的 16 倍（至少 16 KB），超出的部分随实际读到的元素逐步扩容。几个字节就号称有十亿个元素的数据，直接拒绝。
-- **栈的用量有上限。** 嵌套超过 128 层的对象会推迟到较浅的层级再读取；不能推迟的（由构造函数创建或按值比较的类型、包含自身的结构体和集合）最多 [`NinoSettings.MaxDepth`](/zh/docs/v4/security#limits) 层（默认 512），途中还会检查剩余栈空间：更深的数据会抛出异常，而不是栈溢出。参见[深层对象图](#deep-object-graphs)。
-- **只创建你声明的类型。** 数据里只有类型 ID，没有类型名：多态值只能是声明类型已注册的子类型之一，回引用必须指向已经读过、类型与槽位相符的对象。`System.Type` 有意不支持序列化。
-- **读取失败不会留下旧内存。** 读入已有值时，即使数据不够长或读到一半被拒绝（不是 0 或 1 的 `bool` 或存在字节、[不可信模式](/zh/docs/v4/security#untrusted-mode)检查的值），也不会在其中留下一个装着未初始化内存的数组。
-
-无效数据只会抛出 `NinoDataException`（命名空间 `Nino.Core`，派生自 `InvalidOperationException`），消息以 `Nino:` 开头，不会是别的异常：类型自己拒绝的值（格式错误的 `Uri`、不存在的区域或时区、越界的 `DateTimeOffset`、字典的 null 键）也这样报告，原异常放在 `InnerException` 里。例如：
-
-- 数据被截断（"unexpected end of data"）；
-- 长度不合法；
-- 类型 ID 未知，或不是声明类型的子类型；
-- 嵌套超过上面的上限；
-- `[NinoUtf8]` 字符串的字节不是合法的 UTF-8，或与它记录的字符数和字节数对不上；
-- Nino 从不写出的字节：不是 0 或 1 的 `bool` 或<Term id="presence-byte" lang="zh">存在字节</Term>、比所需更长或第一个字节为 `0x82` 及以上的字符串头、条目中的字节多于其值的键控成员、与所在区域不符的推迟的主体段；
-- 字典或 Set 中的重复键，或在哈希表中刻意构造的冲突键（[哈希洪泛](/zh/docs/v4/security#hash-flooding)）。
-
-这些限制可以在 `NinoSettings` 中收紧，`NinoSettings.Untrusted` 会加上每次读取都要花时间的检查；参见[不可信数据](/zh/docs/v4/security)。
-
-在数据进入的地方捕获它，把输入当作坏数据处理。Nino 检查不了的部分要由你的代码负责，就像对待用户改过的存档：
-
-- **值。** 完整读出的值就是数据里写的值：负数的血量、没有名字的枚举值，以及（未设置 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 时）作为整块拷贝的非托管结构体中既不是 0 也不是 1 的 `bool` 字节。构造函数和 setter 拿到的就是这些值。请校验你的逻辑依赖的部分。
-- **类型。** 字节里不带 schema，所以为**另一个**布局兼容的类型写的数据，也能读出来而不报错。请自己给数据加上版本信息（参见[数据演进](/zh/docs/v4/evolving-data)和[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）；`Deserialize<object>` 接受任何已注册的类型。
-- **消息大小。** 分配多少内存受输入大小约束，所以要限制输入：在缓冲之前限制帧或请求的大小（参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）。数据里真实存在的元素，照样占用它在内存中的大小：一个成员全部省略的大型版本容错结构体，在数据里只占 4 字节。
+Nino 本来就是为读取不可信的数据设计的，比如网络对端发来的消息、用户交给你的文件、请求体。不管字节是什么，读取都不会让进程崩溃，不会读到输入末尾之外，也不会分配与输入大小不成比例的内存。数据无效时（截断、长度不合理、类型 ID 未知、含有 Nino 从不写出的字节），只会抛一种异常：[`NinoDataException`](/zh/docs/v4/security#ninodataexception)（命名空间 `Nino.Core`），消息以 `Nino:` 开头。在数据进来的地方捕获它，丢掉这份输入即可。如果数据可能是别人刻意构造的，还要打开 `NinoSettings.Untrusted`，并自己限制消息大小：上线之前请读[不可信数据](/zh/docs/v4/security)。
 
 本文档中有特定含义的词（顶层调用、格式化器、原始值、槽位等）见[术语表](/zh/docs/v4/glossary)。
 

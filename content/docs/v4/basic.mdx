@@ -1,7 +1,7 @@
 ---
 title: Serialize and Deserialize
 seoTitle: "Serialize and Deserialize in C# – Nino v4 Docs"
-description: "Serialize and deserialize with NinoSerializer and NinoDeserializer, reuse buffers and instances, and handle runtime types."
+description: "Serialize and deserialize with NinoSerializer and NinoDeserializer, reuse buffers and instances, handle runtime types and catch invalid data."
 icon: Play
 ---
 
@@ -11,10 +11,14 @@ icon: Play
     'recommended-usage': '/en/docs/v4/basic#reusing-a-buffer',
     'using-a-writer': '/en/docs/v4/basic#several-values-in-one-buffer',
     'deserializing-into-an-existing-value': '/en/docs/v4/basic#into-an-existing-value',
+    'multi-segment-data': '/en/docs/v4/advanced/streams#readonlysequence-input',
+    'deep-object-graphs': '/en/docs/v4/reference-tracking#deep-object-graphs',
   }}
 />
 
 `NinoSerializer` and `NinoDeserializer` (namespace `Nino.Core`) are the whole runtime API. Both are static and **thread safe**: call them from any number of threads without locking. Per-call state (the <Term id="scratch-buffer">scratch buffer</Term> Nino serializes into, reference tables) is kept per thread, and no hot path writes shared memory.
+
+This page covers the calls you use every day. [High-Performance Serialization](/en/docs/v4/advanced/high-performance) takes the same calls down to no allocation at all.
 
 The examples on this page serialize an `Order` like this one:
 
@@ -64,7 +68,7 @@ byte[] bytes = NinoSerializer.Serialize(order);
 
 ### Reusing a Buffer
 
-`Serialize<T>(value)` allocates one `byte[]` for the result. For a [fixed-size type](/en/docs/v4/performance#fixed-size-types), and for an array or list of fixed-size elements, that array is allocated at its final size and written in place; other values are written into a per-thread scratch buffer and copied out. To allocate nothing, serialize into a buffer you keep.
+`Serialize<T>(value)` allocates one `byte[]` for the result. For a <Term id="fixed-size">fixed-size type</Term>, and for an array or list of fixed-size elements, that array is allocated at its final size and written in place ([Fixed-Size Types](/en/docs/v4/performance#fixed-size-types) says how); other values are written into a per-thread scratch buffer and copied out. To allocate nothing, serialize into a buffer you keep.
 
 `NinoArrayBufferWriter` is Nino's own `IBufferWriter<byte>`, backed by `ArrayPool<byte>.Shared` (or a pool you pass in), and Nino writes into it **in place**. Any other `IBufferWriter<byte>` (.NET's `ArrayBufferWriter<byte>`, a `PipeWriter`, a writer that wraps a `Stream`) costs one extra copy at the end.
 
@@ -81,18 +85,13 @@ NinoSerializer.Serialize(order, buffer);       // no allocation this time
 
 The buffer grows by renting a larger array from the pool. If you know roughly how large your messages are, size it up front with `new NinoArrayBufferWriter(initialCapacity)` or `EnsureCapacity(sizeHint)`; `Capacity` and `FreeCapacity` report the array's size and the room left.
 
-To serialize straight into buffers you manage, pass your own `ArrayPool<byte>`: `new NinoArrayBufferWriter(initialCapacity, pool)` rents every array from that pool and returns them to it as it grows and on `Dispose()`. A server that allocates its socket buffers on the pinned object heap, for example, can then serialize messages directly into them, with no extra copy. Growing returns the previous array to the pool, so take `WrittenMemory` after the last write and use it only until the next write or `ResetWrittenCount()`.
-
-```csharp
-// pinnedPool: an ArrayPool<byte> of your own, e.g. of GC.AllocateUninitializedArray<byte>(n, pinned: true) arrays
-var buffer = new NinoArrayBufferWriter(4096, pinnedPool);
-```
-
 <Callout type="warn">
 
 A `NinoArrayBufferWriter` is **not** thread safe: use one per thread, per connection or per operation. When you no longer need it, call `Dispose()` to return its array to the pool.
 
 </Callout>
+
+Serializing into arrays you manage (a pool of your own), exact-size arrays and every other lever are in [High-Performance Serialization](/en/docs/v4/advanced/high-performance#levers).
 
 ### Several Values in One Buffer
 
@@ -132,16 +131,18 @@ void NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, ref object value
 void NinoDeserializer.DeserializeBoxed(ref Reader reader, ref object value, Type type);
 ```
 
-The data is a `ReadOnlySpan<byte>`: pass a `byte[]`, an `ArraySegment<byte>`, a `Span<byte>`, `Memory<byte>.Span` or a slice of any buffer you already have, without copying it.
+The data is a `ReadOnlySpan<byte>`: pass a `byte[]`, an `ArraySegment<byte>`, a `Span<byte>`, `Memory<byte>.Span` or a slice of any buffer you already have, without copying it. A `ReadOnlySequence<byte>` (from `System.IO.Pipelines`) has no overload: [Multi-Segment Input](/en/docs/v4/advanced/streams#readonlysequence-input) reads one with at most one copy.
 
 ```csharp
 Order order = NinoDeserializer.Deserialize<Order>(bytes);
 Order fromSlice = NinoDeserializer.Deserialize<Order>(rented.AsSpan(0, received));
 ```
 
+Recursive types (trees, linked lists) can nest to any depth: neither side overflows the stack. An object referenced twice is written twice, and a cycle throws while serializing; [Reference Tracking](/en/docs/v4/reference-tracking) keeps shared objects and cycles, and explains deep graphs.
+
 ### Into an Existing Value
 
-Pass an existing value by `ref` and Nino fills it in place, reusing the instance and its nested objects, lists, arrays and dictionaries where it can. Pass `null` (or `default`) and a new value is created. Strings are compared with what the value already holds: a string with the same text is kept, and only a string whose text changed (or that was `null`) is read into a new instance. A `[NinoUtf8]` string is kept this way when its text is ASCII; non-ASCII UTF-8 text is always decoded into a new string.
+Pass an existing value by `ref` and Nino fills it in place (<Term id="reuse-deserialization">reuse deserialization</Term>), reusing the instance and its nested objects, lists, arrays and dictionaries where it can. Pass `null` (or `default`) and a new value is created. Strings are compared with what the value already holds: a string with the same text is kept, and only a string whose text changed (or that was `null`) is read into a new instance. A `[NinoUtf8]` string is kept this way when its text is ASCII; non-ASCII UTF-8 text is always decoded into a new string.
 
 ```csharp
 Order order = null;
@@ -163,30 +164,6 @@ var reader = new Reader(buffer.WrittenSpan);
 var header = NinoDeserializer.Deserialize<Header>(ref reader);
 var body = NinoDeserializer.Deserialize<Body>(ref reader);
 reader.ReleaseReferences();
-```
-
-### Multi-Segment Data
-
-There is no `ReadOnlySequence<byte>` overload. A sequence from `System.IO.Pipelines` is usually a single segment, which you can pass directly; otherwise, copy it into one contiguous block first:
-
-```csharp
-static Order Read(ReadOnlySequence<byte> data)
-{
-    if (data.IsSingleSegment)
-        return NinoDeserializer.Deserialize<Order>(data.First.Span);
-
-    int length = (int)data.Length;
-    byte[] rented = ArrayPool<byte>.Shared.Rent(length);
-    try
-    {
-        data.CopyTo(rented);
-        return NinoDeserializer.Deserialize<Order>(rented.AsSpan(0, length));
-    }
-    finally
-    {
-        ArrayPool<byte>.Shared.Return(rented);
-    }
-}
 ```
 
 ## Runtime Types
@@ -232,62 +209,9 @@ field.SetValue(target, current);
 
 </Callout>
 
-## Deep Object Graphs
-
-Recursive types (a linked list, a tree, a node that holds another node) can nest to any depth. Nino writes the first 128 levels of nested objects in place; an object nested deeper is **deferred**: written later from a shallower level, and read back the same way. As a result:
-
-- Writing and reading use a bounded amount of stack, however deep the graph is: a 100,000-node linked list round-trips on a 512 KB thread stack.
-- Data cannot be crafted to overflow the reader's stack, so recursive types are safe in messages from untrusted sources.
-- Data nested less than 128 levels deep is not affected: its bytes do not change.
-
-```csharp
-[NinoType]
-public class TreeNode
-{
-    public int Value;
-    public List<TreeNode> Children;
-}
-
-// As deep as you like: no StackOverflowException on either side.
-byte[] bytes = NinoSerializer.Serialize(deepTree);
-var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
-```
-
-A recursive type like `TreeNode` needs no `trackReferences` as long as the data is a tree, where each node is referenced once. If a node appears twice or the graph has a cycle, mark the type [`trackReferences: true`](/en/docs/v4/reference-tracking). Without it, a shared node is written as separate copies, and a cycle (`a.Next = b; b.Next = a;`) is detected while writing and throws an `InvalidOperationException` that names the type and points to `trackReferences`, so it never loops forever.
-
-A deferred object is created and stored in its member or collection element as soon as Nino reaches that member, and its members are read later in the same call, so reuse deserialization and `[NinoPooled]` still reuse every instance. Two kinds of classes cannot be deferred like that and are always nested in place:
-
-- classes created by their **constructor** (positional records, init-only or read-only members), since there is no instance until their members are read;
-- classes **compared by value** (records, classes that override `GetHashCode` or implement `IComparable`), since a `HashSet<T>`, dictionary key or sorted collection could hold one before its members are read.
-
-A graph of such classes nested deeper than [`NinoSettings.MaxDepth`](/en/docs/v4/security#limits) (512 levels by default) throws, counting the open bodies of structs that hold themselves around them too, on both sides: an `InvalidOperationException` when it is serialized, a `NinoDataException` when such data is read. Give a deeply recursive type a parameterless constructor and settable members.
-
 ## Invalid Data
 
-Nino is built to read data from sources you do not trust: a network peer, a file a user hands you, a request body. Data crafted against a reader cannot crash the process, read past the end of the input, allocate out of proportion to its size, or make Nino create a type you did not declare:
-
-- **Lengths are checked before anything is allocated.** Every count is checked against the bytes left, at the fewest bytes an element takes, and a collection allocates ahead of its elements at most 16 times the bytes left in the input (16 KB at least): a count beyond that is grown into as elements are actually read. Data that claims a billion elements in a few bytes is rejected.
-- **The stack stays bounded.** Objects nested more than 128 levels deep are read later, from a shallow level, and what cannot wait (types built by their constructor or compared by value, structs and collections that hold themselves) is limited to [`NinoSettings.MaxDepth`](/en/docs/v4/security#limits) (512 by default), with the stack checked on the way: deeper data throws instead of overflowing the stack. See [Deep Object Graphs](#deep-object-graphs).
-- **Only the types you declared.** The data holds type ids, never type names: a polymorphic value can only be one of the declared type's registered subtypes, and a back reference must point to an object already read, of the slot's type. `System.Type` is not serializable, on purpose.
-- **A failed read leaves no stale memory.** Reading into an existing value never leaves an array of uninitialized memory in it when the data turns out short or is rejected half way (a `bool` or presence byte other than 0 or 1, a value [Untrusted mode](/en/docs/v4/security#untrusted-mode) checks).
-
-Invalid data throws a `NinoDataException` (namespace `Nino.Core`, derived from `InvalidOperationException`) whose message starts with `Nino:`, and nothing else: a value its own type rejects (a malformed `Uri`, an unknown culture or time zone, a `DateTimeOffset` out of range, a null dictionary key) is reported the same way, with the original exception as `InnerException`. For example:
-
-- truncated data ("unexpected end of data");
-- an impossible length;
-- an unknown type id, or one that is not a subtype of the declared type;
-- data nested deeper than the limits above;
-- a `[NinoUtf8]` string whose bytes are not valid UTF-8 or do not match its char and byte counts;
-- bytes Nino never writes: a `bool` or <Term id="presence-byte">presence byte</Term> other than 0 or 1, a string header longer than it needs to be or with a first byte of `0x82` or above, a keyed member whose entry holds more bytes than its value, a section of deferred bodies that does not match its region;
-- a key repeated in a dictionary or set, or keys built to collide in a hash table ([hash flooding](/en/docs/v4/security#hash-flooding)).
-
-The limits can be tightened in `NinoSettings`, and `NinoSettings.Untrusted` adds checks that cost time on every read; see [Untrusted Data](/en/docs/v4/security).
-
-Catch it where the data comes in and treat the input as bad. What Nino cannot check is up to your code, as with a save file a user has edited:
-
-- **Values.** A value read in full is whatever the data says: a negative health, an enum value with no name, and, unless [`NinoSettings.Untrusted`](/en/docs/v4/security#untrusted-mode) is set, a `bool` of an unmanaged struct copied as a block whose byte is neither 0 nor 1. Constructors and setters run with those values. Validate what your logic depends on.
-- **The type.** The bytes carry no schema, so data written for a **different** type with a compatible layout reads without error. Version your payloads yourself (see [Evolving Your Data](/en/docs/v4/evolving-data) and the [file header](/en/docs/v4/advanced/persistence#add-a-file-header) pattern); `Deserialize<object>` accepts any registered type.
-- **The size of a message.** Allocation is bounded relative to the input, so bound the input: cap the size of a frame or request before you buffer it (see [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream)). Elements that really are in the data cost their size in memory: a large version-tolerant struct whose members are all left out takes 4 bytes on the wire.
+Nino is built to read data you do not trust (a network peer, a user's file, a request body): whatever the bytes, a read never crashes the process, reads past the input or allocates out of proportion to it. Invalid data (truncated, an impossible length, an unknown type id, bytes Nino never writes) throws one exception, [`NinoDataException`](/en/docs/v4/security#ninodataexception) (namespace `Nino.Core`), whose message starts with `Nino:`. Catch it where the data comes in and drop the input. Data someone could craft also needs `NinoSettings.Untrusted` and a size cap of your own: read [Untrusted Data](/en/docs/v4/security) before you ship.
 
 Words these docs use with a specific meaning (top-level call, formatter, raw, slot and more) are in the [Glossary](/en/docs/v4/glossary).
 

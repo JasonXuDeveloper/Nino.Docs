@@ -1,10 +1,12 @@
 ---
 title: 引用追踪
-description: "序列化含共享引用与循环引用的对象图：按类型开启，不开启的类型没有任何开销。"
+description: "序列化含共享引用与循环引用的对象图：按类型开启，不开启的类型没有任何开销。对象图再深，栈的用量也有上限。"
 icon: Share2
 ---
 
-默认情况下，一个对象被引用两次就写两次，读回来成了两个实例；序列化带环的对象图会抛 `InvalidOperationException`（见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)）。给类加上 `trackReferences: true`，对象图就能原样保留。它的所有子类型也都会追踪，哪怕子类型自己声明的 `[NinoType]` 没写这个选项：
+默认情况下，Nino 把对象图当成一棵树来写。同一个对象引用两次就写两次，读回来是两个实例。对象图里有环（`a.Next = b; b.Next = a;`）时，序列化会检测出来，抛出 `InvalidOperationException`，消息里指明类型、提示加上 `trackReferences`，不会无限循环。很深的树什么都不用加，见[深层对象图](#deep-object-graphs)。
+
+给类加上 `trackReferences: true`，对象图就能原样保留。它的所有子类型也都会追踪，哪怕子类型自己声明的 `[NinoType]` 没写这个选项：
 
 ```csharp
 [NinoType(trackReferences: true)] // [!code highlight]
@@ -68,6 +70,36 @@ var loaded = NinoDeserializer.Deserialize<List<Employee>>(bytes);
 
 </Callout>
 
+## 深层对象图 [#deep-object-graphs]
+
+递归类型（链表、树、节点里又包含节点）可以嵌套任意深，开不开 `trackReferences` 都一样。前 128 层嵌套的对象，Nino 在原处直接写入；更深的对象会成为<Term id="deferred-object" lang="zh">推迟的对象</Term>：之后从较浅的层级写入，读取时也一样。因此：
+
+- 无论对象图有多深，写入和读取占用的栈都有上限：10 万个节点的链表在 512 KB 栈的线程上也能正常往返。
+- 无法构造出让读取方栈溢出的数据，所以递归类型可以放心用在来自不可信来源的消息里。
+- 嵌套不到 128 层的数据不受影响，写出的字节完全不变。
+
+```csharp
+[NinoType]
+public class TreeNode
+{
+    public int Value;
+    public List<TreeNode> Children;
+}
+
+// 多深都可以：两边都不会 StackOverflowException。
+byte[] bytes = NinoSerializer.Serialize(deepTree);
+var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
+```
+
+像 `TreeNode` 这样的递归类型，只要数据是一棵树（每个节点只引用一次），就不需要 `trackReferences`；某个节点出现两次，或者有环，才需要。
+
+推迟的对象在 Nino 读到存放它的成员或集合元素时就立即创建并放进去，它的成员则在同一次调用中稍后读取，所以复用反序列化和 `[NinoPooled]` 仍然会复用每一个实例。有两种类不能这样推迟，总是在原处嵌套：
+
+- 由**构造函数**创建的类（位置记录、init-only 或只读成员），因为成员读完之前还没有实例；
+- **按值比较**的类（记录、重写了 `GetHashCode` 或实现了 `IComparable` 的类），因为 `HashSet<T>`、字典的键或有序集合可能在成员读完之前就已经持有它。
+
+由这两种类组成的对象图，嵌套超过 [`NinoSettings.MaxDepth`](/zh/docs/v4/settings#limits)（默认 512 层）就会抛异常，外围包含自身的结构体里尚未结束的主体也计入层数，写和读都一样：序列化时抛 `InvalidOperationException`，读取这样的数据时抛 `NinoDataException`。需要深度递归的类型，请给它无参构造函数和可赋值的成员。
+
 ## 什么时候用 [#when-to-use-it]
 
 <Accordions type="single">
@@ -93,6 +125,6 @@ var loaded = NinoDeserializer.Deserialize<List<Employee>>(bytes);
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="复用与对象池" href="/zh/docs/v4/pooling">直接填充已有实例，新实例从对象池里取。</Card>
   <Card title="自定义格式化器" href="/zh/docs/v4/custom-formatters">用另一种方式编码某个成员，或让 Nino 支持新的类型。</Card>
+  <Card title="流与压缩" href="/zh/docs/v4/advanced/streams">在 Stream 上分帧、异步读写、多段输入、回调和压缩。</Card>
 </Cards>
