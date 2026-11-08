@@ -73,7 +73,7 @@ function panels(lang: Locale): Panel[] {
       value: 'rust',
       label: 'Rust',
       commands: [
-        `cargo add nino-serialization@${release.version} --features indexmap`,
+        `cargo add nino-serialization@=${release.version} --features indexmap`,
         'cargo add indexmap',
       ],
       note: generated[lang],
