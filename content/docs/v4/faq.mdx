@@ -95,3 +95,10 @@ Interceptors need Roslyn 4.8 or later (the .NET 8 SDK and later); Unity uses the
 ## Why does my hot path still allocate? [#still-allocates]
 
 Check, in order: you serialize into a reused `NinoArrayBufferWriter` (or another `IBufferWriter<byte>`) rather than calling `Serialize(value)`, which returns a new `byte[]`; you deserialize into an existing value with `ref`; a `Writer` or `Reader` you create yourself ends with `ReleaseReferences()`; arrays keep the same length (use `List<T>` for counts that vary); the classes Nino has to create are `[NinoPooled]`; and you measure after warming up. Text that changes is always a new string. See [What Allocates](/en/docs/v4/advanced/zero-allocation#what-allocates) and the [checklist](/en/docs/v4/advanced/zero-allocation#checklist).
+
+## Next Steps [#next-steps]
+
+<Cards>
+  <Card title="Analyzers" href="/en/docs/v4/analyzers">Every diagnostic, NINO001 to NINO033, and how to fix it.</Card>
+  <Card title="Best Practices" href="/en/docs/v4/best-practices">The choices to make before your data ships: format, sealing, buffers, reuse.</Card>
+</Cards>

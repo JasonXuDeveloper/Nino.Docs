@@ -95,3 +95,10 @@ Nino.Core 的 net8.0 和 net10.0 版本还带有裁剪和 Native AOT 标注：�
 ## 为什么我的热路径还在分配内存？ [#still-allocates]
 
 依次检查：序列化到复用的 `NinoArrayBufferWriter`（或其他 `IBufferWriter<byte>`），而不是调用会返回新 `byte[]` 的 `Serialize(value)`；用 `ref` 反序列化到已有的值；自己创建的 `Writer` 或 `Reader` 最后调用了 `ReleaseReferences()`；数组长度保持不变（数量会变化时用 `List<T>`）；Nino 需要新建的类标记了 `[NinoPooled]`；并且是在预热之后才测量。内容变化的文本总会产生新字符串。参见[哪些调用会分配内存](/zh/docs/v4/advanced/zero-allocation#what-allocates)和[检查清单](/zh/docs/v4/advanced/zero-allocation#checklist)。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="分析器" href="/zh/docs/v4/analyzers">NINO001 到 NINO033 每条诊断的含义和修复方法。</Card>
+  <Card title="最佳实践" href="/zh/docs/v4/best-practices">数据发布之前要做的选择：格式、密封类、缓冲区、复用。</Card>
+</Cards>
