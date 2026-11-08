@@ -209,6 +209,10 @@ Nino validates every length inside the payload against the bytes left before all
 
 </Callout>
 
+<Callout title="A frame that will not read">
+Run its bytes through [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect): it shows which member each byte belongs to and, for malformed data, the offset and the check that failed. Pipe a hex dump in with `--hex`, and skip your length prefix with `--offset`.
+</Callout>
+
 ## Connect It to a Socket [#connect-to-a-socket]
 
 `FrameWriter` and `FrameReader` work on a `PipeWriter` and a `PipeReader`. Over a plain socket, make both from its `NetworkStream` with `PipeWriter.Create` and `PipeReader.Create` (Kestrel's connection handlers hand you a pipe directly). A complete program that sends two messages over loopback TCP and prints what the server reads:

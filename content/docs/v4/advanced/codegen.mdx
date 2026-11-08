@@ -188,6 +188,41 @@ nino-gen reports in MSBuild's message format, so a build shows them as warnings 
 nino-gen : warning NINOGEN002: Samples.Nest`1 is not written to Go: it holds itself with other type arguments, through Samples.Nest`1.
 ```
 
+## Inspecting a Message [#inspect]
+
+`nino-gen inspect` reads one message with the layouts your assembly publishes and prints what each byte is: every member with its offset, length, encoding and value, the type each type id names, keyed entries with their keys (unknown keys as skipped bytes), the members older data lacks, reference headers and deferred bodies. Use it when bytes from another language, a packet capture, a log or a save file do not read, or read to something you did not expect.
+
+```shell
+nino-gen inspect --assembly publish/Shop.Contracts.dll --type Shop.Contracts.Order order.bin
+xxd -p frame.bin | nino-gen inspect --assembly publish/Shop.Contracts.dll --type Shop.Contracts.Order --hex --offset 4
+```
+
+| Option | |
+| --- | --- |
+| `--assembly`, `--references` | As for code generation. The assembly is required: positional data carries no names, lengths or types, so it cannot be read without the layouts. |
+| `--type` | The type the message was written as, by its runtime-form name: `Namespace.Outer+Inner`, `Namespace.Box<System.Int32>`, `System.Collections.Generic.List<Namespace.Point>`. |
+| `<file>` | The message; standard input when it is left out or is `-`. |
+| `--hex` | The input is hex text; whitespace, `,`, `:`, `-` and `0x` between byte pairs are ignored. |
+| `--offset` | Start at this byte, for a frame inside a bigger buffer (after your length prefix, for example). Offsets in the output are the input's. |
+| `--json` | Write the tree as JSON for tools: each node's `name`, `type`, `encoding`, `offset`, `length` and `value`, with `error` and `trailing` at the top. |
+
+A keyed message written by an older version, read as the current type:
+
+```text
+       0      61  value: Conformance.KeyedV2  (keyed)
+       0       1    presence = 1
+       1       4    length = 56
+       5      12    Hp: int [raw(4)] = 42  (key 0x99A16761 (a former name))
+      17      12    Name: string [string] = "old"  (key 0x3085B3E2; Latin-1, 3 char(s))
+      29      16    (unknown key)  (key 0xDCA8A053: 8 byte(s) skipped)
+      45      16    Score: long [raw(8)] = 1152921504606846976  (key 0x044AB14D)
+      61       0    Level  (no entry (key 0xEAA8149B): default value)
+```
+
+- It makes every check a reader makes on [untrusted data](/en/docs/v4/security#untrusted-mode), so hostile bytes cannot crash or hang it. On malformed data it prints what it read, then the offset and the check that failed (`nino-gen: malformed data at offset 1: type id 0xAD792380 is Conformance.Cat, not a Conformance.Dog`), and exits with code 2; a mistake on the command line exits with 1.
+- Bytes after the value are reported with their offset, not read, so you can see where the next frame starts.
+- A member written by a [custom formatter](/en/docs/v4/custom-formatters) is shown as its bytes inside a keyed entry or as the last member of a version-tolerant type; anywhere else nothing says where its bytes end, and reading stops there.
+
 ## Types in Each Language [#types]
 
 Each `[NinoType]` becomes one type, and each member the type its language has for what .NET writes. The shapes that differ most:

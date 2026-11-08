@@ -188,6 +188,41 @@ nino-gen 按 MSBuild 的消息格式报告，所以构建会把它们显示为�
 nino-gen : warning NINOGEN002: Samples.Nest`1 is not written to Go: it holds itself with other type arguments, through Samples.Nest`1.
 ```
 
+## 查看一条消息 [#inspect]
+
+`nino-gen inspect` 按程序集发布的布局读一条消息，把每个字节是什么列出来：每个成员的偏移、长度、编码和值，类型 ID 对应的类型，键控条目的键（不认识的键显示为跳过的字节），旧数据里缺少的成员，引用头和延后读取的对象体。别的语言发来的数据、抓包、日志或存档读不出来，或者读出来的值不对时，用它来排查。
+
+```shell
+nino-gen inspect --assembly publish/Shop.Contracts.dll --type Shop.Contracts.Order order.bin
+xxd -p frame.bin | nino-gen inspect --assembly publish/Shop.Contracts.dll --type Shop.Contracts.Order --hex --offset 4
+```
+
+| 选项 | |
+| --- | --- |
+| `--assembly`、`--references` | 和生成代码时一样。必须给出程序集：按位置格式的数据里没有成员名、长度和类型，离开布局就读不了。 |
+| `--type` | 消息写出时的类型，用运行时形式的名字：`Namespace.Outer+Inner`、`Namespace.Box<System.Int32>`、`System.Collections.Generic.List<Namespace.Point>`。 |
+| `<file>` | 消息文件；省略或写 `-` 时从标准输入读。 |
+| `--hex` | 输入是十六进制文本；字节之间的空白、`,`、`:`、`-` 和 `0x` 都会被忽略。 |
+| `--offset` | 从这个字节开始读，用于大缓冲区里的一帧（比如跳过你自己的长度前缀）。输出里的偏移按整个输入算。 |
+| `--json` | 把结果树写成 JSON 给工具用：每个节点有 `name`、`type`、`encoding`、`offset`、`length` 和 `value`，顶层还有 `error` 和 `trailing`。 |
+
+用当前类型读一条旧版本写出的键控消息：
+
+```text
+       0      61  value: Conformance.KeyedV2  (keyed)
+       0       1    presence = 1
+       1       4    length = 56
+       5      12    Hp: int [raw(4)] = 42  (key 0x99A16761 (a former name))
+      17      12    Name: string [string] = "old"  (key 0x3085B3E2; Latin-1, 3 char(s))
+      29      16    (unknown key)  (key 0xDCA8A053: 8 byte(s) skipped)
+      45      16    Score: long [raw(8)] = 1152921504606846976  (key 0x044AB14D)
+      61       0    Level  (no entry (key 0xEAA8149B): default value)
+```
+
+- 它做的检查和读取[不可信数据](/zh/docs/v4/security#untrusted-mode)时完全一样，恶意字节不会让它崩溃或卡住。数据有问题时，它先输出已经读到的部分，再给出出错的偏移和没通过的检查（`nino-gen: malformed data at offset 1: type id 0xAD792380 is Conformance.Cat, not a Conformance.Dog`），以退出码 2 结束；命令行写错时退出码是 1。
+- 值后面多出来的字节只报告偏移，不往下读，方便你看出下一帧从哪里开始。
+- 由[自定义格式化器](/zh/docs/v4/custom-formatters)写出的成员，在键控条目里或作为版本容错类型的最后一个成员时，会原样显示它的字节；在其他位置，没有任何信息说明它的字节到哪里结束，读到这里就会停下。
+
 ## 各语言中的类型 [#types]
 
 每个 `[NinoType]` 生成一个类型，每个成员则取该语言里能表达 .NET 所写内容的类型。差别最大的几类：

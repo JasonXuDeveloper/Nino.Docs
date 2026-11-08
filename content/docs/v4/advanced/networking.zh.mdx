@@ -209,6 +209,10 @@ Nino 在分配内存之前，会把数据中的每个长度与剩余字节数比
 
 </Callout>
 
+<Callout title="某一帧读不出来">
+把它的字节交给 [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect)：它会显示每个字节属于哪个成员；数据有问题时，还会给出出错的偏移和没通过的检查。十六进制转储用 `--hex` 传进去，长度前缀用 `--offset` 跳过。
+</Callout>
+
 ## 接到 Socket 上 [#connect-to-a-socket]
 
 `FrameWriter` 和 `FrameReader` 工作在 `PipeWriter` 和 `PipeReader` 上。用普通 socket 时，用 `PipeWriter.Create` 和 `PipeReader.Create` 从它的 `NetworkStream` 创建这两个对象（Kestrel 的连接处理器直接给你 pipe）。下面是一个完整的程序：通过本机回环 TCP 发送两条消息，打印服务端读到的内容：
