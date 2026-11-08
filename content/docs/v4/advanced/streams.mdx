@@ -199,7 +199,7 @@ With `System.IO.Pipelines`, serialize straight into the `PipeWriter` (it is an `
 
 ## Multi-Segment Input (`ReadOnlySequence`) [#readonlysequence-input]
 
-A `PipeReader` or a `SequenceReader` hands you a `ReadOnlySequence<byte>`. Since rc.10 `NinoDeserializer` reads one directly: a single segment is deserialized in place, a multi-segment sequence is copied once into a pooled buffer, and the `ref` overload fills an instance you keep.
+A `PipeReader` or a `SequenceReader` hands you a `ReadOnlySequence<byte>`. Since rc.10 `NinoDeserializer` reads one directly: a single segment is deserialized in place, a multi-segment sequence is copied once (to the stack up to 512 bytes, else into a pooled array), and the `ref` overload fills an instance you keep.
 
 ```csharp
 Checkpoint read = NinoDeserializer.Deserialize<Checkpoint>(sequence);

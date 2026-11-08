@@ -13,7 +13,7 @@ icon: RotateCcwClock
 
 ### 新功能 [#new-8]
 
-- **直接读取 `ReadOnlySequence<byte>`**：新增 `NinoDeserializer.Deserialize<T>(in ReadOnlySequence<byte>)` 和 `Deserialize<T>(in ReadOnlySequence<byte>, ref T)`，`PipeReader` 或 gRPC 交给你的数据可以直接读。只有一段时原地读取，跨多段时先拷贝一次到池化的缓冲区。参见[多段输入](/zh/docs/v4/advanced/streams#readonlysequence-input)。
+- **直接读取 `ReadOnlySequence<byte>`**：新增 `NinoDeserializer.Deserialize<T>(in ReadOnlySequence<byte>)` 和 `Deserialize<T>(in ReadOnlySequence<byte>, ref T)`，`PipeReader` 或 gRPC 交给你的数据可以直接读。只有一段时原地读取，跨多段时拷贝一次：512 字节以内拷到栈上，更大的拷进池化数组。被拦截的调用和 span 一样直接调用生成的格式化器。参见[多段输入](/zh/docs/v4/advanced/streams#readonlysequence-input)。
 
 </Release>
 
