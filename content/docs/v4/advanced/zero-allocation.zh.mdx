@@ -190,7 +190,7 @@ while (TryReceive(out ReadOnlySpan<byte> frame))
 
 - 条数会变化时用 `List<T>`：列表保留原有容量，而数组只在新数据长度相同时复用。
 - 每条消息都会变的文本，每次都要分配新字符串，所以要保持 0 B，会变的值就用数字或 ID 表示，不要用文本。
-- Nino 需要新建的类（列表变长、`null` 成员有了值）标记为 [`[NinoPooled]`](/zh/docs/v4/advanced/high-performance#pool-what-you-create)，这样新实例从对象池里取，丢弃的实例也回到池中。
+- Nino 需要新建的类（列表变长、`null` 成员有了值）标记为 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)，这样新实例从对象池里取，丢弃的实例也回到池中。
 
 [零 GC 状态同步示例](/zh/docs/v4/pooling#example)把这些做法组合在了一起；按 `ref` 填充、`[NinoPooled]` 和自己的对象池怎么选，见[选哪种复用方式](/zh/docs/v4/pooling#which-mechanism)。
 
@@ -451,7 +451,7 @@ public class AllocationTests
 - [ ] 高频创建和丢弃的类标记为 `[NinoPooled]`。
 - [ ] 批量数据放在非托管结构体的数组或列表中；按下标访问的记录是非托管结构体，大小用 `GetFixedSize<T>()` 确定。
 - [ ] 没有子类型的类声明为 `sealed`（1 字节头部，无需分派）。
-- [ ] 热路径上的类型保持按位置格式，除非数据要跨版本保留；只有共享的类型才追踪引用（参见[格式](/zh/docs/v4/advanced/high-performance#choose-the-cheapest-format)）。
+- [ ] 热路径上的类型保持按位置格式，除非数据要跨版本保留；只有共享的类型才追踪引用（参见[格式](/zh/docs/v4/advanced/type-design#choose-the-cheapest-format)）。
 - [ ] 项目用 .NET 8 SDK 或更高版本编译，才能用上[拦截器](/zh/docs/v4/performance#interceptors)。
 - [ ] 有一个测试把热路径钉在 0 B。
 

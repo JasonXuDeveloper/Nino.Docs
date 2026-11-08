@@ -29,7 +29,7 @@ The saving is a few nanoseconds per call, which matters most when small values a
 - **Older compilers simply use the regular path**, which writes the same bytes. The Unity package ships the generator's Roslyn 4.3 build, so Unity projects never intercept.
 - Some calls are left alone, because intercepting them would gain nothing: raw values and arrays of raw elements (the regular path already copies them directly; only `Deserialize<T>(data)` of a raw value is intercepted, to a single load), `[NinoType]`s declared in another assembly (the calling project reaches their formatter only through the formatter cache, as the regular call does), and calls inside generic code.
 - `Serialize(value)` of a [fixed-size type](#fixed-size-types) is routed to code that writes straight into a `byte[]` of the type's size.
-- With `<NinoPrefetchLargeCollections>true</NinoPrefetchLargeCollections>` in the project, intercepted calls of large arrays and lists of classes also prefetch their objects; see [Large Collections of Scattered Objects](/en/docs/v4/advanced/high-performance#large-collections).
+- With `<NinoPrefetchLargeCollections>true</NinoPrefetchLargeCollections>` in the project, intercepted calls of large arrays and lists of classes also prefetch their objects; see [Large Collections of Scattered Objects](/en/docs/v4/advanced/type-design#large-collections).
 - Intercepted and regular calls always use the same formatter: formatters are declared with attributes and cannot be replaced at run time, so the generator knows the one the runtime would find.
 
 <Callout type="warn">
@@ -105,7 +105,7 @@ Where the padding comes from: by default (`LayoutKind.Sequential`) every field i
 
 `Pack` changes the struct's layout in memory as well: `Time` is no longer 8-byte aligned. That is free on x64 and ARM64, but changes the bytes on the wire, so pick the layout before you store data.
 
-How to keep your own types on this path (which collections to use, what turns raw copying off): [Keep Bulk Data Raw](/en/docs/v4/advanced/high-performance#keep-bulk-data-raw).
+How to keep your own types on this path (which collections to use, what turns raw copying off): [Keep Bulk Data Raw](/en/docs/v4/advanced/type-design#keep-bulk-data-raw).
 
 <Callout type="info">
 
@@ -183,7 +183,7 @@ What is **not** thread safe is the state you own: a `NinoArrayBufferWriter`, a `
 
 ## Polymorphism
 
-A polymorphic value costs a 4-byte type id. For subtypes declared in the same assembly as their base, the generator emits a dispatch chain for writing and a `switch` on the id for reading, so the common case calls the subtype's formatter directly; subtypes from other assemblies, generic subtypes and tracked types go through a lock-free registry; a generic base dispatches the subtypes of each of its closed types the same way. A sealed class needs only a presence byte and no dispatch; what to do about it is in [Seal Classes, and Dispatch Through a Base](/en/docs/v4/advanced/high-performance#sealed-and-polymorphic).
+A polymorphic value costs a 4-byte type id. For subtypes declared in the same assembly as their base, the generator emits a dispatch chain for writing and a `switch` on the id for reading, so the common case calls the subtype's formatter directly; subtypes from other assemblies, generic subtypes and tracked types go through a lock-free registry; a generic base dispatches the subtypes of each of its closed types the same way. A sealed class needs only a presence byte and no dispatch; what to do about it is in [Seal Classes, and Dispatch Through a Base](/en/docs/v4/advanced/type-design#sealed-and-polymorphic).
 
 ## Measuring
 

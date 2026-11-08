@@ -1,18 +1,30 @@
 ---
 title: 高性能序列化
-description: "影响 Nino 速度的每一个手段，何时使用、代价是什么：缓冲区写入器、大小精确的数组、Writer 与 Reader、复用反序列化、对象池、原始与固定大小的结构体、格式、密封类与多态类型、集合、散落对象的大型集合的预取、字符串、自定义格式化器、启动，以及如何测量。"
+description: "在调用上让 Nino 更快的所有手段，什么时候用、代价是什么：缓冲区写入器、大小精确的数组、Writer 与 Reader、直接从已有内存读取、复用反序列化、对象池、启动、每次调用的固定开销、线程安全，以及怎样测量。"
 icon: Gauge
 ---
 
 <AnchorRedirect
   map={{
     'checklist': '/zh/docs/v4/advanced/zero-allocation#checklist',
+    'keep-bulk-data-raw': '/zh/docs/v4/advanced/type-design#keep-bulk-data-raw',
+    'deterministic-bytes': '/zh/docs/v4/advanced/type-design#deterministic-bytes',
+    'choose-the-cheapest-format': '/zh/docs/v4/advanced/type-design#choose-the-cheapest-format',
+    'sealed-and-polymorphic': '/zh/docs/v4/advanced/type-design#sealed-and-polymorphic',
+    'collections': '/zh/docs/v4/advanced/type-design#collections',
+    'strings': '/zh/docs/v4/advanced/type-design#strings',
+    'custom-formatters': '/zh/docs/v4/advanced/type-design#custom-formatters',
+    'large-collections': '/zh/docs/v4/advanced/type-design#large-collections',
+    'mark-the-class': '/zh/docs/v4/pooling#ninopooled',
+    'deserialize-as-usual': '/zh/docs/v4/pooling#ninopooled',
+    'return-what-you-own': '/zh/docs/v4/pooling#ninopooled',
+    'pool-sizes': '/zh/docs/v4/settings#pools',
   }}
 />
 
-`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 你已经在[序列化与反序列化](/zh/docs/v4/basic)里用过了。它们本身已经很快，只是每次调用都要为结果分配内存。这一页讲怎样让同样的调用做到**每次调用 0 B**：先讲让序列化和反序列化都降到 0 B 的机制（每种调用写到哪里、从哪里读、开销多少），再讲你自己的类型里哪些选择能让调用保持快：格式、密封类与多态类、集合、字符串和自定义格式化器，最后是启动和如何测量。[下表](#levers)把所有手段列在一处。
+`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 你已经在[序列化与反序列化](/zh/docs/v4/basic)里用过了。它们本身已经很快，只是每次调用都要为结果分配内存。这一页讲怎样让同样的调用做到**每次调用 0 B**：每种调用写到哪里、从哪里读、开销多少，然后是启动、每次调用的固定开销、线程安全和怎样测量。类型本身怎么写才能让调用一直快（格式、密封类与多态类、集合、字符串、自定义格式化器），放在下一页[面向性能的类型设计](/zh/docs/v4/advanced/type-design)。[下表](#levers)把这两页的手段列在一处。
 
-性能部分从这一页开始，后面几页依次深入：[复用与对象池](/zh/docs/v4/pooling)（复用反序列化和对象池的具体规则）、[零分配模式](/zh/docs/v4/advanced/zero-allocation)（可以直接复制的做法和检查清单）、[构建配置](/zh/docs/v4/advanced/build-configuration)（Release、分层编译、Native AOT、Unity 的 IL2CPP 与 Burst）。内部实现（内联的格式化器、结构体布局）见[性能原理](/zh/docs/v4/performance)。
+性能部分从这一页开始，后面几页依次深入：[面向性能的类型设计](/zh/docs/v4/advanced/type-design)、[复用与对象池](/zh/docs/v4/pooling)（复用反序列化和对象池的具体规则）、[零分配模式](/zh/docs/v4/advanced/zero-allocation)（可以直接复制的做法和检查清单）、[构建配置](/zh/docs/v4/advanced/build-configuration)（Release、分层编译、Native AOT、Unity 的 IL2CPP 与 Burst）。内部实现（内联的格式化器、结构体布局）见[性能原理](/zh/docs/v4/performance)。
 
 ## 手段一览 [#levers]
 
@@ -24,20 +36,20 @@ icon: Gauge
 | [`Writer` 与 `Reader`](#several-values-back-to-back) | 多个值共用一个缓冲区 | 每条消息调用一次 `Flush` 和 `ReleaseReferences` |
 | [直接从已有内存反序列化](#deserialize-from-the-memory-you-have) | 任何时候 | 无 |
 | [复用反序列化（`ref`）](#deserialize-into-existing-objects) | 结构相同的消息，逐条处理 | 实例由你持有，每次读取都会改变它 |
-| [`[NinoPooled]`](#pool-what-you-create) 与[池容量](#pool-sizes) | 高频创建、保留或丢弃的实例 | 类必须是 `sealed partial`，自己持有的实例要 `ReturnToPool()`，池占用内存 |
-| [非托管结构体及其布局](#keep-bulk-data-raw) | 批量数据和热数据 | 布局是格式的一部分 |
+| [`[NinoPooled]`](#pool-what-you-create) 与[池容量](/zh/docs/v4/settings#pools) | 高频创建、保留或丢弃的实例 | 类必须是 `sealed partial`，自己持有的实例要 `ReturnToPool()`，池占用内存 |
+| [非托管结构体及其布局](/zh/docs/v4/advanced/type-design#keep-bulk-data-raw) | 批量数据和热数据 | 布局是格式的一部分 |
 | [固定大小的类型与 `GetFixedSize<T>()`](#exact-size-arrays) | 记录、槽位和大小精确的缓冲区 | 只能有非托管成员 |
-| [按位置格式](#choose-the-cheapest-format) | 由同一版本写入和读取的数据 | 数据不能改变结构 |
-| [只在需要处开启 `trackReferences`](#choose-the-cheapest-format) | 共享的对象或环 | 每个被追踪的对象 4 字节和一次查找 |
-| [密封类](#sealed-and-polymorphic) | 没有子类型的类 | 无 |
-| [共同的 `[NinoType]` 基类](#sealed-and-polymorphic) | 多态值 | 每个值 4 字节的类型 ID |
-| [原始元素的数组和列表](#collections) | 热路径上的集合 | 无 |
-| [默认的字符串编码](#strings) | 几乎所有情况；以 ASCII 为主、夹杂少量更宽字符的文本用 `[NinoUtf8]` | `[NinoUtf8]`：一次转码和一个字节数 |
-| [整块拷贝的自定义格式化器](#custom-formatters) | Nino 不认识的类型 | 带自定义格式化器的成员让它的类型不再按原始内存拷贝、不再是固定大小 |
+| [按位置格式](/zh/docs/v4/advanced/type-design#choose-the-cheapest-format) | 由同一版本写入和读取的数据 | 数据不能改变结构 |
+| [只在需要处开启 `trackReferences`](/zh/docs/v4/advanced/type-design#choose-the-cheapest-format) | 共享的对象或环 | 每个被追踪的对象 4 字节和一次查找 |
+| [密封类](/zh/docs/v4/advanced/type-design#sealed-and-polymorphic) | 没有子类型的类 | 无 |
+| [共同的 `[NinoType]` 基类](/zh/docs/v4/advanced/type-design#sealed-and-polymorphic) | 多态值 | 每个值 4 字节的类型 ID |
+| [原始元素的数组和列表](/zh/docs/v4/advanced/type-design#collections) | 热路径上的集合 | 无 |
+| [默认的字符串编码](/zh/docs/v4/advanced/type-design#strings) | 几乎所有情况；以 ASCII 为主、夹杂少量更宽字符的文本用 `[NinoUtf8]` | `[NinoUtf8]`：一次转码和一个字节数 |
+| [整块拷贝的自定义格式化器](/zh/docs/v4/advanced/type-design#custom-formatters) | Nino 不认识的类型 | 带自定义格式化器的成员让它的类型不再按原始内存拷贝、不再是固定大小 |
 | [`NinoSettings.Untrusted` 只用于不可信的输入](/zh/docs/v4/security#untrusted-mode) | 来自进程外的数据 | 字典或 Set 的每个键算一次带种子的哈希，每个值的 `bool`、`DateTime`、`decimal`、`DateOnly`、`TimeOnly` 字段各查一次（[开销](/zh/docs/v4/security#untrusted-cost)） |
 | [提前注册与预热](#startup) | 第一条消息也必须快 | 启动时间 |
 | [拦截器](#per-call-overhead) | 项目用 .NET 8 SDK 或更高版本构建 | 无 |
-| [`NinoPrefetchLargeCollections`](#large-collections) | 类的数组或列表大于 CPU 缓存，且其中的对象被替换、打乱或排序过 | 不设置：无；设置：这类集合的每次顶层调用多一次长度判断 |
+| [`NinoPrefetchLargeCollections`](/zh/docs/v4/advanced/type-design#large-collections) | 类的数组或列表大于 CPU 缓存，且其中的对象被替换、打乱或排序过 | 不设置：无；设置：这类集合的每次顶层调用多一次长度判断 |
 | [Release 构建、Native AOT 与 IL2CPP 的设置](/zh/docs/v4/advanced/build-configuration#at-a-glance) | 要发布和测量的构建 | 代码不用改；有些设置构建更慢，抬高指令集基线后，旧 CPU 跑不了 |
 
 ## 序列化到复用的缓冲区 [#serialize-into-a-reused-buffer]
@@ -141,178 +153,19 @@ NinoDeserializer.Deserialize(payload, ref batch);   // 第一次调用构建对�
 NinoDeserializer.Deserialize(payload, ref batch);   // 之后的调用原地填充：0 B
 ```
 
-- 列表逐个元素复用，并保留原有容量，所以条数不同的批次也读进同一个列表。数组只在新数据**长度相同**时复用，否则会分配新数组。字典按键合并。
-- 非托管结构体的数组和列表，读写都是一次整块拷贝。
-- 无法原地填充的类型（位置记录、只有 `init` 或只有 getter 的成员）会重新创建。
-- 文本没变的字符串原样保留，不产生分配；文本变了才读成新字符串。非 ASCII 的 `[NinoUtf8]` 文本无论是否变化，每次都会解码成新字符串。
-- 已有实例被**丢弃**时（数据中为 `null`、列表变短、某个键消失、多态类型改变），它会交给原来存放它的成员或元素对应的[回收器](/zh/docs/v4/pooling#where-dropped-instances-go)（只交一次），而不是被悄悄覆盖。正因如此，复用反序列化才能安全地和对象池配合使用；参见[复用与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
+在热路径上：
 
-外层的循环怎么写、如何让字符串和条数变化不再分配内存，见[复用反序列化的结果](/zh/docs/v4/advanced/zero-allocation#reuse-what-you-deserialize)。什么时候按 `ref` 填充、什么时候用对象池、什么时候用自己的池，见[选哪种复用方式](/zh/docs/v4/pooling#which-mechanism)。
+- 每个持有者（一个连接、一个消费者）各留一个实例，读下一条消息之前先用完它：下一条消息会读进同一批对象。
+- 条数会变就用 `List<T>`：列表保留容量，数组只在新数据**长度相同**时才复用（见[集合](/zh/docs/v4/advanced/type-design#collections)）。
+- 字符串尽量少变：文本没变的字符串原样保留，文本变了就是一个新字符串（见[字符串](/zh/docs/v4/advanced/type-design#strings)）。
+
+哪些对象原地填充、哪些要重新创建、丢弃的实例去哪里，见[反序列化到已有实例](/zh/docs/v4/pooling#deserializing-into-existing-instances)。外层的循环怎么写，见[复用反序列化的结果](/zh/docs/v4/advanced/zero-allocation#reuse-what-you-deserialize)。
 
 ## 池化新建的对象 [#pool-what-you-create]
 
-复用反序列化复用的是你手里已有的对象，其余的交给 `[NinoPooled]`：每当 Nino 需要**新建**该类型的实例（你要反序列化的值本身、成员、变长列表中的新元素），都会先从池中取，被丢弃的实例也会自动回到池中。
+复用反序列化填的是你手里已有的对象。给类加上 `[NinoPooled]`，Nino 需要**新建**的实例（列表变长了、`null` 成员有了值、你要交给别处代码的消息）就从对象池里取，丢弃的实例也回到池里。这样即使消息的结构在变，池填满之后也是 0 B。
 
-<Steps>
-<Step>
-
-### 标记类 [#mark-the-class]
-
-```csharp
-[NinoType, NinoPooled] // [!code highlight]
-public sealed partial class TelemetryEvent
-{
-    public long Timestamp;
-    public int SourceId;
-    public int Kind;
-    public List<double> Values;
-
-    // 在 Nino 第一次反序列化这个类型之前调用一次：预先填充对象池。
-    private static partial IEnumerable<TelemetryEvent> OnNinoPoolWarmup() =>
-        Enumerable.Range(0, 256).Select(_ => new TelemetryEvent { Values = new List<double>(8) });
-
-    // 由 ReturnToPool() 调用：释放 Nino 不反序列化的状态。
-    private partial void OnNinoPoolReturn() { }
-}
-```
-
-该类必须是 `sealed`、`partial`，并且能原地填充（NINO018、NINO002）。分析器提供一键修复，会补上这两个钩子方法（NINO019）。
-
-</Step>
-<Step>
-
-### 照常反序列化 [#deserialize-as-usual]
-
-```csharp
-[NinoType]
-public sealed class EventBatch
-{
-    public long Sequence;
-    public List<TelemetryEvent> Events;
-}
-
-EventBatch batch = null;
-NinoDeserializer.Deserialize(frame1, ref batch); // 事件从对象池中取出
-NinoDeserializer.Deserialize(frame2, ref batch); // 消失的事件回到对象池
-```
-
-</Step>
-<Step>
-
-### 归还你持有的实例 [#return-what-you-own]
-
-`Deserialize` 直接返回给你的实例，用完之后把它还回去：
-
-```csharp
-var telemetryEvent = NinoDeserializer.Deserialize<TelemetryEvent>(data);
-Process(telemetryEvent);
-telemetryEvent.ReturnToPool(); // 它的 List<double> 保留在实例上，下次复用
-```
-
-同一个实例归还两次会抛出 `InvalidOperationException`。未归还的实例会被 GC 正常回收。
-
-</Step>
-</Steps>
-
-### 池容量 [#pool-sizes]
-
-如果默认容量（共享栈 256 个，另外每个线程最多 64 个）不合适，可以在启动时调整：
-
-```csharp
-NinoSettings.SetPoolMaxRetained<TelemetryEvent>(4096);
-```
-
-上限越大，两次高峰之间留存的实例越多，而且会在进程的整个生命周期内占用内存；上限越小，超出池容量的高峰就要为放不下的部分分配内存。`NinoSettings.PoolMaxRetained` 设置之后创建的每个池的上限。两者都要在任何线程第一次调用之前设置：参见[设置](/zh/docs/v4/pooling#settings)。
-
-<Callout type="idea">
-
-已经有自己的对象池了？给一个公共静态工厂方法加上 `[NinoFactory]`，Nino 就会通过它创建实例；再用 `NinoSettings.SetRecycler<T>(...)` 注册处理函数，接收 Nino 丢弃的实例。参见[复用与对象池](/zh/docs/v4/pooling#creating-instances-with-ninofactory)。
-
-</Callout>
-
-## 批量数据保持原始内存格式 [#keep-bulk-data-raw]
-
-非托管数据会按原始内存整块拷贝：
-
-```csharp
-[NinoType]
-public struct Sample            // 非托管、顺序布局：按原始内存写出
-{
-    public long Timestamp;
-    public double Value;
-    public int SensorId;
-}
-
-[NinoType]
-public sealed class SampleBlock
-{
-    public long SeriesId;
-    public Sample[] Samples;    // 整个数组一次整块复制
-}
-```
-
-- 非托管元素的数组和 `List<T>` 只需一次拷贝。
-- 含有 `string` 或数组的结构体不能按原始内存写入；如果这个结构体处在热路径上，把这些字段挪到单独的类里。
-- `NinoFormat.VersionTolerant`、`NinoFormat.Keyed` 和自定义成员格式化器都会关闭该结构体的原始内存拷贝。
-- 只由非托管成员组成的结构体或密封类是[固定大小的](/zh/docs/v4/performance#fixed-size-types)：`NinoSerializer.Serialize(value)` 会把它直接写进大小正好的 `byte[]`，不经过暂存缓冲区，也没有拷贝。固定大小的记录还可以在文件或共享内存中按下标定位：见[固定大小的记录](/zh/docs/v4/advanced/zero-allocation#fixed-size-records)。
-
-**热路径上的结构体布局不留填充。** 没有填充的结构体是一次普通的块拷贝；有填充的结构体要经过一个把空隙清零的掩码拷贝，开销稍高；声明为 `[StructLayout(LayoutKind.Auto)]` 的结构体根本不按原始内存拷贝，而是逐个字段写入。把字段按从大到小排列，或设置 `Pack`，就能去掉填充。两者都会改变字节，所以要在保存数据之前定好布局。参见[结构体布局](/zh/docs/v4/performance#struct-layout)。
-
-### 确定性的字节 [#deterministic-bytes]
-
-Nino 会把填充字节清零，所以相等的值总是产生相同的字节，即使结构体是在未初始化的内存中构造的（`stackalloc`、`SkipLocalsInit`）。因此可以直接对数据做哈希或比较，例如跳过发送没有变化的状态：
-
-```csharp
-buffer.ResetWrittenCount();
-NinoSerializer.Serialize(state, buffer);
-ulong hash = XxHash64.HashToUInt64(buffer.WrittenSpan); // System.IO.Hashing
-if (hash != lastHash) { Send(buffer.WrittenSpan); lastHash = hash; }
-```
-
-## 选择开销最小的格式 [#choose-the-cheapest-format]
-
-每个 `[NinoType]` 都要选定自己的[格式](/zh/docs/v4/evolving-data)，以及是否追踪引用。默认之外的每个选项，都会让这个类型的每个值多花字节和时间，所以只给真正需要的类型使用：
-
-| 选项 | 额外字节 | 额外工作 |
-| --- | --- | --- |
-| 按位置（只写 `[NinoType]`） | 无 | 无：原始结构体按内存拷贝，[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)直接写进它的 `byte[]` |
-| `format: NinoFormat.VersionTolerant` | 每个对象 4 字节 | 每个对象一个长度；该类型不再按原始内存拷贝，也不再是固定大小 |
-| `format: NinoFormat.Keyed` | 每个成员 8 字节，外加每个对象 4 字节 | 每个成员一个键和一个长度，读取时每个成员要检查一次键；该类型不再按原始内存拷贝，也不再是固定大小 |
-| `trackReferences: true` | 每个被追踪的对象 4 字节 | 每个被追踪的对象一次身份查找，外加每次顶层调用一点固定开销 |
-
-- 由同一版本写入和读取的消息和缓存保持按位置格式；只有要跨版本保留的数据才用版本容错或键控成员，参见[如何选择](/zh/docs/v4/evolving-data#choosing)。
-- 只给真正被共享、或者构成环的类型开启引用追踪：在[组织结构图](/zh/docs/v4/reference-tracking)的例子里，只有 `Department` 被追踪，`Employee` 不付出任何开销。树形数据不论多深都不需要追踪。
-
-## 密封类，以及通过基类分派 [#sealed-and-polymorphic]
-
-Nino 在类的值前面写什么，取决于存放它的位置的声明类型（参见[多态值如何写入](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)）：
-
-- **没有子类型的类声明为 `sealed`。** 密封类只需一个存在字节，无需分派；未密封的类即使没有任何子类型，也要写 4 字节的类型 ID 并做一次类型检查。
-- **通过共同的 `[NinoType]` 基类分派。** 对于与基类声明在同一程序集中的子类型，生成的代码写入时依次做精确的类型检查，读取时按类型 ID `switch`，直接调用各子类型的格式化器。来自其他程序集的子类型、泛型子类型、开启引用追踪的类型，以及子类型超过 64 个的层次结构的写入，则改走无锁的注册表（参见[分派](/zh/docs/v4/polymorphism#dispatch)）。
-- **热路径上不要用 `object` 和装箱 API。** 声明为 `object` 的位置要通过包含所有 `[NinoType]` 的全局注册表分派；`SerializeBoxed`/`DeserializeBoxed` 按 `Type` 查找格式化器，还要对值类型装箱（参见[运行时类型](/zh/docs/v4/basic#runtime-types)）。
-
-## 选择能整块拷贝的集合 [#collections]
-
-- **批量数据放进原始元素的数组和列表。** 非托管值或原始结构体的 `T[]`、`List<T>` 只需一次整块拷贝；元素全是原始值的值元组和 `KeyValuePair` 的数组和列表也一样（CPU 支持时用 [SIMD](/zh/docs/v4/simd#dotnet) 重排）。完整列表见[非托管数据按原始内存拷贝](/zh/docs/v4/performance#raw-memory-for-unmanaged-data)。
-- **数量会变化时用 `List<T>`。** 复用反序列化会原地填充列表并保留它的容量；数组只有在新数据长度相同时才会被复用。字典按键合并。
-- **声明你希望创建的类型。** 声明为 `IList<T>`、`IEnumerable<T>` 或 `IReadOnlyList<T>` 的成员读回来是 `List<T>`，`ISet<T>` 读回来是 `HashSet<T>`，`IDictionary<TKey, TValue>` 读回来是 `Dictionary<TKey, TValue>`（参见[集合类型](/zh/docs/v4/types#collection-types)）。可空原始元素只有放在数组或 `List<T?>` 中才整块写入；声明为接口时，每个元素单独写入。
-- **集合是值。** 同一个集合出现在两个成员中会被写两次；引用追踪只覆盖 `[NinoType]` 类，不覆盖集合。
-
-## 字符串 [#strings]
-
-- 默认编码下，所有字符都不超过 U+00FF 的文本每个字符写一个字节，其他文本按 UTF-16 写出，都只需一遍。`[NinoUtf8]` 要做转码，还要多写字节数（UTF-8 不超过 127 字节时占 1 字节），只有以 ASCII 为主、夹杂少量更宽字符的文本才划算（参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)）。
-- 复用反序列化会保留内容没有变化的字符串，所以稳定的文本（名称、键、类似枚举的代码）每条消息不产生任何开销；`[NinoUtf8]` 字符串只有在内容是 ASCII 时才会保留。
-
-## 热路径上的自定义格式化器 [#custom-formatters]
-
-[自定义格式化器](/zh/docs/v4/custom-formatters)是一个结构体，Nino 直接调用它，JIT 会把它内联，和生成的格式化器一样。让它也走同样的快速路径：
-
-- **连续的非托管数据整块拷贝**：`Writer.Write<T>(ReadOnlySpan<T>)` 一次拷贝写出长度和全部元素；`WriteUnmanagedRaw` / `ReadUnmanagedRaw` 不带长度，直接读写你已有的内存。泛型格式化器的元素参数标上 `[NinoRaw]`，它就只会绑定到 Nino 按原始字节拷贝的类型（[示例](/zh/docs/v4/custom-formatters#example-grid)）。
-- **读入当前的值。** `Deserialize(ref Reader reader, ref T value)` 收到的是调用方持有的实例：结构合适时就填充它，并用 `reader.ReadString(current)` 保留它的字符串，文本没变时它直接返回 `current` 本身。这样复用反序列化经过你的类型时仍然是 0 B。
-- **分配之前先检查长度**：用 `ReadLength(minElementSize)`，剩余字节容纳不下那么多元素时它会抛出异常。
-- **开销：** 成员上的 `[NinoMemberFormatter]` 会让它所在的类型不再按原始内存拷贝，也不再是固定大小。热点结构体尽量使用内置的成员类型。
-
-`Writer` 和 `Reader` 提供的方法见 [Writer 与 Reader](/zh/docs/v4/custom-formatters#writer-and-reader)。
+热路径上要做到两点：从 Nino 手里拿走的每个池化实例（`Deserialize` 直接返回给你的值）都调用一次 `ReturnToPool()`；启动时按最大的一波高峰设好池容量，高峰超出池容量，放不下的部分就要分配内存。怎么声明、两个钩子方法和具体规则见[内置对象池：`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)，容量上限见[对象池与回收器](/zh/docs/v4/settings#pools)，用自己的池（`[NinoFactory]`、`SetRecycler<T>`）见[选哪种复用方式](/zh/docs/v4/pooling#which-mechanism)。
 
 ## 启动与第一次调用 [#startup]
 
@@ -323,28 +176,6 @@ Nino 在类的值前面写什么，取决于存放它的位置的声明类型（
 - 在这两步之前配置好 `NinoSettings`。
 
 **开销：** 启动时间，以及对象池现在持有的实例所占的内存。预热调用运行的是未经优化的 Tier-0 代码，所以它不能代替[测量](#measure)之前的预热。
-
-## 散落在内存中的大型集合 [#large-collections]
-
-类的 `T[]` 或 `List<T>` 中，每个元素都是堆上单独的对象。集合的顺序与对象分配的顺序一致时，CPU 的硬件预取器会在循环用到之前取来后面的对象；一旦对象在创建后被替换、打乱或排序，每个元素都是硬件无法预测的缓存未命中，集合比缓存大时，循环大部分时间都在等内存。
-
-在发起调用的项目中设置 MSBuild 属性 `NinoPrefetchLargeCollections`，Nino 就会自己提前取这些对象（软件预取）：
-
-```xml title="MyApp.csproj"
-<PropertyGroup>
-  <NinoPrefetchLargeCollections>true</NinoPrefetchLargeCollections>
-</PropertyGroup>
-```
-
-设置后，以下调用会预取：
-
-- `NinoSerializer.Serialize(collection)`（带或不带 `IBufferWriter<byte>`），以及 `NinoDeserializer.Deserialize(bytes, ref collection)` 读入元素个数相同的现有集合（其中的对象被复用，所以读入的正是这些散落的对象）；
-- 其中 `collection` 是非泛型 `[NinoType]` 类（包括抽象基类）的 `T[]` 或 `List<T>`，且该类不是[固定大小](/zh/docs/v4/performance#fixed-size-types)的；集合被直接写入或读取（而不是作为其他类型的成员），并且调用经由[拦截器](#per-call-overhead)转发（项目用 .NET 8 SDK 或更高版本构建），运行在 x64 或 Arm64 上的 .NET 8 或更高版本；
-- 并且只在集合大于 CPU 末级缓存的四分之一、且前几个对象不是按分配顺序排列时。其他集合的读写与之前完全相同。
-
-无论设置与否，字节一致。热路径会序列化这类集合时再设置，并用你自己的数据[测量](#measure)：放得进缓存的集合，或对象仍按分配顺序排列的集合，不会更快。Unity 项目不受影响：Unity 使用生成器的 Roslyn 4.3 版本编译，没有拦截器，这个属性在 Unity 中不起作用。
-
-**代价：** 不设置（默认）时没有任何代价：生成的代码与之前完全相同。设置后，这类集合的每次顶层调用都会在循环前判断长度，在我们的基准测试中，短集合的调用因此慢了几个百分点，所以只在处理这类集合的项目中设置。
 
 ## 每次调用的固定开销 [#per-call-overhead]
 
@@ -365,6 +196,7 @@ Nino 在类的值前面写什么，取决于存放它的位置的声明类型（
 ## 下一步 [#next-steps]
 
 <Cards>
+  <Card title="面向性能的类型设计" href="/zh/docs/v4/advanced/type-design">格式、密封类、集合、字符串和自定义格式化器怎么选，调用才能一直快。</Card>
   <Card title="复用与对象池" href="/zh/docs/v4/pooling">原地填充已有实例，新实例从对象池里取。</Card>
   <Card title="零分配模式" href="/zh/docs/v4/advanced/zero-allocation">每次调用 0 B 分配的热路径实践方案。</Card>
 </Cards>

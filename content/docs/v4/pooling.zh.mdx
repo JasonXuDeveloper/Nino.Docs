@@ -201,7 +201,7 @@ alert.ReturnToPool();                                   // 归还两次会抛异
   - `OnNinoPoolReturn()` 在 `ReturnToPool()` 时运行：释放 Nino 不会反序列化的状态。
 - 同一个实例归还两次会抛出 `InvalidOperationException`。没有归还的实例照常由 GC 回收。
 - `ReturnToPool()` 只归还这一个实例。它的列表、数组和嵌套对象（无论是否池化）仍然挂在它身上，下次借出时一起复用。这也意味着：**带着池化子对象的类型本身也应该池化**，否则它被丢弃时，子对象会跟着它一起交给 GC。如果想把某个子对象归还到它自己的池，请在 `OnNinoPoolReturn()` 中归还，并把字段设为 `null`。
-- 对象池是线程安全的：每个线程自己最多保留 64 个实例，共享栈默认最多保留 256 个。可以在启动时用 `NinoSettings.PoolMaxRetained` 或 `NinoSettings.SetPoolMaxRetained<T>(int)` 修改上限。
+- 对象池是线程安全的：每个线程自己最多保留 64 个实例，共享栈默认最多保留 256 个。可以在启动时用 `NinoSettings.PoolMaxRetained` 或 `NinoSettings.SetPoolMaxRetained<T>(int)` 修改上限，按最大的一波高峰来定：上限越大，两次高峰之间留下的实例越多，而且一直占用到进程结束；上限越小，超出池容量的高峰就要为放不下的部分分配内存。
 - `NinoPool<T>.Shared` 就是这个池本身：`Count` 是共享栈中的实例数（不含各线程自己保留的），`Clear()` 会丢弃所有池化实例（共享栈立即清空，各线程自己的栈在那个线程下次使用时清空）。
 
 ### 池化集合 [#your-own-pooled-collections]

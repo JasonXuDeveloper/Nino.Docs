@@ -40,7 +40,7 @@ The read and write paths take these four as constants: all four are frozen the f
 | Member | Type | Default | Allowed | What it does |
 | --- | --- | --- | --- | --- |
 | `PoolMaxRetained` | `int` | `256` | 0 or more | How many instances the shared stack of each `[NinoPooled]` pool keeps, for pools created from now on (a pool is created when its type is first deserialized or returned). [Settings](/en/docs/v4/pooling#settings) |
-| `SetPoolMaxRetained<T>(int maxRetained)` | method | | 0 or more; `T` a `[NinoPooled]` class | The same for `T`'s pool, whether or not it exists yet. Each thread keeps up to 64 more of its own. [Pool Sizes](/en/docs/v4/advanced/high-performance#pool-sizes) |
+| `SetPoolMaxRetained<T>(int maxRetained)` | method | | 0 or more; `T` a `[NinoPooled]` class | The same for `T`'s pool, whether or not it exists yet. Each thread keeps up to 64 more of its own. [Built-in Pools](/en/docs/v4/pooling#ninopooled) |
 | `SetRecycler<T>(Action<T> handler)` | method | none | `null` removes it | Receives each instance that reuse deserialization drops from a slot declared as `T`, instead of the pool. [Why Register a Recycler](/en/docs/v4/pooling#why-setrecycler) |
 
 These are not frozen, but like the limits they are plain fields read without synchronization: a change made while other threads serialize takes effect at some point, not at once for the calls in flight. Set them at startup too. `PoolMaxRetained` is applied when a pool is created, so it leaves the pools that already exist as they are.

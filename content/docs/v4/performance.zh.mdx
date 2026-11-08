@@ -29,7 +29,7 @@ static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 - **旧编译器直接走常规路径**，字节一样。Unity 包里是生成器的 Roslyn 4.3 版本，所以 Unity 项目从不拦截。
 - 有些调用不拦截，因为拦截了也没好处：原始值和原始元素数组（常规路径本来就直接拷贝；只有原始值的 `Deserialize<T>(data)` 会拦截，变成一次读取）；在别的程序集里声明的 `[NinoType]`（调用方项目只能经格式化器缓存拿到它的格式化器，和常规调用一样）；以及泛型代码里的调用。
 - [固定大小类型](#fixed-size-types)的 `Serialize(value)` 会改调专门的代码，直接写进大小正好的 `byte[]`。
-- 项目里设了 `<NinoPrefetchLargeCollections>true</NinoPrefetchLargeCollections>` 后，类的大数组和大列表的拦截调用还会预取里面的对象；见[散落在内存中的大型集合](/zh/docs/v4/advanced/high-performance#large-collections)。
+- 项目里设了 `<NinoPrefetchLargeCollections>true</NinoPrefetchLargeCollections>` 后，类的大数组和大列表的拦截调用还会预取里面的对象；见[散落在内存中的大型集合](/zh/docs/v4/advanced/type-design#large-collections)。
 - 拦截的调用和常规调用用的总是同一个格式化器：格式化器都用特性声明，运行时换不掉，所以生成器知道运行时会找到哪一个。
 
 <Callout type="warn">
@@ -105,7 +105,7 @@ public partial struct PackedSample // 12 字节，没有填充
 
 `Pack` 也会改变结构体在内存里的布局：`Time` 不再按 8 字节对齐。这在 x64 和 ARM64 上没有开销，但会改变写出的字节，所以存数据之前就要定好布局。
 
-怎样让你自己的类型一直走这条路径（用哪些集合、什么会关掉原始内存拷贝），见[批量数据保持原始内存格式](/zh/docs/v4/advanced/high-performance#keep-bulk-data-raw)。
+怎样让你自己的类型一直走这条路径（用哪些集合、什么会关掉原始内存拷贝），见[批量数据保持原始内存格式](/zh/docs/v4/advanced/type-design#keep-bulk-data-raw)。
 
 <Callout type="info">
 
@@ -183,7 +183,7 @@ int size = NinoSerializer.GetFixedSize<SensorReading>();  // 22
 
 ## 多态 [#polymorphism]
 
-多态值多花 4 字节的类型 ID。子类型和基类声明在同一个程序集里时，生成器为写入生成一串类型判断，为读取生成一个按 ID 的 `switch`，常见的情况直接调用子类型的格式化器；别的程序集里的子类型、泛型子类型和开了引用追踪的类型，经无锁注册表分派；泛型基类的每个封闭类型，其子类型也照这个方式分派。密封类只要一个存在字节，也不用分派；该怎么做见[密封类，以及通过基类分派](/zh/docs/v4/advanced/high-performance#sealed-and-polymorphic)。
+多态值多花 4 字节的类型 ID。子类型和基类声明在同一个程序集里时，生成器为写入生成一串类型判断，为读取生成一个按 ID 的 `switch`，常见的情况直接调用子类型的格式化器；别的程序集里的子类型、泛型子类型和开了引用追踪的类型，经无锁注册表分派；泛型基类的每个封闭类型，其子类型也照这个方式分派。密封类只要一个存在字节，也不用分派；该怎么做见[密封类，以及通过基类分派](/zh/docs/v4/advanced/type-design#sealed-and-polymorphic)。
 
 ## 测量 [#measuring]
 

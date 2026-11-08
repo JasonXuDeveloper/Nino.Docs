@@ -190,7 +190,7 @@ while (TryReceive(out ReadOnlySpan<byte> frame))
 
 - Use `List<T>` for counts that vary: a list keeps its capacity, while an array is reused only when the new data has the same length.
 - Text that changes with every message allocates the new string each time, so data that must stay at 0 B carries values that change as numbers or ids rather than text.
-- Mark the classes Nino has to create (a list grew, a `null` member got a value) [`[NinoPooled]`](/en/docs/v4/advanced/high-performance#pool-what-you-create), so they come from a pool and dropped ones go back to it.
+- Mark the classes Nino has to create (a list grew, a `null` member got a value) [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled), so they come from a pool and dropped ones go back to it.
 
 The [zero-GC state sync example](/en/docs/v4/pooling#example) combines all of these, and [Which Reuse Mechanism](/en/docs/v4/pooling#which-mechanism) compares filling by `ref`, `[NinoPooled]` and your own pools.
 
@@ -451,7 +451,7 @@ public class AllocationTests
 - [ ] Classes created and dropped at a high rate are `[NinoPooled]`.
 - [ ] Bulk data is kept in arrays or lists of unmanaged structs; indexed records are unmanaged structs, sized with `GetFixedSize<T>()`.
 - [ ] Classes that have no subtypes are sealed (1-byte header, no dispatch).
-- [ ] Hot types stay positional unless their data must outlive a release, and only shared types track references ([formats](/en/docs/v4/advanced/high-performance#choose-the-cheapest-format)).
+- [ ] Hot types stay positional unless their data must outlive a release, and only shared types track references ([formats](/en/docs/v4/advanced/type-design#choose-the-cheapest-format)).
 - [ ] The project builds with the .NET 8 SDK or later, to get [interceptors](/en/docs/v4/performance#interceptors).
 - [ ] A test pins the hot path at 0 B.
 

@@ -40,7 +40,7 @@ NinoSettings.PoolMaxRetained = 1024;        // 此后新建的每个池最多保
 | 成员 | 类型 | 默认值 | 取值 | 作用 |
 | --- | --- | --- | --- | --- |
 | `PoolMaxRetained` | `int` | `256` | 不小于 0 | 此后新建的 `[NinoPooled]` 池，共享栈最多保留几个实例（某个类型第一次反序列化或归还时，它的池才创建）。见[设置](/zh/docs/v4/pooling#settings) |
-| `SetPoolMaxRetained<T>(int maxRetained)` | 方法 | | 不小于 0；`T` 是 `[NinoPooled]` 类 | 只设 `T` 的池，不管这个池是否已经创建。每个线程另外还各留最多 64 个。见[池容量](/zh/docs/v4/advanced/high-performance#pool-sizes) |
+| `SetPoolMaxRetained<T>(int maxRetained)` | 方法 | | 不小于 0；`T` 是 `[NinoPooled]` 类 | 只设 `T` 的池，不管这个池是否已经创建。每个线程另外还各留最多 64 个。见[内置对象池](/zh/docs/v4/pooling#ninopooled) |
 | `SetRecycler<T>(Action<T> handler)` | 方法 | 无 | 传 `null` 即移除 | 复用反序列化时，从声明为 `T` 的槽位上丢下的实例交给这个处理函数，不再还回池里。见[为什么要注册回收器](/zh/docs/v4/pooling#why-setrecycler) |
 
 这几项不会冻结，但和限制一样都是普通字段，读的时候不加同步。其他线程正在序列化时修改，新值迟早生效，但正在进行的调用不一定立刻看到，所以也请在启动时设置。`PoolMaxRetained` 只在创建池时读取，已经存在的池不受影响。

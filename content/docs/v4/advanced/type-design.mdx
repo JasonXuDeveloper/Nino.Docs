@@ -1,0 +1,121 @@
+---
+title: Designing Types for Speed
+description: "The choices in your Nino types that decide their speed: raw unmanaged structs and their layout, deterministic bytes, the cheapest format, sealed classes and polymorphic bases, collections that copy as blocks, strings, custom formatters and prefetching large collections of scattered objects."
+icon: PencilRuler
+---
+
+[High-Performance Serialization](/en/docs/v4/advanced/high-performance) took each call to 0 B: reused buffers, reads from the memory you have, reuse deserialization and pools. How much work each call still does is decided in your types: whether a struct is copied as one block, which format a type writes, whether a class needs a type id, which collections you declare. This page goes through those choices, what each costs, and what to declare on a hot path; every lever of both pages is in [Levers at a Glance](/en/docs/v4/advanced/high-performance#levers).
+
+## Keep Bulk Data Raw [#keep-bulk-data-raw]
+
+Unmanaged data is copied as raw memory, in blocks:
+
+```csharp
+[NinoType]
+public struct Sample            // unmanaged, sequential: written as raw memory
+{
+    public long Timestamp;
+    public double Value;
+    public int SensorId;
+}
+
+[NinoType]
+public sealed class SampleBlock
+{
+    public long SeriesId;
+    public Sample[] Samples;    // one block copy for the whole array
+}
+```
+
+- Arrays and `List<T>` of unmanaged elements are one copy.
+- A struct with a `string` or an array inside is not raw; keep those in a separate class if the struct is hot.
+- `NinoFormat.VersionTolerant`, `NinoFormat.Keyed` and custom member formatters turn raw copying off for that struct.
+- A struct or sealed class made only of unmanaged members is [fixed-size](/en/docs/v4/performance#fixed-size-types): `NinoSerializer.Serialize(value)` writes it straight into a `byte[]` of its size, with no scratch buffer or copy. Records of a fixed size can also be addressed by index in a file or shared memory: see [Fixed-Size Records](/en/docs/v4/advanced/zero-allocation#fixed-size-records).
+
+**Lay out hot structs without padding.** A struct without padding is a plain block copy; one with padding is copied through a mask that zeroes the gaps, which costs a little more; a struct declared `[StructLayout(LayoutKind.Auto)]` is not raw at all and is written field by field. Order the fields largest first, or set `Pack` to remove the padding. Both change the bytes, so settle the layout before you store data. See [Struct Layout](/en/docs/v4/performance#struct-layout).
+
+### Deterministic Bytes [#deterministic-bytes]
+
+Nino zeroes padding bytes, so equal values always produce equal bytes, even for structs built in uninitialized memory (`stackalloc`, `SkipLocalsInit`). You can hash or compare payloads directly, for example to skip sending unchanged state:
+
+```csharp
+buffer.ResetWrittenCount();
+NinoSerializer.Serialize(state, buffer);
+ulong hash = XxHash64.HashToUInt64(buffer.WrittenSpan); // System.IO.Hashing
+if (hash != lastHash) { Send(buffer.WrittenSpan); lastHash = hash; }
+```
+
+## Choose the Cheapest Format [#choose-the-cheapest-format]
+
+Each `[NinoType]` picks its [format](/en/docs/v4/evolving-data) and whether it tracks references. Every option beyond the default costs bytes and time on every value of the type, so give it only to the types that need it:
+
+| Option | Extra bytes | Extra work |
+| --- | --- | --- |
+| Positional (a bare `[NinoType]`) | none | none: raw structs are copied as memory, and [fixed-size types](/en/docs/v4/performance#fixed-size-types) are written straight into their `byte[]` |
+| `format: NinoFormat.VersionTolerant` | 4 per object | one length per object; the type is no longer raw or fixed-size |
+| `format: NinoFormat.Keyed` | 8 per member, plus 4 per object | a key and a length per member, and a key check per member when reading; the type is no longer raw or fixed-size |
+| `trackReferences: true` | 4 per tracked object | an identity lookup per tracked object, plus a small fixed cost per top-level call |
+
+- Keep messages and caches that are written and read by the same build positional, and give version tolerance or keys only to the data that outlives a release: see [Choosing](/en/docs/v4/evolving-data#choosing).
+- Track references only on the types that are actually shared or form cycles: in the [organization chart](/en/docs/v4/reference-tracking), only `Department` is tracked, and `Employee` pays nothing. Tree-shaped data needs no tracking, however deep it is.
+
+## Seal Classes, and Dispatch Through a Base [#sealed-and-polymorphic]
+
+What Nino writes in front of a class value depends on the declared type of its slot ([How a Polymorphic Value Is Written](/en/docs/v4/polymorphism#how-a-polymorphic-value-is-written)):
+
+- **Seal classes that have no subtypes.** A sealed class costs a presence byte and no dispatch; a class that is not sealed costs a 4-byte type id and a type check, even when it has no subtype.
+- **Dispatch through a common `[NinoType]` base.** For subtypes declared in the base's assembly, generated code writes through a chain of exact type checks and reads through a `switch` on the type id, calling each subtype's formatter directly. Subtypes from other assemblies, generic subtypes, tracked types, and writes in hierarchies of more than 64 subtypes go through a lock-free registry instead ([Dispatch](/en/docs/v4/polymorphism#dispatch)).
+- **Keep `object` and the boxed API off hot paths.** A slot declared as `object` dispatches through the global registry of every `[NinoType]`, and `SerializeBoxed`/`DeserializeBoxed` find the formatter by `Type` and box value types ([Runtime Types](/en/docs/v4/basic#runtime-types)).
+
+## Choose Collections That Copy as Blocks [#collections]
+
+- **Bulk data in arrays and lists of raw elements.** A `T[]` or `List<T>` of unmanaged values or raw structs is one block copy, and so are arrays and lists of value tuples and `KeyValuePair`s of raw items (rearranged with [SIMD](/en/docs/v4/simd#dotnet) where the CPU allows). The full list is in [Raw Memory for Unmanaged Data](/en/docs/v4/performance#raw-memory-for-unmanaged-data).
+- **`List<T>` for counts that vary.** Reuse deserialization fills a list in place and keeps its capacity; an array is reused only when the new data has the same length. A dictionary is merged by key.
+- **Declare the type you want created.** A member declared as `IList<T>`, `IEnumerable<T>` or `IReadOnlyList<T>` is read back as a `List<T>`, `ISet<T>` as a `HashSet<T>`, `IDictionary<TKey, TValue>` as a `Dictionary<TKey, TValue>` ([Collection Types](/en/docs/v4/types#collection-types)). Nullable raw elements are one block only in an array or a `List<T?>`: declared as an interface, each element is written on its own.
+- **Collections are values.** The same collection in two members is written twice; reference tracking covers `[NinoType]` classes, not collections.
+
+## Strings [#strings]
+
+- The default encoding writes text whose chars are all at most U+00FF in one byte a char and other text as UTF-16, each in one pass. `[NinoUtf8]` costs a transcode and a byte count (one byte up to 127 bytes of UTF-8), and pays off only for text that is mostly ASCII with a few wider chars ([String Encoding](/en/docs/v4/defining-types#string-encoding)).
+- Reuse deserialization keeps a string whose text did not change, so stable text (names, keys, enum-like codes) costs nothing per message; a `[NinoUtf8]` string is kept only when its text is ASCII.
+
+## Custom Formatters on Hot Paths [#custom-formatters]
+
+A [custom formatter](/en/docs/v4/custom-formatters) is a struct that Nino calls directly and the JIT inlines, like a generated one. Keep it on the same fast paths:
+
+- **Copy unmanaged runs as one block**: `Writer.Write<T>(ReadOnlySpan<T>)` writes a length and the elements in one copy, and `WriteUnmanagedRaw` / `ReadUnmanagedRaw` move them without a length into memory you already have. Mark a generic formatter's element parameter `[NinoRaw]` so it is bound only to types Nino copies as raw bytes ([example](/en/docs/v4/custom-formatters#example-grid)).
+- **Read into the current value.** `Deserialize(ref Reader reader, ref T value)` receives the instance the caller holds: fill it when its shape fits, and keep its strings with `reader.ReadString(current)`, which returns `current` itself when the text is unchanged. Reuse deserialization then stays at 0 B through your type.
+- **Check lengths before allocating** with `ReadLength(minElementSize)`, which throws when the bytes left cannot hold that many elements.
+- **Cost:** a `[NinoMemberFormatter]` on a member means its type is no longer copied as raw memory and is no longer fixed-size. Give hot structs built-in member types where you can.
+
+The methods `Writer` and `Reader` offer: [Writer and Reader](/en/docs/v4/custom-formatters#writer-and-reader).
+
+## Large Collections of Scattered Objects [#large-collections]
+
+Each element of a `T[]` or `List<T>` of classes is an object of its own on the heap. While the collection's order is the order its objects were allocated in, the CPU's hardware prefetcher fetches the next ones before the loop needs them. Once objects were replaced, shuffled or sorted after they were created, each element is a cache miss the hardware cannot predict, and on a collection larger than the cache the loop spends most of its time waiting for memory.
+
+The MSBuild property `NinoPrefetchLargeCollections` makes Nino fetch those objects ahead itself (software prefetch), in the project that makes the calls:
+
+```xml title="MyApp.csproj"
+<PropertyGroup>
+  <NinoPrefetchLargeCollections>true</NinoPrefetchLargeCollections>
+</PropertyGroup>
+```
+
+With it set, these calls prefetch:
+
+- `NinoSerializer.Serialize(collection)`, with or without an `IBufferWriter<byte>`, and `NinoDeserializer.Deserialize(bytes, ref collection)` into an existing collection holding as many elements (its objects are reused, so the scattered ones are read into);
+- where `collection` is a `T[]` or `List<T>` of a non-generic `[NinoType]` class (an abstract base included) that is not [fixed-size](/en/docs/v4/performance#fixed-size-types), written or read directly (not as a member of another type) through a call the [interceptors](/en/docs/v4/advanced/high-performance#per-call-overhead) route (a project built with the .NET 8 SDK or later), running on .NET 8 or later on x64 or Arm64;
+- and only when the collection takes more than a quarter of the CPU's last-level cache and its first objects are not in allocation order. Every other collection is written and read as before.
+
+The bytes are the same either way. Set it when a hot path serializes such collections, and [measure](/en/docs/v4/advanced/high-performance#measure) it on your data: collections that fit in the cache, or whose objects are still in allocation order, gain nothing. Unity projects are unaffected: Unity compiles with the generator's Roslyn 4.3 build, which has no interceptors, so the property does nothing there.
+
+**Cost:** without the property (the default), nothing: the generated code is the same as before. With it, each top-level call of such a collection tests its length before its loop, which made calls on short collections a few percent slower in our benchmarks, so set it only in projects that handle such collections.
+
+## Next Steps [#next-steps]
+
+<Cards>
+  <Card title="Reuse and Pooling" href="/en/docs/v4/pooling">Fill existing instances in place and take new ones from pools.</Card>
+  <Card title="Zero-Allocation Patterns" href="/en/docs/v4/advanced/zero-allocation">Recipes for hot paths that allocate 0 B per call.</Card>
+  <Card title="Performance Internals" href="/en/docs/v4/performance">What Nino does under the hood: inlined formatters, raw memory, struct layout.</Card>
+</Cards>
