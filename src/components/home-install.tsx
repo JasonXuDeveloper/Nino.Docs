@@ -120,7 +120,7 @@ export function HomeInstall({ lang, docs }: { lang: Locale; docs: string }) {
   const all = panels(lang);
   const [selected, setSelected] = useState<Platform>('dotnet');
   return (
-    <div className="mt-8 flex w-full max-w-xl flex-col items-center">
+    <div className="mt-6 flex w-full max-w-xl flex-col items-center">
       <Segmented
         options={all.map(({ value, label }) => ({ value, label }))}
         value={selected}

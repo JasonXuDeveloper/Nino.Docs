@@ -32,7 +32,7 @@ export function baseOptions(lang: Locale): BaseLayoutProps {
       },
       {
         text: zh ? '性能' : 'Performance',
-        url: `/${lang}/docs/${latestVersion}/perf`,
+        url: `/${lang}/docs/${latestVersion}/benchmarks`,
         icon: <Gauge />,
         on: 'nav',
       },
