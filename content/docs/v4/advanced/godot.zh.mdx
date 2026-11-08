@@ -199,7 +199,7 @@ public partial class StateSync : Node
 ```
 
 - Godot 更底层的 API 同样收发 `byte[]`：`SceneMultiplayer.SendBytes` 及其 `PeerPacket` 信号，`PacketPeer.PutPacket` 和 `GetPacket`。`StreamPeer`（TCP）是字节流，所以每条消息前要加上长度：参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)。
-- 读入 `_latest` 时，每个数据包都复用同一个 `WorldState` 和它的列表，预热之后 Nino 不再分配内存；参见[处理消息时不分配内存](/zh/docs/v4/best-practices#zero-gc-messages)。
+- 读入 `_latest` 时，每个数据包都复用同一个 `WorldState` 和它的列表，预热之后 Nino 不再分配内存；参见[处理消息时不分配内存](/zh/docs/v4/advanced/zero-allocation#message-loop)。
 - 客户端和服务器分开更新时，消息要用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`：参见[滚动升级](/zh/docs/v4/advanced/networking#rolling-upgrades)。各端运行同一版本时，消息可以继续用按位置格式。
 - 多态的消息类型按基类发送（`Serialize<Message>(...)`），也按基类读取：参见[多态](/zh/docs/v4/polymorphism)。
 

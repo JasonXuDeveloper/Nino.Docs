@@ -90,7 +90,7 @@ Nino 仓库的 [docs/spec/wire-format.md](https://github.com/JasonXuDeveloper/Ni
 | 密封类 | 存在字节（[布局](/zh/docs/v4/evolving-data#layout-metadata)中为 `header=Presence`）：`0` 为 null，`1` 为有值 |
 | 其他类、接口、`object` | 运行时类型的 `int32` 类型 ID，`0` 为 null |
 
-- **类型 ID** 是类型全名（或其 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)）按 UTF-16 码元计算的 32 位 FNV-1a 哈希，所以数据里从不出现类型名；读取器也只接受它在这个槽位上认识的子类型。参见[多态](/zh/docs/v4/polymorphism)。
+- **类型 ID** 是类型全名（或其 [`[NinoFormerName]`](/zh/docs/v4/evolving-data#former-name)）按 UTF-16 码元计算的 32 位 FNV-1a 哈希，所以数据里从不出现类型名；读取器也只接受它在这个槽位上认识的子类型。参见[多态](/zh/docs/v4/polymorphism)。
 - **按位置**的主体就是整个继承层次的成员，从根类开始依次写出，不带长度，也不带名字。
 - **版本容错**的主体是一个 `int32` 长度，然后是各成员：旧版本的读取器跳过不认识的成员，新版本给缺少的成员赋默认值。
 - **键控**的主体是一个 `int32` 长度，然后每个成员一个 `(int32 键, int32 长度, 值)` 条目，键是成员名的 FNV-1a 哈希。条目顺序不限，不认识的键直接跳过。
@@ -109,7 +109,7 @@ Nino 仓库的 [docs/spec/wire-format.md](https://github.com/JasonXuDeveloper/Ni
 
 ## 深层嵌套 [#deep-nesting]
 
-每个读取器都必须实现推迟，否则读不了超过 128 个节点的链表。已经有 128 个类主体打开、又要再打开一个时，**可推迟**的类型只写头，不写主体：对象进入队列，主体稍后在较浅的位置写出，即顶层值之后；在版本容错或键控区域内，则写在最外层区域末尾的一个段里。Nino 能在读成员之前就创建出来的类型是可推迟的，布局元数据会标明这一点（`deferrable=true|false`）。嵌套不到 128 层的数据，字节里不会多出任何内容。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
+每个读取器都必须实现推迟，否则读不了超过 128 个节点的链表。已经有 128 个类主体打开、又要再打开一个时，**可推迟**的类型只写头，不写主体：对象进入队列，主体稍后在较浅的位置写出，即顶层值之后；在版本容错或键控区域内，则写在最外层区域末尾的一个段里。Nino 能在读成员之前就创建出来的类型是可推迟的，布局元数据会标明这一点（`deferrable=true|false`）。嵌套不到 128 层的数据，字节里不会多出任何内容。参见[深层对象图](/zh/docs/v4/reference-tracking#deep-object-graphs)。
 
 ## 布局元数据 [#layout-metadata]
 

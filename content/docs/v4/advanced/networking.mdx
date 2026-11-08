@@ -41,7 +41,7 @@ public sealed class Chat : Message
 
 - Declare the messages in the same assembly as `Message`: Nino then dispatches on them with generated code (a type check chain when writing, a `switch` on the id when reading) instead of a registry lookup. Seal them, so that a member declared as `PriceUpdate` costs a 1-byte header instead of a 4-byte id.
 - Put that assembly where both ends compile it, a class library the server and its .NET clients reference; for a Unity client, see [Sharing Types with a .NET Server](/en/docs/v4/advanced/unity#shared-types).
-- Type ids come from names, so renaming or moving a message class breaks old peers. Use [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name) when you rename one.
+- Type ids come from names, so renaming or moving a message class breaks old peers. Use [`[NinoFormerName]`](/en/docs/v4/evolving-data#former-name) when you rename one.
 - `NinoFormat.VersionTolerant` lets you add fields to each message later (not to `Message` itself); see [Rolling Upgrades](#rolling-upgrades). Subtypes inherit it with `[NinoType]`; if you give a message its own `[NinoType]`, repeat `format: NinoFormat.VersionTolerant` there.
 
 Dispatch with ordinary pattern matching:
@@ -187,7 +187,7 @@ public static class FrameReader
 
 <Callout type="info">
 
-Nino validates every length inside the payload against the bytes left before allocating, and a collection allocates ahead of its elements at most 16 times the bytes left, so a malicious frame cannot make it allocate out of proportion to its size; truncated data throws instead of reading past the end. Still cap the frame size yourself, as above, so a peer cannot make the pipe buffer gigabytes. Deeply nested payloads cannot overflow the server's stack either: objects nested more than 128 levels deep are deferred and read from a shallower level, and what cannot be deferred is limited to `NinoSettings.MaxDepth` (512 by default). See [Invalid Data](/en/docs/v4/basic#invalid-data) and [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs).
+Nino validates every length inside the payload against the bytes left before allocating, and a collection allocates ahead of its elements at most 16 times the bytes left, so a malicious frame cannot make it allocate out of proportion to its size; truncated data throws instead of reading past the end. Still cap the frame size yourself, as above, so a peer cannot make the pipe buffer gigabytes. Deeply nested payloads cannot overflow the server's stack either: objects nested more than 128 levels deep are deferred and read from a shallower level, and what cannot be deferred is limited to `NinoSettings.MaxDepth` (512 by default). See [Invalid Data](/en/docs/v4/basic#invalid-data) and [Deep Object Graphs](/en/docs/v4/reference-tracking#deep-object-graphs).
 
 </Callout>
 

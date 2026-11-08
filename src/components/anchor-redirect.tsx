@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 /**
  * Sends old deep links to the page their section moved to, e.g.
- * /en/docs/v4/advanced#former-name -> /en/docs/v4/defining-types#former-name
+ * /en/docs/v4/advanced#former-name -> /en/docs/v4/evolving-data#former-name
  * (the old site had all advanced topics on one page).
  */
 export function AnchorRedirect({ map }: { map: Record<string, string> }) {

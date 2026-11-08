@@ -78,11 +78,11 @@ Native AOT 下，错误信息会说运行时没法现场构建格式化器：只
 
 ## 为什么读取时报错说某个类型 ID 不是已注册的子类型？ [#unknown-type-id]
 
-数据里写的类型，读取方在声明类型下面找不到。常见原因：子类型所在的程序集还没加载（先加载就行，不用注册）；类型改名或挪了位置，却没加 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)；或者数据是按另一个声明类型写的。进程只读不写的封闭泛型子类型，要在启动时调用 `NinoPolymorphic.TryRegister<T>()`。如果是*写入*时报错说某个类型不是已注册的子类型，说明这个运行时类型不是 `[NinoType]`：它的基类设了 `inheritedBySubtypes: false`（NINO003），或者它所在的程序集没跑源生成器。参见[其他程序集中的子类型](/zh/docs/v4/polymorphism#subtypes-in-other-assemblies)。
+数据里写的类型，读取方在声明类型下面找不到。常见原因：子类型所在的程序集还没加载（先加载就行，不用注册）；类型改名或挪了位置，却没加 [`[NinoFormerName]`](/zh/docs/v4/evolving-data#former-name)；或者数据是按另一个声明类型写的。进程只读不写的封闭泛型子类型，要在启动时调用 `NinoPolymorphic.TryRegister<T>()`。如果是*写入*时报错说某个类型不是已注册的子类型，说明这个运行时类型不是 `[NinoType]`：它的基类设了 `inheritedBySubtypes: false`（NINO003），或者它所在的程序集没跑源生成器。参见[其他程序集中的子类型](/zh/docs/v4/polymorphism#subtypes-in-other-assemblies)。
 
 ## 为什么序列化时报错说对象图中有环？ [#cycle]
 
-某个对象经由成员又引用回自己，又没有类型追踪引用，就会一直写下去。把环上的类型标成 [`trackReferences: true`](/zh/docs/v4/reference-tracking)。报错说某个类型嵌套超过 512 层时也这样处理；另外，靠构造函数创建或按值比较的类没法推迟，所以深度递归的类型要有无参构造函数和可赋值的成员。参见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)。
+某个对象经由成员又引用回自己，又没有类型追踪引用，就会一直写下去。把环上的类型标成 [`trackReferences: true`](/zh/docs/v4/reference-tracking)。报错说某个类型嵌套超过 512 层时也这样处理；另外，靠构造函数创建或按值比较的类没法推迟，所以深度递归的类型要有无参构造函数和可赋值的成员。参见[深层对象图](/zh/docs/v4/reference-tracking#deep-object-graphs)。
 
 ## 为什么旧数据读不出来了，或者读出的值不对？ [#old-data]
 

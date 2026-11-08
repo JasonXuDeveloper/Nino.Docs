@@ -199,7 +199,7 @@ public partial class StateSync : Node
 ```
 
 - Godot's lower-level APIs take and return `byte[]` too: `SceneMultiplayer.SendBytes` and its `PeerPacket` signal, `PacketPeer.PutPacket` and `GetPacket`. A `StreamPeer` (TCP) is a stream of bytes, so put a length in front of each message: see [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream).
-- Reading into `_latest` reuses the same `WorldState` and its list on every packet, so Nino allocates nothing once warmed up; see [Handle Messages Without Allocating](/en/docs/v4/best-practices#zero-gc-messages).
+- Reading into `_latest` reuses the same `WorldState` and its list on every packet, so Nino allocates nothing once warmed up; see [Handle Messages Without Allocating](/en/docs/v4/advanced/zero-allocation#message-loop).
 - Clients and servers that are updated separately need `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` messages: see [Rolling Upgrades](/en/docs/v4/advanced/networking#rolling-upgrades). Peers running the same build can keep messages positional.
 - For a polymorphic message type, send the base class (`Serialize<Message>(...)`) and read it as the base: [Polymorphism](/en/docs/v4/polymorphism).
 
