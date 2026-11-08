@@ -588,6 +588,12 @@ export const payload = x64.payload;
  * `machine` (the source line of an architecture tab), also the runner and the
  * CPU, OS and .NET of that run.
  */
+/** The footnote of a case marked gcBound († in the charts) */
+export const gcNote = {
+  en: '† Vector4[10000] allocates a 160 KB array on the large object heap per call, so it mostly measures gen-2 garbage collections and varies between runs. The copy itself is one memcpy in both.',
+  zh: '† Vector4[10000] 每次调用都在大对象堆上分配 160 KB 的数组，测到的主要是第 2 代垃圾回收，每次运行结果都有波动。拷贝本身在两个库里都是一次 memcpy。',
+};
+
 export function sourceNote(zh: boolean, ds = x64, machine = false) {
   const { tag, publishedAt, environment, origin } = ds.source;
   const parts = [`Nino ${tag}`, publishedAt?.slice(0, 10)].filter(Boolean);

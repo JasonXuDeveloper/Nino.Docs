@@ -53,15 +53,15 @@ The code of every benchmark is in [Benchmark Code](#benchmark-code).
 
 ## Runtime Results [#runtime]
 
-Bars show time relative to MemoryPack (1.0); shorter is faster. Hover or focus a bar for the numbers. The charts compare Nino with MemoryPack; MessagePack and protobuf-net, once the synced report has them, are in the tables, where “· 2.00×” after a time says how many times faster Nino is in that case and “—” marks a case the library cannot express.
+The chart compares Nino with every other serializer measured: pick the architecture, serialize or deserialize, the group of cases and one library, or all of them. Each bar is that library's time as a multiple of Nino's (Nino = 1×), so a longer bar took longer; hover or focus a bar for the numbers. The tables below it hold every time, where “· 2.00×” after a time says how many times faster Nino is in that case and “—” marks a case the library cannot express.
+
+<DotnetChart lang="en" />
 
 ### Serialize (to a Reused Buffer Writer) [#serialize-to-a-reused-buffer-writer]
 
 One value or array, written into a reused buffer writer. Data types: [`SimpleTest`](#simpletest) and [`PolymorphicTest`](#polymorphictest).
 
 <RuntimeTable op="serialize" lang="en" />
-
-<BenchmarkChart chart="serialize" lang="en" table={false} />
 
 `SimpleStruct` (`int` + `DateTime`) is declared with `[StructLayout(LayoutKind.Sequential, Pack = 4)]`, so it is 12 bytes with no padding and every serializer copies it as one block. Without `Pack` it would be 16 bytes with 4 bytes of padding, which Nino zeroes on write; see [Struct Layout](/en/docs/v4/performance#struct-layout).
 
@@ -70,8 +70,6 @@ One value or array, written into a reused buffer writer. Data types: [`SimpleTes
 The same values, read back into new objects on every call. Data types: [`SimpleTest`](#simpletest) and [`PolymorphicTest`](#polymorphictest).
 
 <RuntimeTable op="deserialize" lang="en" />
-
-<BenchmarkChart chart="deserialize" lang="en" table={false} />
 
 <Callout type="info">
 

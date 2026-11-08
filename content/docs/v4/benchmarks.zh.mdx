@@ -53,15 +53,15 @@ icon: ChartColumn
 
 ## 运行时结果 [#runtime]
 
-柱条是相对 MemoryPack（1.0）的耗时，越短越快。悬停或聚焦柱条可以看具体数值。图表只比 Nino 和 MemoryPack；同步来的报告有了 MessagePack 和 protobuf-net 之后，它们出现在表格里：时间后面的 “· 2.00×” 是这个用例里 Nino 快几倍，“—” 表示这个库表达不了这个用例。
+下面的图把 Nino 和测过的每个序列化库放在一起比：可以选架构、序列化或反序列化、用例分组，以及单看某个库或全部一起看。每根条是那个库的耗时相当于 Nino 的几倍（Nino 为 1×），条越长，耗时越多；悬停或聚焦柱条可以看具体数值。完整数字在图下方的表格里：时间后面的 “· 2.00×” 是这个用例里 Nino 快几倍，“—” 表示这个库表达不了这个用例。
+
+<DotnetChart lang="zh" />
 
 ### 序列化（到复用的缓冲区写入器） [#serialize-to-a-reused-buffer-writer]
 
 把一个值或数组写入复用的缓冲区写入器。数据类型：[`SimpleTest`](#simpletest) 和 [`PolymorphicTest`](#polymorphictest)。
 
 <RuntimeTable op="serialize" lang="zh" />
-
-<BenchmarkChart chart="serialize" lang="zh" table={false} />
 
 `SimpleStruct`（`int` + `DateTime`）声明了 `[StructLayout(LayoutKind.Sequential, Pack = 4)]`，所以占 12 字节、没有填充，每个序列化库都整块拷贝它。不加 `Pack` 的话它占 16 字节，其中 4 字节是填充，Nino 写的时候会把填充清零；见[结构体布局](/zh/docs/v4/performance#struct-layout)。
 
@@ -70,8 +70,6 @@ icon: ChartColumn
 同样的值，每次调用都读回成新对象。数据类型：[`SimpleTest`](#simpletest) 和 [`PolymorphicTest`](#polymorphictest)。
 
 <RuntimeTable op="deserialize" lang="zh" />
-
-<BenchmarkChart chart="deserialize" lang="zh" table={false} />
 
 <Callout type="info">
 

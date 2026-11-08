@@ -414,6 +414,9 @@ function markdownComponents(lang: Locale, pageUrl: string) {
     UnityChart() {
       return null;
     },
+    DotnetChart() {
+      return null;
+    },
     RuntimesTables(props: ComponentProps<typeof RuntimesTables>) {
       asMarkdown();
       return RuntimesTables({ ...props, markdown: true });

@@ -12,6 +12,7 @@ import {
   FLOOR_NS,
   formatBytes,
   formatTime,
+  gcNote,
   isOnPar,
   type RuntimeCase,
   reuseSpeedup,
@@ -76,11 +77,6 @@ function seriesFor(zh: boolean) {
     },
   } satisfies Record<string, ChartSeries>;
 }
-
-const gcNote = {
-  en: '† Vector4[10000] allocates a 160 KB array on the large object heap per call, so it mostly measures gen-2 garbage collections and varies between runs. The copy itself is one memcpy in both.',
-  zh: '† Vector4[10000] 每次调用都在大对象堆上分配 160 KB 的数组，测到的主要是第 2 代垃圾回收，每次运行结果都有波动。拷贝本身在两个库里都是一次 memcpy。',
-};
 
 /** v4 under FLOOR_NS against a measurable time; `than` names the other side where the badges do */
 const tooFastBadge = (zh: boolean, than?: string) => ({

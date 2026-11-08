@@ -7,6 +7,7 @@
  */
 import { lazy, Suspense } from 'react';
 import { ArchTabs } from '@/components/bench-data';
+import type { RuntimeLang } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
 import type { BenchmarkChartProps } from './benchmark-charts';
 import { isArchChart } from './ids';
@@ -54,6 +55,9 @@ const Explorers = import.meta.env.SSR
       UnityChart: lazy(() =>
         import('./explorers').then((m) => ({ default: m.UnityChart })),
       ),
+      DotnetChart: lazy(() =>
+        import('./explorers').then((m) => ({ default: m.DotnetChart })),
+      ),
     };
 
 function Fallback() {
@@ -66,7 +70,7 @@ function Fallback() {
 }
 
 /** Go, Rust and TypeScript against their competitors, relative to Nino */
-export function RuntimesChart(props: { lang?: Locale }) {
+export function RuntimesChart(props: { lang?: Locale; only?: RuntimeLang }) {
   return (
     <Suspense fallback={<Fallback />}>
       <Explorers.RuntimesChart {...props} />
@@ -79,6 +83,15 @@ export function UnityChart(props: { lang?: Locale }) {
   return (
     <Suspense fallback={<Fallback />}>
       <Explorers.UnityChart {...props} />
+    </Suspense>
+  );
+}
+
+/** .NET: Nino v4 against MemoryPack, MessagePack, protobuf-net and v3, per architecture */
+export function DotnetChart(props: { lang?: Locale }) {
+  return (
+    <Suspense fallback={<Fallback />}>
+      <Explorers.DotnetChart {...props} />
     </Suspense>
   );
 }

@@ -30,7 +30,12 @@ import {
 } from '@/components/bench-data';
 import { BytePlayground } from '@/components/byte-playground';
 import { Bytes, Matrix } from '@/components/bytes';
-import { BenchmarkChart, RuntimesChart, UnityChart } from '@/components/charts';
+import {
+  BenchmarkChart,
+  DotnetChart,
+  RuntimesChart,
+  UnityChart,
+} from '@/components/charts';
 import { handleBlockFeedback } from '@/components/feedback/actions';
 import { FeedbackBlock } from '@/components/feedback/client';
 import { Glossary, Term } from '@/components/glossary';
@@ -96,6 +101,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     Accordions,
     BenchChart,
     BenchmarkChart,
+    DotnetChart,
     RuntimesChart,
     UnityChart,
     BenchSource,
