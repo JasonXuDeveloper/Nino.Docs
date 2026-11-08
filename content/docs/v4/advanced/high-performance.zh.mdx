@@ -165,7 +165,7 @@ NinoDeserializer.Deserialize(payload, ref batch);   // 之后的调用原地填�
 
 复用反序列化填的是你手里已有的对象。给类加上 `[NinoPooled]`，Nino 需要**新建**的实例（列表变长了、`null` 成员有了值、你要交给别处代码的消息）就从对象池里取，丢弃的实例也回到池里。这样即使消息的结构在变，池填满之后也是 0 B。
 
-热路径上要做到两点：从 Nino 手里拿走的每个池化实例（`Deserialize` 直接返回给你的值）都调用一次 `ReturnToPool()`；启动时按最大的一波高峰设好池容量，高峰超出池容量，放不下的部分就要分配内存。怎么声明、两个钩子方法和具体规则见[内置对象池：`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)，容量上限见[对象池与回收器](/zh/docs/v4/settings#pools)，用自己的池（`[NinoFactory]`、`SetRecycler<T>`）见[选哪种复用方式](/zh/docs/v4/pooling#which-mechanism)。
+热路径上要做到两点：从 Nino 手里拿走的每个池化实例（`Deserialize` 直接返回给你的值）都调用一次 `ReturnToPool()`；启动时按最大的一波高峰设好池容量，超出的部分就要分配内存。怎么声明、两个钩子方法和具体规则见[内置对象池：`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)，容量上限见[对象池与回收器](/zh/docs/v4/settings#pools)，用自己的池（`[NinoFactory]`、`SetRecycler<T>`）见[选哪种复用方式](/zh/docs/v4/pooling#which-mechanism)。
 
 ## 启动与第一次调用 [#startup]
 
