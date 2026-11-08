@@ -1,0 +1,232 @@
+---
+title: Rust
+seoTitle: "在 Rust 中使用 Nino：从 [NinoType] 生成类型和编解码器 – Nino v4 文档"
+description: "Rust crate nino-serialization 以及 nino-gen 为它生成的代码：生成的类型和编解码器、类型映射、.NET 值、derive、手写 impl、泛型、用 Shared 做的引用追踪和对不可信数据的检查。"
+icon: Cog
+---
+
+<AnchorRedirect map={{ 'guarantees': '/zh/docs/v4/advanced/rust#untrusted-data' }} />
+
+Rust 运行时（crate `nino-serialization`，库名 `nino`）读写 Nino 的[二进制格式](/zh/docs/v4/wire-format)。它的边界检查都是安全代码；只有两处允许 `unsafe`（其余部分为 `#![deny(unsafe_code)]`）：读写时转码字符串的模块，在小端和大端目标上用 Miri 测试；以及[引用追踪](#reference-tracking)中 `Shared::get` 的一个代码块，同样用 Miri 测试。它没有必需的依赖。每次发布都会以 Nino 的版本号把它发布到 crates.io。
+
+## 安装 [#install]
+
+```shell
+cargo add nino-serialization --features indexmap
+cargo add indexmap
+```
+
+nino-gen 生成的代码需要 `indexmap` 功能和 `indexmap` 本身：映射和集合是 `IndexMap` 和 `IndexSet`，保持线上顺序。使用 [`Maps="std"`](/zh/docs/v4/advanced/codegen#options) 时，它们是 `std::collections::HashMap` 和 `HashSet`，两者都不需要；这时它们按 `HashMap` 的迭代顺序写出，.NET 从与它写出的不同的字节中读出相同的值。使用 `Serde="true"` 时，给你的 crate 加一个 `serde` 功能，由它打开 `serde` 和 `nino-serialization/serde`。
+
+要生成代码，就声明一个 `<NinoCodegen Include="rust" Out="../client/src" />` 项（[在构建中生成](/zh/docs/v4/advanced/codegen#setup)）；它的选项是 `Serde`、`SerdeNames`、`Strings` 和 `Maps`（[选项](/zh/docs/v4/advanced/codegen#options)）。生成的代码需要 Rust 1.88 或更高版本。
+
+## 读写 [#functions]
+
+把生成的文件作为模块引入（它是生成的，所以关闭 rustfmt），再调用 crate 的函数。下面读的是 .NET 写出的 [TypeScript 例子](/zh/docs/v4/advanced/typescript#example)中的 `Order`：
+
+```rust title="main.rs"
+#[rustfmt::skip]
+#[path = "nino_types.rs"]
+mod protocol;
+
+use protocol::OrderRef;
+
+fn main() -> nino::Result<()> {
+    let bytes = std::fs::read("order.bin").expect("order.bin"); // NinoSerializer.Serialize(order) 写出的字节
+    let order: Option<OrderRef> = nino::deserialize(&bytes)?;   // Order 不是 sealed：带类型 ID 读取
+    assert_eq!(nino::serialize(&order)?, bytes);                // 再次得到相同的字节
+    Ok(())
+}
+```
+
+结构体读成它本身，密封类读成 `Option<Order>`，非密封类（比如 `Order`）读成 `Option<OrderRef>`，也就是列出这个位置允许的类型的枚举。
+
+| 函数 | |
+| --- | --- |
+| `serialize`、`serialize_into` | 按声明类型写出一个值，与 `NinoSerializer.Serialize<T>` 相同。`serialize_into` 追加到一个 `Vec`，出错时把它截回原来的长度。 |
+| `deserialize`、`deserialize_exact` | 读取一个值。`deserialize_exact` 还会拒绝值之后的字节。 |
+| `deserialize_into` | 读进已有的值，与 `NinoDeserializer.Deserialize(data, ref value)` 相同：成员原地读取，`Vec` 的缓冲区和元素被复用，映射和集合先清空再填充，多态值只在类型相同时复用。 |
+
+## 生成的代码 [#generated-code]
+
+编解码器完整写出（每个类型实现 `NinoRead`、`NinoWrite`、`NinoReadBody` 和 `NinoWriteBody`），而不是 `#[derive]` 属性，所以代码既不需要 derive crate，也不需要构建它的过程宏，并按布局中带的哈希检查旧键。每个类型都有 `NINO_TYPE_ID`、`NINO_TYPE_NAME` 和 `NINO_LAYOUT` 常量（`Cat::NINO_TYPE_ID`），通过 `nino::type_consts!(id, name, layout)` 声明，文档只在 crate 里写一次（泛型类型没有 `NINO_TYPE_ID`）；它的 `NinoReadBody` 和 `NinoWriteBody` impl 把各自的 `TYPE_ID` 设为同一个 ID，和 derive 一样。原始结构体的 `NinoRead` 和 `NinoWrite` impl 是 `nino::raw_read!()` 和 `nino::raw_write!()`。容纳多种类型的槽位是一个枚举 `<Base>Ref`，每个允许的类型一个装箱变体；`object` 槽位是 `AnyObject`。枚举是整数，另有一个单元结构体以常量形式持有各个具名取值。`with_nino_type(name, visitor)` 用某个 .NET 名字对应的类型调用 `NinoVisit` 访问者。引入生成的文件时关闭 rustfmt，见[读写](#functions)。
+
+## 类型 [#types]
+
+| C# | Rust |
+| --- | --- |
+| `sbyte` … `ulong`、`Int128`、`UInt128`、`float`、`double`、`bool` | `i8` … `u64`、`i128`、`u128`、`f32`、`f64`、`bool` |
+| `char` | `u16`，一个 UTF-16 码元（Rust 的 `char` 对应 `Rune`） |
+| `string` | `Option<String>`、`Option<WideString>`，`[NinoUtf8]` 则为 `Option<Utf8>` |
+| `T?`（结构体）、类 | `Option<T>`；递归的类为 `Option<Box<T>>` |
+| `T[]`、`List<T>`、`Queue<T>`…… | `Option<Vec<T>>`、`VecDeque<T>` |
+| `HashSet<T>`、`SortedSet<T>` | `HashSet<T>`、`BTreeSet<T>`、`IndexSet<T>` |
+| `Dictionary<K, V>`、`SortedDictionary<K, V>` | `HashMap<K, V>`、`BTreeMap<K, V>`、`IndexMap<K, V>` |
+| `ValueTuple<…>`（1 到 7 项） | 元组 |
+| `T[,]` 等多维数组 | `Grid<T, R>` |
+| 原始结构体的 `T?[]`（按原始内存写入） | `RawNullables<T>` |
+| 原始结构体里的 `nint`；`nuint`、指针和函数指针 | `i64`；`u64` |
+| 原始结构体里的 `DateTimeOffset` | 结构体 `{ date_time, offset_minutes }` |
+| `decimal`、`Guid`、`DateTime`、`DateTimeOffset`、`TimeSpan`、`DateOnly`、`TimeOnly`、`Half`、`Rune`、`Version`、`BigInteger`、`BitArray` | 同名类型；`DateTimeKind` 表示 `DateTime` 的 Kind |
+
+`String` 把未配对的代理项（.NET 字符串可能包含）替换为 U+FFFD；`WideString` 保留 UTF-16 码元，所以这样的值能逐字节写回（生成的代码中用 `Strings="wide"`）。`HashSet<string>` 的元素和字典的键是非 null 的字符串，因为 .NET 从不在那里写出 null 键。
+
+## .NET 值 [#values]
+
+用各类型的构造函数创建，它们检查 .NET 接受的范围，返回 `nino::Result`；也可以从文本解析。`chrono`、`uuid`、`rust_decimal` 和 `num-bigint` 这几个[功能](#features)提供从这些 crate 的类型转换过来的 `TryFrom` 和 `From`：
+
+```rust
+use nino::{DateOnly, DateTime, DateTimeKind, DateTimeOffset, Decimal, Guid, TimeSpan};
+
+let price: Decimal = "19.99".parse()?;                       // decimal 文本，保留 scale
+let price = Decimal::new(1999, 2, false)?;                   // 系数、scale、是否为负
+let id: Guid = "6f9619ff-8b86-d011-b42d-00c04fc964ff".parse()?;
+let id = Guid::from_u128(0x6f9619ff_8b86_d011_b42d_00c04fc964ff);
+let epoch = DateTime::new(nino::UNIX_EPOCH_TICKS, DateTimeKind::Utc)?; // 自 0001-01-01 起的 tick 数
+let timeout = TimeSpan(90 * 10_000_000);                     // 以 100 ns 为单位的 tick 数
+let day = DateOnly::new(739_919)?;                           // 自 0001-01-01 起的天数
+
+// 开启 chrono 功能时
+let now = DateTime::try_from(chrono::Utc::now())?;          // Kind 为 Utc
+let sent = DateTimeOffset::try_from(chrono::Local::now().fixed_offset())?;
+let wait = TimeSpan::try_from(chrono::TimeDelta::seconds(90))?;
+let date: chrono::NaiveDate = day.try_into()?;
+```
+
+`Half` 就是它的 16 位（`Half(0x3E00)` 是 1.5），`BigInteger` 用 `from_i128` 或从文本创建，`Version` 是字段公开的结构体。全部类型和转换见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust)。
+
+.NET 为夏令时切换时重复那一小时里的本地时间写出的 `DateTime`（最高两位为 kind 3），能读出并原样写回：`kind()` 与 .NET 的 `DateTime.Kind` 一样报告为 `Local`，并可用 `is_ambiguous_local()` 区分。
+
+## Derive [#derive]
+
+对你自己写的类型，`#[derive(NinoRead, NinoWrite)]`（功能 `derive`）生成同样的代码，并在编译时与类型发布的布局核对：
+
+```rust
+use nino::{NinoRead, NinoWrite};
+
+#[derive(Debug, Default, Clone, PartialEq, NinoRead, NinoWrite)]
+#[nino(format = "keyed")]                 // [NinoType(NinoFormat.Keyed)] 密封类
+pub struct Player {
+    #[nino(key = "Name", utf8)]           // [NinoUtf8]
+    pub name: Option<String>,
+    #[nino(former = "Health")]            // 键为 "Hp"，也按 "Health" 读取
+    pub hp: i32,
+    #[nino(skip)]                         // 不在线上，读取时为 Default
+    pub cached: u64,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, NinoRead, NinoWrite)]
+#[nino(kind = "raw")]                     // 非托管结构体，按规范布局
+pub struct Vec2 { pub x: f32, pub y: f32 }
+```
+
+| 类型属性 | 含义 |
+| --- | --- |
+| `format = "positional" \| "version_tolerant" \| "keyed"` | `NinoFormat.Positional`（默认）、`VersionTolerant` 或 `Keyed`。 |
+| `kind = "class" \| "open" \| "struct" \| "raw"` | 密封类（默认，带存在字节）、非密封类（带类型 ID）、结构体，或按内存写出的非托管结构体（可用 `pack` 和 `size`）。 |
+| `id = "Full.Name"` 或 `id = 0x…` | 类型 ID：在编译时哈希的 .NET 全名，或数字本身。 |
+| `deferrable = false` | .NET 从不推迟的类型（记录、通过构造函数创建的类型）。未给出时取自 `layout`。 |
+| `layout = "…"` | 类型发布的[布局](/zh/docs/v4/evolving-data#layout-metadata)，在编译时核对：成员名字和顺序、键、旧键、`[NinoUtf8]`、原始值的大小和偏移。格式、种类、类型 ID 和可推迟性未给出时取自它。 |
+
+字段属性有 `index`、`name`（.NET 中的名字；默认是字段名的 PascalCase 形式）、`key`、`former`、`utf8` 和 `skip`。枚举是多态的声明类型，每个具体类型一个变体；其他类型 ID 都会被拒绝。二进制格式无法表达的内容（`usize`、Rust 的 `char`、引用、冲突的键、不匹配的 `layout`）都是指明字段的编译错误。
+
+## 手写 impl [#hand-written]
+
+优先用 derive。要手写类型的 impl（不想编译过程宏）时，crate 里的宏写出和生成代码、derive 相同的方法，写出和读入的字节也相同：
+
+| 宏 | 写出 | 放在 |
+| --- | --- | --- |
+| `nino::raw_read!()`、`nino::raw_write!()` | 原始结构体的读和写，取自它的 `nino::Raw` impl（`SIZE`、`ALIGN`、`decode_raw`、`encode_raw`）：每个值一个块，填充清零 | `impl NinoRead`、`impl NinoWrite` |
+| `nino::sealed_read!()`、`nino::sealed_write!()` | 密封类的读和写（先存在字节，再是它的 `NinoReadBody` / `NinoWriteBody`） | `impl NinoRead`、`impl NinoWrite` |
+| `nino::type_consts!(id, name, layout)` | 常量 `NINO_TYPE_ID`、`NINO_TYPE_NAME` 和 `NINO_LAYOUT`；泛型类型没有自己的 ID，写 `type_consts!(name, layout)` | 类型自己的 `impl` |
+
+```rust
+use nino::{NinoRead, NinoWrite, Raw};
+
+/// C#：`struct Cell { int Row; int Column; }`，8 字节。
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct Cell { pub row: i32, pub column: i32 }
+
+impl Raw for Cell {
+    const SIZE: usize = 8;
+    const ALIGN: usize = 4;
+
+    fn decode_raw(b: &[u8]) -> nino::Result<Self> {
+        Ok(Self { row: i32::decode_raw(b)?, column: i32::decode_raw(b.get(4..).unwrap_or_default())? })
+    }
+
+    fn encode_raw(&self, out: &mut [u8]) {
+        self.row.encode_raw(out);
+        if let Some(o) = out.get_mut(4..) {
+            self.column.encode_raw(o);
+        }
+    }
+}
+
+impl NinoRead for Cell { nino::raw_read!(); }   // 每个值读一个检查过边界的 8 字节块
+impl NinoWrite for Cell { nino::raw_write!(); } // 写一个清零的块，填充保持为 0
+```
+
+`NinoWrite::PREFETCH_BYTES`（默认 0）估计写一个值时经由它的指针读取的字节数，长列表据此边写边预取。手写的 impl 不对照任何布局检查：要在编译时发现不一致，用带 `layout = "…"` 的 [derive](#derive)。
+
+## 泛型类型 [#generics]
+
+泛型 `[NinoType]` 生成为泛型类型，其编解码器由类型参数的编解码器组合而成。每种语言都支持哪些泛型，以及下面的 `Box<T>`、`Shelf<T>` 和 `Animal`，见[泛型类型](/zh/docs/v4/advanced/codegen#generics)。在 Rust 中：
+
+| | Rust |
+| --- | --- |
+| `Box<T>` | `struct BoxType<T>`（`Box` 已被占用） |
+| 它的编解码器 | 只要 `T` 实现了 `NinoRead` 和 `NinoWrite`，`BoxType<T>` 就实现它们 |
+| 作为成员的 `Box<int>` | `Option<Box<BoxType<i32>>>` |
+| 成员 `Shelf<int>` ([按类型 ID 写出](/zh/docs/v4/advanced/codegen#generic-types-behind-a-type-id)) | `Option<ShelfInt32Ref>`，每个允许的类型一个装箱变体的枚举 |
+| 泛型 `OpenHolder<T>` 中的 `Open<T>` | 在自身类型参数之后多一个类型参数（`OpenHolder<T, S0>`），用作 `OpenHolder<i64, OpenInt64Ref>`；只有槽位用到的类型参数放在 `_params: PhantomData` 字段中 |
+| `Animal` 槽位中的 `Box<int>` ([槽位中的封闭泛型类型](/zh/docs/v4/advanced/codegen#closed-generic-types-in-slots)) | 变体 `AnimalRef::BoxInt32(Box<BoxType<i32>>)`，`AnyObject` 中也有一个 |
+
+Rust 在编译时实例化泛型，所以以其他类型参数包含自身的泛型类型（`Nest<T>` 包含 `Nest<List<T>>`）会被跳过，包含它的类型也一样，并给出警告 NINOGEN002。
+
+## 引用追踪 [#reference-tracking]
+
+声明了 [`[NinoType(trackReferences: true)]`](/zh/docs/v4/reference-tracking) 的类（比如 `Node`）是 `Option<nino::Shared<Node>>`：可以被任意多处持有的一个对象（克隆得到的是同一个对象），按标识比较相等；用 `Shared::empty` 和 `fill` 构建循环。引用头和对它的检查与每种语言相同（[引用追踪](/zh/docs/v4/advanced/codegen#reference-tracking)）。
+
+在 Rust 中，一次读取创建的对象（包括循环）都属于这次读取，一起释放，就像 .NET 的垃圾回收器那样：最后一个保持它们的 `Shared`（返回的值、任何克隆、存放在所有被追踪对象之外的 `Shared`）被丢弃时，或者读取失败时。丢弃读到的值后还要保留图的一部分，就克隆你要保留的 `Shared`。手工构建的图（`Shared::new`、`Shared::empty` 和 `fill`）像 `Rc` 一样按引用计数，这样构建的循环不会被释放。手写多态被追踪槽位的读取代码时，对槽位允许的每个类型用 `r.shared_from::<T>(&r.back_ref(header)?)` 取回引用。
+
+## 不可信数据 [#untrusted-data]
+
+生成的读取代码、derive 和 crate 自己的读取代码按不可信输入处理数据，做[每种语言都做的检查](/zh/docs/v4/advanced/codegen#untrusted-data)。在 Rust 中：
+
+- 它不会 panic，要么返回完整的值，要么返回一个 `Error`（`ErrorKind` 说明是哪项检查失败；超过 512 层是 `ErrorKind::TooDeep`）。
+- 推迟的主体放到堆上的工作列表中。集合的预先分配来自每次读取的一份预算（每个输入字节 16 字节，外加 4 KiB）。
+- 在[不可信模式](/zh/docs/v4/security#untrusted-mode)之外比 .NET 更严格，或者始终更严格：它还拒绝超出范围的日期和时间、无效的 `decimal`、原始结构体中非零的填充、`BitArray` 中不为零的未用位，以及非最简形式的 `BigInteger`。
+
+## Rust 不支持的内容 [#not-supported]
+
+除了[所有语言都不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated)，Rust 还会跳过以下类型以及包含它们的类型，并给出警告 NINOGEN002：
+
+- 以其他类型参数包含自身的泛型类型（[泛型类型](#generics)）；
+- 键或元素无法在 Rust 中哈希的映射和集合（`f32`、`f64` 以及包含它们的类型）；
+- 带填充的原始元组。
+
+## 功能 [#features]
+
+| 功能 | 增加 |
+| --- | --- |
+| `derive` | `#[derive(NinoRead, NinoWrite)]`（crate `nino-serialization-derive`） |
+| `indexmap` | `IndexMap` 和 `IndexSet`，保持线上顺序，所以映射能读回并逐字节写回。生成的代码需要它，除非使用 `Maps="std"`。 |
+| `serde` | 为运行时的值类型实现 serde，带 Nino 编解码器的类型也能派生 serde（`Serde="true"`）；打开 `indexmap` 和 `uuid` 功能时，也为它们打开 serde |
+| `uuid`、`rust_decimal`、`chrono`、`num-bigint` | Nino 的 `Guid`、`decimal`、日期时间类型和 `BigInteger` 与这些 crate 类型之间的转换 |
+
+完整的 API 和每种值类型的 serde 形式见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust)。
+
+## 性能 [#performance]
+
+每次发布都在相同的数据上测量 Rust 运行时（按 nino-gen 生成的形式写的编解码器），对比 Protocol Buffers（`prost`）、MessagePack（`rmp-serde`）、`bincode`、`postcard` 和 `serde_json`。测量方式见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#rust)。
+
+<RuntimesTables lang="zh" only="rust" />
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="数据演进" href="/zh/docs/v4/evolving-data">已部署的程序在更新前一直运行旧代码：选择能容忍变化的格式。</Card>
+  <Card title="二进制格式" href="/zh/docs/v4/wire-format">每个运行时读写的字节。</Card>
+  <Card title="其他语言的基准测试" href="/zh/docs/v4/benchmarks-runtimes">Go、Rust 和 TypeScript 与各自语言的序列化库的对比。</Card>
+</Cards>

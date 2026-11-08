@@ -88,8 +88,8 @@ codegen-units = 1
 
 ## TypeScript 与 JavaScript [#typescript]
 
-- **引擎。** 运行时支持 Node 15 及以上。在 Node（以及 Bun、带 Node `Buffer` 的 Deno）里，字符串走 `Buffer` 的原生方法。在浏览器和 Deno 里，引擎支持 WebAssembly SIMD、GC 和 JS String Builtins（Chromium 130、Firefox 134 及以上）时，较长的文本走一个小的 WebAssembly 模块；其余情况走 JavaScript 路径，字节相同。内容安全策略要允许 `'wasm-unsafe-eval'` 才能用这个模块。见[浏览器中的文本](/zh/docs/v4/advanced/codegen#text-in-browsers)。
-- **数字数组。** `--numeric-arrays plain`（默认）或 `typed` 决定用 `number[]` 还是类型化数组，两者在各引擎里的读写速度不同：见[类型化数组](/zh/docs/v4/advanced/codegen#typed-arrays)。
+- **引擎。** 运行时支持 Node 15 及以上。在 Node（以及 Bun、带 Node `Buffer` 的 Deno）里，字符串走 `Buffer` 的原生方法。在浏览器和 Deno 里，引擎支持 WebAssembly SIMD、GC 和 JS String Builtins（Chromium 130、Firefox 134 及以上）时，较长的文本走一个小的 WebAssembly 模块；其余情况走 JavaScript 路径，字节相同。内容安全策略要允许 `'wasm-unsafe-eval'` 才能用这个模块。见[浏览器中的文本](/zh/docs/v4/advanced/typescript#text-in-browsers)。
+- **数字数组。** `--numeric-arrays plain`（默认）或 `typed` 决定用 `number[]` 还是类型化数组，两者在各引擎里的读写速度不同：见[类型化数组](/zh/docs/v4/advanced/typescript#typed-arrays)。
 - **打包工具**无需设置：WebAssembly 模块以字符串形式嵌在 `nino.ts` 里，没有要部署的 `.wasm` 文件，也不用加插件；npm 包是 ES2022，标了 `sideEffects: false`。打包目标保持在 ES2020 或以上，因为运行时用了 `bigint` 字面量。压缩工具可能重命名类：Nino 按类型 id 识别类型，变的只是错误消息里的类名。
 
 ## 基准测试用的配置 [#what-the-benchmarks-use]

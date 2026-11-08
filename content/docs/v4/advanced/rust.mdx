@@ -1,0 +1,232 @@
+---
+title: Rust
+seoTitle: "Nino in Rust: Types and Codecs Generated from Your [NinoType]s – Nino v4 Docs"
+description: "The Rust crate nino-serialization and the code nino-gen writes for it: generated types and codecs, the type mapping, .NET values, the derive, hand-written impls, generics, reference tracking with Shared and the checks on untrusted data."
+icon: Cog
+---
+
+<AnchorRedirect map={{ 'guarantees': '/en/docs/v4/advanced/rust#untrusted-data' }} />
+
+The Rust runtime (crate `nino-serialization`, library `nino`) reads and writes Nino's [wire format](/en/docs/v4/wire-format). Its bounds checks are safe code; `unsafe` (`#![deny(unsafe_code)]` elsewhere) is allowed only in the module that transcodes strings as they are written and read, tested under Miri on little- and big-endian targets, and in one block of [reference tracking](#reference-tracking)'s `Shared::get`, tested under Miri too. It has no required dependencies. Every release publishes it to crates.io with Nino's version.
+
+## Install [#install]
+
+```shell
+cargo add nino-serialization --features indexmap
+cargo add indexmap
+```
+
+Code nino-gen generates needs the `indexmap` feature and `indexmap` itself: maps and sets are `IndexMap` and `IndexSet`, which keep the wire order. With [`Maps="std"`](/en/docs/v4/advanced/codegen#options) they are `std::collections::HashMap` and `HashSet`, and the crate needs neither; they are then written in `HashMap`'s iteration order, so .NET reads the same values from bytes that differ from the ones it wrote. With `Serde="true"`, give your crate a `serde` feature that turns on `serde` and `nino-serialization/serde`.
+
+To generate the code, declare a `<NinoCodegen Include="rust" Out="../client/src" />` item ([In a Build](/en/docs/v4/advanced/codegen#setup)); its options are `Serde`, `SerdeNames`, `Strings` and `Maps` ([Options](/en/docs/v4/advanced/codegen#options)). The generated code needs Rust 1.88 or later.
+
+## Read and Write [#functions]
+
+Include the generated file as a module, with rustfmt off since it is generated, and call the crate's functions. Here they read the `Order` of the [TypeScript example](/en/docs/v4/advanced/typescript#example), as .NET wrote it:
+
+```rust title="main.rs"
+#[rustfmt::skip]
+#[path = "nino_types.rs"]
+mod protocol;
+
+use protocol::OrderRef;
+
+fn main() -> nino::Result<()> {
+    let bytes = std::fs::read("order.bin").expect("order.bin"); // what NinoSerializer.Serialize(order) wrote
+    let order: Option<OrderRef> = nino::deserialize(&bytes)?;   // Order is not sealed: read behind its type id
+    assert_eq!(nino::serialize(&order)?, bytes);                // the same bytes again
+    Ok(())
+}
+```
+
+A struct reads as itself, a sealed class as `Option<Order>`, and a class that is not sealed, like `Order`, as `Option<OrderRef>`, an enum of the types its slot allows.
+
+| Function | |
+| --- | --- |
+| `serialize`, `serialize_into` | Write a value under its declared type, as `NinoSerializer.Serialize<T>` does. `serialize_into` appends to a `Vec`, and on an error truncates it back to where it was. |
+| `deserialize`, `deserialize_exact` | Read a value. `deserialize_exact` also rejects bytes after it. |
+| `deserialize_into` | Read into an existing value, as `NinoDeserializer.Deserialize(data, ref value)` does: members in place, a `Vec`'s buffer and elements reused, maps and sets cleared and refilled, a polymorphic value reused only for the same type. |
+
+## Generated Code [#generated-code]
+
+The codecs are written out in full (`NinoRead`, `NinoWrite`, `NinoReadBody` and `NinoWriteBody` for each type), not as `#[derive]` attributes, so the code needs neither the derive crate nor its proc-macro build, and checks former keys by the hashes the layouts carry. Each type gets `NINO_TYPE_ID`, `NINO_TYPE_NAME` and `NINO_LAYOUT` constants (`Cat::NINO_TYPE_ID`), declared through `nino::type_consts!(id, name, layout)` so they are documented once in the crate (a generic type has no `NINO_TYPE_ID`), and its `NinoReadBody` and `NinoWriteBody` impls set their `TYPE_ID` to the same id, as the derive's do. A raw struct's `NinoRead` and `NinoWrite` impls are `nino::raw_read!()` and `nino::raw_write!()`. A slot holding several types is an enum `<Base>Ref` with a boxed variant per allowed type, and an `object` slot is `AnyObject`. Enums are integers with a unit struct holding the named values as constants. `with_nino_type(name, visitor)` calls a `NinoVisit` visitor with the type of a .NET name. Include the file with rustfmt off, as in [Read and Write](#functions).
+
+## Types [#types]
+
+| C# | Rust |
+| --- | --- |
+| `sbyte` … `ulong`, `Int128`, `UInt128`, `float`, `double`, `bool` | `i8` … `u64`, `i128`, `u128`, `f32`, `f64`, `bool` |
+| `char` | `u16`, a UTF-16 code unit (a Rust `char` is a `Rune`) |
+| `string` | `Option<String>`, `Option<WideString>`, or `Option<Utf8>` for `[NinoUtf8]` |
+| `T?` (a struct), a class | `Option<T>`; `Option<Box<T>>` for a recursive class |
+| `T[]`, `List<T>`, `Queue<T>`, … | `Option<Vec<T>>`, `VecDeque<T>` |
+| `HashSet<T>`, `SortedSet<T>` | `HashSet<T>`, `BTreeSet<T>`, `IndexSet<T>` |
+| `Dictionary<K, V>`, `SortedDictionary<K, V>` | `HashMap<K, V>`, `BTreeMap<K, V>`, `IndexMap<K, V>` |
+| `ValueTuple<…>` (1 to 7 items) | tuples |
+| `T[,]` and other multi-dimensional arrays | `Grid<T, R>` |
+| `T?[]` of raw structs (written as raw memory) | `RawNullables<T>` |
+| `nint`; `nuint`, pointers and function pointers, inside a raw struct | `i64`; `u64` |
+| `DateTimeOffset` inside a raw struct | a struct `{ date_time, offset_minutes }` |
+| `decimal`, `Guid`, `DateTime`, `DateTimeOffset`, `TimeSpan`, `DateOnly`, `TimeOnly`, `Half`, `Rune`, `Version`, `BigInteger`, `BitArray` | types of the same names; `DateTimeKind` is the kind of a `DateTime` |
+
+`String` replaces an unpaired surrogate (which a .NET string may hold) with U+FFFD; `WideString` keeps the UTF-16 code units, so such a value writes back byte for byte (`Strings="wide"` in generated code). The elements of a `HashSet<string>` and the keys of a dictionary are non-null strings, since .NET never writes a null key there.
+
+## .NET Values [#values]
+
+Build them with their constructors, which check the range .NET accepts and return `nino::Result`, or from text; the `chrono`, `uuid`, `rust_decimal` and `num-bigint` [features](#features) add `TryFrom` and `From` conversions from those crates' types:
+
+```rust
+use nino::{DateOnly, DateTime, DateTimeKind, DateTimeOffset, Decimal, Guid, TimeSpan};
+
+let price: Decimal = "19.99".parse()?;                       // decimal text, scale kept
+let price = Decimal::new(1999, 2, false)?;                   // mantissa, scale, negative
+let id: Guid = "6f9619ff-8b86-d011-b42d-00c04fc964ff".parse()?;
+let id = Guid::from_u128(0x6f9619ff_8b86_d011_b42d_00c04fc964ff);
+let epoch = DateTime::new(nino::UNIX_EPOCH_TICKS, DateTimeKind::Utc)?; // ticks since 0001-01-01
+let timeout = TimeSpan(90 * 10_000_000);                     // ticks of 100 ns
+let day = DateOnly::new(739_919)?;                           // days since 0001-01-01
+
+// with the chrono feature
+let now = DateTime::try_from(chrono::Utc::now())?;          // kind Utc
+let sent = DateTimeOffset::try_from(chrono::Local::now().fixed_offset())?;
+let wait = TimeSpan::try_from(chrono::TimeDelta::seconds(90))?;
+let date: chrono::NaiveDate = day.try_into()?;
+```
+
+`Half` is its 16 bits (`Half(0x3E00)` is 1.5), `BigInteger` comes `from_i128` or from its text, and `Version` is a struct with public fields. The runtime's [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust) lists every type and conversion.
+
+A `DateTime` that .NET wrote for a local time in the repeated hour of a daylight saving change (kind 3 in its top two bits) is read and written back unchanged: `kind()` reports it as `Local`, as .NET's `DateTime.Kind` does, and `is_ambiguous_local()` tells it apart.
+
+## Derive [#derive]
+
+For types you write yourself, `#[derive(NinoRead, NinoWrite)]` (feature `derive`) generates the same code, checked against the type's published layout at compile time:
+
+```rust
+use nino::{NinoRead, NinoWrite};
+
+#[derive(Debug, Default, Clone, PartialEq, NinoRead, NinoWrite)]
+#[nino(format = "keyed")]                 // [NinoType(NinoFormat.Keyed)] sealed class
+pub struct Player {
+    #[nino(key = "Name", utf8)]           // [NinoUtf8]
+    pub name: Option<String>,
+    #[nino(former = "Health")]            // keyed "Hp", and read under "Health" too
+    pub hp: i32,
+    #[nino(skip)]                         // not on the wire, Default on read
+    pub cached: u64,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, NinoRead, NinoWrite)]
+#[nino(kind = "raw")]                     // an unmanaged struct, in the canonical layout
+pub struct Vec2 { pub x: f32, pub y: f32 }
+```
+
+| Type attribute | Meaning |
+| --- | --- |
+| `format = "positional" \| "version_tolerant" \| "keyed"` | `NinoFormat.Positional` (default), `VersionTolerant` or `Keyed`. |
+| `kind = "class" \| "open" \| "struct" \| "raw"` | A sealed class (default, behind a presence byte), a class that is not sealed (behind its type id), a struct, or an unmanaged struct written as its memory (with `pack` and `size`). |
+| `id = "Full.Name"` or `id = 0x…` | The type id: a .NET full name hashed at compile time, or the number. |
+| `deferrable = false` | A type .NET never defers (a record, a type built through its constructor). Taken from `layout` when not given. |
+| `layout = "…"` | The type's published [layout](/en/docs/v4/evolving-data#layout-metadata), checked at compile time: member names and order, keys, former keys, `[NinoUtf8]`, raw sizes and offsets. Format, kind, type id and deferrability come from it when not given. |
+
+Field attributes are `index`, `name` (the .NET name; the default is the field's name in PascalCase), `key`, `former`, `utf8` and `skip`. An enum is a polymorphic declared type, one variant per concrete type; any other type id is rejected. Anything the wire format cannot express (`usize`, a Rust `char`, references, colliding keys, a `layout` that does not match) is a compile error naming the field.
+
+## Hand-Written Impls [#hand-written]
+
+Prefer the derive. To write a type's impls by hand (no proc-macro build), the crate's macros write the same methods generated code and the derive write, so the type reads and writes the same bytes:
+
+| Macro | Writes | Put it in |
+| --- | --- | --- |
+| `nino::raw_read!()`, `nino::raw_write!()` | A raw struct's reads and writes from its `nino::Raw` impl (`SIZE`, `ALIGN`, `decode_raw`, `encode_raw`): one block per value, padding zeroed | `impl NinoRead`, `impl NinoWrite` |
+| `nino::sealed_read!()`, `nino::sealed_write!()` | A sealed class's reads and writes (the presence byte, then its `NinoReadBody` / `NinoWriteBody`) | `impl NinoRead`, `impl NinoWrite` |
+| `nino::type_consts!(id, name, layout)` | The `NINO_TYPE_ID`, `NINO_TYPE_NAME` and `NINO_LAYOUT` constants; `type_consts!(name, layout)` for a generic type, which has no id of its own | the type's own `impl` |
+
+```rust
+use nino::{NinoRead, NinoWrite, Raw};
+
+/// C#: `struct Cell { int Row; int Column; }`, 8 bytes.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct Cell { pub row: i32, pub column: i32 }
+
+impl Raw for Cell {
+    const SIZE: usize = 8;
+    const ALIGN: usize = 4;
+
+    fn decode_raw(b: &[u8]) -> nino::Result<Self> {
+        Ok(Self { row: i32::decode_raw(b)?, column: i32::decode_raw(b.get(4..).unwrap_or_default())? })
+    }
+
+    fn encode_raw(&self, out: &mut [u8]) {
+        self.row.encode_raw(out);
+        if let Some(o) = out.get_mut(4..) {
+            self.column.encode_raw(o);
+        }
+    }
+}
+
+impl NinoRead for Cell { nino::raw_read!(); }   // one bounds-checked 8-byte block per value
+impl NinoWrite for Cell { nino::raw_write!(); } // one zeroed block, padding stays 0
+```
+
+`NinoWrite::PREFETCH_BYTES` (0 by default) estimates the bytes a write reads through the value's pointers, so that long lists of it are written prefetching ahead. A hand-written impl is checked against no layout: the [derive](#derive) with `layout = "…"` is the form that catches a mismatch at compile time.
+
+## Generic Types [#generics]
+
+A generic `[NinoType]` is a generic type with a codec built from the codecs of its type arguments. What every language supports, and the `Box<T>`, `Shelf<T>` and `Animal` types below, are in [Generic Types](/en/docs/v4/advanced/codegen#generics). In Rust:
+
+| | Rust |
+| --- | --- |
+| `Box<T>` | `struct BoxType<T>` (`Box` is taken) |
+| Its codec | `NinoRead` and `NinoWrite` for `BoxType<T>` wherever `T` has them |
+| `Box<int>` as a member | `Option<Box<BoxType<i32>>>` |
+| A member `Shelf<int>` ([behind a type id](/en/docs/v4/advanced/codegen#generic-types-behind-a-type-id)) | `Option<ShelfInt32Ref>`, an enum with a boxed variant per allowed type |
+| `Open<T>` in a generic `OpenHolder<T>` | a type parameter after its own (`OpenHolder<T, S0>`), used as `OpenHolder<i64, OpenInt64Ref>`; a parameter only the slots hold is kept in a `_params: PhantomData` field |
+| `Box<int>` in an `Animal` slot ([in slots](/en/docs/v4/advanced/codegen#closed-generic-types-in-slots)) | a variant `AnimalRef::BoxInt32(Box<BoxType<i32>>)`, and one in `AnyObject` |
+
+Rust instantiates generics at compile time, so a generic type that holds itself with other arguments (`Nest<T>` holding a `Nest<List<T>>`) is left out with warning NINOGEN002, with the types that hold it.
+
+## Reference Tracking [#reference-tracking]
+
+A class declared with [`[NinoType(trackReferences: true)]`](/en/docs/v4/reference-tracking), such as `Node`, is `Option<nino::Shared<Node>>`: one object any number of places hold (a clone is the same object), equal by identity; `Shared::empty` and `fill` build a cycle. The reference header and its checks are those of every language ([Reference Tracking](/en/docs/v4/advanced/codegen#reference-tracking)).
+
+In Rust, the objects one read creates belong to that read, cycles included, and are freed together, as .NET's collector would free them: when the last `Shared` that keeps them (the value returned, any clone, a `Shared` stored outside every tracked object) is dropped, or when the read fails. To keep part of a graph after dropping the value read, clone the `Shared`s you keep. A graph built by hand (`Shared::new`, `Shared::empty` and `fill`) is reference counted like an `Rc`, so a cycle built that way is not freed. A hand-written reader of a polymorphic tracked slot takes a back reference with `r.shared_from::<T>(&r.back_ref(header)?)` for each type the slot allows.
+
+## Untrusted Data [#untrusted-data]
+
+The generated readers, the derive and the crate's own readers take untrusted input with the checks [every language makes](/en/docs/v4/advanced/codegen#untrusted-data). In Rust:
+
+- It never panics, and returns either the whole value or an `Error` (`ErrorKind` says which check failed; `ErrorKind::TooDeep` past 512).
+- Deferred bodies go onto a heap work list. Up-front allocation for collections comes from one budget per read (16 bytes per input byte, plus 4 KiB).
+- Stricter than .NET outside [untrusted mode](/en/docs/v4/security#untrusted-mode), or always: it also rejects out-of-range dates and times, invalid `decimal`s, non-zero padding in raw structs, unused `BitArray` bits that are not zero and non-minimal `BigInteger`s.
+
+## What Rust Leaves Out [#not-supported]
+
+Besides what [no language gets](/en/docs/v4/advanced/codegen#not-generated), Rust leaves out, with warning NINOGEN002 and with the types that hold them:
+
+- generic types that hold themselves with other arguments ([Generic Types](#generics));
+- maps and sets whose key or element Rust cannot hash (`f32`, `f64` and types containing them);
+- raw tuples with padding.
+
+## Features [#features]
+
+| Feature | Adds |
+| --- | --- |
+| `derive` | `#[derive(NinoRead, NinoWrite)]` (crate `nino-serialization-derive`) |
+| `indexmap` | `IndexMap` and `IndexSet`, which keep the wire order, so a map reads back and writes back byte for byte. Needed by generated code, unless `Maps="std"`. |
+| `serde` | serde for the runtime's value types, so types with Nino codecs can derive serde too (`Serde="true"`); also turns on serde for `indexmap` and `uuid` when those features are on |
+| `uuid`, `rust_decimal`, `chrono`, `num-bigint` | Conversions between Nino's `Guid`, `decimal`, date and time types and `BigInteger` and those crates' types |
+
+The runtime's [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust) has the full API and the serde form of each value type.
+
+## Performance [#performance]
+
+Every release measures the Rust runtime, with codecs in the shape nino-gen generates, against Protocol Buffers (`prost`), MessagePack (`rmp-serde`), `bincode`, `postcard` and `serde_json` on the same data. How it is measured: [Other-Language Benchmarks](/en/docs/v4/benchmarks-runtimes#rust).
+
+<RuntimesTables lang="en" only="rust" />
+
+## Next Steps [#next-steps]
+
+<Cards>
+  <Card title="Evolving Your Data" href="/en/docs/v4/evolving-data">Deployed programs keep their old code until they update: choose a format that tolerates changes.</Card>
+  <Card title="Wire Format" href="/en/docs/v4/wire-format">The bytes every runtime reads and writes.</Card>
+  <Card title="Other-Language Benchmarks" href="/en/docs/v4/benchmarks-runtimes">Go, Rust and TypeScript against each language's serializers.</Card>
+</Cards>

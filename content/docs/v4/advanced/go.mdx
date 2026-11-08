@@ -1,0 +1,152 @@
+---
+title: Go
+seoTitle: "Nino in Go: Structs and Codecs Generated from Your [NinoType]s – Nino v4 Docs"
+description: "The Go runtime and the code nino-gen writes for it: generated structs with ReadX and WriteX functions, nino struct tags for structs you write yourself, strings, .NET values, generics, reference tracking and the checks on untrusted data."
+icon: Server
+---
+
+<AnchorRedirect map={{ 'guarantees': '/en/docs/v4/advanced/go#untrusted-data' }} />
+
+The Go runtime (module `github.com/JasonXuDeveloper/Nino/runtimes/go/v4`, package `nino`) reads and writes Nino's [wire format](/en/docs/v4/wire-format). There are two ways to give Go types their codecs: the code nino-gen generates (no reflection; the fastest path), or Go structs you write yourself, mapped with `nino` struct tags.
+
+## Install [#install]
+
+```shell
+go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4
+```
+
+The runtime needs Go 1.22 or later and nothing outside the standard library. To generate the code, declare a `<NinoCodegen Include="go" Out="../server/protocol" Package="protocol" />` item ([In a Build](/en/docs/v4/advanced/codegen#setup)); its options are `Package`, `Tags` and `TagNames` ([Options](/en/docs/v4/advanced/codegen#options)).
+
+## Generated Code [#generated-code]
+
+For every `[NinoType]`, `nino_types.go` holds:
+
+- a struct whose fields carry the `nino` tag first (the member's position, or its C# name in a keyed type), then the `Tags`: ``Health int32 `nino:"Health" json:"health" yaml:"health"` ``;
+- `NinoLayout()`, returning the layout .NET publishes for the type, `NinoTypeName()`, and `NinoTypeID()` on the classes that can be written behind a type id;
+- `ReadX` and `WriteX` functions in the shape the runtime's hand-written samples use: one bounds check per run of fixed-size members, no reflection, and no call through a function value or interface: each class body and each element of a collection is read and written by a direct call (bodies 128 deep go through the runtime's `Class`, which defers them as .NET does).
+
+A sealed class is a `*X` (nil for null), a struct an `X`, and a slot that holds several types (an abstract class, an interface, a class that is not sealed) an interface with one implementation per allowed type. Enums are named integer types with constants. Helper types are named `NinoTuple2`, ..., `NinoGrid`; a user type whose name starts with `Nino` gets a `Type` suffix, and two types with the same simple name are prefixed with their namespace (`ShapesLeftItem`). `[NinoFormerName]`s are not in the `nino` tag: layouts carry only their hashes, which `NinoLayout()` keeps, so a keyed type still reads data written under a former name.
+
+```go
+data, err := nino.Serialize(player, protocol.WritePlayer)      // a new slice
+buf, err = nino.Append(buf[:0], player, protocol.WritePlayer)  // appends; no allocation when buf has room
+player, err := nino.Deserialize(data, protocol.ReadPlayer)      // bytes after the value are ignored, as in .NET
+player, err := nino.DeserializeExact(data, protocol.ReadPlayer) // ... or rejected
+err = nino.DeserializeInto(data, &player, protocol.ReadPlayerInto) // into player, reusing what it holds
+```
+
+Writing a value into a reused buffer allocates nothing. Since the generated structs carry `nino` tags and `NinoLayout()`, the struct-tag functions below read and write them too.
+
+## Struct Tags [#struct-tags]
+
+```go
+type Monster struct {
+	Health int32   `nino:"Health"`
+	Name   *string `nino:"Name,former=Title"`
+	Items  []int32 `nino:"Items"`
+	Cache  string  `nino:"-"`
+}
+
+func (Monster) NinoLayout() string { // what .NET publishes for the type, or a part of it
+	return "format=Keyed; header=Presence"
+}
+
+data, err := nino.Marshal(m)          // m is a *Monster: a sealed class
+err = nino.Unmarshal(data, &m)        // *m is left unchanged on any error
+err = nino.UnmarshalExact(data, &m)   // ... and bytes after the value are an error
+data, err = nino.MarshalAs[Animal](a) // a polymorphic root, written behind its type id
+```
+
+| Tag | Meaning |
+| --- | --- |
+| `nino:"0"`, `nino:"1"`, ... | The member's position, for positional and version-tolerant types: 0 to n-1, no gaps, no repeats. |
+| `nino:"Name"` | A member of a keyed type, by its C# name. |
+| `nino:"-"` | A Go-only field: not read or written. |
+| `,utf8` | A `[NinoUtf8]` string. |
+| `,former=Old` | A former name of a keyed member, once per name. |
+
+A type declares its .NET shape with a `NinoLayout() string` method: the [layout](/en/docs/v4/evolving-data#layout-metadata) .NET publishes for it (`format=`, `header=`, `id=`, `deferrable=`, `members=`), or a subset of its parts. With `members=`, the tags are checked against it: the number of members, each field's encoding and the keys. Polymorphic types are registered once with `nino.Register`, and a slot only reads the registered types that implement its interface.
+
+Anything the wire format cannot express (an `int` field, which has no fixed size, an `omitempty`, a type with `trackReferences=true`) is a `*nino.TagError` naming the field, returned before a byte is read or written. A plan is built once per type and cached; marshalling then takes a few times as long as generated code, and is still faster than `encoding/json`. The struct-tag path also rejects multi-dimensional arrays, groupings, `BitArray`, `TimeZoneInfo`, custom formatters and `[NinoType]` collections with members. The full tag reference and the Go type for each encoding are in the runtime's [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go#struct-tags).
+
+## Strings [#strings]
+
+Strings in the default encoding are read into Go strings as WTF-8: UTF-8, except that an unpaired surrogate (which a .NET string may hold) keeps a 3-byte form, so writing the string back gives the same code units. `Reader.UTF16` returns the code units themselves. `[NinoUtf8]` strings are strict UTF-8.
+
+A C# `string` member is a `*string` in generated code, so null stays null. A Go `string` has no null: where one is read (`Reader.String`, a `string` field of a struct with `nino` tags, dictionary keys and `HashSet<string>` elements), a null string reads as `""`, and `""` is written back, not null. Use `*string` to tell null from empty. In generated code, the keys of a dictionary are non-null `string`s, since .NET never writes a null key.
+
+Go strings are UTF-8, so writing and reading a string in the default encoding (Latin-1 or UTF-16) transcodes it, where Protocol Buffers and MessagePack copy the UTF-8 bytes as they are; the string cases of [Other-Language Benchmarks](/en/docs/v4/benchmarks-runtimes#strings) measure it, in Rust too.
+
+Short strings (up to 128 bytes of UTF-8) are read into a block the reader keeps, up to 2 KiB and never more than the data left can fill: one allocation for many strings. A string you keep keeps its block alive, as a substring keeps its string; `strings.Clone` gives a copy of its own. Likewise the `*string`s generated code reads (`StringPtr`, `Utf8Ptr`) point into a block of up to 32 the reader keeps.
+
+## .NET Values [#values]
+
+`decimal`, `Guid`, `DateTime` and the other .NET value types have Go types of the same names in package `nino`, with constructors from Go's own types; a `*big.Int` is a `BigInteger`:
+
+```go
+price, err := nino.ParseDecimal("19.99")                           // decimal: scale 2, as 19.99m
+id, err := nino.ParseGuid("6f9619ff-8b86-d011-b42d-00c04fc964ff")  // the D, N or B form
+placed, ok := nino.DateTimeOf(time.Now())                          // DateTime, kind Utc, to the 100 ns
+local := nino.NewDateTime(placed.Ticks(), nino.KindLocal)          // ticks since 0001-01-01 and a kind
+timeout := nino.TimeSpanOf(90 * time.Second)                       // TimeSpan
+sent, ok := nino.DateTimeOffsetOf(time.Now())                      // DateTimeOffset, offset in whole minutes
+huge, ok := nino.Int128Of(new(big.Int).Lsh(big.NewInt(1), 100))   // Int128 (UInt128Of for UInt128)
+half := nino.HalfOf(1.5)                                           // Half
+version := &nino.Version{Major: 4, Minor: 0, Build: -1, Revision: -1} // 4.0
+```
+
+`DateTimeOf` and `DateTimeOffsetOf` return false for a time outside .NET's range, and `DateTimeOffsetOf` also for an offset that is not whole minutes or is past ±14 hours. Back to Go types: `DateTime.Time()`, `TimeSpan.Duration()`, `DateTimeOffset.Time()`, `Decimal.String()` (or `Coefficient()` and `Scale()`), `Guid.String()`, `Int128.Big()`, `Half.Float32()`. `DateOnly` and `TimeOnly` are a day number and ticks (`nino.DateOnly(days since 0001-01-01)`). Inside a [raw struct](/en/docs/v4/advanced/codegen#raw-struct-fields), `nint` is an `int64`, `nuint`, pointers and function pointers a `uint64`, a `DateTimeOffset` a struct `{ DateTime, OffsetMinutes }` and a `T?` of a raw `T` a `*T`. The runtime's [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go) lists every type.
+
+A `DateTime` that .NET wrote for a local time in the repeated hour of a daylight saving change (kind 3 in its top two bits) is read and written back unchanged: its `Kind()` returns 3.
+
+## Generic Types [#generics]
+
+A generic `[NinoType]` is a generic type with a codec built from the codecs of its type arguments. What every language supports, and the `Box<T>`, `Shelf<T>` and `Animal` types below, are in [Generic Types](/en/docs/v4/advanced/codegen#generics). In Go:
+
+| | Go |
+| --- | --- |
+| `Box<T>` | `type Box[T any] struct` |
+| Its codec | `BoxCodec[T any](p0 NinoArg[T]) NinoArg[*Box[T]]` (`NinoArg` holds `Read`, `Write` and `MinSize`) |
+| `Box<int>` as a member | `*Box[int32]`, through a codec built in `init` |
+| A member `Shelf<int>` ([behind a type id](/en/docs/v4/advanced/codegen#generic-types-behind-a-type-id)) | `Shelf[int32]`, an interface that `*ListShelf[int32]` and `*IntShelf` implement through marker methods (a non-abstract definition's interface is `<Name>Type[T]`) |
+| `Open<T>` in a generic `OpenHolder<T>` | the codec of `OpenHolder[T]` takes the slot's read and write functions (`OpenHolderCodec(p0, s0 NinoArg[OpenType[T]])`) |
+| `Box<int>` in an `Animal` slot ([in slots](/en/docs/v4/advanced/codegen#closed-generic-types-in-slots)) | a case `*Box[int32]` of `ReadAnimal` and `WriteAnimal`, through a codec built in `init`; `Box[T]` gets `NinoTypeID()`, `NinoTypeName()` (the closed name) and the slot's marker methods |
+
+Closed types of one definition whose arguments are the same Go type (`Wrap<int?[]>` and `Wrap<List<int?>>` are both `Wrap[[]*int32]`) cannot be told apart: the first by name is the slot's case, and the others are left out with NINOGEN002, so their ids are not read in Go.
+
+Go instantiates generics at compile time, so a generic type that holds itself with other arguments (`Nest<T>` holding a `Nest<List<T>>`) is left out with warning NINOGEN002, with the types that hold it.
+
+## Reference Tracking [#reference-tracking]
+
+A class declared with [`[NinoType(trackReferences: true)]`](/en/docs/v4/reference-tracking), such as `Node`, is `*Node`: the same pointer for every reference, numbered by pointer. The reference header and its checks are those of every language ([Reference Tracking](/en/docs/v4/advanced/codegen#reference-tracking)). [Struct tags](#struct-tags) do not track references: they reject such a type.
+
+## Untrusted Data [#untrusted-data]
+
+The generated readers and the struct-tag functions take untrusted input with the checks [every language makes](/en/docs/v4/advanced/codegen#untrusted-data). In Go:
+
+- Reading never panics on any input, by construction rather than `recover`, and lengths are capped as in .NET. Errors are sticky: after the first failure every read returns zeros, so every loop ends.
+- Every failure is a `*nino.Error` (`Code`, `Offset`, `Detail`; `errors.Is(err, nino.ErrTooDeep)` ...), and `Deserialize` returns the zero value with it, never part of a value; `Unmarshal` leaves its target unchanged.
+- Stricter than .NET outside [untrusted mode](/en/docs/v4/security#untrusted-mode), or always: it also rejects `DateTime` ticks past `DateTime.MaxValue`, invalid `decimal`s, out-of-range `DateOnly` and `TimeOnly`, bools inside raw structs other than 0 or 1, a key repeated in a keyed body and non-minimal `BigInteger`s.
+
+## What Go Leaves Out [#not-supported]
+
+Besides what [no language gets](/en/docs/v4/advanced/codegen#not-generated), Go leaves out, with warning NINOGEN002 and with the types that hold them:
+
+- generic types that hold themselves with other arguments ([Generic Types](#generics));
+- in slots, closed generic types of one definition whose arguments are the same Go type, after the first ([Generic Types](#generics)).
+
+The [struct tags](#struct-tags) have limits of their own, listed there.
+
+## Performance [#performance]
+
+Every release measures the Go runtime, with codecs in the shape nino-gen generates and with struct tags, against Protocol Buffers (`google.golang.org/protobuf`), MessagePack (`vmihailenco/msgpack`), `encoding/json` and `encoding/gob` on the same data. How it is measured: [Other-Language Benchmarks](/en/docs/v4/benchmarks-runtimes#go).
+
+<RuntimesTables lang="en" only="go" />
+
+## Next Steps [#next-steps]
+
+<Cards>
+  <Card title="Evolving Your Data" href="/en/docs/v4/evolving-data">Deployed services keep their old code until they update: choose a format that tolerates changes.</Card>
+  <Card title="Wire Format" href="/en/docs/v4/wire-format">The bytes every runtime reads and writes.</Card>
+  <Card title="Other-Language Benchmarks" href="/en/docs/v4/benchmarks-runtimes">Go, Rust and TypeScript against each language's serializers.</Card>
+</Cards>

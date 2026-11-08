@@ -59,7 +59,7 @@ function panels(lang: Locale): Panel[] {
       label: 'Go',
       commands: ['go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4'],
       note: generated[lang],
-      href: 'advanced/codegen#go',
+      href: 'advanced/go',
       link: codegen,
     },
     {
@@ -70,7 +70,7 @@ function panels(lang: Locale): Panel[] {
         'cargo add indexmap',
       ],
       note: generated[lang],
-      href: 'advanced/codegen#rust',
+      href: 'advanced/rust',
       link: codegen,
     },
     {
@@ -80,7 +80,7 @@ function panels(lang: Locale): Panel[] {
       note: zh
         ? `${generated.zh}生成的代码默认使用 nino-gen 写在旁边的 nino.ts，设置 Runtime="nino-serialization" 时改为导入这个包。`
         : `${generated.en} Generated code uses the nino.ts written next to it, or this package with Runtime="nino-serialization".`,
-      href: 'advanced/codegen#typescript',
+      href: 'advanced/typescript',
       link: codegen,
     },
   ];

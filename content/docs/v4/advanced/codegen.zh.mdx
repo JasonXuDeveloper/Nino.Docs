@@ -5,7 +5,7 @@ description: "Nino.Codegen 在每次构建后（或用 nino-gen 工具从构建�
 icon: Languages
 ---
 
-<AnchorRedirect map={{ 'compared-with-json': '/zh/docs/v4/advanced/codegen#performance' }} />
+<AnchorRedirect map={{ 'example': '/zh/docs/v4/advanced/typescript#example', 'with-aspnet-core': '/zh/docs/v4/advanced/typescript#with-aspnet-core', 'api': '/zh/docs/v4/advanced/typescript#api', 'text-in-browsers': '/zh/docs/v4/advanced/typescript#text-in-browsers', 'type-mapping': '/zh/docs/v4/advanced/typescript#type-mapping', 'typed-arrays': '/zh/docs/v4/advanced/typescript#typed-arrays', 'not-supported': '/zh/docs/v4/advanced/typescript#not-supported', 'performance': '/zh/docs/v4/advanced/typescript#performance', 'compared-with-memorypack': '/zh/docs/v4/advanced/typescript#compared-with-memorypack', 'from-ninotypescript': '/zh/docs/v4/advanced/typescript#from-ninotypescript', 'typescript': '/zh/docs/v4/advanced/typescript', 'compared-with-json': '/zh/docs/v4/advanced/typescript#performance', 'go': '/zh/docs/v4/advanced/go', 'go-generated-code': '/zh/docs/v4/advanced/go#generated-code', 'struct-tags': '/zh/docs/v4/advanced/go#struct-tags', 'go-strings': '/zh/docs/v4/advanced/go#strings', 'go-values': '/zh/docs/v4/advanced/go#values', 'rust': '/zh/docs/v4/advanced/rust', 'rust-generated-code': '/zh/docs/v4/advanced/rust#generated-code', 'rust-types': '/zh/docs/v4/advanced/rust#types', 'rust-values': '/zh/docs/v4/advanced/rust#values', 'rust-derive': '/zh/docs/v4/advanced/rust#derive', 'rust-hand-written': '/zh/docs/v4/advanced/rust#hand-written', 'rust-features': '/zh/docs/v4/advanced/rust#features' }} />
 
 Nino 可以把你的 `[NinoType]` 写成 **TypeScript**、**Go** 或 **Rust**：每个 `[NinoType]` 一个类型，其编解码器读写的字节与 .NET 中 Nino 写出的完全相同。浏览器、Node 服务端、Go 服务或 Rust 程序由此与你的 .NET 代码交换相同的字节，不需要 .NET 运行时。生成器是 **nino-gen**，它有两个包，选项相同，输出也相同：
 
@@ -20,11 +20,17 @@ Nino 可以把你的 `[NinoType]` 写成 **TypeScript**、**Go** 或 **Rust**：
 </ItemGroup>
 ```
 
-每种语言都需要在生成的代码旁边有它的运行时：**TypeScript** 是 `nino.ts`，nino-gen 会把它写在生成的文件旁边；**Go** 是模块 `github.com/JasonXuDeveloper/Nino/runtimes/go/v4`（包 `nino`）；**Rust** 是 crate `nino-serialization`（库名 `nino`），并打开它的 `indexmap` 功能（使用 [`Maps="std"`](#options) 时只需要这个 crate）。每次发布都会以 Nino 的版本号发布这三个运行时：Go 模块、crates.io 上的 crate，以及 npm 上的 TypeScript 运行时 `nino-serialization`；使用 [`Runtime="nino-serialization"`](#options) 时，生成的代码从这个包导入运行时，而不是复制一份 `nino.ts`。它们的源码位于 Nino 的仓库中（[runtimes/](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes)）。
+每种语言各有一页，生成的代码旁边都需要它的运行时，每次发布都以 Nino 的版本号发布（[runtimes/](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes)）：
+
+| 语言 | 运行时 | 需要 |
+| --- | --- | --- |
+| [TypeScript](/zh/docs/v4/advanced/typescript) | `nino.ts`，写在生成的代码旁边；或者 npm 包 `nino-serialization`（[`Runtime`](#options)） | TypeScript 5.7 或更高版本，浏览器、Node 等 ES2020 环境 |
+| [Go](/zh/docs/v4/advanced/go) | 模块 `github.com/JasonXuDeveloper/Nino/runtimes/go/v4`（包 `nino`） | Go 1.22 或更高版本，除标准库外没有依赖 |
+| [Rust](/zh/docs/v4/advanced/rust) | crate `nino-serialization`（库名 `nino`），除非用 [`Maps="std"`](#options)，否则打开它的 `indexmap` 功能 | Rust 1.88 或更高版本 |
 
 <Callout type="info" title="环境要求">
 
-nino-gen 在 .NET 8 或更高版本上运行（在构建中用的是 SDK 自带的运行时），与项目的目标框架无关。它读取的是生成器自 Nino **4.0.0-rc.6** 起在布局元数据中发布的字节编码。生成的代码需要：**TypeScript** 5.7 或更高版本（它返回的类型化数组标明了 `ArrayBuffer` 类型），以及浏览器、Node 等 ES2020 环境；**Go** 1.22 或更高版本，除标准库外没有依赖；**Rust** 1.88 或更高版本。
+nino-gen 在 .NET 8 或更高版本上运行（在构建中用的是 SDK 自带的运行时），与项目的目标框架无关。它读取的是生成器自 Nino **4.0.0-rc.6** 起在布局元数据中发布的字节编码。
 
 </Callout>
 
@@ -39,9 +45,9 @@ flowchart LR
   N --> O(".ts / .go / .rs")
 ```
 
-- **基于构建出的程序集。** nino-gen 只读取生成器在每个编译的程序集中发布的 `[assembly: NinoTypeLayout]` 特性（[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)），包括该程序集及其引用的程序集，不加载它们。它不需要源代码，也不运行任何代码：只需要构建好的 `.dll`。生成该程序集的 `[NinoType]`，以及它用到的、被引用程序集中的 `[NinoType]`。
+- **基于构建出的程序集。** nino-gen 只读取生成器在每个编译的程序集中发布的 `[assembly: NinoTypeLayout]` 特性（[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)），不加载该程序集及其引用的程序集：不需要源代码，也不运行任何代码。它生成该程序集的 `[NinoType]`，以及它们用到的、被引用程序集中的 `[NinoType]`。
 - **与格式化器同一份布局。** 生成器用生成类型 C# 格式化器的同一个模型写出布局，因此生成的代码读写成员的顺序、编码和格式与 .NET 代码一致。所有关于字节的决定只做一次，三种语言共用。
-- **构建未变时不打扰。** 每个文件只在文本变化时才写入，监视器和增量构建不会看到变化。在构建中，只有程序集、它的引用、工具或该项的元数据变化时，该项才会重新运行；IDE 的设计时构建从不运行它。
+- **构建未变时不打扰。** 文件只在文本变化时才写入；只有程序集、它的引用、工具或该项的元数据变化时，该项才重新运行，IDE 的设计时构建从不运行它。
 - **删除过时的文件。** 一次运行写出的文件记录在输出目录的 `.nino-gen` 中，下一次运行会删除其中不再写出的文件（程序集改名、换了 `Name` 或给出了 `Runtime` 之后）。目录中的其他文件不受影响。
 
 ## 在构建中生成 [#setup]
@@ -108,55 +114,7 @@ dotnet build Shop.Contracts
 
 ### 使用 [#use-them]
 
-<Tabs groupId="codegen-lang" persist items={['TypeScript', 'Go', 'Rust']}>
-<Tab value="TypeScript">
-
-```ts
-import { deserialize, serialize } from './nino/nino.js';
-import { Order, OrderCodec } from './nino/Shop.Contracts.js';
-
-const bytes = serialize(OrderCodec, order);  // 与 .NET 中 NinoSerializer.Serialize(order) 写出的相同
-const copy = deserialize(OrderCodec, bytes); // 又是一个 Order
-```
-
-生成的代码是普通的 TypeScript：类、`const` 对象和函数，没有装饰器，也没有依赖。参见 [TypeScript](#typescript)。
-
-</Tab>
-<Tab value="Go">
-
-```shell
-go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4
-```
-
-```go
-order, err := nino.Deserialize(data, protocol.ReadOrder) // data：NinoSerializer.Serialize(order) 写出的字节
-again, err := nino.Serialize(order, protocol.WriteOrder) // 相同的字节
-```
-
-`ReadOrder` 和 `WriteOrder` 是为[下面例子](#example)中的 `Order` 生成的。参见 [Go](#go)。
-
-</Tab>
-<Tab value="Rust">
-
-```rust title="main.rs"
-#[rustfmt::skip]
-#[path = "nino_types.rs"]
-mod protocol;
-
-use protocol::OrderRef;
-
-fn main() -> nino::Result<()> {
-    let bytes = std::fs::read("order.bin").expect("order.bin"); // NinoSerializer.Serialize(order) 写出的字节
-    let order: Option<OrderRef> = nino::deserialize(&bytes)?;   // Order 不是 sealed：带类型 ID 读取
-    assert_eq!(nino::serialize(&order)?, bytes);                // 再次得到相同的字节
-    Ok(())
-}
-```
-
-`Order` 是[下面的例子](#example)中的类型。struct 读成它本身，sealed 类读成 `Option<Order>`，非 sealed 的类（比如 `Order`）读成 `Option<OrderRef>`，也就是列出这个位置允许的类型的枚举。crate 需要打开 `indexmap` 功能的 `nino-serialization`，以及 `indexmap`（使用 `Maps="std"` 时只需要这个 crate）；参见 [Rust](#rust)。
-
-</Tab>
-</Tabs>
+每种语言的页面都展示了 nino-gen 写出的代码和调用方式：[TypeScript](/zh/docs/v4/advanced/typescript#example)、[Go](/zh/docs/v4/advanced/go#generated-code)、[Rust](/zh/docs/v4/advanced/rust#functions)。
 
 </Step>
 </Steps>
@@ -172,14 +130,14 @@ fn main() -> nino::Result<()> {
 | `Names` | `--names` | TypeScript | `camel` | `camel` 把成员名写成 camelCase（`UnitPrice` → `unitPrice`，`URL` → `url`）；`keep` 保留 C# 中的名字。 |
 | `ImportExtension` | `--import-extension` | TypeScript | 空 | 生成的文件导入 `nino.ts` 时用的扩展名：空适用于打包工具（Vite、webpack、esbuild），`.js` 适用于用 `tsc` 编译的 Node ESM，`.ts` 适用于 Deno 和 Node 的类型剥离，也可以是 `.mjs`、`.mts`。 |
 | `Runtime` | `--runtime` | TypeScript | 空 | 从这个模块导入运行时，而不是在代码旁边写出 `nino.ts`。 |
-| `NumericArrays` | `--numeric-arrays` | TypeScript | `plain` | `plain`：数字的数组和列表是 `number[]`（64 位整数为 `bigint[]`）。`typed`：[类型化数组](#typed-arrays)（`Int32Array`、`Float64Array`……）。 |
+| `NumericArrays` | `--numeric-arrays` | TypeScript | `plain` | `plain`：数字的数组和列表是 `number[]`（64 位整数为 `bigint[]`）。`typed`：[类型化数组](/zh/docs/v4/advanced/typescript#typed-arrays)（`Int32Array`、`Float64Array`……）。 |
 | `Package` | `--package` | Go | 程序集名中的字母和数字，转为小写 | 包名。 |
 | `Tags` | `--tags` | Go | `json,yaml` | 写在 `nino` 之后的结构体标签，按顺序；为空则不写。 |
 | `TagNames` | `--tag-names` | Go | `camel` | 这些标签如何命名成员：`camel`、`snake` 或 `original`。 |
 | `Serde` | `--serde` | Rust | `false` | `true` 加上 `#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]`，并为每个字段重命名。 |
 | `SerdeNames` | `--serde-names` | Rust | `camel` | serde 名字：`camel`（与 `System.Text.Json` 的命名一致）、`snake` 或 `original`。 |
-| `Strings` | `--strings` | Rust | `string` | `string`：C# 字符串为 `String`，读取时把未配对的代理项（.NET 字符串可能包含）替换为 U+FFFD。`wide`：`nino::WideString`，保留任何 UTF-16，这样的字符串能逐字节写回。 |
-| `Maps` | `--maps` | Rust | `indexmap` | `indexmap`：字典和集合为 `indexmap::IndexMap` 和 `IndexSet`，保持读入时的顺序，所以读出的值能逐字节写回。`std`：`std::collections::HashMap` 和 `HashSet`，除这个 crate 外没有其他依赖；它们按 `HashMap` 的迭代顺序写出，这不是 .NET 写出的顺序，并且每次运行都不同（.NET 读出的值相同，但字节不同）。 |
+| `Strings` | `--strings` | Rust | `string` | `string`：C# 字符串为 `String`。`wide`：`nino::WideString`，保留未配对的代理项（[类型](/zh/docs/v4/advanced/rust#types)）。 |
+| `Maps` | `--maps` | Rust | `indexmap` | `indexmap`：字典和集合为 `IndexMap` 和 `IndexSet`，保持读入时的顺序。`std`：`HashMap` 和 `HashSet`，除这个 crate 外没有其他依赖，写出的顺序与 .NET 不同（[安装](/zh/docs/v4/advanced/rust#install)）。 |
 
 构建会自行传入它编译出的程序集及其引用。nino-gen 像检查命令行一样检查元数据：属于其他语言的选项，或它不接受的值，会让构建以 [NINOGEN001](#diagnostics) 失败。
 
@@ -222,547 +180,34 @@ nino-gen 按 MSBuild 的消息格式报告，所以构建会把它们显示为�
 | --- | --- | --- |
 | `NINOGEN001` | 错误 | 参数或项的元数据无效，或无法读取程序集。工具以退出码 1 结束，构建失败。 |
 | `NINOGEN002` | 警告 | 某个类型因目标语言无法表达而被跳过，并说明原因（见[不会生成的内容](#not-generated)）。 |
-| `NINOGEN003` | 警告 | 项目设置了 Nino.TypeScript 的 `NinoTypeScript*` 属性（见[从 Nino.TypeScript 迁移](#from-ninotypescript)）。 |
+| `NINOGEN003` | 警告 | 项目设置了 Nino.TypeScript 的 `NinoTypeScript*` 属性（见[从 Nino.TypeScript 迁移](/zh/docs/v4/advanced/typescript#from-ninotypescript)）。 |
 | `NINOGEN004` | 警告 | 项目引用了 Nino.Codegen，却没有声明 `<NinoCodegen>` 项，所以什么也不写出：添加一项，或把 `NinoCodegenEnabled` 设为 `false`。 |
 
 ```text
 nino-gen : warning NINOGEN002: Samples.Nest`1 is not written to Go: it holds itself with other type arguments, through Samples.Nest`1.
 ```
 
-### 从 Nino.TypeScript 迁移 [#from-ninotypescript]
-
-Nino.TypeScript（`nino-ts`，4.0 的候选版本直到 rc.7）由 Nino.Codegen 取代：替换包引用，并声明它的属性所描述的那一项。
-
-| Nino.TypeScript | Nino.Codegen |
-| --- | --- |
-| `<PackageReference Include="Nino.TypeScript" ... />` | `<PackageReference Include="Nino.Codegen" ... />` |
-| （始终开启） | `<NinoCodegen Include="typescript" Out="ts/" />` |
-| `NinoTypeScriptOutput` | `Out` |
-| `NinoTypeScriptImportExtension` | `ImportExtension` |
-| `NinoTypeScriptNames` | `Names` |
-| `NinoTypeScriptTargetFramework` | `NinoCodegenTargetFramework` |
-| `NinoTypeScriptEnabled` | `NinoCodegenEnabled` |
-| `NINOTS001`、`NINOTS002` | `NINOGEN001`、`NINOGEN002` |
-| `.nino-ts` 清单 | `.nino-gen`；第一次运行会接管旧清单并删除它 |
-
-输出相同，只是文件头注释写的是 `nino-gen` 而不是 `Nino.TypeScript`。在声明项之前，`NinoTypeScript*` 属性仍然有效，但会给出警告 NINOGEN003：没有 `<NinoCodegen>` 项时，它们代表 `<NinoCodegen Include="typescript" ... />`（未设置 `NinoTypeScriptOutput` 时仍是 `ts/`）；与项同时存在时，它们被忽略。
-
-## TypeScript [#typescript]
-
-TypeScript 的输出是两个文件：`<程序集名>.ts`，为每个类型生成一个类、为每个枚举生成一个 `as const` 对象、为每个类型生成一个编解码器；以及 `nino.ts`，即读写 Nino 格式的运行时。新版本一旦改变 `nino.ts`，就会重写它，并在 `ninoVersion` 中记下版本号。这个运行时也是 npm 包 `nino-serialization`（[runtimes/typescript](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript)），与 Rust crate 同名，每次发布都以 Nino 的版本号发布：设置 `Runtime="nino-serialization"`（并 `npm install nino-serialization`）后，生成的代码从这个包导入运行时，而不是在你的代码旁边写一份 `nino.ts`。Nino 的测试先在 .NET 中序列化一个包含所有受支持成员种类的样例，再在 Node 中读取并写回、逐字节比较，检查 .NET 能读取 TypeScript 创建的值，并用 `tsc --strict --noUnusedLocals --noUnusedParameters` 编译生成的代码。
-
-### 示例 [#example]
-
-类型只在 C# 中声明一次：
-
-```csharp title="Shop.Contracts/Order.cs"
-using System;
-using System.Collections.Generic;
-using Nino.Core;
-
-namespace Shop.Contracts;
-
-public enum OrderStatus { Pending, Paid, Shipped }
-
-[NinoType(format: NinoFormat.VersionTolerant)]
-public class Order
-{
-    public long Id;
-    public string Customer;
-    public OrderStatus Status;
-    public DateTime PlacedAt;
-    public decimal Total;
-    public List<OrderLine> Lines;
-}
-
-[NinoType]
-public struct OrderLine
-{
-    public int ProductId;
-    public int Quantity;
-    public double UnitPrice;
-}
-```
-
-构建写入 `ts/Shop.Contracts.ts` 的内容（节选，省略了大部分函数）：
-
-```ts title="ts/Shop.Contracts.ts"
-export const OrderStatus = {
-  Pending: 0,
-  Paid: 1,
-  Shipped: 2,
-} as const;
-export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
-
-/** `Shop.Contracts.OrderLine`, copied as raw memory (16 bytes). */
-export class OrderLine {
-  productId: number = 0;
-  quantity: number = 0;
-  unitPrice: number = 0;
-}
-
-/** `Shop.Contracts.Order`. */
-export class Order {
-  id: bigint = 0n;
-  customer: string | null = null;
-  status: OrderStatus = 0 as OrderStatus;
-  placedAt: Date = new Date(-62135596800000);
-  total: string = "0";
-  lines: OrderLine[] | null = null;
-}
-
-function readOrderLine(r: NinoReader, at: number): OrderLine {
-  const v = new OrderLine();
-  v.productId = r.view.getInt32(at, true);
-  v.quantity = r.view.getInt32(at + 4, true);
-  v.unitPrice = r.view.getFloat64(at + 8, true);
-  return v;
-}
-
-export const OrderCodec: NinoCodec<Order | null> = {
-  read: (r) => {
-    const id = r.i32();
-    switch (id) {
-      case 0:
-        return null;
-      case 1504254414:
-        return readOrder(r);
-    }
-    throw types.unreadable(id);
-  },
-  write: (w, v) => { /* null, or the type id of v.constructor, then its members */ },
-};
-export const OrderLineCodec: NinoCodec<OrderLine> = {
-  read: (r) => readOrderLine(r, r.take(16)),
-  write: (w, v) => writeOrderLine(w, w.reserve(16), v),
-};
-```
-
-每个成员的初始值就是 .NET 中的默认值（`0`、`null`、`DateTime.MinValue`）。`Order` 是版本容错类型，所以它的读取函数和 .NET 中一样：读到旧版本写出的成员末尾就停止，并跳过新版本多出的成员。
-
-使用方式：
-
-```ts
-import { deserialize, serialize } from './ts/nino';
-import { Order, OrderCodec, OrderLine, OrderStatus } from './ts/Shop.Contracts';
-
-const order = new Order();
-order.id = 42n;
-order.customer = 'Ada';
-order.status = OrderStatus.Paid;
-order.placedAt = new Date(Date.UTC(2026, 9, 18, 12, 0, 0));
-order.total = '39.00';
-const line = new OrderLine();
-line.productId = 7;
-line.quantity = 2;
-line.unitPrice = 9.5;
-order.lines = [line];
-
-const bytes = serialize(OrderCodec, order);  // 与 .NET 中 NinoSerializer.Serialize(order) 写出的相同 // [!code highlight]
-const copy = deserialize(OrderCodec, bytes); // 又是一个 Order
-```
-
-### 配合 ASP.NET Core 服务端 [#with-aspnet-core]
-
-服务端使用 [Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 时，请求和响应各一行调用：
-
-```csharp title="Program.cs (ASP.NET Core)"
-app.MapPost("/orders", (NinoBody<Order> order) =>
-{
-    // ... 保存 order.Value ...
-    return NinoResults.Ok(order.Value);
-});
-```
-
-```ts title="orders.ts"
-import { deserialize, serialize } from './ts/nino';
-import { type Order, OrderCodec } from './ts/Shop.Contracts';
-
-export async function placeOrder(order: Order): Promise<Order | null> {
-  const response = await fetch('/orders', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-nino', Accept: 'application/x-nino' },
-    body: serialize(OrderCodec, order),
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return deserialize(OrderCodec, new Uint8Array(await response.arrayBuffer()));
-}
-```
-
-WebSocket 的用法相同：发送 `serialize` 的结果，设置 `binaryType = 'arraybuffer'`，再 `deserialize(codec, new Uint8Array(event.data))`。每条消息就是一个值，不需要分帧。
-
-### API [#api]
-
-- **`serialize(codec, value)`** 返回一个 `Uint8Array`，内容与 .NET 中 `NinoSerializer.Serialize<T>` 写出的相同。结果不会被复制：每个结果都紧接在上一个结果之后写进一个共享的 64 KB 缓冲区，返回的是它上面的一个视图，之后的调用不会覆盖它（剩余空间不多，或某个结果超出缓冲区时，会换用新的缓冲区）。直接把这个 `Uint8Array` 交给 `fetch`、`WebSocket.send`、`Blob` 或流，它们会按 `byteOffset` 和 `length` 读取；不要使用它的 `.buffer`，其中还有其他结果。保留一个结果，就会让它所在的整个缓冲区一直存活：需要独占缓冲区的数组时，调用 `bytes.slice()`。
-- **`serializeInto(codec, value, target)`** 写进你自己的内存，相当于 .NET 中用复用的 `NinoArrayBufferWriter` 调用 `NinoSerializer.Serialize(value, bufferWriter)`，返回值的字节数。写进 `NinoWriter` 时追加在已有内容之后，按需扩容；`writer.reset()` 清空它并保留缓冲区，缓冲区足够大之后写入不再分配内存（不产生新的 `ArrayBuffer`，Node 24 大约每新增 64 MB 的 `ArrayBuffer` 就触发一次完整垃圾回收），`writer.written()` 在写入器下次写入之前都是这些字节的视图。写进 `Uint8Array` 时，值放得下就从数组开头写入；返回的字节数大于数组长度表示什么都没写。Go 有 `nino.Append` 和复用的 `Writer`，Rust 有 `serialize_into`。
-- **`deserialize(codec, bytes)`** 从一个 `Uint8Array`（Node 的 `Buffer` 也可以）中读取一个值。
-- **`deserializeInto(codec, bytes, value)`** 读进你已有的值，相当于 `NinoDeserializer.Deserialize(data, ref value)`，返回读到的值（除非数据是 null 或另一个类，否则就是 `value` 本身）。嵌套对象原地读取，数组保留存储并把每个元素读进同一下标的旧元素，映射和集合先清空再填充，按类型 ID 写出的成员只有在数据中是它自己的类时才读进它；追踪引用的对象和类型化数组总是新建。抛出异常时，`value` 保留出错前读到的内容，其余保持原样。Go 有 `nino.DeserializeInto` 配合生成的 `ReadXInto`，Rust 有 `deserialize_into`。
-- 每个类型 `X` 都有 **`XCodec`**：按 .NET 为其声明类型写出的头读写这个值。结构体没有头（`NinoCodec<X>`），密封类有空标记（`NinoCodec<X | null>`），非密封类和接口有类型 ID，所以 `AnimalCodec` 能读写 `Animal` 的任何生成子类型，与 `Serialize<Animal>` 一样。
-- **`NinoWriter` 和 `NinoReader`** 把多个值写进一个缓冲区并按顺序读回，相当于 .NET 中的 `Writer` 和 `Reader`：先 `codec.write(writer, value)`，再 `writer.toBytes()`；读取时 `codec.read(new NinoReader(bytes))`。
-- 数据不是所读类型的有效值时（数据被截断、长度超出末尾、未知的类型 ID，以及[不可信数据](#untrusted-data)中的其他检查），以及值无法写出时，抛出 **`NinoError`**。
-
-<Callout type="warn" title="多态的值要用 new 创建">
-
-按类型 ID 写出的值（声明为非密封类、接口或 `object` 的成员）是按它的构造函数查找类型的，所以必须是生成类的实例：要用 `new Cat()`，而不是形状相同的对象字面量。对象字面量会抛出 `NinoError`（`Object is not a type that can be written here`）。
-
-</Callout>
-
-### 浏览器中的文本 [#text-in-browsers]
-
-读写大量值时，大部分工作是字符串。在 Node（以及 Bun 和带 Node `Buffer` 的 Deno）中，运行时用 `Buffer` 原生的 Latin-1 和 UTF-16 方法搬运字符。在浏览器和 Deno 中，`nino.ts` 用嵌入其中的一个小型 WebAssembly 模块（约 1.3 KB）处理 JavaScript 较慢的文本，最多 4096 个字符：读取超过 24 个字符的 UTF-16 文本和 33 到 128 个字符的 Latin-1 文本，写入超过 64 个字符的文本（超过 1024 个字符的 ASCII 交给 `TextEncoder`）。它通过 JS String Builtins 读取和创建 JavaScript 字符串，并在 SIMD 寄存器中一次搬运 8 或 16 个字符，只使用一页永不增长的内存；其他情况都走 JavaScript 路径，两者写出的字节相同。
-
-模块在第一次需要时编译。没有 WebAssembly SIMD、GC 或 JS String Builtins 的引擎（Chromium 130 之前、Firefox 134 之前、Node 20 及更早版本），或者内容安全策略不允许编译 WebAssembly（`'wasm-unsafe-eval'`）的页面，会继续使用 JavaScript 路径，不报错；浏览器仍可能把被阻止的编译报告为 CSP 违规。
-
-```ts
-import { useWasm } from './nino';
-
-useWasm();      // 文本经过该模块时返回 true
-useWasm(false); // 只用 JavaScript 路径
-useWasm(true);  // 重新打开（在引擎允许的地方）
-```
-
-### 类型映射 [#type-mapping]
-
-| C# | TypeScript | 说明 |
-| --- | --- | --- |
-| `bool` | `boolean` | |
-| `byte`、`sbyte`、`short`、`ushort`、`int`、`uint`、`float`、`double` | `number` | |
-| `long`、`ulong`、`nint`、`nuint` | `bigint` | |
-| `char` | `string` | 一个 UTF-16 码元 |
-| `decimal` | `string` | 精确的十进制文本，如 `"-12.345"` |
-| `Guid` | `string` | 读出为 `xxxxxxxx-xxxx-…`；写入时接受 `D`、`N` 和 `B` 格式 |
-| `DateTime` | `Date` | 精确到毫秒。`Date` 没有 Kind：每个 `DateTime` 的刻度都按 UTC 读取，所以按 `DateTimeKind.Unspecified` 或 `Local` 写出的值，读出为钟面读数相同的 UTC 时间，并按 `DateTimeKind.Utc` 写回 |
-| `TimeSpan` | `bigint` | 以 100 ns 为单位的 tick 数 |
-| `string`（包括 `[NinoUtf8]`） | `string \| null` | |
-| `byte[]` | `Uint8Array \| null` | 字节的副本 |
-| 数组、`List<T>` 和其他序列 | `T[] \| null` | 设置 [`NumericArrays="typed"`](#typed-arrays) 时数字为类型化数组 |
-| `HashSet<T>` 和其他集合 | `Set<T> \| null` | |
-| `Dictionary<TKey, TValue>` 和其他字典 | `Map<K, V> \| null` | |
-| `ValueTuple`、`KeyValuePair` | `[A, B, ...]` | TypeScript 元组，最多 7 项 |
-| `Tuple<...>` | `[A, ...] \| null` | |
-| `T?`、`Lazy<T>` | `T \| null` | |
-| 枚举 | `as const` 对象，以及由其取值组成的类型 | `[Flags]` 枚举是 `number`（64 位的是 `bigint`）；64 位枚举的取值是 `bigint` |
-| `[NinoType]` 类 | 类 | `extends` 生成的基类，`implements` 生成的接口；抽象类仍是抽象类 |
-| `[NinoType]` 接口 | 接口 | |
-| 结构体（`[NinoType]` 或按原始内存复制的） | 类 | 原始结构体按各字段的偏移逐个读写，填充字节置零 |
-| `object` | `unknown` | 任何生成的 `[NinoType]`，按类型 ID |
-| 键控与版本容错类型 | 同上 | 按其[格式](/zh/docs/v4/evolving-data)读写，包括旧键 |
-
-在 TypeScript 里构造这些值，直接用上表的类型：`decimal` 是它的文本（`"19.99"`；小数点后最多 28 位，系数小于 2^96），`Guid` 是 `D`、`N` 或 `B` 格式的文本，`DateTime` 是 `Date`（`new Date(Date.UTC(2026, 9, 31, 12))`），`TimeSpan` 是以 100 ns 为单位的 tick 数，类型为 `bigint`（90 秒是 `90n * 10_000_000n`）。不是合法 `decimal` 或 `Guid` 的文本，写入时抛出 `NinoError`。
-
-### 类型化数组 [#typed-arrays]
-
-默认情况下（`NumericArrays="plain"`），数字的数组或列表是 `number[]`（64 位整数为 `bigint[]`），在所有引擎中读取都最快。设置 `NumericArrays="typed"`（`--numeric-arrays typed`）后，`sbyte`、`short`、`ushort`、`int`、`uint`、`long`、`ulong`、`nint`、`nuint`、`float` 和 `double` 的数组、列表及其他序列（集合除外）改为类型化数组：`Int8Array`、`Int16Array`、`Uint16Array`、`Int32Array`、`Uint32Array`、`BigInt64Array`、`BigUint64Array`、`Float32Array` 和 `Float64Array`。线上的字节就是类型化数组自身的字节，所以字节不变，变的只是 TypeScript 类型。
-
-```csharp title="Mesh.cs"
-using System.Collections.Generic;
-using Nino.Core;
-
-[NinoType]
-public class Mesh
-{
-    public float[] Positions;
-    public List<int> Indices;
-}
-```
-
-```ts
-// NumericArrays="typed"
-export class Mesh {
-  positions: Float32Array | null = null;
-  indices: Int32Array | null = null;
-}
-mesh.indices = Int32Array.of(0, 1, 2);
-```
-
-- 超过 64 字节的数组整块复制；更短的逐个元素读写，因为 V8 把它们放在自己的堆上。
-- 读出的 65 字节到 8 KB 的数组是一个共享的 64 KB 缓冲区上的视图：转移其 `.buffer` 之前先 `slice()`。
-- 在 Node 和 Chromium 中序列化都更快，在 Node 中反序列化大的数字数组也更快。但每个类型化数组都需要自己的底层存储，很多读取中创建它们的开销比复制省下的更多：Chromium 反序列化几 KB 的数字数组比读成 `number[]` 慢 2 到 3.3 倍（Arm64 上约 2 倍，x64 上最多 3.3 倍），数组和其他成员混合的数据最多慢 1.4 倍，每个对象只带一个短数组的小对象列表在两种引擎中都慢 5% 到 25%。所以它不是默认值：在序列化为主、或在 Node 中读取大数组的场景再打开。
-- `byte` 序列无论如何都是 `Uint8Array`。`bool`、`char`、`decimal`、`TimeSpan` 和枚举的序列仍是数组，集合仍是 `Set`。
-
-### TypeScript 不支持的内容 [#not-supported]
-
-除了[所有语言都不会生成的内容](#not-generated)，TypeScript 还会跳过编码暂时没有 TypeScript 形式的成员：多维数组、`DateTimeOffset`、`BigInteger`、`Version`、`BitArray`、`TimeZoneInfo`、`Uri`、`CultureInfo`、`StringBuilder`、`Memory<T>`、`ReadOnlyMemory<T>`、`ReadOnlySequence<T>`、`PriorityQueue<TElement, TPriority>`、`ILookup` 和 `IGrouping`、超过 7 项的元组，以及由 Nino.Core 以外的格式化器写出的成员：[自定义格式化器](/zh/docs/v4/custom-formatters)、`Nino.Immutable` 的不可变集合，以及 Unity 的 `AnimationCurve`、`Gradient` 和 `RectOffset`。包含它们的类型也会被跳过，并给出警告 NINOGEN002。
-
-### 性能 [#performance]
-
-每次发布都会用 Nino 仓库中的 [`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench)，在 Node 中、相同数据上，对比生成的 TypeScript 与 Protocol Buffers（protobuf-es）、MessagePack（msgpackr）和 `JSON`。每个场景的值都由 .NET 中的 Nino 写出，计时之前每个值都必须读出再写回，得到完全相同的字节。每次遍历依次取数据的 64 个变体中的下一个，V8 无法复用上一次遍历在同一输入上的工作。JSON 拿到的是普通 JSON 数据（64 位整数为字符串，映射为对象），`JSON.parse` 的结果也不转换回 `bigint` 或 `Map`，所以 JSON 做的工作比生成的读取代码少。JSON 与二进制格式一样，计时包括转为 UTF-8 字节和从 UTF-8 字节读出（`TextEncoder`、`TextDecoder`）。测量方法以及 Go 和 Rust 的基准测试见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes)。
-
-<RuntimesTables lang="zh" only="typescript" />
-
-### 与 MemoryPack 的 TypeScript 对比 [#compared-with-memorypack]
-
-[MemoryPack](https://github.com/Cysharp/MemoryPack) 也能为标记了 `[GenerateTypeScript]` 的类生成 TypeScript。它在 Roslyn 源生成器内部完成这件事，在编译 C# 的同时把 `.ts` 文件写到磁盘。两者的差异都源于这一选择：
-
-| | Nino.Codegen | MemoryPack `[GenerateTypeScript]` |
-| --- | --- | --- |
-| 何时运行 | 每次构建之后，在独立进程中，基于构建出的程序集 | 在源生成器内部，每次编译都运行，包括 IDE 中的编译 |
-| 读取什么 | 发布的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)，即生成格式化器所依据的布局 | C# 源码，配合它自己的 TypeScript 读写代码 |
-| 配置 | 一个包引用和一个 `<NinoCodegen>` 项 | 需要用 `CompilerVisibleProperty` 项让编译器看到 MSBuild 属性，每个类型还要加特性 |
-| 运行时文件 | 版本变化导致内容变化时就重写 | 只在文件不存在时写入，升级 MemoryPack 不会更新已经写出的副本 |
-| 类型改名 | 旧文件会被删除 | 过时的 `.ts` 文件会留下（[#315](https://github.com/Cysharp/MemoryPack/issues/315)，以不计划修复关闭） |
-| 结构体 | ✅ | ❌ 只支持类 |
-| `char`、`decimal`、64 位枚举 | ✅ | ❌ |
-| 版本容错 | ✅ 版本容错和键控 | ❌ |
-| 泛型 | ✅ 泛型类型，以及多态槽位中的封闭泛型类型（[泛型类型](#generics)） | ❌ |
-| 引用追踪 | ✅（[引用追踪](#reference-tracking)） | ❌ |
-| 导入扩展名 | 空、`.js`、`.ts`、`.mjs` 或 `.mts` | 默认 `.js`（[#170](https://github.com/Cysharp/MemoryPack/issues/170)） |
-| 其他语言 | Go 和 Rust | ❌ |
-
-Roslyn 不支持源生成器输出 C# 以外的文件（[dotnet/roslyn#49935](https://github.com/dotnet/roslyn/issues/49935)），分析器规则 RS1035 也禁止在生成器中读写文件；MemoryPack 没有启用包含这条规则的扩展分析器规则。它的 TypeScript 读写代码与 C# 格式化器分开编写，两者可能不一致：在 [#309](https://github.com/Cysharp/MemoryPack/issues/309) 中，TypeScript 写 `float?` 或 `double?` 的存在字节时宽度不对，C# 读出的是 `null`；在 [#166](https://github.com/Cysharp/MemoryPack/issues/166) 中，空字符串曾被写错。用户还报告过生成的代码无法通过严格的 `tsconfig`（[#426](https://github.com/Cysharp/MemoryPack/issues/426)）、导入了没有 `.ts` 文件的基类型（[#174](https://github.com/Cysharp/MemoryPack/issues/174)），以及换行符混用（[#311](https://github.com/Cysharp/MemoryPack/issues/311)）。
-
-Nino.Codegen 在构建之后运行，依据的正是 C# 格式化器所依据的布局，测试中还在 .NET 与 Node 之间逐字节往返并运行 `tsc --strict`，从而避开了这些问题。其他方案（Protocol Buffers、MessagePack）见[什么时候不适合](/zh/docs/v4#when-not-to-use-it)。
-
-## Go [#go]
-
-Go 运行时（模块 `github.com/JasonXuDeveloper/Nino/runtimes/go/v4`，包 `nino`）读写 Nino 的[二进制格式](/zh/docs/v4/wire-format)。给 Go 类型提供编解码器有两种方式：nino-gen 生成的代码（不用反射，是最快的方式），或者你自己写的、用 `nino` 结构体标签映射的 Go 结构体。
-
-### 生成的代码 [#go-generated-code]
-
-`nino_types.go` 为每个 `[NinoType]` 包含：
-
-- 一个结构体，字段先带 `nino` 标签（成员的位置，键控类型中则是 C# 成员名），然后是 `Tags`：``Health int32 `nino:"Health" json:"health" yaml:"health"` ``；
-- `NinoLayout()`，返回 .NET 为这个类型发布的布局；`NinoTypeName()`；可以按类型 ID 写出的类还有 `NinoTypeID()`；
-- 与运行时手写示例形状相同的 `ReadX` 和 `WriteX` 函数：每段连续的固定大小成员只做一次边界检查，不用反射，也不经由函数值或接口调用：每个类的成员体和集合的每个元素都直接调用读写代码（嵌套 128 层的成员体经由运行时的 `Class`，像 .NET 一样推迟处理）。
-
-密封类是 `*X`（nil 表示 null），结构体是 `X`，可以容纳多种类型的槽位（抽象类、接口、非密封类）是一个接口，每个允许的类型一个实现。枚举是带常量的具名整数类型。辅助类型命名为 `NinoTuple2`……`NinoGrid`；名字以 `Nino` 开头的用户类型会加上 `Type` 后缀，简单名相同的两个类型会加上命名空间前缀（`ShapesLeftItem`）。`[NinoFormerName]` 不在 `nino` 标签中：布局只带有它们的哈希，`NinoLayout()` 保留了这些哈希，所以键控类型仍能读取按旧名称写出的数据。
-
-```go
-data, err := nino.Serialize(player, protocol.WritePlayer)      // 新的切片
-buf, err = nino.Append(buf[:0], player, protocol.WritePlayer)  // 追加；buf 有空间时不分配
-player, err := nino.Deserialize(data, protocol.ReadPlayer)      // 忽略值之后的字节，与 .NET 一致
-player, err := nino.DeserializeExact(data, protocol.ReadPlayer) // ……或拒绝它们
-err = nino.DeserializeInto(data, &player, protocol.ReadPlayerInto) // 读进 player，复用其中已有的对象
-```
-
-把值写入复用的缓冲区时不分配内存。生成的结构体也带有 `nino` 标签和 `NinoLayout()`，所以下面的结构体标签函数同样能读写它们。
-
-### 结构体标签 [#struct-tags]
-
-```go
-type Monster struct {
-	Health int32   `nino:"Health"`
-	Name   *string `nino:"Name,former=Title"`
-	Items  []int32 `nino:"Items"`
-	Cache  string  `nino:"-"`
-}
-
-func (Monster) NinoLayout() string { // .NET 为该类型发布的布局，或其中一部分
-	return "format=Keyed; header=Presence"
-}
-
-data, err := nino.Marshal(m)          // m 是 *Monster：一个密封类
-err = nino.Unmarshal(data, &m)        // 出错时 *m 保持不变
-err = nino.UnmarshalExact(data, &m)   // ……并且值之后的字节视为错误
-data, err = nino.MarshalAs[Animal](a) // 多态根，按类型 ID 写出
-```
-
-| 标签 | 含义 |
-| --- | --- |
-| `nino:"0"`、`nino:"1"`…… | 成员的位置，用于按位置和版本容错的类型：0 到 n-1，不能有空缺或重复。 |
-| `nino:"Name"` | 键控类型的成员，用其 C# 名字。 |
-| `nino:"-"` | 只在 Go 中使用的字段：不读也不写。 |
-| `,utf8` | `[NinoUtf8]` 字符串。 |
-| `,former=Old` | 键控成员的旧名称，每个名称写一次。 |
-
-类型用 `NinoLayout() string` 方法声明它在 .NET 中的形状：.NET 为它发布的[布局](/zh/docs/v4/evolving-data#layout-metadata)（`format=`、`header=`、`id=`、`deferrable=`、`members=`），或其中的部分。给出 `members=` 时，标签会与之核对：成员数量、每个字段的编码和键。多态类型用 `nino.Register` 注册一次，槽位只读取实现了它的接口的已注册类型。
-
-二进制格式无法表达的内容（没有固定大小的 `int` 字段、`omitempty`、`trackReferences=true` 的类型）会在读写任何字节之前返回一个指明字段的 `*nino.TagError`。每个类型的计划只构建一次并缓存；之后序列化的耗时是生成代码的几倍，仍然比 `encoding/json` 快。结构体标签方式还拒绝多维数组、分组、`BitArray`、`TimeZoneInfo`、自定义格式化器，以及带成员的 `[NinoType]` 集合。完整的标签说明和每种编码对应的 Go 类型见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go#struct-tags)。
-
-### 字符串 [#go-strings]
-
-默认编码的字符串以 WTF-8 读入 Go 字符串：即 UTF-8，但未配对的代理项（.NET 字符串可能包含）保留为 3 字节形式，所以写回时得到相同的码元。`Reader.UTF16` 返回码元本身。`[NinoUtf8]` 字符串是严格的 UTF-8。
-
-生成的代码中，C# 的 `string` 成员是 `*string`，所以 null 仍是 null。Go 的 `string` 没有 null：在读取它的地方（`Reader.String`、带 `nino` 标签的结构体中的 `string` 字段、字典的键和 `HashSet<string>` 的元素），null 字符串读出为 `""`，写回的也是 `""` 而不是 null。要区分 null 和空字符串，请用 `*string`。
-
-Go 的字符串是 UTF-8，所以按默认编码（Latin-1 或 UTF-16）写入和读取字符串时需要转码，而 Protocol Buffers 和 MessagePack 直接复制原样的 UTF-8 字节；[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#strings)中的字符串用例测量了这一点，Rust 也一样。
-
-短字符串（UTF-8 不超过 128 字节）读入 reader 持有的一块内存：每块最多 2 KiB，且不超过剩余数据能填满的大小，许多字符串只需一次分配。保留一个字符串会让它所在的整块内存保持存活，就像子串会让原字符串保持存活一样；用 `strings.Clone` 可得到独立的副本。同样，生成代码读出的 `*string`（`StringPtr`、`Utf8Ptr`）指向 reader 持有的、最多 32 个字符串的一块内存。
-
-### .NET 值 [#go-values]
-
-`decimal`、`Guid`、`DateTime` 等 .NET 值类型，在 `nino` 包里都有同名的 Go 类型，并提供从 Go 自身类型构造的函数；`*big.Int` 就是 `BigInteger`：
-
-```go
-price, err := nino.ParseDecimal("19.99")                           // decimal：scale 为 2，等同 19.99m
-id, err := nino.ParseGuid("6f9619ff-8b86-d011-b42d-00c04fc964ff")  // D、N 或 B 格式
-placed, ok := nino.DateTimeOf(time.Now())                          // DateTime，Kind 为 Utc，精确到 100 ns
-local := nino.NewDateTime(placed.Ticks(), nino.KindLocal)          // 自 0001-01-01 起的 tick 数和 Kind
-timeout := nino.TimeSpanOf(90 * time.Second)                       // TimeSpan
-sent, ok := nino.DateTimeOffsetOf(time.Now())                      // DateTimeOffset，偏移为整分钟
-huge, ok := nino.Int128Of(new(big.Int).Lsh(big.NewInt(1), 100))   // Int128（UInt128 用 UInt128Of）
-half := nino.HalfOf(1.5)                                           // Half
-version := &nino.Version{Major: 4, Minor: 0, Build: -1, Revision: -1} // 4.0
-```
-
-时间超出 .NET 的范围时，`DateTimeOf` 和 `DateTimeOffsetOf` 返回 false；偏移不是整分钟或超过 ±14 小时，`DateTimeOffsetOf` 也返回 false。转回 Go 类型：`DateTime.Time()`、`TimeSpan.Duration()`、`DateTimeOffset.Time()`、`Decimal.String()`（或 `Coefficient()` 和 `Scale()`）、`Guid.String()`、`Int128.Big()`、`Half.Float32()`。`DateOnly` 和 `TimeOnly` 分别是天数和 tick 数（`nino.DateOnly(自 0001-01-01 起的天数)`）。全部类型见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go)。
-
-## Rust [#rust]
-
-Rust 运行时（crate `nino-serialization`，库名 `nino`）读写 Nino 的[二进制格式](/zh/docs/v4/wire-format)。它的边界检查都是安全代码；只有两处允许 `unsafe`（其余部分为 `#![deny(unsafe_code)]`）：读写时转码字符串的模块，在小端和大端目标上用 Miri 测试；以及[引用追踪](#reference-tracking)中 `Shared::get` 的一个代码块，同样用 Miri 测试。它没有必需的依赖。每次发布都会以 Nino 的版本号把它发布到 crates.io：
-
-```shell
-cargo add nino-serialization --features indexmap
-cargo add indexmap
-```
-
-nino-gen 生成的代码需要 `indexmap` 功能和 `indexmap` 本身：映射和集合是 `IndexMap` 和 `IndexSet`，保持线上顺序。使用 [`Maps="std"`](#options) 时，它们是 `std::collections::HashMap` 和 `HashSet`，两者都不需要；这时它们按 `HashMap` 的迭代顺序写出，.NET 从与它写出的不同的字节中读出相同的值。使用 `Serde="true"` 时，给你的 crate 加一个 `serde` 功能，由它打开 `serde` 和 `nino-serialization/serde`。
-
-| 函数 | |
-| --- | --- |
-| `serialize`、`serialize_into` | 按声明类型写出一个值，与 `NinoSerializer.Serialize<T>` 相同。`serialize_into` 追加到一个 `Vec`，出错时把它截回原来的长度。 |
-| `deserialize`、`deserialize_exact` | 读取一个值。`deserialize_exact` 还会拒绝值之后的字节。 |
-| `deserialize_into` | 读进已有的值，与 `NinoDeserializer.Deserialize(data, ref value)` 相同：成员原地读取，`Vec` 的缓冲区和元素被复用，映射和集合先清空再填充，多态值只在类型相同时复用。 |
-
-### 生成的代码 [#rust-generated-code]
-
-编解码器完整写出（每个类型实现 `NinoRead`、`NinoWrite`、`NinoReadBody` 和 `NinoWriteBody`），而不是 `#[derive]` 属性，所以代码既不需要 derive crate，也不需要构建它的过程宏，并按布局中带的哈希检查旧键。每个类型都有 `NINO_TYPE_ID`、`NINO_TYPE_NAME` 和 `NINO_LAYOUT` 常量（`Cat::NINO_TYPE_ID`），通过 `nino::type_consts!(id, name, layout)` 声明，文档只在 crate 里写一次（泛型类型没有 `NINO_TYPE_ID`）；它的 `NinoReadBody` 和 `NinoWriteBody` impl 把各自的 `TYPE_ID` 设为同一个 ID，和 derive 一样。原始结构体的 `NinoRead` 和 `NinoWrite` impl 是 `nino::raw_read!()` 和 `nino::raw_write!()`。容纳多种类型的槽位是一个枚举 `<Base>Ref`，每个允许的类型一个装箱变体；`object` 槽位是 `AnyObject`。枚举是整数，另有一个单元结构体以常量形式持有各个具名取值。`with_nino_type(name, visitor)` 用某个 .NET 名字对应的类型调用 `NinoVisit` 访问者。生成的文件请关闭 rustfmt 后引入：
-
-```rust title="lib.rs"
-#[rustfmt::skip]
-#[path = "nino_types.rs"]
-mod protocol;
-```
-
-### 类型 [#rust-types]
-
-| C# | Rust |
-| --- | --- |
-| `sbyte` … `ulong`、`Int128`、`UInt128`、`float`、`double`、`bool` | `i8` … `u64`、`i128`、`u128`、`f32`、`f64`、`bool` |
-| `char` | `u16`，一个 UTF-16 码元（Rust 的 `char` 对应 `Rune`） |
-| `string` | `Option<String>`、`Option<WideString>`，`[NinoUtf8]` 则为 `Option<Utf8>` |
-| `T?`（结构体）、类 | `Option<T>`；递归的类为 `Option<Box<T>>` |
-| `T[]`、`List<T>`、`Queue<T>`…… | `Option<Vec<T>>`、`VecDeque<T>` |
-| `HashSet<T>`、`SortedSet<T>` | `HashSet<T>`、`BTreeSet<T>`、`IndexSet<T>` |
-| `Dictionary<K, V>`、`SortedDictionary<K, V>` | `HashMap<K, V>`、`BTreeMap<K, V>`、`IndexMap<K, V>` |
-| `ValueTuple<…>`（1 到 7 项） | 元组 |
-| `T[,]` 等多维数组 | `Grid<T, R>` |
-| 原始结构体的 `T?[]`（按原始内存写入） | `RawNullables<T>` |
-| `decimal`、`Guid`、`DateTime`、`DateTimeOffset`、`TimeSpan`、`DateOnly`、`TimeOnly`、`Half`、`Rune`、`Version`、`BigInteger`、`BitArray` | 同名类型；`DateTimeKind` 表示 `DateTime` 的 Kind |
-
-`String` 把未配对的代理项（.NET 字符串可能包含）替换为 U+FFFD；`WideString` 保留 UTF-16 码元，所以这样的值能逐字节写回（生成的代码中用 `Strings="wide"`）。
-
-### .NET 值 [#rust-values]
-
-用各类型的构造函数创建，它们检查 .NET 接受的范围，返回 `nino::Result`；也可以从文本解析。`chrono`、`uuid`、`rust_decimal` 和 `num-bigint` 这几个[功能](#rust-features)提供从这些 crate 的类型转换过来的 `TryFrom` 和 `From`：
-
-```rust
-use nino::{DateOnly, DateTime, DateTimeKind, DateTimeOffset, Decimal, Guid, TimeSpan};
-
-let price: Decimal = "19.99".parse()?;                       // decimal 文本，保留 scale
-let price = Decimal::new(1999, 2, false)?;                   // 系数、scale、是否为负
-let id: Guid = "6f9619ff-8b86-d011-b42d-00c04fc964ff".parse()?;
-let id = Guid::from_u128(0x6f9619ff_8b86_d011_b42d_00c04fc964ff);
-let epoch = DateTime::new(nino::UNIX_EPOCH_TICKS, DateTimeKind::Utc)?; // 自 0001-01-01 起的 tick 数
-let timeout = TimeSpan(90 * 10_000_000);                     // 以 100 ns 为单位的 tick 数
-let day = DateOnly::new(739_919)?;                           // 自 0001-01-01 起的天数
-
-// 开启 chrono 功能时
-let now = DateTime::try_from(chrono::Utc::now())?;          // Kind 为 Utc
-let sent = DateTimeOffset::try_from(chrono::Local::now().fixed_offset())?;
-let wait = TimeSpan::try_from(chrono::TimeDelta::seconds(90))?;
-let date: chrono::NaiveDate = day.try_into()?;
-```
-
-`Half` 就是它的 16 位（`Half(0x3E00)` 是 1.5），`BigInteger` 用 `from_i128` 或从文本创建，`Version` 是字段公开的结构体。全部类型和转换见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust)。
-
-### Derive [#rust-derive]
-
-对你自己写的类型，`#[derive(NinoRead, NinoWrite)]`（功能 `derive`）生成同样的代码，并在编译时与类型发布的布局核对：
-
-```rust
-use nino::{NinoRead, NinoWrite};
-
-#[derive(Debug, Default, Clone, PartialEq, NinoRead, NinoWrite)]
-#[nino(format = "keyed")]                 // [NinoType(NinoFormat.Keyed)] 密封类
-pub struct Player {
-    #[nino(key = "Name", utf8)]           // [NinoUtf8]
-    pub name: Option<String>,
-    #[nino(former = "Health")]            // 键为 "Hp"，也按 "Health" 读取
-    pub hp: i32,
-    #[nino(skip)]                         // 不在线上，读取时为 Default
-    pub cached: u64,
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, NinoRead, NinoWrite)]
-#[nino(kind = "raw")]                     // 非托管结构体，按规范布局
-pub struct Vec2 { pub x: f32, pub y: f32 }
-```
-
-| 类型属性 | 含义 |
-| --- | --- |
-| `format = "positional" \| "version_tolerant" \| "keyed"` | `NinoFormat.Positional`（默认）、`VersionTolerant` 或 `Keyed`。 |
-| `kind = "class" \| "open" \| "struct" \| "raw"` | 密封类（默认，带存在字节）、非密封类（带类型 ID）、结构体，或按内存写出的非托管结构体（可用 `pack` 和 `size`）。 |
-| `id = "Full.Name"` 或 `id = 0x…` | 类型 ID：在编译时哈希的 .NET 全名，或数字本身。 |
-| `deferrable = false` | .NET 从不推迟的类型（记录、通过构造函数创建的类型）。未给出时取自 `layout`。 |
-| `layout = "…"` | 类型发布的[布局](/zh/docs/v4/evolving-data#layout-metadata)，在编译时核对：成员名字和顺序、键、旧键、`[NinoUtf8]`、原始值的大小和偏移。格式、种类、类型 ID 和可推迟性未给出时取自它。 |
-
-字段属性有 `index`、`name`（.NET 中的名字；默认是字段名的 PascalCase 形式）、`key`、`former`、`utf8` 和 `skip`。枚举是多态的声明类型，每个具体类型一个变体；其他类型 ID 都会被拒绝。二进制格式无法表达的内容（`usize`、Rust 的 `char`、引用、冲突的键、不匹配的 `layout`）都是指明字段的编译错误。
-
-### 手写 impl [#rust-hand-written]
-
-优先用 derive。要手写类型的 impl（不想编译过程宏）时，crate 里的宏写出和生成代码、derive 相同的方法，写出和读入的字节也相同：
-
-| 宏 | 写出 | 放在 |
-| --- | --- | --- |
-| `nino::raw_read!()`、`nino::raw_write!()` | 原始结构体的读和写，取自它的 `nino::Raw` impl（`SIZE`、`ALIGN`、`decode_raw`、`encode_raw`）：每个值一个块，填充清零 | `impl NinoRead`、`impl NinoWrite` |
-| `nino::sealed_read!()`、`nino::sealed_write!()` | 密封类的读和写（先存在字节，再是它的 `NinoReadBody` / `NinoWriteBody`） | `impl NinoRead`、`impl NinoWrite` |
-| `nino::type_consts!(id, name, layout)` | 常量 `NINO_TYPE_ID`、`NINO_TYPE_NAME` 和 `NINO_LAYOUT`；泛型类型没有自己的 ID，写 `type_consts!(name, layout)` | 类型自己的 `impl` |
-
-```rust
-use nino::{NinoRead, NinoWrite, Raw};
-
-/// C#：`struct Cell { int Row; int Column; }`，8 字节。
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct Cell { pub row: i32, pub column: i32 }
-
-impl Raw for Cell {
-    const SIZE: usize = 8;
-    const ALIGN: usize = 4;
-
-    fn decode_raw(b: &[u8]) -> nino::Result<Self> {
-        Ok(Self { row: i32::decode_raw(b)?, column: i32::decode_raw(b.get(4..).unwrap_or_default())? })
-    }
-
-    fn encode_raw(&self, out: &mut [u8]) {
-        self.row.encode_raw(out);
-        if let Some(o) = out.get_mut(4..) {
-            self.column.encode_raw(o);
-        }
-    }
-}
-
-impl NinoRead for Cell { nino::raw_read!(); }   // 每个值读一个检查过边界的 8 字节块
-impl NinoWrite for Cell { nino::raw_write!(); } // 写一个清零的块，填充保持为 0
-```
-
-`NinoWrite::PREFETCH_BYTES`（默认 0）估计写一个值时经由它的指针读取的字节数，长列表据此边写边预取。手写的 impl 不对照任何布局检查：要在编译时发现不一致，用带 `layout = "…"` 的 [derive](#rust-derive)。
-
-### 功能 [#rust-features]
-
-| 功能 | 增加 |
-| --- | --- |
-| `derive` | `#[derive(NinoRead, NinoWrite)]`（crate `nino-serialization-derive`） |
-| `indexmap` | `IndexMap` 和 `IndexSet`，保持线上顺序，所以映射能读回并逐字节写回。生成的代码需要它，除非使用 `Maps="std"`。 |
-| `serde` | 为运行时的值类型实现 serde，带 Nino 编解码器的类型也能派生 serde（`Serde="true"`）；打开 `indexmap` 和 `uuid` 功能时，也为它们打开 serde |
-| `uuid`、`rust_decimal`、`chrono`、`num-bigint` | Nino 的 `Guid`、`decimal`、日期时间类型和 `BigInteger` 与这些 crate 类型之间的转换 |
-
-完整的 API 和每种值类型的 serde 形式见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust)。
+## 各语言中的类型 [#types]
+
+每个 `[NinoType]` 生成一个类型，每个成员是该语言里对应 .NET 所写内容的类型。差别最大的几类：
+
+| C# | TypeScript | Go | Rust |
+| --- | --- | --- | --- |
+| 结构体 | 类 | `X` | `X` |
+| 密封类 | `X \| null` | `*X` | `Option<X>` |
+| 非密封类、抽象类、接口 | `X \| null`，可以是任何生成的子类型 | 接口，由每个允许的类型实现 | `Option<XRef>`，由允许的类型组成的枚举 |
+| `object` | `unknown` | `nino.Typed` | `Option<AnyObject>` |
+| 枚举 | `as const` 对象和它的值的类型 | 带常量的具名整数类型 | 整数，外加一个列出具名值的单元结构体 |
+| `string` | `string \| null` | `*string` | `Option<String>` |
+| `T[]`、`List<T>` | `T[] \| null` | `[]T` | `Option<Vec<T>>` |
+| `Dictionary<K, V>` | `Map<K, V> \| null` | `[]nino.Entry[K, V]` | `Option<IndexMap<K, V>>` |
+| `decimal`、`Guid`、`DateTime` | `string`、`string`、`Date` | `nino.Decimal`、`nino.Guid`、`nino.DateTime` | `nino::Decimal`、`nino::Guid`、`nino::DateTime` |
+
+完整的类型表，以及怎样构造 .NET 的值：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。
 
 ## 原始结构体的字段 [#raw-struct-fields]
 
-原始结构体（按一整块写出的非托管结构体，见[原始值](/zh/docs/v4/wire-format#raw-values)）生成为一个由它的字段组成的类型，字段在规范布局里的偏移处，填充写 0。在 .NET 里大小或布局随主机变化的字段，有固定的形式：
-
-| 原始结构体里的字段 | 字节 | TypeScript | Go | Rust |
-| --- | --- | --- | --- | --- |
-| `nint` | 8 字节，符号扩展 | `bigint` | `int64` | `i64` |
-| `nuint`、指针、函数指针（`delegate*`） | 8 字节，零扩展 | `bigint` | `uint64` | `u64` |
-| `Int128`、`UInt128` | 16 字节，按 16 对齐 | 由两半（`bigint`）组成的类 | `nino.Int128`、`nino.UInt128` | `i128`、`u128` |
-| `DateTimeOffset` | 16 字节：0 处是分钟偏移，8 处是 UTC 刻度 | NINOGEN002 | 结构体 `{ DateTime, OffsetMinutes }` | 结构体 `{ date_time, offset_minutes }` |
-| 原始类型 `T` 的 `T?` | 存在字节，补 0 到 `T` 的对齐，再是 `T` | `T \| null` | `*T` | `Option<T>` |
-| `Vector64<T>` 到 `Vector512<T>` | 8 到 64 字节 | NINOGEN002 | NINOGEN002 | NINOGEN002 |
-
-`Int128?` 数组的步长是 32 字节（存在字节、15 个 0、值）。TypeScript 不生成含 `DateTimeOffset` 的原始结构体：`Date` 只到毫秒、读出来按 UTC，刻度和 kind 都回不来。旧版本构建的布局里如果有 `System.Numerics.Vector<T>`，每种语言都报 NINOGEN002：`Vector<T>` [不能序列化](/zh/docs/v4/struct-layouts#vector-t)。
+原始结构体（按一整块写出的非托管结构体，见[原始值](/zh/docs/v4/wire-format#raw-values)）生成为一个由它的字段组成的类型，字段在规范布局里的偏移处，填充写 0。在 .NET 里大小或布局随主机变化的字段（`nint`、`nuint`、指针、`Int128`、`DateTimeOffset`、原始类型 `T` 的 `T?`）按二进制格式规定的固定字节写出，在每种语言里也有固定的类型：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。`Int128?` 数组的步长是 32 字节（存在字节、15 个 0、值）。`Vector64<T>` 到 `Vector512<T>` 字段在每种语言里都报 NINOGEN002；旧版本构建的布局里如果有 `System.Numerics.Vector<T>`，也一样：`Vector<T>` [不能序列化](/zh/docs/v4/struct-layouts#vector-t)。
 
 ## 泛型类型 [#generics]
 
@@ -778,11 +223,7 @@ public sealed class Box<T>
 }
 ```
 
-| | `Box<T>` | 它的编解码器 | 作为成员的 `Box<int>` |
-| --- | --- | --- | --- |
-| TypeScript | `class Box<T>` | `BoxCodec<T>(p0: NinoCodec<T>)`，返回 `NinoCodec<Box<T> \| null>` | `Box<number> \| null`，通过模块只构建一次的编解码器读写 |
-| Go | `type Box[T any] struct` | `BoxCodec[T any](p0 NinoArg[T]) NinoArg[*Box[T]]`（`NinoArg` 包含 `Read`、`Write` 和 `MinSize`） | `*Box[int32]`，通过在 `init` 中构建的编解码器读写 |
-| Rust | `struct BoxType<T>`（`Box` 已被占用） | 只要 `T` 实现了 `NinoRead` 和 `NinoWrite`，`BoxType<T>` 就实现它们 | `Option<Box<BoxType<i32>>>` |
+`Box<T>`、它的编解码器和作为成员的 `Box<int>` 在各语言中的样子：[TypeScript](/zh/docs/v4/advanced/typescript#generics)、[Go](/zh/docs/v4/advanced/go#generics)、[Rust](/zh/docs/v4/advanced/rust#generics)。
 
 封闭的用法（`Box<int>`、`Pair<int, string>`、`Box<Box<int>>`、`List<Box<int>>`）写成带类型参数的泛型类型。在泛型类型内部，它的类型参数可以出现在任何成员类型能出现的位置：`T`、`List<T>`、`Dictionary<string, T>`、`T[]`、`T : struct` 时的 `T?`、元组、`Box<T>`、`Pair<int, T>`，以及以 `Node<T>` 形式出现的类型自身。类型实参可以是基元类型、枚举、字符串、`[NinoType]`（包括泛型的）、数组、`List<T>`、`HashSet<T>`、`Dictionary<TKey, TValue>`、`ValueTuple`、`Nullable<T>` 或 `KeyValuePair<TKey, TValue>`，在集合中也可以（`Wrap<int?[]>`、`Wrap<List<int?>>`、`Wrap<Dictionary<int, double?>>`），每个都使用 .NET 对应格式化器写出的编码。
 
@@ -792,25 +233,13 @@ public sealed class Box<T>
 
 ### 按类型 ID 写出的泛型类型 [#generic-types-behind-a-type-id]
 
-非密封的泛型类、抽象泛型类或泛型接口，按其封闭 .NET 名称（`Shop.Shelf<System.Int32>`）的类型 ID 写出。每个封闭类型都是一个单独的槽位，其情况是可以赋值给它的具体类型：封闭泛型类型（`ListShelf<int>`）和非泛型子类型（`IntShelf : Shelf<int>`）。即使没有代码提到，nino-gen 也会加入槽位需要的封闭类型（持有 `Open<T>` 的 `OpenHolder<long>` 需要 `Open<long>` 及其子类型）；持有以自身类型参数构成的槽位的泛型类型，会从每个封闭用法中取得该槽位：
+非密封的泛型类、抽象泛型类或泛型接口，按其封闭 .NET 名称（`Shop.Shelf<System.Int32>`）的类型 ID 写出。每个封闭类型都是一个单独的槽位，其情况是可以赋值给它的具体类型：封闭泛型类型（`ListShelf<int>`）和非泛型子类型（`IntShelf : Shelf<int>`）。即使没有代码提到，nino-gen 也会加入槽位需要的封闭类型（持有 `Open<T>` 的 `OpenHolder<long>` 需要 `Open<long>` 及其子类型）；持有以自身类型参数构成的槽位的泛型类型，会从每个封闭用法中取得该槽位（具体写法见 [TypeScript](/zh/docs/v4/advanced/typescript#generics)、[Go](/zh/docs/v4/advanced/go#generics)、[Rust](/zh/docs/v4/advanced/rust#generics)）。
 
-| | 成员 `Shelf<int>` | 泛型 `OpenHolder<T>` 中的 `Open<T>` |
-| --- | --- | --- |
-| TypeScript | `Shelf<number> \| null`；值是一个封闭类（`new ListShelfInt32()`），槽位按它分支 | `OpenHolder<T>` 的编解码器接收槽位的编解码器以及类型实参的编解码器 |
-| Go | `Shelf[int32]`，一个由 `*ListShelf[int32]` 和 `*IntShelf` 通过标记方法实现的接口（非抽象定义的接口名为 `<Name>Type[T]`） | `OpenHolder[T]` 的编解码器接收槽位的读写函数（`OpenHolderCodec(p0, s0 NinoArg[OpenType[T]])`） |
-| Rust | `Option<ShelfInt32Ref>`，每个允许的类型一个装箱变体的枚举 | 在自身类型参数之后多一个类型参数（`OpenHolder<T, S0>`），用作 `OpenHolder<i64, OpenInt64Ref>`；只有槽位用到的类型参数放在 `_params: PhantomData` 字段中 |
-
-类型 ID 不被槽位允许的值（其他封闭类型、未知 ID）会被拒绝。在 Go 中，同一定义的封闭类型如果类型实参对应同一个 Go 类型（`Wrap<int?[]>` 和 `Wrap<List<int?>>` 都是 `Wrap[[]*int32]`），就无法区分：按名称排在第一个的成为槽位的情况，其余的跳过并给出 NINOGEN002，所以 Go 不读取它们的 ID。
+类型 ID 不被槽位允许的值（其他封闭类型、未知 ID）会被拒绝。
 
 ### 槽位中的封闭泛型类型 [#closed-generic-types-in-slots]
 
-泛型子类型（`sealed class Box<T> : Animal`，或实现了 `[NinoType]` 接口的泛型结构体）在多态槽位或 `object` 槽位中，按其封闭 .NET 名称（`Shop.Box<System.Int32>`）的哈希写出。布局只带有定义（`Box<T>`），所以 nino-gen 从程序集的元数据中读取封闭类型：签名、`new Box<int>()`、`typeof(Box<int>)` 或泛型方法的类型实参（`NinoPolymorphic.TryRegister<Box<int>>()`）提到的每个封闭类型。其中定义是具体泛型 `[NinoType]` 的，都成为它可赋值到的槽位的一种情况（`object` 槽位接受全部），并用其类型实参的编解码器读写：
-
-| | `Animal` 槽位中的 `Box<int>` |
-| --- | --- |
-| TypeScript | `class BoxInt32 extends Box<number> {}`。槽位的写入代码按构造函数区分各种情况，所以写到那里的值是 `new BoxInt32()`，而不是 `new Box<number>()`。泛型编解码器的最后一个可选参数（`type`，默认 `Box`）是要构建的类，`Box<int>` 的编解码器读出的是 `BoxInt32`。 |
-| Go | `ReadAnimal` 和 `WriteAnimal` 中的一个 `*Box[int32]` 分支，通过在 `init` 中构建的编解码器读写；`Box[T]` 获得 `NinoTypeID()`、`NinoTypeName()`（封闭名称）以及槽位的标记方法 |
-| Rust | 变体 `AnimalRef::BoxInt32(Box<BoxType<i32>>)`，`AnyObject` 中也有一个 |
+泛型子类型（`sealed class Box<T> : Animal`，或实现了 `[NinoType]` 接口的泛型结构体）在多态槽位或 `object` 槽位中，按其封闭 .NET 名称（`Shop.Box<System.Int32>`）的哈希写出。布局只带有定义（`Box<T>`），所以 nino-gen 从程序集的元数据中读取封闭类型：签名、`new Box<int>()`、`typeof(Box<int>)` 或泛型方法的类型实参（`NinoPolymorphic.TryRegister<Box<int>>()`）提到的每个封闭类型。其中定义是具体泛型 `[NinoType]` 的，都成为它可赋值到的槽位的一种情况（`object` 槽位接受全部），并用其类型实参的编解码器读写。
 
 <Callout type="warn" title="与 .NET 接受的集合不完全相同">
 
@@ -822,15 +251,9 @@ public sealed class Box<T>
 
 声明了 [`[NinoType(trackReferences: true)]`](/zh/docs/v4/reference-tracking) 的类型会为每种语言生成，并带有 .NET 写出的引用头：0 表示 null，-1 表示之前没写过的对象（后面跟着它的主体），或者之前写过的对象的编号。对象在创建时、读取主体之前就被记录，所以主体可以持有它所在的对象（循环）。没有子类型的被追踪类、按类型 ID 写出的被追踪类或接口，以及位于不追踪的槽位（`object`、未追踪的基类）中的被追踪类型，读写方式都与 .NET 相同。
 
-| | 被追踪的类 `Node` |
-| --- | --- |
-| TypeScript | `Node \| null`：读取时对同一个对象的每个引用返回同一个对象，写入时按对象标识编号 |
-| Go | `*Node`：每个引用都是同一个指针，按指针编号 |
-| Rust | `Option<nino::Shared<Node>>`：可以被任意多处持有的一个对象（克隆得到的是同一个对象），按标识比较相等；用 `Shared::empty` 和 `fill` 构建循环 |
+被追踪的类 `Node` 在 [TypeScript](/zh/docs/v4/advanced/typescript#reference-tracking) 中是 `Node | null`，在 [Go](/zh/docs/v4/advanced/go#reference-tracking) 中是 `*Node`，在 [Rust](/zh/docs/v4/advanced/rust#reference-tracking) 中是 `Option<nino::Shared<Node>>`，对它的每个引用都是同一个对象。
 
-在 Rust 中，一次读取创建的对象（包括循环）都属于这次读取，一起释放，就像 .NET 的垃圾回收器那样：最后一个保持它们的 `Shared`（返回的值、任何克隆、存放在所有被追踪对象之外的 `Shared`）被丢弃时，或者读取失败时。丢弃读到的值后还要保留图的一部分，就克隆你要保留的 `Shared`。手工构建的图（`Shared::new`、`Shared::empty` 和 `fill`）像 `Rc` 一样按引用计数，这样构建的循环不会被释放。手写多态被追踪槽位的读取代码时，对槽位允许的每个类型用 `r.shared_from::<T>(&r.back_ref(header)?)` 取回引用。
-
-引用头不是 -1、0 或已读对象的编号时会被拒绝，指向槽位不允许的类型的对象的反向引用也会被拒绝；每个新对象至少占 4 个字节的引用头，所以对象表的增长不会快于数据。Go 的[结构体标签](#struct-tags)不追踪引用：它们拒绝这样的类型。
+引用头不是 -1、0 或已读对象的编号时会被拒绝，指向槽位不允许的类型的对象的反向引用也会被拒绝；每个新对象至少占 4 个字节的引用头，所以对象表的增长不会快于数据。
 
 ## `[NinoType]` 集合 [#ninotype-collections]
 
@@ -846,55 +269,27 @@ TypeScript、Go 和 Rust 的读取器与 .NET 读取器一样，按不可信输�
 - **.NET 在任何模式下都拒绝的内容。** 不是 0 或 1 的 `bool` 和存在字节、超出其区域末尾的成员、值没有填满条目的键控成员、格式错误的推迟的主体段、映射或集合中重复的键或元素。
 - **值之后的字节**不读取，与 .NET 的默认行为一致（TypeScript 的 `deserializeExact`、Go 的 `DeserializeExact` 和 Rust 的 `deserialize_exact` 会拒绝它们）。
 
-<Tabs groupId="codegen-lang" persist items={['TypeScript', 'Go', 'Rust']}>
-<Tab value="TypeScript">
-
-- 所有失败都是 `NinoError`。
-- 映射读入 `Map`，从不读入普通对象，所以 `__proto__` 这样的键只是数据。
-- `[NinoUtf8]` 字符串必须是给定字符数的严格 UTF-8。
-- V8 对数字、`bigint` 以及数组下标形式的字符串（`"0"` 到 `"4294967294"`，按其数值求哈希）求哈希时不带种子，数据可以挑出落进同一个桶的键。超过 128 个数字、`bigint` 或字符串键的映射或集合会让每个键经过 `NinoKeyGuard`（字符串只对数组下标形式的求哈希）：某个键在所在的桶里会碰到 100 个以上的键时，抛出 `NinoError`，和 .NET 的 [`MaxHashCollisions`](/zh/docs/v4/security#hash-flooding) 一样。这个防护只对 V8（Node、Chromium、Deno）精确，对 JavaScriptCore 和 SpiderMonkey 不精确，它们对键的哈希方式不同。Go 和 Rust 用随机种子求键的哈希。
-- 重复的键按 `Map` 和 `Set` 的方式比较：数字、`bigint`、字符串、布尔值和 `null` 按值比较。读成对象的键（读成 `Date` 的 `DateTime`、结构体、元组）以及只有小数位数不同的 `decimal` 不参与比较，这样的映射或集合会保留两个条目。
-
-</Tab>
-<Tab value="Go">
-
-- 对任何输入，读取都不会 panic，这是由构造保证的，而不是靠 `recover`；长度上限与 .NET 相同。错误是粘滞的：第一次失败后，每次读取都返回零值，所以每个循环都会结束。
-- 所有失败都是 `*nino.Error`（`Code`、`Offset`、`Detail`；`errors.Is(err, nino.ErrTooDeep)` ……），`Deserialize` 同时返回零值，从不返回部分值；`Unmarshal` 不改动目标。
-- 在[不可信模式](/zh/docs/v4/security#untrusted-mode)之外比 .NET 更严格，或者始终更严格：它还拒绝超过 `DateTime.MaxValue` 的 `DateTime` 刻度、无效的 `decimal`、超出范围的 `DateOnly` 和 `TimeOnly`、原始结构体中不是 0 或 1 的 bool、键控主体中的重复键，以及非最简形式的 `BigInteger`。
-
-</Tab>
-<Tab value="Rust">
-
-- 它不会 panic，要么返回完整的值，要么返回一个 `Error`（`ErrorKind` 说明是哪项检查失败；超过 512 层是 `ErrorKind::TooDeep`）。
-- 推迟的主体放到堆上的工作列表中。集合的预先分配来自每次读取的一份预算（每个输入字节 16 字节，外加 4 KiB）。
-- 在[不可信模式](/zh/docs/v4/security#untrusted-mode)之外比 .NET 更严格，或者始终更严格：它还拒绝超出范围的日期和时间、无效的 `decimal`、原始结构体中非零的填充、`BitArray` 中不为零的未用位，以及非最简形式的 `BigInteger`。
-
-</Tab>
-</Tabs>
-
-.NET 为夏令时切换时重复那一小时里的本地时间写出的 `DateTime`（最高两位为 kind 3），Go 和 Rust 都能读出并原样写回：Rust 的 `kind()` 与 .NET 的 `DateTime.Kind` 一样报告为 `Local`，并可用 `is_ambiguous_local()` 区分；Go 的 `Kind()` 返回 3。
+每个运行时各自补充的内容（它的错误类型、对哈希洪泛的防护、比 .NET 更严格的检查）：[TypeScript](/zh/docs/v4/advanced/typescript#untrusted-data)、[Go](/zh/docs/v4/advanced/go#untrusted-data)、[Rust](/zh/docs/v4/advanced/rust#untrusted-data)。
 
 ## 不会生成的内容 [#not-generated]
 
-nino-gen 会跳过目标语言无法表达的类型以及包含它们的类型，并给出警告 NINOGEN002：
+nino-gen 会跳过目标语言无法表达的类型以及包含它们的类型，并给出警告 NINOGEN002。每种语言都跳过：
 
-- Go 和 Rust 中，以其他类型参数包含自身的泛型类型（[泛型类型](#generics)）；
-- Go 中，槽位里同一定义、类型实参对应同一个 Go 类型的封闭泛型类型，第一个之后的那些（[按类型 ID 写出的泛型类型](#generic-types-behind-a-type-id)）；
-- 槽位中，程序集和槽位都没有提到的封闭泛型类型：它们的 ID 是未知的；
+- 槽位中，程序集和槽位都没有提到的封闭泛型类型：它们的 ID 是未知的（[槽位中的封闭泛型类型](#closed-generic-types-in-slots)）；
 - 带 `trackReferences` 的泛型类型；
-- TypeScript 中，[上面列出的](#not-supported)成员；
-- Rust 中，键或元素无法在 Rust 中哈希的映射和集合（`f32`、`f64` 以及包含它们的类型），以及带填充的原始元组；
-- 每种语言中原始结构体的 `Vector64<T>` 到 `Vector512<T>` 字段，TypeScript 中原始结构体的 `DateTimeOffset` 字段（[原始结构体的字段](#raw-struct-fields)），以及旧版本构建的、含 `System.Numerics.Vector<T>` 的布局。
+- 原始结构体的 `Vector64<T>` 到 `Vector512<T>` 字段（[原始结构体的字段](#raw-struct-fields)），以及旧版本构建的、含 `System.Numerics.Vector<T>` 的布局。
 
-在 Go 和 Rust 中，`HashSet<string>` 的元素和字典的键是非 null 的字符串，因为 .NET 从不在那里写出 null 键。
+各语言另外跳过的内容：[TypeScript](/zh/docs/v4/advanced/typescript#not-supported)、[Go](/zh/docs/v4/advanced/go#not-supported)、[Rust](/zh/docs/v4/advanced/rust#not-supported)。
 
 ## 如何测试 [#tests]
 
-nino-gen 为一致性语料中的类型生成的 TypeScript、Go 和 Rust 代码提交在 Nino 的仓库中，并在各语言中用语料运行：每个有效用例都要读出并逐字节写回，每个恶意用例和截断前缀都要被拒绝。Nino 的集成测试还用 Nino.Codegen 的构建目标为每种语言构建项目，把输出与 nino-gen 的输出比较，并在 Node 中用 .NET 写出的字节运行生成的 TypeScript。设计说明见 [docs/codegen.md](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/codegen.md)。
+nino-gen 为一致性语料中的类型生成的 TypeScript、Go 和 Rust 代码提交在 Nino 的仓库中，并在各语言中用语料运行：每个有效用例都要读出并逐字节写回，每个恶意用例和截断前缀都要被拒绝。Nino 的集成测试还用 Nino.Codegen 的构建目标为每种语言构建项目，把输出与 nino-gen 的输出比较，在 Node 中用 .NET 写出的字节运行生成的 TypeScript（也让 .NET 读取 TypeScript 创建的值），并用 `tsc --strict --noUnusedLocals --noUnusedParameters` 编译它。设计说明见 [docs/codegen.md](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/codegen.md)。
 
 ## 下一步 [#next-steps]
 
-- [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)：用于 `application/x-nino` 的 MVC 格式化器和 Minimal API 请求体。
-- [浏览器客户端](/zh/docs/v4/advanced/browser)：在浏览器中通过 .NET WebAssembly 直接运行 C# 类型，用于 TypeScript 尚未覆盖的功能。
-- [数据演进](/zh/docs/v4/evolving-data)：已经部署的客户端在更新之前一直运行旧代码，所以要选择能容忍变化的格式。
-- [二进制格式](/zh/docs/v4/wire-format)：每个运行时读写的字节。
+<Cards>
+  <Card title="TypeScript" href="/zh/docs/v4/advanced/typescript">用于浏览器和 Node 的类和编解码器：API、类型化数组和浏览器中的文本。</Card>
+  <Card title="Go" href="/zh/docs/v4/advanced/go">生成的结构体和编解码器，或者带 nino 标签的自定义结构体。</Card>
+  <Card title="Rust" href="/zh/docs/v4/advanced/rust">生成的类型和编解码器、derive 和手写 impl。</Card>
+  <Card title="数据演进" href="/zh/docs/v4/evolving-data">已部署的客户端在更新前一直运行旧代码：选择能容忍变化的格式。</Card>
+</Cards>
