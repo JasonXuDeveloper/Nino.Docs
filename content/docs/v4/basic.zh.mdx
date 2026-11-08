@@ -54,10 +54,16 @@ void NinoSerializer.Serialize<T>(in T value, IBufferWriter<byte> bufferWriter);
 // 用已有的 Writer（一个缓冲区中的多个值、自定义格式化器）
 void NinoSerializer.Serialize<T>(in T value, ref Writer writer);
 
+// 写入 Stream：字节相同，不分帧（rc.10 起；见流与压缩）
+void NinoSerializer.Serialize<T>(in T value, Stream stream);
+ValueTask NinoSerializer.SerializeAsync<T>(T value, Stream stream, CancellationToken cancellationToken = default);
+
 // 装箱的值，仅用于运行时才以 Type 得知的类型（见运行时类型）
 byte[] NinoSerializer.SerializeBoxed(object value, Type type);
 void NinoSerializer.SerializeBoxed(object value, IBufferWriter<byte> bufferWriter, Type type);
 void NinoSerializer.SerializeBoxed(object value, ref Writer writer, Type type);
+void NinoSerializer.SerializeBoxed(object value, Stream stream, Type type);
+ValueTask NinoSerializer.SerializeBoxedAsync(object value, Stream stream, Type type, CancellationToken cancellationToken = default);
 ```
 
 `T` 可以是任何[受支持的类型](/zh/docs/v4/types)：`[NinoType]`、基元类型、字符串、集合等。
@@ -125,13 +131,21 @@ void NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data, ref T value);
 T NinoDeserializer.Deserialize<T>(ref Reader reader);
 void NinoDeserializer.Deserialize<T>(ref Reader reader, ref T value);
 
+// 从 Stream 读，一直读到结尾（rc.10 起；见流与压缩）
+T NinoDeserializer.Deserialize<T>(Stream stream);
+void NinoDeserializer.Deserialize<T>(Stream stream, ref T value);
+ValueTask<T> NinoDeserializer.DeserializeAsync<T>(Stream stream, CancellationToken cancellationToken = default);
+
 // 装箱的值，仅用于运行时才以 Type 得知的类型（见运行时类型）
 object NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, Type type);
 void NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, ref object value, Type type);
 void NinoDeserializer.DeserializeBoxed(ref Reader reader, ref object value, Type type);
+object NinoDeserializer.DeserializeBoxed(Stream stream, Type type);
+void NinoDeserializer.DeserializeBoxed(Stream stream, ref object value, Type type);
+ValueTask<object> NinoDeserializer.DeserializeBoxedAsync(Stream stream, Type type, CancellationToken cancellationToken = default);
 ```
 
-输入数据是 `ReadOnlySpan<byte>`：`byte[]`、`ArraySegment<byte>`、`Span<byte>`、`Memory<byte>.Span`，或者现有缓冲区的任意切片，都可以直接传入，不用拷贝。`ReadOnlySequence<byte>`（来自 `System.IO.Pipelines`）从 rc.10 起有自己的重载，只有数据跨多段时才拷贝一次，见[多段输入](/zh/docs/v4/advanced/streams#readonlysequence-input)。
+输入数据是 `ReadOnlySpan<byte>`：`byte[]`、`ArraySegment<byte>`、`Span<byte>`、`Memory<byte>.Span`，或者现有缓冲区的任意切片，都可以直接传入，不用拷贝。`ReadOnlySequence<byte>`（来自 `System.IO.Pipelines`）从 rc.10 起有自己的重载，只有数据跨多段时才拷贝一次，见[多段输入](/zh/docs/v4/advanced/streams#readonlysequence-input)。只放了一个值的 `Stream`，用 `Deserialize<T>(stream)` 或 `await DeserializeAsync<T>(stream)` 读，见[流](/zh/docs/v4/advanced/streams#streams)。
 
 ```csharp
 Order order = NinoDeserializer.Deserialize<Order>(bytes);

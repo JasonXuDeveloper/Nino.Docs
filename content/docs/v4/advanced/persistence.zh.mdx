@@ -219,6 +219,8 @@ Document loaded = DocumentFile.Decode(SafeFile.Read(path, buffer));
 
 `bufferSize: 1` 关掉 `FileStream` 自带的缓冲区：一次读写一整块时，它只会多一次拷贝。`Stream.ReadExactly` 要求 .NET 7 或更高版本；其他平台（包括 Unity）循环调用 `Read`，直到读满 `length` 字节。在 Unity 里，文件写到 `Application.persistentDataPath` 下。
 
+没有文件头的文件不用自己准备缓冲区：把 `file.Write(bytes)` 换成 `NinoSerializer.Serialize(document, file)`，读的时候用 `NinoDeserializer.Deserialize<Document>(file)`（[流](/zh/docs/v4/advanced/streams#streams)）。
+
 </Callout>
 
 ## 键值存储 [#key-value-stores]
@@ -374,7 +376,7 @@ public sealed class EventLog : IDisposable
 - 先重放，再在 `Replay` 返回的位置打开日志：`using var log = new EventLog(path, EventLog.Replay(path, state.Apply));`。这样追加下一条记录之前，残缺的末尾就被截掉了；如果直接接在它后面追加，下次重放会按残缺记录的长度把新记录读进去。
 - 长度前缀只能发现被截断的**末尾**。要发现文件中间的损坏，在每条记录的长度之后加一个校验和（例如 `System.IO.Hashing.Crc32`）。
 - 读回事件的版本，在写入时可能还不存在：[消息队列的规则](/zh/docs/v4/advanced/message-queues#topics-that-outlive-a-deployment)原样适用。
-- 这些记录的帧格式 `[int32 长度][负载]` 和 [`Stream` 辅助类](/zh/docs/v4/advanced/streams#streams)、[网络层指南](/zh/docs/v4/advanced/networking#frame-the-stream)一样，所以也能用它们读写这份日志。
+- 这些记录的帧格式 `[int32 长度][负载]` 和 [`Stream` 分帧辅助类](/zh/docs/v4/advanced/streams#frames)、[网络层指南](/zh/docs/v4/advanced/networking#frame-the-stream)一样，所以也能用它们读写这份日志。
 
 ## 快照与检查点 [#snapshots-and-checkpoints]
 

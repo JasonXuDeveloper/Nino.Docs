@@ -72,8 +72,8 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
   { label: '对象池', cells: [['yes', <><code>[NinoPooled]</code>、工厂、回收器</>], 'n/a: 文档未说明'] },
   { group: 'I/O 与集成' },
   { label: <><code>IBufferWriter&lt;byte&gt;</code> 和 span</>, cells: ['yes', 'yes'] },
-  { label: <><code>Stream</code></>, cells: [['yes', <>基于缓冲区 API 的<a href="/zh/docs/v4/advanced/streams#streams">简短辅助方法</a></>], 'yes: 它的主要 API'] },
-  { label: '序列化回调', cells: [['yes', <>在调用前后调用你自己的钩子（<a href="/zh/docs/v4/advanced/streams#callbacks">示例</a>）</>], ['yes', <><code>[ProtoBeforeSerialization]</code>、<code>[ProtoAfterDeserialization]</code> 等</>]] },
+  { label: <><code>Stream</code></>, cells: [['yes', <>rc.10 起内置，同步异步都有（<a href="/zh/docs/v4/advanced/streams#streams">流</a>）</>], 'yes: 它的主要 API'] },
+  { label: '序列化回调', cells: [['yes', <>rc.10 起内置：<code>[NinoOnSerializing]</code>、<code>[NinoOnDeserialized]</code> 等四个特性，由生成的代码直接调用（<a href="/zh/docs/v4/defining-types#callbacks">回调</a>）</>], ['yes', <><code>[ProtoBeforeSerialization]</code>、<code>[ProtoAfterDeserialization]</code> 等</>]] },
   { label: '无法加特性的类型', cells: [['yes', <><a href="/zh/docs/v4/custom-formatters">自定义格式化器</a></>], ['yes', <>代理类型（<code>SetSurrogate</code>）</>]] },
   { label: '内置的 BCL 类型', cells: [['yes', <><code>BigInteger</code>、<code>Version</code>、<code>DateTimeOffset</code> 等<a href="/zh/docs/v4/types#other-built-in-types">更多类型</a></>], 'partial: 没有 BigInteger、Version、StringBuilder、BitArray、DateTimeOffset 等类型的序列化器'] },
   { label: 'gRPC', cells: ['n/a: 是序列化库，不是 RPC 框架', ['yes', <>protobuf-net.Grpc，代码优先</>]] },
@@ -126,11 +126,12 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
 | `[ProtoIgnore]` | `[NinoIgnore]`（Nino 默认写出所有公共成员，除非你排除它） |
 | 私有成员上的 `[ProtoMember]` | `[NinoType(includeNonPublicMembers: true)]` |
 | 基类型上的 `[ProtoInclude(n, typeof(T))]` | 基类型上的 `[NinoType]`：子类型自动继承，不需要编号（[多态](/zh/docs/v4/polymorphism)） |
-| `[ProtoBeforeSerialization]`、`[ProtoAfterDeserialization]` | 在调用前后调用你自己的钩子（[回调](/zh/docs/v4/advanced/streams#callbacks)） |
+| `[ProtoBeforeSerialization]`、`[ProtoAfterSerialization]`、`[ProtoBeforeDeserialization]`、`[ProtoAfterDeserialization]` | `[NinoOnSerializing]`、`[NinoOnSerialized]`、`[NinoOnDeserializing]`、`[NinoOnDeserialized]`：方法不带参数，是 `public` 或 `internal`（[回调](/zh/docs/v4/defining-types#callbacks)） |
 | `RuntimeTypeModel` 代理类型 | [自定义格式化器](/zh/docs/v4/custom-formatters) |
-| `Serializer.Serialize(stream, value)` | `NinoSerializer.Serialize(value)` 或 `NinoSerializer.Serialize(value, bufferWriter)`；流用一个[简短的辅助方法](/zh/docs/v4/advanced/streams#streams) |
-| `Serializer.Deserialize<T>(stream)` | `NinoDeserializer.Deserialize<T>(bytes)` |
-| `Serializer.Merge(stream, value)` | `NinoDeserializer.Deserialize(bytes, ref value)`，它替换内容而不是追加（[复用与对象池](/zh/docs/v4/pooling)） |
+| `Serializer.Serialize(stream, value)` | `NinoSerializer.Serialize(value, stream)`：值在前（[流](/zh/docs/v4/advanced/streams#streams)）；不用流时是 `NinoSerializer.Serialize(value)` 和 `Serialize(value, bufferWriter)` |
+| `Serializer.Deserialize<T>(stream)` | `NinoDeserializer.Deserialize<T>(stream)`，一直读到流结束；不用流时是 `Deserialize<T>(bytes)` |
+| `Serializer.Merge(stream, value)` | `NinoDeserializer.Deserialize(stream, ref value)`，它替换内容而不是追加（[复用与对象池](/zh/docs/v4/pooling)） |
+| `SerializeWithLengthPrefix`、`DeserializeItems` | 在流上读写[帧](/zh/docs/v4/advanced/streams#frames) |
 | `TypeModel.MaxDepth` | `NinoSettings.MaxDepth`（[限制](/zh/docs/v4/security#limits)） |
 
 两个库写出的字节不同，所以已经存下的数据需要转换。两个库可以装在同一个项目里：转换期间给类型同时保留两种特性，用 protobuf-net 读出每个存下的值，再用 Nino 写回，最后移除 protobuf-net。给转换后的数据加上[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)，以后的版本就知道该用哪个读取器。进程之间的消息不需要转换：两端同时升级即可。其他语言的程序依据 `.proto` schema 读的消息继续用 Protocol Buffers；如果那些程序是 TypeScript、Go 或 Rust，也可以改用 [nino-gen](/zh/docs/v4/advanced/codegen) 生成的代码。

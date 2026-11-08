@@ -1,15 +1,68 @@
 ---
 title: Streams and Compression
-seoTitle: "Streams, Async, Callbacks and Compression – Nino v4 Docs"
-description: "Short helpers over Nino's buffer and span APIs: length-prefixed frames on a Stream, async reads and writes, ReadOnlySequence input, before/after hooks, and Brotli or GZip compression."
+seoTitle: "Streams, Async I/O and Compression – Nino v4 Docs"
+description: "Write a value to a Stream and read it back with NinoSerializer and NinoDeserializer, synchronously or async; length-prefixed frames for several messages on one stream; ReadOnlySequence input; and Brotli or GZip compression."
 icon: ArrowDownUp
 ---
 
-Nino serializes into an `IBufferWriter<byte>` and deserializes from a `ReadOnlySpan<byte>`. Streams, async I/O, multi-segment input, serialization callbacks and compression each take a few lines on top of those two calls. This page has a ready-to-copy version of each.
+<AnchorRedirect
+  map={{
+    callbacks: '/en/docs/v4/defining-types#callbacks',
+  }}
+/>
+
+Since rc.10, `NinoSerializer` and `NinoDeserializer` write to and read from a `Stream` directly, synchronously or with `await`. One call puts one value on a stream, or reads one value up to the stream's end. Several messages on one stream need frames, and compression takes a few lines on top; this page shows each.
+
+| You have | Use |
+| --- | --- |
+| One value per stream: a file, an HTTP body, a blob | [`Serialize(value, stream)`, `Deserialize<T>(stream)`](#streams) |
+| The same, with async I/O | [`SerializeAsync`, `DeserializeAsync`](#async) |
+| Many values on one stream: a socket, a log of records | [frames](#frames) |
+| A `ReadOnlySequence<byte>` from a `PipeReader` | [`Deserialize<T>(sequence)`](#readonlysequence-input) |
+| Fewer bytes on disk or on the wire | [compression](#compression) |
 
 ## Streams
 
-A stream has no message boundaries, so write each value as a frame: a 4-byte little-endian length, then the payload. `Writer` reserves the length slot, serializes the value after it and then patches in the length, all in one buffer:
+`NinoSerializer.Serialize(value, stream)` writes one value; `NinoDeserializer.Deserialize<T>(stream)` reads it back, to the end of the stream:
+
+```csharp
+using (var file = File.Create(path))
+    NinoSerializer.Serialize(checkpoint, file); // [!code highlight]
+
+using (var file = File.OpenRead(path))
+    checkpoint = NinoDeserializer.Deserialize<Checkpoint>(file); // [!code highlight]
+
+using (var file = File.OpenRead(path))
+    NinoDeserializer.Deserialize(file, ref checkpoint); // fills the instance you keep
+```
+
+- **The bytes.** The stream gets exactly what `NinoSerializer.Serialize(checkpoint)` returns: no length, no header. Nino serializes into its pooled <Term id="scratch-buffer">scratch buffer</Term> and hands it to the stream in one `Write`, so a call allocates no array.
+- **Reading.** From the stream's position to its end, into an array rented from `ArrayPool<byte>.Shared` and returned after the read. A `MemoryStream` whose buffer is exposed is read in place, with no copy, and left at its end. The bytes are then read as a span is, with every check: [untrusted mode](/en/docs/v4/security#untrusted-mode) applies, bytes after the value included, and a stream that ends early throws `NinoDataException`.
+- **Growth.** A stream that cannot seek starts with 4 KiB and doubles the array only when it is full. A seekable stream's `Length` sizes the first array up to 1 MiB, since a length is only a claim. Nino never holds much more than twice what the stream delivered.
+- **Calls.** With a type known at compile time, both calls are [intercepted](/en/docs/v4/performance#interceptors) like the span calls and go straight to the generated formatter. For a type known only as a `Type`, the [boxed calls](/en/docs/v4/basic#the-boxed-api) take a stream too: `SerializeBoxed(value, stream, type)`, `DeserializeBoxed(stream, type)` and `DeserializeBoxed(stream, ref value, type)`.
+
+<Callout type="warn" title="Bound a stream from a peer">
+
+Nino reads until the stream ends, so a stream someone else controls (an upload, a socket) can make it hold as much as they send. Cap it before you read: reject a request whose length is over your limit (ASP.NET Core's request size limit does), or send [frames](#frames) with a maximum size. See [What Stays Your Job](/en/docs/v4/security#what-stays-your-job).
+
+</Callout>
+
+## Async
+
+```csharp
+await NinoSerializer.SerializeAsync(checkpoint, stream, ct);
+Checkpoint read = await NinoDeserializer.DeserializeAsync<Checkpoint>(stream, ct);
+```
+
+- Both return a `ValueTask` and write and read the same bytes as the synchronous calls; `SerializeBoxedAsync` and `DeserializeBoxedAsync` take a `Type`.
+- `SerializeAsync` serializes the value before it returns, so you may change the value while the write is pending. A write that completes at once (a `MemoryStream`, a buffered `FileStream`) allocates nothing; a pending one keeps Nino's buffer until it completes, and the next call on the thread gets another.
+- `DeserializeAsync` from a `MemoryStream` allocates nothing but the value.
+- There is no async form that reads into an existing instance (an `async` method takes no `ref`): call the synchronous `Deserialize(stream, ref value)`, or read the bytes yourself and call `Deserialize(span, ref value)`.
+- The async calls need .NET Standard 2.1 or later: .NET 8 and 10, and every Unity version Nino supports. .NET Framework uses the .NET Standard 2.0 build, which has only the synchronous calls.
+
+## Several Messages on One Stream [#frames]
+
+`Deserialize<T>(stream)` reads one value up to the end of the stream. A socket, or a file of records, holds many, so write each as a frame: a 4-byte little-endian length, then the payload. `Writer` reserves the length slot, serializes the value after it and then patches in the length, all in one buffer:
 
 ```csharp title="StreamFrames.cs"
 using System;
@@ -118,18 +171,13 @@ public static partial class StreamFrames
 }
 ```
 
+A sequence of values (what `IAsyncEnumerable<T>` streaming gives you elsewhere) is just consecutive frames: write one frame per element, and read until the stream ends, into one instance:
+
 ```csharp
 using var buffer = new NinoArrayBufferWriter(); // one per thread or connection
-using (var file = File.Create(path))
-    StreamFrames.Write(file, checkpoint, buffer);
-
-using (var file = File.OpenRead(path))
-    checkpoint = StreamFrames.Read<Checkpoint>(file);
+foreach (AuditEvent e in events)
+    StreamFrames.Write(stream, e, buffer);
 ```
-
-`TryRead` rents one pooled array per frame for the prefix and the payload, and deserializes into `value` in place: once `value` has the right shape, writing and reading a frame allocates nothing but the strings whose text changed. `Read` returns a new value each time.
-
-A sequence of values (what `IAsyncEnumerable<T>` streaming gives you elsewhere) is just consecutive frames: write one frame per element and read until the stream ends, into one instance:
 
 ```csharp
 AuditEvent auditEvent = null;                   // filled in place by every frame
@@ -137,11 +185,11 @@ while (StreamFrames.TryRead(stream, ref auditEvent))
     Index(auditEvent);
 ```
 
-The frame format is the same as in the [network guide](/en/docs/v4/advanced/networking#frame-the-stream), so both ends can mix the two.
+`TryRead` rents one pooled array per frame for the prefix and the payload, and deserializes into `value` in place: once `value` has the right shape, writing and reading a frame allocates nothing but the strings whose text changed. `Read` returns a new value each time. The frame format is the same as in the [network guide](/en/docs/v4/advanced/networking#frame-the-stream), so both ends can mix the two.
 
-## Async
+### Async Frames [#async-frames]
 
-`Writer` is a `ref struct` and cannot live in an `async` method, so build the frame synchronously with `Frame`, then await the I/O. `WriteAsync` needs no `async` of its own: it returns the stream's task, so do not reuse the buffer until that has completed. Add these to `StreamFrames`:
+Build the frame synchronously with `Frame` (a `Writer` is a `ref struct` and cannot live in an `async` method), then await the I/O. `WriteAsync` needs no `async` of its own: it returns the stream's task, so do not reuse the buffer until that has completed. Add these to `StreamFrames`:
 
 ```csharp title="StreamFrames.cs"
 using System;
@@ -191,11 +239,11 @@ public static partial class StreamFrames
 }
 ```
 
-An `async` method allocates its state machine only when it actually waits for I/O, and `ReadAsync` returns a new value per frame (an `async` method cannot take a `ref` parameter); for a loop that must not allocate, use the synchronous `TryRead` or a [`PipeReader`](/en/docs/v4/advanced/networking#reading-frames).
+An `async` method allocates its state machine only when it actually waits for I/O, and `ReadAsync` returns a new value per frame; for a loop that must not allocate, use the synchronous `TryRead` or a [`PipeReader`](/en/docs/v4/advanced/networking#reading-frames).
 
 `Fill` and `FillAsync` run on every target; on .NET 7 and later, `Stream.ReadAtLeast` and `ReadExactlyAsync` do the same. `stream.Write(span)`, `WriteAsync(memory)` and `ReadAsync(memory)` need .NET Standard 2.1, which every Unity version Nino supports (2022.3 and later) has; on .NET Standard 2.0 only, use the `byte[]` overloads, getting the written array with `MemoryMarshal.TryGetArray(buffer.WrittenMemory, out var segment)`.
 
-With `System.IO.Pipelines`, serialize straight into the `PipeWriter` (it is an `IBufferWriter<byte>`) and read frames from the `PipeReader`; see [Reading Frames](/en/docs/v4/advanced/networking#reading-frames) for the complete loop, which decodes each frame the same way as the helper below.
+With `System.IO.Pipelines`, serialize straight into the `PipeWriter` (it is an `IBufferWriter<byte>`) and read frames from the `PipeReader`; see [Reading Frames](/en/docs/v4/advanced/networking#reading-frames) for the complete loop, which decodes each frame as the sequence overloads below do.
 
 ## Multi-Segment Input (`ReadOnlySequence`) [#readonlysequence-input]
 
@@ -239,37 +287,6 @@ public static void Deserialize<T>(in ReadOnlySequence<byte> data, ref T value)
 ```
 
 Add both to `StreamFrames`. Either way, pipes usually return one segment per read, so most frames take the first branch and copy nothing.
-
-## Callbacks
-
-Nino calls no hooks of its own. Put the before and after logic in an interface, and call it around Nino in one small helper. Constrained to the interface, the calls do not box a struct:
-
-```csharp
-public interface ISerializationCallbacks
-{
-    void OnBeforeSerialize();
-    void OnAfterDeserialize();
-}
-
-public static class CallbackSerializer
-{
-    public static void Serialize<T>(T value, IBufferWriter<byte> output) where T : ISerializationCallbacks
-    {
-        value?.OnBeforeSerialize();
-        NinoSerializer.Serialize(value, output);
-    }
-
-    public static void Deserialize<T>(ReadOnlySpan<byte> data, ref T value) where T : ISerializationCallbacks
-    {
-        NinoDeserializer.Deserialize(data, ref value);
-        value?.OnAfterDeserialize();
-    }
-}
-```
-
-- Calls inside a generic helper are not [intercepted](/en/docs/v4/performance#interceptors), because `T` is a type parameter there. They use the regular path, a few nanoseconds more per call.
-- Hooks for nested objects are your helper's job too: call them from the root's `OnAfterDeserialize`.
-- For logic that belongs to construction, a [`[NinoConstructor]`](/en/docs/v4/constructors) or a property setter runs during deserialization itself.
 
 ## Compression
 
@@ -332,17 +349,28 @@ public static class BrotliPayload
 }
 ```
 
-With streams, wrap the stream and reuse the frame helpers from above. `GZipStream` is available everywhere, including .NET Standard 2.0 and Unity:
+With streams, wrap the stream and call Nino on the wrapper. `GZipStream` is available everywhere, including .NET Standard 2.0 and Unity:
 
 ```csharp
 using (var gzip = new GZipStream(File.Create(path), CompressionLevel.Fastest))
-    StreamFrames.Write(gzip, checkpoint, buffer);
+    NinoSerializer.Serialize(checkpoint, gzip);
 
 using (var gzip = new GZipStream(File.OpenRead(path), CompressionMode.Decompress))
-    checkpoint = StreamFrames.Read<Checkpoint>(gzip);
+    checkpoint = NinoDeserializer.Deserialize<Checkpoint>(gzip);
 ```
 
+For several values in one compressed stream, write [frames](#frames) into the wrapper with `StreamFrames`. A decompressing stream delivers as many bytes as the data expands to, whatever the file's size, so read files from others with `BrotliPayload`, whose `MaxSize` bounds the uncompressed length.
+
 `BrotliEncoder`, `BrotliDecoder` and `BrotliStream` need .NET Core 2.1 or later, and are not in .NET Standard. If you want more speed and can accept less compression, LZ4 libraries offer the same span-in, span-out shape as `BrotliEncoder.TryCompress`.
+
+## Pitfalls [#pitfalls]
+
+| Mistake | What happens | Caught by |
+| --- | --- | --- |
+| Several values written to one stream with `Serialize(value, stream)` | `Deserialize<T>(stream)` reads to the end: the first value comes back and the rest is ignored, or rejected in untrusted mode | nothing: write [frames](#frames) |
+| Reading a stream someone else controls without a size limit | Nino holds as much as they send | nothing: cap the stream or the frame ([above](#streams)) |
+| Reusing the buffer of `StreamFrames.WriteAsync` before its task completes | The pending write sends the next frame's bytes | nothing: await the task first |
+| `SerializeAsync` or `DeserializeAsync` in a .NET Framework or .NET Standard 2.0 project | It does not compile: that build has only the synchronous calls | the compiler |
 
 ## Next Steps [#next-steps]
 

@@ -1,6 +1,6 @@
 ---
 title: 定义类型
-description: "用 [NinoType] 标记类、结构体、记录和接口，决定哪些成员参与序列化、按什么顺序写。"
+description: "用 [NinoType] 标记类、结构体、记录和接口，决定哪些成员参与序列化、按什么顺序写，并用序列化回调在每个值的读写前后执行代码。"
 icon: Braces
 ---
 
@@ -10,7 +10,7 @@ icon: Braces
   }}
 />
 
-`class`、`struct`、`record`、`record struct` 或 `interface` 标上 `[NinoType]` 就能序列化。源生成器在编译期写好它的格式化器，不用注册。本页讲哪些成员会写、按什么顺序写，以及哪些选项会改变格式。
+`class`、`struct`、`record`、`record struct` 或 `interface` 标上 `[NinoType]` 就能序列化。源生成器在编译期写好它的格式化器，不用注册。本页讲哪些成员会写、按什么顺序写、哪些选项会改变格式，以及 Nino 在每个值前后调用的回调。
 
 ```csharp
 using Nino.Core;
@@ -295,6 +295,65 @@ public record struct Pair<TKey, TValue>(TKey Key, TValue Value);
 
 子类型从最近的 `[NinoType]` 基类或接口继承 `[NinoType]` 和它的选项；想给子类型单独设选项，在子类型上再加一个 `[NinoType]` 就行。子类型自己的 `[NinoType]` 会替换继承来的选项，所以要保留的选项得重新写上：比如版本容错基类的子类型要写 `[NinoType(format: NinoFormat.VersionTolerant)]`。唯一的例外是 `trackReferences`：只要类本身或任何一个 `[NinoType]` 基类、接口要求追踪，这个类就追踪引用，不管它自己的特性怎么写，所以开了追踪的继承体系始终保持追踪。参见[多态](/zh/docs/v4/polymorphism)。
 
+## 回调 [#callbacks]
+
+给 `[NinoType]` 类或结构体的方法加上 `[NinoOnSerializing]`、`[NinoOnSerialized]`、`[NinoOnDeserializing]` 或 `[NinoOnDeserialized]`，Nino 每次写、读这个类型的值时都会在前后调用它们。比如保存前给值打上时间戳，或者读完后重建数据里没有的状态。生成的格式化器直接调用这些方法，不走反射也不用委托，所以 IL2CPP、Native AOT 和 HybridCLR 下都一样能用。
+
+```csharp
+[NinoType]
+public class SaveGame
+{
+    public DateTime SavedAt;
+    public List<Item> Items = new();
+    [NinoIgnore] public Dictionary<int, Item> ById = new(); // 每次读完后重建
+
+    [NinoOnSerializing]
+    internal void Stamp() => SavedAt = DateTime.UtcNow;
+
+    [NinoOnDeserialized]
+    internal void BuildIndex()
+    {
+        ById.Clear(); // 这个实例之后可能还会被复用反序列化
+        if (Items == null)
+            return;
+        foreach (Item item in Items)
+            ById[item.Id] = item;
+    }
+}
+
+[NinoType]
+public class Item
+{
+    public int Id;
+    public string Name;
+}
+```
+
+| 特性 | 什么时候调用 | 在哪个对象上调用 |
+| --- | --- | --- |
+| `[NinoOnSerializing]` | 写出这个值的第一个字节之前 | 这个值 |
+| `[NinoOnSerialized]` | 写完最后一个字节之后 | 这个值 |
+| `[NinoOnDeserializing]` | 读第一个成员之前 | 要填充的实例；`static` 方法则在实例存在之前调用 |
+| `[NinoOnDeserialized]` | 读完最后一个成员之后（由成员构造的类型，在实例创建之后） | 这个值 |
+
+不管这个类型的值出现在哪里，回调都会执行：顶层、成员、集合元素，以及放在基类或接口槽位里的子类型。没有回调的类型不受任何影响，回调也从不改变字节。
+
+- **方法本身。** 签名是 `void M()`：没有参数、没有返回值、不是泛型（[NINO038](/zh/docs/v4/analyzers#nino038)）；必须是 `public`、`internal` 或 `protected internal`，因为格式化器是类型外部的代码（[NINO039](/zh/docs/v4/analyzers#nino039)，代码修复会把它改成 `internal`）；一个类型的每种特性只能标一个方法（[NINO041](/zh/docs/v4/analyzers#nino041)）。只有 `[NinoOnDeserializing]` 可以是 `static`（[NINO042](/zh/docs/v4/analyzers#nino042)），静态的先于实例的执行。
+- **继承。** 每个 `[NinoType]` 基类的回调也会执行，基类在前。子类重写的虚回调只调用一次；用 `new` 隐藏的那个在它自己那一层照样执行。接口或抽象类的槽位执行的是里面那个具体类型的回调，标在接口上的特性不起作用（[NINO040](/zh/docs/v4/analyzers#nino040)）。
+- **在哪个实例上调用。** 实例方法的 `[NinoOnDeserializing]` 在要读入成员的实例上执行：传给 `Deserialize(data, ref value)` 的那个、[`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled) 对象池里取出的那个，或者新建的那个。对象池里的实例照旧在 `OnNinoPoolReturn` 里重置。Nino 用读到的成员来创建的类型（记录的主构造函数、构造函数参数、`init` 或 `readonly` 成员）这时还没有实例，只能用静态的 `[NinoOnDeserializing]`（[NINO043](/zh/docs/v4/analyzers#nino043)）。
+- **结构体。** `[NinoOnSerializing]` 在要写出的副本上执行：它改的内容会写出去，但不会留在原值里。读取的回调在槽位里的值（字段、数组元素）上执行，所以它们设置的内容会保留。按[原始内存](#structs)写的结构体不执行任何代码，在它上面标回调会报错（[NINO044](/zh/docs/v4/analyzers#nino044)）：在持有它的类型的回调里做这件事，或者把结构体改成 `NinoFormat.VersionTolerant`，这会改变它的字节。
+- **开销。** 带回调的类型不再是[固定大小](/zh/docs/v4/performance#fixed-size-types)的：没法直接写进大小正好的数组，集合里也不能整块拷贝，不过字节不变。
+- **异常。** 回调抛出的异常原样结束这次调用，这个值的 `[NinoOnSerialized]` 或 `[NinoOnDeserialized]` 不再执行。
+- **其他语言。** [nino-gen](/zh/docs/v4/advanced/codegen) 生成的 TypeScript、Go 和 Rust 代码不调用回调。
+
+<Accordions>
+<Accordion title="引用追踪与深层嵌套" id="callbacks-graphs" value="callbacks-graphs">
+
+开了 [`trackReferences`](/zh/docs/v4/reference-tracking) 时，再次出现的对象只写一个回引用，没有自己的主体，所以每次调用里它的回调只执行一次。读回来时，环里的对象可能在自己的主体还没读完时就被引用到：里层对象的 `[NinoOnDeserialized]` 先执行，看到的外层对象可能只填了一半。嵌套超过 128 层类的主体会被[推迟](/zh/docs/v4/reference-tracking#deep-object-graphs)，等上面的主体读完再读，所以上层对象的 `[NinoOnDeserialized]` 可能看到它还是空的。
+
+</Accordion>
+</Accordions>
+
 ## 常见陷阱 [#pitfalls]
 
 | 错误 | 后果 | 由谁发现 |
@@ -307,6 +366,9 @@ public record struct Pair<TKey, TValue>(TKey Key, TValue Value);
 | `[NinoUtf8]` 加在接口成员上 | 不起作用：只认实现成员上的特性 | [NINO033](/zh/docs/v4/analyzers#nino033)，代码修复会把它移过去 |
 | 数据已经存下或发出后，给成员加上或去掉 `[NinoUtf8]` | 按另一种编码写出的数据读不回来 | 无：这会改变格式，和换掉成员类型一样 |
 | 结构体的字段全被忽略 | 它会写成 0 字节 | [NINO023](/zh/docs/v4/analyzers#nino023) |
+| 回调带参数、有返回值，或者是 `private` | 永远不会被调用 | [NINO038](/zh/docs/v4/analyzers#nino038)、[NINO039](/zh/docs/v4/analyzers#nino039)，带代码修复 |
+| 在记录或由构造函数参数创建的类型上，用实例方法的 `[NinoOnDeserializing]` | 没有实例可以调用 | [NINO043](/zh/docs/v4/analyzers#nino043)：改成静态方法，或者改用 `[NinoOnDeserialized]` |
+| 在按原始内存写的结构体上标回调 | 永远不会被调用 | [NINO044](/zh/docs/v4/analyzers#nino044) |
 
 ## 下一步 [#next-steps]
 

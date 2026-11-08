@@ -36,6 +36,11 @@
       "zh": "布局基线"
     },
     {
+      "id": "callbacks",
+      "en": "Serialization Callbacks",
+      "zh": "序列化回调"
+    },
+    {
       "id": "code-generation",
       "en": "Code Generation for Other Languages",
       "zh": "其他语言的代码生成"
@@ -558,6 +563,104 @@
       "zh": {
         "problem": "`[assembly: NinoLayouts]` 里的布局基线读不了，所以不会检查任何布局；消息会指出字符串里出错的行以及错在哪里",
         "fix": "改正那一行，或者用重构“创建布局基线”或 `nino-gen layouts` 重新生成基线"
+      }
+    },
+    {
+      "id": "NINO038",
+      "category": "callbacks",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "A method marked as a serialization callback takes parameters, returns a value, is generic or is not an ordinary method, so Nino never calls it",
+        "fix": "Make it a non-generic `void` method without parameters"
+      },
+      "zh": {
+        "problem": "标了序列化回调特性的方法带参数、有返回值、是泛型，或者不是普通方法，Nino 永远不会调用它",
+        "fix": "改成没有参数、返回 `void` 的非泛型方法"
+      }
+    },
+    {
+      "id": "NINO039",
+      "category": "callbacks",
+      "severity": "error",
+      "codeFix": true,
+      "en": {
+        "problem": "A serialization callback is `private` or `protected` (or `internal` to a base class's assembly), so the generated formatter, which is outside the type, cannot call it",
+        "fix": "Make it `internal` (the code fix does), or `public` when a subtype in another assembly calls it"
+      },
+      "zh": {
+        "problem": "序列化回调是 `private` 或 `protected`（或者是另一个程序集里基类的 `internal` 方法），类型外部的生成格式化器调用不到",
+        "fix": "改成 `internal`（代码修复会改），子类型在别的程序集里时改成 `public`"
+      }
+    },
+    {
+      "id": "NINO040",
+      "category": "callbacks",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "A serialization callback on a class or struct that is not a `[NinoType]`, or on an interface, is never called",
+        "fix": "Mark the type `[NinoType]`, or remove the attribute (the code fix does)"
+      },
+      "zh": {
+        "problem": "序列化回调标在不是 `[NinoType]` 的类或结构体上，或者标在接口上，永远不会被调用",
+        "fix": "给类型加上 `[NinoType]`，或者删掉这个特性（代码修复会删）"
+      }
+    },
+    {
+      "id": "NINO041",
+      "category": "callbacks",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "Two methods of one type have the same callback attribute; Nino calls only the first",
+        "fix": "Merge them into one method (a base class may declare its own)"
+      },
+      "zh": {
+        "problem": "同一个类型有两个方法标了同一种回调特性，Nino 只调用第一个",
+        "fix": "合并成一个方法（基类可以有自己的）"
+      }
+    },
+    {
+      "id": "NINO042",
+      "category": "callbacks",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "A static `[NinoOnSerializing]`, `[NinoOnSerialized]` or `[NinoOnDeserialized]`: they run on the value",
+        "fix": "Make it an instance method (only `[NinoOnDeserializing]` may be static)"
+      },
+      "zh": {
+        "problem": "`[NinoOnSerializing]`、`[NinoOnSerialized]` 或 `[NinoOnDeserialized]` 是静态方法，而它们要在值上执行",
+        "fix": "改成实例方法（只有 `[NinoOnDeserializing]` 可以是静态的）"
+      }
+    },
+    {
+      "id": "NINO043",
+      "category": "callbacks",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "An instance `[NinoOnDeserializing]` on a type Nino creates from the members it reads (a record's primary constructor, constructor parameters, `init` or `readonly` members): there is no instance before they are read",
+        "fix": "Make it static, or move the work to `[NinoOnDeserialized]`"
+      },
+      "zh": {
+        "problem": "Nino 用读到的成员来创建这个类型（记录的主构造函数、构造函数参数、`init` 或 `readonly` 成员），读完之前没有实例，实例方法的 `[NinoOnDeserializing]` 无从调用",
+        "fix": "改成静态方法，或者把这部分工作挪到 `[NinoOnDeserialized]`"
+      }
+    },
+    {
+      "id": "NINO044",
+      "category": "callbacks",
+      "severity": "error",
+      "codeFix": false,
+      "en": {
+        "problem": "A serialization callback on a struct written as its raw memory (and an array of it as one copy), which runs no code, so it is never called",
+        "fix": "Call the work from a callback of the type that holds the struct, or make the struct `NinoFormat.VersionTolerant` (which changes its bytes)"
+      },
+      "zh": {
+        "problem": "序列化回调标在按原始内存写的结构体上（它的数组整块拷贝），这条路径不执行任何代码，回调永远不会被调用",
+        "fix": "在持有这个结构体的类型的回调里做这件事，或者把结构体改成 `NinoFormat.VersionTolerant`（会改变它的字节）"
       }
     },
     {

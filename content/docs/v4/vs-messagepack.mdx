@@ -76,9 +76,9 @@ Payload sizes differ by format, not by effort: MessagePack writes small integers
   { label: 'Object pools', cells: [['yes', <><code>[NinoPooled]</code>, factories, recycler</>], 'partial: its own buffers come from pools'] },
   { group: 'I/O and integrations' },
   { label: <><code>IBufferWriter&lt;byte&gt;</code>, spans, <code>ReadOnlySequence&lt;byte&gt;</code></>, cells: [['yes', <>sequences built in since rc.10 (<a href="/en/docs/v4/advanced/streams#readonlysequence-input">a short helper</a> before)</>], 'yes'] },
-  { label: <><code>Stream</code> and async I/O</>, cells: [['yes', <>a <a href="/en/docs/v4/advanced/streams#async">short helper</a> over the buffer API</>], ['yes', <><code>SerializeAsync</code>, <code>MessagePackStreamReader</code></>]] },
+  { label: <><code>Stream</code> and async I/O</>, cells: [['yes', <>built in since rc.10 (<a href="/en/docs/v4/advanced/streams#streams">Streams</a>); several messages on one stream as <a href="/en/docs/v4/advanced/streams#frames">frames</a></>], ['yes', <><code>SerializeAsync</code>, <code>MessagePackStreamReader</code></>]] },
   { label: 'Untyped reading', cells: ['no: every read names a type', ['yes', <><code>Deserialize&lt;dynamic&gt;</code>, <code>ConvertToJson</code></>]] },
-  { label: 'Serialization callbacks', cells: [['yes', <>your own hooks around the call (<a href="/en/docs/v4/advanced/streams#callbacks">example</a>)</>], ['yes', <><code>IMessagePackSerializationCallbackReceiver</code></>]] },
+  { label: 'Serialization callbacks', cells: [['yes', <>built in since rc.10: <code>[NinoOnSerializing]</code>, <code>[NinoOnDeserialized]</code> and two more, called by generated code (<a href="/en/docs/v4/defining-types#callbacks">Callbacks</a>)</>], ['yes', <><code>IMessagePackSerializationCallbackReceiver</code></>]] },
   { label: 'Custom formatters', cells: [['yes', <>struct formatters, inlined (<a href="/en/docs/v4/custom-formatters">Custom Formatters</a>)</>], ['yes', <><code>IMessagePackFormatter&lt;T&gt;</code>, resolvers, <code>[MessagePackFormatter]</code></>]] },
   { label: 'Compression', cells: [['partial', <><code>System.IO.Compression</code> over the output (<a href="/en/docs/v4/advanced/streams#compression">example</a>)</>], ['yes', <>LZ4, <code>MessagePackCompression.Lz4BlockArray</code></>]] },
   { label: <><code>System.Type</code> values</>, cells: ['no: on purpose, data never names a type', 'yes: as an assembly-qualified name'] },
@@ -134,11 +134,13 @@ Both are MIT licensed, source generated and AOT safe. If you are unsure, benchma
 | `AllowPrivate = true` | `[NinoType(includeNonPublicMembers: true)]` |
 | `[SerializationConstructor]` | `[NinoConstructor]` ([Constructors](/en/docs/v4/constructors)) |
 | `[Union(key, typeof(T))]` on the base | `[NinoType]` on the base: subtypes inherit it, with no keys ([Polymorphism](/en/docs/v4/polymorphism)) |
-| `IMessagePackSerializationCallbackReceiver` | your own hooks around the call ([Callbacks](/en/docs/v4/advanced/streams#callbacks)) |
+| `IMessagePackSerializationCallbackReceiver` | `[NinoOnSerializing]` on the `OnBeforeSerialize` method and `[NinoOnDeserialized]` on `OnAfterDeserialize`, with no interface ([Callbacks](/en/docs/v4/defining-types#callbacks)) |
 | `IMessagePackFormatter<T>`, resolvers | [Custom Formatters](/en/docs/v4/custom-formatters) |
 | `MessagePackSerializer.Serialize(value)` | `NinoSerializer.Serialize(value)` |
 | `MessagePackSerializer.Serialize(bufferWriter, value)` | `NinoSerializer.Serialize(value, bufferWriter)`: the value comes first |
 | `MessagePackSerializer.Deserialize<T>(bytes)` | `NinoDeserializer.Deserialize<T>(bytes)` |
+| `MessagePackSerializer.SerializeAsync(stream, value)`, `DeserializeAsync<T>(stream)` | `NinoSerializer.SerializeAsync(value, stream)`, `NinoDeserializer.DeserializeAsync<T>(stream)`: the value comes first ([Async](/en/docs/v4/advanced/streams#async)) |
+| `MessagePackStreamReader` | [frames](/en/docs/v4/advanced/streams#frames) on the stream |
 | `MessagePackSecurity.UntrustedData` | nothing per call; `NinoSettings.Untrusted = true` once at startup for the extra checks ([Untrusted Mode](/en/docs/v4/security#untrusted-mode)) |
 | `MessagePackCompression.Lz4BlockArray` | a compression stream over the output ([Compression](/en/docs/v4/advanced/streams#compression)) |
 

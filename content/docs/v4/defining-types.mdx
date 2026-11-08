@@ -1,6 +1,6 @@
 ---
 title: Defining Types
-description: "Mark classes, structs, records and interfaces with [NinoType], and choose which members are serialized and in what order."
+description: "Mark classes, structs, records and interfaces with [NinoType], choose which members are serialized and in what order, and run code before and after each value with serialization callbacks."
 icon: Braces
 ---
 
@@ -10,7 +10,7 @@ icon: Braces
   }}
 />
 
-Any `class`, `struct`, `record`, `record struct` or `interface` marked `[NinoType]` becomes serializable. The source generator writes its formatter at compile time; there is nothing to register. This page covers which members are written, in what order, and the options that change the format.
+Any `class`, `struct`, `record`, `record struct` or `interface` marked `[NinoType]` becomes serializable. The source generator writes its formatter at compile time; there is nothing to register. This page covers which members are written, in what order, the options that change the format, and the callbacks Nino runs around each value.
 
 ```csharp
 using Nino.Core;
@@ -295,6 +295,65 @@ A closed generic type that a process only **reads** polymorphically (by type id)
 
 Subtypes inherit `[NinoType]`, with its options, from their nearest `[NinoType]` base class or interface; put `[NinoType]` on a subtype to give it options of its own. A subtype's own `[NinoType]` replaces the inherited options, so repeat the ones you want to keep: `[NinoType(format: NinoFormat.VersionTolerant)]` on a subtype of a version-tolerant base. The one exception is `trackReferences`: a class is tracked when it or any `[NinoType]` base class or interface asks for it, whatever its own attribute says, so a tracked hierarchy stays tracked. See [Polymorphism](/en/docs/v4/polymorphism).
 
+## Callbacks [#callbacks]
+
+Mark methods of a `[NinoType]` class or struct with `[NinoOnSerializing]`, `[NinoOnSerialized]`, `[NinoOnDeserializing]` or `[NinoOnDeserialized]`, and Nino runs them around writing and reading each value of the type: to stamp a value before it is saved, or to rebuild state the data does not carry after it is read. The generated formatter calls them directly, with no reflection or delegate, so they work the same under IL2CPP, Native AOT and HybridCLR.
+
+```csharp
+[NinoType]
+public class SaveGame
+{
+    public DateTime SavedAt;
+    public List<Item> Items = new();
+    [NinoIgnore] public Dictionary<int, Item> ById = new(); // rebuilt after each read
+
+    [NinoOnSerializing]
+    internal void Stamp() => SavedAt = DateTime.UtcNow;
+
+    [NinoOnDeserialized]
+    internal void BuildIndex()
+    {
+        ById.Clear(); // the instance may be one you deserialize into again
+        if (Items == null)
+            return;
+        foreach (Item item in Items)
+            ById[item.Id] = item;
+    }
+}
+
+[NinoType]
+public class Item
+{
+    public int Id;
+    public string Name;
+}
+```
+
+| Attribute | Runs | On |
+| --- | --- | --- |
+| `[NinoOnSerializing]` | before the first byte of the value is written | the value |
+| `[NinoOnSerialized]` | after its last byte | the value |
+| `[NinoOnDeserializing]` | before the first member is read | the instance being filled, or a `static` method before there is one |
+| `[NinoOnDeserialized]` | after the last member is read (and the instance created, for a type built from its members) | the value |
+
+They run for every value of the type, wherever it is: at the top level, as a member, as a collection element, and as a subtype held in a base class or interface slot. A type without callbacks is unaffected, and callbacks never change the bytes.
+
+- **The method.** `void M()`: no parameters, no return value, not generic ([NINO038](/en/docs/v4/analyzers#nino038)); `public`, `internal` or `protected internal`, since the formatter is code outside the type ([NINO039](/en/docs/v4/analyzers#nino039), whose code fix makes it `internal`); one method per attribute and type ([NINO041](/en/docs/v4/analyzers#nino041)). Only `[NinoOnDeserializing]` may be `static` ([NINO042](/en/docs/v4/analyzers#nino042)); a static one runs before an instance one.
+- **Inheritance.** The callbacks of each `[NinoType]` base class run too, base classes first. A virtual callback that a subclass overrides is called once; one hidden with `new` still runs at its own level. An interface or abstract slot runs the callbacks of the concrete type it holds, and the attributes on an interface do nothing ([NINO040](/en/docs/v4/analyzers#nino040)).
+- **Which instance.** An instance `[NinoOnDeserializing]` runs on the instance the members are read into: the one you pass to `Deserialize(data, ref value)`, one from a [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled) pool, or a new one. Pooled instances are still reset in `OnNinoPoolReturn`. A type Nino creates from what it reads (a record's primary constructor, constructor parameters, `init` or `readonly` members) has no instance yet: only a static `[NinoOnDeserializing]` can run ([NINO043](/en/docs/v4/analyzers#nino043)).
+- **Structs.** `[NinoOnSerializing]` runs on the copy being written: what it changes is written, not kept. The read callbacks run on the value in its slot (a field, an array element), so what they set is kept. A struct written as [raw memory](#structs) runs no code, so callbacks on it are an error ([NINO044](/en/docs/v4/analyzers#nino044)): call the work from the holding type's callback, or make the struct `NinoFormat.VersionTolerant`, which changes its bytes.
+- **Cost.** A type with callbacks is no longer [fixed-size](/en/docs/v4/performance#fixed-size-types): it loses the direct write into an array of its size and the block copies in collections, though its bytes stay the same.
+- **Exceptions** from a callback end the call unchanged, and the `[NinoOnSerialized]` or `[NinoOnDeserialized]` of that value does not run.
+- **Other languages.** The TypeScript, Go and Rust code [nino-gen](/en/docs/v4/advanced/codegen) writes does not call them.
+
+<Accordions>
+<Accordion title="Reference tracking and deep nesting" id="callbacks-graphs" value="callbacks-graphs">
+
+With [`trackReferences`](/en/docs/v4/reference-tracking), an object written again as a back reference has no body of its own, so its callbacks run once per call. Read back, an object of a cycle can be reached by reference while its own body is still being read: the inner object's `[NinoOnDeserialized]` runs first and may see the outer one half filled. A body nested deeper than 128 classes is [deferred](/en/docs/v4/reference-tracking#deep-object-graphs) and read after the bodies above it, so the `[NinoOnDeserialized]` of an object above it may see it still empty.
+
+</Accordion>
+</Accordions>
+
 ## Pitfalls [#pitfalls]
 
 | Mistake | What happens | Caught by |
@@ -307,6 +366,9 @@ Subtypes inherit `[NinoType]`, with its options, from their nearest `[NinoType]`
 | `[NinoUtf8]` on an interface member | No effect: the implementing member's attributes count | [NINO033](/en/docs/v4/analyzers#nino033), whose code fix moves it |
 | Adding or removing `[NinoUtf8]` on a member whose data is stored or sent | Data written in the other encoding does not read back | nothing: it changes the format, like a new member type |
 | Ignoring every field of a struct | It would be written as zero bytes | [NINO023](/en/docs/v4/analyzers#nino023) |
+| A callback that takes parameters, returns a value or is `private` | It is never called | [NINO038](/en/docs/v4/analyzers#nino038), [NINO039](/en/docs/v4/analyzers#nino039), with a code fix |
+| An instance `[NinoOnDeserializing]` on a record or a type built from constructor parameters | There is no instance to call it on | [NINO043](/en/docs/v4/analyzers#nino043): make it static, or use `[NinoOnDeserialized]` |
+| A callback on a struct written as raw memory | It is never called | [NINO044](/en/docs/v4/analyzers#nino044) |
 
 ## Next Steps [#next-steps]
 

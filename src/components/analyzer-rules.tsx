@@ -1,5 +1,5 @@
 /**
- * The analyzer rules (NINO001-NINO037 and nino-gen's NINOGEN ids) as one
+ * The analyzer rules (NINO001-NINO044 and nino-gen's NINOGEN ids) as one
  * filterable list, from src/data/analyzer-rules.json, the single source of the
  * analyzers page and its Markdown copy (src/lib/markdown.tsx). The prerendered
  * HTML holds every rule; filtering only hides rows, so the page reads the same

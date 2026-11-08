@@ -154,7 +154,7 @@ Nino checks the structure of the data, not what it means, as with a save file a 
 
 - **Values.** A value read in full is whatever the data says: a negative health, an enum value with no name. Constructors and setters run with those values. Validate what your logic depends on.
 - **The type.** The bytes carry no schema, so data written for a **different** type with a compatible layout reads without error. Version your payloads yourself (see [Evolving Your Data](/en/docs/v4/evolving-data) and the [file header](/en/docs/v4/advanced/persistence#add-a-file-header) pattern); `Deserialize<object>` accepts any registered type.
-- **The size of a message.** Allocation is bounded relative to the input, so bound the input: cap the size of a frame or request before you buffer it (see [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream)). Elements that really are in the data cost their size in memory: a large version-tolerant struct whose members are all left out takes 4 bytes on the wire.
+- **The size of a message.** Allocation is bounded relative to the input, so bound the input: cap the size of a frame or request before you buffer it (see [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream)). `Deserialize<T>(stream)` reads a stream to its end, so a stream from a peer needs that cap too ([Streams](/en/docs/v4/advanced/streams#streams)). Elements that really are in the data cost their size in memory: a large version-tolerant struct whose members are all left out takes 4 bytes on the wire.
 
 ## Other Languages [#other-languages]
 

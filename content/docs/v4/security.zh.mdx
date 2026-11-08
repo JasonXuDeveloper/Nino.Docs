@@ -154,7 +154,7 @@ Nino 检查数据的结构，不管数据的含义，就像面对一个被用户
 
 - **值。** 完整读出的值，就是数据里写的值：负的生命值、没有名字的枚举值都可能。构造函数和 setter 拿到的就是这些值。你的逻辑依赖哪些值，就校验哪些。
 - **类型。** 字节里不带 schema，所以给**另一个**布局兼容的类型写的数据，也能不报错地读出来。数据的版本要自己加（见[数据演进](/zh/docs/v4/evolving-data)和[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)的做法）；`Deserialize<object>` 接受任何已注册的类型。
-- **消息大小。** 内存分配和输入大小成比例，所以要限制输入：缓冲之前就限制帧或请求的大小（见[为流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）。数据里真实存在的元素，按自身大小占内存：一个成员全部省略的大型版本容错结构体，在数据里只占 4 个字节。
+- **消息大小。** 内存分配和输入大小成比例，所以要限制输入：缓冲之前就限制帧或请求的大小（见[为流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）。`Deserialize<T>(stream)` 会一直读到流结束，所以对端给的流同样要限制大小（[流](/zh/docs/v4/advanced/streams#streams)）。数据里真实存在的元素，按自身大小占内存：一个成员全部省略的大型版本容错结构体，在数据里只占 4 个字节。
 
 ## 其他语言 [#other-languages]
 

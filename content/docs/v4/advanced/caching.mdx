@@ -98,6 +98,8 @@ public static class DistributedCacheExtensions
 
 The interface takes and returns arrays, so each call allocates one `byte[]`: that is the cache API's cost, not Nino's. Providers that also implement `IBufferDistributedCache` (Microsoft.Extensions.Caching.StackExchangeRedis 10 does) read and write through buffers instead; `HybridCache`, below, uses that interface when the provider has it, so for a hot cache use `HybridCache` rather than these two methods.
 
+A store that hands you a `Stream` instead (a blob container, an S3 object, a file cache) needs no buffer of yours: `await NinoSerializer.SerializeAsync(profile, upload, ct)` writes the profile, and `await NinoDeserializer.DeserializeAsync<UserProfile>(download, ct)` reads it back ([Async](/en/docs/v4/advanced/streams#async)).
+
 ## HybridCache [#hybridcache]
 
 `HybridCache` (the `Microsoft.Extensions.Caching.Hybrid` package) hands a serializer an `IBufferWriter<byte>` to write into and a `ReadOnlySequence<byte>` to read from, which matches Nino's API directly:

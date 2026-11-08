@@ -98,6 +98,8 @@ public static class DistributedCacheExtensions
 
 这个接口按数组收发数据，所以每次调用都会分配一个 `byte[]`：这是缓存 API 的开销，不是 Nino 的。如果提供程序还实现了 `IBufferDistributedCache`（Microsoft.Extensions.Caching.StackExchangeRedis 10 就实现了），就能直接用缓冲区读写；下面的 `HybridCache` 在提供程序支持时会自动走这个接口，所以访问频繁的缓存用 `HybridCache`，不要用这两个方法。
 
+如果存储给你的是 `Stream`（blob 容器、S3 对象、文件缓存），就不用自己准备缓冲区：`await NinoSerializer.SerializeAsync(profile, upload, ct)` 写入，`await NinoDeserializer.DeserializeAsync<UserProfile>(download, ct)` 读回（[异步](/zh/docs/v4/advanced/streams#async)）。
+
 ## HybridCache [#hybridcache]
 
 `HybridCache`（`Microsoft.Extensions.Caching.Hybrid` 包）写入时交给序列化器一个 `IBufferWriter<byte>`，读取时交给它一个 `ReadOnlySequence<byte>`，正好对上 Nino 的 API：

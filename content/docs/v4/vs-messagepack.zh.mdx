@@ -76,9 +76,9 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
   { label: '对象池', cells: [['yes', <><code>[NinoPooled]</code>、工厂、回收器</>], 'partial: 它自己的缓冲区来自池'] },
   { group: 'I/O 与集成' },
   { label: <><code>IBufferWriter&lt;byte&gt;</code>、span、<code>ReadOnlySequence&lt;byte&gt;</code></>, cells: [['yes', <>序列从 rc.10 起内置（之前用<a href="/zh/docs/v4/advanced/streams#readonlysequence-input">简短的辅助方法</a>）</>], 'yes'] },
-  { label: <><code>Stream</code> 与异步 I/O</>, cells: [['yes', <>基于缓冲区 API 的<a href="/zh/docs/v4/advanced/streams#async">简短辅助方法</a></>], ['yes', <><code>SerializeAsync</code>、<code>MessagePackStreamReader</code></>]] },
+  { label: <><code>Stream</code> 与异步 I/O</>, cells: [['yes', <>rc.10 起内置（<a href="/zh/docs/v4/advanced/streams#streams">流</a>）；一个流上传多条消息用<a href="/zh/docs/v4/advanced/streams#frames">帧</a></>], ['yes', <><code>SerializeAsync</code>、<code>MessagePackStreamReader</code></>]] },
   { label: '不指定类型读取', cells: ['no: 每次读取都要给出类型', ['yes', <><code>Deserialize&lt;dynamic&gt;</code>、<code>ConvertToJson</code></>]] },
-  { label: '序列化回调', cells: [['yes', <>在调用前后调用你自己的钩子（<a href="/zh/docs/v4/advanced/streams#callbacks">示例</a>）</>], ['yes', <><code>IMessagePackSerializationCallbackReceiver</code></>]] },
+  { label: '序列化回调', cells: [['yes', <>rc.10 起内置：<code>[NinoOnSerializing]</code>、<code>[NinoOnDeserialized]</code> 等四个特性，由生成的代码直接调用（<a href="/zh/docs/v4/defining-types#callbacks">回调</a>）</>], ['yes', <><code>IMessagePackSerializationCallbackReceiver</code></>]] },
   { label: '自定义格式化器', cells: [['yes', <>结构体格式化器，可内联（<a href="/zh/docs/v4/custom-formatters">自定义格式化器</a>）</>], ['yes', <><code>IMessagePackFormatter&lt;T&gt;</code>、解析器、<code>[MessagePackFormatter]</code></>]] },
   { label: '压缩', cells: [['partial', <>在输出外面套 <code>System.IO.Compression</code>（<a href="/zh/docs/v4/advanced/streams#compression">示例</a>）</>], ['yes', <>LZ4，<code>MessagePackCompression.Lz4BlockArray</code></>]] },
   { label: <><code>System.Type</code> 值</>, cells: ['no: 有意不支持，数据永远不会指定类型', 'yes: 写成程序集限定名'] },
@@ -134,11 +134,13 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
 | `AllowPrivate = true` | `[NinoType(includeNonPublicMembers: true)]` |
 | `[SerializationConstructor]` | `[NinoConstructor]`（[构造函数](/zh/docs/v4/constructors)） |
 | 基类型上的 `[Union(key, typeof(T))]` | 基类型上的 `[NinoType]`：子类型自动继承，不需要键（[多态](/zh/docs/v4/polymorphism)） |
-| `IMessagePackSerializationCallbackReceiver` | 在调用前后调用你自己的钩子（[回调](/zh/docs/v4/advanced/streams#callbacks)） |
+| `IMessagePackSerializationCallbackReceiver` | 给 `OnBeforeSerialize` 方法加 `[NinoOnSerializing]`，给 `OnAfterDeserialize` 加 `[NinoOnDeserialized]`，不用实现接口（[回调](/zh/docs/v4/defining-types#callbacks)） |
 | `IMessagePackFormatter<T>`、解析器 | [自定义格式化器](/zh/docs/v4/custom-formatters) |
 | `MessagePackSerializer.Serialize(value)` | `NinoSerializer.Serialize(value)` |
 | `MessagePackSerializer.Serialize(bufferWriter, value)` | `NinoSerializer.Serialize(value, bufferWriter)`：值在前 |
 | `MessagePackSerializer.Deserialize<T>(bytes)` | `NinoDeserializer.Deserialize<T>(bytes)` |
+| `MessagePackSerializer.SerializeAsync(stream, value)`、`DeserializeAsync<T>(stream)` | `NinoSerializer.SerializeAsync(value, stream)`、`NinoDeserializer.DeserializeAsync<T>(stream)`：值在前（[异步](/zh/docs/v4/advanced/streams#async)） |
+| `MessagePackStreamReader` | 在流上读写[帧](/zh/docs/v4/advanced/streams#frames) |
 | `MessagePackSecurity.UntrustedData` | 每次调用都不用传；要额外的检查，在启动时设一次 `NinoSettings.Untrusted = true`（[不可信模式](/zh/docs/v4/security#untrusted-mode)） |
 | `MessagePackCompression.Lz4BlockArray` | 在输出外面套一个压缩流（[压缩](/zh/docs/v4/advanced/streams#compression)） |
 

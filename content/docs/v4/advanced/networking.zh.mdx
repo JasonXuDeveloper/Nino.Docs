@@ -99,7 +99,7 @@ await pipe.Output.FlushAsync();
 
 如果帧要写进你自己管理的缓冲区（比如 socket I/O 用的 pinned 数组），创建缓冲区时传入你的池即可：`new NinoArrayBufferWriter(4096, pool)`，参见[复用缓冲区](/zh/docs/v4/basic#reusing-a-buffer)。
 
-如果传输层本身已经分帧（WebSocket 消息、UDP 数据报、消息队列），就不需要长度前缀，序列化到复用的 `NinoArrayBufferWriter`，或直接序列化到传输层的 `IBufferWriter<byte>`（`NinoSerializer.Serialize(message, pipeWriter)`，它先写入线程自己的暂存缓冲区，再一次性拷贝过去）即可；参见 [WebSocket 与 UDP](#websocket-and-udp) 和[消息队列](/zh/docs/v4/advanced/message-queues)。
+如果传输层本身已经分帧（WebSocket 消息、UDP 数据报、消息队列），就不需要长度前缀，序列化到复用的 `NinoArrayBufferWriter`，或直接序列化到传输层的 `IBufferWriter<byte>`（`NinoSerializer.Serialize(message, pipeWriter)`，它先写入线程自己的暂存缓冲区，再一次性拷贝过去）即可；参见 [WebSocket 与 UDP](#websocket-and-udp) 和[消息队列](/zh/docs/v4/advanced/message-queues)。只传一条消息就结束的流（HTTP 请求体、文件）也不用分帧：`await NinoDeserializer.DeserializeAsync<Message>(body)` 一直读到流结束（[流](/zh/docs/v4/advanced/streams#streams)）。
 
 </Callout>
 

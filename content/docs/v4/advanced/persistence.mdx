@@ -219,6 +219,8 @@ Document loaded = DocumentFile.Decode(SafeFile.Read(path, buffer));
 
 `bufferSize: 1` turns off `FileStream`'s own buffer, which would only add a copy for a single large read or write. `Stream.ReadExactly` needs .NET 7 or later; elsewhere (Unity included), call `Read` in a loop until `length` bytes are in. On Unity, write under `Application.persistentDataPath`.
 
+A file with no header needs no buffer of yours: write `NinoSerializer.Serialize(document, file)` in place of `file.Write(bytes)`, and read with `NinoDeserializer.Deserialize<Document>(file)` ([Streams](/en/docs/v4/advanced/streams#streams)).
+
 </Callout>
 
 ## Key-Value Stores [#key-value-stores]
@@ -375,7 +377,7 @@ public sealed class EventLog : IDisposable
 - Open the log after replaying it, at the position `Replay` returns: `using var log = new EventLog(path, EventLog.Replay(path, state.Apply));`. That cuts a torn tail off before the next record is appended; appending after it instead would make the next replay read the torn record's length across the new records.
 - The length prefix finds a torn **tail**. To detect corruption in the middle of a file, add a checksum per record (for example `System.IO.Hashing.Crc32`) after the length.
 - Events are read back by builds that did not exist when they were written: the [message queue rules](/en/docs/v4/advanced/message-queues#topics-that-outlive-a-deployment) apply unchanged.
-- The records use the same `[int32 length][payload]` frames as the [`Stream` helpers](/en/docs/v4/advanced/streams#streams) and the [network guide](/en/docs/v4/advanced/networking#frame-the-stream), so those can read and write the log too.
+- The records use the same `[int32 length][payload]` frames as the [`Stream` frame helpers](/en/docs/v4/advanced/streams#frames) and the [network guide](/en/docs/v4/advanced/networking#frame-the-stream), so those can read and write the log too.
 
 ## Snapshots and Checkpoints [#snapshots-and-checkpoints]
 
