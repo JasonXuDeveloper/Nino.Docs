@@ -278,7 +278,7 @@ using Nino.Core;
 
 public static class BrotliPayload
 {
-    public const int MaxSize = 64 << 20;
+    public const int MaxSize = 16 << 20; // the most one frame can make a reader rent
 
     /// <summary>Writes [int32 compressed length][int32 uncompressed length][Brotli data] to output. scratch holds the uncompressed bytes.</summary>
     public static void Compress<T>(T value, NinoArrayBufferWriter scratch, IBufferWriter<byte> output)
@@ -306,37 +306,18 @@ public static class BrotliPayload
         if ((uint)compressed > (uint)(data.Length - 8) || (uint)length > MaxSize)
             throw new InvalidDataException("Bad frame header");
 
-        // the header's length is a claim: grow the buffer only as the data really decompresses
-        var decoder = new BrotliDecoder();
-        byte[] rented = ArrayPool<byte>.Shared.Rent(Math.Min(length, 4 * compressed + 256));
+        // MaxSize is the most one frame can make the reader rent: keep it small for untrusted senders
+        byte[] rented = ArrayPool<byte>.Shared.Rent(length);
         try
         {
-            ReadOnlySpan<byte> source = data.Slice(8, compressed);
-            int written = 0;
-            while (true)
-            {
-                var status = decoder.Decompress(source, rented.AsSpan(written, Math.Min(rented.Length, length) - written),
-                    out int read, out int produced);
-                source = source.Slice(read);
-                written += produced;
-                if (status == OperationStatus.Done)
-                    break;
-                if (status != OperationStatus.DestinationTooSmall)
-                    throw new InvalidDataException("Corrupt data");
-                if (written == length)
-                    throw new InvalidDataException("Corrupt data"); // past the length the header claims: corrupt
-                byte[] larger = ArrayPool<byte>.Shared.Rent(Math.Min(length, rented.Length * 2));
-                rented.AsSpan(0, written).CopyTo(larger);
-                ArrayPool<byte>.Shared.Return(rented);
-                rented = larger;
-            }
-            if (written != length)
+            // one-shot, with no decoder instance: nothing is allocated
+            if (!BrotliDecoder.TryDecompress(data.Slice(8, compressed), rented.AsSpan(0, length), out int written)
+                || written != length)
                 throw new InvalidDataException("Corrupt data");
             NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
         }
         finally
         {
-            decoder.Dispose();
             ArrayPool<byte>.Shared.Return(rented);
         }
         return 8 + compressed;
