@@ -10,9 +10,9 @@ icon: Gauge
   }}
 />
 
-`NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)` are already fast, but each call allocates its result. This page explains the mechanisms that take both directions down to **0 B per call** (where each call writes, what it reads from, what it costs), then the choices in your own types that keep calls fast: formats, sealed and polymorphic classes, collections, strings and custom formatters, then startup and how to measure. The [table below](#levers) lists every lever in one place.
+You know `NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)` from [Serialize and Deserialize](/en/docs/v4/basic). They are already fast, but each call allocates its result. This page shows the same calls at **0 B per call**: first the mechanisms that take both directions there (where each call writes, what it reads from, what it costs), then the choices in your own types that keep calls fast: formats, sealed and polymorphic classes, collections, strings and custom formatters, then startup and how to measure. The [table below](#levers) lists every lever in one place.
 
-For copy-paste recipes built on these mechanisms, and the checklist, see [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation); for the internals (inlined formatters, struct layout), see the [Performance Internals](/en/docs/v4/performance). What to set in your build (Release, tiered compilation, Native AOT, Unity's IL2CPP and Burst) is in [Build Configuration](/en/docs/v4/advanced/build-configuration).
+It opens the performance track; the pages after it go deeper, in this order: [Reuse and Pooling](/en/docs/v4/pooling) (the exact rules of reuse deserialization and pools), [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation) (copy-paste recipes and the checklist) and [Build Configuration](/en/docs/v4/advanced/build-configuration) (Release, tiered compilation, Native AOT, Unity's IL2CPP and Burst). The internals (inlined formatters, struct layout) are in [Performance Internals](/en/docs/v4/performance).
 
 ## Levers at a Glance [#levers]
 
@@ -34,9 +34,11 @@ For copy-paste recipes built on these mechanisms, and the checklist, see [Zero-A
 | [Arrays and lists of raw elements](#collections) | collections on hot paths | nothing |
 | [The default string encoding](#strings) | almost always; `[NinoUtf8]` for mostly-ASCII text with a few wider chars | `[NinoUtf8]`: a transcode and a byte count |
 | [Custom formatters that copy blocks](#custom-formatters) | types Nino does not know | a member with one is no longer raw or fixed-size |
+| [`NinoSettings.Untrusted` only for input you do not trust](/en/docs/v4/security#untrusted-mode) | data from outside your process | a seeded hash per key of a dictionary or set, and a check per `bool`, `DateTime`, `decimal`, `DateOnly` or `TimeOnly` field of each value ([what it costs](/en/docs/v4/security#untrusted-cost)) |
 | [Early registration and a warm-up](#startup) | the first message must be fast | startup time |
 | [Interceptors](#per-call-overhead) | the project builds with the .NET 8 SDK or later | nothing |
 | [`NinoPrefetchLargeCollections`](#large-collections) | arrays or lists of classes larger than the CPU cache, whose objects were replaced, shuffled or sorted | unset: nothing; set: a length test per top-level call of such a collection |
+| [Release builds, Native AOT and IL2CPP settings](/en/docs/v4/advanced/build-configuration#at-a-glance) | the builds you ship and measure | nothing in your code; longer builds for some settings, and a raised instruction set leaves out older CPUs |
 
 ## Serialize into a Reused Buffer
 
@@ -54,9 +56,18 @@ public ReadOnlySpan<byte> Encode(Quote quote)
 ```
 
 - **Cost:** 0 B per call once the array has grown; growth rents a larger array from the pool, and `Dispose()` returns it.
-- Size it for your largest message up front (the constructor's `initialCapacity`, or `EnsureCapacity(sizeHint)`), so it never grows on the hot path. To serialize into arrays you manage (pinned socket buffers), pass your own `ArrayPool<byte>`: see [Reusing a Buffer](/en/docs/v4/basic#reusing-a-buffer).
+- Size it for your largest message up front (the constructor's `initialCapacity`, or `EnsureCapacity(sizeHint)`), so it never grows on the hot path. To rent from a pool of your own (pinned socket buffers), see [Your Own Array Pool](#own-array-pool).
 - `ResetWrittenCount()` reuses the same array, so `WrittenSpan` is only valid until the next reset: copy or send it first.
 - A buffer is not thread safe. Give each thread, connection or encoder its own; the [encoder and thread-static buffer recipes](/en/docs/v4/advanced/zero-allocation#reuse-one-buffer) show both.
+
+### Your Own Array Pool [#own-array-pool]
+
+To serialize straight into buffers you manage, pass your own `ArrayPool<byte>`: `new NinoArrayBufferWriter(initialCapacity, pool)` rents every array from that pool and returns them to it as it grows and on `Dispose()`. A server that allocates its socket buffers on the pinned object heap, for example, can then serialize messages directly into them, with no extra copy. Growing returns the previous array to the pool, so take `WrittenMemory` after the last write and use it only until the next write or `ResetWrittenCount()`.
+
+```csharp
+// pinnedPool: an ArrayPool<byte> of your own, e.g. of GC.AllocateUninitializedArray<byte>(n, pinned: true) arrays
+var socketBuffer = new NinoArrayBufferWriter(4096, pinnedPool);
+```
 
 ### Several Values Back to Back
 
@@ -354,6 +365,6 @@ To put all of this into practice, start from the recipes in [Zero-Allocation Pat
 ## Next Steps [#next-steps]
 
 <Cards>
+  <Card title="Reuse and Pooling" href="/en/docs/v4/pooling">Fill existing instances in place and take new ones from pools.</Card>
   <Card title="Zero-Allocation Patterns" href="/en/docs/v4/advanced/zero-allocation">Recipes for hot paths that allocate 0 B per call.</Card>
-  <Card title=".NET Benchmarks" href="/en/docs/v4/benchmarks">Every case, with MemoryPack, MessagePack and protobuf-net, and the code that measures it.</Card>
 </Cards>

@@ -1,5 +1,6 @@
 // What content/docs/v4/advanced/high-performance.mdx leaves to the reader: its message types and the values the
 // fragments send and receive.
+using System.Buffers;
 using System.IO.Hashing;
 using System.IO.Pipelines;
 
@@ -28,6 +29,7 @@ public struct Tick
 public partial class Snippets
 {
     public static NinoArrayBufferWriter buffer;
+    public static ArrayPool<byte> pinnedPool;
     public static Header header;
     public static Body body;
     public static Quote message;

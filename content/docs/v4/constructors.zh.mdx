@@ -4,10 +4,16 @@ description: "Nino 反序列化时怎样创建实例：无参构造函数和 [Ni
 icon: Hammer
 ---
 
+<AnchorRedirect
+  map={{
+    'from-a-pool': '/zh/docs/v4/pooling#creating-instances-with-ninofactory',
+  }}
+/>
+
 Nino 反序列化每个类型，都得知道怎么创建它的实例。生成器在编译期按下面的顺序选定：
 
 1. 标了 `[NinoConstructor]` 的构造函数或静态工厂方法（如果有）。
-2. 否则，如果所有序列化成员在构造之后都能赋值：用不传参数就能调用的构造函数（无参，或参数都有默认值），也可以用 [`[NinoFactory]`](#from-a-pool) 方法代替它。实例创建后逐个成员填充；[复用反序列化](/zh/docs/v4/pooling)时直接填充已有实例。结构体用 `new T()`。即使类型还有参数能对上成员的构造函数，也优先走这一步。
+2. 否则，如果所有序列化成员在构造之后都能赋值：用不传参数就能调用的构造函数（无参，或参数都有默认值），也可以用 [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) 方法代替它。实例创建后逐个成员填充；[复用反序列化](/zh/docs/v4/pooling)时直接填充已有实例。结构体用 `new T()`。即使类型还有参数能对上成员的构造函数，也优先走这一步。
 3. 否则（有成员只有 getter、只有 `init` 或是 `readonly`）：在可访问（`public` 或 `internal`）的构造函数里，挑参数都能按名称（不区分大小写）对上序列化成员、且参数最多的那个。位置记录挑中的就是主构造函数。不是参数的成员，调用后立即赋值。
 4. 结构体最后退回 `new T()`；类如果以上都不满足，就报错（NINO004）。
 
@@ -129,64 +135,15 @@ Nino 有两种方式介入实例创建，用途不同：
 
 两者只能选一个。有 `[NinoConstructor]` 的类型总是通过它重新创建，同一类型上的 `[NinoFactory]` 永远不会调用，分析器会对此报警告（NINO025）：想保留构造函数，就删掉 `[NinoFactory]`；想用工厂创建实例再原地填充，就删掉 `[NinoConstructor]`。
 
-## 从对象池取实例 [#from-a-pool]
-
-只有 Nino 需要**新**实例时，才调用 `[NinoFactory]` 方法：槽位是 `null`、列表变长，或者多态槽位换了类型。然后 Nino 原地填充这个实例。再配合[复用反序列化](/zh/docs/v4/pooling#deserializing-into-existing-instances)，为丢弃的实例注册[回收器](/zh/docs/v4/pooling#why-setrecycler)，对象池预热之后，源源不断的消息也不再分配内存：
-
-```csharp title="Order.cs"
-using System.Collections.Generic;
-using Nino.Core;
-
-[NinoType]
-public sealed class Order
-{
-    public long Id;
-    public List<OrderLine> Lines = new(); // 跟着订单保留，原地复用
-
-    [NinoFactory] // [!code highlight]
-    public static Order Rent() => ObjectPool<Order>.Rent(); // ObjectPool<T>：见池化集合
-
-    public void Return()
-    {
-        Lines.Clear();
-        ObjectPool<Order>.Return(this);
-    }
-}
-
-[NinoType]
-public sealed class OrderBatch
-{
-    public List<Order> Orders;
-}
-
-[NinoType]
-public struct OrderLine
-{
-    public int ProductId;
-    public int Quantity;
-}
-```
-
-```csharp
-// 启动时：列表变短时丢弃的订单回到对象池
-NinoSettings.SetRecycler<Order>(order => order.Return());
-
-OrderBatch batch = null;
-foreach (byte[] data in messages)
-    NinoDeserializer.Deserialize(data, ref batch); // 订单变多：Order.Rent()；变少：Return()
-```
-
-- 这个方法必须是 `public`、`static`，不传参数就能调用（无参，或参数都有默认值），返回类型正好是声明它的类型；否则报 NINO017。它不能返回 `null`。
-- 槽位里已经有实例时，直接原地填充，不调用工厂方法。
-- [`ObjectPool<T>`](/zh/docs/v4/pooling#your-own-pooled-collections) 是对象池页面里那个简单的线程本地池，换成别的对象池也行。不需要自己的对象池时，[`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled) 会生成一个，丢弃的实例自动还回池里，不用注册回收器。
+只有 Nino 需要**新**实例时（槽位是 `null`、列表变长、多态槽位换了类型），才会调用 `[NinoFactory]` 方法，所以反序列化时想从自己的对象池里取实例，就用它。完整例子，以及把丢弃的实例还回池里的回收器，见[复用与对象池](/zh/docs/v4/pooling#creating-instances-with-ninofactory)。
 
 ## 重新创建的类型 [#re-created-types]
 
-类型标了 `[NinoConstructor]`，或者成员在构造之后没法再赋值（构造函数参数、`init` 属性、只读属性或 `readonly` 字段），每次反序列化都会**重新创建**它，[复用反序列化](/zh/docs/v4/pooling)也不例外，旧实例交给[回收器](/zh/docs/v4/pooling#where-dropped-instances-go)。这类类型不能用 [`trackReferences`](/zh/docs/v4/reference-tracking)（NINO016）或 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)（NINO018）。这类类型上的 `[NinoFactory]` 方法也不会调用（和 `[NinoConstructor]` 同时出现时，分析器报 NINO025）。需要这些功能时（比如要做到 0 GC 反序列化），请把成员改成可写，改为[从对象池取实例](#from-a-pool)。
+类型标了 `[NinoConstructor]`，或者成员在构造之后没法再赋值（构造函数参数、`init` 属性、只读属性或 `readonly` 字段），每次反序列化都会**重新创建**它，[复用反序列化](/zh/docs/v4/pooling)也不例外，旧实例交给[回收器](/zh/docs/v4/pooling#where-dropped-instances-go)。这类类型不能用 [`trackReferences`](/zh/docs/v4/reference-tracking)（NINO016）或 [`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled)（NINO018）。这类类型上的 `[NinoFactory]` 方法也不会调用（和 `[NinoConstructor]` 同时出现时，分析器报 NINO025）。需要这些功能时（比如要做到 0 GC 反序列化），请把成员改成可写，改为[从对象池取实例](/zh/docs/v4/pooling#creating-instances-with-ninofactory)。
 
 ## 下一步 [#next-steps]
 
 <Cards>
   <Card title="多态" href="/zh/docs/v4/polymorphism">基类和接口，读回来还是运行时的实际类型。</Card>
-  <Card title="复用与对象池" href="/zh/docs/v4/pooling">原地填充已有实例，新实例从对象池里取。</Card>
+  <Card title="数据演进" href="/zh/docs/v4/evolving-data">数据存下来或发出去之前，先定好每个类型的格式。</Card>
 </Cards>

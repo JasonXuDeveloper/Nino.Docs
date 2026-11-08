@@ -10,9 +10,9 @@ icon: Gauge
   }}
 />
 
-`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 本身已经很快，但每次调用都要为结果分配内存。本页先讲让序列化和反序列化都降到**每次调用 0 B** 的机制（每种调用写到哪里、从哪里读、开销多少），再讲你自己的类型里哪些选择能让调用保持快：格式、密封类与多态类、集合、字符串和自定义格式化器，最后是启动和如何测量。[下表](#levers)把所有手段列在一处。
+`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 你已经在[序列化与反序列化](/zh/docs/v4/basic)里用过了。它们本身已经很快，只是每次调用都要为结果分配内存。这一页讲怎样让同样的调用做到**每次调用 0 B**：先讲让序列化和反序列化都降到 0 B 的机制（每种调用写到哪里、从哪里读、开销多少），再讲你自己的类型里哪些选择能让调用保持快：格式、密封类与多态类、集合、字符串和自定义格式化器，最后是启动和如何测量。[下表](#levers)把所有手段列在一处。
 
-基于这些机制、可以直接复制的做法和检查清单见[零分配模式](/zh/docs/v4/advanced/zero-allocation)；内部实现（内联的格式化器、结构体布局）见[性能原理](/zh/docs/v4/performance)。构建里该设置什么（Release、分层编译、Native AOT、Unity 的 IL2CPP 与 Burst），见[构建配置](/zh/docs/v4/advanced/build-configuration)。
+性能部分从这一页开始，后面几页依次深入：[复用与对象池](/zh/docs/v4/pooling)（复用反序列化和对象池的具体规则）、[零分配模式](/zh/docs/v4/advanced/zero-allocation)（可以直接复制的做法和检查清单）、[构建配置](/zh/docs/v4/advanced/build-configuration)（Release、分层编译、Native AOT、Unity 的 IL2CPP 与 Burst）。内部实现（内联的格式化器、结构体布局）见[性能原理](/zh/docs/v4/performance)。
 
 ## 手段一览 [#levers]
 
@@ -34,9 +34,11 @@ icon: Gauge
 | [原始元素的数组和列表](#collections) | 热路径上的集合 | 无 |
 | [默认的字符串编码](#strings) | 几乎所有情况；以 ASCII 为主、夹杂少量更宽字符的文本用 `[NinoUtf8]` | `[NinoUtf8]`：一次转码和一个字节数 |
 | [整块拷贝的自定义格式化器](#custom-formatters) | Nino 不认识的类型 | 带自定义格式化器的成员让它的类型不再按原始内存拷贝、不再是固定大小 |
+| [`NinoSettings.Untrusted` 只用于不可信的输入](/zh/docs/v4/security#untrusted-mode) | 来自进程外的数据 | 字典或 Set 的每个键算一次带种子的哈希，每个值的 `bool`、`DateTime`、`decimal`、`DateOnly`、`TimeOnly` 字段各查一次（[开销](/zh/docs/v4/security#untrusted-cost)） |
 | [提前注册与预热](#startup) | 第一条消息也必须快 | 启动时间 |
 | [拦截器](#per-call-overhead) | 项目用 .NET 8 SDK 或更高版本构建 | 无 |
 | [`NinoPrefetchLargeCollections`](#large-collections) | 类的数组或列表大于 CPU 缓存，且其中的对象被替换、打乱或排序过 | 不设置：无；设置：这类集合的每次顶层调用多一次长度判断 |
+| [Release 构建、Native AOT 与 IL2CPP 的设置](/zh/docs/v4/advanced/build-configuration#at-a-glance) | 要发布和测量的构建 | 代码不用改；有些设置构建更慢，抬高指令集基线后，旧 CPU 跑不了 |
 
 ## 序列化到复用的缓冲区 [#serialize-into-a-reused-buffer]
 
@@ -54,9 +56,18 @@ public ReadOnlySpan<byte> Encode(Quote quote)
 ```
 
 - **开销：** 数组增长到位之后，每次调用 0 B；增长时从池中租用更大的数组，`Dispose()` 时归还。
-- 预先按最大的消息设定大小（构造函数的 `initialCapacity`，或 `EnsureCapacity(sizeHint)`），热路径上就不会再增长。要序列化到你自己管理的数组（固定的套接字缓冲区）中，传入你自己的 `ArrayPool<byte>`：参见[复用缓冲区](/zh/docs/v4/basic#reusing-a-buffer)。
+- 预先按最大的消息设定大小（构造函数的 `initialCapacity`，或 `EnsureCapacity(sizeHint)`），热路径上就不会再增长。想从自己的池里租数组（比如固定的 socket 缓冲区），见[自己的数组池](#own-array-pool)。
 - `ResetWrittenCount()` 复用同一个数组，所以 `WrittenSpan` 只在下一次重置之前有效：先拷贝或发送。
 - 缓冲区不是线程安全的。每个线程、连接或编码器各用一个；[编码器与线程静态缓冲区的做法](/zh/docs/v4/advanced/zero-allocation#reuse-one-buffer)给出了这两种写法。
+
+### 自己的数组池 [#own-array-pool]
+
+想让 Nino 直接写进你自己管理的缓冲区，就传入自己的 `ArrayPool<byte>`：`new NinoArrayBufferWriter(initialCapacity, pool)` 从这个池租数组，扩容时换下的数组和 `Dispose()` 时的数组都还给它。比如服务器把 socket 缓冲区分配在固定对象堆（POH）上，消息就能直接序列化进去，省掉一次拷贝。扩容时旧数组会还给池，所以要在最后一次写入之后再取 `WrittenMemory`，并且只在下一次写入或 `ResetWrittenCount()` 之前使用。
+
+```csharp
+// pinnedPool：你自己的 ArrayPool<byte>，例如由 GC.AllocateUninitializedArray<byte>(n, pinned: true) 数组组成的池
+var socketBuffer = new NinoArrayBufferWriter(4096, pinnedPool);
+```
 
 ### 连续写入多个值 [#several-values-back-to-back]
 
@@ -354,6 +365,6 @@ Nino 在类的值前面写什么，取决于存放它的位置的声明类型（
 ## 下一步 [#next-steps]
 
 <Cards>
+  <Card title="复用与对象池" href="/zh/docs/v4/pooling">原地填充已有实例，新实例从对象池里取。</Card>
   <Card title="零分配模式" href="/zh/docs/v4/advanced/zero-allocation">每次调用 0 B 分配的热路径实践方案。</Card>
-  <Card title=".NET 基准测试" href="/zh/docs/v4/benchmarks">全部用例，包括 MemoryPack、MessagePack 和 protobuf-net，以及测量它们的代码。</Card>
 </Cards>

@@ -10,7 +10,7 @@ icon: Recycle
   }}
 />
 
-反序列化一个类，通常每次调用都会分配一整套新的对象图。Nino v4 的**复用反序列化**改为填充你已有的对象、复用其中的实例，需要新建的对象则从对象池中取，所以持续不断地反序列化消息或帧，也能做到 **0 B** 分配。
+反序列化一个类，通常每次调用都会分配一整套新的对象图。Nino v4 的**复用反序列化**改为填充你已有的对象、复用其中的实例，需要新建的对象则从对象池中取，所以持续不断地反序列化消息或帧，也能做到 **0 B** 分配。[高性能序列化](/zh/docs/v4/advanced/high-performance#levers)把复用列为提速手段之一；这一页讲它的具体规则：哪些会原地填充，新实例从哪里来，丢弃的实例去哪里。
 
 ## 选哪种复用方式 [#which-mechanism]
 
@@ -20,7 +20,7 @@ Nino 有三种办法避免为读到的数据分配内存。它们解决的问题
 | --- | --- | --- |
 | [按 `ref` 反序列化](#deserializing-into-existing-instances) | 一个你留着、反复读入的值（快照、一批数据、一个连接上的上一条消息），并且在下一次读之前处理完 | 不用声明任何东西。实例归你管：读下一条消息时，别的代码不能还拿着它；只有类型相同时才原地填充（槽位里的类型变了，就会新建实例）。 |
 | [`[NinoPooled]`](#ninopooled) | Nino 自己新建的实例：时增时减的列表元素、从 `null` 变成有值的成员、交给其他代码、用完再还回来的消息 | 类必须是 `sealed`、`partial`，并实现两个分部方法（NINO018、NINO002、NINO019）。从 Nino 手里拿走的每个实例，你要调用一次 `ReturnToPool()`（调用两次会抛异常）；每个对象池每个线程最多留 64 个实例，共享栈留 256 个。 |
-| [`[NinoFactory]`](#creating-instances-with-ninofactory) 加 [`SetRecycler<T>`](#why-setrecycler) | 你已有的对象池（框架自带的池化列表、实体系统），或者不能标 `[NinoPooled]` 的类型（没有 sealed，或者是集合） | 每个类型一个工厂方法；每个声明类型一个回收器，在启动时、第一次调用之前注册。回收器作用于这个类型的所有槽位，所以只有完全属于反序列化对象图的对象才能经过它。 |
+| [`[NinoFactory]`](#creating-instances-with-ninofactory) 加 [`SetRecycler<T>`](#why-setrecycler) | 你已有的对象池（框架自带的池化列表、实体系统），或者不能标 `[NinoPooled]` 的类型（没有 sealed，或者是集合） | 每个类型一个工厂方法；每个声明类型一个<Term id="recycler" lang="zh">回收器</Term>，在启动时、第一次调用之前注册。回收器作用于这个类型的所有槽位，所以只有完全属于反序列化对象图的对象才能经过它。 |
 
 大多数热路径同时用前两种：按 `ref` 反序列化到根对象，再把它的列表和成员会新建的类标成 `[NinoPooled]`，就像下面的[例子](#example)那样。
 
@@ -115,13 +115,59 @@ NinoSettings.SetRecycler<Customer>(customer => ObjectPool<Customer>.Return(custo
 
 ## 用 `[NinoFactory]` 创建实例 [#creating-instances-with-ninofactory]
 
-给一个公共静态方法加上这个特性，方法要能无参调用，返回声明它的类型。每当 Nino 要创建这个类型的实例时，就调用它来代替构造函数，然后原地填充得到的实例。上面的 `Customer.Rent()` 就是一个例子。
+给一个公共静态方法加上这个特性：方法不传参数就能调用，返回声明它的类型。只有 Nino 需要这个类型的**新**实例时（槽位是 `null`、列表变长、多态槽位换了类型），才调用它来代替构造函数，然后原地填充拿到的实例；槽位里已经有实例时，直接填充，不调用它。上面的 `Customer.Rent()` 就是一个。再配合复用反序列化，并为 Nino 丢弃的实例注册[回收器](#why-setrecycler)，对象池预热之后，持续不断的消息也不会再分配内存：
 
-它同样适用于集合类型（`List<T>` 的子类、`IDictionary<TKey, TValue>` 的实现等）。方法可以返回仍装着元素的实例，这些元素会在读取数据之前丢弃（并回收）。它不能返回 `null`；无效的方法会报告 NINO017。如果类型有 `[NinoConstructor]`，工厂方法从不调用，因为这样的类型总是通过构造函数重新创建；分析器会对此警告（NINO025）。
+```csharp title="Order.cs"
+using System.Collections.Generic;
+using Nino.Core;
+
+[NinoType]
+public sealed class Order
+{
+    public long Id;
+    public List<OrderLine> Lines = new(); // 跟着订单保留，原地复用
+
+    [NinoFactory] // [!code highlight]
+    public static Order Rent() => ObjectPool<Order>.Rent(); // ObjectPool<T>：见池化集合
+
+    public void Return()
+    {
+        Lines.Clear();
+        ObjectPool<Order>.Return(this);
+    }
+}
+
+[NinoType]
+public sealed class OrderBatch
+{
+    public List<Order> Orders;
+}
+
+[NinoType]
+public struct OrderLine
+{
+    public int ProductId;
+    public int Quantity;
+}
+```
+
+```csharp
+// 启动时：列表变短时丢弃的订单回到对象池
+NinoSettings.SetRecycler<Order>(order => order.Return());
+
+OrderBatch batch = null;
+foreach (ReadOnlyMemory<byte> message in messages)
+    NinoDeserializer.Deserialize(message.Span, ref batch); // 订单变多：Order.Rent()；变少：Return()
+```
+
+- 这个方法必须是 `public`、`static`，不传参数就能调用（无参，或参数都有默认值），返回类型正好是声明它的类型；否则报 NINO017。它不能返回 `null`。
+- 集合类型也能用（`List<T>` 的子类、`IDictionary<TKey, TValue>` 的实现等）。方法返回的实例里可以还有元素，读数据之前会先丢弃（并回收）这些元素。
+- [`ObjectPool<T>`](#your-own-pooled-collections) 是下面那个简单的线程本地对象池，换成别的对象池也行。不需要自己的对象池时，[`[NinoPooled]`](#ninopooled) 会生成一个，丢弃的实例自动还回池里，不用注册回收器。
+- 类型有 `[NinoConstructor]` 时，Nino 永远不会调用工厂方法，因为这样的类型总是通过构造函数[重新创建](/zh/docs/v4/constructors#re-created-types)；分析器会报警告（NINO025）。
 
 ## 内置对象池：`[NinoPooled]` [#ninopooled]
 
-`[NinoPooled]` 为 `[NinoType]` 类提供内置的对象池。无论 Nino 在哪里创建它的实例（你要反序列化的值本身、成员还是集合元素），都会先从池中取一个，再反序列化到这个实例中；丢弃的实例自动还回池中。
+`[NinoPooled]` 给 `[NinoType]` 类配一个内置的对象池，这样的类就是<Term id="pooled-class" lang="zh">池化类</Term>。无论 Nino 在哪里创建它的实例（你要反序列化的值本身、成员还是集合元素），都会先从池中取一个，再反序列化到这个实例中；丢弃的实例自动还回池中。
 
 ```csharp title="Alert.cs"
 using System.Collections.Generic;
@@ -301,6 +347,6 @@ foreach (ReadOnlyMemory<byte> message in messages)
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="自定义格式化器" href="/zh/docs/v4/custom-formatters">用另一种方式编码某个成员，或让 Nino 支持新的类型。</Card>
   <Card title="零分配模式" href="/zh/docs/v4/advanced/zero-allocation">每次调用 0 B 分配的热路径实践方案。</Card>
+  <Card title="构建配置" href="/zh/docs/v4/advanced/build-configuration">按平台列出影响 Nino 速度的编译器、运行时和引擎设置。</Card>
 </Cards>
