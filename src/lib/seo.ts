@@ -11,6 +11,7 @@
  */
 import type { MetaDescriptor } from 'react-router';
 import type { Locale } from './i18n';
+import { release } from './release';
 import {
   author,
   codegenNugetUrl,
@@ -194,6 +195,8 @@ export function homeMeta({
         description: softwareDescription,
         url: `${siteUrl}/en`,
         license: licenseUrl,
+        // The newest release (src/data/release.json), synced before each build
+        version: release.version,
         author: { '@id': ids.author },
         runtimePlatform: [
           '.NET',
@@ -220,6 +223,7 @@ export function homeMeta({
           name: 'Nino',
           applicationCategory: 'DeveloperApplication',
           applicationSubCategory: 'Serialization library',
+          softwareVersion: release.version,
           operatingSystem:
             'Cross-platform (any .NET Standard 2.0 runtime, Unity, Godot; Node.js and browsers, Go and Rust through generated code)',
           downloadUrl: nugetUrl,

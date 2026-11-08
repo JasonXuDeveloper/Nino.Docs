@@ -10,7 +10,7 @@ import { createRequire } from 'node:module';
 import { availableParallelism } from 'node:os';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { Element, ElementContent, Root as HastRoot } from 'hast';
+import type { Element, Root as HastRoot } from 'hast';
 import { fromHtmlIsomorphic } from 'hast-util-from-html-isomorphic';
 import type { Code, Root } from 'mdast';
 import type { MdxJsxFlowElement } from 'mdast-util-mdx-jsx';
@@ -19,16 +19,25 @@ import { type BrowserContext, chromium } from 'playwright';
 import { visit } from 'unist-util-visit';
 import type { VFile } from 'vfile';
 
+/** The font of diagram labels: the same file in the build's tab and on the site. */
+export const diagramFont = {
+  family: 'Nino Diagram',
+  file: 'public/fonts/inter-latin-400-normal.woff2',
+};
+
 const renderOptions = {
   // One drawing for both themes: `neutral` is grayscale, and the dark site
   // shows it inverted (src/components/mermaid.tsx).
   mermaidConfig: {
     theme: 'neutral',
     securityLevel: 'strict',
-    // The site's text font (Tailwind's --font-sans): labels are measured
-    // with the build's fonts and shown with the reader's.
-    fontFamily:
-      "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial, sans-serif",
+    // Mermaid sizes each box to its label as measured here, and the reader's
+    // browser draws the label again: with a system font the reader's (SF on
+    // a Mac) ran wider than the build's and cut the last letters off
+    // ("[NinoType] Orde"). Latin text uses the Inter the site serves
+    // (`diagramFont`, public/fonts, @font-face in app/app.css), so both
+    // measure the same; CJK glyphs are one em wide in every CJK font.
+    fontFamily: `'${diagramFont.family}', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', sans-serif`,
     // Small diagrams that sit inline with the text (WRITING.md, Visual forms):
     // the page's text size and tight spacing.
     themeVariables: { fontSize: '14px' },
@@ -64,7 +73,7 @@ export function remarkMermaidSource() {
 
 /*
  * Drawing is the slow part of the build. The SVGs of a page are cached by the
- * page's diagrams, the render options and the version of the Mermaid that
+ * page's diagrams, the render options, the diagram font and the version of the Mermaid that
  * draws them (mermaid-isomorphic's), in memory (the build's second
  * environment) and on disk (node_modules/.cache/mermaid, the next local build).
  * Cloudflare Pages' build cache keeps only the package manager's global cache
@@ -85,6 +94,7 @@ const memory = new Map<string, Promise<string[]>>();
 function cacheKey(diagrams: string[]) {
   return createHash('sha256')
     .update(JSON.stringify([mermaidVersion, renderOptions, diagrams]))
+    .update(fs.readFileSync(diagramFont.file))
     .digest('hex');
 }
 
@@ -157,6 +167,8 @@ async function renderInTab({
 }) {
   const { mermaid } = globalThis as unknown as { mermaid: Mermaid };
   await Promise.all(Array.from(document.fonts, (font) => font.load()));
+  if (!document.fonts.check(`14px ${config.fontFamily?.split(',')[0]}`))
+    throw new Error('the diagram font did not load');
   const container = document.createElement('div');
   container.ariaHidden = 'true';
   container.style.maxHeight = '0';
@@ -201,6 +213,9 @@ async function tab() {
       }),
       page.addStyleTag({ url: fileUrl('katex/dist/katex.css') }),
       page.addScriptTag({ url: fileUrl('mermaid/dist/mermaid.js') }),
+      page.addStyleTag({
+        content: `@font-face { font-family: '${diagramFont.family}'; src: url('${pathToFileURL(path.resolve(diagramFont.file)).href}') format('woff2'); }`,
+      }),
     ]);
     const config = renderOptions.mermaidConfig;
     for (; job; job = queue.shift())
@@ -255,6 +270,19 @@ function mermaidSource(pre: Element) {
   return text;
 }
 
+/**
+ * A wide diagram shrinks with the column down to `minScale` of its drawn size
+ * (labels of about 10px), then the column scrolls (src/components/mermaid.tsx):
+ * on a phone, the index page's diagram shrank to 6px text.
+ */
+const minScale = 0.7;
+function keepLegible(svg: Element) {
+  const style = String(svg.properties.style ?? '');
+  const width = Number(/max-width:\s*([\d.]+)px/.exec(style)?.[1]);
+  if (width > 0)
+    svg.properties.style = `${style};min-width:${Math.round(width * minScale)}px`;
+}
+
 /** Replaces each mermaid fence with its SVG, drawn or from the cache. */
 export function rehypeMermaid() {
   return async (tree: HastRoot, file: VFile) => {
@@ -275,7 +303,8 @@ export function rehypeMermaid() {
     );
     found.forEach(({ parent, pre }, i) => {
       const svg = fromHtmlIsomorphic(svgs[i], { fragment: true })
-        .children[0] as ElementContent;
+        .children[0] as Element;
+      keepLegible(svg);
       parent.children[parent.children.indexOf(pre)] = svg;
     });
   };

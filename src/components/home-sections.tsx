@@ -25,8 +25,10 @@ import {
   reuseSpeedup,
 } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
+import { release } from '@/lib/release';
 
 const memoryPackVersion = '1.21.4';
+const prerelease = release.prerelease ? ' --prerelease' : '';
 
 const range = (op: 'serialize' | 'deserialize') => {
   const { min, max } = classRatioRange(op);
@@ -67,7 +69,7 @@ const text: Record<
   Locale,
   {
     aboutTitle: string;
-    about: string;
+    about: string[];
     facts: Fact[];
     useTitle: string;
     useLead: string;
@@ -80,12 +82,19 @@ const text: Record<
 > = {
   en: {
     aboutTitle: 'What is Nino?',
-    about:
+    about: [
       'Nino is a general-purpose, high-performance binary serializer for C# and .NET. A Roslyn source generator writes the serialization code at compile time, so there is no reflection, it runs under IL2CPP and NativeAOT, and serializing into a reused buffer allocates nothing.',
+      'Mark a class, struct, record or interface with [NinoType] and call NinoSerializer.Serialize and NinoDeserializer.Deserialize: no schema file, no registration. Values declared as a base class or interface come back as their runtime type, each type chooses whether it tolerates added members, uses keys or tracks shared references, and invalid input only ever throws NinoDataException. nino-gen generates TypeScript, Go and Rust code from the same types, so browsers, Node, Go and Rust programs read and write the same bytes as .NET.',
+      'Nino is not the right choice when people need to read the data (use JSON) or when programs in Java, Python or C++ must read it (use Protocol Buffers or MessagePack).',
+    ],
     facts: [
       {
+        label: 'Latest version',
+        value: `${release.version}${release.prerelease ? ' (prerelease)' : ''}`,
+      },
+      {
         label: 'Install',
-        value: 'dotnet add package Nino --prerelease',
+        value: `dotnet add package Nino${prerelease}`,
         code: true,
       },
       {
@@ -101,7 +110,7 @@ const text: Record<
       {
         label: 'Runs on',
         value:
-          '.NET Standard 2.0+, .NET 8, .NET 10, NativeAOT, ASP.NET Core, Unity 2022.3+ (Mono, IL2CPP, HybridCLR), Godot 4; browsers and Node through generated TypeScript, Go and Rust through generated code',
+          '.NET Standard 2.0+, .NET 8, .NET 10, NativeAOT, ASP.NET Core, Unity 2022.3+ (Mono, IL2CPP, HybridCLR), Godot 4; browsers, Node, Go and Rust through generated code (TypeScript, Go, Rust)',
       },
       ...(serializeRange
         ? [
@@ -224,12 +233,19 @@ const text: Record<
   },
   zh: {
     aboutTitle: 'Nino 是什么？',
-    about:
+    about: [
       'Nino 是通用的高性能 C# / .NET 二进制序列化库。Roslyn 源生成器在编译期生成序列化代码，没有反射，可在 IL2CPP 和 NativeAOT 下运行，序列化到复用的缓冲区时零分配。',
+      '给类、结构体、记录或接口加上 [NinoType]，再调用 NinoSerializer.Serialize 和 NinoDeserializer.Deserialize 就行，不用写 schema，也不用注册。声明为基类或接口的值，读回来还是它的实际类型；每个类型可以单独选择版本容错、键控成员或引用追踪；无效输入只会抛出 NinoDataException。nino-gen 还能从同一批类型生成 TypeScript、Go 和 Rust 代码，浏览器、Node、Go 和 Rust 程序读写的字节与 .NET 完全一致。',
+      '数据需要人来看时用 JSON；数据要给 Java、Python、C++ 等程序读时，用 Protocol Buffers 或 MessagePack。这两种情况 Nino 不合适。',
+    ],
     facts: [
       {
+        label: '最新版本',
+        value: `${release.version}${release.prerelease ? '（预发行版）' : ''}`,
+      },
+      {
         label: '安装',
-        value: 'dotnet add package Nino --prerelease',
+        value: `dotnet add package Nino${prerelease}`,
         code: true,
       },
       {
@@ -245,7 +261,7 @@ const text: Record<
       {
         label: '运行环境',
         value:
-          '.NET Standard 2.0+、.NET 8、.NET 10、NativeAOT、ASP.NET Core、Unity 2022.3+（Mono、IL2CPP、HybridCLR）、Godot 4；通过生成的 TypeScript 支持浏览器和 Node，通过生成的代码支持 Go 和 Rust',
+          '.NET Standard 2.0+、.NET 8、.NET 10、NativeAOT、ASP.NET Core、Unity 2022.3+（Mono、IL2CPP、HybridCLR）、Godot 4；浏览器、Node、Go 和 Rust 通过生成的代码（TypeScript、Go、Rust）使用',
       },
       ...(serializeRange
         ? [
@@ -378,9 +394,14 @@ export function HomeAbout({ lang }: { lang: Locale }) {
     <div className="grid gap-8 lg:grid-cols-[3fr_2fr]">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">{t.aboutTitle}</h2>
-        <p className="mt-3 leading-relaxed text-fd-muted-foreground">
-          {t.about}
-        </p>
+        {t.about.map((paragraph) => (
+          <p
+            key={paragraph}
+            className="mt-3 leading-relaxed text-fd-muted-foreground"
+          >
+            {paragraph}
+          </p>
+        ))}
       </div>
       <dl className="grid content-start gap-3 rounded-xl border bg-fd-card p-5 text-sm">
         {t.facts.map((fact) => (

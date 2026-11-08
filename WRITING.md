@@ -152,7 +152,10 @@ Overview, FAQ and reference pages answer the questions their readers search for,
   5 changed and no), and the Markdown copy never depends on it.
 - **Diagrams**: Mermaid fences (` ```mermaid `), drawn at build time (`src/lib/mermaid.ts`: Mermaid in a headless
   Chromium through Playwright, on mermaid-isomorphic's page), so the page holds the SVG and loads no Mermaid; the
-  `neutral` theme, inverted in dark mode (`src/components/mermaid.tsx`); the Markdown copy keeps the source. Keep
+  `neutral` theme, inverted in dark mode (`src/components/mermaid.tsx`); the Markdown copy keeps the source. Labels
+  use the Inter the site serves (`public/fonts`, `diagramFont`): Mermaid sizes each box with the build's fonts, so a
+  system font cut the last letters off on a Mac ("[NinoType] Orde"); a wide diagram shrinks to 70 % at most, then
+  scrolls (`keepLegible`). Keep
   them small (`flowchart LR`, rounded nodes `A(label)`, no diamonds, about six nodes, short labels: a wide diagram
   shrinks its text; no diagram taller than about 420px at desktop width, which the build's spacing and the component
   cap; a decision with a few outcomes is a "question | answer | use" table, not a flowchart, since round 105's
