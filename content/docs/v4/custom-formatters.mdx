@@ -51,7 +51,7 @@ public struct ZigZagLongFormatter : INinoFormatter<long>
             reader.Read(out b);
             v |= (ulong)(b & 0x7F) << shift;
             shift += 7;
-        } while ((b & 0x80) != 0);
+        } while ((b & 0x80) != 0 && shift < 70); // at most 10 bytes: a 64-bit value
         value = (long)(v >> 1) ^ -(long)(v & 1);
     }
 }

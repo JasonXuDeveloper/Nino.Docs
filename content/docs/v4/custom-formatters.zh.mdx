@@ -51,7 +51,7 @@ public struct ZigZagLongFormatter : INinoFormatter<long>
             reader.Read(out b);
             v |= (ulong)(b & 0x7F) << shift;
             shift += 7;
-        } while ((b & 0x80) != 0);
+        } while ((b & 0x80) != 0 && shift < 70); // 最多 10 字节：一个 64 位值
         value = (long)(v >> 1) ^ -(long)(v & 1);
     }
 }
@@ -374,7 +374,7 @@ public sealed class AuditEntry
 | `Reader.ReadRaw(int length)` | 同上，返回 `ReadOnlySpan<byte>` | 同上 |
 | `Reader.Advance(int count)` | 跳过 `count` 个字节（不返回 `ref` 的 `ReadBlock`） | 同上 |
 
-<Callout type="warn" title="这些引用没有任何检查">
+<Callout type="warn" title="这些引用不做任何检查">
 
 - `Reserve` 返回的 `ref` 只在下一次写入这个 writer 之前有效：任何一次写入都可能把输出挪到更大的缓冲区，并把旧缓冲区还给池；再通过旧的 `ref` 写，就会改坏别处正在用的内存。拿到之后立刻填满。
 - `ReadBlock` 返回的 `ref` 指向你正在反序列化的数据。它不是只读的：千万别通过它写，也只读你要的那 `size` 个字节。`size` 为 `0` 时，它可能指向数据末尾之后。
