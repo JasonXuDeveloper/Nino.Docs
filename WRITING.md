@@ -15,6 +15,10 @@ anything read twice):
 2. **The fact hunter** with one question ("how do I version a type", "is X supported on IL2CPP", "what does NINO007
    mean"): from search or the sidebar to the sentence that answers it.
 3. **The evaluator** comparing Nino with MemoryPack: home → Nino vs MemoryPack → the benchmarks → Limitations.
+4. **The learner on a track** (round 130, the owner: a newcomer should learn Nino in one go, then its fast and its
+   advanced use): Basics (Introduction → … → Best Practices), Performance (High-Performance Serialization → … →
+   Build Configuration) and Advanced (Reference Tracking → … → Wire Format), each followed by Next Steps alone, with
+   no folder to open and no page read twice.
 
 A change that makes a page richer but not easier to read is not made. Why: the owner's rule (round 107): the main
 goal is the reader's reading experience. Evidence: round 107's walk found the newcomer path behind six "Overview"
@@ -23,11 +27,16 @@ to version your types), and the evaluator's pages split between "Overview" and "
 
 ## Order
 
-The sidebar (`content/docs/v4/meta.json`, `meta.zh.json`, same order) is the reader's path: **Get Started**
-(introduction, quick start, serialize and deserialize), **Define Types**, **Features**, **Guides** (the `advanced/`
-folder, collapsed: best practices, performance, use cases, engines and languages), **Compare** (vs MemoryPack, vs
-MessagePack, vs protobuf-net, the three benchmark pages, limitations), **Reference** (analyzers, platforms, wire format, struct layouts, SIMD,
-performance internals, glossary), **Project** (what's new, migration, format versions, changelog, FAQ). A page never
+The sidebar (`content/docs/v4/meta.json`, `meta.zh.json`, same order) is the reader's path, three learning tracks
+first: **Get Started** (introduction, quick start, serialize and deserialize) and **Define Types**, then **Before You
+Ship** (evolving your data, untrusted data, best practices: the basics track ends here, ready to ship),
+**Performance** (high-performance serialization, reuse and pooling, zero-allocation patterns, build configuration),
+**Advanced Features** (reference tracking, custom formatters, streams and compression), then **Guides** (the
+collapsed `advanced/` folder "All Guides": use cases, engines and languages), **Compare** (vs MemoryPack, vs
+MessagePack, vs protobuf-net, the three benchmark pages, limitations: after the tracks, the owner's choice in round
+130), **Reference** (settings, analyzers, platforms, glossary), **Under the Hood** (wire format, struct layouts, SIMD,
+performance internals) and **Project** (what's new, migration, format versions, changelog, FAQ). The introduction's
+"Start Here" maps the three tracks; each page's first Next Steps card is the next page of its track. A page never
 relies on a feature taught later; it links forward instead of explaining twice.
 
 ## Information architecture (every docs pass)
