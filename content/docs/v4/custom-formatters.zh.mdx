@@ -27,7 +27,7 @@ public interface INinoFormatter<T>
 典型的例子是账本或指标流：每条记录保存各个数值的变化量。变化量通常很小，而 `long` 总是占 8 字节。改用 zig-zag 变长整数后，-64 到 63 之间的值只占 1 字节，±8191 以内只占 2 字节：
 
 ```csharp
-/// Writes a long as a zig-zag varint.
+/// 把 long 写成 zig-zag varint。
 public struct ZigZagLongFormatter : INinoFormatter<long>
 {
     public void Serialize(long value, ref Writer writer)
@@ -74,7 +74,7 @@ public sealed class BalanceChange
 ```csharp
 [assembly: NinoFormatter(typeof(RingFormatter<,>))]
 
-// From a library you cannot annotate: a fixed-capacity buffer whose struct enumerator keeps foreach free of allocations
+// 来自你无法加特性的库：一个容量固定的缓冲区，它的结构体枚举器让 foreach 不分配内存
 //   public sealed class Ring<T> : IEnumerable<T>
 //   {
 //       public Ring(int capacity); public int Count { get; } public int Capacity { get; }
@@ -94,24 +94,24 @@ public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
 
         writer.WriteLength(value.Count);
         writer.Write(value.Capacity);
-        foreach (var item in value)            // Ring's struct enumerator: no allocation
-            default(TFormatter).Serialize(item, ref writer); // inlined element formatter
+        foreach (var item in value)            // Ring 的结构体枚举器：不分配内存
+            default(TFormatter).Serialize(item, ref writer); // 内联的元素格式化器
     }
 
     public void Deserialize(ref Reader reader, ref Ring<T> value)
     {
-        int count = reader.ReadLength();       // validated against the bytes left
+        int count = reader.ReadLength();       // 对照剩余字节校验
         if (count < 0)
         {
-            NinoRecycler.Discard(ref value);   // the data holds null: recycle the old ring
+            NinoRecycler.Discard(ref value);   // 数据中是 null：回收旧的 ring
             return;
         }
 
         reader.Read(out int capacity);
         if (value != null && value.Capacity == capacity)
-            value.Clear();                     // reuse the existing ring // [!code highlight]
+            value.Clear();                     // 复用已有的 ring // [!code highlight]
         else
-            NinoRecycler.Replace(ref value, new Ring<T>(capacity)); // recycles the old one, if any
+            NinoRecycler.Replace(ref value, new Ring<T>(capacity)); // 如果有旧的，就回收它
         for (int i = 0; i < count; i++)
         {
             T item = default;
@@ -124,7 +124,7 @@ public struct RingFormatter<T, TFormatter> : INinoFormatter<Ring<T>>
 [NinoType]
 public sealed class RingHolder
 {
-    public Ring<int> Ints;          // uses RingFormatter<int, ...>
+    public Ring<int> Ints;          // 使用 RingFormatter<int, ...>
     public List<Ring<string>> Nested;
 }
 ```
@@ -185,12 +185,12 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using Nino.Core;
 
-// From a library you cannot annotate:
+// 来自你无法加特性的库：
 //   public sealed class Grid<T> { public Grid(int width, int height); public int Width { get; } public T[] Cells { get; } }
 
 [assembly: NinoFormatter(typeof(GridFormatter<>))]
 
-/// Grid<T> of raw cells: the width (-1 for null), then the cells as a T[] (a length, then one block).
+/// 单元格为原始值的 Grid<T>：先写宽度（null 写 -1），再把单元格写成 T[]（一个长度，然后一整块）。
 public struct GridFormatter<[NinoRaw] T> : INinoFormatter<Grid<T>>
     where T : unmanaged
 {
@@ -203,7 +203,7 @@ public struct GridFormatter<[NinoRaw] T> : INinoFormatter<Grid<T>>
         }
 
         writer.Write(value.Width);
-        writer.Write<T>(value.Cells.AsSpan());                     // length, then one block copy
+        writer.Write<T>(value.Cells.AsSpan());                     // 先写长度，再整块复制
     }
 
     public void Deserialize(ref Reader reader, ref Grid<T> value)
@@ -215,12 +215,12 @@ public struct GridFormatter<[NinoRaw] T> : INinoFormatter<Grid<T>>
             return;
         }
 
-        int length = reader.ReadLength(Unsafe.SizeOf<T>());     // checked against the bytes left
+        int length = reader.ReadLength(Unsafe.SizeOf<T>());     // 对照剩余字节检查
         if (width == 0 ? length != 0 : length % width != 0)
             throw new InvalidOperationException("Not a grid.");
         if (value == null || value.Cells.Length != length || value.Width != width)
-            value = new Grid<T>(width, width == 0 ? 0 : length / width); // reuse the grid when its size matches
-        reader.ReadUnmanagedRaw(value.Cells.AsSpan());          // one block copy // [!code highlight]
+            value = new Grid<T>(width, width == 0 ? 0 : length / width); // 大小相同时复用 grid
+        reader.ReadUnmanagedRaw(value.Cells.AsSpan());          // 一次整块复制 // [!code highlight]
     }
 }
 
@@ -228,8 +228,8 @@ public struct GridFormatter<[NinoRaw] T> : INinoFormatter<Grid<T>>
 public sealed class Level
 {
     public string Name;
-    public Grid<byte> Tiles;        // uses GridFormatter<byte>
-    public Grid<Vector2> Flow;      // uses GridFormatter<Vector2>
+    public Grid<byte> Tiles;        // 使用 GridFormatter<byte>
+    public Grid<Vector2> Flow;      // 使用 GridFormatter<Vector2>
 }
 ```
 
@@ -263,13 +263,13 @@ public sealed class Level
 ```csharp
 static void ReadBlock(ref Reader reader)
 {
-    Reader slice = reader.ReadSlice();     // the parent skips the whole block
-    int start = slice.Position;            // an offset in the whole input, not 0
+    Reader slice = reader.ReadSlice();     // 父 reader 跳过整个数据块
+    int start = slice.Position;            // 整个输入中的偏移，不是 0
     slice.Read(out int kind);
     // ...
-    int consumed = slice.Position - start; // bytes read inside the slice
-    bool complete = slice.Eof;             // Remaining == 0: the slice is used up
-    reader.EndSlice(in slice);             // objects read in the slice stay visible to back references
+    int consumed = slice.Position - start; // 切片内读取的字节数
+    bool complete = slice.Eof;             // Remaining == 0：切片已读完
+    reader.EndSlice(in slice);             // 切片中读出的对象对之后的反向引用依然可见
 }
 ```
 

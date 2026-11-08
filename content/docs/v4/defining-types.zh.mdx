@@ -12,10 +12,10 @@ using Nino.Core;
 [NinoType]
 public class Order
 {
-    public long Id;                              // public fields
-    public string CustomerName { get; set; }     // public properties with a getter and a setter
-    public List<OrderLine> Lines { get; init; }  // init setters work too
-    public DateTime? ShippedAt;                  // Nullable<T> of any serializable T
+    public long Id;                              // 公共字段
+    public string CustomerName { get; set; }     // 有 getter 和 setter 的公共属性
+    public List<OrderLine> Lines { get; init; }  // init 访问器也可以
+    public DateTime? ShippedAt;                  // 任意可序列化 T 的 Nullable<T>
 }
 ```
 
@@ -54,7 +54,7 @@ public interface IEvent
     long Timestamp { get; set; }
 }
 
-public class OrderShipped : IEvent // inherits [NinoType]
+public class OrderShipped : IEvent // 继承 [NinoType]
 {
     public long Timestamp { get; set; }
     public long OrderId;
@@ -145,9 +145,9 @@ public class Session
 [NinoType(false)] // [!code highlight]
 public class Invoice
 {
-    public decimal CachedTotal;                         // not serialized
+    public decimal CachedTotal;                         // 不序列化
     [NinoMember(1)] public string Number { get; set; } // [!code highlight]
-    [NinoMember(0)] public long CustomerId;            // written first
+    [NinoMember(0)] public long CustomerId;            // 最先写出
 }
 ```
 
@@ -212,7 +212,7 @@ public class ChatMessage
 {
     public int SenderId;
     [NinoUtf8] public string Text;                       // [!code highlight]
-    [NinoUtf8] public Dictionary<string, string> Tags;   // keys and values are UTF-8 too
+    [NinoUtf8] public Dictionary<string, string> Tags;   // 键和值也按 UTF-8 写
 }
 ```
 
@@ -254,7 +254,7 @@ namespace MyApp.Protocol
 
 ```csharp
 [NinoType]
-public struct SensorReading // raw: one 16-byte copy, no padding
+public struct SensorReading // 原始值：一次 16 字节的复制，没有填充
 {
     public int SensorId;
     public float Value;

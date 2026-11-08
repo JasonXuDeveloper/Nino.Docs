@@ -13,11 +13,11 @@ Nino 不用任何调优就很快。本页介绍它的内部机制，帮你让类
 当项目由 **Roslyn 4.8 及以上版本**编译时（.NET 8 SDK 及以上、Visual Studio 2022 17.8+、新版 Rider），只要调用处知道类型参数，生成器就会拦截这次 `NinoSerializer`/`NinoDeserializer` 调用，在编译期把它直接导向生成的格式化器。这样调用就绕开了格式化器缓存（`NinoFormatterCache<T>`，常规调用在这里查找 `T` 的格式化器）和它的虚调用，写出的字节完全相同。
 
 ```csharp
-// Intercepted: the type is known here
+// 会拦截：这里知道具体类型
 byte[] bytes = NinoSerializer.Serialize(order);
 Order copy = NinoDeserializer.Deserialize<Order>(bytes);
 
-// Not intercepted: T is a type parameter, so the regular call runs
+// 不拦截：T 是类型参数，所以执行普通调用
 static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 ```
 
@@ -83,7 +83,7 @@ using System.Runtime.InteropServices;
 using Nino.Core;
 
 [NinoType]
-public partial struct Sample // 16 bytes, 4 of them padding
+public partial struct Sample // 16 字节，其中 4 字节是填充
 {
     public int Id;
     public DateTime Time;
@@ -91,7 +91,7 @@ public partial struct Sample // 16 bytes, 4 of them padding
 
 [NinoType]
 [StructLayout(LayoutKind.Sequential, Pack = 4)] // [!code highlight]
-public partial struct PackedSample // 12 bytes, no padding
+public partial struct PackedSample // 12 字节，没有填充
 {
     public int Id;
     public DateTime Time;
@@ -120,14 +120,14 @@ public partial struct PackedSample // 12 bytes, no padding
 using Nino.Core;
 
 [NinoType]
-public struct GeoPoint               // raw: 8 bytes
+public struct GeoPoint               // 原始值：8 字节
 {
     public float Latitude;
     public float Longitude;
 }
 
 [NinoType]
-public sealed class SensorReading    // fixed size: 1 (presence byte) + 4 + 8 + 8 + 1 = 22 bytes
+public sealed class SensorReading    // 固定大小：1（存在字节）+ 4 + 8 + 8 + 1 = 22 字节
 {
     public int SensorId;
     public long Timestamp;
@@ -137,7 +137,7 @@ public sealed class SensorReading    // fixed size: 1 (presence byte) + 4 + 8 + 
 ```
 
 ```csharp
-byte[] bytes = NinoSerializer.Serialize(reading);         // a new byte[22], written in place
+byte[] bytes = NinoSerializer.Serialize(reading);         // 一个新的 byte[22]，直接在其中写入
 int size = NinoSerializer.GetFixedSize<SensorReading>();  // 22
 ```
 

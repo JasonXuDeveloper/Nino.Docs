@@ -49,7 +49,7 @@ public ReadOnlySpan<byte> Encode(Quote quote)
 {
     _buffer.ResetWrittenCount();
     NinoSerializer.Serialize(quote, _buffer); // [!code highlight]
-    return _buffer.WrittenSpan;   // valid until the next Encode
+    return _buffer.WrittenSpan;   // 下次调用 Encode 之前有效
 }
 ```
 
@@ -63,14 +63,14 @@ public ReadOnlySpan<byte> Encode(Quote quote)
 `Writer` 写入 `NinoArrayBufferWriter`。用它可以把多个值放进同一个缓冲区，或者预留空间稍后回填。自己创建的 `Writer` 要像 `NinoSerializer` 那样收尾：先 `Flush`，再 `ReleaseReferences`；`Reader` 则以 `ReleaseReferences` 收尾：
 
 ```csharp
-buffer.ResetWrittenCount();  // a NinoArrayBufferWriter you keep
+buffer.ResetWrittenCount();  // 一个你保留下来的 NinoArrayBufferWriter
 var writer = new Writer(buffer);
 NinoSerializer.Serialize(header, ref writer);
 NinoSerializer.Serialize(body, ref writer);
-writer.Flush();              // commit to buffer.WrittenCount
-writer.ReleaseReferences();  // end the call: hand back what the writer rented
+writer.Flush();              // 提交到 buffer.WrittenCount
+writer.ReleaseReferences();  // 结束这次调用：归还 writer 租用的资源
 
-// reading them back in the same order
+// 按同样的顺序读回来
 var reader = new Reader(buffer.WrittenSpan);
 var h = NinoDeserializer.Deserialize<Header>(ref reader);
 var b = NinoDeserializer.Deserialize<Body>(ref reader);
@@ -88,7 +88,7 @@ reader.ReleaseReferences();
 任何 `IBufferWriter<byte>` 都可以作为写入目标：`PipeWriter`、Kestrel 的响应体写入器、`ArrayBufferWriter<byte>`。Nino 先写入每个线程各自的<Term id="scratch-buffer" lang="zh">暂存缓冲区</Term>，再一次性拷贝到目标写入器，因此每次调用都不分配内存：
 
 ```csharp
-NinoSerializer.Serialize(message, pipeWriter); // one copy into the pipe's memory
+NinoSerializer.Serialize(message, pipeWriter); // 复制一次，写进管道的内存
 await pipeWriter.FlushAsync();
 ```
 
@@ -126,8 +126,8 @@ if (NinoSerializer.GetFixedSize<Tick>() < 0)
 
 ```csharp
 MetricsBatch batch = null;
-NinoDeserializer.Deserialize(payload, ref batch);   // first call builds the graph
-NinoDeserializer.Deserialize(payload, ref batch);   // later calls fill it: 0 B
+NinoDeserializer.Deserialize(payload, ref batch);   // 第一次调用构建对象图
+NinoDeserializer.Deserialize(payload, ref batch);   // 之后的调用原地填充：0 B
 ```
 
 - 列表逐个元素复用，并保留原有容量，所以条数不同的批次也读进同一个列表。数组只在新数据**长度相同**时复用，否则会分配新数组。字典按键合并。
@@ -156,11 +156,11 @@ public sealed partial class TelemetryEvent
     public int Kind;
     public List<double> Values;
 
-    // Called once, before Nino first deserializes the type: pre-fill the pool.
+    // 在 Nino 第一次反序列化这个类型之前调用一次：预先填充对象池。
     private static partial IEnumerable<TelemetryEvent> OnNinoPoolWarmup() =>
         Enumerable.Range(0, 256).Select(_ => new TelemetryEvent { Values = new List<double>(8) });
 
-    // Called by ReturnToPool(): release state Nino does not deserialize.
+    // 由 ReturnToPool() 调用：释放 Nino 不反序列化的状态。
     private partial void OnNinoPoolReturn() { }
 }
 ```
@@ -181,8 +181,8 @@ public sealed class EventBatch
 }
 
 EventBatch batch = null;
-NinoDeserializer.Deserialize(frame1, ref batch); // events come from the pool
-NinoDeserializer.Deserialize(frame2, ref batch); // events that disappeared go back to it
+NinoDeserializer.Deserialize(frame1, ref batch); // 事件从对象池中取出
+NinoDeserializer.Deserialize(frame2, ref batch); // 消失的事件回到对象池
 ```
 
 </Step>
@@ -195,7 +195,7 @@ NinoDeserializer.Deserialize(frame2, ref batch); // events that disappeared go b
 ```csharp
 var telemetryEvent = NinoDeserializer.Deserialize<TelemetryEvent>(data);
 Process(telemetryEvent);
-telemetryEvent.ReturnToPool(); // its List<double> stays attached and is reused next time
+telemetryEvent.ReturnToPool(); // 它的 List<double> 保留在实例上，下次复用
 ```
 
 同一个实例归还两次会抛出 `InvalidOperationException`。未归还的实例会被 GC 正常回收。
@@ -225,7 +225,7 @@ NinoSettings.SetPoolMaxRetained<TelemetryEvent>(4096);
 
 ```csharp
 [NinoType]
-public struct Sample            // unmanaged, sequential: written as raw memory
+public struct Sample            // 非托管、顺序布局：按原始内存写出
 {
     public long Timestamp;
     public double Value;
@@ -236,7 +236,7 @@ public struct Sample            // unmanaged, sequential: written as raw memory
 public sealed class SampleBlock
 {
     public long SeriesId;
-    public Sample[] Samples;    // one block copy for the whole array
+    public Sample[] Samples;    // 整个数组一次整块复制
 }
 ```
 

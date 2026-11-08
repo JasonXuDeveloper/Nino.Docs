@@ -11,12 +11,12 @@ icon: Share2
 public class Node
 {
     public int Value;
-    public Node Next;    // may point back to an earlier node
+    public Node Next;    // 可能指回更早的节点
 }
 
 var a = new Node { Value = 1 };
 var b = new Node { Value = 2, Next = a };
-a.Next = b;                                   // a cycle
+a.Next = b;                                   // 形成环
 var bytes = NinoSerializer.Serialize(a);
 var copy = NinoDeserializer.Deserialize<Node>(bytes);
 // copy.Next.Next == copy
@@ -39,7 +39,7 @@ var staff = new List<Employee>
 };
 byte[] bytes = NinoSerializer.Serialize(staff);
 var loaded = NinoDeserializer.Deserialize<List<Employee>>(bytes);
-// loaded[0].Department == loaded[1].Department: one object, so a rename shows on both employees // [!code highlight]
+// loaded[0].Department == loaded[1].Department：同一个对象，所以改名后两个员工都能看到 // [!code highlight]
 ```
 
 如果不追踪，读取后会得到两个独立的 `Department` 对象，之后给部门改名只会反映在其中一名员工身上。只有被共享的类型需要这个选项，`Employee` 本身不需要追踪。

@@ -24,7 +24,7 @@ public abstract class OrderEvent
     public DateTime At;
 }
 
-public sealed class OrderPlaced : OrderEvent   // inherits [NinoType]
+public sealed class OrderPlaced : OrderEvent   // 继承 [NinoType]
 {
     public decimal Total;
 }
@@ -45,7 +45,7 @@ var history = new List<OrderEvent>
 };
 byte[] bytes = NinoSerializer.Serialize(history);
 List<OrderEvent> events = NinoDeserializer.Deserialize<List<OrderEvent>>(bytes);
-// events[0] is an OrderPlaced, events[1] is an OrderCancelled
+// events[0] 是 OrderPlaced，events[1] 是 OrderCancelled
 ```
 
 <Callout type="info">
@@ -133,10 +133,10 @@ public class Derived : Base
 `NinoTypeId` 在运行时算出同样的 ID，可以用于日志、协议校验，或者在握手时比对双方的消息集合：
 
 ```csharp
-int id = NinoTypeId.Of(typeof(OrderShipped));                   // the id OrderShipped is written with ([NinoFormerName] honored)
-string name = NinoTypeId.GetRuntimeName(typeof(OrderShipped));  // its runtime-form name, e.g. "MyApp.Events.OrderShipped"
-string hashed = NinoTypeId.GetHashedName(typeof(OrderShipped)); // the name the id is computed from: its [NinoFormerName], if any
-int same = NinoTypeId.Compute(hashed);                          // == id: the hash of a runtime-form name
+int id = NinoTypeId.Of(typeof(OrderShipped));                   // 写出 OrderShipped 时用的 ID（会考虑 [NinoFormerName]）
+string name = NinoTypeId.GetRuntimeName(typeof(OrderShipped));  // 它的运行时形式名称，例如 "MyApp.Events.OrderShipped"
+string hashed = NinoTypeId.GetHashedName(typeof(OrderShipped)); // 计算 ID 所用的名称：有 [NinoFormerName] 时就是它
+int same = NinoTypeId.Compute(hashed);                          // == id：运行时形式名称的哈希
 ```
 
 ID 永远不会是 `0`，`0` 表示 null。
@@ -164,24 +164,24 @@ RPC 或消息分派、插件系统、编辑器工具，都应该给相关类型�
 [NinoType]
 public interface ICommand { }
 
-public sealed class CreateUser : ICommand { public string Name; }   // implementations inherit [NinoType]
+public sealed class CreateUser : ICommand { public string Name; }   // 实现类继承 [NinoType]
 public sealed class DeleteUser : ICommand { public int UserId; }
 
 public sealed class CommandChannel
 {
     private readonly Socket _socket;
-    private readonly NinoArrayBufferWriter _buffer = new(); // reused for every message
+    private readonly NinoArrayBufferWriter _buffer = new(); // 每条消息都复用它
 
     public CommandChannel(Socket socket) => _socket = socket;
 
     public void Send(ICommand command)
     {
         _buffer.ResetWrittenCount();
-        NinoSerializer.Serialize<ICommand>(command, _buffer); // the type id, then the command
+        NinoSerializer.Serialize<ICommand>(command, _buffer); // 先写类型 ID，再写命令
         _socket.Send(_buffer.WrittenSpan);
     }
 
-    // Fills `command` in place when the data holds the same type, else replaces (and recycles) it
+    // 数据中是同一类型时原地填充 `command`，否则替换它（并回收旧的）
     public void Receive(ReadOnlySpan<byte> message, ref ICommand command) =>
         NinoDeserializer.Deserialize(message, ref command); // [!code highlight]
 }

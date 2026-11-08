@@ -23,7 +23,7 @@ using Nino.Core;
 [NinoType(format: NinoFormat.Keyed)]
 public sealed class Document
 {
-    public int Version;              // your own content version, see below
+    public int Version;              // 你自己的内容版本，见下文
     public DateTime SavedAt;
     public Profile Owner;
     public List<Layer> Layers;
@@ -47,7 +47,7 @@ public sealed class Layer
 }
 
 [NinoType]
-public struct Point              // positional raw structs: never reorder their fields
+public struct Point              // 按位置的原始结构体：永远不要调整字段顺序
 {
     public float X, Y;
 }
@@ -78,7 +78,7 @@ public struct Rgba
 public sealed class Profile
 {
     [NinoFormerName("Name")]  // [!code highlight]
-    public string DisplayName; // was: public string Name;
+    public string DisplayName; // 原来是：public string Name;
     public string Email;
 }
 ```
@@ -116,8 +116,8 @@ static void Upgrade(PlayerStats stats, int fileVersion)
 public class TaskItem
 {
     public string Title;
-    public TaskItem Parent;            // may point to another task in the file
-    public List<TaskItem> DependsOn;   // the same task may appear in many lists, or point back here
+    public TaskItem Parent;            // 可能指向文件中的另一个任务
+    public List<TaskItem> DependsOn;   // 同一个任务可能出现在多个列表中，也可能指回这里
 }
 ```
 
@@ -134,8 +134,8 @@ using Nino.Core;
 
 public static class DocumentFile
 {
-    private const int Magic = 0x434F444E;   // any constant you like ("NDOC")
-    private const int FormatVersion = 3;    // bump when you change the layout by hand
+    private const int Magic = 0x434F444E;   // 任意你喜欢的常量（"NDOC"）
+    private const int FormatVersion = 3;    // 手动修改布局时递增
 
     public static void Encode(Document document, NinoArrayBufferWriter buffer)
     {
@@ -145,7 +145,7 @@ public static class DocumentFile
         writer.Write(FormatVersion);
         NinoSerializer.Serialize(document, ref writer);
         writer.Flush();
-        writer.ReleaseReferences();         // returns the reference table (trackReferences types) to its pool
+        writer.ReleaseReferences();         // 把引用表（trackReferences 类型用到的）还给它的池
     }
 
     public static Document Decode(ReadOnlySpan<byte> data)
@@ -162,7 +162,7 @@ public static class DocumentFile
         return Migrate(document, version);
     }
 
-    // fix up content written by older layouts (FormatVersion < 3)
+    // 修正旧布局（FormatVersion < 3）写出的内容
     private static Document Migrate(Document document, int fromVersion) => document;
 }
 ```
@@ -178,22 +178,22 @@ using Nino.Core;
 
 public static class SafeFile
 {
-    /// <summary>Replaces the file at path; a crash leaves the old file or the new one, never a mix.</summary>
+    /// <summary>替换 path 处的文件；崩溃时留下的要么是旧文件，要么是新文件，绝不会新旧混杂。</summary>
     public static void Write(string path, ReadOnlySpan<byte> bytes)
     {
         string temp = path + ".tmp";
         using (var file = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 1))
         {
             file.Write(bytes);
-            file.Flush(flushToDisk: true);              // on disk before it replaces the old file
+            file.Flush(flushToDisk: true);              // 替换旧文件之前先落盘
         }
         if (File.Exists(path))
-            File.Replace(temp, path, path + ".bak");    // keeps the previous file as a backup
+            File.Replace(temp, path, path + ".bak");    // 把之前的文件保留为备份
         else
             File.Move(temp, path);
     }
 
-    /// <summary>Reads the whole file into buffer, which is reused from call to call.</summary>
+    /// <summary>把整个文件读入 buffer，buffer 在多次调用之间复用。</summary>
     public static ReadOnlySpan<byte> Read(string path, NinoArrayBufferWriter buffer)
     {
         using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1);
@@ -207,7 +207,7 @@ public static class SafeFile
 ```
 
 ```csharp
-using var buffer = new NinoArrayBufferWriter(64 * 1024); // or keep one per thread and reuse it
+using var buffer = new NinoArrayBufferWriter(64 * 1024); // 或者每个线程保留一个并复用
 
 DocumentFile.Encode(document, buffer);
 SafeFile.Write(path, buffer.WrittenSpan);
@@ -230,10 +230,10 @@ using System;
 using System.Buffers;
 using Nino.Core;
 
-public interface IKeyValueStore            // stands in for your store's API
+public interface IKeyValueStore            // 代表你所用存储的 API
 {
     void Put(ReadOnlySpan<byte> key, ReadOnlySpan<byte> value);
-    bool TryGet(ReadOnlySpan<byte> key, IBufferWriter<byte> value);  // copies the value into the writer
+    bool TryGet(ReadOnlySpan<byte> key, IBufferWriter<byte> value);  // 把值复制到 writer 中
 }
 
 public sealed class TypedStore<TKey, TValue> where TKey : unmanaged
@@ -291,7 +291,7 @@ public abstract class AccountEvent
 public sealed class Deposited : AccountEvent { public decimal Amount; }
 public sealed class Withdrawn : AccountEvent { public decimal Amount; }
 
-/// <summary>An append-only file of [int32 length][payload] records.</summary>
+/// <summary>只追加的文件，记录格式为 [int32 长度][负载]。</summary>
 public sealed class EventLog : IDisposable
 {
     public const int MaxRecordSize = 1 << 20;
@@ -308,11 +308,11 @@ public sealed class EventLog : IDisposable
         var writer = new Writer(_buffer);
         int slot = writer.ReserveInt32();
         NinoSerializer.Serialize(evt, ref writer);
-        writer.PatchLength(slot);                 // bytes written after the slot
+        writer.PatchLength(slot);                 // 槽位之后写入的字节数
         writer.Flush();
-        writer.ReleaseReferences();               // end the call, as NinoSerializer does
+        writer.ReleaseReferences();               // 结束这次调用，和 NinoSerializer 一样
         _file.Write(_buffer.WrittenSpan);
-        _file.Flush(flushToDisk: true);           // durable before the caller is told it is stored
+        _file.Flush(flushToDisk: true);           // 告诉调用方已存储之前，先确保持久化
     }
 
     public void Dispose()
@@ -322,14 +322,14 @@ public sealed class EventLog : IDisposable
     }
 
     /// <summary>
-    /// Passes every complete record to apply, in order; a torn record at the end (a crash mid-write) is ignored.
-    /// apply receives a reused instance: do not keep it.
+    /// 按顺序把每条完整的记录交给 apply；末尾残缺的记录（写到一半时崩溃）直接忽略。
+    /// apply 收到的是复用的实例：不要保留它。
     /// </summary>
     public static void Replay(string path, Action<AccountEvent> apply)
     {
         using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         byte[] record = ArrayPool<byte>.Shared.Rent(4096);
-        AccountEvent evt = null;                  // filled in place when the next record has the same type
+        AccountEvent evt = null;                  // 下一条记录类型相同时原地填充
         try
         {
             while (file.ReadAtLeast(record.AsSpan(0, 4), 4, throwOnEndOfStream: false) == 4)
@@ -341,10 +341,10 @@ public sealed class EventLog : IDisposable
                 {
                     byte[] larger = ArrayPool<byte>.Shared.Rent(length);
                     ArrayPool<byte>.Shared.Return(record);
-                    record = larger;              // the finally returns whichever array is current
+                    record = larger;              // finally 归还当前所用的数组
                 }
                 if (file.ReadAtLeast(record.AsSpan(0, length), length, throwOnEndOfStream: false) < length)
-                    break;                        // incomplete tail
+                    break;                        // 末尾不完整
                 NinoDeserializer.Deserialize(record.AsSpan(0, length), ref evt); // [!code highlight]
                 apply(evt);
             }
@@ -374,13 +374,13 @@ using Nino.Core;
 [NinoType(format: NinoFormat.Keyed)]
 public sealed class AccountSnapshot
 {
-    public long LastSequence;   // the last event the snapshot includes
+    public long LastSequence;   // 快照包含的最后一个事件
     public decimal Balance;
 
     public void Apply(AccountEvent evt)
     {
         if (evt.Sequence <= LastSequence)
-            return;                               // already in the snapshot
+            return;                               // 已经在快照中
         Balance += evt switch
         {
             Deposited d => d.Amount,
@@ -397,7 +397,7 @@ public static class Snapshots
     {
         buffer.ResetWrittenCount();
         NinoSerializer.Serialize(snapshot, buffer);
-        SafeFile.Write(path, buffer.WrittenSpan); // never leaves a half-written snapshot
+        SafeFile.Write(path, buffer.WrittenSpan); // 绝不会留下写了一半的快照
     }
 
     public static AccountSnapshot Load(string snapshotPath, string logPath, NinoArrayBufferWriter buffer)
@@ -406,7 +406,7 @@ public static class Snapshots
             ? NinoDeserializer.Deserialize<AccountSnapshot>(SafeFile.Read(snapshotPath, buffer))
             : new AccountSnapshot();
         if (File.Exists(logPath))
-            EventLog.Replay(logPath, state.Apply);   // reads the whole log; Apply skips what the snapshot covers
+            EventLog.Replay(logPath, state.Apply);   // 读取整个日志；Apply 跳过快照已经包含的部分
         return state;
     }
 }

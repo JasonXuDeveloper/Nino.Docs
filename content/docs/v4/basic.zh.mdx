@@ -41,16 +41,16 @@ public struct OrderLine
 ## 序列化 [#serializing]
 
 ```csharp nocheck
-// Into a new byte array
+// 写入新的字节数组
 byte[] NinoSerializer.Serialize<T>(in T value);
 
-// Into any IBufferWriter<byte>
+// 写入任意 IBufferWriter<byte>
 void NinoSerializer.Serialize<T>(in T value, IBufferWriter<byte> bufferWriter);
 
-// With an existing Writer (several values in one buffer, custom formatters)
+// 用已有的 Writer（一个缓冲区中的多个值、自定义格式化器）
 void NinoSerializer.Serialize<T>(in T value, ref Writer writer);
 
-// Boxed values, only for a type known only at run time as a Type (see Runtime Types)
+// 装箱的值，仅用于运行时才以 Type 得知的类型（见运行时类型）
 byte[] NinoSerializer.SerializeBoxed(object value, Type type);
 void NinoSerializer.SerializeBoxed(object value, IBufferWriter<byte> bufferWriter, Type type);
 void NinoSerializer.SerializeBoxed(object value, ref Writer writer, Type type);
@@ -69,14 +69,14 @@ byte[] bytes = NinoSerializer.Serialize(order);
 `NinoArrayBufferWriter` 是 Nino 自带的 `IBufferWriter<byte>`，底层数组默认租自 `ArrayPool<byte>.Shared`（也可以传入你自己的池），Nino 会**直接写入**其中。换成其他 `IBufferWriter<byte>`（.NET 的 `ArrayBufferWriter<byte>`、`PipeWriter`、包装 `Stream` 的写入器），最后会多一次拷贝。
 
 ```csharp
-var buffer = new NinoArrayBufferWriter();      // or new NinoArrayBufferWriter(initialCapacity)
+var buffer = new NinoArrayBufferWriter();      // 或 new NinoArrayBufferWriter(initialCapacity)
 
 NinoSerializer.Serialize(order, buffer);
-ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // also WrittenMemory, WrittenCount, ToArray()
-// ... send or store the bytes ...
+ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // 还有 WrittenMemory、WrittenCount、ToArray()
+// ……发送或存储这些字节……
 
-buffer.ResetWrittenCount();                    // reuse the same array // [!code highlight]
-NinoSerializer.Serialize(order, buffer);       // no allocation this time
+buffer.ResetWrittenCount();                    // 复用同一个数组 // [!code highlight]
+NinoSerializer.Serialize(order, buffer);       // 这次不分配内存
 ```
 
 缓冲区不够用时，会从池里租一个更大的数组。如果大致知道消息有多大，可以用 `new NinoArrayBufferWriter(initialCapacity)` 或 `EnsureCapacity(sizeHint)` 预先分配好；`Capacity` 和 `FreeCapacity` 分别是数组的大小和剩余空间。
@@ -84,7 +84,7 @@ NinoSerializer.Serialize(order, buffer);       // no allocation this time
 如果想让 Nino 直接写进你自己管理的缓冲区，可以传入自己的 `ArrayPool<byte>`：`new NinoArrayBufferWriter(initialCapacity, pool)` 会从这个池租用数组，扩容时换下的数组和 `Dispose()` 时的数组也都还给它。例如，服务器如果把 socket 缓冲区分配在固定对象堆（POH）上，就能把消息直接序列化进去，省掉一次拷贝。扩容时旧数组会还给池，所以要在最后一次写入之后再取 `WrittenMemory`，并且只在下一次写入或 `ResetWrittenCount()` 之前使用。
 
 ```csharp
-// pinnedPool: an ArrayPool<byte> of your own, e.g. of GC.AllocateUninitializedArray<byte>(n, pinned: true) arrays
+// pinnedPool：你自己的 ArrayPool<byte>，例如由 GC.AllocateUninitializedArray<byte>(n, pinned: true) 数组组成的池
 var buffer = new NinoArrayBufferWriter(4096, pinnedPool);
 ```
 
@@ -103,8 +103,8 @@ var buffer = new NinoArrayBufferWriter();
 var writer = new Writer(buffer);
 NinoSerializer.Serialize(header, ref writer);
 NinoSerializer.Serialize(body, ref writer);
-writer.Flush();             // commits the bytes to buffer.WrittenCount (Dispose() does the same)
-writer.ReleaseReferences(); // ends reference tracking, see below
+writer.Flush();             // 把字节提交到 buffer.WrittenCount（Dispose() 也会这样做）
+writer.ReleaseReferences(); // 结束引用追踪，见下文
 ```
 
 <Callout type="info">
@@ -116,17 +116,17 @@ writer.ReleaseReferences(); // ends reference tracking, see below
 ## 反序列化 [#deserializing]
 
 ```csharp nocheck
-// A new value
+// 新的值
 T NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data);
 
-// Into an existing value, reusing its instances
+// 读入已有的值，复用它的实例
 void NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data, ref T value);
 
-// With an existing Reader
+// 用已有的 Reader
 T NinoDeserializer.Deserialize<T>(ref Reader reader);
 void NinoDeserializer.Deserialize<T>(ref Reader reader, ref T value);
 
-// Boxed values, only for a type known only at run time as a Type (see Runtime Types)
+// 装箱的值，仅用于运行时才以 Type 得知的类型（见运行时类型）
 object NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, Type type);
 void NinoDeserializer.DeserializeBoxed(ReadOnlySpan<byte> data, ref object value, Type type);
 void NinoDeserializer.DeserializeBoxed(ref Reader reader, ref object value, Type type);
@@ -147,7 +147,7 @@ Order fromSlice = NinoDeserializer.Deserialize<Order>(rented.AsSpan(0, received)
 Order order = null;
 foreach (var message in messages)
 {
-    NinoDeserializer.Deserialize(message, ref order); // the first call creates order, later calls reuse it
+    NinoDeserializer.Deserialize(message, ref order); // 第一次调用创建 order，之后的调用复用它
     Handle(order);
 }
 ```
@@ -197,14 +197,14 @@ static Order Read(ReadOnlySequence<byte> data)
 [NinoType]
 public abstract class Message { }
 
-public sealed class Ping : Message { public long SentAt; } // inherits [NinoType]
+public sealed class Ping : Message { public long SentAt; } // 继承 [NinoType]
 public sealed class Chat : Message { public string Text; }
 
-var buffer = new NinoArrayBufferWriter();                  // one per connection, reused
-NinoSerializer.Serialize<Message>(new Ping { SentAt = 1 }, buffer); // declared as the base: a type id is written
+var buffer = new NinoArrayBufferWriter();                  // 每个连接一个，反复复用
+NinoSerializer.Serialize<Message>(new Ping { SentAt = 1 }, buffer); // 声明为基类：会写出类型 ID
 
 Message message = null;
-NinoDeserializer.Deserialize(buffer.WrittenSpan, ref message); // a Ping, reused by later calls while the type matches
+NinoDeserializer.Deserialize(buffer.WrittenSpan, ref message); // 一个 Ping，类型相同时之后的调用复用它
 ```
 
 参见[多态](/zh/docs/v4/polymorphism#dispatching-through-a-common-base)。
@@ -214,11 +214,11 @@ NinoDeserializer.Deserialize(buffer.WrittenSpan, ref message); // a Ping, reused
 **只有**当类型要到运行时才以 `Type` 的形式得知、而且这些类型没有共同的 `[NinoType]` 基类型时，才使用装箱 API：比如基于反射、面向任意类型的工具，像一个指向哪个字段就保存哪个字段的检视器。序列化和反序列化必须用**同一个**类型：
 
 ```csharp
-Type type = field.FieldType;                                   // known only at run time
+Type type = field.FieldType;                                   // 运行时才知道
 byte[] bytes = NinoSerializer.SerializeBoxed(field.GetValue(target), type);
 object copy = NinoDeserializer.DeserializeBoxed(bytes, type);
 
-// into an existing instance, reused when it is an instance of type
+// 读入已有实例；它是 type 的实例时复用
 object current = field.GetValue(target);
 NinoDeserializer.DeserializeBoxed(bytes, ref current, type);
 field.SetValue(target, current);
@@ -248,7 +248,7 @@ public class TreeNode
     public List<TreeNode> Children;
 }
 
-// As deep as you like: no StackOverflowException on either side.
+// 多深都可以：两边都不会 StackOverflowException。
 byte[] bytes = NinoSerializer.Serialize(deepTree);
 var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
 ```

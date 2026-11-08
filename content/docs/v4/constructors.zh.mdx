@@ -26,11 +26,11 @@ public sealed class Product
     public string Name { get; }
     public decimal Price { get; }
 
-    // no attribute needed: the parameters match Id, Name and Price by name
+    // 不需要特性：参数按名字对应 Id、Name 和 Price
     public Product(int id, string name, decimal price)
     {
         if (price < 0)
-            throw new ArgumentOutOfRangeException(nameof(price)); // a bad catalog row fails at load time
+            throw new ArgumentOutOfRangeException(nameof(price)); // 有问题的商品目录行在加载时就失败
         Id = id;
         Name = name;
         Price = price;
@@ -42,10 +42,10 @@ public sealed class Customer
 {
     public int Id { get; }
     public string Name { get; }
-    public string Email;              // not a parameter: assigned after the call
+    public string Email;              // 不是参数：调用构造函数之后赋值
 
     [NinoConstructor(nameof(Id), nameof(Name))] // [!code highlight]
-    public Customer(int customerId, string displayName) // names differ, so list the members
+    public Customer(int customerId, string displayName) // 名字不同，所以要列出成员
     {
         Id = customerId;
         Name = displayName;
@@ -63,8 +63,8 @@ public sealed class Currency
 {
     private static readonly ConcurrentDictionary<string, Currency> s_known = new();
 
-    public string Code { get; }   // ISO 4217, upper case
-    public int Decimals { get; }  // digits after the decimal point
+    public string Code { get; }   // ISO 4217，大写
+    public int Decimals { get; }  // 小数点后的位数
 
     private Currency(string code, int decimals)
     {
@@ -80,7 +80,7 @@ public sealed class Currency
         if (decimals is < 0 or > 4)
             throw new ArgumentOutOfRangeException(nameof(decimals));
 
-        // normalize, and share one instance per code: a constructor can do neither
+        // 规范化，并让每个代码共享一个实例：构造函数这两件事都做不到
         return s_known.GetOrAdd(code.ToUpperInvariant(), static (c, d) => new Currency(c, d), decimals);
     }
 }
@@ -95,15 +95,15 @@ public record PriceChanged(long ProductId, decimal OldPrice, decimal NewPrice); 
 [NinoType]
 public struct Money
 {
-    public long MinorUnits; // cents for USD
+    public long MinorUnits; // USD 就是美分
     public string Currency;
 
-    // used instead of the implicit parameterless constructor
+    // 代替隐式的无参构造函数
     [NinoConstructor(nameof(MinorUnits), nameof(Currency))] // [!code highlight]
     public Money(long amount, string currencyCode)
     {
         MinorUnits = amount;
-        Currency = currencyCode?.ToUpperInvariant(); // normalize on read
+        Currency = currencyCode?.ToUpperInvariant(); // 读取时规范化
     }
 }
 ```
@@ -141,10 +141,10 @@ using Nino.Core;
 public sealed class Order
 {
     public long Id;
-    public List<OrderLine> Lines = new(); // kept with the order, reused in place
+    public List<OrderLine> Lines = new(); // 跟着订单保留，原地复用
 
     [NinoFactory] // [!code highlight]
-    public static Order Rent() => ObjectPool<Order>.Rent(); // ObjectPool<T>: see Pooled Collections
+    public static Order Rent() => ObjectPool<Order>.Rent(); // ObjectPool<T>：见池化集合
 
     public void Return()
     {
@@ -168,12 +168,12 @@ public struct OrderLine
 ```
 
 ```csharp
-// at startup: orders dropped by a shrinking list go back to the pool
+// 启动时：列表变短时丢弃的订单回到对象池
 NinoSettings.SetRecycler<Order>(order => order.Return());
 
 OrderBatch batch = null;
 foreach (byte[] data in messages)
-    NinoDeserializer.Deserialize(data, ref batch); // more orders: Order.Rent(); fewer: Return()
+    NinoDeserializer.Deserialize(data, ref batch); // 订单变多：Order.Rent()；变少：Return()
 ```
 
 - 该方法必须是 `public`、`static`，可以不传参数调用（无参，或所有参数都有默认值），并且返回值类型正好是声明它的类型；否则报告 NINO017。它不能返回 `null`。

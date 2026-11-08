@@ -21,18 +21,18 @@ using Nino.Core;
 
 public static partial class StreamFrames
 {
-    public const int MaxFrameSize = 16 << 20; // reject absurd lengths before renting a buffer
+    public const int MaxFrameSize = 16 << 20; // 租用缓冲区之前拒绝离谱的长度
 
-    // [int32 length][payload], built in buffer
+    // [int32 长度][负载]，在 buffer 中构建
     public static void Frame<T>(T value, NinoArrayBufferWriter buffer)
     {
         buffer.ResetWrittenCount();
         var writer = new Writer(buffer);
         int slot = writer.ReserveInt32();
         NinoSerializer.Serialize(value, ref writer); // [!code highlight]
-        writer.PatchLength(slot);   // bytes written after the slot
+        writer.PatchLength(slot);   // 槽位之后写入的字节数
         writer.Flush();
-        writer.ReleaseReferences(); // end the call, as NinoSerializer does
+        writer.ReleaseReferences(); // 结束这次调用，和 NinoSerializer 一样
     }
 
     public static void Write<T>(Stream stream, T value, NinoArrayBufferWriter buffer)
@@ -54,14 +54,14 @@ using Nino.Core;
 
 public static partial class StreamFrames
 {
-    /// <summary>Reads the next frame into value (default: a new one). False at the end of the stream.</summary>
+    /// <summary>把下一帧读入 value（默认新建一个）。到达流末尾时返回 false。</summary>
     public static bool TryRead<T>(Stream stream, ref T value)
     {
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(4096); // the prefix, then the payload
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(4096); // 先放前缀，再放负载
         try
         {
             if (!Fill(stream, buffer, 4, endAllowed: true))
-                return false;                              // clean end between frames
+                return false;                              // 在两帧之间正常结束
             int length = ReadLength(buffer);
             if (length > buffer.Length)
                 Grow(ref buffer, length);
@@ -83,7 +83,7 @@ public static partial class StreamFrames
         return value;
     }
 
-    // Stream.ReadAtLeast does the same on .NET 7+; this loop runs everywhere, including Unity
+    // .NET 7+ 上 Stream.ReadAtLeast 做的是同样的事；这个循环在任何地方都能运行，包括 Unity
     private static bool Fill(Stream stream, byte[] buffer, int count, bool endAllowed)
     {
         for (int read = 0; read < count; )
@@ -118,7 +118,7 @@ public static partial class StreamFrames
 ```
 
 ```csharp
-using var buffer = new NinoArrayBufferWriter(); // one per thread or connection
+using var buffer = new NinoArrayBufferWriter(); // 每个线程或连接一个
 using (var file = File.Create(path))
     StreamFrames.Write(file, checkpoint, buffer);
 
@@ -131,7 +131,7 @@ using (var file = File.OpenRead(path))
 一串值（其他库用 `IAsyncEnumerable<T>` 流式传输的那种）就是连续的帧：每个元素写一帧，读到流结束为止，每一帧都读进同一个实例：
 
 ```csharp
-AuditEvent auditEvent = null;                   // filled in place by every frame
+AuditEvent auditEvent = null;                   // 每一帧都原地填充它
 while (StreamFrames.TryRead(stream, ref auditEvent))
     Index(auditEvent);
 ```
@@ -152,7 +152,7 @@ using Nino.Core;
 
 public static partial class StreamFrames
 {
-    /// <summary>Do not reuse buffer until the returned task has completed.</summary>
+    /// <summary>返回的任务完成之前，不要复用 buffer。</summary>
     public static ValueTask WriteAsync<T>(Stream stream, T value, NinoArrayBufferWriter buffer,
         CancellationToken ct = default)
     {
@@ -212,7 +212,7 @@ public static void Deserialize<T>(in ReadOnlySequence<byte> data, ref T value)
 {
     if (data.IsSingleSegment)
     {
-        NinoDeserializer.Deserialize(data.First.Span, ref value); // data.FirstSpan on .NET 5+
+        NinoDeserializer.Deserialize(data.First.Span, ref value); // .NET 5+ 上可用 data.FirstSpan
         return;
     }
 
@@ -279,7 +279,7 @@ public static class BrotliPayload
 {
     public const int MaxSize = 64 << 20;
 
-    /// <summary>Writes [int32 length][Brotli data] to output. scratch holds the uncompressed bytes.</summary>
+    /// <summary>把 [int32 长度][Brotli 数据] 写到 output。scratch 存放未压缩的字节。</summary>
     public static void Compress<T>(T value, NinoArrayBufferWriter scratch, IBufferWriter<byte> output)
     {
         scratch.ResetWrittenCount();
@@ -288,7 +288,7 @@ public static class BrotliPayload
         int length = scratch.WrittenCount;
         Span<byte> target = output.GetSpan(4 + BrotliEncoder.GetMaxCompressedLength(length));
         BinaryPrimitives.WriteInt32LittleEndian(target, length);
-        // quality 1 of 0-11: fast, still compact; window 22 is the default
+        // 质量取 0-11 中的 1：快，依然紧凑；窗口 22 是默认值
         if (!BrotliEncoder.TryCompress(scratch.WrittenSpan, target.Slice(4), out int written, 1, 22))
             throw new InvalidOperationException("Compression failed");
         output.Advance(4 + written);

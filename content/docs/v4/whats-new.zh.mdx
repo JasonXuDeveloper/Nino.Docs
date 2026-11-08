@@ -228,17 +228,17 @@ public sealed partial class Packet
     public int Id;
     public List<int> Values;
 
-    // Required (the analyzer offers a fix that adds both).
+    // 必须写（分析器提供一键添加两者的修复）。
     private static partial IEnumerable<Packet> OnNinoPoolWarmup() => Enumerable.Range(0, 16).Select(_ => new Packet());
-    private partial void OnNinoPoolReturn() { /* clear state Nino does not deserialize */ }
+    private partial void OnNinoPoolReturn() { /* 清除 Nino 不反序列化的状态 */ }
 }
 
-var buffer = new NinoArrayBufferWriter(); // keep it and reuse it: serializing into it allocates nothing
+var buffer = new NinoArrayBufferWriter(); // 保留并复用它：序列化到它里面不分配内存
 NinoSerializer.Serialize(new Packet { Id = 1, Values = new List<int> { 1, 2, 3 } }, buffer);
 
-var packet = NinoDeserializer.Deserialize<Packet>(buffer.WrittenSpan); // reuses a pooled instance (and its list) if there is one
-// ... use it ...
-packet.ReturnToPool();                                                 // returning it twice throws
+var packet = NinoDeserializer.Deserialize<Packet>(buffer.WrittenSpan); // 池中有实例时复用它（连同它的列表）
+// ……使用它……
+packet.ReturnToPool();                                                 // 归还两次会抛异常
 ```
 
 ## 了解更多 [#learn-more]

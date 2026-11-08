@@ -88,13 +88,13 @@ Serializer.ReturnBufferWriter(bufferWriter);
 ```
 
 ```csharp tab="v4" tab-group="nino-version"
-// create once and keep it (one per thread)
+// 只创建一次并保留（每个线程一个）
 var buffer = new NinoArrayBufferWriter();
 
-// for each message
+// 每条消息
 buffer.ResetWrittenCount();
 NinoSerializer.Serialize(obj, buffer); // [!code highlight]
-ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // valid until the next write
+ReadOnlySpan<byte> bytes = buffer.WrittenSpan; // 下次写入之前有效
 ```
 
 <Callout type="info">
@@ -119,13 +119,13 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 ### 版本容错 [#version-tolerance]
 
 ```csharp tab="v3" tab-group="nino-version"
-// v3: #define WEAK_VERSION_TOLERANCE in the project settings
+// v3：在项目设置中 #define WEAK_VERSION_TOLERANCE
 [NinoType]
 public class Customer
 {
     public int Id;
     public string Name;
-    public bool Verified; // appended later
+    public bool Verified; // 后来追加的
 }
 ```
 
@@ -135,7 +135,7 @@ public class Customer
 {
     public int Id;
     public string Name;
-    public bool Verified; // appended later
+    public bool Verified; // 后来追加的
 }
 ```
 
@@ -169,7 +169,7 @@ public class Invoice { public long Id; }
 [NinoType]
 public abstract class Payment { public long Id; }
 
-[NinoType] // required in v3; v4 inherits it from Payment
+[NinoType] // v3 中必须写；v4 从 Payment 继承
 public sealed class CardPayment : Payment { public string Last4; }
 ```
 

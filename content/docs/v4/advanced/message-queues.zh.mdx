@@ -18,7 +18,7 @@ using System;
 using System.Collections.Generic;
 using Nino.Core;
 
-[NinoType(format: NinoFormat.VersionTolerant)] // subtypes inherit [NinoType] and its options
+[NinoType(format: NinoFormat.VersionTolerant)] // 子类型继承 [NinoType] 及其选项
 public abstract class OrderEvent
 {
     public Guid OrderId;
@@ -43,7 +43,7 @@ public sealed class OrderCancelled : OrderEvent
 }
 
 [NinoType]
-public struct OrderLine          // unmanaged: copied as raw memory, lists of it as one block
+public struct OrderLine          // 非托管：按原始内存复制，它的列表整块复制
 {
     public int ProductId;
     public int Quantity;
@@ -158,11 +158,11 @@ using RabbitMQ.Client;
 public sealed class OrderPublisher
 {
     private readonly IChannel _channel;
-    private readonly NinoArrayBufferWriter _buffer = new(1024); // one per publisher
+    private readonly NinoArrayBufferWriter _buffer = new(1024); // 每个发布者一个
 
     public OrderPublisher(IChannel channel) => _channel = channel;
 
-    // Await each call before the next one: the buffer is reused
+    // 每次调用都要 await 完再发下一条：缓冲区是复用的
     public async ValueTask PublishAsync(OrderEvent evt)
     {
         _buffer.ResetWrittenCount();
@@ -246,13 +246,13 @@ public static class EventBatch
         for (int i = 0; i < events.Count; i++)
             NinoSerializer.Serialize(events[i], ref writer); // [!code highlight]
         writer.Flush();
-        writer.ReleaseReferences(); // end the call, as NinoSerializer does
+        writer.ReleaseReferences(); // 结束这次调用，和 NinoSerializer 一样
     }
 
     public static void Read(ReadOnlySpan<byte> payload, Action<OrderEvent> handle)
     {
         var reader = new Reader(payload);
-        int count = reader.ReadLength(minElementSize: 4); // each event starts with a 4-byte type id
+        int count = reader.ReadLength(minElementSize: 4); // 每个事件以 4 字节的类型 ID 开头
         for (int i = 0; i < count; i++)
             handle(NinoDeserializer.Deserialize<OrderEvent>(ref reader));
         reader.ReleaseReferences();
@@ -276,7 +276,7 @@ using System.Collections.Generic;
 using Nino.Core;
 
 [NinoType]
-public struct Sample             // fixed-size, copied as raw memory
+public struct Sample             // 固定大小，按原始内存复制
 {
     public long Timestamp;
     public int SeriesId;
@@ -288,12 +288,12 @@ public sealed class SampleBatch
 {
     public string Host;
     public long Sequence;
-    public List<Sample> Samples;   // one block copy; keeps its capacity between batches
+    public List<Sample> Samples;   // 整块复制；批次之间保留容量
 }
 
 public sealed class SampleConsumer
 {
-    private SampleBatch _batch;     // reused for every message
+    private SampleBatch _batch;     // 每条消息都复用它
 
     public void OnMessage(ReadOnlySpan<byte> payload)
     {

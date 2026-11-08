@@ -14,7 +14,7 @@ icon: Network
 ```csharp title="Messages.cs"
 using Nino.Core;
 
-[NinoType(format: NinoFormat.VersionTolerant)] // subtypes inherit [NinoType] and its options
+[NinoType(format: NinoFormat.VersionTolerant)] // 子类型继承 [NinoType] 及其选项
 public abstract class Message
 {
     public int RequestId;
@@ -35,7 +35,7 @@ public sealed class PriceUpdate : Message
 
 public sealed class Chat : Message
 {
-    [NinoUtf8] public string Text; // UTF-8: smaller for mostly-ASCII text with emoji or other chars above U+00FF
+    [NinoUtf8] public string Text; // UTF-8：文本大多是 ASCII、夹带 emoji 或其他 U+00FF 以上的字符时更小
 }
 ```
 
@@ -70,27 +70,27 @@ using Nino.Core;
 
 public sealed class FrameWriter : IDisposable
 {
-    private readonly NinoArrayBufferWriter _buffer = new(4096); // one per connection; rented from ArrayPool<byte>.Shared
+    private readonly NinoArrayBufferWriter _buffer = new(4096); // 每个连接一个；从 ArrayPool<byte>.Shared 租用
 
     public void Write(PipeWriter output, Message message)
     {
         _buffer.ResetWrittenCount();
         var writer = new Writer(_buffer);
-        int lengthPosition = writer.ReserveInt32();   // 4 bytes for the length
+        int lengthPosition = writer.ReserveInt32();   // 为长度预留 4 字节
         NinoSerializer.Serialize(message, ref writer); // [!code highlight]
-        writer.PatchLength(lengthPosition);           // bytes written after the slot
+        writer.PatchLength(lengthPosition);           // 槽位之后写入的字节数
         writer.Flush();
-        writer.ReleaseReferences();                   // end the call, as NinoSerializer does
+        writer.ReleaseReferences();                   // 结束这次调用，和 NinoSerializer 一样
 
-        output.Write(_buffer.WrittenSpan);            // PipeWriter is an IBufferWriter<byte>
+        output.Write(_buffer.WrittenSpan);            // PipeWriter 就是 IBufferWriter<byte>
     }
 
-    public void Dispose() => _buffer.Dispose();       // the buffer goes back to the pool
+    public void Dispose() => _buffer.Dispose();       // 缓冲区回到池中
 }
 ```
 
 ```csharp
-// sending: one FrameWriter per connection; update is a PriceUpdate you fill in and reuse
+// 发送：每个连接一个 FrameWriter；update 是一个你填好数据、反复复用的 PriceUpdate
 frameWriter.Write(pipe.Output, update);
 await pipe.Output.FlushAsync();
 ```
@@ -118,7 +118,7 @@ using Nino.Core;
 
 public static class FrameReader
 {
-    public const int MaxFrameSize = 1 << 20; // reject absurd lengths before buffering them
+    public const int MaxFrameSize = 1 << 20; // 在缓冲之前拒绝离谱的长度
 
     // handler 写入 replies 的回复，每次读取只 flush 一次
     public static async Task ReadLoopAsync(PipeReader input, Action<Message> handle,
@@ -164,10 +164,10 @@ public static class FrameReader
 
     public static T Decode<T>(in ReadOnlySequence<byte> frame)
     {
-        if (frame.IsSingleSegment)                       // the common case: no copy
+        if (frame.IsSingleSegment)                       // 常见情况：不复制
             return NinoDeserializer.Deserialize<T>(frame.First.Span); // [!code highlight]
 
-        int length = checked((int)frame.Length);         // spans segments: copy once
+        int length = checked((int)frame.Length);         // 跨多个段：复制一次
         if (length <= 512)
         {
             Span<byte> stack = stackalloc byte[length];
@@ -336,8 +336,8 @@ public static class MessageTransports
 {
     public const int MaxMessageSize = 1 << 20;
 
-    // WebSocket: one Nino payload per WebSocket message.
-    // Returns the socket's task: do not reuse buffer until it has completed.
+    // WebSocket：每条 WebSocket 消息一个 Nino 负载。
+    // 返回 socket 的任务：它完成之前不要复用 buffer。
     public static ValueTask SendAsync<T>(WebSocket socket, T message, NinoArrayBufferWriter buffer,
         CancellationToken ct)
     {
@@ -351,7 +351,7 @@ public static class MessageTransports
     {
         buffer.ResetWrittenCount();
         ValueWebSocketReceiveResult result;
-        do                                                  // a message may arrive in several parts
+        do                                                  // 一条消息可能分几部分到达
         {
             if (buffer.WrittenCount >= MaxMessageSize)
                 throw new InvalidDataException("WebSocket message too large");
@@ -365,7 +365,7 @@ public static class MessageTransports
         return NinoDeserializer.Deserialize<T>(buffer.WrittenSpan);
     }
 
-    // UDP: one Nino payload per datagram
+    // UDP：每个数据报一个 Nino 负载
     public static void SendDatagram<T>(Socket socket, SocketAddress remote, T message, NinoArrayBufferWriter buffer)
     {
         buffer.ResetWrittenCount();
@@ -375,8 +375,8 @@ public static class MessageTransports
 
     public static void ReceiveLoop<T>(Socket socket, Action<T> handle) where T : class
     {
-        byte[] datagram = new byte[65_527];  // the largest UDP payload, allocated once
-        T message = null;                    // reused for every datagram
+        byte[] datagram = new byte[65_527];  // UDP 负载的最大值，只分配一次
+        T message = null;                    // 每个数据报都复用它
         while (true)
         {
             int received = socket.Receive(datagram);
@@ -403,18 +403,18 @@ public static class MessageTransports
 给高频消息加上 `[NinoPooled]`。Nino 每次创建实例时都会先从池中取，通过 `Message` 基类型读取 `PriceUpdate` 时也一样。处理完之后把它还回去；这样解码、处理、归还一条池化消息都不会分配内存：
 
 ```csharp
-[NinoPooled] // [NinoType] and its format are inherited from Message
+[NinoPooled] // [NinoType] 及其格式继承自 Message
 public sealed partial class PriceUpdate : Message
 {
     public int InstrumentId;
     public long Timestamp;
     public double Bid, Ask;
 
-    private static partial IEnumerable<PriceUpdate> OnNinoPoolWarmup() => null; // start empty
+    private static partial IEnumerable<PriceUpdate> OnNinoPoolWarmup() => null; // 一开始为空
     private partial void OnNinoPoolReturn() { }
 }
 
-// in the read loop
+// 在读取循环中
 Message message = FrameReader.Decode<Message>(frame);
 Handle(message);
 if (message is INinoPooled pooled)
@@ -429,7 +429,7 @@ if (message is INinoPooled pooled)
 如果消息是同步处理的、处理完不会保留，就用 `ref` 反序列化到上一个实例。下一条消息类型相同时原地填充；类型不同时，旧实例会被丢弃（如果是池化类型，还会被回收）：
 
 ```csharp
-private Message _last; // per connection, used by one thread at a time
+private Message _last; // 每个连接一个，同一时间只由一个线程使用
 
 void OnFrame(ReadOnlySpan<byte> frame)
 {
@@ -457,7 +457,7 @@ public static class NinoMarshaller
             NinoSerializer.Serialize(value, context.GetBufferWriter());
             context.Complete();
         },
-        // the payload as it arrived: one segment is read in place, several are copied once
+        // 负载保持到达时的样子：只有一个段就原地读取，多个段则复制一次
         deserializer: context => FrameReader.Decode<T>(context.PayloadAsReadOnlySequence()));
 }
 

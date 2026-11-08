@@ -241,7 +241,7 @@ public sealed partial class SimpleClass : SimpleClassBase
 [NinoType]
 [MemoryPackable]
 [MessagePackObject]
-[StructLayout(LayoutKind.Sequential, Pack = 4)] // int + DateTime with no padding: 12 bytes
+[StructLayout(LayoutKind.Sequential, Pack = 4)] // int + DateTime，没有填充：12 字节
 public partial struct SimpleStruct
 {
     [Key(0)] public int Id;
@@ -278,7 +278,7 @@ public static SimpleStruct Create()
     };
 }
 
-// SimpleTest's static constructor
+// SimpleTest 的静态构造函数
 SimpleClass = SimpleClass.Create();
 SimpleClasses = Enumerable.Range(0, 100).Select(_ => SimpleClass.Create()).ToArray();
 SimpleStruct = SimpleStruct.Create();
@@ -314,7 +314,7 @@ public int MemoryPackSerializeSimpleClass()
     return _memoryPackBuffer.WrittenCount;
 }
 
-// SerializedSimpleClass holds the bytes each serializer wrote in the static constructor
+// SerializedSimpleClass 保存每个序列化库在静态构造函数中写出的字节
 [Benchmark(Baseline = true), BenchmarkCategory("SimpleClassDeserialize")]
 public SimpleClass NinoDeserializeSimpleClass()
 {
@@ -327,9 +327,9 @@ public SimpleClass MemoryPackDeserializeSimpleClass()
     return MemoryPackSerializer.Deserialize<SimpleClass>(SerializedSimpleClass[1]);
 }
 
-// MessagePack has the same pair, with its own ArrayBufferWriter<byte>.
-// SimpleStruct, SimpleClasses (SimpleClass[100]), SimpleStructs (SimpleStruct[100])
-// and Vectors (Vector4[10000]) have the same methods.
+// MessagePack 有同样的一对方法，用它自己的 ArrayBufferWriter<byte>。
+// SimpleStruct、SimpleClasses（SimpleClass[100]）、SimpleStructs（SimpleStruct[100]）
+// 和 Vectors（Vector4[10000]）的方法相同。
 ```
 
 ### PolymorphicTest [#polymorphictest]
@@ -365,8 +365,8 @@ public sealed partial class PolymorphicClass : PolymorphicClassBase, IPolymorphi
 
 [NinoType]
 [MemoryPackable]
-[MemoryPackUnion(1, typeof(FooA))]   // ... one [MemoryPackUnion] and one [Union] per subtype,
-[Union(1, typeof(FooA))]             // FooA to FooS and FooZ (20 in all)
+[MemoryPackUnion(1, typeof(FooA))]   // ……每个子类型一个 [MemoryPackUnion] 和一个 [Union]，
+[Union(1, typeof(FooA))]             // FooA 到 FooS 以及 FooZ（共 20 个）
 public abstract partial class PolymorphicFooBase
 {
     [Key(0)] public int Id;
@@ -389,8 +389,8 @@ public partial class FooC : FooB { [Key(3)] public PolymorphicTransform CardC; }
 [NinoType] [MemoryPackable] [MessagePackObject]
 public partial class FooD : FooC { [Key(4)] public PolymorphicTransform CardD; }
 
-// FooE : FooD, FooF : FooE, FooG : FooF, FooH : FooG add no members (depth 5 to 8).
-// FooI, FooJ, ... FooS and FooZ all derive from FooH (depth 9) and add no members.
+// FooE : FooD、FooF : FooE、FooG : FooF、FooH : FooG 不增加成员（深度 5 到 8）。
+// FooI、FooJ……FooS 和 FooZ 都派生自 FooH（深度 9），不增加成员。
 
 [MemoryPackable]
 [MessagePackObject]
@@ -404,9 +404,9 @@ public partial struct PolymorphicTransform
 ```
 
 ```csharp title="PolymorphicTest.cs" nocheck tab="数据" tab-group="bench-code"
-// Polymorphic class: one PolymorphicClass. Create() fills Numbers (100 ints),
-// Map1 (12 Foos: FooA to FooD, three times), Foo (a FooD) and Set (100 ints);
-// then 1,000 Foos are added to Numbers2, cycling through the 20 subtypes.
+// 多态类：一个 PolymorphicClass。Create() 填充 Numbers（100 个 int）、
+// Map1（12 个 Foo：FooA 到 FooD，重复三遍）、Foo（一个 FooD）和 Set（100 个 int）；
+// 然后向 Numbers2 加入 1,000 个 Foo，依次轮换 20 个子类型。
 PolymorphicInstance = PolymorphicClass.Create();
 var polyClass = (PolymorphicClass)PolymorphicInstance;
 for (int i = 0; i < 1000; i++)
@@ -415,17 +415,17 @@ for (int i = 0; i < 1000; i++)
     {
         case 0: polyClass.Numbers2.Add(FooA.Create()); break;
         case 1: polyClass.Numbers2.Add(FooB.Create()); break;
-        // ... one case per subtype
+        // ……每个子类型一个 case
         case 19: polyClass.Numbers2.Add(FooZ.Create()); break;
     }
 }
 
-// Polymorphic Foo[]: 1,000 elements declared as PolymorphicFooBase, the same 20 subtypes in turn
+// 多态 Foo[]：1,000 个声明为 PolymorphicFooBase 的元素，依次是同样的 20 个子类型
 PolymorphicFooArray = new PolymorphicFooBase[1000];
 
-// Polymorphic class array: 100 PolymorphicClass values declared as PolymorphicClassBase,
-// each with 50 Foos in Numbers2
-PolymorphicClassArray = Enumerable.Range(0, 100).Select(_ => /* as above, 50 Foos */).ToArray();
+// 多态类数组：100 个声明为 PolymorphicClassBase 的 PolymorphicClass 值，
+// 每个值的 Numbers2 中有 50 个 Foo
+PolymorphicClassArray = Enumerable.Range(0, 100).Select(_ => /* 同上，50 个 Foo */).ToArray();
 ```
 
 ```csharp title="PolymorphicTest.cs" nocheck tab="方法" tab-group="bench-code"
@@ -451,8 +451,8 @@ public PolymorphicClassBase NinoDeserializePolymorphicClass()
     return NinoDeserializer.Deserialize<PolymorphicClassBase>(SerializedPolymorphicClass[2]);
 }
 
-// MemoryPack and MessagePack: the same shape as in SimpleTest.
-// PolymorphicFooArray and PolymorphicClassArray have the same methods.
+// MemoryPack 和 MessagePack：写法和 SimpleTest 中相同。
+// PolymorphicFooArray 和 PolymorphicClassArray 的方法相同。
 ```
 
 ### PooledTest [#pooledtest]
@@ -478,8 +478,8 @@ public sealed partial class PooledSimpleClass
     private static partial IEnumerable<PooledSimpleClass> OnNinoPoolWarmup() => null;
     private partial void OnNinoPoolReturn() { }
 
-    // a copy of SimpleClass.Create()'s data
-    public static PooledSimpleClass From(SimpleClass c) => new() { /* every member of c */ };
+    // SimpleClass.Create() 数据的副本
+    public static PooledSimpleClass From(SimpleClass c) => new() { /* c 的每个成员 */ };
 }
 ```
 
@@ -491,7 +491,7 @@ private static readonly byte[] MemoryPackData = MemoryPackSerializer.Serialize(V
 [Benchmark(Baseline = true), BenchmarkCategory("PooledDeserialize")]
 public PooledSimpleClass NinoDeserializeNew()
 {
-    // Nothing is ever returned here, so the pool stays empty and every call creates the graph.
+    // 这里从不归还任何实例，所以对象池一直为空，每次调用都新建对象图。
     return NinoDeserializer.Deserialize<PooledSimpleClass>(NinoData);
 }
 
@@ -526,13 +526,13 @@ public sealed partial class PooledLeaf
 {
     public int A;
     public float B;
-    public List<int> Items;   // 8 ints
+    public List<int> Items;   // 8 个 int
 
     private static partial IEnumerable<PooledLeaf> OnNinoPoolWarmup() => null;
     private partial void OnNinoPoolReturn() { }
 }
 
-/// <summary>The same as PooledLeaf, not pooled: the "Plain" baseline.</summary>
+/// <summary>与 PooledLeaf 相同，但不池化：即 "Plain" 基线。</summary>
 [NinoType]
 [MemoryPackable]
 public sealed partial class PlainLeaf
@@ -551,11 +551,11 @@ public sealed partial class PooledNode
     public double X, Y;
     public bool Flag;
     public Guid Guid;
-    public int[] Data;               // 32 ints
-    public List<long> Values;        // 16 longs
-    public Dictionary<int, int> Map; // 16 entries
+    public int[] Data;               // 32 个 int
+    public List<long> Values;        // 16 个 long
+    public Dictionary<int, int> Map; // 16 个条目
     public PooledLeaf Leaf;
-    public List<PooledLeaf> Leaves;  // 8 leaves
+    public List<PooledLeaf> Leaves;  // 8 个叶子
 
     private static partial IEnumerable<PooledNode> OnNinoPoolWarmup() => null;
     private partial void OnNinoPoolReturn() { }
@@ -586,7 +586,7 @@ public PooledNode MemoryPackNodeOverwrite()
     return _memoryPackNode;
 }
 
-/// <summary>A new list each time, its elements taken from the pool and returned after use.</summary>
+/// <summary>每次新建列表，元素从对象池中取出，用完后归还。</summary>
 [Benchmark, BenchmarkCategory("Leaves")]
 public int NinoLeavesPooledElements()
 {
@@ -597,7 +597,7 @@ public int NinoLeavesPooledElements()
     return count;
 }
 
-/// <summary>The same list and elements, deserialized into again.</summary>
+/// <summary>同一个列表和同样的元素，再次读入其中。</summary>
 [Benchmark, BenchmarkCategory("Leaves")]
 public List<PooledLeaf> NinoLeavesInPlace()
 {
@@ -612,8 +612,8 @@ public List<PooledLeaf> MemoryPackLeavesOverwrite()
     return _memoryPackLeaves;
 }
 
-// Also measured: NinoLeavesNew, MemoryPackNodeNew, MemoryPackLeavesNew (new instances every call)
-// and the Plain category (List<PlainLeaf>, new instances, Nino and MemoryPack).
+// 同样测量的还有：NinoLeavesNew、MemoryPackNodeNew、MemoryPackLeavesNew（每次调用都新建实例）
+// 以及 Plain 类别（List<PlainLeaf>，新建实例，Nino 和 MemoryPack）。
 ```
 
 ### ReferenceTest [#referencetest]
@@ -627,9 +627,9 @@ public sealed partial class RefNode
 {
     [MemoryPackOrder(0)] public int Id;
     [MemoryPackOrder(1)] public double Weight;
-    [MemoryPackOrder(2)] public RefGraph Graph;   // back to the root: a cycle
-    [MemoryPackOrder(3)] public RefTag Tag;       // one of 16 shared tags
-    [MemoryPackOrder(4)] public RefNode Peer;     // an earlier node
+    [MemoryPackOrder(2)] public RefGraph Graph;   // 指回根：形成环
+    [MemoryPackOrder(3)] public RefTag Tag;       // 16 个共享标签之一
+    [MemoryPackOrder(4)] public RefNode Peer;     // 更早的一个节点
 }
 
 [NinoType(trackReferences: true)]
@@ -651,8 +651,8 @@ public sealed partial class RefGraph
 ```
 
 ```csharp title="ReferenceTest.cs" nocheck tab="数据" tab-group="bench-code"
-// In RefGraph: count nodes sharing 16 tags; each node's peer is an earlier node
-// (a back reference, so the nesting stays shallow), and every node refers back to the graph.
+// RefGraph 中：count 个节点共享 16 个标签；每个节点的 peer 是更早的一个节点
+// （向后引用，嵌套因此保持很浅），并且每个节点都引用回图本身。
 public static RefGraph Create(int count)
 {
     var r = new Random(3);
@@ -670,7 +670,7 @@ public static RefGraph Create(int count)
     return graph;
 }
 
-// In ReferenceTest:
+// ReferenceTest 中：
 private static readonly RefGraph Graph = RefGraph.Create(200);
 private static readonly byte[] NinoGraph = NinoSerializer.Serialize(Graph);
 private static readonly byte[] MemoryPackGraph = MemoryPackSerializer.Serialize(Graph);
@@ -723,14 +723,14 @@ public sealed partial class TolerantClass
 ```
 
 ```csharp title="VersionTolerantTest.cs" nocheck tab="数据" tab-group="bench-code"
-// In TolerantClass: a copy of a SimpleClass from SimpleTest's data.
+// TolerantClass 中：SimpleTest 数据中一个 SimpleClass 的副本。
 public static TolerantClass From(SimpleClass c) => new()
 {
     Id = c.Id, Tag = c.Tag, Guid = c.Guid, CreateTime = c.CreateTime, Name = c.Name, Desc = c.Desc,
     Numbers = c.Numbers, Dates = c.Dates, Map1 = c.Map1, Map2 = c.Map2,
 };
 
-// In VersionTolerantTest:
+// VersionTolerantTest 中：
 private static readonly TolerantClass TolerantClass = TolerantClass.From(SimpleClass.Create());
 private static readonly TolerantClass[] TolerantClasses =
     Enumerable.Range(0, 100).Select(_ => TolerantClass.From(SimpleClass.Create())).ToArray();
@@ -764,7 +764,7 @@ public TolerantClass NinoDeserializeTolerantClass() =>
 public TolerantClass MemoryPackDeserializeTolerantClass() =>
     MemoryPackSerializer.Deserialize<TolerantClass>(MemoryPackTolerantClass);
 
-// TolerantClasses (the array of 100) has the same methods.
+// TolerantClasses（100 个元素的数组）的方法相同。
 ```
 
 ### FixedSizeTest [#fixedsizetest]
@@ -772,7 +772,7 @@ public TolerantClass MemoryPackDeserializeTolerantClass() =>
 每个值都占用相同字节数的类型（[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)）：`Serialize(value)` 返回一个按这个大小分配的新 `byte[]`，并把值直接写进去，不经过暂存缓冲区、写入器，也没有拷贝。通过两个序列化库返回 `byte[]` 的 API 测量，所以每次序列化调用都包含分配结果数组的开销；另外还测了这种类的 100 个元素的数组，它的长度不固定，走常规路径。对应上文[结果表格](#more-cases)中的 `FixedStruct` 和 `FixedClass` 各行。
 
 ```csharp title="FixedSizeTest.cs" excerpt tab="类型" tab-group="bench-code"
-// Unmanaged members only (40 bytes, no padding): every value serializes to the same number of bytes.
+// 只有非托管成员（40 字节，没有填充）：每个值序列化后的字节数都相同。
 [NinoType]
 [MemoryPackable]
 public partial struct FixedStruct
@@ -783,7 +783,7 @@ public partial struct FixedStruct
     public Guid Guid;
 }
 
-// The same members in a sealed class: its size is fixed too (a presence byte and 40 bytes).
+// 同样的成员放在密封类中：大小也固定（一个存在字节加 40 字节）。
 [NinoType]
 [MemoryPackable]
 public sealed partial class FixedClass
@@ -796,7 +796,7 @@ public sealed partial class FixedClass
 ```
 
 ```csharp title="FixedSizeTest.cs" nocheck tab="数据" tab-group="bench-code"
-// In FixedStruct (FixedClass has the same Create):
+// FixedStruct 中（FixedClass 的 Create 相同）：
 public static FixedStruct Create(Random r) => new()
 {
     Id = r.Next(),
@@ -805,7 +805,7 @@ public static FixedStruct Create(Random r) => new()
     Guid = Guid.NewGuid(),
 };
 
-// In FixedSizeTest:
+// FixedSizeTest 中：
 private static readonly FixedStruct FixedStruct = FixedStruct.Create(new Random(4));
 private static readonly FixedClass FixedClass = FixedClass.Create(new Random(5));
 private static readonly FixedClass[] FixedClasses =
@@ -813,7 +813,7 @@ private static readonly FixedClass[] FixedClasses =
 
 static FixedSizeTest()
 {
-    // These cases measure the fixed-size path: stop if either type ever stops taking it.
+    // 这些用例测的是固定大小的路径：任一类型不再走这条路径，就直接报错。
     if (NinoSerializer.GetFixedSize<FixedStruct>() < 0 || NinoSerializer.GetFixedSize<FixedClass>() < 0)
         throw new InvalidOperationException("FixedStruct and FixedClass must be of fixed size");
 }
@@ -833,7 +833,7 @@ public FixedClass NinoDeserializeFixedClass() => NinoDeserializer.Deserialize<Fi
 public FixedClass MemoryPackDeserializeFixedClass() =>
     MemoryPackSerializer.Deserialize<FixedClass>(MemoryPackFixedClass);
 
-// FixedStruct and FixedClasses (the array of 100) have the same methods.
+// FixedStruct 和 FixedClasses（100 个元素的数组）的方法相同。
 ```
 
 ### GenericPolymorphicTest [#genericpolymorphictest]
@@ -876,16 +876,16 @@ public ProbeBox<int>[] NinoDeserializeGenericIntBase() =>
 克隆 [Nino 仓库](https://github.com/JasonXuDeveloper/Nino)，准备好 .NET 10 SDK 和 Python 3：
 
 ```shell
-# runtime, as published: v3 3.3.13, then the full v4 suite (about six hours)
+# 运行时，与发布的数据相同：先 v3 3.3.13，再完整的 v4 套件（约六小时）
 benchmarks/run.sh
 
-# runtime, v4 only, a subset
+# 运行时，只测 v4 的一部分
 dotnet run -c Release --project benchmarks/Nino.Benchmark -- --filter '*SimpleTest*' --launchCount 3 --warmupCount 5 --iterationCount 15
 
-# reference tracking, version tolerance and fixed-size types
+# 引用追踪、版本容错和固定大小的类型
 dotnet run -c Release --project benchmarks/Nino.Benchmark -- --filter '*ReferenceTest*' '*VersionTolerantTest*' '*FixedSizeTest*'
 
-# build time and generated code (N = 30, 8 derived classes per root)
+# 构建时间和生成的代码（N = 30，每个根类型 8 个派生类）
 dotnet run -c Release --project benchmarks/Nino.GeneratorBenchmark -- 30 8
 ```
 

@@ -107,15 +107,15 @@ Nino 直接读写 `List<T>`、`Stack<T>`、`Queue<T>`、`SortedList<TKey, TValue
 ```csharp
 var context = new AssemblyLoadContext("logic", isCollectible: true);
 var logic = context.LoadFromAssemblyPath(path);
-// ... serialize and deserialize the logic's [NinoType]s ...
+// ……序列化和反序列化 logic 程序集中的 [NinoType] 类型……
 
-context.Unload(); // Nino clears what it cached for the assembly here
+context.Unload(); // Nino 在这里清除它为这个程序集缓存的内容
 ```
 
 这个自动清理由 Nino.Core 的 net8.0 / net10.0 版本完成，面向 .NET 8 及以上的项目会自动用到这两个版本。.NET Core 3.0 到 .NET 7 的项目用的是 netstandard2.1 版本，它没法使用 `AssemblyLoadContext`，所以要在卸载前自己调用 `NinoRegistry.Remove(assembly)`，之后上下文一样能被回收。
 
 ```csharp
-NinoRegistry.Remove(logic); // .NET Core 3.0 to .NET 7
+NinoRegistry.Remove(logic); // .NET Core 3.0 到 .NET 7
 context.Unload();
 ```
 

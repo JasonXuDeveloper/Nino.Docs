@@ -14,7 +14,7 @@ using System;
 using System.Collections.Generic;
 using Nino.Core;
 
-[NinoType(format: NinoFormat.VersionTolerant)] // cached data outlives a deployment, see below
+[NinoType(format: NinoFormat.VersionTolerant)] // 缓存的数据比一次部署存活得更久，见下文
 public sealed class UserProfile
 {
     public long Id;
@@ -41,19 +41,19 @@ public sealed class RedisProfileCache
 
     public RedisProfileCache(IConnectionMultiplexer redis) => _db = redis.GetDatabase();
 
-    private static RedisKey Key(long id) => "profile:v1:" + id; // the key carries a schema version
+    private static RedisKey Key(long id) => "profile:v1:" + id; // 键里带着 schema 版本
 
     public void Set(UserProfile profile, TimeSpan ttl)
     {
         var buffer = t_buffer ??= new NinoArrayBufferWriter(1024);
         buffer.ResetWrittenCount();
         NinoSerializer.Serialize(profile, buffer); // [!code highlight]
-        _db.StringSet(Key(profile.Id), buffer.WrittenMemory, ttl); // synchronous: done before the buffer is reused
+        _db.StringSet(Key(profile.Id), buffer.WrittenMemory, ttl); // 同步调用：缓冲区复用之前已经写完
     }
 
     public UserProfile Get(long id)
     {
-        using Lease<byte> lease = _db.StringGetLease(Key(id));      // pooled bytes, no byte[] per read
+        using Lease<byte> lease = _db.StringGetLease(Key(id));      // 池化的字节，每次读取不分配 byte[]
         if (lease == null)
             return null;
         return NinoDeserializer.Deserialize<UserProfile>(lease.Span);
@@ -189,12 +189,12 @@ app.Run();
 using System.Collections.Concurrent;
 using Nino.Core;
 
-/// <summary>Holds values as bytes: compact, and every reader gets its own copy.</summary>
+/// <summary>以字节保存值：紧凑，每个读取方都拿到自己的副本。</summary>
 public sealed class BlobCache<TKey, TValue>
 {
     private readonly ConcurrentDictionary<TKey, byte[]> _entries = new();
 
-    // the entry is the array: Serialize(value) allocates it at its exact size
+    // 缓存项就是这个数组：Serialize(value) 按准确大小分配它
     public void Set(TKey key, TValue value) => _entries[key] = NinoSerializer.Serialize(value);
 
     public bool TryGet(TKey key, out TValue value)
@@ -208,7 +208,7 @@ public sealed class BlobCache<TKey, TValue>
         return false;
     }
 
-    /// <summary>Reads into an instance the caller keeps: once it has the right shape, only changed strings allocate.</summary>
+    /// <summary>读入调用方保留的实例：实例的结构一旦对上，只有变化的字符串才分配内存。</summary>
     public bool TryGetInto(TKey key, ref TValue value)
     {
         if (!_entries.TryGetValue(key, out byte[] bytes))

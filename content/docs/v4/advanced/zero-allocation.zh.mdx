@@ -34,12 +34,12 @@ public sealed class MessageEncoder : IDisposable
 
     public ReadOnlySpan<byte> Encode(Message message)
     {
-        _buffer.ResetWrittenCount();          // reuse the same array
+        _buffer.ResetWrittenCount();          // 复用同一个数组
         NinoSerializer.Serialize(message, _buffer);
-        return _buffer.WrittenSpan;           // valid until the next Encode
+        return _buffer.WrittenSpan;           // 下次调用 Encode 之前有效
     }
 
-    public void Dispose() => _buffer.Dispose(); // returns the array to the pool
+    public void Dispose() => _buffer.Dispose(); // 把数组还给池
 }
 ```
 
@@ -76,7 +76,7 @@ static class ScratchBuffer
 using System;
 using System.Buffers;
 
-/// <summary>An IBufferWriter over memory you own. Allocate it once; Reset() before each use.</summary>
+/// <summary>基于你自己内存的 IBufferWriter。只分配一次；每次使用前调用 Reset()。</summary>
 public sealed class SpanBufferWriter : IBufferWriter<byte>
 {
     private Memory<byte> _target;
@@ -104,11 +104,11 @@ public sealed class SpanBufferWriter : IBufferWriter<byte>
 ```
 
 ```csharp
-var slot = new byte[4096];                 // or a slice of a larger buffer
+var slot = new byte[4096];                 // 或者一个更大缓冲区的切片
 var output = new SpanBufferWriter(slot);
 
 output.Reset(slot);
-NinoSerializer.Serialize(order, output);   // one copy into slot, 0 B
+NinoSerializer.Serialize(order, output);   // 复制一次到 slot，0 B
 Send(output.WrittenSpan);
 ```
 
@@ -122,9 +122,9 @@ Nino 只往 `GetSpan` 拷贝一次结果（[原因](/zh/docs/v4/advanced/high-pe
 using Nino.Core;
 
 [NinoType]
-public struct Tick                 // unmanaged and sequential: copied as raw memory
+public struct Tick                 // 非托管、顺序布局：按原始内存复制
 {
-    public long Timestamp;         // Unix time in nanoseconds
+    public long Timestamp;         // Unix 时间，单位纳秒
     public double Price;
     public double Quantity;
     public int InstrumentId;
@@ -133,7 +133,7 @@ public struct Tick                 // unmanaged and sequential: copied as raw me
 ```
 
 ```csharp
-// write: 0 B once the buffer has grown to the batch size
+// 写：缓冲区长到批次大小之后，0 B
 buffer.ResetWrittenCount();
 var writer = new Writer(buffer);
 foreach (var tick in ticks)
@@ -141,7 +141,7 @@ foreach (var tick in ticks)
 writer.Flush(); // [!code highlight]
 writer.ReleaseReferences(); // [!code highlight]
 
-// read: 0 B, one bounds check and one copy per tick
+// 读：0 B，每个 tick 一次边界检查、一次复制
 var reader = new Reader(buffer.WrittenSpan);
 while (!reader.Eof)
 {
@@ -158,7 +158,7 @@ reader.ReleaseReferences(); // [!code highlight]
 直接从接收缓冲区反序列化：每个 socket 只租一次缓冲区，按收到的长度切片，并在 `finally` 中归还（[原因](/zh/docs/v4/advanced/high-performance#deserialize-from-the-memory-you-have)）：
 
 ```csharp
-byte[] datagram = ArrayPool<byte>.Shared.Rent(65536); // once per socket, not per datagram
+byte[] datagram = ArrayPool<byte>.Shared.Rent(65536); // 每个 socket 一次，不是每个数据报一次
 Message message = null;
 try
 {
@@ -180,7 +180,7 @@ finally
 保留上一次的结果，按 `ref` 传入，Nino 会原地填充（[机制](/zh/docs/v4/advanced/high-performance#deserialize-into-existing-objects)）：
 
 ```csharp
-OrderBook book = null;                   // created on the first call
+OrderBook book = null;                   // 第一次调用时创建
 while (TryReceive(out ReadOnlySpan<byte> frame))
 {
     NinoDeserializer.Deserialize(frame, ref book); // [!code highlight]
@@ -205,7 +205,7 @@ using System.Buffers.Binary;
 using System.IO;
 using Nino.Core;
 
-/// <summary>[int32 length][payload] frames on a Stream. One instance per connection; not thread safe.</summary>
+/// <summary>Stream 上的 [int32 长度][负载] 帧。每个连接一个实例；不是线程安全的。</summary>
 public sealed class FrameStream : IDisposable
 {
     public const int MaxFrameSize = 16 << 20;
@@ -222,26 +222,26 @@ public sealed class FrameStream : IDisposable
         var writer = new Writer(_out);
         int slot = writer.ReserveInt32();
         NinoSerializer.Serialize(value, ref writer);
-        writer.PatchLength(slot);                           // bytes written after the slot
+        writer.PatchLength(slot);                           // 槽位之后写入的字节数
         writer.Flush();
-        writer.ReleaseReferences();                         // end the call, as NinoSerializer does
+        writer.ReleaseReferences();                         // 结束这次调用，和 NinoSerializer 一样
         _stream.Write(_out.WrittenSpan);
     }
 
-    /// <summary>Reads the next frame into value. False at the end of the stream.</summary>
+    /// <summary>把下一帧读入 value。到达流末尾时返回 false。</summary>
     public bool TryRead<T>(ref T value)
     {
         Span<byte> prefix = stackalloc byte[4];
         int read = _stream.ReadAtLeast(prefix, 4, throwOnEndOfStream: false);
         if (read == 0)
-            return false;                                   // clean end between frames
+            return false;                                   // 在两帧之间正常结束
         if (read < 4)
             throw new EndOfStreamException();
         int length = BinaryPrimitives.ReadInt32LittleEndian(prefix);
         if ((uint)length > MaxFrameSize)
             throw new InvalidDataException($"Frame of {length} bytes");
 
-        if (_in.Length < length)                            // grow once, then keep it
+        if (_in.Length < length)                            // 扩容一次，之后一直保留
         {
             byte[] larger = ArrayPool<byte>.Shared.Rent(length);
             ArrayPool<byte>.Shared.Return(_in);
@@ -259,7 +259,7 @@ public sealed class FrameStream : IDisposable
         if (_in != null)
         {
             ArrayPool<byte>.Shared.Return(_in);
-            _in = null;                                     // a second Dispose returns nothing
+            _in = null;                                     // 第二次 Dispose 不会再归还
         }
     }
 }
@@ -267,7 +267,7 @@ public sealed class FrameStream : IDisposable
 
 ```csharp
 using var frames = new FrameStream(networkStream);
-MetricsBatch batch = null;                 // filled in place by every frame
+MetricsBatch batch = null;                 // 每一帧都原地填充它
 while (frames.TryRead(ref batch))
     Aggregate(batch);
 ```
@@ -279,7 +279,7 @@ while (frames.TryRead(ref batch))
 只由非托管成员组成的结构体，每个值占用的字节数都相同。`NinoSerializer.GetFixedSize<T>()` 返回这个大小（大小不固定的类型返回 `-1`），所以由这类记录组成的文件或缓冲区可以按下标直接定位，不需要偏移表：
 
 ```csharp
-int size = NinoSerializer.GetFixedSize<Tick>();   // check once at startup: -1 means not fixed
+int size = NinoSerializer.GetFixedSize<Tick>();   // 启动时检查一次：-1 表示大小不固定
 
 Tick ReadAt(ReadOnlySpan<byte> records, int index) =>
     NinoDeserializer.Deserialize<Tick>(records.Slice(index * size, size)); // [!code highlight]
@@ -300,7 +300,7 @@ unsafe
     try
     {
         var records = new ReadOnlySpan<byte>(start + view.PointerOffset, checked((int)fileLength));
-        Tick tick = ReadAt(records, 1_000);   // only the pages touched are read from disk
+        Tick tick = ReadAt(records, 1_000);   // 只有访问到的页会从磁盘读取
     }
     finally
     {
@@ -424,7 +424,7 @@ public class AllocationTests
     {
         var buffer = new NinoArrayBufferWriter();
         var quote = new Quote { InstrumentId = 7, Bid = 99.5, Ask = 100.5 };
-        for (int i = 0; i < 100; i++)                    // warm up: tiered JIT, buffer growth
+        for (int i = 0; i < 100; i++)                    // 预热：分层 JIT、缓冲区扩容
             Encode(buffer, quote);
 
         long before = GC.GetAllocatedBytesForCurrentThread();
