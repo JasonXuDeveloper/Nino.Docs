@@ -14,6 +14,7 @@ What changed from one v4 release to the next, newest first. For everything v4 ch
 ### New [#new-8]
 
 - **`ReadOnlySequence<byte>` input**: `NinoDeserializer.Deserialize<T>(in ReadOnlySequence<byte>)` and `Deserialize<T>(in ReadOnlySequence<byte>, ref T)` read what a `PipeReader` or a gRPC payload hands you. A single segment is read in place; data across several segments is copied once, to the stack up to 512 bytes and into a pooled array beyond. Intercepted calls go straight to the generated formatter, as with a span. See [Multi-Segment Input](/en/docs/v4/advanced/streams#readonlysequence-input).
+- **Layout baseline and compatibility checks**: a `NinoLayouts.cs` holding `[assembly: NinoLayouts(...)]`, created by an IDE refactoring or `nino-gen layouts`, records the layouts of your saved and sent types. The analyzer then reports, as you type, a change that breaks old data or old builds ([NINO034](/en/docs/v4/analyzers#nino034)), loses data without an error ([NINO035](/en/docs/v4/analyzers#nino035)) or is compatible with a condition ([NINO036](/en/docs/v4/analyzers#nino036)); an unreadable baseline is [NINO037](/en/docs/v4/analyzers#nino037). Code fixes undo the change (a former name, `sealed` back, the member moved to the end) or accept it into the baseline, and `nino-gen layouts --check` runs the same rules in CI. The attribute is conditional and never reaches your assembly. See [Layout Baseline](/en/docs/v4/evolving-data#layout-baseline).
 
 </Release>
 

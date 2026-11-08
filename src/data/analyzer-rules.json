@@ -31,6 +31,11 @@
       "zh": "格式化器注册"
     },
     {
+      "id": "layout-baseline",
+      "en": "Layout Baseline",
+      "zh": "布局基线"
+    },
+    {
       "id": "code-generation",
       "en": "Code Generation for Other Languages",
       "zh": "其他语言的代码生成"
@@ -497,6 +502,62 @@
       "zh": {
         "problem": "`[assembly: NinoFormatter]` 注册无效，不起作用",
         "fix": "注册一个只实现一次 `INinoFormatter<P>`、且没有嵌套在泛型类型中的结构体：泛型结构体以开放泛型定义（`typeof(F<,>)`）传入，所有类型参数都要能推断；非泛型结构体直接传入（`typeof(F)`）"
+      }
+    },
+    {
+      "id": "NINO034",
+      "category": "layout-baseline",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "A change to a type in the [layout baseline](/en/docs/v4/evolving-data#layout-baseline) breaks data written before it, data written after it for builds before it, or both: for example a member inserted, removed or moved in a version-tolerant type, any member change in a positional type that stored data reaches, `sealed` added or removed, a member's encoding changed, `format` or `trackReferences` changed, a type whose id is written renamed or moved, or a type removed (reported on its section of the baseline)",
+        "fix": "Undo the break as the message says: `[NinoFormerName(\"Old.Name\")]` on a renamed type, `sealed` back as it was, an inserted member moved to the end. When old data and old builds no longer matter, accept the change into the baseline (Fix All accepts every change at once)"
+      },
+      "zh": {
+        "problem": "[布局基线](/zh/docs/v4/evolving-data#layout-baseline)里某个类型的改动会让改动之前写的数据读不出来，或者让改动之前的版本读不了改动之后写的数据，或两者都有。例如：版本容错类型里插入、删除或调换了成员；被存储数据用到的按位置类型改了成员；加上或去掉了 `sealed`；成员的编码变了；`format` 或 `trackReferences` 变了；写出类型 ID 的类型改了名或换了命名空间；类型被删除（报在基线里它那一段上）",
+        "fix": "按消息里说的撤销改动：给改名的类型加 `[NinoFormerName(\"旧全名\")]`、把 `sealed` 恢复原样、把插入的成员挪到末尾。旧数据和旧版本都不用再管时，把改动接受进基线（全部修复会一次接受所有改动）"
+      }
+    },
+    {
+      "id": "NINO035",
+      "category": "layout-baseline",
+      "severity": "warning",
+      "codeFix": true,
+      "en": {
+        "problem": "A keyed member of a type in the layout baseline was renamed without `[NinoFormerName]`: its value in old data is skipped as an unknown key, and old builds skip it in new data, with no error on either side",
+        "fix": "Add `[NinoFormerName(\"OldName\")]` to the member (the code fix does), or accept the change into the baseline if the old value may be lost"
+      },
+      "zh": {
+        "problem": "布局基线里某个键控类型的成员改了名，却没加 `[NinoFormerName]`：旧数据里它的值会被当成未知键跳过，旧版本读新数据时也会跳过它，两边都不报错",
+        "fix": "给成员加上 `[NinoFormerName(\"旧名\")]`（代码修复会加），或者在旧值可以丢弃时把改动接受进基线"
+      }
+    },
+    {
+      "id": "NINO036",
+      "category": "layout-baseline",
+      "severity": "info",
+      "codeFix": true,
+      "en": {
+        "problem": "A change to a type in the layout baseline is compatible, with a condition: a keyed member removed (its value in old data is skipped, old builds read its default), a keyed member renamed with `[NinoFormerName]` (old builds do not know the new key: deploy readers before writers), or `deferrable` changed (matters only for data nested deeper than 128 bodies)",
+        "fix": "Accept the change into the baseline once the condition is met"
+      },
+      "zh": {
+        "problem": "布局基线里某个类型的改动是兼容的，但有前提：删了键控成员（旧数据里它的值会被跳过，旧版本读到默认值）；键控成员改了名并加了 `[NinoFormerName]`（旧版本不认识新键：先发布读的一方，再发布写的一方）；`deferrable` 变了（只影响嵌套超过 128 层的数据）",
+        "fix": "确认满足前提后，把改动接受进基线"
+      }
+    },
+    {
+      "id": "NINO037",
+      "category": "layout-baseline",
+      "severity": "warning",
+      "codeFix": false,
+      "en": {
+        "problem": "The layout baseline in `[assembly: NinoLayouts]` cannot be read, so no layout is checked; the message names the line inside the string and what is wrong there",
+        "fix": "Correct that line, or write the baseline again with the refactoring *Create the layout baseline* or `nino-gen layouts`"
+      },
+      "zh": {
+        "problem": "`[assembly: NinoLayouts]` 里的布局基线读不了，所以不会检查任何布局；消息会指出字符串里出错的行以及错在哪里",
+        "fix": "改正那一行，或者用重构“创建布局基线”或 `nino-gen layouts` 重新生成基线"
       }
     },
     {

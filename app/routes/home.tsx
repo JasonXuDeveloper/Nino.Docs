@@ -126,7 +126,7 @@ const copy: Record<
       {
         icon: ListChecks,
         label: 'Mistakes caught as you type',
-        text: '33 analyzer rules, many with a code fix.',
+        text: '37 analyzer rules, many with a code fix.',
       },
     ],
     claims: [
@@ -226,7 +226,7 @@ const copy: Record<
       {
         icon: ListChecks,
         label: '写代码时就发现错误',
-        text: '33 条分析器规则，许多带一键修复。',
+        text: '37 条分析器规则，许多带一键修复。',
       },
     ],
     claims: [

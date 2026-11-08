@@ -197,6 +197,34 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
 - Two types have the same layout exactly when Nino writes them the same way. A member of another `[NinoType]` reads `type(T)` and refers to that type's own layout, so a change inside it shows up only in its own entry; a member copied as raw memory spells out its bytes in place. To catch every change, record the layouts of all your types, keyed by `layout.Type`, and compare each `layout.ToString()` with what you recorded for the last release: any difference means the bytes changed. Whether old data still reads correctly then depends on the format, as described above.
 - Because the layout is metadata, a tool can also read it from referenced assemblies, even without loading them (`System.Reflection.Metadata`). A project gets the same layouts in every target framework.
 
+## Layout Baseline [#layout-baseline]
+
+Data you save or send outlives the build that wrote it. A layout baseline is a file in your project that records the [layout](#layout-metadata) of every type whose bytes outlive a build: each version-tolerant and keyed `[NinoType]`, and every type their members reach (positional types and polymorphic subtypes included). The analyzer compares your types with it as you type and reports, on the member or type that changed, when a change breaks old data or old builds.
+
+```csharp title="NinoLayouts.cs"
+[assembly: Nino.Core.NinoLayouts(@"
+['MyGame.Save.PlayerData']
+format = 'Keyed'
+header = 'Presence'
+id = 0x3DEFB1B5
+members = [
+  { name = 'Health', type = 'int', encoding = 'raw(4)', key = 0x99A16761 },
+  { name = 'Name', type = 'string', encoding = 'string', key = 0x3085B3E2 },
+]
+")]
+```
+
+- **Create it** with the refactoring *Create the layout baseline (NinoLayouts.cs)*, offered on any `[NinoType]` declaration, or with `nino-gen layouts --assembly MyGame.dll --out NinoLayouts.cs`. Commit the file. You never write it by hand: the code fixes and the command keep it up to date.
+- **It costs nothing at run time.** `NinoLayoutsAttribute` is conditional, so the compiler checks it and the analyzer reads it from source, but it never reaches your assembly. Because it is a C# file, it works the same in Unity, and each assembly (csproj or asmdef) has its own.
+- **What it reports**, for each of two kinds of reader: this build reading data written before the change, and builds before the change reading data written after it (clients not updated yet, old nodes in a rolling deployment):
+  - [NINO034](/en/docs/v4/analyzers#nino034) (warning) for a change that breaks either: a member inserted, removed or moved in a version-tolerant type, any member change in a positional type that stored data reaches, `sealed` added or removed, a member's type or encoding changed, a type written with its type id renamed or moved, a type removed.
+  - [NINO035](/en/docs/v4/analyzers#nino035) (warning) for a keyed member renamed without [`[NinoFormerName]`](#renaming-keyed-members), whose value would be lost without an error.
+  - [NINO036](/en/docs/v4/analyzers#nino036) (info) for a change that is compatible with a condition: a keyed member removed, or renamed with its former name (deploy readers before writers).
+  - Appending to a version-tolerant type and adding a keyed member are compatible and report nothing.
+- **Fix or accept.** Each finding offers the fix that undoes the break, where there is one: a former name, `sealed` back, the inserted member moved to the end. When old data or old builds no longer matter, *Accept the change into the layout baseline* rewrites that type's section, and Fix All accepts every change at once. The change then shows in the baseline's diff, in the pull request.
+- **In CI**, `nino-gen layouts --assembly MyGame.dll --out NinoLayouts.cs --check` runs the same rules on a built assembly and exits with 1 on NINO034 or NINO035. To fail the build itself instead, set `dotnet_diagnostic.NINO034.severity = error` in `.editorconfig`.
+- **Not checked**, because a layout does not show it: enum values renumbered (an enum is just its bytes), what a [custom formatter](/en/docs/v4/custom-formatters) writes, and polymorphic subtypes removed while old data may still hold them.
+
 ## Choosing
 
 | Question | Answer | Use |
@@ -239,11 +267,11 @@ The options can be mixed: a keyed settings file can hold positional raw structs 
 
 | Mistake | What happens | Caught by |
 | --- | --- | --- |
-| Appending a member to a version-tolerant base class that has `[NinoType]` subclasses | The subclasses' data reads wrong values, or throws `NinoDataException` | nothing: see [Appending to a Base Class](#appending-to-a-base-class) |
-| Changing a member's type, or a type's format, once data exists | Old data is misread or does not read | nothing: the [layout metadata](#layout-metadata) shows the change |
-| Renaming or moving a type that is written with its type id | Old data's type id is unknown: `NinoDataException` | nothing: add [`[NinoFormerName]`](#former-name) |
+| Appending a member to a version-tolerant base class that has `[NinoType]` subclasses | The subclasses' data reads wrong values, or throws `NinoDataException` | a [layout baseline](#layout-baseline) (NINO034 on the subclass); see [Appending to a Base Class](#appending-to-a-base-class) |
+| Changing a member's type, or a type's format, once data exists | Old data is misread or does not read | a [layout baseline](#layout-baseline) (NINO034) |
+| Renaming or moving a type that is written with its type id | Old data's type id is unknown: `NinoDataException` | a [layout baseline](#layout-baseline) (NINO034, whose code fix adds [`[NinoFormerName]`](#former-name)) |
 | `[NinoFormerName]` on a generic type written with its type id | Every instantiation writes the same id, and reads cannot tell them apart | [NINO027](/en/docs/v4/analyzers#nino027) |
-| Renaming a keyed member without `[NinoFormerName]` | Old data's value for it is skipped as an unknown key | nothing: see [Renaming Keyed Members](#renaming-keyed-members) |
+| Renaming a keyed member without `[NinoFormerName]` | Old data's value for it is skipped as an unknown key | a [layout baseline](#layout-baseline) (NINO035, whose code fix adds the former name) |
 | Two keyed members (or a former name) that hash to the same key | The build fails | [NINO014](/en/docs/v4/analyzers#nino014) |
 | `[NinoFormerName]` on a member of a positional or version-tolerant type | No effect: those formats write no names | [NINO024](/en/docs/v4/analyzers#nino024), with a code fix |
 | A project that still defines `WEAK_VERSION_TOLERANCE` | The types it made version tolerant would be positional and stop reading their data | [NINO032](/en/docs/v4/analyzers#nino032), whose code fix keeps the bytes |

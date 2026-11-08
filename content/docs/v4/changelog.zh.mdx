@@ -14,6 +14,7 @@ icon: RotateCcwClock
 ### 新功能 [#new-8]
 
 - **直接读取 `ReadOnlySequence<byte>`**：新增 `NinoDeserializer.Deserialize<T>(in ReadOnlySequence<byte>)` 和 `Deserialize<T>(in ReadOnlySequence<byte>, ref T)`，`PipeReader` 或 gRPC 交给你的数据可以直接读。只有一段时原地读取，跨多段时拷贝一次：512 字节以内拷到栈上，更大的拷进池化数组。被拦截的调用和 span 一样直接调用生成的格式化器。参见[多段输入](/zh/docs/v4/advanced/streams#readonlysequence-input)。
+- **布局基线与兼容性检查**：用 IDE 重构或 `nino-gen layouts` 生成一个 `NinoLayouts.cs`（内容是 `[assembly: NinoLayouts(...)]`），记下要存储或传输的类型的布局。之后你一边写代码，分析器一边比对：改动会让旧数据或旧版本读不了时报 [NINO034](/zh/docs/v4/analyzers#nino034)，会悄无声息丢数据时报 [NINO035](/zh/docs/v4/analyzers#nino035)，兼容但有前提时报 [NINO036](/zh/docs/v4/analyzers#nino036)；基线本身读不了时报 [NINO037](/zh/docs/v4/analyzers#nino037)。代码修复可以撤销改动（加旧名、恢复 `sealed`、把成员挪到末尾），也可以把改动接受进基线；`nino-gen layouts --check` 在 CI 里跑同一套规则。这个特性是条件特性，不会写进程序集。参见[布局基线](/zh/docs/v4/evolving-data#layout-baseline)。
 
 </Release>
 
