@@ -1,13 +1,13 @@
 ---
 title: TypeScript、Go 与 Rust
 seoTitle: "在 TypeScript、Go 和 Rust 中使用 Nino：从 [NinoType] 生成编解码器 – Nino v4 文档"
-description: "Nino.Codegen 在每次构建后（或用 nino-gen 工具从构建好的程序集）把你的 [NinoType] 写成带编解码器的 TypeScript、Go 或 Rust 类型，浏览器、Node、Go 服务和 Rust 程序读写的字节与 .NET 中 Nino 写出的完全相同。"
+description: "Nino.Codegen 在每次构建后（或用 nino-gen 工具从构建好的程序集）把你的 [NinoType] 写成带编解码器的 TypeScript、Go 或 Rust 类型，浏览器、Node、Go 服务和 Rust 程序由此与 .NET 中的 Nino 互通，字节完全一致。"
 icon: Languages
 ---
 
 <AnchorRedirect map={{ 'example': '/zh/docs/v4/advanced/typescript#example', 'with-aspnet-core': '/zh/docs/v4/advanced/typescript#with-aspnet-core', 'api': '/zh/docs/v4/advanced/typescript#api', 'text-in-browsers': '/zh/docs/v4/advanced/typescript#text-in-browsers', 'type-mapping': '/zh/docs/v4/advanced/typescript#type-mapping', 'typed-arrays': '/zh/docs/v4/advanced/typescript#typed-arrays', 'not-supported': '/zh/docs/v4/advanced/typescript#not-supported', 'performance': '/zh/docs/v4/advanced/typescript#performance', 'compared-with-memorypack': '/zh/docs/v4/advanced/typescript#compared-with-memorypack', 'from-ninotypescript': '/zh/docs/v4/advanced/typescript#from-ninotypescript', 'typescript': '/zh/docs/v4/advanced/typescript', 'compared-with-json': '/zh/docs/v4/advanced/typescript#performance', 'go': '/zh/docs/v4/advanced/go', 'go-generated-code': '/zh/docs/v4/advanced/go#generated-code', 'struct-tags': '/zh/docs/v4/advanced/go#struct-tags', 'go-strings': '/zh/docs/v4/advanced/go#strings', 'go-values': '/zh/docs/v4/advanced/go#values', 'rust': '/zh/docs/v4/advanced/rust', 'rust-generated-code': '/zh/docs/v4/advanced/rust#generated-code', 'rust-types': '/zh/docs/v4/advanced/rust#types', 'rust-values': '/zh/docs/v4/advanced/rust#values', 'rust-derive': '/zh/docs/v4/advanced/rust#derive', 'rust-hand-written': '/zh/docs/v4/advanced/rust#hand-written', 'rust-features': '/zh/docs/v4/advanced/rust#features' }} />
 
-Nino 可以把你的 `[NinoType]` 写成 **TypeScript**、**Go** 或 **Rust**：每个 `[NinoType]` 一个类型，其编解码器读写的字节与 .NET 中 Nino 写出的完全相同。浏览器、Node 服务端、Go 服务或 Rust 程序由此与你的 .NET 代码交换相同的字节，不需要 .NET 运行时。生成器是 **nino-gen**，它有两个包，选项相同，输出也相同：
+Nino 可以把你的 `[NinoType]` 写成 **TypeScript**、**Go** 或 **Rust**：每个 `[NinoType]` 一个类型，编解码器与 .NET 中的 Nino 字节一致。这样，浏览器、Node 服务端、Go 服务或 Rust 程序不需要 .NET 运行时，就能与你的 .NET 代码互通。生成器是 **nino-gen**，它有两个包，选项相同，输出也相同：
 
 - **Nino.Codegen**，构建包：引用它的项目每次编译之后，按项目中的 `<NinoCodegen>` 项写出代码（[在构建中生成](#setup)）。
 - **Nino.Codegen.Tool**，即 `nino-gen` .NET 工具，在命令行、脚本或 CI 步骤中处理构建好的程序集（[在命令行中生成](#command-line)）。
@@ -20,7 +20,7 @@ Nino 可以把你的 `[NinoType]` 写成 **TypeScript**、**Go** 或 **Rust**：
 </ItemGroup>
 ```
 
-每种语言各有一页，生成的代码旁边都需要它的运行时，每次发布都以 Nino 的版本号发布（[runtimes/](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes)）：
+每种语言各有一页，也各有一个配合生成代码使用的运行时，随 Nino 每次发布，版本号与 Nino 相同（[runtimes/](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes)）：
 
 | 语言 | 运行时 | 需要 |
 | --- | --- | --- |
@@ -189,7 +189,7 @@ nino-gen : warning NINOGEN002: Samples.Nest`1 is not written to Go: it holds its
 
 ## 各语言中的类型 [#types]
 
-每个 `[NinoType]` 生成一个类型，每个成员是该语言里对应 .NET 所写内容的类型。差别最大的几类：
+每个 `[NinoType]` 生成一个类型，每个成员则取该语言里能表达 .NET 所写内容的类型。差别最大的几类：
 
 | C# | TypeScript | Go | Rust |
 | --- | --- | --- | --- |
@@ -204,13 +204,13 @@ nino-gen : warning NINOGEN002: Samples.Nest`1 is not written to Go: it holds its
 | `Dictionary<K, V>` | `Map<K, V> \| null` | `[]nino.Entry[K, V]` | `Option<IndexMap<K, V>>` |
 | `decimal`、`Guid`、`DateTime` | `string`、`string`、`Date` | `nino.Decimal`、`nino.Guid`、`nino.DateTime` | `nino::Decimal`、`nino::Guid`、`nino::DateTime` |
 
-集合中的字符串在每种语言里都可以是 null，与 .NET 一致（`HashSet<string>` 可以包含一个 null）；字典的键则不会是 null，因为 .NET 遇到 null 键会抛出异常。
+Set 中的字符串在每种语言里都可以是 null，与 .NET 一致（`HashSet<string>` 可以包含一个 null）；字典的键则不会是 null，因为 .NET 遇到 null 键会抛出异常。
 
 完整的类型表，以及怎样构造 .NET 的值：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。
 
 ## 原始结构体的字段 [#raw-struct-fields]
 
-原始结构体（按一整块写出的非托管结构体，见[原始值](/zh/docs/v4/wire-format#raw-values)）生成为一个由它的字段组成的类型，字段在规范布局里的偏移处，填充写 0。在 .NET 里大小或布局随主机变化的字段（`nint`、`nuint`、指针、`Int128`、`DateTimeOffset`、原始类型 `T` 的 `T?`）按二进制格式规定的固定字节写出，在每种语言里也有固定的类型：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。`Int128?` 数组的步长是 32 字节（存在字节、15 个 0、值）。`Vector64<T>` 到 `Vector512<T>` 字段在每种语言里都报 NINOGEN002；旧版本构建的布局里如果有 `System.Numerics.Vector<T>`，也一样：`Vector<T>` [不能序列化](/zh/docs/v4/struct-layouts#vector-t)。
+原始结构体（按一整块写出的非托管结构体，见[原始值](/zh/docs/v4/wire-format#raw-values)）生成为一个由其字段组成的类型，各字段位于规范布局中的偏移处，填充为 0。在 .NET 里大小或布局随主机变化的字段（`nint`、`nuint`、指针、`Int128`、`DateTimeOffset`、原始类型 `T` 的 `T?`）按二进制格式规定的固定字节写出，在每种语言里也有固定的类型：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。`Int128?` 数组的步长是 32 字节（存在字节、15 个 0、值）。`Vector64<T>` 到 `Vector512<T>` 字段在每种语言里都报 NINOGEN002；旧版本构建的布局里如果有 `System.Numerics.Vector<T>`，也一样：`Vector<T>` [不能序列化](/zh/docs/v4/struct-layouts#vector-t)。
 
 ## 泛型类型 [#generics]
 
@@ -236,13 +236,13 @@ public sealed class Box<T>
 
 ### 按类型 ID 写出的泛型类型 [#generic-types-behind-a-type-id]
 
-非密封的泛型类、抽象泛型类或泛型接口，按其封闭 .NET 名称（`Shop.Shelf<System.Int32>`）的类型 ID 写出。每个封闭类型都是一个单独的槽位，其情况是可以赋值给它的具体类型：封闭泛型类型（`ListShelf<int>`）和非泛型子类型（`IntShelf : Shelf<int>`）。即使没有代码提到，nino-gen 也会加入槽位需要的封闭类型（持有 `Open<T>` 的 `OpenHolder<long>` 需要 `Open<long>` 及其子类型）；持有以自身类型参数构成的槽位的泛型类型，会从每个封闭用法中取得该槽位（具体写法见 [TypeScript](/zh/docs/v4/advanced/typescript#generics)、[Go](/zh/docs/v4/advanced/go#generics)、[Rust](/zh/docs/v4/advanced/rust#generics)）。
+非密封的泛型类、抽象泛型类或泛型接口，按其封闭 .NET 名称（`Shop.Shelf<System.Int32>`）的类型 ID 写出。每个封闭类型都是一个单独的槽位，槽位的各个分支是可以赋值给它的具体类型：封闭泛型类型（`ListShelf<int>`）和非泛型子类型（`IntShelf : Shelf<int>`）。即使没有代码提到，nino-gen 也会加入槽位需要的封闭类型（持有 `Open<T>` 的 `OpenHolder<long>` 需要 `Open<long>` 及其子类型）；泛型类型若持有由自身类型参数构成的槽位，会从每个封闭用法中取得该槽位（具体写法见 [TypeScript](/zh/docs/v4/advanced/typescript#generics)、[Go](/zh/docs/v4/advanced/go#generics)、[Rust](/zh/docs/v4/advanced/rust#generics)）。
 
-类型 ID 不被槽位允许的值（其他封闭类型、未知 ID）会被拒绝。
+值的类型 ID 不在槽位允许的范围内（其他封闭类型、未知 ID）时，直接拒绝。
 
 ### 槽位中的封闭泛型类型 [#closed-generic-types-in-slots]
 
-泛型子类型（`sealed class Box<T> : Animal`，或实现了 `[NinoType]` 接口的泛型结构体）在多态槽位或 `object` 槽位中，按其封闭 .NET 名称（`Shop.Box<System.Int32>`）的哈希写出。布局只带有定义（`Box<T>`），所以 nino-gen 从程序集的元数据中读取封闭类型：签名、`new Box<int>()`、`typeof(Box<int>)` 或泛型方法的类型实参（`NinoPolymorphic.TryRegister<Box<int>>()`）提到的每个封闭类型。其中定义是具体泛型 `[NinoType]` 的，都成为它可赋值到的槽位的一种情况（`object` 槽位接受全部），并用其类型实参的编解码器读写。
+泛型子类型（`sealed class Box<T> : Animal`，或实现了 `[NinoType]` 接口的泛型结构体）在多态槽位或 `object` 槽位中，按其封闭 .NET 名称（`Shop.Box<System.Int32>`）的哈希写出。布局只带有定义（`Box<T>`），所以 nino-gen 从程序集的元数据中读取封闭类型：签名、`new Box<int>()`、`typeof(Box<int>)` 或泛型方法的类型实参（`NinoPolymorphic.TryRegister<Box<int>>()`）提到的每个封闭类型。其中定义是具体泛型 `[NinoType]` 的，都是它可赋值到的槽位的一个分支（`object` 槽位接受全部），并用其类型实参的编解码器读写。
 
 <Callout type="warn" title="与 .NET 接受的集合不完全相同">
 
@@ -256,7 +256,7 @@ public sealed class Box<T>
 
 被追踪的类 `Node` 在 [TypeScript](/zh/docs/v4/advanced/typescript#reference-tracking) 中是 `Node | null`，在 [Go](/zh/docs/v4/advanced/go#reference-tracking) 中是 `*Node`，在 [Rust](/zh/docs/v4/advanced/rust#reference-tracking) 中是 `Option<nino::Shared<Node>>`，对它的每个引用都是同一个对象。
 
-引用头不是 -1、0 或已读对象的编号时会被拒绝，指向槽位不允许的类型的对象的反向引用也会被拒绝；每个新对象至少占 4 个字节的引用头，所以对象表的增长不会快于数据。
+引用头不是 -1、0 或已读对象的编号时会被拒绝，反向引用指向的对象类型不被槽位允许时，同样拒绝；每个新对象至少占 4 个字节的引用头，所以对象表的增长不会快于数据。
 
 ## `[NinoType]` 集合 [#ninotype-collections]
 
@@ -264,7 +264,7 @@ public sealed class Box<T>
 
 ## 不可信数据 [#untrusted-data]
 
-TypeScript、Go 和 Rust 的读取器与 .NET 读取器一样，按不可信输入处理数据（[不可信数据](/zh/docs/v4/security)）：不是所读类型有效值的数据，会以该运行时唯一的错误类型失败，不会抛出其他异常或 panic，也不会越界读取、无限制地递归，或分配超出数据所含内容的内存。
+TypeScript、Go 和 Rust 的读取器与 .NET 读取器一样，按不可信输入处理数据（[不可信数据](/zh/docs/v4/security)）：数据如果不是所读类型的有效值，就以该运行时唯一的错误类型失败，不会抛出其他异常或 panic，也不会越界读取、无限制地递归，或分配超出数据所含内容的内存。
 
 - **边界与内存。** 每次读取都检查边界；长度或数量在分配任何内存之前，先与剩余字节数比较。
 - **深度。** 嵌套超过 128 层的类主体完全按 .NET 的方式推迟，所以字节一致、栈有界；不能推迟的（以及包含自身的结构体）超过 512 层就失败。

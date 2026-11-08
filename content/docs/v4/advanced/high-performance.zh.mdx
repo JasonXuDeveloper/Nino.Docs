@@ -10,7 +10,7 @@ icon: Gauge
   }}
 />
 
-`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 本身已经很快，但每次调用都要为结果分配内存。本页先讲解让序列化和反序列化都降到**每次调用 0 B** 的机制（每种调用写到哪里、从哪里读、有什么开销），再介绍你自己的类型中哪些选择能让调用保持快速：格式、密封类与多态类、集合、字符串和自定义格式化器，最后是启动和如何测量。[下表](#levers)把所有手段列在一处。
+`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 本身已经很快，但每次调用都要为结果分配内存。本页先讲让序列化和反序列化都降到**每次调用 0 B** 的机制（每种调用写到哪里、从哪里读、开销多少），再讲你自己的类型里哪些选择能让调用保持快：格式、密封类与多态类、集合、字符串和自定义格式化器，最后是启动和如何测量。[下表](#levers)把所有手段列在一处。
 
 基于这些机制、可以直接复制的做法和检查清单见[零分配模式](/zh/docs/v4/advanced/zero-allocation)；内部实现（内联的格式化器、结构体布局）见[性能原理](/zh/docs/v4/performance)。构建里该设置什么（Release、分层编译、Native AOT、Unity 的 IL2CPP 与 Burst），见[构建配置](/zh/docs/v4/advanced/build-configuration)。
 
@@ -98,7 +98,7 @@ await pipeWriter.FlushAsync();
 
 ## 需要 `byte[]` 的时候 [#exact-size-arrays]
 
-有些 API 接收一个 `byte[]` 并保留它：缓存客户端、消息代理、游戏引擎的网络调用。`NinoSerializer.Serialize(value)` 返回的数组大小正好等于数据，是得到它的最便宜的方式：
+有些 API 接收一个 `byte[]` 并保留它：缓存客户端、消息代理、游戏引擎的网络调用。`NinoSerializer.Serialize(value)` 返回的数组大小正好等于数据，这是拿到 `byte[]` 最便宜的办法：
 
 - **固定大小的类型**（只由非托管成员组成的结构体和密封类），以及**元素整块拷贝的数组和列表**，会直接写进按最终大小分配的数组：不经过暂存缓冲区，也没有拷贝。
 - 其他值先写入每个线程的暂存缓冲区，再拷贝出来一次，和对你自己的缓冲区调用 `ToArray()` 一样。
@@ -122,7 +122,7 @@ if (NinoSerializer.GetFixedSize<Tick>() < 0)
 
 ## 反序列化到已有对象 [#deserialize-into-existing-objects]
 
-用 `ref` 传入上一次的结果，Nino 会原地填充：同一个对象，同样的嵌套对象、列表、数组和字典。这样，结构相同的消息源源不断地到来时，也不会分配内存。
+用 `ref` 传入上一次的结果，Nino 把数据读入这个实例：还是同一个对象，同样的嵌套对象、列表、数组和字典。这样，结构相同的消息源源不断地到来，也不会分配内存。
 
 ```csharp
 MetricsBatch batch = null;
@@ -133,8 +133,8 @@ NinoDeserializer.Deserialize(payload, ref batch);   // 之后的调用原地填�
 - 列表逐个元素复用，并保留原有容量，所以条数不同的批次也读进同一个列表。数组只在新数据**长度相同**时复用，否则会分配新数组。字典按键合并。
 - 非托管结构体的数组和列表，读写都是一次整块拷贝。
 - 无法原地填充的类型（位置记录、只有 `init` 或只有 getter 的成员）会重新创建。
-- 内容不变的字符串会直接保留，不产生分配；内容变化时读成新字符串。非 ASCII 的 `[NinoUtf8]` 文本无论是否变化，每次都会解码成新字符串。
-- 已有实例被**丢弃**时（数据中为 `null`、列表变短、某个键消失、多态类型改变），存放它的成员或元素所对应的[回收器](/zh/docs/v4/pooling#where-dropped-instances-go)会收到它（只收一次），而不是让它被悄悄覆盖掉。正因如此，复用反序列化才能安全地和对象池配合使用；参见[复用与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
+- 文本没变的字符串原样保留，不产生分配；文本变了才读成新字符串。非 ASCII 的 `[NinoUtf8]` 文本无论是否变化，每次都会解码成新字符串。
+- 已有实例被**丢弃**时（数据中为 `null`、列表变短、某个键消失、多态类型改变），它会交给原来存放它的成员或元素对应的[回收器](/zh/docs/v4/pooling#where-dropped-instances-go)（只交一次），而不是被悄悄覆盖。正因如此，复用反序列化才能安全地和对象池配合使用；参见[复用与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
 
 外层的循环怎么写、如何让字符串和条数变化不再分配内存，见[复用反序列化的结果](/zh/docs/v4/advanced/zero-allocation#reuse-what-you-deserialize)。什么时候按 `ref` 填充、什么时候用对象池、什么时候用自己的池，见[选哪种复用方式](/zh/docs/v4/pooling#which-mechanism)。
 
@@ -277,7 +277,7 @@ if (hash != lastHash) { Send(buffer.WrittenSpan); lastHash = hash; }
 Nino 在类的值前面写什么，取决于存放它的位置的声明类型（参见[多态值如何写入](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)）：
 
 - **没有子类型的类声明为 `sealed`。** 密封类只需一个存在字节，无需分派；未密封的类即使没有任何子类型，也要写 4 字节的类型 ID 并做一次类型检查。
-- **通过共同的 `[NinoType]` 基类分派。** 对于与基类声明在同一程序集中的子类型，生成的代码写入时依次做精确的类型检查，读取时按类型 ID `switch`，直接调用各子类型的格式化器。来自其他程序集的子类型、泛型子类型、开启引用追踪的类型，以及子类型超过 64 个的层次结构在写入时，则改走无锁的注册表（参见[分派](/zh/docs/v4/polymorphism#dispatch)）。
+- **通过共同的 `[NinoType]` 基类分派。** 对于与基类声明在同一程序集中的子类型，生成的代码写入时依次做精确的类型检查，读取时按类型 ID `switch`，直接调用各子类型的格式化器。来自其他程序集的子类型、泛型子类型、开启引用追踪的类型，以及子类型超过 64 个的层次结构的写入，则改走无锁的注册表（参见[分派](/zh/docs/v4/polymorphism#dispatch)）。
 - **热路径上不要用 `object` 和装箱 API。** 声明为 `object` 的位置要通过包含所有 `[NinoType]` 的全局注册表分派；`SerializeBoxed`/`DeserializeBoxed` 按 `Type` 查找格式化器，还要对值类型装箱（参见[运行时类型](/zh/docs/v4/basic#runtime-types)）。
 
 ## 选择能整块拷贝的集合 [#collections]
@@ -331,17 +331,17 @@ Nino 在类的值前面写什么，取决于存放它的位置的声明类型（
 - 其中 `collection` 是非泛型 `[NinoType]` 类（包括抽象基类）的 `T[]` 或 `List<T>`，且该类不是[固定大小](/zh/docs/v4/performance#fixed-size-types)的；集合被直接写入或读取（而不是作为其他类型的成员），并且调用经由[拦截器](#per-call-overhead)转发（项目用 .NET 8 SDK 或更高版本构建），运行在 x64 或 Arm64 上的 .NET 8 或更高版本；
 - 并且只在集合大于 CPU 末级缓存的四分之一、且前几个对象不是按分配顺序排列时。其他集合的读写与之前完全相同。
 
-无论设置与否，写出的字节都相同。热路径会序列化这类集合时再设置，并用你自己的数据[测量](#measure)：放得进缓存的集合，或对象仍按分配顺序排列的集合，不会更快。Unity 项目不受影响：Unity 使用生成器的 Roslyn 4.3 版本编译，没有拦截器，这个属性在 Unity 中不起作用。
+无论设置与否，字节一致。热路径会序列化这类集合时再设置，并用你自己的数据[测量](#measure)：放得进缓存的集合，或对象仍按分配顺序排列的集合，不会更快。Unity 项目不受影响：Unity 使用生成器的 Roslyn 4.3 版本编译，没有拦截器，这个属性在 Unity 中不起作用。
 
 **代价：** 不设置（默认）时没有任何代价：生成的代码与之前完全相同。设置后，这类集合的每次顶层调用都会在循环前判断长度，在我们的基准测试中，短集合的调用因此慢了几个百分点，所以只在处理这类集合的项目中设置。
 
 ## 每次调用的固定开销 [#per-call-overhead]
 
-不再分配内存之后，剩下的就是每次调用几纳秒的开销；在紧凑的循环里序列化小值时，这部分最明显。用 Roslyn 4.8 或更高版本（.NET 8 SDK 及以上）编译，调用处类型已知的调用就会直达生成的格式化器，省去格式化器缓存的查找和那次虚调用。泛型代码中的调用、在其他程序集中声明的 `[NinoType]`，以及 Unity 项目（使用 Roslyn 4.3 版本）走常规路径，写出的字节相同。参见[拦截器](/zh/docs/v4/performance#interceptors)。
+不再分配内存之后，剩下的就是每次调用几纳秒的开销；在紧凑的循环里序列化小值时，这部分最明显。用 Roslyn 4.8 或更高版本（.NET 8 SDK 及以上）编译，调用处类型已知的调用就会直达生成的格式化器，省去格式化器缓存的查找和那次虚调用。泛型代码中的调用、在其他程序集中声明的 `[NinoType]`，以及 Unity 项目（使用 Roslyn 4.3 版本）走常规路径，字节一致。参见[拦截器](/zh/docs/v4/performance#interceptors)。
 
 ## 线程安全 [#thread-safety]
 
-`NinoSerializer` 和 `NinoDeserializer` 的所有方法都可以并发调用，不需要加锁；但你自己持有的状态不是线程安全的：`NinoArrayBufferWriter`、`Writer` 或 `Reader`，以及你反序列化进去的对象。所以每种做法都让每个线程或每个归属方各持有一个缓冲区。详见[线程安全](/zh/docs/v4/performance#thread-safety)。
+`NinoSerializer` 和 `NinoDeserializer` 的所有方法都可以并发调用，不需要加锁；但你自己持有的状态不是线程安全的：`NinoArrayBufferWriter`、`Writer` 或 `Reader`，以及你反序列化进去的对象。所以每个做法都给每个线程或每个持有者各配一个缓冲区。详见[线程安全](/zh/docs/v4/performance#thread-safety)。
 
 ## 测量 [#measure]
 

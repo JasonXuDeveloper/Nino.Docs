@@ -17,7 +17,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 <Steps>
 <Step>
 
-把 `Nino` NuGet 包更新到 v4（`dotnet add package Nino --prerelease`，或在 IDE 中勾选**包括预发行版**），Unity 中更新 OpenUPM 包。3.9.x 版本已经使用 `NinoSerializer`/`NinoDeserializer`，下一步不适用，但 v4 同样读不了它写出的数据。
+把 `Nino` NuGet 包更新到 v4（`dotnet add package Nino --prerelease`，或在 IDE 中勾选**包括预发行版**），Unity 中更新 OpenUPM 包。如果你用的是 3.9.x，它已经在用 `NinoSerializer`/`NinoDeserializer`，可以跳过下一步，但 v4 同样读不了它写出的数据。
 
 </Step>
 <Step>
@@ -192,7 +192,7 @@ public sealed class CardPayment : Payment { public string Last4; }
 
 - 仍然要求 Unity 2022.3 及以上。
 - OpenUPM 包已自带源生成器，不必再手动往 Unity 项目里装 `Microsoft.CodeAnalysis` NuGet 包；如果当初只是为 Nino 装的，可以删掉。
-- Unity 中的调用不会被拦截：包里附带的是源生成器的 Roslyn 4.3 版本，而拦截器需要 Roslyn 4.8。调用走常规路径，写出的字节相同。
+- Unity 中的调用不会被拦截：包里附带的是源生成器的 Roslyn 4.3 版本，而拦截器需要 Roslyn 4.8。调用走常规路径，字节一致。
 - 启用 `Override References` 时，`asmdef` 仍需手动引用 `Nino.Core.dll`。
 
 ## HybridCLR [#hybridclr]
@@ -232,7 +232,7 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 
 ## 从 v4 beta 升级 [#upgrading-from-a-v4-beta]
 
-从 v3 升级的话可以跳过这一节。针对 v4 beta 或 preview 编写的代码和写出的数据，需要做以下调整。
+从 v3 升级的话可以跳过这一节。基于 v4 beta 或 preview 写的代码和数据，需要做以下调整。
 
 ### v4 beta 中改过的名称 [#names-from-the-v4-betas]
 
@@ -252,7 +252,7 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 
 ### v4 beta 之后的行为变化 [#behavior-changes-since-the-v4-betas]
 
-4.0.0-rc.1 还改变了以下行为，为 beta 写的代码和 beta 写出的数据可能依赖这些行为：
+4.0.0-rc.1 还改变了以下行为，基于 beta 写的代码和数据可能依赖它们：
 
 <Callout type="warn">
 
@@ -266,14 +266,14 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 - **对声明为 `object` 的变量调用 `NinoSerializer.Serialize(obj)`，会写入类型 ID。** beta 有一个 `Serialize(object)` 重载，按值的运行时类型写入。这个重载已经移除，同样的调用现在会编译成 `Serialize<object>`：它只接受 `[NinoType]` 的值，并且先写 4 字节的类型 ID。写出的字节因此不同，也只有 `Deserialize<object>`（或以该值的非密封 `[NinoType]` 基类或接口调用的 `Deserialize<TBase>`）能读取。请给这些类型一个共同的 `[NinoType]` 基类型并调用 `Serialize<TBase>`；如果类型要到运行时才知道，就调用 `SerializeBoxed(obj, type)`；`SerializeBoxed(obj, obj.GetType())` 写出的内容与旧重载相同（采用 rc.1 的格式）。参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
 - **不能再在运行时注册格式化器。** `NinoFormatterCache<T>.Register<TFormatter>()` 已移除，请改用 `[assembly: NinoFormatter]` 或 `[NinoMemberFormatter]` 声明格式化器。参见[自定义格式化器](/zh/docs/v4/custom-formatters)。
 - **`[NinoFactory]` 与 `[NinoConstructor]` 同时出现时会报告。** 这样的工厂方法本来就不会被调用，现在分析器会给出警告（NINO025）。参见[构造函数还是工厂方法？](/zh/docs/v4/constructors#constructor-or-factory)。
-- **在 `ReadSlice()` 返回的 reader 上，`Reader.Position` 是相对整个输入的偏移**，而不是相对切片起点。如果自定义格式化器拿它和切片长度比较，应当在切片开始处记下位置，再把它减掉。参见[切片中的位置](/zh/docs/v4/custom-formatters#positions-in-a-slice)。
+- **在 `ReadSlice()` 返回的 reader 上，`Reader.Position` 是相对整个输入的偏移**，而不是相对切片起点。如果自定义格式化器拿它和切片长度比较，应在切片开始处记下位置，比较前先减掉它。参见[切片中的位置](/zh/docs/v4/custom-formatters#positions-in-a-slice)。
 
 ## 从更早的候选版本升级 [#upgrading-from-an-earlier-release-candidate]
 
 各个候选版本沿用 4.0.0-rc.1 的格式，只有[更新日志](/zh/docs/v4/changelog)中“二进制格式”一节列出的变化除外：
 
-- **4.0.0-rc.8** 写出的每个字符串（成员、元素、键、`StringBuilder`，`Uri`、`CultureInfo` 和 `TimeZoneInfo` 的文本，以及 `[NinoUtf8]` 字符串）都使用 1、3 或 5 字节的头，不再是 4 字节的 `int32` 头。它读不了早期版本写出的字符串，早期版本也读不了它写出的字符串：请用写出数据的版本读出已存储的数据，再用 rc.8 重新写入（参见[读取旧版本的数据](/zh/docs/v4/versioning#reading-data-from-an-older-version)），或者丢弃这些数据，并同时升级读取和写入数据的进程。与它一同发布的 Go、Rust 和 TypeScript 运行时写出和读取相同的字节。参见[字符串](/zh/docs/v4/wire-format#strings)。
-- **4.0.0-rc.6** 在字符串的所有字符都不超过 U+00FF 时，每个字符写一个字节，头部为负数。它仍能读取早期版本写出的字符串（早期的 UTF-16 形式正是它读取的另一种形式），所以已存储的数据无需转换。但早期版本读不了它写出的单字节字符串：读取数据的进程要先于写入数据的进程升级，或者同时升级。`[NinoUtf8]` 字符串不变。早期版本记录下来的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)，每个非原始内存成员的文本都会不同，需要重新记录。
+- **4.0.0-rc.8** 写出的每个字符串（成员、元素、键、`StringBuilder`，`Uri`、`CultureInfo` 和 `TimeZoneInfo` 的文本，以及 `[NinoUtf8]` 字符串）都使用 1、3 或 5 字节的头，不再是 4 字节的 `int32` 头。它读不了早期版本写出的字符串，早期版本也读不了它写出的字符串：请用写出数据的版本读出已存储的数据，再用 rc.8 重新写入（参见[读取旧版本的数据](/zh/docs/v4/versioning#reading-data-from-an-older-version)），或者丢弃这些数据，并同时升级读取和写入数据的进程。同时发布的 Go、Rust 和 TypeScript 运行时与它字节一致。参见[字符串](/zh/docs/v4/wire-format#strings)。
+- **4.0.0-rc.6** 在字符串的所有字符都不超过 U+00FF 时，每个字符写一个字节，头部为负数。它仍能读取早期版本写出的字符串（早期的 UTF-16 形式正是它读取的另一种形式），所以已存储的数据无需转换。但早期版本读不了它写出的单字节字符串：读取数据的进程要先于写入数据的进程升级，或者同时升级。`[NinoUtf8]` 字符串不变。早期版本记录下来的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)，非原始值成员的布局文本都会不同，需要重新记录。
 - **4.0.0-rc.3** 和 **4.0.0-rc.2** 改变了少数在其他程序集中声明的结构体的字节，以及 netstandard 上 `nint` 和 `nuint` 成员的字节；参见更新日志中对应的[二进制格式条目](/zh/docs/v4/changelog#wire-format)。
 
 **4.0.0-rc.8 改名**了以下 API，没有保留旧名（用到旧名的代码无法编译；字节不变）：
@@ -301,10 +301,10 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 | `NinoDeserializer.Deserialize(ref value, ref reader)`、`DeserializeBoxed(ref value, ref reader, type)` | `NinoDeserializer.Deserialize(ref reader, ref value)`、`DeserializeBoxed(ref reader, ref value, type)`：读取器在前 |
 | 自己的格式化器里的 `INinoFormatter<T>.Deserialize(ref T value, ref Reader reader)` | `Deserialize(ref Reader reader, ref T value)`：交换两个参数 |
 | `NinoHeader.NullFlag`；布局文本 `header=NullFlag` 和 `typeId=0x...`；`NinoTypeLayoutAttribute` 的构造函数参数 `typeId` | `NinoHeader.Presence`；`header=Presence` 和 `id=0x...`；`id`。存下来的布局需要重新记录 |
-| `WEAK_VERSION_TOLERANCE` | 已移除：错误 [NINO032](/zh/docs/v4/analyzers#nino032) 的代码修复给它变为版本容错的每个类型加上 `format: NinoFormat.VersionTolerant`（字节不变），之后删掉这个符号 |
-| `[NinoMemberFormatter(typeof(Utf8StringFormatter))]` | `[NinoUtf8]`（旧写法仍能编译，写出相同的字节；[NINO031](/zh/docs/v4/analyzers#nino031) 会改写它） |
+| `WEAK_VERSION_TOLERANCE` | 已移除：错误 [NINO032](/zh/docs/v4/analyzers#nino032) 的代码修复会给这个符号原先设为版本容错的每个类型加上 `format: NinoFormat.VersionTolerant`（字节不变），之后删掉这个符号 |
+| `[NinoMemberFormatter(typeof(Utf8StringFormatter))]` | `[NinoUtf8]`（旧写法仍能编译，字节不变；[NINO031](/zh/docs/v4/analyzers#nino031) 会改写它） |
 | 只有生成代码才调用的 `NinoPolymorphic.Register<TSub, TFormatter>(id)`、`RegisterTracked`、`NinoFormatterCache<T>.TryRegisterFixed`、`TryRegisterTop` | `Nino.Core.CompilerServices.NinoTypes.Register`、`RegisterFixed`、`RegisterTop`、`RegisterTracked<T, TFormatter>(id)`：由更早版本生成代码的程序集都要重新编译 |
-| Rust：生成类型的 `Cat::TYPE_ID` | `Cat::NINO_TYPE_ID`，和 `NINO_TYPE_NAME`、`NINO_LAYOUT` 一致：重新生成即可（`<Cat as NinoReadBody>::TYPE_ID` 不变） |
+| Rust：生成类型的 `Cat::TYPE_ID` | `Cat::NINO_TYPE_ID`，与 `NINO_TYPE_NAME`、`NINO_LAYOUT` 的命名一致：重新生成即可（`<Cat as NinoReadBody>::TYPE_ID` 不变） |
 
 ## 下一步 [#next-steps]
 

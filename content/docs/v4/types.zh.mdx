@@ -24,7 +24,7 @@ icon: Shapes
 
 <Callout type="idea">
 
-如果某个成员的类型无法序列化，分析器会在你写代码时报告警告 NINO007，该成员会被跳过。参见[分析器](/zh/docs/v4/analyzers)。
+如果某个成员的类型无法序列化，分析器会在你写代码时报告警告 NINO007，并跳过这个成员。参见[分析器](/zh/docs/v4/analyzers)。
 
 </Callout>
 
@@ -32,7 +32,7 @@ icon: Shapes
 
 ### 基元类型与非托管类型 [#primitive-and-unmanaged-types]
 
-Nino 支持所有[非托管类型](https://learn.microsoft.com/zh-cn/dotnet/csharp/language-reference/builtin-types/unmanaged-types)，包括自定义的非托管类型。它们按原始字节写入（小端序，填充字节清零），它们的数组和列表只需一次整块拷贝：
+Nino 支持所有[非托管类型](https://learn.microsoft.com/zh-cn/dotnet/csharp/language-reference/builtin-types/unmanaged-types)，包括你自己定义的。它们按原始字节写入（小端序，填充字节清零），数组和列表只需一次整块拷贝：
 - `bool`、`byte`、`sbyte`、`char`、`short`、`ushort`、`int`、`uint`、`long`、`ulong`、`float`、`double`、`decimal`
 - `enum`
 - `DateTime`、`TimeSpan`、`Guid`
@@ -48,7 +48,7 @@ Nino 支持所有[非托管类型](https://learn.microsoft.com/zh-cn/dotnet/csha
 
 <Callout type="info">
 
-原始布局以 64 位平台的规范布局为准。在结构体布局不同的运行时上（例如 32 位平台），Nino 会逐个字段转换，保证所有平台读写的字节一致。
+原始布局以 64 位平台的规范布局为准。在结构体布局不同的运行时上（例如 32 位平台），Nino 会逐个字段转换，保证跨平台字节一致。
 
 </Callout>
 
@@ -60,7 +60,7 @@ Nino 支持所有[非托管类型](https://learn.microsoft.com/zh-cn/dotnet/csha
 - 任意可序列化类型 `T` 的 `Nullable<T>`（`T?`）
 - 1 到 7 个元素的 `ValueTuple` 和 `Tuple`；作为自己类型的成员或元素（生成代码），或作为泛型 `[NinoType]` 的类型实参时，8 个及以上元素的 `ValueTuple` 也支持
 - `KeyValuePair<TKey, TValue>`
-- `BigInteger`（它的二进制补码字节）、`Version`、`Uri`（它的原始字符串，读回时相对或绝对 URI 均可）、`StringBuilder`（按 UTF-16 形式的 `string` 写出，两种形式都能读取）、`BitArray`、`CultureInfo`（它的名称；在 .NET 8 及以上只能读回运行时自带的区域性，见[不可信数据](/zh/docs/v4/security#guarantees)）和 `TimeZoneInfo`（它的 ID；自定义时区再加上它的序列化形式，包括调整规则；系统时区读回时是读取方机器上该 ID 的时区）
+- `BigInteger`（写二进制补码字节）、`Version`、`Uri`（写原始字符串，读回时保持相对或绝对）、`StringBuilder`（按 UTF-16 形式的 `string` 写出，两种形式都能读）、`BitArray`、`CultureInfo`（写名称；在 .NET 8 及以上只能读回运行时自带的区域性，见[不可信数据](/zh/docs/v4/security#guarantees)）和 `TimeZoneInfo`（写 ID；自定义时区还写它的序列化形式，包括调整规则；系统时区读回的是读取方机器上同一 ID 的时区）
 - `Lazy<T>`：写入它的值（如果还没创建，序列化时会创建）；读回的是已经创建好值的 `Lazy<T>`
 - `object`：声明为 `object` 的成员可以存放任何 `[NinoType]` 实例（类或结构体），写入时带上类型 ID，读回后仍是原来的运行时类型。其他值（如 `int`、`List<T>`）不能通过 `object` 写入，序列化这样的值会抛出异常。
 
@@ -122,11 +122,11 @@ public sealed class Article
 }
 ```
 
-每种不可变集合写出的字节都与对应的可变集合（`List<T>`、`HashSet<T>`、`SortedSet<T>`、`Queue<T>`、`Stack<T>`、`Dictionary<TKey, TValue>`、`SortedDictionary<TKey, TValue>`）相同，所以成员在两者之间切换不会改变格式。集合和字典读回时使用默认比较器；数据中出现重复的键或元素时会抛出 `NinoDataException`，与 `HashSet<T>` 一样。
+每种不可变集合写出的字节都与对应的可变集合（`List<T>`、`HashSet<T>`、`SortedSet<T>`、`Queue<T>`、`Stack<T>`、`Dictionary<TKey, TValue>`、`SortedDictionary<TKey, TValue>`）相同，所以成员在两者之间切换不会改变格式。Set 和字典读回时使用默认比较器；数据中出现重复的键或元素时会抛出 `NinoDataException`，与 `HashSet<T>` 一样。
 
 ### 自定义集合 [#user-collections]
 
-你自己的集合类型无需任何特性即可使用：派生自 `List<T>`、`HashSet<T>`、`Queue<T>`、`Stack<T>` 或 `Dictionary<TKey, TValue>` 的类，或者实现了 `IDictionary<TKey, TValue>`、`IProducerConsumerCollection<T>` 或 `ICollection<T>` 的类，写入方式和它所扩展的集合完全相同。
+你自己的集合类型无需任何特性即可使用：派生自 `List<T>`、`HashSet<T>`、`Queue<T>`、`Stack<T>` 或 `Dictionary<TKey, TValue>` 的类，或者实现了 `IDictionary<TKey, TValue>`、`IProducerConsumerCollection<T>` 或 `ICollection<T>` 的类，写法和它扩展的集合完全一样。
 
 ```csharp
 public class OrderLines : List<OrderLine> { }
@@ -134,10 +134,10 @@ public class OrderLines : List<OrderLine> { }
 public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 ```
 
-- Nino 只在存放集合的成员或元素为 `null` 时才创建集合：如果类型声明了公共静态的 [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) 工厂方法（比如从池中取实例），就调用它，否则调用能无参调用的公共构造函数。
+- Nino 只在存放集合的成员或元素为 `null` 时才创建集合：如果类型声明了公共静态的 [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) 工厂方法（比如从池中取实例），就调用它，否则调用可以不带参数调用的公共构造函数。
 - 集合通过公开的集合 API 填充（`Add`/`Clear`、字典索引器、`Enqueue`、`Push`、`TryAdd`）。派生自运行时自带集合（`List<T>`、`HashSet<T>`、`Dictionary<TKey, TValue>`、`Stack<T>`、`Queue<T>`，以及有序、链表和并发集合）的类型，通过基类型自己的方法或字段写入和填充，所以用 `new` 隐藏的成员不会被调用。Nino 自己新建的、由原始值组成的 `HashSet<T>` 或 `Dictionary<TKey, TValue>`，在运行时布局可识别时直接通过内部条目填充（见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)中的“集合的内部字段”），内容与通过 `Add` 填充相同。
 - 如果集合类型本身也是 `[NinoType]`，先写元素，再写它自己的序列化成员。
-- 创建什么由声明类型决定：一个声明为 `List<OrderLine>` 的成员即使存放的是 `OrderLines`，读回来也是 `List<OrderLine>`。
+- 创建什么类型由声明决定：声明为 `List<OrderLine>` 的成员即使存的是 `OrderLines`，读回来也是 `List<OrderLine>`。
 - 集合按值处理：同一个集合实例出现在两个成员中，会写入两次，读回来是两个实例。
 - 池化的集合（例如 ET 的 `ListComponent<T>`）可以实现 `INinoPooled`：复用反序列化丢弃它时，Nino 会调用它的 `ReturnToPool()`。参见[复用与对象池](/zh/docs/v4/pooling#deserializing-into-existing-instances)。
 
@@ -151,16 +151,16 @@ public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 
 ## 不支持的类型 [#not-supported]
 
-下列类型没有格式化器，这类成员会被跳过并报告警告 NINO007（可以用 `[NinoIgnore]` 忽略，或为它写[自定义格式化器](/zh/docs/v4/custom-formatters)）：
+下列类型没有格式化器，这些类型的成员会被跳过，并报告警告 NINO007（可以用 `[NinoIgnore]` 忽略，或为它写[自定义格式化器](/zh/docs/v4/custom-formatters)）：
 
 - 委托、`Task`、指针等只在运行时有意义的类型；
 - 本来就不能作为类成员的 `Span<T>` 和 `ReadOnlySpan<T>`；
-- `Type`，这是有意不支持的：由数据指定要创建的类型，是一种广为人知的反序列化攻击手段。请自己保存类型 ID 或名称，再映射到你允许的类型；
+- `Type`：故意不支持，让数据决定要创建哪个类型，是众所周知的反序列化攻击手法。请自己保存类型 ID 或名称，再映射到你允许的类型；
 - 非泛型集合（`ArrayList`、`Hashtable`）；
 - Nino 无法创建或填充的集合：抽象集合类（`abstract class Bag : ICollection<int>`）、既没有可无参调用的公共构造函数也没有 [`[NinoFactory]`](/zh/docs/v4/pooling#creating-instances-with-ninofactory) 方法的集合、结构体集合（`struct Ring : IList<int>`），以及对两个不同的 `T` 实现了 `ICollection<T>` 的类型；
-- Unity 和 Godot 的**类**（`Texture2D`、`ScriptableObject`、`Node`、`Resource` 等），Unity 的 `AnimationCurve`、`Gradient` 和 `RectOffset` 除外（[Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)）；它们的非托管结构体是支持的。
+- Unity 和 Godot 的**类**（`Texture2D`、`ScriptableObject`、`Node`、`Resource` 等），Unity 的 `AnimationCurve`、`Gradient` 和 `RectOffset` 除外（[Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)）；引擎的非托管结构体则支持。
 
-`System.Numerics.Vector<T>` 直接被拒绝，无论单独出现还是在别的类型里（数组、集合、元组、普通结构体）：写代码时报错误 NINO029，运行时抛 `NotSupportedException`。它是 16、32 或 64 字节，由 CPU 决定，任何平台都没法读回所有其他平台写的字节；请改存固定数量的通道（见[`Vector<T>` 不能序列化](/zh/docs/v4/struct-layouts#vector-t)）。`Vector64<T>` 到 `Vector512<T>` 是支持的。
+`System.Numerics.Vector<T>` 一律拒绝，无论单独出现还是在别的类型里（数组、集合、元组、普通结构体）：写代码时报错误 NINO029，运行时抛 `NotSupportedException`。它是 16、32 或 64 字节，由 CPU 决定，任何平台都没法读回所有其他平台写的字节；请改存固定数量的通道（见 [`Vector<T>` 不能序列化](/zh/docs/v4/struct-layouts#vector-t)）。`Vector64<T>` 到 `Vector512<T>` 是支持的。
 
 ## 你自己的类型 [#your-own-types]
 
