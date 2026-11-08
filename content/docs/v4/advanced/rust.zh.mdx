@@ -69,7 +69,7 @@ fn main() -> nino::Result<()> {
 | 原始结构体里的 `DateTimeOffset` | 结构体 `{ date_time, offset_minutes }` |
 | `decimal`、`Guid`、`DateTime`、`DateTimeOffset`、`TimeSpan`、`DateOnly`、`TimeOnly`、`Half`、`Rune`、`Version`、`BigInteger`、`BitArray` | 同名类型；`DateTimeKind` 表示 `DateTime` 的 Kind |
 
-`String` 把未配对的代理项（.NET 字符串可能包含）替换为 U+FFFD；`WideString` 保留 UTF-16 码元，所以这样的值能逐字节写回（生成的代码中用 `Strings="wide"`）。`HashSet<string>` 的元素和字典的键是非 null 的字符串，因为 .NET 从不在那里写出 null 键。
+`String` 把未配对的代理项（.NET 字符串可能包含）替换为 U+FFFD；`WideString` 保留 UTF-16 码元，所以这样的值能逐字节写回（生成的代码中用 `Strings="wide"`）。`HashSet<string>` 的元素同样是 `Option`（`IndexSet<Option<String>>`），因为 .NET 的集合可以包含一个 null；字典的键是非 null 的字符串（`IndexMap<String, V>`），因为 .NET 从不写出 null 键。
 
 ## .NET 值 [#values]
 

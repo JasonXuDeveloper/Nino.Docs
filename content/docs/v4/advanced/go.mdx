@@ -73,7 +73,7 @@ Anything the wire format cannot express (an `int` field, which has no fixed size
 
 Strings in the default encoding are read into Go strings as WTF-8: UTF-8, except that an unpaired surrogate (which a .NET string may hold) keeps a 3-byte form, so writing the string back gives the same code units. `Reader.UTF16` returns the code units themselves. `[NinoUtf8]` strings are strict UTF-8.
 
-A C# `string` member is a `*string` in generated code, so null stays null. A Go `string` has no null: where one is read (`Reader.String`, a `string` field of a struct with `nino` tags, dictionary keys and `HashSet<string>` elements), a null string reads as `""`, and `""` is written back, not null. Use `*string` to tell null from empty. In generated code, the keys of a dictionary are non-null `string`s, since .NET never writes a null key.
+A C# `string` member is a `*string` in generated code, so null stays null. A Go `string` has no null: where one is read (`Reader.String`, a `string` field of a struct with `nino` tags, dictionary keys, and the elements of a `map[string]struct{}` set under struct tags), a null string reads as `""`, and `""` is written back, not null. Use `*string` to tell null from empty. In generated code, a `HashSet<string>` is a `[]*string`, which keeps a null element, and the keys of a dictionary are non-null `string`s, since .NET never writes a null key.
 
 Go strings are UTF-8, so writing and reading a string in the default encoding (Latin-1 or UTF-16) transcodes it, where Protocol Buffers and MessagePack copy the UTF-8 bytes as they are; the string cases of [Other-Language Benchmarks](/en/docs/v4/benchmarks-runtimes#strings) measure it, in Rust too.
 

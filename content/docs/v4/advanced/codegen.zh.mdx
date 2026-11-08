@@ -200,8 +200,11 @@ nino-gen : warning NINOGEN002: Samples.Nest`1 is not written to Go: it holds its
 | 枚举 | `as const` 对象和它的值的类型 | 带常量的具名整数类型 | 整数，外加一个列出具名值的单元结构体 |
 | `string` | `string \| null` | `*string` | `Option<String>` |
 | `T[]`、`List<T>` | `T[] \| null` | `[]T` | `Option<Vec<T>>` |
+| `HashSet<string>` | `Set<string \| null> \| null` | `[]*string` | `Option<IndexSet<Option<String>>>` |
 | `Dictionary<K, V>` | `Map<K, V> \| null` | `[]nino.Entry[K, V]` | `Option<IndexMap<K, V>>` |
 | `decimal`、`Guid`、`DateTime` | `string`、`string`、`Date` | `nino.Decimal`、`nino.Guid`、`nino.DateTime` | `nino::Decimal`、`nino::Guid`、`nino::DateTime` |
+
+集合中的字符串在每种语言里都可以是 null，与 .NET 一致（`HashSet<string>` 可以包含一个 null）；字典的键则不会是 null，因为 .NET 遇到 null 键会抛出异常。
 
 完整的类型表，以及怎样构造 .NET 的值：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。
 

@@ -73,7 +73,7 @@ data, err = nino.MarshalAs[Animal](a) // 多态根，按类型 ID 写出
 
 默认编码的字符串以 WTF-8 读入 Go 字符串：即 UTF-8，但未配对的代理项（.NET 字符串可能包含）保留为 3 字节形式，所以写回时得到相同的码元。`Reader.UTF16` 返回码元本身。`[NinoUtf8]` 字符串是严格的 UTF-8。
 
-生成的代码中，C# 的 `string` 成员是 `*string`，所以 null 仍是 null。Go 的 `string` 没有 null：在读取它的地方（`Reader.String`、带 `nino` 标签的结构体中的 `string` 字段、字典的键和 `HashSet<string>` 的元素），null 字符串读出为 `""`，写回的也是 `""` 而不是 null。要区分 null 和空字符串，请用 `*string`。生成的代码中，字典的键是非 null 的 `string`，因为 .NET 从不写出 null 键。
+生成的代码中，C# 的 `string` 成员是 `*string`，所以 null 仍是 null。Go 的 `string` 没有 null：在读取它的地方（`Reader.String`、带 `nino` 标签的结构体中的 `string` 字段、字典的键，以及结构体标签下 `map[string]struct{}` 集合的元素），null 字符串读出为 `""`，写回的也是 `""` 而不是 null。要区分 null 和空字符串，请用 `*string`。生成的代码中，`HashSet<string>` 是 `[]*string`，保留 null 元素；字典的键是非 null 的 `string`，因为 .NET 从不写出 null 键。
 
 Go 的字符串是 UTF-8，所以按默认编码（Latin-1 或 UTF-16）写入和读取字符串时需要转码，而 Protocol Buffers 和 MessagePack 直接复制原样的 UTF-8 字节；[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#strings)中的字符串用例测量了这一点，Rust 也一样。
 

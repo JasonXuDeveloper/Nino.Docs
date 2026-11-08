@@ -30,6 +30,7 @@ icon: RotateCcwClock
 - **每个成员错误只报一次**：基类成员的 NINO007 和 NINO029 只由声明它的类型报告一次，不再在同一位置为每个子类型各报一次。参见[分析器](/zh/docs/v4/analyzers)。
 - **`[NinoType]` 接口成员的显式实现**：显式实现 `[NinoType]` 接口属性的类型（`int IFoo.X { get; set; }`）不再因 CS1061 编译失败。接口的成员通过接口写出（结构体不装箱），用接口成员上的 `[NinoUtf8]`、`[NinoMemberFormatter]` 和 `[NinoIgnore]`，布局与隐式实现相同。参见[接口与抽象类](/zh/docs/v4/polymorphism#interfaces-and-abstract-classes)。
 - **生成的 Rust 代码中的类型 ID**：nino-gen 写出的 Rust 代码把 `NinoReadBody::TYPE_ID` 和 `NinoWriteBody::TYPE_ID` 设为类型的 ID，和 `#[derive]` 一样；之前是 0，泛型代码通过 `<T as NinoReadBody>::TYPE_ID` 取到的都是 0。参见 [Rust：生成的代码](/zh/docs/v4/advanced/rust#generated-code)。
+- **包含 null 的 Rust 字符串集合**：nino-gen 写出的 Rust 代码能读取包含 null 的 `HashSet<string>`（任何字符串集合，包括 `[NinoUtf8]` 的），与 .NET 写出的一致；之前会以 `UnexpectedNull` 失败。它的元素现在是 `Option<String>`、`Option<WideString>` 或 `Option<Utf8>`，所以构造或读取这类集合的 Rust 代码需要相应修改（`IndexSet<String>` 变为 `IndexSet<Option<String>>`）。Go 和 TypeScript 原本就能读取。参见 [Rust：类型](/zh/docs/v4/advanced/rust#types)。
 
 </Release>
 

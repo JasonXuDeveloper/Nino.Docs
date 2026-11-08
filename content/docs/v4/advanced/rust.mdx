@@ -69,7 +69,7 @@ The codecs are written out in full (`NinoRead`, `NinoWrite`, `NinoReadBody` and 
 | `DateTimeOffset` inside a raw struct | a struct `{ date_time, offset_minutes }` |
 | `decimal`, `Guid`, `DateTime`, `DateTimeOffset`, `TimeSpan`, `DateOnly`, `TimeOnly`, `Half`, `Rune`, `Version`, `BigInteger`, `BitArray` | types of the same names; `DateTimeKind` is the kind of a `DateTime` |
 
-`String` replaces an unpaired surrogate (which a .NET string may hold) with U+FFFD; `WideString` keeps the UTF-16 code units, so such a value writes back byte for byte (`Strings="wide"` in generated code). The elements of a `HashSet<string>` and the keys of a dictionary are non-null strings, since .NET never writes a null key there.
+`String` replaces an unpaired surrogate (which a .NET string may hold) with U+FFFD; `WideString` keeps the UTF-16 code units, so such a value writes back byte for byte (`Strings="wide"` in generated code). The elements of a `HashSet<string>` are `Option`s too (`IndexSet<Option<String>>`), since a .NET set may hold one null; the keys of a dictionary are non-null strings (`IndexMap<String, V>`), since .NET never writes a null key.
 
 ## .NET Values [#values]
 
