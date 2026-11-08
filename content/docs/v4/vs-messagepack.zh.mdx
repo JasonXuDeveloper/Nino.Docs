@@ -5,7 +5,7 @@ description: "Nino v4 与 MessagePack for C# 3.1.12 对比：两种格式、读�
 icon: Swords
 ---
 
-[MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp)（MessagePack-CSharp）是 .NET 里用得最广的二进制序列化库之一。它写的是 [MessagePack](https://msgpack.org) 格式，许多语言都有读取它的库。本页对比 Nino v4 和 MessagePack for C# **3.1.12**，也就是 Nino 基准测试所用的版本：MessagePack 的功能以它的 README 和源码为准，Nino 的功能以 Nino 源码为准；标注“实测”的行为，是用 3.1.12 写测试程序验证过的。MessagePack 已经发布了 4.0 预览版，本页讲的是 3.x。无法核实的功能，一律不列出。
+[MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp)（MessagePack-CSharp）是 .NET 里用得最广的二进制序列化库之一。它写的是 [MessagePack](https://msgpack.org) 格式，许多语言都有读取它的库。本页对比 Nino v4 和 MessagePack for C# **3.1.12**，也就是 Nino 基准测试所用的版本：MessagePack 的功能以它的 README 和源码为准，Nino 的功能以 Nino 源码为准；标注“实测”的行为，是用 3.1.12 写测试程序验证过的。MessagePack 已经公布了 4.0 预览版，本页讲的是 3.x。无法核实的功能，一律不列出。
 
 ## 两种格式 [#formats]
 
@@ -15,7 +15,7 @@ icon: Swords
 | --- | --- | --- |
 | 一个值 | 只有它的字节 | 一个类型标记（整数、字符串、数组、映射……）加上它的字节 |
 | 一个对象 | 成员依次排列；用 [`NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members) 时每个成员多一个键和一个长度（8 字节） | 成员组成的数组（整数 `[Key]`），或从名字到成员的映射（字符串键） |
-| 一个子类型 | 4 字节类型 id，即类型名的哈希 | 两个元素的数组：先是 union 键，再是对象 |
+| 一个子类型 | 4 字节类型 ID，即类型名的哈希 | 两个元素的数组：先是 union 键，再是对象 |
 | 整数 | 按完整宽度写（`int` 占 4 字节） | 用能装下这个值的最少字节写（0 到 127 只占 1 字节） |
 | 字符串 | 所有字符都不超过 U+00FF 时每字符一个字节，否则 UTF-16；加 [`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 用 UTF-8 | UTF-8 |
 | `Guid`、`DateTime` | 16 字节；tick 和 kind | 36 个字符的字符串；UTC 的 MessagePack 时间戳（native 解析器可以改变这两者） |
@@ -26,11 +26,11 @@ icon: Swords
 
 MessagePack 的 README 警告：“取决于反序列化时使用的设置，不可信数据可能执行任意代码，或造成拒绝服务攻击”（"depending on the settings used during deserialization, untrusted data may be able to execute arbitrary code or cause a denial of service attack"），并要求读这类数据时主动切换到更安全的模式：`MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData)`，每次调用时传入，或者设为 `MessagePackSerializer.DefaultOptions`。默认选项用的是 `MessagePackSecurity.TrustedData`。README 说这个模式只是“针对一些常见攻击”做了加固，“本身并不是完全安全的方案”，还说不要用 Typeless API 读不可信数据，因为它会把类型名写进数据（[MessagePack README，Security](https://github.com/MessagePack-CSharp/MessagePack-CSharp#security)）。
 
-Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 再加上每次读取都要花时间的检查。
+Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 再加上那些每次读取都要多花时间的检查。
 
 <Matrix columns={['Nino v4', 'MessagePack 3.1.12']} rows={[
   { label: '不设任何选项就能安全读取不可信数据', cells: [['yes', <>每次读取都检查长度、深度、类型和哈希桶（<a href="/zh/docs/v4/security#guarantees">保证</a>）</>], ['partial', <><code>MessagePackSecurity.UntrustedData</code>，每次调用传入或设为默认选项</>]] },
-  { label: '数据无法指定要创建的类型', cells: ['yes: 只能是声明类型已注册子类型的类型 id', ['partial', <>标准解析器如此；Typeless API 和 <code>TypelessFormatter</code> 会读取程序集限定的类型名</>]] },
+  { label: '数据无法指定要创建的类型', cells: ['yes: 只接受声明类型已注册子类型的类型 ID', ['partial', <>标准解析器如此；Typeless API 和 <code>TypelessFormatter</code> 会读取程序集限定的类型名</>]] },
   { label: '超出数据长度的元素个数在分配之前就被拒绝', cells: ['yes', 'yes: 实测'] },
   { label: '嵌套深度上限', cells: [['yes', <><code>NinoSettings.MaxDepth</code>，512，途中还检查线程的栈</>], ['yes', <><code>MaximumObjectGraphDepth</code>，500，两种模式都有</>]] },
   { label: '字典和集合的哈希洪泛', cells: [['yes', <>每个桶受 <code>MaxHashCollisions</code> 限制；<code>Untrusted</code> 下用带种子的哈希</>], 'partial: 只有 UntrustedData 模式用抗碰撞哈希'] },
@@ -38,7 +38,7 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
   { label: '无效数据只抛一种异常', cells: [['yes', <><code>NinoDataException</code></>], ['yes', <><code>MessagePackSerializationException</code>：实测</>]] },
 ]} />
 
-无论用哪个库，仍需应用自己负责的部分（值本身、消息大小、验证发送方）见[不可信数据](/zh/docs/v4/security#what-stays-your-job)。
+无论用哪个库，应用都要自己负责的部分（值本身、消息大小、验证发送方），见[不可信数据](/zh/docs/v4/security#what-stays-your-job)。
 
 ## 性能 [#performance]
 
@@ -57,7 +57,7 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
   { label: 'IL2CPP / Native AOT', cells: ['yes: 源生成，序列化时无反射', 'yes: 源生成；没有生成代码的类型会回退到 Reflection.Emit，而 IL2CPP 和 Native AOT 都没有它'] },
   { label: '其他语言的读取器', cells: [['partial', <>Go、Rust 和 TypeScript，由 <a href="/zh/docs/v4/advanced/codegen">nino-gen</a> 生成</>], 'yes: 任何 MessagePack 库'] },
   { group: '定义类型' },
-  { label: '每个成员都要加特性', cells: ['yes: 不需要；按声明顺序写出公共成员', ['partial', <>每个成员加 <code>[Key]</code>，或用 <code>keyAsPropertyName: true</code> 全部按字符串键</>]] },
+  { label: '不用给每个成员加特性', cells: ['yes: 不需要；按声明顺序写出公共成员', ['partial', <>每个成员加 <code>[Key]</code>，或用 <code>keyAsPropertyName: true</code> 全部按字符串键</>]] },
   { label: '不加特性的类型', cells: ['no: 每个类型或其基类型要有 [NinoType]', ['yes', <><code>ContractlessStandardResolver</code>，按名字写成员</>]] },
   { label: '私有成员', cells: [['yes', <><code>includeNonPublicMembers</code></>], ['yes', <><code>AllowPrivate = true</code></>]] },
   { label: <>构造函数、记录、<code>init</code></>, cells: ['yes', ['yes', <><code>[SerializationConstructor]</code></>]] },
@@ -69,10 +69,10 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
   { group: '数据演进' },
   { label: '增加成员；旧代码读新数据', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>、<code>NinoFormat.Keyed</code></>], 'yes: 用整数键实测'] },
   { label: '删除成员', cells: [['yes', <><code>NinoFormat.Keyed</code></>], 'partial: 键要空着不再使用；整数键中间的空缺会写成 nil 占位'] },
-  { label: '调整顺序或重命名成员', cells: [['yes', <><code>NinoFormat.Keyed</code>，用 <code>[NinoFormerName]</code> 重命名</>], 'yes: 整数键固定顺序；只有整数键才能随意重命名'] },
+  { label: '调整顺序或重命名成员', cells: [['yes', <><code>NinoFormat.Keyed</code>，用 <code>[NinoFormerName]</code> 重命名</>], 'yes: 整数键固定顺序；只有整数键才能重命名'] },
   { group: '对象图与分配' },
   { label: '共享引用和循环引用', cells: [['yes', <><code>trackReferences</code></>], 'no: 共享对象每被引用一次就写一次；循环无法写出（实测：栈溢出）'] },
-  { label: '读入已有实例', cells: ['yes: 原地填充对象、列表和字典', 'no: 只能创建新实例'] },
+  { label: '读入已有实例', cells: ['yes: 填充已有的对象、列表和字典', 'no: 只能创建新实例'] },
   { label: '对象池', cells: [['yes', <><code>[NinoPooled]</code>、工厂、回收器</>], 'partial: 它自己的缓冲区来自池'] },
   { group: 'I/O 与集成' },
   { label: <><code>IBufferWriter&lt;byte&gt;</code>、span、<code>ReadOnlySequence&lt;byte&gt;</code></>, cells: [['yes', <>序列用一个<a href="/zh/docs/v4/advanced/streams#readonlysequence-input">简短的辅助方法</a></>], 'yes'] },
@@ -83,7 +83,7 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
   { label: '压缩', cells: [['partial', <>在输出外面套 <code>System.IO.Compression</code>（<a href="/zh/docs/v4/advanced/streams#compression">示例</a>）</>], ['yes', <>LZ4，<code>MessagePackCompression.Lz4BlockArray</code></>]] },
   { label: <><code>System.Type</code> 值</>, cells: ['no: 有意不支持，数据永远不会指定类型', 'yes: 写成程序集限定名'] },
   { label: 'ASP.NET Core', cells: [['yes', <><a href="/zh/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>：MVC 格式化器和 Minimal API 请求体</>], ['yes', <><code>MessagePack.AspNetCoreMvcFormatter</code></>]] },
-  { label: '所有运行时和 CPU 上字节相同', cells: ['yes: CoreCLR、Mono 和 IL2CPP，64 位和 32 位都是同一种布局', 'yes: 值按字段逐个写出'] },
+  { label: '所有运行时和 CPU 上字节一致', cells: ['yes: CoreCLR、Mono 和 IL2CPP，64 位和 32 位都是同一种布局', 'yes: 值按字段逐个写出'] },
 ]} />
 
 ## MessagePack 的优势 [#where-messagepack-is-ahead]
@@ -99,11 +99,11 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
 ## Nino 的优势 [#where-nino-is-ahead]
 
 - **默认就能读不可信输入**：没有要记得打开的选项，数据里也没有类型名（[不可信输入](#untrusted-input)）。
-- **多态不用记账**：任何非密封类都可以作基类型，包括泛型基类型，没有要列出并保持不变的键；其他程序集和热更新 DLL 中的子类型会被自动发现。MessagePack 的 `[Union]` 只能用于接口和抽象类，每个子类型都要连同键列在基类型上。
+- **多态无需登记**：任何非密封类都可以作基类型，包括泛型基类型，没有要列出并保持不变的键；其他程序集和热更新 DLL 中的子类型，Nino 会自动找到。MessagePack 的 `[Union]` 只能用于接口和抽象类，每个子类型都要连同键列在基类型上。
 - **对象图**：用 [`trackReferences`](/zh/docs/v4/reference-tracking) 保留共享引用和循环引用。
-- **零分配复用**：[复用反序列化](/zh/docs/v4/pooling)原地填充已有的对象、列表和字典，新实例来自 `[NinoPooled]` 对象池；MessagePack 每次读取都创建新实例。
+- **零分配复用**：[复用反序列化](/zh/docs/v4/pooling)直接填充已有的对象、列表和字典，新实例来自 `[NinoPooled]` 对象池；MessagePack 每次读取都创建新实例。
 - **特性更少**：公共成员按声明顺序写出，不用在每个成员上加 `[Key]`；[`NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members) 按名字（的哈希）写成员，可以删除、调整顺序和插入成员。
-- **非托管结构体及其数组整块拷贝**，在每个运行时上字节都相同（[可移植的设计](/zh/docs/v4/platforms#portable-by-design)）。
+- **非托管结构体及其数组整块拷贝**，跨运行时字节一致（[可移植的设计](/zh/docs/v4/platforms#portable-by-design)）。
 - **Unity 只需一个包**，来自 OpenUPM；HybridCLR 无需初始化调用。
 
 ## 如何选择 [#when-to-choose-which]

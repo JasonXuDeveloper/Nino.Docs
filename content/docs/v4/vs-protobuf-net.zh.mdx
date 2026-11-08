@@ -14,7 +14,7 @@ Protocol Buffers 有自己的 schema 语言（`.proto`），许多语言都有�
 | | Nino v4 | protobuf-net |
 | --- | --- | --- |
 | 一个对象 | 成员依次排列；用 [`NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members) 时每个成员多一个键和一个长度（8 字节） | 每个字段带字段号和 wire type；嵌套对象是带长度前缀的消息 |
-| 一个子类型 | 4 字节类型 id，即类型名的哈希 | 放在它的 `[ProtoInclude]` 编号下的嵌套消息，继承层次每多一层就多一层消息 |
+| 一个子类型 | 4 字节类型 ID，即类型名的哈希 | 放在它的 `[ProtoInclude]` 编号下的嵌套消息，继承层次每多一层就多一层消息 |
 | 整数 | 按完整宽度写（`int` 占 4 字节） | 默认是 varint（小的值只占 1 字节）；`DataFormat.FixedSize` 按完整宽度写 |
 | null 与空 | null 集合、空集合和 null 元素都按原样读回 | 格式里没有 null：空集合读回来是 null，null 根对象读回来是成员全为默认值的对象（实测） |
 | schema | 你的 C# 类型 | 你的 C# 类型，或者由 `protogen` 转成 C# 的 `.proto` 文件 |
@@ -22,19 +22,19 @@ Protocol Buffers 有自己的 schema 语言（`.proto`），许多语言都有�
 
 ## 不可信输入 [#untrusted-input]
 
-protobuf-net 没有专门读不可信数据的模式；它的文档讲了应该加哪些限制。第 3 版没有实现动态类型（`DynamicType`），所以数据无法指定类型；从 3.1 起，`TypeModel.MaxDepth`（默认 512）限制嵌套深度（[发布说明](https://docs.protobuf-net.dev/releasenotes)）。这个格式的 varint 让内存中的对象比它的字节大：按它的[内存与消息大小限制](https://docs.protobuf-net.dev/memory_and_size_limits)一页，packed 整数集合大约是 4 到 24 倍。那一页说 `TypeModel` 没有最大消息大小的设置，要求你自己限制输入：在宿主上（Kestrel 的 `MaxRequestBodySize`、gRPC 的 `MaxReceiveMessageSize`），或者在流外面限制。
+protobuf-net 没有专门读不可信数据的模式；它的文档讲了应该加哪些限制。第 3 版没有实现动态类型（`DynamicType`），所以数据无法指定类型；从 3.1 起，`TypeModel.MaxDepth`（默认 512）限制嵌套深度（[发布说明](https://docs.protobuf-net.dev/releasenotes)）。这个格式的 varint 让内存中的对象比它的字节大：按它的[内存与消息大小限制](https://docs.protobuf-net.dev/memory_and_size_limits)一页，packed 整数集合大约是 4 到 24 倍。那一页说它没有设置最大消息大小的选项，要求你自己限制输入：在宿主上（Kestrel 的 `MaxRequestBodySize`、gRPC 的 `MaxReceiveMessageSize`），或者在流外面限制。
 
-Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 再加上每次读取都要花时间的检查。
+Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 再加上那些每次读取都要多花时间的检查。
 
 <Matrix columns={['Nino v4', 'protobuf-net 3.4.40']} rows={[
-  { label: '数据无法指定要创建的类型', cells: ['yes: 只能是声明类型已注册子类型的类型 id', 'yes: 第 3 版没有实现动态类型'] },
+  { label: '数据无法指定要创建的类型', cells: ['yes: 只接受声明类型已注册子类型的类型 ID', 'yes: 第 3 版没有实现动态类型'] },
   { label: '嵌套深度上限', cells: [['yes', <><code>NinoSettings.MaxDepth</code>，512，途中还检查线程的栈</>], ['yes', <><code>TypeModel.MaxDepth</code>，512</>]] },
   { label: '内存与输入成比例', cells: ['yes: 集合在读到元素之前最多预先分配剩余字节数的 16 倍', 'yes: 按它的文档，packed 整数最多约为载荷的 24 倍'] },
   { label: '字典和集合的哈希洪泛', cells: [['yes', <>每个桶受 <code>MaxHashCollisions</code> 限制；<code>Untrusted</code> 下用带种子的哈希</>], 'n/a: 文档未说明'] },
   { label: '无效数据只抛一种异常', cells: [['yes', <><code>NinoDataException</code></>], 'n/a: 文档未说明'] },
 ]} />
 
-无论用哪个库，仍需应用自己负责的部分（值本身、消息大小、验证发送方）见[不可信数据](/zh/docs/v4/security#what-stays-your-job)。
+无论用哪个库，应用都要自己负责的部分（值本身、消息大小、验证发送方），见[不可信数据](/zh/docs/v4/security#what-stays-your-job)。
 
 ## 性能 [#performance]
 
@@ -42,7 +42,7 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
 
 <LibraryTables lib="protobuf" lang="zh" />
 
-载荷大小的差别来自格式本身：protobuf 把小整数写成 1 字节的 varint，类继承层次每一层嵌套一条消息；Nino 按完整宽度写整数，子类型是成员前面的一个类型 id。包括 MemoryPack 在内的全部用例见 [.NET 基准测试](/zh/docs/v4/benchmarks#runtime)。
+载荷大小的差别来自格式本身：protobuf 把小整数写成 1 字节的 varint，类继承层次每一层嵌套一条消息；Nino 按完整宽度写整数，子类型在成员前面写一个类型 ID。包括 MemoryPack 在内的全部用例见 [.NET 基准测试](/zh/docs/v4/benchmarks#runtime)。
 
 ## 功能矩阵 [#feature-matrix]
 
@@ -53,7 +53,7 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
   { label: 'IL2CPP / Native AOT', cells: ['yes: 源生成，序列化时无反射', ['partial', <>从 3.3 起有编译期模型，仍是预览版（<code>[Experimental]</code>，需要 C# 12）；默认模型在运行时生成 IL</>]] },
   { label: '其他语言的读取器', cells: [['partial', <>Go、Rust 和 TypeScript，由 <a href="/zh/docs/v4/advanced/codegen">nino-gen</a> 生成</>], 'yes: 任何 Protocol Buffers 实现'] },
   { group: '定义类型' },
-  { label: '每个成员都要加特性', cells: ['yes: 不需要；按声明顺序写出公共成员', ['partial', <>每个成员加 <code>[ProtoMember(n)]</code></>]] },
+  { label: '不用给每个成员加特性', cells: ['yes: 不需要；按声明顺序写出公共成员', ['partial', <>每个成员加 <code>[ProtoMember(n)]</code></>]] },
   { label: '私有成员', cells: [['yes', <><code>includeNonPublicMembers</code></>], 'yes: 实测'] },
   { label: '不加特性也能配置', cells: ['no: 每个类型或其基类型要有 [NinoType]', ['yes', <><code>RuntimeTypeModel</code></>]] },
   { label: '从 schema 文件生成类型', cells: ['no: C# 类型就是 schema', ['yes', <><code>.proto</code> 文件和 <code>protogen</code></>]] },
@@ -63,12 +63,12 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
   { label: <>泛型基类型（<code>Box&lt;T&gt;</code>）</>, cells: ['yes: 自动支持任意类型实参', ['partial', <>每个封闭类型的子类型都要手动加到 <code>RuntimeTypeModel</code></>]] },
   { label: '其他程序集、热更新 DLL 中的子类型', cells: ['yes: 自动发现，不需要编号', 'partial: 每个子类型都要列在它的基类型上'] },
   { group: '数据演进' },
-  { label: '增加成员；旧代码读新数据', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>、<code>NinoFormat.Keyed</code></>], 'yes: 所有类型都可以；不认识的字段会被跳过（实测）'] },
+  { label: '增加成员；旧代码读新数据', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>、<code>NinoFormat.Keyed</code></>], 'yes: 所有类型都可以；不认识的字段直接跳过（实测）'] },
   { label: '删除、调整顺序或重命名成员', cells: [['yes', <><code>NinoFormat.Keyed</code>，用 <code>[NinoFormerName]</code> 重命名</>], 'yes: 字段号固定数据，名字不写进数据'] },
   { group: '对象图与分配' },
   { label: '共享引用和循环引用', cells: [['yes', <><code>trackReferences</code></>], 'no: 第 3 版没有实现；遇到循环会抛异常（实测）'] },
   { label: '区分 null 集合与空集合', cells: ['yes', 'no: 空集合读回来是 null'] },
-  { label: '读入已有实例', cells: ['yes: 原地填充对象、列表和字典', ['partial', <><code>Serializer.Merge</code> 是合并：列表会被追加（实测）</>]] },
+  { label: '读入已有实例', cells: ['yes: 填充已有的对象、列表和字典', ['partial', <><code>Serializer.Merge</code> 是合并：列表会被追加（实测）</>]] },
   { label: '对象池', cells: [['yes', <><code>[NinoPooled]</code>、工厂、回收器</>], 'n/a: 文档未说明'] },
   { group: 'I/O 与集成' },
   { label: <><code>IBufferWriter&lt;byte&gt;</code> 和 span</>, cells: ['yes', 'yes'] },
@@ -91,10 +91,10 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
 ## Nino 的优势 [#where-nino-is-ahead]
 
 - **默认就能读不可信输入**，深度、内存和哈希洪泛都有写明的上限，只抛一种异常（[不可信输入](#untrusted-input)）。
-- **多态不用记账**：子类型自动继承 `[NinoType]`，不用在基类型上列出编号并保持不变，泛型基类型也一样；其他程序集和热更新 DLL 中的子类型会被自动发现。
+- **多态无需登记**：子类型自动继承 `[NinoType]`，不用在基类型上列出编号并保持不变，泛型基类型也一样；其他程序集和热更新 DLL 中的子类型，Nino 会自动找到。
 - **对象图**：用 [`trackReferences`](/zh/docs/v4/reference-tracking) 保留共享引用和循环引用。
 - **null 还是 null，空还是空**，集合和其中的元素都是如此。
-- **零分配复用**：[复用反序列化](/zh/docs/v4/pooling)原地替换已有对象、列表和字典的内容，新实例来自 `[NinoPooled]` 对象池。
+- **零分配复用**：[复用反序列化](/zh/docs/v4/pooling)直接替换已有对象、列表和字典的内容，新实例来自 `[NinoPooled]` 对象池。
 - **特性更少**：公共成员按声明顺序写出，不用给每个成员编号。
 - **AOT 不靠预览版**：编译期为每个 `[NinoType]` 生成格式化器，IL2CPP 和 Native AOT 都一样；Unity 只需 OpenUPM 上的一个包，HybridCLR 无需初始化调用。
 - **内置更多基础类库类型**：`BigInteger`、`Version`、`DateTimeOffset`、不可变集合、并发集合等都[已内置](/zh/docs/v4/types#other-built-in-types)。
@@ -181,7 +181,7 @@ Message back = NinoDeserializer.Deserialize<Message>(bytes); // 一个 Chat
     全部用例，包括 MemoryPack、MessagePack 和 protobuf-net，以及测量它们的代码。
   </Card>
   <Card title="TypeScript、Go 与 Rust" href="/zh/docs/v4/advanced/codegen">
-    用从你的类型生成的代码，在 .NET 之外读写 Nino 的字节。
+    用从你的类型生成的代码，在 .NET 之外与 Nino 互通。
   </Card>
   <Card title="不可信数据" href="/zh/docs/v4/security">
     每次读取检查什么、各项限制和不可信模式。
