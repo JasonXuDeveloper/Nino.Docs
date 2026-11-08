@@ -1,13 +1,13 @@
 ---
 title: Go
 seoTitle: "在 Go 中使用 Nino：从 [NinoType] 生成结构体和编解码器 – Nino v4 文档"
-description: "Go 运行时以及 nino-gen 为它生成的代码：带 ReadX 和 WriteX 函数的结构体、用于自定义结构体的 nino 结构体标签、字符串、.NET 值、泛型、引用追踪和对不可信数据的检查。"
+description: "Go 运行时和 nino-gen 为它生成的代码：带 ReadX、WriteX 函数的结构体，给手写结构体用的 nino 结构体标签，以及字符串、.NET 值、泛型、引用追踪和不可信数据的检查。"
 icon: Server
 ---
 
 <AnchorRedirect map={{ 'guarantees': '/zh/docs/v4/advanced/go#untrusted-data' }} />
 
-Go 运行时（模块 `github.com/JasonXuDeveloper/Nino/runtimes/go/v4`，包 `nino`）读写 Nino 的[二进制格式](/zh/docs/v4/wire-format)。给 Go 类型提供编解码器有两种方式：nino-gen 生成的代码（不用反射，是最快的方式），或者你自己写的、用 `nino` 结构体标签映射的 Go 结构体。
+Go 运行时（模块 `github.com/JasonXuDeveloper/Nino/runtimes/go/v4`，包 `nino`）读写 Nino 的[二进制格式](/zh/docs/v4/wire-format)。Go 类型的编解码器有两种来源：nino-gen 生成的代码（不用反射，最快），或者自己写 Go 结构体，用 `nino` 结构体标签做映射。
 
 ## 安装 [#install]
 
@@ -15,27 +15,27 @@ Go 运行时（模块 `github.com/JasonXuDeveloper/Nino/runtimes/go/v4`，包 `n
 go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4
 ```
 
-运行时需要 Go 1.22 或更高版本，除标准库外没有依赖。要生成代码，就声明一个 `<NinoCodegen Include="go" Out="../server/protocol" Package="protocol" />` 项（[在构建中生成](/zh/docs/v4/advanced/codegen#setup)）；它的选项是 `Package`、`Tags` 和 `TagNames`（[选项](/zh/docs/v4/advanced/codegen#options)）。
+运行时要求 Go 1.22 或更高版本，除标准库外没有依赖。要生成代码，声明一个 `<NinoCodegen Include="go" Out="../server/protocol" Package="protocol" />` 项（[在构建中生成](/zh/docs/v4/advanced/codegen#setup)）；它的选项是 `Package`、`Tags` 和 `TagNames`（[选项](/zh/docs/v4/advanced/codegen#options)）。
 
 ## 生成的代码 [#generated-code]
 
-`nino_types.go` 为每个 `[NinoType]` 包含：
+每个 `[NinoType]` 在 `nino_types.go` 里生成：
 
-- 一个结构体，字段先带 `nino` 标签（成员的位置，键控类型中则是 C# 成员名），然后是 `Tags`：``Health int32 `nino:"Health" json:"health" yaml:"health"` ``；
-- `NinoLayout()`，返回 .NET 为这个类型发布的布局；`NinoTypeName()`；可以按类型 ID 写出的类还有 `NinoTypeID()`；
-- 与运行时手写示例形状相同的 `ReadX` 和 `WriteX` 函数：每段连续的固定大小成员只做一次边界检查，不用反射，也不经由函数值或接口调用：每个类的成员体和集合的每个元素都直接调用读写代码（嵌套 128 层的成员体经由运行时的 `Class`，像 .NET 一样推迟处理）。
+- 一个结构体，字段先写 `nino` 标签（成员的位置；键控类型里是 C# 成员名），再写 `Tags`：``Health int32 `nino:"Health" json:"health" yaml:"health"` ``；
+- `NinoLayout()`，返回 .NET 为这个类型发布的布局；`NinoTypeName()`；能按类型 ID 写出的类还有 `NinoTypeID()`；
+- `ReadX` 和 `WriteX` 函数，写法和运行时里手写的示例一样：连续的一段固定大小成员只做一次边界检查，不用反射，也不经函数值或接口调用，每个类的主体、集合的每个元素都直接调用读写函数（嵌套到 128 层的主体交给运行时的 `Class`，和 .NET 一样推迟处理）。
 
-密封类是 `*X`（nil 表示 null），结构体是 `X`，可以容纳多种类型的槽位（抽象类、接口、非密封类）是一个接口，每个允许的类型一个实现。枚举是带常量的具名整数类型。辅助类型命名为 `NinoTuple2`……`NinoGrid`；名字以 `Nino` 开头的用户类型会加上 `Type` 后缀，简单名相同的两个类型会加上命名空间前缀（`ShapesLeftItem`）。`[NinoFormerName]` 不在 `nino` 标签中：布局只带有它们的哈希，`NinoLayout()` 保留了这些哈希，所以键控类型仍能读取按旧名称写出的数据。
+密封类生成 `*X`（nil 表示 null），结构体生成 `X`。能放多种类型的槽位（抽象类、接口、非密封类）生成一个接口，每个允许的类型实现一次。枚举是带常量的具名整数类型。辅助类型叫 `NinoTuple2`……`NinoGrid`；用户类型的名字以 `Nino` 开头时加 `Type` 后缀，两个类型简单名相同时加命名空间前缀（`ShapesLeftItem`）。`[NinoFormerName]` 不写进 `nino` 标签：布局里只有旧名称的哈希，`NinoLayout()` 保留了这些哈希，所以键控类型照样能读旧名称下写出的数据。
 
 ```go
 data, err := nino.Serialize(player, protocol.WritePlayer)      // 新的切片
 buf, err = nino.Append(buf[:0], player, protocol.WritePlayer)  // 追加；buf 有空间时不分配
 player, err := nino.Deserialize(data, protocol.ReadPlayer)      // 忽略值之后的字节，与 .NET 一致
 player, err := nino.DeserializeExact(data, protocol.ReadPlayer) // ……或拒绝它们
-err = nino.DeserializeInto(data, &player, protocol.ReadPlayerInto) // 读进 player，复用其中已有的对象
+err = nino.DeserializeInto(data, &player, protocol.ReadPlayerInto) // 读入 player，复用它已有的对象
 ```
 
-把值写入复用的缓冲区时不分配内存。生成的结构体也带有 `nino` 标签和 `NinoLayout()`，所以下面的结构体标签函数同样能读写它们。
+写入复用的缓冲区不分配内存。生成的结构体也带 `nino` 标签和 `NinoLayout()`，所以下面的结构体标签函数也能读写它们。
 
 ## 结构体标签 [#struct-tags]
 
@@ -47,7 +47,7 @@ type Monster struct {
 	Cache  string  `nino:"-"`
 }
 
-func (Monster) NinoLayout() string { // .NET 为该类型发布的布局，或其中一部分
+func (Monster) NinoLayout() string { // .NET 为这个类型发布的布局，或其中一部分
 	return "format=Keyed; header=Presence"
 }
 
@@ -59,29 +59,29 @@ data, err = nino.MarshalAs[Animal](a) // 多态根，按类型 ID 写出
 
 | 标签 | 含义 |
 | --- | --- |
-| `nino:"0"`、`nino:"1"`…… | 成员的位置，用于按位置和版本容错的类型：0 到 n-1，不能有空缺或重复。 |
-| `nino:"Name"` | 键控类型的成员，用其 C# 名字。 |
-| `nino:"-"` | 只在 Go 中使用的字段：不读也不写。 |
+| `nino:"0"`、`nino:"1"`…… | 按位置和版本容错类型的成员位置：从 0 到 n-1，不能跳号，不能重复。 |
+| `nino:"Name"` | 键控类型的成员，写它的 C# 名字。 |
+| `nino:"-"` | 只在 Go 里用的字段：不读也不写。 |
 | `,utf8` | `[NinoUtf8]` 字符串。 |
 | `,former=Old` | 键控成员的旧名称，每个名称写一次。 |
 
-类型用 `NinoLayout() string` 方法声明它在 .NET 中的形状：.NET 为它发布的[布局](/zh/docs/v4/evolving-data#layout-metadata)（`format=`、`header=`、`id=`、`deferrable=`、`members=`），或其中的部分。给出 `members=` 时，标签会与之核对：成员数量、每个字段的编码和键。多态类型用 `nino.Register` 注册一次，槽位只读取实现了它的接口的已注册类型。
+类型用 `NinoLayout() string` 方法声明自己在 .NET 里的形状：返回 .NET 为它发布的[布局](/zh/docs/v4/evolving-data#layout-metadata)（`format=`、`header=`、`id=`、`deferrable=`、`members=`），或其中几部分。给了 `members=`，就拿它核对标签：成员数量、每个字段的编码和键。多态类型用 `nino.Register` 注册一次；槽位只读已注册、且实现了槽位接口的类型。
 
-二进制格式无法表达的内容（没有固定大小的 `int` 字段、`omitempty`、`trackReferences=true` 的类型）会在读写任何字节之前返回一个指明字段的 `*nino.TagError`。每个类型的计划只构建一次并缓存；之后序列化的耗时是生成代码的几倍，仍然比 `encoding/json` 快。结构体标签方式还拒绝多维数组、分组、`BitArray`、`TimeZoneInfo`、自定义格式化器，以及带成员的 `[NinoType]` 集合。完整的标签说明和每种编码对应的 Go 类型见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go#struct-tags)。
+二进制格式表达不了的写法（`int` 字段，它没有固定大小；`omitempty`；`trackReferences=true` 的类型）会在读写第一个字节之前返回 `*nino.TagError`，错误里指明是哪个字段。每个类型的读写计划只构建一次，之后缓存；这样序列化的耗时是生成代码的几倍，但仍比 `encoding/json` 快。结构体标签还不支持多维数组、分组、`BitArray`、`TimeZoneInfo`、自定义格式化器和带成员的 `[NinoType]` 集合。完整的标签说明和每种编码对应的 Go 类型见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go#struct-tags)。
 
 ## 字符串 [#strings]
 
-默认编码的字符串以 WTF-8 读入 Go 字符串：即 UTF-8，但未配对的代理项（.NET 字符串可能包含）保留为 3 字节形式，所以写回时得到相同的码元。`Reader.UTF16` 返回码元本身。`[NinoUtf8]` 字符串是严格的 UTF-8。
+默认编码的字符串按 WTF-8 读成 Go 字符串：也就是 UTF-8，只是未配对的代理项（.NET 字符串里可能有）保留 3 字节的形式，所以写回去码元不变。`Reader.UTF16` 返回码元本身。`[NinoUtf8]` 字符串是严格的 UTF-8。
 
-生成的代码中，C# 的 `string` 成员是 `*string`，所以 null 仍是 null。Go 的 `string` 没有 null：在读取它的地方（`Reader.String`、带 `nino` 标签的结构体中的 `string` 字段、字典的键，以及结构体标签下 `map[string]struct{}` 集合的元素），null 字符串读出为 `""`，写回的也是 `""` 而不是 null。要区分 null 和空字符串，请用 `*string`。生成的代码中，`HashSet<string>` 是 `[]*string`，保留 null 元素；字典的键是非 null 的 `string`，因为 .NET 从不写出 null 键。
+在生成的代码里，C# 的 `string` 成员是 `*string`，null 读出来还是 null。Go 的 `string` 没有 null：凡是读成 `string` 的地方（`Reader.String`、带 `nino` 标签的结构体里的 `string` 字段、字典的键、结构体标签下 `map[string]struct{}` Set 的元素），null 字符串都读成 `""`，写回去也是 `""`，不再是 null。要区分 null 和空字符串，用 `*string`。在生成的代码里，`HashSet<string>` 是 `[]*string`，能保留 null 元素；字典的键是非 null 的 `string`，因为 .NET 从不写 null 键。
 
-Go 的字符串是 UTF-8，所以按默认编码（Latin-1 或 UTF-16）写入和读取字符串时需要转码，而 Protocol Buffers 和 MessagePack 直接复制原样的 UTF-8 字节；[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#strings)中的字符串用例测量了这一点，Rust 也一样。
+Go 的字符串是 UTF-8，按默认编码（Latin-1 或 UTF-16）读写字符串都要转码，而 Protocol Buffers 和 MessagePack 直接复制 UTF-8 字节；[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#strings)里的字符串用例测的就是这部分开销，Rust 也一样。
 
-短字符串（UTF-8 不超过 128 字节）读入 reader 持有的一块内存：每块最多 2 KiB，且不超过剩余数据能填满的大小，许多字符串只需一次分配。保留一个字符串会让它所在的整块内存保持存活，就像子串会让原字符串保持存活一样；用 `strings.Clone` 可得到独立的副本。同样，生成代码读出的 `*string`（`StringPtr`、`Utf8Ptr`）指向 reader 持有的、最多 32 个字符串的一块内存。
+短字符串（UTF-8 不超过 128 字节）读进 reader 持有的一块内存：每块最多 2 KiB，也不会超过剩余数据能填满的大小，这样许多字符串只分配一次。留着一个字符串，它所在的整块内存就不会回收，和子串拖住原字符串一个道理；要独立的副本，用 `strings.Clone`。同理，生成代码读出的 `*string`（`StringPtr`、`Utf8Ptr`）指向 reader 持有的一块内存，每块最多 32 个。
 
 ## .NET 值 [#values]
 
-`decimal`、`Guid`、`DateTime` 等 .NET 值类型，在 `nino` 包里都有同名的 Go 类型，并提供从 Go 自身类型构造的函数；`*big.Int` 就是 `BigInteger`：
+`decimal`、`Guid`、`DateTime` 等 .NET 值类型在 `nino` 包里都有同名的 Go 类型，可以从 Go 自己的类型构造；`*big.Int` 对应 `BigInteger`：
 
 ```go
 price, err := nino.ParseDecimal("19.99")                           // decimal：scale 为 2，等同 19.99m
@@ -97,56 +97,56 @@ version := &nino.Version{Major: 4, Minor: 0, Build: -1, Revision: -1} // 4.0
 
 时间超出 .NET 的范围时，`DateTimeOf` 和 `DateTimeOffsetOf` 返回 false；偏移不是整分钟或超过 ±14 小时，`DateTimeOffsetOf` 也返回 false。转回 Go 类型：`DateTime.Time()`、`TimeSpan.Duration()`、`DateTimeOffset.Time()`、`Decimal.String()`（或 `Coefficient()` 和 `Scale()`）、`Guid.String()`、`Int128.Big()`、`Half.Float32()`。`DateOnly` 和 `TimeOnly` 分别是天数和 tick 数（`nino.DateOnly(自 0001-01-01 起的天数)`）。在[原始结构体](/zh/docs/v4/advanced/codegen#raw-struct-fields)里，`nint` 是 `int64`，`nuint`、指针和函数指针是 `uint64`，`DateTimeOffset` 是结构体 `{ DateTime, OffsetMinutes }`，原始类型 `T` 的 `T?` 是 `*T`。全部类型见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go)。
 
-.NET 为夏令时切换时重复那一小时里的本地时间写出的 `DateTime`（最高两位为 kind 3），能读出并原样写回：它的 `Kind()` 返回 3。
+夏令时切换时有一小时会重复。.NET 为这一小时里的本地时间写出的 `DateTime`（最高两位是 kind 3）能读出来并原样写回，它的 `Kind()` 返回 3。
 
 ## 泛型类型 [#generics]
 
-泛型 `[NinoType]` 生成为泛型类型，其编解码器由类型参数的编解码器组合而成。每种语言都支持哪些泛型，以及下面的 `Box<T>`、`Shelf<T>` 和 `Animal`，见[泛型类型](/zh/docs/v4/advanced/codegen#generics)。在 Go 中：
+泛型 `[NinoType]` 生成泛型类型，它的编解码器由各个类型实参的编解码器组合而成。每种语言支持哪些泛型，以及下面的 `Box<T>`、`Shelf<T>` 和 `Animal`，见[泛型类型](/zh/docs/v4/advanced/codegen#generics)。在 Go 里：
 
 | | Go |
 | --- | --- |
 | `Box<T>` | `type Box[T any] struct` |
 | 它的编解码器 | `BoxCodec[T any](p0 NinoArg[T]) NinoArg[*Box[T]]`（`NinoArg` 包含 `Read`、`Write` 和 `MinSize`） |
-| 作为成员的 `Box<int>` | `*Box[int32]`，通过在 `init` 中构建的编解码器读写 |
-| 成员 `Shelf<int>` ([按类型 ID 写出](/zh/docs/v4/advanced/codegen#generic-types-behind-a-type-id)) | `Shelf[int32]`，一个由 `*ListShelf[int32]` 和 `*IntShelf` 通过标记方法实现的接口（非抽象定义的接口名为 `<Name>Type[T]`） |
-| 泛型 `OpenHolder<T>` 中的 `Open<T>` | `OpenHolder[T]` 的编解码器接收槽位的读写函数（`OpenHolderCodec(p0, s0 NinoArg[OpenType[T]])`） |
-| `Animal` 槽位中的 `Box<int>` ([槽位中的封闭泛型类型](/zh/docs/v4/advanced/codegen#closed-generic-types-in-slots)) | `ReadAnimal` 和 `WriteAnimal` 中的一个 `*Box[int32]` 分支，通过在 `init` 中构建的编解码器读写；`Box[T]` 获得 `NinoTypeID()`、`NinoTypeName()`（封闭名称）以及槽位的标记方法 |
+| 作为成员的 `Box<int>` | `*Box[int32]`，用 `init` 里构建的编解码器读写 |
+| 成员 `Shelf<int>`（[按类型 ID 写出](/zh/docs/v4/advanced/codegen#generic-types-behind-a-type-id)） | `Shelf[int32]`，一个接口，`*ListShelf[int32]` 和 `*IntShelf` 通过标记方法实现它（非抽象定义的接口叫 `<Name>Type[T]`） |
+| 泛型 `OpenHolder<T>` 里的 `Open<T>` | `OpenHolder[T]` 的编解码器接收这个槽位的读写函数（`OpenHolderCodec(p0, s0 NinoArg[OpenType[T]])`） |
+| `Animal` 槽位里的 `Box<int>`（[槽位中的封闭泛型类型](/zh/docs/v4/advanced/codegen#closed-generic-types-in-slots)） | `ReadAnimal` 和 `WriteAnimal` 里的一个 `*Box[int32]` 分支，用 `init` 里构建的编解码器读写；`Box[T]` 多出 `NinoTypeID()`、`NinoTypeName()`（封闭名称）和槽位的标记方法 |
 
-同一定义的封闭类型如果类型实参对应同一个 Go 类型（`Wrap<int?[]>` 和 `Wrap<List<int?>>` 都是 `Wrap[[]*int32]`），就无法区分：按名称排在第一个的成为槽位的情况，其余的跳过并给出 NINOGEN002，所以 Go 不读取它们的 ID。
+同一定义的几个封闭类型，如果类型实参对应同一个 Go 类型（`Wrap<int?[]>` 和 `Wrap<List<int?>>` 都是 `Wrap[[]*int32]`），就分不开：按名称排第一的成为槽位的分支，其余的跳过并报 NINOGEN002，Go 不读它们的 ID。
 
-Go 在编译时实例化泛型，所以以其他类型参数包含自身的泛型类型（`Nest<T>` 包含 `Nest<List<T>>`）会被跳过，包含它的类型也一样，并给出警告 NINOGEN002。
+Go 在编译期实例化泛型。泛型类型如果以别的类型实参包含自己（`Nest<T>` 里有个 `Nest<List<T>>`），就和包含它的类型一起跳过，并报警告 NINOGEN002。
 
 ## 引用追踪 [#reference-tracking]
 
-声明了 [`[NinoType(trackReferences: true)]`](/zh/docs/v4/reference-tracking) 的类（比如 `Node`）是 `*Node`：每个引用都是同一个指针，按指针编号。引用头和对它的检查与每种语言相同（[引用追踪](/zh/docs/v4/advanced/codegen#reference-tracking)）。[结构体标签](#struct-tags)不追踪引用：它们拒绝这样的类型。
+声明了 [`[NinoType(trackReferences: true)]`](/zh/docs/v4/reference-tracking) 的类（比如 `Node`）生成 `*Node`：同一个对象的每个引用都是同一个指针，按指针编号。引用头和相关检查各语言都一样（[引用追踪](/zh/docs/v4/advanced/codegen#reference-tracking)）。[结构体标签](#struct-tags)不追踪引用，遇到这种类型直接报错。
 
 ## 不可信数据 [#untrusted-data]
 
-生成的读取代码和结构体标签函数按不可信输入处理数据，做[每种语言都做的检查](/zh/docs/v4/advanced/codegen#untrusted-data)。在 Go 中：
+生成的读取代码和结构体标签函数把输入一律当作不可信数据，做[每种语言都做的检查](/zh/docs/v4/advanced/codegen#untrusted-data)。在 Go 里：
 
-- 对任何输入，读取都不会 panic，这是由构造保证的，而不是靠 `recover`；长度上限与 .NET 相同。错误是粘滞的：第一次失败后，每次读取都返回零值，所以每个循环都会结束。
-- 所有失败都是 `*nino.Error`（`Code`、`Offset`、`Detail`；`errors.Is(err, nino.ErrTooDeep)` ……），`Deserialize` 同时返回零值，从不返回部分值；`Unmarshal` 不改动目标。
-- 在[不可信模式](/zh/docs/v4/security#untrusted-mode)之外比 .NET 更严格，或者始终更严格：它还拒绝超过 `DateTime.MaxValue` 的 `DateTime` 刻度、无效的 `decimal`、超出范围的 `DateOnly` 和 `TimeOnly`、原始结构体中不是 0 或 1 的 bool、键控主体中的重复键，以及非最简形式的 `BigInteger`。
+- 任何输入都不会让读取 panic，这靠代码结构保证，不靠 `recover`；长度上限和 .NET 一样。错误会一直保留：第一次失败之后，每次读取都返回零值，所以循环总能结束。
+- 所有失败都是 `*nino.Error`（`Code`、`Offset`、`Detail`；`errors.Is(err, nino.ErrTooDeep)`……）。`Deserialize` 出错时返回零值，从不返回读了一半的值；`Unmarshal` 出错时不动目标。
+- 有些检查在[不可信模式](/zh/docs/v4/security#untrusted-mode)之外比 .NET 严，有些一直比 .NET 严：它还拒绝超过 `DateTime.MaxValue` 的 `DateTime` tick 数、无效的 `decimal`、超出范围的 `DateOnly` 和 `TimeOnly`、原始结构体里不是 0 或 1 的 bool、键控主体里重复的键，以及不是最简形式的 `BigInteger`。
 
 ## Go 不支持的内容 [#not-supported]
 
-除了[所有语言都不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated)，Go 还会跳过以下类型以及包含它们的类型，并给出警告 NINOGEN002：
+除了[所有语言都不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated)，Go 还跳过下面这些类型和包含它们的类型，并报警告 NINOGEN002：
 
-- 以其他类型参数包含自身的泛型类型（[泛型类型](#generics)）；
-- 槽位里同一定义、类型实参对应同一个 Go 类型的封闭泛型类型，第一个之后的那些（[泛型类型](#generics)）。
+- 以别的类型实参包含自己的泛型类型（[泛型类型](#generics)）；
+- 槽位里同一定义、类型实参对应同一个 Go 类型的封闭泛型类型，除第一个以外的（[泛型类型](#generics)）。
 
-[结构体标签](#struct-tags)有它自己的限制，列在那一节。
+[结构体标签](#struct-tags)另有限制，见那一节。
 
 ## 性能 [#performance]
 
-每次发布都在相同的数据上测量 Go 运行时（按 nino-gen 生成的形式写的编解码器，以及结构体标签），对比 Protocol Buffers（`google.golang.org/protobuf`）、MessagePack（`vmihailenco/msgpack`）、`encoding/json` 和 `encoding/gob`。测量方式见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#go)。
+每次发布都会用同一份数据测 Go 运行时（nino-gen 生成形式的编解码器和结构体标签两种），和 Protocol Buffers（`google.golang.org/protobuf`）、MessagePack（`vmihailenco/msgpack`）、`encoding/json`、`encoding/gob` 对比。测量方式见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#go)。
 
 <RuntimesTables lang="zh" only="go" />
 
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="数据演进" href="/zh/docs/v4/evolving-data">已部署的服务在更新前一直运行旧代码：选择能容忍变化的格式。</Card>
+  <Card title="数据演进" href="/zh/docs/v4/evolving-data">已部署的服务升级前一直跑旧代码：选一种容得下改动的格式。</Card>
   <Card title="二进制格式" href="/zh/docs/v4/wire-format">每个运行时读写的字节。</Card>
-  <Card title="其他语言的基准测试" href="/zh/docs/v4/benchmarks-runtimes">Go、Rust 和 TypeScript 与各自语言的序列化库的对比。</Card>
+  <Card title="其他语言的基准测试" href="/zh/docs/v4/benchmarks-runtimes">Go、Rust 和 TypeScript 对比各自语言里的序列化库。</Card>
 </Cards>

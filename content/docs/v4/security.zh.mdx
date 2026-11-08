@@ -1,28 +1,28 @@
 ---
 title: 不可信数据
 seoTitle: "安全读取不可信数据：限制、NinoDataException 与不可信模式 – Nino v4 文档"
-description: "Nino 读取网络对端或用户文件中的数据时检查什么：所有无效输入只抛出 NinoDataException、它拒绝的字节、NinoSettings 中的深度、长度与哈希冲突限制，以及 NinoSettings.Untrusted。"
+description: "Nino 读取网络对端或用户文件里的数据时检查什么：无效输入一律抛 NinoDataException，哪些字节会被拒绝，NinoSettings 里的深度、长度和哈希冲突限制，以及 NinoSettings.Untrusted。"
 icon: ShieldCheck
 ---
 
-Nino 就是为读取不可信来源的数据而设计的：网络对端发来的消息、用户交给你的文件、请求体。本页列出每次读取都会做的检查、可以在 `NinoSettings` 中收紧的限制、`NinoSettings.Untrusted` 额外的检查，以及仍需你的代码负责的部分。
+Nino 本来就是为读不可信来源的数据设计的：网络对端发来的消息、用户给你的文件、请求体。这一页列出每次读取都做的检查、能在 `NinoSettings` 里收紧的限制、`NinoSettings.Untrusted` 额外加的检查，以及仍然要你的代码负责的事。
 
 ## 保证 [#guarantees]
 
-无论字节是什么，一次读取都：
+不管字节是什么，一次读取都：
 
-- **不会读到输入之外**，也不会读出它所在的区域或键控条目；
-- **按输入的大小分配内存**：每个长度在分配任何内存之前，先按元素最少占用的字节数与剩余字节数比较；集合在读到元素之前最多预先分配剩余字节数的 16 倍（至少 16 KB），更大的数量随着元素真正读入再增长；
-- **栈深度有界**：嵌套超过 128 层的对象会推迟到较浅的层级再读；其他会嵌套的内容（由构造函数创建或按值比较的类型、包含自身的结构体和集合）在 [`NinoSettings.MaxDepth`](#limits) 处停止，途中还会检查线程栈（见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)）；
-- **只创建你声明过的类型**：数据中只有类型 ID，没有类型名；多态值只能是声明类型已注册的子类型之一，回引用只能指向已读过、且类型与槽位相符的对象；
-- **限制它填充的字典和集合中每个键的工作量**（[哈希洪泛](#hash-flooding)）；
-- **不让进程级缓存增长**：在 .NET 8 及以上（net8.0 和 net10.0 构建），`CultureInfo` 只有在运行时自带这个区域性（包括 `zh-CN` 这类别名），且名称不含扩展或私有子标记（`-u-`、`-t-`、`-x-`）时才能读回；开启固定区域性（invariant）全球化模式时只能读回固定区域性（`""`）。.NET 会在整个进程生命周期里保留它创建过的每个区域性，否则数据中的名称可以让堆无限增长。.NET Framework、Mono 和 Unity 只认识它们自己表中的区域性；
-- **不在你的对象里留下旧内存**：读进已有的值时，读取新分配的数组要等填满之后才放进去，所以读到一半被拒绝的数据不会在其中留下未初始化的内存（[无效数据](/zh/docs/v4/basic#invalid-data)）；
-- **只抛出一种异常**：以上所有情况都抛出 [`NinoDataException`](#ninodataexception)。
+- **不会读到输入之外**，也不会读出所在的区域或键控条目；
+- **按输入的大小分配内存**：分配任何内存之前，每个长度都按元素最少占的字节数，和剩余字节数比一次；集合在读到元素之前，最多预先分配剩余字节数的 16 倍（至少 16 KB），数量更大的，随元素真正读进来再扩容；
+- **栈深度有上限**：嵌套超过 128 层的对象推迟到较浅的层级再读；其他会嵌套的东西（靠构造函数创建或按值比较的类型、包含自己的结构体和集合）到 [`NinoSettings.MaxDepth`](#limits) 就停，途中还会检查线程栈（见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)）；
+- **只创建你声明过的类型**：数据里只有类型 ID，没有类型名；多态值只能是声明类型已注册的子类型之一；回引用只能指向已经读过、类型和槽位相符的对象；
+- **限制它填充的字典和 Set 里每个键的工作量**（[哈希洪泛](#hash-flooding)）；
+- **不让进程级缓存膨胀**：在 .NET 8 及以上（net8.0 和 net10.0 构建），`CultureInfo` 只有运行时自带这个区域性（包括 `zh-CN` 这类别名）、而且名称不带扩展或私有子标记（`-u-`、`-t-`、`-x-`）时才能读回；开了固定区域性（invariant）全球化模式时，只能读回固定区域性（`""`）。.NET 创建过的每个区域性都会保留到进程结束，不这样限制的话，数据里的名称能让堆无限增长。.NET Framework、Mono 和 Unity 只认它们自己表里的区域性；
+- **不在你的对象里留下脏内存**：读入已有的值时，读取新分配的数组要等填满之后才放进去，所以读到一半被拒绝的数据，不会在对象里留下未初始化的内存（[无效数据](/zh/docs/v4/basic#invalid-data)）；
+- **只抛一种异常**：以上全部情况都抛 [`NinoDataException`](#ninodataexception)。
 
 ## NinoDataException [#ninodataexception]
 
-每一项拒绝数据的检查都抛出 `NinoDataException`（命名空间 `Nino.Core`），消息以 `Nino:` 开头。值在创建时被其自身类型拒绝（格式错误的 `Uri`、未知的区域性或时区、超出范围的 `DateTimeOffset`、为 null 的字典键）时也同样报告，原始异常放在 `InnerException` 中。在数据进入的地方捕获它：
+每项拒绝数据的检查都抛 `NinoDataException`（命名空间 `Nino.Core`），消息以 `Nino:` 开头。值在创建时被它自己的类型拒绝（格式错误的 `Uri`、未知的区域性或时区、超出范围的 `DateTimeOffset`、为 null 的字典键），也这样报告，原始异常放在 `InnerException` 里。在数据进来的地方捕获它：
 
 ```csharp title="Receive.cs"
 using Nino.Core;
@@ -34,22 +34,22 @@ try
 }
 catch (NinoDataException e)
 {
-    // 这段数据不是 Message 的有效 Nino 数据：丢弃、记录日志或关闭连接。
+    // 这段数据不是有效的 Message Nino 数据：丢掉、记日志、关连接。
     log.Warn($"Bad message from {peer}: {e.Message}");
 }
 ```
 
-`NinoDataException` 派生自 `InvalidOperationException`，即 Nino 在 4.0.0-rc.7 及之前对无效数据抛出的类型，所以 `catch (InvalidOperationException)` 仍然能捕获它。调用方的错误保留各自的异常类型：参数为 null、类型没有格式化器、反序列化到只读集合、[过晚修改设置](#limits)。**序列化**时的失败也是如此（对象图有未追踪的循环，或嵌套超过 `MaxDepth`），抛出 `InvalidOperationException`：那是你的对象，不是无效数据。[Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 对无效请求体返回 400。
+`NinoDataException` 派生自 `InvalidOperationException`，也就是 Nino 在 4.0.0-rc.7 及以前遇到无效数据时抛的类型，所以 `catch (InvalidOperationException)` 照样能接住它。调用方自己的错误保留各自的异常类型：参数为 null、类型没有格式化器、反序列化到只读集合、[设置改得太晚](#limits)。**序列化**时的失败也一样（对象图有没追踪的环，或嵌套超过 `MaxDepth`），抛 `InvalidOperationException`：那是你的对象，不是无效数据。[Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 对无效请求体返回 400。
 
-## 会被拒绝的数据 [#what-is-rejected]
+## 拒绝哪些数据 [#what-is-rejected]
 
-下表每一行都抛出 `NinoDataException`。默认模式做所有对有效数据不花时间的检查；[`Untrusted`](#untrusted-mode) 再加上每次读取都要花时间的检查。
+下表每一行都抛 `NinoDataException`。默认模式做所有对有效数据零开销的检查；[`Untrusted`](#untrusted-mode) 再加上每次读取都要花时间的检查。
 
 <Matrix corner="输入" columns={['默认', 'Untrusted']} rows={[
   { label: '数据提前结束；长度或数量为负（null 用的 -1 除外），或剩余字节放不下', cells: ['yes', 'yes'] },
   { label: <>集合长度超过 <a href="#limits"><code>MaxCollectionLength</code></a>；嵌套深度超过 <a href="#limits"><code>MaxDepth</code></a></>, cells: ['yes', 'yes'] },
   { label: '未知的类型 ID、不是声明类型子类型的 ID、无效的回引用', cells: ['yes', 'yes'] },
-  { label: <>读取从空开始填充的字典、集合或查找表时出现重复键；某个键在其哈希桶中遇到超过 <a href="#hash-flooding"><code>MaxHashCollisions</code></a> 个键</>, cells: ['yes', 'yes'] },
+  { label: <>读取时从空开始填充的字典、Set 或查找表里出现重复的键；某个键在其哈希桶中遇到超过 <a href="#hash-flooding"><code>MaxHashCollisions</code></a> 个键</>, cells: ['yes', 'yes'] },
   { label: '特意挑选落进同一哈希桶的键（整数、char、Guid 和 string 键）', cells: ['partial: 由 MaxHashCollisions 限制', 'yes: 带种子的哈希'] },
   { label: '不是 0 或 1 的 bool 或存在字节（值、成员、bool 数组、元组和 KeyValuePair 的项）', cells: ['yes', 'yes'] },
   { label: <><strong>原始结构体里</strong>不是 0 或 1 的 <code>bool</code> 字段或 <code>Nullable</code> 存在字节</>, cells: ['no: 原样复制，不检查', 'yes'] },
@@ -62,33 +62,33 @@ catch (NinoDataException e)
 
 <Callout type="error" title="不可信的数据要用 NinoSettings.Untrusted 读">
 
-默认模式把原始结构体（按一整块写出的非托管结构体）原样复制，所以里面的 `bool` 字段和 `Nullable` 存在字节都不检查。那里出现不是 0 或 1 的字节，对 .NET JIT 是未定义行为，不只是值不对：重新编译后，这个结构体可能和自己都不相等（一个存在字节为 2 的 `long?`，一个编译后的方法读成 null，另一个读成有值），放进 `Dictionary` 当键或值就找不回来了。可能被人构造的数据，必须设 `NinoSettings.Untrusted = true` 再读，它会拒绝这种字节。Go、Rust 和 TypeScript 的读取器总是拒绝。
+默认模式把原始结构体（整块写出的非托管结构体）原样复制，所以里面的 `bool` 字段和 `Nullable` 存在字节都不检查。那里出现 0 和 1 以外的字节，对 .NET JIT 来说是未定义行为，不只是值不对：代码重新编译后，这个结构体可能连和自己都不相等（一个存在字节为 2 的 `long?`，一个编译后的方法读成 null，另一个读成有值），放进 `Dictionary` 当键或值就再也找不到了。可能被人伪造的数据，必须设 `NinoSettings.Untrusted = true` 再读，它会拒绝这种字节。Go、Rust 和 TypeScript 的读取器一律拒绝。
 
 </Callout>
 
 ## 限制 [#limits]
 
-`NinoSettings`（命名空间 `Nino.Core`）中的这些静态成员限制一次读取能占用的资源：
+`NinoSettings`（命名空间 `Nino.Core`）里的这些静态成员，限制一次读取能占用多少资源：
 
 <TypeTable
   type={{
     MaxDepth: {
-      description: '读写数据时对象最多可以嵌套多深：类主体，加上可能包含自身的结构体和集合。Nino 能在读取成员之前创建的类，超过 128 层的主体会被推迟，不需要限制；这个值限制其余的一切。至少 128。读取时过深抛出 NinoDataException，写入时抛出 InvalidOperationException。',
+      description: '读写数据时对象最多能嵌套多深：类主体，以及可能包含自己的结构体和集合。Nino 能在读成员之前就创建的类，超过 128 层的主体会推迟处理，不需要限制；这个值管的是其余所有情况。至少 128。读取时过深抛 NinoDataException，写入时抛 InvalidOperationException。',
       type: 'int',
       default: '512',
     },
     MaxCollectionLength: {
-      description: '数据中一个集合或数组最多可以声称有多少个元素（或键值对）；更长的在分配任何内存之前就抛出 NinoDataException。多维数组按元素总数计算。每个长度本来就会与剩余字节数比较，所以只在需要限制有效但很大的数据所占内存时才调低它。',
+      description: '数据里一个集合或数组最多能声称有多少个元素（或键值对）；超过的话，分配任何内存之前就抛 NinoDataException。多维数组按元素总数算。每个长度本来就要和剩余字节数比较，所以只有想限制有效但很大的数据占用的内存时，才需要调低它。',
       type: 'int',
       default: 'int.MaxValue',
     },
     MaxHashCollisions: {
-      description: 'Nino 把从数据中读到的键加入它所填充的哈希表时，这个键在其哈希桶中最多可以遇到多少个键；更多则抛出 NinoDataException。至少 1。见“哈希洪泛”。',
+      description: 'Nino 把从数据里读到的键加进它填充的哈希表时，这个键在它的哈希桶里最多能碰到多少个键；再多就抛 NinoDataException。至少 1。见“哈希洪泛”。',
       type: 'int',
       default: '100',
     },
     Untrusted: {
-      description: '加上每次读取都要花时间的检查：常见键类型的带种子哈希、按原始字节复制的值的范围检查，以及拒绝值之后的字节。见“不可信模式”。',
+      description: '加上每次读取都要花时间的检查：常见键类型用带种子的哈希、按原始字节复制的值做范围检查、拒绝值之后的字节。见“不可信模式”。',
       type: 'bool',
       default: 'false',
     },
@@ -97,7 +97,7 @@ catch (NinoDataException e)
 
 <Callout type="warn" title="在首次使用前设置">
 
-读写路径把这四个值当作常量：Nino 第一次用到其中任何一个时它们就被冻结，之后再设置会抛出 `InvalidOperationException`。请在启动时、任何线程第一次序列化或反序列化之前设置。超出范围的值（`MaxDepth` 小于 128、`MaxCollectionLength` 为负、`MaxHashCollisions` 小于 1）抛出 `ArgumentOutOfRangeException`。
+读写路径把这四个值当常量用：Nino 第一次用到其中任何一个，它们就冻结了，之后再设会抛 `InvalidOperationException`。在启动时、任何线程第一次序列化或反序列化之前设好。超出范围的值（`MaxDepth` 小于 128、`MaxCollectionLength` 为负、`MaxHashCollisions` 小于 1）抛 `ArgumentOutOfRangeException`。
 
 </Callout>
 
@@ -106,63 +106,63 @@ using Nino.Core;
 
 // 启动时，在任何 Nino 调用之前。
 NinoSettings.Untrusted = true;              // 数据来自客户端
-NinoSettings.MaxCollectionLength = 100_000; // 我们的消息都不会更多
+NinoSettings.MaxCollectionLength = 100_000; // 我们的消息不会超过这个数
 ```
 
-`NinoSettings` 中对象池和回收器的设置见[对象池](/zh/docs/v4/pooling#settings)。
+`NinoSettings` 里对象池和回收器的设置见[对象池](/zh/docs/v4/pooling#settings)。
 
 ## 哈希洪泛 [#hash-flooding]
 
-精心构造、全部落在同一个哈希桶中的键，会让每次插入都扫描它之前的所有键，于是填充这样一个字典所需的时间与其大小的平方成正比。在任何模式下，从数据中读到的键如果在其哈希桶中遇到超过 `MaxHashCollisions`（默认 100）个键，就抛出 `NinoDataException`。这适用于 `Dictionary<TKey, TValue>`、`HashSet<T>`、查找表（`ILookup`）、`ConcurrentDictionary<TKey, TValue>`，以及 Nino.Immutable 中的 `ImmutableDictionary<TKey, TValue>` 和 `ImmutableHashSet<T>`（在这两者中，指超过这么多个键有相同的哈希码）。
+专门构造、全挤在同一个哈希桶里的键，会让每次插入都把前面的键扫一遍，于是填满这样一个字典的时间和它大小的平方成正比。不管什么模式，从数据里读到的键如果在它的哈希桶里碰到超过 `MaxHashCollisions`（默认 100）个键，就抛 `NinoDataException`。适用于 `Dictionary<TKey, TValue>`、`HashSet<T>`、查找表（`ILookup`）、`ConcurrentDictionary<TKey, TValue>`，以及 Nino.Immutable 里的 `ImmutableDictionary<TKey, TValue>` 和 `ImmutableHashSet<T>`（对这两个，指超过这么多个键的哈希码相同）。
 
-- Nino 自己填充新表时，计数没有额外开销，因为它本来就要遍历哈希桶来查找重复键；由表自己添加键时（读入已有集合），Nino 在添加之后遍历新键所在的桶。
-- 哈希码合理的键，每个桶大约只有一个键。哈希码较差的键（例如没有自己的 `GetHashCode` 的结构体键）可以调高这个限制。
-- 字符串键交给那些在 100 次冲突后会自行改用随机化比较器的表处理（.NET 的 `Dictionary`、`HashSet` 和 `ConcurrentDictionary`，以及 .NET Framework 的 `Dictionary` 和 `ConcurrentDictionary`）。
-- 其他运行时：Go 的 map 与其重复检查、Rust 的 `HashMap`、`HashSet` 和 `indexmap` 表都使用每个进程的随机种子计算哈希。V8（Node、Chromium、Deno）对 JavaScript `Map` 或 `Set` 的 number 和 `bigint` 键计算哈希时不加种子，因此 TypeScript 读取器对键数超过 128 的这类 map 或 set，按 V8 所建哈希表的每个桶计数，超过 100 时抛出 `NinoError`，与这里一致；JavaScriptCore（Safari、Bun）和 SpiderMonkey（Firefox）有各自的数值哈希，在那里这个计数对应的是 V8 的桶，而不是它们的。见[不可信数据](/zh/docs/v4/advanced/typescript#untrusted-data)。
-- `ConcurrentDictionary<TKey, TValue>` 不公开自己的桶：Nino 通过为每个运行时（.NET、.NET Framework、Mono 和 Unity）声明、并在启动时检查的布局找到它们，在构建新字典时为每个键所在的桶计数，读入已有字典时则在每次添加之后遍历该桶。没有匹配的布局时，由字典的构造函数填充，不计数。
+- Nino 自己填充新表时，计数不额外花钱，因为它本来就要遍历哈希桶找重复键；由表自己添加键时（读入已有集合），Nino 在添加之后遍历新键所在的桶。
+- 哈希码正常的键，每个桶大约只有一个键。哈希码质量差的键（比如没有自己的 `GetHashCode` 的结构体键），可以调高这个上限。
+- 字符串键交给那些冲突 100 次后会自己换成随机化比较器的表（.NET 的 `Dictionary`、`HashSet` 和 `ConcurrentDictionary`，.NET Framework 的 `Dictionary` 和 `ConcurrentDictionary`）。
+- 其他运行时：Go 的 map 和它的重复检查、Rust 的 `HashMap`、`HashSet` 和 `indexmap` 表，都用每个进程的随机种子算哈希。V8（Node、Chromium、Deno）给 JavaScript `Map` 或 `Set` 的 number 和 `bigint` 键算哈希时不加种子，所以这类键超过 128 个的 map 或 set，TypeScript 读取器会按 V8 建的哈希表逐桶计数，超过 100 就抛 `NinoError`，和这里一样；JavaScriptCore（Safari、Bun）和 SpiderMonkey（Firefox）对数字另有自己的哈希，在那里这个计数跟的是 V8 的桶，不是它们自己的。见[不可信数据](/zh/docs/v4/advanced/typescript#untrusted-data)。
+- `ConcurrentDictionary<TKey, TValue>` 不对外公开它的桶：Nino 靠一份按运行时（.NET、.NET Framework、Mono 和 Unity）声明、启动时检查过的布局找到这些桶；构建新字典时给每个键所在的桶计数，读入已有字典时每次添加之后遍历那个桶。没有匹配的布局时，由字典的构造函数填充，不计数。
 
 ## 不可信模式 [#untrusted-mode]
 
-`NinoSettings.Untrusted = true` 加上每次读取都要花时间、可信数据不需要的检查。关闭时（默认）它们没有任何开销：读取路径把它当作常量判断。开启后：
+`NinoSettings.Untrusted = true` 加上每次读取都要花时间、可信数据又用不着的检查。关闭时（默认）这些检查一点开销都没有：读取路径把这个开关当常量判断。打开后：
 
-- **带种子的哈希。** Nino 创建的字典和哈希集合（包括 `IDictionary`、`ISet` 和查找表）对整数、`char`、`Guid` 和 `string` 键使用以每个进程随机生成的密钥为种子的比较器（SipHash-1-3），使键根本无法被选成相互冲突。它们的 `Comparer` 不是默认比较器，但相等性相同。你传入的集合保留自己的比较器；其他键类型，以及 `ConcurrentDictionary`、`ImmutableDictionary` 和 `ImmutableHashSet`，依靠 `MaxHashCollisions`。
-- **按字节复制的值也会检查**，与其自身构造函数的检查一致，原始结构体和元组内部也一样：不是 0 或 1 的 `bool` 或 `Nullable` 存在字节、超过 `DateTime.MaxValue` 的 `DateTime`、标志位中除符号和小数位数之外还有其他位、或小数位数超过 28 的 `decimal`、超出范围的 `DateOnly` 或 `TimeOnly`。枚举不检查：底层类型的任何值都是有效的枚举值（标志可以组合，新版本也可能增加成员）。`TimeSpan`、`Guid`、`char` 和数字没有无效值。这类值组成的数组和列表在检查时不会对每个值分支，在 .NET 8+ 上还会用 SIMD 一次检查多个值。
-- **值之后的字节**对接收整段数据（span 或数组）的 API（`NinoDeserializer.Deserialize` 和生成的重载）而言是无效数据。从你自己创建的 `Reader` 读取时，其余字节交给你处理，所以仍然可以从一个缓冲区中读取多个值。
+- **带种子的哈希。** Nino 创建的字典和 Set（包括 `IDictionary`、`ISet` 和查找表），对整数、`char`、`Guid` 和 `string` 键用一个比较器（SipHash-1-3），它的密钥每个进程随机生成一次，所以根本没法挑出会冲突的键。它们的 `Comparer` 不是默认比较器，但判断相等的结果一样。你传进来的集合保留自己的比较器；其他键类型，以及 `ConcurrentDictionary`、`ImmutableDictionary` 和 `ImmutableHashSet`，靠 `MaxHashCollisions` 兜底。
+- **按字节复制的值也要检查**，查法和它自己的构造函数一样，原始结构体和元组里面也查：0 和 1 以外的 `bool` 或 `Nullable` 存在字节、超过 `DateTime.MaxValue` 的 `DateTime`、标志位里除了符号还有别的位或者小数位数超过 28 的 `decimal`、超出范围的 `DateOnly` 或 `TimeOnly`。枚举不查：底层类型的任何值都是有效的枚举值（标志可以组合，新版本也可能加成员）。`TimeSpan`、`Guid`、`char` 和数字没有无效值。这类值组成的数组和列表，检查时不会每个值一个分支，在 .NET 8+ 上还用 SIMD 一次查好几个。
+- **值之后的字节**，对接收整段数据（span 或数组）的 API（`NinoDeserializer.Deserialize` 和生成的重载）来说是无效数据。从你自己创建的 `Reader` 读时，剩下的字节由你处理，所以照样能从一个缓冲区里读多个值。
 
 ### 开销 [#untrusted-cost]
 
 | 检查 | 对有效数据的开销 |
 | --- | --- |
 | 带种子的哈希 | 每个键算一次 SipHash-1-3；默认比较器对 `int` 键直接返回键本身 |
-| 按字节复制的值 | 每个值的每个受检字段（`bool`、`DateTime`、`decimal`、`DateOnly`、`TimeOnly`）判断一次；没有这类字段的类型照旧整块复制 |
+| 按字节复制的值 | 每个值的每个要查的字段（`bool`、`DateTime`、`decimal`、`DateOnly`、`TimeOnly`）判断一次；没有这类字段的类型照旧整块复制 |
 | 值之后的字节 | 每次调用比较一次 |
 
-[`UntrustedTest`](/zh/docs/v4/benchmarks#common-types-and-collections) 在这个模式下读取 1,000 个带 `DateTime` 和 `bool` 的原始结构体组成的列表，对比不做检查、直接复制的 MemoryPack；结果见[全部测量结果](/zh/docs/v4/benchmarks#results)。
+[`UntrustedTest`](/zh/docs/v4/benchmarks#common-types-and-collections) 在这个模式下读一个由 1,000 个原始结构体组成的列表，结构体里有一个 `DateTime` 和一个 `bool`，对照不检查、直接复制的 MemoryPack；结果见[全部测量结果](/zh/docs/v4/benchmarks#results)。
 
 ## 常见陷阱 [#pitfalls]
 
 | 错误 | 后果 | 由谁发现 |
 | --- | --- | --- |
-| 第一次调用 Nino 之后才设置 `Untrusted` 或某个限制 | 读写路径已经把它们当作常量 | setter 抛出 `InvalidOperationException` |
-| 不开 `Untrusted` 就读可能被伪造的数据 | 原始结构体里不是 0 或 1 的 `bool` 或 `Nullable` 标志原样复制，对 JIT 来说是未定义行为 | 无：打开 `Untrusted`（见[会被拒绝的数据](#what-is-rejected)） |
+| 第一次调用 Nino 之后才设 `Untrusted` 或某个限制 | 读写路径已经把它们当常量用了 | setter 抛 `InvalidOperationException` |
+| 不开 `Untrusted` 就读可能被伪造的数据 | 原始结构体里 0 和 1 以外的 `bool` 或 `Nullable` 存在字节原样复制，对 JIT 来说是未定义行为 | 没有：打开 `Untrusted`（见[拒绝哪些数据](#what-is-rejected)） |
 | 读取时捕获 `Exception` | 你自己的错误（类型没有格式化器、只读集合）看起来也像坏数据 | 捕获 `NinoDataException`（见[上文](#ninodataexception)） |
-| 先缓冲整帧再检查大小 | 对方发来一个巨大的帧；内存分配只受输入大小约束，不受你约束 | 无：限制帧的大小（见[仍需你负责的部分](#what-stays-your-job)） |
+| 先缓冲整帧再检查大小 | 对方发来一个巨大的帧；内存分配只跟着输入走，不由你控制 | 没有：限制帧的大小（见[仍要你负责的事](#what-stays-your-job)） |
 
-## 仍需你负责的部分 [#what-stays-your-job]
+## 仍要你负责的事 [#what-stays-your-job]
 
-Nino 检查数据的结构，而不是数据的含义，就像对待用户编辑过的存档文件一样：
+Nino 检查数据的结构，不管数据的含义，就像面对一个被用户改过的存档文件：
 
-- **值。** 完整读取的值就是数据所写的值：负的生命值、没有名字的枚举值。构造函数和 setter 会以这些值运行。请校验你的逻辑所依赖的值。
-- **类型。** 字节中不带模式信息，所以为**另一个**布局兼容的类型写出的数据也能无错读取。请自己为数据加上版本（见[数据演进](/zh/docs/v4/evolving-data)和[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)模式）；`Deserialize<object>` 接受任何已注册的类型。
-- **消息大小。** 内存分配与输入大小成比例，所以要限制输入：在缓冲之前限制帧或请求的大小（见[为流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）。数据中真实存在的元素会按其大小占用内存：一个成员全部省略的大型版本容错结构体在线上只占 4 个字节。
+- **值。** 完整读出的值，就是数据里写的值：负的生命值、没有名字的枚举值都可能。构造函数和 setter 拿到的就是这些值。你的逻辑依赖哪些值，就校验哪些。
+- **类型。** 字节里不带 schema，所以给**另一个**布局兼容的类型写的数据，也能不报错地读出来。数据的版本要自己加（见[数据演进](/zh/docs/v4/evolving-data)和[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)的做法）；`Deserialize<object>` 接受任何已注册的类型。
+- **消息大小。** 内存分配和输入大小成比例，所以要限制输入：缓冲之前就限制帧或请求的大小（见[为流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）。数据里真实存在的元素，按自身大小占内存：一个成员全部省略的大型版本容错结构体，在数据里只占 4 个字节。
 
 ## 其他语言 [#other-languages]
 
-[TypeScript、Go 和 Rust 的读取器](/zh/docs/v4/advanced/codegen#untrusted-data)做同样的检查：在分配之前检查边界和长度，按 .NET 的方式计算深度，类型 ID 仅限槽位允许的类型，并严格检查字节。它们各自只抛出或返回一种错误类型。Go 和 Rust 还会拒绝一些 .NET 在不可信模式之外接受的字节，例如超出范围的日期和 decimal。所有读取器遵循的规则见[二进制格式](/zh/docs/v4/wire-format#validation)。
+[TypeScript、Go 和 Rust 的读取器](/zh/docs/v4/advanced/codegen#untrusted-data)做同样的检查：分配之前检查边界和长度，深度和 .NET 一样计算，类型 ID 只能是槽位允许的类型，字节严格检查。每个读取器都只抛或只返回自己的一种错误类型。Go 和 Rust 还会拒绝一些 .NET 在不可信模式之外接受的字节，比如超出范围的日期和 decimal。所有读取器遵守的规则见[二进制格式](/zh/docs/v4/wire-format#validation)。
 
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="最佳实践" href="/zh/docs/v4/best-practices#untrusted-input">外部数据交给 Nino 之前要做的选择。</Card>
+  <Card title="最佳实践" href="/zh/docs/v4/best-practices#untrusted-input">外部数据交给 Nino 之前要定的事。</Card>
   <Card title="网络" href="/zh/docs/v4/advanced/networking#frame-the-stream">缓冲之前先限制帧的大小。</Card>
 </Cards>
