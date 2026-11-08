@@ -4,7 +4,7 @@ description: "按位置、版本容错和键控三种格式：数据写出之后
 icon: GitBranch
 ---
 
-数据往往比代码活得更久。保存的文档、缓存的资源、旧版客户端发来的消息，都要由新版本的类型来读，有时反过来也一样。Nino 为每个类型提供三种格式，也就是 `NinoFormat` 枚举的三个值，用 `[NinoType(format: ...)]` 选定：
+数据往往比代码活得更久。保存的文档、缓存的资源、旧版客户端发来的消息，都要由新版本的类型来读，有时反过来也一样。所以数据离开进程之前，就要定好每个类型的格式：默认的按位置格式，数据一旦写出，成员就不能再动；以后改格式，已有的数据同样读不了。Nino 为每个类型提供三种格式，也就是 `NinoFormat` 枚举的三个值，用 `[NinoType(format: ...)]` 选定：
 
 <Matrix columns={[<code key="p">Positional</code>, <code key="v">VersionTolerant</code>, <code key="k">Keyed</code>]} rows={[
   { label: '向没有子类的类型追加成员', cells: ['no', 'yes', 'yes'] },
@@ -17,11 +17,9 @@ icon: GitBranch
   { label: '速度', cells: ['最快', '接近按位置：每个对象一个长度', '开销最大：每个成员多写一个键和长度，读取时每个成员要检查一次键'] },
 ]} />
 
-`Positional` 是默认格式；另外两种是 `[NinoType(format: NinoFormat.VersionTolerant)]` 和 `[NinoType(format: NinoFormat.Keyed)]`。
+`Positional` 是默认格式；另外两种是 `[NinoType(format: NinoFormat.VersionTolerant)]` 和 `[NinoType(format: NinoFormat.Keyed)]`。拿不准用哪种，看[如何选择](#choosing)里的三个问题。
 
-格式本身也是数据的一部分：改了类型的 `format`，之前写出的数据就读不出来了。保存任何数据之前就要选好。
-
-无论哪种格式，都**不能修改成员的类型**。按位置和版本容错格式不写成员名，所以可以随意**重命名成员**；键控格式的键是成员名的哈希，所以改名的成员要标上旧名称（参见[重命名键控成员](#renaming-keyed-members)），否则改名会被当作“删掉一个、新增一个”。重命名*类型*请在类型上使用 [`[NinoFormerName]`](/zh/docs/v4/defining-types#former-name)。
+无论哪种格式，都**不能修改成员的类型**。按位置和版本容错格式不写成员名，所以可以随意**重命名成员**；键控成员和连同类型 ID 写出的类型改名时，要用 `[NinoFormerName]` 留住旧名称（见[重命名](#renaming)）。
 
 ## 按位置 [#positional]
 
@@ -123,6 +121,33 @@ public class ConnectionConfig
 
 这种格式适合需要长期保存、会经历多个版本修改的数据：配置、文档、设置文件、用工具编辑的内容数据。
 
+## 重命名 [#renaming]
+
+按位置和版本容错的类型不写成员名，给它们的成员改名什么都不用做。有两种改名会改变写出的内容：一是值带类型 ID 的类型，二是键控类型的成员。两种都用 `[NinoFormerName]` 让旧数据照样能读。
+
+### 重命名类型 [#former-name]
+
+成员、元素或变量的声明类型是非密封类、抽象类、接口或 `object` 时，值会连同它运行时类型的<Term id="type-id" lang="zh">类型 ID</Term> 一起写出。类型 ID 是类型全名的 32 位哈希，读取时靠它还原成正确的类型（见[多态](/zh/docs/v4/polymorphism#how-a-polymorphic-value-is-written)）。类型改名或换命名空间，ID 就变了，密封的子类型也一样（比如通过 `Message` 基类发送的各个消息类）。
+
+典型场景：你把协议类从 `MyApp.Net` 挪到了 `MyApp.Protocol`，而上个版本存下的文件或客户端用的还是旧 ID。加上 `[NinoFormerName]` 就能继续读旧数据：
+
+```csharp
+namespace MyApp.Protocol
+{
+    [NinoType]
+    [NinoFormerName("MyApp.Net.OrderPlaced")] // [!code highlight]
+    public class OrderPlaced
+    {
+        public long OrderId;
+    }
+}
+```
+
+旧名称用全名的**运行时形式**：`Namespace.Type`，嵌套类型和外层类型之间用 `+` 连接（`Namespace.Outer+Inner`），不带 `global::`。类型 ID 由旧名称算出，所以改名后的类型读写的仍是已有数据和旧版读取方用的那个 ID。`NinoTypeId.Of(typeof(T))` 返回某个类型写出的 ID。
+
+- 一个类型只能有一个 `[NinoFormerName]`，因为 ID 只能由一个名称算出；再加一个就报错 NINO026。
+- 泛型类型上的旧名称会替换整个名称，连类型实参一起，所以每个封闭泛型类型（`Box<int>`、`Box<string>`）都得到同一个 ID：其中两个都连同类型 ID 写出时，读取方分不清谁是谁（警告 NINO027）。旧名称只加在非泛型类型上。
+
 ### 重命名键控成员 [#renaming-keyed-members]
 
 在改名的字段或属性上加 `[NinoFormerName("OldName")]`，每个旧名称加一个。读取时，当前名称和所有旧名称都能识别；写入时始终使用当前名称。
@@ -216,6 +241,8 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
 | --- | --- | --- |
 | 给有 `[NinoType]` 子类的版本容错基类追加成员 | 子类的数据读出错误的值，或抛出 `NinoDataException` | 无：参见[向基类追加成员](#appending-to-a-base-class) |
 | 数据已经存在后，修改成员的类型或类型的格式 | 旧数据读错或读不出来 | 无：[布局元数据](#layout-metadata)会显示这个变化 |
+| 重命名或移动一个连同类型 ID 写出的类型 | 旧数据的类型 ID 认不出来：`NinoDataException` | 无：加上 [`[NinoFormerName]`](#former-name) |
+| 在连同类型 ID 写出的泛型类型上用 `[NinoFormerName]` | 所有封闭泛型类型写出同一个 ID，读取时分不清 | [NINO027](/zh/docs/v4/analyzers#nino027) |
 | 重命名键控成员却不加 `[NinoFormerName]` | 旧数据里这个成员的值当作未知的键跳过 | 无：参见[重命名键控成员](#renaming-keyed-members) |
 | 两个键控成员（或一个旧名称）哈希到同一个键 | 无法编译 | [NINO014](/zh/docs/v4/analyzers#nino014) |
 | 在按位置格式或版本容错的类型的成员上用 `[NinoFormerName]` | 不起作用：这两种格式不写名字 | [NINO024](/zh/docs/v4/analyzers#nino024)，带代码修复 |
@@ -224,6 +251,6 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="引用追踪" href="/zh/docs/v4/reference-tracking">按类型开启，保留共享引用和循环引用。</Card>
+  <Card title="不可信数据" href="/zh/docs/v4/security">每次读取都检查什么、可以收紧的限制，以及什么时候打开不可信模式。</Card>
   <Card title="持久化" href="/zh/docs/v4/advanced/persistence">能跨版本读取的文件、文件头、安全写入和追加日志。</Card>
 </Cards>

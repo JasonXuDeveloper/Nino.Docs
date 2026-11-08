@@ -4,6 +4,12 @@ description: "用 [NinoType] 标记类、结构体、记录和接口，决定哪
 icon: Braces
 ---
 
+<AnchorRedirect
+  map={{
+    'former-name': '/zh/docs/v4/evolving-data#former-name',
+  }}
+/>
+
 `class`、`struct`、`record`、`record struct` 或 `interface` 标上 `[NinoType]` 就能序列化。源生成器在编译期写好它的格式化器，不用注册。本页讲哪些成员会写、按什么顺序写，以及哪些选项会改变格式。
 
 ```csharp
@@ -96,7 +102,7 @@ public NinoTypeAttribute(
       default: 'true',
     },
     format: {
-      description: <>成员怎么写。<code>Positional</code>：成员依次写出，体积最小、速度最快。<code>VersionTolerant</code>：以后可以在最末端的派生类型里追加成员（参见<a href="/zh/docs/v4/evolving-data#version-tolerance">版本容错</a>）。<code>Keyed</code>：每个成员带键写出，以后可以调整顺序、删除和插入成员（参见<a href="/zh/docs/v4/evolving-data#keyed-members">键控成员</a>）。</>,
+      description: <>成员怎么写。<code>Positional</code>：成员依次写出，体积最小、速度最快。<code>VersionTolerant</code>：以后可以在最末端的派生类型里追加成员（参见<a href="/zh/docs/v4/evolving-data#version-tolerance">版本容错</a>）。<code>Keyed</code>：每个成员带键写出，以后可以调整顺序、删除和插入成员（参见<a href="/zh/docs/v4/evolving-data#keyed-members">键控成员</a>）。上线之前就要选定：以后再改，已经写出的数据就读不了了（参见<a href="/zh/docs/v4/evolving-data#choosing">数据演进</a>）。</>,
       type: 'NinoFormat',
       default: 'NinoFormat.Positional',
     },
@@ -191,7 +197,7 @@ public partial class Account
 
 <Callout type="warn">
 
-调整顺序、插入或删除成员（或者改索引），之前写出的数据就读不了了。请提前用[版本容错或键控成员](/zh/docs/v4/evolving-data)为以后的改动做准备。
+调整顺序、插入或删除成员（或者改索引），之前写出的数据就读不了了。请提前用[版本容错或键控成员](/zh/docs/v4/evolving-data)为以后的改动做准备。值声明为基类、接口或 `object` 时会连同类型 ID 写出；这样的类型改名或换命名空间，要加 `[NinoFormerName]`，见[重命名类型](/zh/docs/v4/evolving-data#former-name)。
 
 </Callout>
 
@@ -220,31 +226,9 @@ public class ChatMessage
 
 读写双方必须一致：按 UTF-8 写的数据，成员没标 `[NinoUtf8]` 的类型读不了。UTF-8 字符串同时写了字符数和字节数，所以读的时候能按最终长度分配字符串，再一遍把这些字节转码进去（参见[字符串](/zh/docs/v4/wire-format#strings)）。
 
-## 旧名称 [#former-name]
-
-成员、元素或变量的声明类型是非密封类、抽象类、接口或 `object` 时，值会连同它运行时类型的**类型 ID** 一起写出。类型 ID 是类型全名的 32 位哈希，读取时靠它还原成正确的类型。类型改名或换命名空间，ID 就变了，密封的子类型也一样（比如通过 `Message` 基类发送的各个消息类）。
-
-典型场景：你把协议类从 `MyApp.Net` 挪到了 `MyApp.Protocol`，而上个版本存下的文件或客户端用的还是旧 ID。加上 `[NinoFormerName]` 就能继续读旧数据：
-
-```csharp
-namespace MyApp.Protocol
-{
-    [NinoType]
-    [NinoFormerName("MyApp.Net.OrderPlaced")] // [!code highlight]
-    public class OrderPlaced
-    {
-        public long OrderId;
-    }
-}
-```
-
-旧名称用全名的**运行时形式**：`Namespace.Type`，嵌套类型和外层类型之间用 `+` 连接（`Namespace.Outer+Inner`），不带 `global::`。类型 ID 由旧名称算出，所以改名后的类型读写的仍是已有数据和旧版读取方用的那个 ID。`NinoTypeId.Of(typeof(T))` 返回某个类型写出的 ID。一个类型只能有一个 `[NinoFormerName]`，因为 ID 只能由一个名称算出；再加一个就报错 NINO026。
-
-在 `NinoFormat.Keyed` 类型的字段或属性上，`[NinoFormerName("OldName")]`（可以写多个）让按成员旧名称写出的数据仍能读取，参见[重命名键控成员](/zh/docs/v4/evolving-data#renaming-keyed-members)。按位置和版本容错的类型不写成员名，重命名成员时什么都不用做。
-
 ## 结构体 [#structs]
 
-`[NinoType]` 结构体不带任何头部。满足下面的条件时，它按**原始内存**写（单个值拷贝一次，数组和列表整块拷贝）：
+`[NinoType]` 结构体不带任何头部。满足下面的条件时，它按<Term id="raw" lang="zh">原始内存</Term>写（单个值拷贝一次，数组和列表整块拷贝）：
 
 - 是非托管类型，并使用顺序布局（默认就是顺序布局，设不设 `Pack` 和 `Size` 都行；`LayoutKind.Explicit` 和 `LayoutKind.Auto` 的结构体不按原始内存写）；
 - 格式不是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，也没有自定义成员格式化器；
@@ -316,7 +300,6 @@ public record struct Pair<TKey, TValue>(TKey Key, TValue Value);
 | 错误 | 后果 | 由谁发现 |
 | --- | --- | --- |
 | 按位置格式的类型，数据已经存下或发出后，又调整成员顺序、插入或删除成员 | 旧数据读进错误的成员，或者抛出 `NinoDataException` | 编译时发现不了：改用[版本容错或键控成员](/zh/docs/v4/evolving-data)，并在 CI 中检查[布局元数据](/zh/docs/v4/evolving-data#layout-metadata) |
-| 重命名或移动一个连同类型 ID 写出的类型 | 旧数据的类型 ID 认不出来：`NinoDataException` | 无：加上 [`[NinoFormerName]`](#former-name) |
 | 只读属性没有对应的构造函数参数 | 不参与序列化 | [NINO006](/zh/docs/v4/analyzers#nino006) |
 | 成员的类型 Nino 无法序列化（委托、`Task`） | 跳过这个成员 | [NINO007](/zh/docs/v4/analyzers#nino007) |
 | 在 .NET Standard、.NET Framework 或 Unity 上，类型有非公开成员却不是 `partial` | 生成的代码无法编译 | [NINO002](/zh/docs/v4/analyzers#nino002)，带代码修复 |

@@ -14,15 +14,15 @@ Nino 本来就是为读不可信来源的数据设计的：网络对端发来的
 - **不会读到输入之外**，也不会读出所在的区域或键控条目；
 - **按输入的大小分配内存**：分配任何内存之前，每个长度都按元素最少占的字节数，和剩余字节数比一次；集合在读到元素之前，最多预先分配剩余字节数的 16 倍（至少 16 KB），数量更大的，随元素真正读进来再扩容；
 - **栈深度有上限**：嵌套超过 128 层的对象推迟到较浅的层级再读；其他会嵌套的东西（靠构造函数创建或按值比较的类型、包含自己的结构体和集合）到 [`NinoSettings.MaxDepth`](#limits) 就停，途中还会检查线程栈（见[深层对象图](/zh/docs/v4/basic#deep-object-graphs)）；
-- **只创建你声明过的类型**：数据里只有类型 ID，没有类型名；多态值只能是声明类型已注册的子类型之一；回引用只能指向已经读过、类型和槽位相符的对象；
+- **只创建你声明过的类型**：数据里只有类型 ID，没有类型名；多态值只能是声明类型已注册的子类型之一；回引用只能指向已经读过、类型和槽位相符的对象（`System.Type` 有意不支持序列化，见[不支持的类型](/zh/docs/v4/types#not-supported)）；
 - **限制它填充的字典和 Set 里每个键的工作量**（[哈希洪泛](#hash-flooding)）；
 - **不让进程级缓存膨胀**：在 .NET 8 及以上（net8.0 和 net10.0 构建），`CultureInfo` 只有运行时自带这个区域性（包括 `zh-CN` 这类别名）、而且名称不带扩展或私有子标记（`-u-`、`-t-`、`-x-`）时才能读回；开了固定区域性（invariant）全球化模式时，只能读回固定区域性（`""`）。.NET 创建过的每个区域性都会保留到进程结束，不这样限制的话，数据里的名称能让堆无限增长。.NET Framework、Mono 和 Unity 只认它们自己表里的区域性；
-- **不在你的对象里留下脏内存**：读入已有的值时，读取新分配的数组要等填满之后才放进去，所以读到一半被拒绝的数据，不会在对象里留下未初始化的内存（[无效数据](/zh/docs/v4/basic#invalid-data)）；
+- **不在你的对象里留下脏内存**：读入已有的值时，读取新分配的数组要等填满之后才放进去，所以数据提前结束，或者读到一半被拒绝（`bool` 或存在字节不是 0 或 1，或者[不可信模式](#untrusted-mode)检查的值不合法），都不会在对象里留下未初始化的内存；
 - **只抛一种异常**：以上全部情况都抛 [`NinoDataException`](#ninodataexception)。
 
 ## NinoDataException [#ninodataexception]
 
-每项拒绝数据的检查都抛 `NinoDataException`（命名空间 `Nino.Core`），消息以 `Nino:` 开头。值在创建时被它自己的类型拒绝（格式错误的 `Uri`、未知的区域性或时区、超出范围的 `DateTimeOffset`、为 null 的字典键），也这样报告，原始异常放在 `InnerException` 里。在数据进来的地方捕获它：
+每项拒绝数据的检查都抛 `NinoDataException`（命名空间 `Nino.Core`），消息以 `Nino:` 开头（数据提前结束时是 `Nino: unexpected end of data.`）。值在创建时被它自己的类型拒绝（格式错误的 `Uri`、未知的区域性或时区、超出范围的 `DateTimeOffset`、为 null 的字典键），也这样报告，原始异常放在 `InnerException` 里。在数据进来的地方捕获它：
 
 ```csharp title="Receive.cs"
 using Nino.Core;
@@ -163,6 +163,6 @@ Nino 检查数据的结构，不管数据的含义，就像面对一个被用户
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="最佳实践" href="/zh/docs/v4/best-practices#untrusted-input">外部数据交给 Nino 之前要定的事。</Card>
-  <Card title="网络" href="/zh/docs/v4/advanced/networking#frame-the-stream">缓冲之前先限制帧的大小。</Card>
+  <Card title="最佳实践" href="/zh/docs/v4/best-practices">数据上线前的检查清单：格式、改名、不可信的输入和项目配置。</Card>
+  <Card title="设置" href="/zh/docs/v4/settings#limits">所有 NinoSettings 成员集中在一页：各项限制、不可信模式和对象池。</Card>
 </Cards>

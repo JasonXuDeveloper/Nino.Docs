@@ -1,6 +1,6 @@
 ---
 title: 最佳实践
-description: "处理消息时不分配内存，以及 Nino 数据发布之前要做的选择：每个类型的格式、密封类与共同基类、缓冲区与复用、持久保存的数据、不可信的输入，以及项目配置。"
+description: "Nino 数据上线前的检查清单：每个类型的格式、密封类与共同基类、怎么调用 Nino、改名与持久保存的数据、不可信的输入，以及项目配置。"
 icon: ListChecks
 ---
 
@@ -10,18 +10,11 @@ icon: ListChecks
     'reading-messages': '/zh/docs/v4/advanced/zero-allocation#reuse-what-you-deserialize',
     'message-types': '/zh/docs/v4/advanced/zero-allocation#message-loop',
     'zero-gc-example': '/zh/docs/v4/advanced/zero-allocation#message-loop',
+    'zero-gc-messages': '/zh/docs/v4/advanced/zero-allocation#message-loop',
   }}
 />
 
-Nino 用默认设置就能工作，下面的大多数建议都是可选的。第一节是热路径上最重要的做法：处理消息时不分配内存。其余几节是数据写出之后就很难再改的决定，以及让调用保持快速的习惯。每条都附有详细说明的链接。
-
-## 处理消息时不分配内存 [#zero-gc-messages]
-
-高频收发消息的循环（网络数据包、游戏 tick、队列消费者）在预热之后，每条消息都不应再分配内存。做到这一点靠三个习惯；具体写法见[零分配模式](/zh/docs/v4/advanced/zero-allocation)，[完整的消息循环](/zh/docs/v4/advanced/zero-allocation#message-loop)把它们串在一起。
-
-- **写进复用的缓冲区**：每个线程或连接一个 `NinoArrayBufferWriter`，或者直接用调用方的 `IBufferWriter<byte>`；只有 API 需要 `byte[]` 时才调用 `Serialize(value)`（[每个归属方复用一个缓冲区](/zh/docs/v4/advanced/zero-allocation#reuse-one-buffer)）。
-- **读进已有的对象**：直接从接收缓冲区反序列化，用 `ref` 读入上一个实例；消息要保留时从 `[NinoPooled]` 对象池取（[复用反序列化的结果](/zh/docs/v4/advanced/zero-allocation#reuse-what-you-deserialize)）。
-- **按复用来设计消息**：热数据用非托管结构体，数量会变的用 `List<T>`，不要 `object` 成员（[消息类型](/zh/docs/v4/advanced/zero-allocation#message-loop)）。
+数据上线前，对照这份清单过一遍。Nino 用默认设置就能工作，下面大多是可选的：有些决定一旦写出数据就很难再改，有些习惯能让调用既正确又快。每条都链接到讲透它的页面。
 
 ## 设计类型 [#designing-types]
 
@@ -37,27 +30,23 @@ Nino 用默认设置就能工作，下面的大多数建议都是可选的。第
 ## 调用 Nino [#calling-nino]
 
 - **用写入时的类型来读取。** 多态值按基类序列化（`Serialize<TBase>`），再用 `Deserialize<TBase>` 读取；[装箱 API](/zh/docs/v4/basic#the-boxed-api) 只用于运行时才以 `Type` 形式得知的类型。
-- **在热路径上复用缓冲区和实例**，做法见[处理消息时不分配内存](#zero-gc-messages)。
+- **在热路径上复用缓冲区和实例**：缓冲区写入器一直复用，反序列化时读入手上已有的实例。所有手段见高性能序列化的[一览表](/zh/docs/v4/advanced/high-performance#levers)。
 - **自己创建的 `Writer` 或 `Reader` 要收尾**：每条逻辑消息结束时调用 `Flush()` 和 `ReleaseReferences()`（`Reader` 调用 `ReleaseReferences()`）。参见[一个缓冲区中的多个值](/zh/docs/v4/basic#several-values-in-one-buffer)。
-- **在启动时配置 `NinoSettings`**，赶在任何线程第一次调用之前：读取这些值时不加同步。参见[设置](/zh/docs/v4/pooling#settings)。
-
-这些选择在速度上的影响，参见[高性能序列化](/zh/docs/v4/advanced/high-performance)。
+- **在启动时配置 `NinoSettings`**，赶在任何线程第一次调用之前：读取这些值时不加同步。参见[设置](/zh/docs/v4/settings#startup)。
 
 ## 保存与交换的数据 [#stored-data]
 
 - **在保存的数据前面加上你自己的文件头**：一个魔数和一个格式版本号，让以后的版本知道自己读的是什么。参见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)。
-- **改名时使用 `[NinoFormerName]`。** 用在类型上，它保留已有数据使用的类型 ID；用在键控类型的成员上，它继续读取旧名称。参见[曾用名](/zh/docs/v4/defining-types#former-name)。
+- **改名时使用 `[NinoFormerName]`。** 用在类型上，它保留已有数据使用的类型 ID；用在键控类型的成员上，它继续读取旧名称。参见[重命名](/zh/docs/v4/evolving-data#renaming)。
 - **在版本之间检查布局。** 在 CI 中把每次构建的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)与上一个版本比较，并在测试中保留旧的数据（[测试旧文件](/zh/docs/v4/advanced/persistence#test-old-files)）。
 - **谨慎修改字符串编码和集合的声明。** 增加或去掉 `[NinoUtf8]`，或者把可空元素的列表在数组、`List<T?>` 与接口之间改来改去，都会改变字节。参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)和[集合类型](/zh/docs/v4/types#collection-types)。
 - **两端分别升级时，只用容错的格式。** 客户端和服务器分开发布时，消息要用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`。参见[网络](/zh/docs/v4/advanced/networking)。
 
 ## 不可信的输入 [#untrusted-input]
 
-- Nino 本来就是为读取不可信数据而设计的：分配内存之前会检查每个长度是否超出剩余字节（一个集合在读到元素之前最多预先分配剩余字节数的 16 倍），数据嵌套再深，栈的用量也有上限；只创建派生自声明类型的类型。任何无效输入都抛出 `NinoDataException`（一种 `InvalidOperationException`），消息以 `Nino:` 开头：在边界处捕获它，把这份输入当作坏数据处理。参见[不可信数据](/zh/docs/v4/security)。
-- 读取外部数据时，在启动时、第一次调用 Nino 之前设置 `NinoSettings.Untrusted = true`：它会用进程级的密钥对常见键类型做哈希，检查原始结构体的值，并拒绝值后面多出的字节。合法消息用不到那么多元素的话，就调低 `NinoSettings.MaxCollectionLength`。参见[限制](/zh/docs/v4/security#limits)。
-- 在缓冲之前限制帧或请求的大小（参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）：一次读取分配多少内存，受它输入的大小约束。
-- 校验你的逻辑依赖的值，就像对待用户改过的存档：Nino 只检查数据的结构，不管它的含义。
-- 字节里不带 schema，如果另一个类型的布局恰好兼容，Nino 分辨不出数据其实是为它写的。请自己给数据加上版本。
+- **读外部来的数据，打开 `NinoSettings.Untrusted = true`**：在启动时、第一次调用 Nino 之前设置；在数据进来的地方捕获 `NinoDataException`。参见[不可信模式](/zh/docs/v4/security#untrusted-mode)。
+- **合法消息用不到那么大的限制，就调低**，比如 `NinoSettings.MaxCollectionLength`。参见[限制](/zh/docs/v4/security#limits)。
+- **帧或请求先限制大小再缓冲**，逻辑依赖的值自己校验：Nino 只检查数据的结构，不管它的含义。参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)。
 
 ## 项目配置 [#project-setup]
 
@@ -67,7 +56,9 @@ Nino 用默认设置就能工作，下面的大多数建议都是可选的。第
 
 ## 下一步 [#next-steps]
 
+到这里，类型能用了，不可信的输入也处理好了。想把每次调用的分配降到 0 B，接着读性能部分的第一页：高性能序列化。
+
 <Cards>
-  <Card title="高性能序列化" href="/zh/docs/v4/advanced/high-performance">怎样让 Nino 跑到最快，以及每条热路径的开销。</Card>
-  <Card title="常见问题" href="/zh/docs/v4/faq">简短解答，以及最常见报错的解决办法。</Card>
+  <Card title="高性能序列化" href="/zh/docs/v4/advanced/high-performance">提速的所有手段：复用缓冲区、复用反序列化、对象池、原始结构体，以及各自的开销。</Card>
+  <Card title="指南" href="/zh/docs/v4/advanced">在真实系统里用 Nino：网络、ASP.NET Core、消息队列、缓存、持久化、Unity 和其他语言。</Card>
 </Cards>

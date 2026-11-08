@@ -14,15 +14,15 @@ Whatever the bytes, a read:
 - **never reads past the input**, or past the region or keyed entry it is in;
 - **allocates in proportion to the input**: every length is checked against the bytes left, at the fewest bytes an element takes, before anything is allocated, and a collection allocates ahead of its elements at most 16 times the bytes left (16 KB at least); a larger count is grown into as elements are actually read;
 - **keeps its stack bounded**: objects nested more than 128 levels deep are read later from a shallow level, and everything else that nests (types built by their constructor or compared by value, structs and collections that hold themselves) stops at [`NinoSettings.MaxDepth`](#limits), with the thread's stack checked on the way (see [Deep Object Graphs](/en/docs/v4/basic#deep-object-graphs));
-- **creates only the types you declared**: the data holds type ids, never type names, a polymorphic value must be one of the declared type's registered subtypes, and a back reference must point to an object already read, of the slot's type;
+- **creates only the types you declared**: the data holds type ids, never type names, a polymorphic value must be one of the declared type's registered subtypes, and a back reference must point to an object already read, of the slot's type (`System.Type` is not serializable, on purpose: see [Not Supported](/en/docs/v4/types#not-supported));
 - **bounds the work per key** of the dictionaries and sets it fills ([hash flooding](#hash-flooding));
 - **grows no process-wide cache**: on .NET 8 and later (the net8.0 and net10.0 builds) a `CultureInfo` reads back only if the runtime ships it (aliases such as `zh-CN` included) and its name has no extension or private-use subtag (`-u-`, `-t-`, `-x-`); with invariant globalization only the invariant culture (`""`) reads back. .NET keeps every culture it creates for the life of the process, so names taken from the data could otherwise grow the heap without bound. .NET Framework, Mono and Unity know only the cultures of their own tables;
-- **leaves no stale memory in your objects**: reading into an existing value, an array the read allocated takes its place only once the read has filled it, so data rejected half way never leaves uninitialized memory in it ([Invalid Data](/en/docs/v4/basic#invalid-data));
+- **leaves no stale memory in your objects**: reading into an existing value, an array the read allocated takes its place only once the read has filled it, so data that ends early or is rejected half way (a `bool` or presence byte other than 0 or 1, a value [untrusted mode](#untrusted-mode) checks) never leaves uninitialized memory in it;
 - **throws one exception type**, [`NinoDataException`](#ninodataexception), for all of it.
 
 ## NinoDataException [#ninodataexception]
 
-Every check that rejects data throws `NinoDataException` (namespace `Nino.Core`), with a message that starts with `Nino:`. A value its own type rejects while it is created (a malformed `Uri`, an unknown culture or time zone, a `DateTimeOffset` out of range, a null dictionary key) is reported the same way, with the original exception as `InnerException`. Catch it where the data comes in:
+Every check that rejects data throws `NinoDataException` (namespace `Nino.Core`), with a message that starts with `Nino:` (data that ends early reads `Nino: unexpected end of data.`). A value its own type rejects while it is created (a malformed `Uri`, an unknown culture or time zone, a `DateTimeOffset` out of range, a null dictionary key) is reported the same way, with the original exception as `InnerException`. Catch it where the data comes in:
 
 ```csharp title="Receive.cs"
 using Nino.Core;
@@ -163,6 +163,6 @@ The [TypeScript, Go and Rust readers](/en/docs/v4/advanced/codegen#untrusted-dat
 ## Next Steps [#next-steps]
 
 <Cards>
-  <Card title="Best Practices" href="/en/docs/v4/best-practices#untrusted-input">The choices to make before data from outside reaches Nino.</Card>
-  <Card title="Networking" href="/en/docs/v4/advanced/networking#frame-the-stream">Cap a frame before you buffer it.</Card>
+  <Card title="Best Practices" href="/en/docs/v4/best-practices">The checklist before your data ships: formats, renames, untrusted input and project setup.</Card>
+  <Card title="Settings" href="/en/docs/v4/settings#limits">Every NinoSettings member in one place: the limits, untrusted mode and the pools.</Card>
 </Cards>

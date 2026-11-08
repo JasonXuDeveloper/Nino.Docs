@@ -1,6 +1,6 @@
 ---
 title: Best Practices
-description: "Handling messages without allocating, then the choices to make before Nino data ships: the format of each type, sealed classes and common bases, buffers and reuse, stored data, untrusted input and project setup."
+description: "The checklist before Nino data ships: the format of each type, sealed classes and common bases, how to call Nino, renames and stored data, untrusted input and project setup."
 icon: ListChecks
 ---
 
@@ -10,18 +10,11 @@ icon: ListChecks
     'reading-messages': '/en/docs/v4/advanced/zero-allocation#reuse-what-you-deserialize',
     'message-types': '/en/docs/v4/advanced/zero-allocation#message-loop',
     'zero-gc-example': '/en/docs/v4/advanced/zero-allocation#message-loop',
+    'zero-gc-messages': '/en/docs/v4/advanced/zero-allocation#message-loop',
   }}
 />
 
-Nino works with its defaults, and most of what follows is optional. The first section is the practice that matters most on a hot path: handling messages without allocating. The rest are the decisions that are hard to change once data has been written, and the habits that keep calls fast. Each one links to the page that explains it.
-
-## Handle Messages Without Allocating [#zero-gc-messages]
-
-A loop that sends and receives messages at a high rate (network packets, game ticks, a queue consumer) should allocate nothing per message once warmed up. Three habits get it there; [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation) has the recipes and [a complete message loop](/en/docs/v4/advanced/zero-allocation#message-loop) puts them together.
-
-- **Write into a reused buffer**: one `NinoArrayBufferWriter` per thread or connection, or the caller's `IBufferWriter<byte>`; call `Serialize(value)` only when an API needs a `byte[]` ([Reuse One Buffer per Owner](/en/docs/v4/advanced/zero-allocation#reuse-one-buffer)).
-- **Read into what you have**: deserialize from the receive buffer itself, with `ref` into the previous instance, or from `[NinoPooled]` pools when messages are kept ([Reuse What You Deserialize](/en/docs/v4/advanced/zero-allocation#reuse-what-you-deserialize)).
-- **Shape messages for reuse**: unmanaged structs for hot data, `List<T>` for counts that vary, no `object` members ([the message types](/en/docs/v4/advanced/zero-allocation#message-loop)).
+The checklist before your data ships. Nino works with its defaults, and most of what follows is optional: these are the decisions that are hard to change once data has been written, and the habits that keep calls correct and fast. Each one links to the page that explains it.
 
 ## Designing Types [#designing-types]
 
@@ -37,27 +30,23 @@ A loop that sends and receives messages at a high rate (network packets, game ti
 ## Calling Nino [#calling-nino]
 
 - **Read with the type you wrote with.** Serialize a polymorphic value as its base (`Serialize<TBase>`) and read it with `Deserialize<TBase>`; use the [boxed API](/en/docs/v4/basic#the-boxed-api) only for a type known only as a `Type` at run time.
-- **Reuse buffers and instances on hot paths**, as in [Handle Messages Without Allocating](#zero-gc-messages).
+- **Reuse buffers and instances on hot paths**: a reused buffer writer, and deserializing into the instance you already have. See [the levers](/en/docs/v4/advanced/high-performance#levers) of High-Performance Serialization.
 - **End a `Writer` or `Reader` you create yourself** with `Flush()` and `ReleaseReferences()` (a reader with `ReleaseReferences()`), once per logical message. See [Several Values in One Buffer](/en/docs/v4/basic#several-values-in-one-buffer).
-- **Configure `NinoSettings` at startup**, before the first call on any thread: its values are read without synchronization. See [Settings](/en/docs/v4/pooling#settings).
-
-For the speed side of these choices, see [High-Performance Serialization](/en/docs/v4/advanced/high-performance).
+- **Configure `NinoSettings` at startup**, before the first call on any thread: its values are read without synchronization. See [Settings](/en/docs/v4/settings#startup).
 
 ## Stored and Exchanged Data [#stored-data]
 
 - **Put your own header in front of stored data**: a magic number and a format version, so a later build can tell what it reads. See [Add a File Header](/en/docs/v4/advanced/persistence#add-a-file-header).
-- **Rename with `[NinoFormerName]`.** On a type, it keeps the type id that existing data uses; on a member of a keyed type, it keeps reading the old name. See [Former Name](/en/docs/v4/defining-types#former-name).
+- **Rename with `[NinoFormerName]`.** On a type, it keeps the type id that existing data uses; on a member of a keyed type, it keeps reading the old name. See [Renaming](/en/docs/v4/evolving-data#renaming).
 - **Check layouts between releases.** Compare the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) of each build with the last release's in CI, and keep old payloads in your tests ([Test Old Files](/en/docs/v4/advanced/persistence#test-old-files)).
 - **Change string encodings and collection declarations deliberately.** Adding or removing `[NinoUtf8]`, or changing a nullable list between an array or `List<T?>` and an interface, changes the bytes. See [String Encoding](/en/docs/v4/defining-types#string-encoding) and [Collection Types](/en/docs/v4/types#collection-types).
 - **Upgrade peers at different times only with a tolerant format.** Clients and servers that roll out separately need `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` messages. See [Networking](/en/docs/v4/advanced/networking).
 
 ## Untrusted Input [#untrusted-input]
 
-- Nino is built to read untrusted data: it checks every length against the bytes left before allocating (a collection allocates at most 16 times the bytes left ahead of its elements), keeps its stack bounded however deep the data is nested, and only creates types that derive from the declared type. Every invalid input throws a `NinoDataException` (an `InvalidOperationException`) whose message starts with `Nino:`: catch it at the boundary and treat the input as bad. See [Untrusted Data](/en/docs/v4/security).
-- For data from outside, set `NinoSettings.Untrusted = true` at startup, before the first Nino call: it hashes common key types with a per-process secret, checks the values of raw structs and rejects bytes after the value. Lower `NinoSettings.MaxCollectionLength` if no valid message holds that many elements. See [Limits](/en/docs/v4/security#limits).
-- Cap the size of a frame or request before you buffer it (see [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream)): what a read allocates is bounded relative to its input.
-- Validate the values your logic depends on, as with a save file a user has edited: Nino checks the structure of the data, not what it means.
-- The bytes carry no schema, so Nino cannot tell data written for another type with a compatible layout. Version your payloads.
+- **Read data from outside with `NinoSettings.Untrusted = true`**, set at startup before the first Nino call, and catch `NinoDataException` where the data comes in. See [Untrusted Mode](/en/docs/v4/security#untrusted-mode).
+- **Lower the limits no valid message reaches**, such as `NinoSettings.MaxCollectionLength`. See [Limits](/en/docs/v4/security#limits).
+- **Cap a frame or request before you buffer it**, and validate the values your logic depends on: Nino checks the structure of the data, not what it means. See [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream).
 
 ## Project Setup [#project-setup]
 
@@ -67,7 +56,9 @@ For the speed side of these choices, see [High-Performance Serialization](/en/do
 
 ## Next Steps
 
+Your types work and untrusted input is handled. To take each call down to 0 B, continue with High-Performance Serialization, the start of the Performance track.
+
 <Cards>
-  <Card title="High-Performance Serialization" href="/en/docs/v4/advanced/high-performance">How to get the most speed out of Nino, and what each hot path costs.</Card>
-  <Card title="FAQ" href="/en/docs/v4/faq">Short answers, and fixes for the errors people run into most.</Card>
+  <Card title="High-Performance Serialization" href="/en/docs/v4/advanced/high-performance">Every lever for speed: reused buffers, reuse deserialization, pools, raw structs, and what each costs.</Card>
+  <Card title="Guides" href="/en/docs/v4/advanced">Nino in real systems: networking, ASP.NET Core, message queues, caching, persistence, Unity and other languages.</Card>
 </Cards>

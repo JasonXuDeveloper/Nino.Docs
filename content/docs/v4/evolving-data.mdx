@@ -4,7 +4,7 @@ description: "Positional, version-tolerant and keyed formats: what each one lets
 icon: GitBranch
 ---
 
-Data outlives code. A saved document, a cached asset or a message from an older client is read by a newer build of your types, and sometimes the other way round. Nino gives every type one of three formats, the values of the `NinoFormat` enum, chosen with `[NinoType(format: ...)]`:
+Data outlives code. A saved document, a cached asset or a message from an older client is read by a newer build of your types, and sometimes the other way round. Decide each type's format before its data leaves the process: the default, positional, cannot change shape once data is written, and changing a type's format later makes its data unreadable too. Nino gives every type one of three formats, the values of the `NinoFormat` enum, chosen with `[NinoType(format: ...)]`:
 
 <Matrix columns={[<code key="p">Positional</code>, <code key="v">VersionTolerant</code>, <code key="k">Keyed</code>]} rows={[
   { label: 'Append members to a type without subclasses', cells: ['no', 'yes', 'yes'] },
@@ -17,11 +17,9 @@ Data outlives code. A saved document, a cached asset or a message from an older 
   { label: 'Speed', cells: ['fastest', 'close to positional: one length per object', 'the most work: a key and length per member, a key check per member when reading'] },
 ]} />
 
-`Positional` is the default; the others are `[NinoType(format: NinoFormat.VersionTolerant)]` and `[NinoType(format: NinoFormat.Keyed)]`.
+`Positional` is the default; the others are `[NinoType(format: NinoFormat.VersionTolerant)]` and `[NinoType(format: NinoFormat.Keyed)]`. [Choosing](#choosing) picks one in three questions.
 
-The format itself is part of the data: changing a type's `format` makes previously written data unreadable. Choose before you store anything.
-
-In every format, **changing a member's type** is not tolerated. **Renaming a member** is free in positional and version-tolerant types, which write no names. In keyed types the key is the hash of the name, so mark a renamed member with its old name ([Renaming Keyed Members](#renaming-keyed-members)); without it, the rename reads as "one member removed, another added". Rename *types* with [`[NinoFormerName]`](/en/docs/v4/defining-types#former-name) on the type.
+In every format, **changing a member's type** is not tolerated. **Renaming a member** is free in positional and version-tolerant types, which write no names; a keyed member and a type written with its type id keep their old name with `[NinoFormerName]` ([Renaming](#renaming)).
 
 ## Positional
 
@@ -123,7 +121,34 @@ Each member is written with a **key** (the 32-bit FNV-1a hash of its name, compu
 
 This is the format for data kept for a long time and edited by many releases: configuration, documents, settings files, content authored in tools.
 
-### Renaming Keyed Members
+## Renaming [#renaming]
+
+Positional and version-tolerant types write no member names, so renaming one of their members needs nothing. Two renames change what is written, and `[NinoFormerName]` keeps the old data readable: a type whose values carry a type id, and a member of a keyed type.
+
+### Renaming Types [#former-name]
+
+A value stored in a member, element or variable declared as a non-sealed class, an abstract class, an interface or `object` is written with the <Term id="type-id">type id</Term> of its runtime type: a 32-bit hash of that type's full name, so it can be read back as the right type ([Polymorphism](/en/docs/v4/polymorphism#how-a-polymorphic-value-is-written)). Renaming the type or moving it to another namespace changes the id, for sealed subtypes too (such as the message classes sent through a `Message` base).
+
+A typical case: you move your protocol classes from `MyApp.Net` to `MyApp.Protocol`, while stored files or clients from the previous release still use the old ids. Keep reading old data with `[NinoFormerName]`:
+
+```csharp
+namespace MyApp.Protocol
+{
+    [NinoType]
+    [NinoFormerName("MyApp.Net.OrderPlaced")] // [!code highlight]
+    public class OrderPlaced
+    {
+        public long OrderId;
+    }
+}
+```
+
+The former name is the **runtime form** of the full name: `Namespace.Type`, `+` between a nested type and its container (`Namespace.Outer+Inner`), no `global::`. The type id is computed from the former name, so the renamed type keeps writing and reading the id that existing data and older readers use. `NinoTypeId.Of(typeof(T))` returns the id a type writes.
+
+- A type takes a single `[NinoFormerName]`, since its id comes from one name; a second one is error NINO026.
+- On a generic type the former name replaces the whole name, type arguments included, so every instantiation (`Box<int>`, `Box<string>`) gets the same id: two of them written with their type id cannot be told apart (warning NINO027). Put former names on non-generic types only.
+
+### Renaming Keyed Members [#renaming-keyed-members]
 
 Put `[NinoFormerName("OldName")]` on the renamed field or property, once per earlier name. Reading accepts the current name and every former name; writing always uses the current name.
 
@@ -216,6 +241,8 @@ The options can be mixed: a keyed settings file can hold positional raw structs 
 | --- | --- | --- |
 | Appending a member to a version-tolerant base class that has `[NinoType]` subclasses | The subclasses' data reads wrong values, or throws `NinoDataException` | nothing: see [Appending to a Base Class](#appending-to-a-base-class) |
 | Changing a member's type, or a type's format, once data exists | Old data is misread or does not read | nothing: the [layout metadata](#layout-metadata) shows the change |
+| Renaming or moving a type that is written with its type id | Old data's type id is unknown: `NinoDataException` | nothing: add [`[NinoFormerName]`](#former-name) |
+| `[NinoFormerName]` on a generic type written with its type id | Every instantiation writes the same id, and reads cannot tell them apart | [NINO027](/en/docs/v4/analyzers#nino027) |
 | Renaming a keyed member without `[NinoFormerName]` | Old data's value for it is skipped as an unknown key | nothing: see [Renaming Keyed Members](#renaming-keyed-members) |
 | Two keyed members (or a former name) that hash to the same key | The build fails | [NINO014](/en/docs/v4/analyzers#nino014) |
 | `[NinoFormerName]` on a member of a positional or version-tolerant type | No effect: those formats write no names | [NINO024](/en/docs/v4/analyzers#nino024), with a code fix |
@@ -224,6 +251,6 @@ The options can be mixed: a keyed settings file can hold positional raw structs 
 ## Next Steps
 
 <Cards>
-  <Card title="Reference Tracking" href="/en/docs/v4/reference-tracking">Shared references and cycles, opted in per type.</Card>
+  <Card title="Untrusted Data" href="/en/docs/v4/security">What every read checks, the limits to tighten, and when to turn on untrusted mode.</Card>
   <Card title="Persistence" href="/en/docs/v4/advanced/persistence">Files that survive updates, file headers, safe writes and append-only logs.</Card>
 </Cards>
