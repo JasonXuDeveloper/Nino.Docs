@@ -188,6 +188,37 @@ function scan(
   return out;
 }
 
+/** Each line of `lines` that starts inside a string (a multi-line verbatim or raw string). */
+function linesInString(lines: string[]): boolean[] {
+  const text = lines.join('\n');
+  const code = new Set<number>();
+  scan(text, (_, index) => code.add(index));
+  const result = [false];
+  for (let i = 0; i < text.length; i++)
+    if (text[i] === '\n') result.push(!code.has(i));
+  return result;
+}
+
+/** `text` with the inside of its strings blanked, so brackets in them are not counted. */
+function blankStrings(text: string): string {
+  const code = new Set<number>();
+  scan(text, (_, index) => code.add(index));
+  let out = '';
+  for (let i = 0; i < text.length; i++)
+    out += code.has(i) || text[i] === '\n' ? text[i] : ' ';
+  return out;
+}
+
+/** The brackets `text` leaves open, outside its strings and comments. */
+function depthOf(text: string): number {
+  let depth = 0;
+  scan(text, (ch) => {
+    if (ch === '{' || ch === '(' || ch === '[') depth++;
+    else if (ch === '}' || ch === ')' || ch === ']') depth--;
+  });
+  return depth;
+}
+
 /** The code of a line without its comments and trailing spaces. */
 function codeOnly(line: string): string {
   return scan(line).trimEnd();
@@ -214,6 +245,12 @@ function headOf(
   for (let i = start; i <= end; i++) {
     let text = codeOnly(lines[i]).trim();
     if (text === '') continue;
+    // an attribute whose argument spans lines (a verbatim string): read up to its closing bracket
+    if (text.startsWith('[')) {
+      let joined = lines[i];
+      while (i < end && depthOf(joined) > 0) joined += `\n${lines[++i]}`;
+      text = blankStrings(joined).replace(/\s+/g, ' ').trim();
+    }
     // attributes before the declaration, alone on their line or before it
     while (text.startsWith('[')) {
       let depth = 0;
@@ -449,8 +486,10 @@ function generate(page: string, name: string, fences: Fence[]): Output[] {
     from: number,
     to: number,
   ) => {
+    const inString = linesInString(lines);
     for (let i = from; i <= to; i++) {
-      target.push(`#line ${fence.line + i} "${fence.file}"`);
+      // a line that continues a multi-line string takes no #line: it would become part of the string
+      if (!inString[i]) target.push(`#line ${fence.line + i} "${fence.file}"`);
       target.push(lines[i]);
     }
     target.push('#line default');
