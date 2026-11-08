@@ -147,7 +147,8 @@ public sealed partial class Particle
 
 Measured by Nino's CI (run 41280617045, `tests/Nino.RuntimeTests`): .NET 10 on Linux x64 and Arm64, Windows x86 and Linux Arm32 (under qemu), .NET Framework 4.8 64-bit and 32-bit, Mono 6.14 on Linux x64 and Arm64. The CoreCLR x64 column is the canonical layout, with two exceptions that do not depend on the runtime: `DateTimeOffset` as .NET 10 lays it out, and `nint`/`nuint` as 8 bytes. The last column names only the runtimes whose layout differs from CoreCLR x64, in **bold** (size, then offsets in field order), or that do not have the type; every runtime it does not name has CoreCLR x64's size and field offsets, and — means every runtime does. "32-bit CoreCLR" means x86 and Arm32, "Mono" Mono on x64 and Arm64, ".NET Framework" its 64-bit and 32-bit runs. Field names differ between runtimes; offsets are what count. Every runtime in these tables writes and reads CoreCLR x64's bytes for each type, checked in the same CI run.
 
-### Each Type: Size, Then the Offset of Each Field [#each-type]
+<Accordions type="multiple">
+<Accordion title="Each type: size, then the offset of each field" id="each-type" value="each-type">
 
 | Type | CoreCLR x64 | Where it differs |
 | --- | --- | --- |
@@ -220,7 +221,8 @@ Measured by Nino's CI (run 41280617045, `tests/Nino.RuntimeTests`): .NET 10 on L
 | `Vector256<long>` | 32: _lower 0, _upper 16 | not in .NET Framework or Mono |
 | `Vector512<long>` | 64: _lower 0, _upper 32 | not in .NET Framework or Mono |
 
-### Inside `Around<T> { byte A; T B; int C; }`: Size, Then the Offsets of A, B and C [#around]
+</Accordion>
+<Accordion title="Inside Around<T> { byte A; T B; int C; }: size, then the offsets of A, B and C" id="around" value="around">
 
 | Type | CoreCLR x64 | Where it differs |
 | --- | --- | --- |
@@ -293,7 +295,8 @@ Measured by Nino's CI (run 41280617045, `tests/Nino.RuntimeTests`): .NET 10 on L
 | `Vector256<long>` | 96: 0, 32, 64 | **64: 0, 16, 48** on CoreCLR Arm64; **48: 0, 8, 40** on CoreCLR Arm32; not in .NET Framework or Mono |
 | `Vector512<long>` | 192: 0, 64, 128 | **96: 0, 16, 80** on CoreCLR Arm64; **80: 0, 8, 72** on CoreCLR Arm32; not in .NET Framework or Mono |
 
-### Unity: Mono and IL2CPP [#unity]
+</Accordion>
+<Accordion title="Unity: Mono and IL2CPP" id="unity" value="unity">
 
 Unity's tests log the layouts of a few types (CI: Unity 2022.3 and 6000.3, the editor's Mono and a Linux x64 IL2CPP player, the same on all four), and check CoreCLR's bytes for every case above in the editor and the IL2CPP player. `Vector<T>` is 16 bytes there, one reason it is [not serializable](#vector-t). `=` is the same size and field offsets as CoreCLR x64; a **bold** cell differs.
 
@@ -306,10 +309,12 @@ Unity's tests log the layouts of a few types (CI: Unity 2022.3 and 6000.3, the e
 | `DateTimeOffset` | 16: minutes 0 (`int`), UTC 8 | **16: UTC 0, minutes 8 (`short`)** |
 | `Around<(int,long)>` | 32 | = |
 
-## Related [#related]
+</Accordion>
+</Accordions>
+
+## Next Steps [#next-steps]
 
 <Cards>
-  <Card title="Platforms" href="/en/docs/v4/platforms" description="Where Nino runs and why every target writes the same bytes." />
-  <Card title="Wire Format" href="/en/docs/v4/wire-format#raw-values" description="Raw values and the canonical layout, byte by byte." />
-  <Card title="Nino vs MemoryPack" href="/en/docs/v4/vs-memorypack" description="Copies of memory against one defined layout." />
+  <Card title="SIMD" href="/en/docs/v4/simd">The vector paths on each platform, and the kernels that copy arrays of raw structs on Unity, Mono and .NET Framework.</Card>
+  <Card title="Performance Internals" href="/en/docs/v4/performance">How Nino gets its speed, and how to keep your code on the fast paths.</Card>
 </Cards>
