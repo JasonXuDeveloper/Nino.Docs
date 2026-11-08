@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { Segmented } from '@/components/showcase';
 import type { Locale } from '@/lib/i18n';
+import { release } from '@/lib/release';
 
 type Platform = 'dotnet' | 'unity' | 'go' | 'rust' | 'typescript';
 
@@ -37,10 +38,14 @@ function panels(lang: Locale): Panel[] {
     {
       value: 'dotnet',
       label: '.NET',
-      commands: ['dotnet add package Nino --prerelease'],
+      commands: [
+        release.prerelease
+          ? 'dotnet add package Nino --prerelease'
+          : 'dotnet add package Nino',
+      ],
       note: zh
-        ? '任何 .NET 项目，包括 Godot 4。v4 还是预发行版，必须加 --prerelease。'
-        : 'Any .NET project, Godot 4 included. v4 is a prerelease, so --prerelease is required.',
+        ? `任何 .NET 项目，包括 Godot 4。${release.prerelease ? 'v4 还是预发行版，必须加 --prerelease。' : ''}`
+        : `Any .NET project, Godot 4 included.${release.prerelease ? ' v4 is a prerelease, so --prerelease is required.' : ''}`,
       href: 'start',
       link: zh ? '快速开始' : 'Quick Start',
     },
@@ -57,7 +62,9 @@ function panels(lang: Locale): Panel[] {
     {
       value: 'go',
       label: 'Go',
-      commands: ['go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4'],
+      commands: [
+        `go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4@v${release.version}`,
+      ],
       note: generated[lang],
       href: 'advanced/go',
       link: codegen,
@@ -66,7 +73,7 @@ function panels(lang: Locale): Panel[] {
       value: 'rust',
       label: 'Rust',
       commands: [
-        'cargo add nino-serialization --features indexmap',
+        `cargo add nino-serialization@${release.version} --features indexmap`,
         'cargo add indexmap',
       ],
       note: generated[lang],
@@ -76,7 +83,7 @@ function panels(lang: Locale): Panel[] {
     {
       value: 'typescript',
       label: 'TypeScript',
-      commands: ['npm install nino-serialization'],
+      commands: [`npm install nino-serialization@${release.version}`],
       note: zh
         ? `${generated.zh}生成的代码默认引用 nino-gen 在同目录写出的 nino.ts；设置 Runtime="nino-serialization" 后改为导入这个包。`
         : `${generated.en} Generated code uses the nino.ts written next to it, or this package with Runtime="nino-serialization".`,

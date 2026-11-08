@@ -13,6 +13,7 @@ import {
 } from 'fumadocs-mdx/config';
 import lastModified from 'fumadocs-mdx/plugins/last-modified';
 import { rehypeMermaid, remarkMermaidSource } from './src/lib/mermaid';
+import { remarkReleaseVersion } from './src/lib/remark-release';
 
 // "Last updated" dates come from `git log`, but only with the full history:
 // in a shallow clone the oldest commit looks like it added every file, so
@@ -77,6 +78,10 @@ export default defineConfig({
     rehypeCodeOptions: { ...rehypeCodeDefaultOptions, addLanguageClass: true },
     remarkPlugins: [
       [remarkImage, { external: false, publicDir: 'public' }],
+      // %NINO_VERSION% and %NINO_OPENUPM_VERSION% -> the newest release
+      // (scripts/sync-release.ts), in code blocks and text; before Fumadocs'
+      // remarkStructure, so the search index has the version too.
+      remarkReleaseVersion,
       // ```mermaid fences -> <Mermaid chart="...">fence</Mermaid>: the
       // attribute is the Markdown copy's source, rehypeMermaid below
       // replaces the fence inside with the SVG.
