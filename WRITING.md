@@ -123,7 +123,9 @@ Overview, FAQ and reference pages answer the questions their readers search for,
   Details" section after First Serialization with nested lists, two callouts in a row and a version table. Round
   130 folded both into one tabbed section above First Serialization, kept `#net-project`, `#unity-project`,
   `#godot-project`, `#openupm-versions` and `#hot-update-code` as tab and accordion ids, and sent
-  `#installation-details` to `#installation` with `<AnchorRedirect>`.
+  `#installation-details` to `#installation` with `<AnchorRedirect>`. A mapping that follows a rule is stated as the rule with the
+  current version as its example, never as a table that gains a row every release (the owner: "不用列这么多吧" about
+  the rc.N → preview.(200 + N) table, removed in round 130).
 - **Byte figures**: `<Bytes rows={[{ title, fields: [{ hex: '07', kind: 'header', label: 'header 7' }, ...] }]} />`
   (`src/components/bytes.tsx`). Kinds: `header` (header, presence byte, reference header), `length` (lengths and
   counts), `id` (type ids and keys), `value`, `pad` (hatched), `changed` (the bytes a comparison is about). Stack rows
