@@ -697,9 +697,46 @@ pub struct Vec2 { pub x: f32, pub y: f32 }
 | `deferrable = false` | .NET 从不推迟的类型（记录、通过构造函数创建的类型）。未给出时取自 `layout`。 |
 | `layout = "…"` | 类型发布的[布局](/zh/docs/v4/evolving-data#layout-metadata)，在编译时核对：成员名字和顺序、键、旧键、`[NinoUtf8]`、原始值的大小和偏移。格式、种类、类型 ID 和可推迟性未给出时取自它。 |
 
-手写 impl 时，`nino::sealed_read!()` 和 `nino::sealed_write!()` 写出密封类 `NinoRead` 与 `NinoWrite` impl 中的方法，`nino::raw_read!()` 和 `nino::raw_write!()` 根据原始结构体的 `nino::Raw` impl（大小、解码和编码）写出它的这两个 impl，和生成的代码、derive 一样；`NinoWrite::PREFETCH_BYTES`（默认 0）估计写一个值时经由它的指针读取的字节数，长列表据此边写边预取。
-
 字段属性有 `index`、`name`（.NET 中的名字；默认是字段名的 PascalCase 形式）、`key`、`former`、`utf8` 和 `skip`。枚举是多态的声明类型，每个具体类型一个变体；其他类型 ID 都会被拒绝。二进制格式无法表达的内容（`usize`、Rust 的 `char`、引用、冲突的键、不匹配的 `layout`）都是指明字段的编译错误。
+
+### 手写 impl [#rust-hand-written]
+
+优先用 derive。要手写类型的 impl（不想编译过程宏）时，crate 里的宏写出和生成代码、derive 相同的方法，写出和读入的字节也相同：
+
+| 宏 | 写出 | 放在 |
+| --- | --- | --- |
+| `nino::raw_read!()`、`nino::raw_write!()` | 原始结构体的读和写，取自它的 `nino::Raw` impl（`SIZE`、`ALIGN`、`decode_raw`、`encode_raw`）：每个值一个块，填充清零 | `impl NinoRead`、`impl NinoWrite` |
+| `nino::sealed_read!()`、`nino::sealed_write!()` | 密封类的读和写（先存在字节，再是它的 `NinoReadBody` / `NinoWriteBody`） | `impl NinoRead`、`impl NinoWrite` |
+| `nino::type_consts!(id, name, layout)` | 常量 `NINO_TYPE_ID`、`NINO_TYPE_NAME` 和 `NINO_LAYOUT`；泛型类型没有自己的 ID，写 `type_consts!(name, layout)` | 类型自己的 `impl` |
+
+```rust
+use nino::{NinoRead, NinoWrite, Raw};
+
+/// C#：`struct Cell { int Row; int Column; }`，8 字节。
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct Cell { pub row: i32, pub column: i32 }
+
+impl Raw for Cell {
+    const SIZE: usize = 8;
+    const ALIGN: usize = 4;
+
+    fn decode_raw(b: &[u8]) -> nino::Result<Self> {
+        Ok(Self { row: i32::decode_raw(b)?, column: i32::decode_raw(b.get(4..).unwrap_or_default())? })
+    }
+
+    fn encode_raw(&self, out: &mut [u8]) {
+        self.row.encode_raw(out);
+        if let Some(o) = out.get_mut(4..) {
+            self.column.encode_raw(o);
+        }
+    }
+}
+
+impl NinoRead for Cell { nino::raw_read!(); }   // 每个值读一个检查过边界的 8 字节块
+impl NinoWrite for Cell { nino::raw_write!(); } // 写一个清零的块，填充保持为 0
+```
+
+`NinoWrite::PREFETCH_BYTES`（默认 0）估计写一个值时经由它的指针读取的字节数，长列表据此边写边预取。手写的 impl 不对照任何布局检查：要在编译时发现不一致，用带 `layout = "…"` 的 [derive](#rust-derive)。
 
 ### 功能 [#rust-features]
 

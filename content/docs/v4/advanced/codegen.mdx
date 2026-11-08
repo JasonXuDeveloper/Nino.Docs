@@ -697,9 +697,46 @@ pub struct Vec2 { pub x: f32, pub y: f32 }
 | `deferrable = false` | A type .NET never defers (a record, a type built through its constructor). Taken from `layout` when not given. |
 | `layout = "…"` | The type's published [layout](/en/docs/v4/evolving-data#layout-metadata), checked at compile time: member names and order, keys, former keys, `[NinoUtf8]`, raw sizes and offsets. Format, kind, type id and deferrability come from it when not given. |
 
-For a type whose impls you write by hand, `nino::sealed_read!()` and `nino::sealed_write!()` write the methods of a sealed class's `NinoRead` and `NinoWrite` impls, and `nino::raw_read!()` and `nino::raw_write!()` those of a raw struct from its `nino::Raw` impl (its size, decode and encode), as generated code and the derive do, and `NinoWrite::PREFETCH_BYTES` (0 by default) estimates the bytes a write reads through the value's pointers, so that long lists of it are written prefetching ahead.
-
 Field attributes are `index`, `name` (the .NET name; the default is the field's name in PascalCase), `key`, `former`, `utf8` and `skip`. An enum is a polymorphic declared type, one variant per concrete type; any other type id is rejected. Anything the wire format cannot express (`usize`, a Rust `char`, references, colliding keys, a `layout` that does not match) is a compile error naming the field.
+
+### Hand-Written Impls [#rust-hand-written]
+
+Prefer the derive. To write a type's impls by hand (no proc-macro build), the crate's macros write the same methods generated code and the derive write, so the type reads and writes the same bytes:
+
+| Macro | Writes | Put it in |
+| --- | --- | --- |
+| `nino::raw_read!()`, `nino::raw_write!()` | A raw struct's reads and writes from its `nino::Raw` impl (`SIZE`, `ALIGN`, `decode_raw`, `encode_raw`): one block per value, padding zeroed | `impl NinoRead`, `impl NinoWrite` |
+| `nino::sealed_read!()`, `nino::sealed_write!()` | A sealed class's reads and writes (the presence byte, then its `NinoReadBody` / `NinoWriteBody`) | `impl NinoRead`, `impl NinoWrite` |
+| `nino::type_consts!(id, name, layout)` | The `NINO_TYPE_ID`, `NINO_TYPE_NAME` and `NINO_LAYOUT` constants; `type_consts!(name, layout)` for a generic type, which has no id of its own | the type's own `impl` |
+
+```rust
+use nino::{NinoRead, NinoWrite, Raw};
+
+/// C#: `struct Cell { int Row; int Column; }`, 8 bytes.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct Cell { pub row: i32, pub column: i32 }
+
+impl Raw for Cell {
+    const SIZE: usize = 8;
+    const ALIGN: usize = 4;
+
+    fn decode_raw(b: &[u8]) -> nino::Result<Self> {
+        Ok(Self { row: i32::decode_raw(b)?, column: i32::decode_raw(b.get(4..).unwrap_or_default())? })
+    }
+
+    fn encode_raw(&self, out: &mut [u8]) {
+        self.row.encode_raw(out);
+        if let Some(o) = out.get_mut(4..) {
+            self.column.encode_raw(o);
+        }
+    }
+}
+
+impl NinoRead for Cell { nino::raw_read!(); }   // one bounds-checked 8-byte block per value
+impl NinoWrite for Cell { nino::raw_write!(); } // one zeroed block, padding stays 0
+```
+
+`NinoWrite::PREFETCH_BYTES` (0 by default) estimates the bytes a write reads through the value's pointers, so that long lists of it are written prefetching ahead. A hand-written impl is checked against no layout: the [derive](#rust-derive) with `layout = "…"` is the form that catches a mismatch at compile time.
 
 ### Features [#rust-features]
 

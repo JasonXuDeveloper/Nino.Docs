@@ -126,6 +126,8 @@ Nino 把数据反序列化到已有的对象图中（[复用反序列化](/zh/do
 
 三者都序列化到复用的缓冲区写入器，并反序列化为新实例。
 
+**不可信读取**（[`UntrustedTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/UntrustedTest.cs)，自 v4.0.0-rc.8 起测量，只测反序列化）在打开 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 时读取 1,000 个带 `DateTime` 和 `bool` 的原始结构体组成的列表，每个值的这两个字段都要检查；对比的 MemoryPack 不做检查，直接复制。结果在[全部测量结果](#results)中。
+
 `InventoryItem` 和 `(int, long)` 在内存中带有填充，MemoryPack 原样拷贝，Nino 则置零或省去：这对耗时、大小和字节本身意味着什么，见[带填充的结构体和元组](/zh/docs/v4/vs-memorypack#padded-values)。
 
 ### MessagePack 与 protobuf-net [#messagepack-and-protobuf-net]
@@ -891,3 +893,10 @@ dotnet run -c Release --project benchmarks/Nino.GeneratorBenchmark -- 30 8
 - 每次发布时，CI 都按同样的流程运行，各基准测试类分布在每种架构的十台运行器上（v3 在 `SimpleTest` 所在的运行器上、紧接在它之前运行），并把结果写进发布说明：Performance Report，以及 **v3 3.3.13 vs v4 (same machine)** 一节。本站的运行时数据取自包含这些数据的最新 v4 版本。
 - Go、Rust 和 TypeScript 的基准测试在同一个发布流程中运行；运行方法见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#reproducing)。
 - `benchmarks/members` 把 `SimpleClass` 按成员逐个拆开，分别对比 v3 和 v4，用来找出某个用例的时间花在哪个成员上。参见 [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks)。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="其他语言的基准测试" href="/zh/docs/v4/benchmarks-runtimes">Go、Rust 和 TypeScript 运行时与各语言常用序列化库的对比。</Card>
+  <Card title="局限性" href="/zh/docs/v4/limit">选用 Nino v4 之前要知道的事。</Card>
+</Cards>

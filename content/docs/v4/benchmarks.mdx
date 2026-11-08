@@ -126,6 +126,8 @@ Three more classes, measured since v4.0.0-rc.5; their rows are in [All Measureme
 
 All three serialize to a reused buffer writer and deserialize into new instances.
 
+**Untrusted reads** ([`UntrustedTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/UntrustedTest.cs), measured since v4.0.0-rc.8, deserialize only) read a list of 1,000 raw structs with a `DateTime` and a `bool` with [`NinoSettings.Untrusted`](/en/docs/v4/security#untrusted-mode) on, which checks both fields of every value, against MemoryPack, which copies them unchecked. Its rows are in [All Measurements](#results).
+
 `InventoryItem` and `(int, long)` have padding in memory, which MemoryPack copies as it is and Nino writes as zeros or leaves out: see [Padded Structs and Tuples](/en/docs/v4/vs-memorypack#padded-values) for what that changes in time, size and the bytes themselves.
 
 ### MessagePack and protobuf-net [#messagepack-and-protobuf-net]
@@ -891,3 +893,10 @@ dotnet run -c Release --project benchmarks/Nino.GeneratorBenchmark -- 30 8
 - Every release runs the same protocol in CI, with the benchmark classes split over ten runners per architecture (v3 runs directly before `SimpleTest` on its runner), and publishes the result in the release notes: the Performance Report, and a **v3 3.3.13 vs v4 (same machine)** section. This site takes its runtime numbers from the newest v4 release that has them.
 - The Go, Rust and TypeScript benchmarks run in the same release workflow; how to run them is in [Other-Language Benchmarks](/en/docs/v4/benchmarks-runtimes#reproducing).
 - `benchmarks/members` takes `SimpleClass` apart member by member, against v3 and v4, to find which member a case spends its time on. See the [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks).
+
+## Next Steps [#next-steps]
+
+<Cards>
+  <Card title="Other-Language Benchmarks" href="/en/docs/v4/benchmarks-runtimes">The Go, Rust and TypeScript runtimes against each language's usual serializers.</Card>
+  <Card title="Limitations" href="/en/docs/v4/limit">What to know before choosing Nino v4.</Card>
+</Cards>

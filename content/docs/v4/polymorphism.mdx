@@ -89,7 +89,14 @@ public class Derived : Base
 }
 ```
 
-A `[NinoType]` interface serializes its own members through the implementing type's members of the same name, with those members' attributes: `[NinoUtf8]`, `[NinoMemberFormatter]` or `[NinoIgnore]` on the interface member has no effect (warning [NINO033](/en/docs/v4/analyzers#nino033), whose code fix moves it to the implementing members); only its `[NinoMember(index)]` counts. An explicit implementation (`int IBase.A { get; set; }`) or a default implementation is the exception: the interface's member is written there, through the interface, with the interface member's attributes. A struct read through a member declared as an interface or `object` is boxed.
+Each implementing type writes a `[NinoType]` interface's members, in one of two ways:
+
+| The implementing type has | What is written | Whose attributes count |
+| --- | --- | --- |
+| A member of the same name (`public int A { get; set; }`) | That member | The implementing member's. On the interface member only `[NinoMember(index)]` counts, which places the member; `[NinoUtf8]`, `[NinoMemberFormatter]` or `[NinoIgnore]` there is warning [NINO033](/en/docs/v4/analyzers#nino033), whose code fix moves it to the implementing members |
+| An explicit implementation (`int IBase.A { get; set; }`) or the interface's default implementation | The interface member, through the interface (a struct is not boxed) | The interface member's |
+
+A struct read through a member declared as an interface or `object` is boxed.
 
 Generic interfaces and abstract classes (`IRepository<T>`, `abstract class Box<T>`), and abstract classes nested in a generic type, work the same way: `Serialize<Box<int>>(new IntBox())` writes the subtype, and reading checks that the type in the data is one of `Box<int>`'s subtypes. The type argument can be anything: a primitive, a tuple (`Box<(int, string)>`), a sealed class or a class with subtypes of its own. Each closed base (`Box<int>`, `Box<Order>`) gets the same generated dispatch as a non-generic base, for the subtypes declared in its assembly (see [Dispatch](#dispatch)).
 

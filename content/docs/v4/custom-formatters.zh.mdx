@@ -130,7 +130,7 @@ public sealed class RingHolder
 ```
 
 - 格式化器必须是结构体，不能嵌套在泛型类型中，并且只实现一次 `INinoFormatter<P>`。泛型格式化器以开放定义注册（`typeof(F<,>)`），非泛型格式化器直接注册（`typeof(F)`）。每个类型参数都必须能推断出来：要么出现在 `P` 中，要么出现在类型约束中（`where TList : List<T>`），要么受 `INinoFormatter<E>` 约束。无法使用的注册会被忽略，并报告 NINO020。
-- `Deserialize` 丢弃实例时（数据为 `null`，或旧实例无法复用），请交给 `NinoRecycler.Discard(ref value)` 或 `NinoRecycler.Replace(ref value, replacement)`，不要直接覆盖，这样[回收处理器和对象池](/zh/docs/v4/pooling)才能拿到它。
+- `Deserialize` 丢弃实例时（数据为 `null`，或旧实例无法复用），请交给 `NinoRecycler`，不要直接覆盖，这样[回收处理器和对象池](/zh/docs/v4/pooling)才能拿到它：数据为 `null` 时用 `Discard(ref value)`；换成新实例时用 `Replace(ref value, replacement)`；要把旧实例交给更具体类型的格式化器时用 `Reuse<TDeclared, TConcrete>(ref value)`（返回这个实例，或者回收它并返回 `null`）；集合丢掉的每个元素用 `NinoRecycler<T>.Recycle(element)`，`NinoRecycler<T>.MayRecycle` 为 false 时可以跳过。
 - 如果格式化的目标是一个裸类型参数（`INinoFormatter<TCollection>`），可以列出适用的类型定义：`[assembly: NinoFormatter(typeof(F<,,>), typeof(IList<>))]`。不列出时，它适用于约束允许的所有类型。
 - 查找顺序：先找为该类型自身定义（以及数组）注册的格式化器，然后是原始非托管值，然后是 `[NinoType]`，最后是裸类型参数的格式化器。多个注册同时匹配时，`Priority` 高的优先（例如 `Priority = 10`）；优先级相同时，取完整名称按序数排序靠前的那个。
 

@@ -210,6 +210,17 @@ The options can be mixed: a keyed settings file can hold positional raw structs 
 
 </Callout>
 
+## Pitfalls [#pitfalls]
+
+| Mistake | What happens | Caught by |
+| --- | --- | --- |
+| Appending a member to a version-tolerant base class that has `[NinoType]` subclasses | The subclasses' data reads wrong values, or throws `NinoDataException` | nothing: see [Appending to a Base Class](#appending-to-a-base-class) |
+| Changing a member's type, or a type's format, once data exists | Old data is misread or does not read | nothing: the [layout metadata](#layout-metadata) shows the change |
+| Renaming a keyed member without `[NinoFormerName]` | Old data's value for it is skipped as an unknown key | nothing: see [Renaming Keyed Members](#renaming-keyed-members) |
+| Two keyed members (or a former name) that hash to the same key | The build fails | [NINO014](/en/docs/v4/analyzers#nino014) |
+| `[NinoFormerName]` on a member of a positional or version-tolerant type | No effect: those formats write no names | [NINO024](/en/docs/v4/analyzers#nino024), with a code fix |
+| A project that still defines `WEAK_VERSION_TOLERANCE` | The types it made version tolerant would be positional and stop reading their data | [NINO032](/en/docs/v4/analyzers#nino032), whose code fix keeps the bytes |
+
 ## Next Steps
 
 <Cards>

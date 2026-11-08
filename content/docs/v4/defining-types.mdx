@@ -121,7 +121,7 @@ With the default `autoCollect: true`, Nino collects:
 And it skips:
 
 - **get-only auto-properties** (`public int Id { get; }`), unless a constructor has a parameter with the same name (ignoring case), since nothing else can restore them. See [Constructors](/en/docs/v4/constructors);
-- **explicit interface implementations** (`int IHasId.Id { get; set; }`) of an interface that is not a `[NinoType]`. For a `[NinoType]` interface, the interface's member is written in their place, through the interface (structs are not boxed), with the interface member's attributes; otherwise a `[NinoType]` interface serializes its members through the implementing type's members of the same name;
+- **explicit interface implementations** (`int IHasId.Id { get; set; }`) of an interface that is not a `[NinoType]`; for a `[NinoType]` interface, the interface's member is written in their place (see [Interfaces](/en/docs/v4/polymorphism#interfaces-and-abstract-classes));
 - members whose type Nino cannot serialize (delegates, `Task`, pointers...), reported as warning NINO007.
 
 An `override` counts as the member it overrides and is collected once. A member that hides a base member with `new` is a separate member: both are serialized, the base one first. When the hidden base member is not public, generated code can only reach it through `[UnsafeAccessor]` (.NET 8+; in generic types .NET 9+, as below); otherwise it is skipped with warning NINO022.
@@ -311,9 +311,23 @@ A closed generic type that a process only **reads** polymorphically (by type id)
 
 Subtypes inherit `[NinoType]`, with its options, from their nearest `[NinoType]` base class or interface; put `[NinoType]` on a subtype to give it options of its own. A subtype's own `[NinoType]` replaces the inherited options, so repeat the ones you want to keep: `[NinoType(format: NinoFormat.VersionTolerant)]` on a subtype of a version-tolerant base. The one exception is `trackReferences`: a class is tracked when it or any `[NinoType]` base class or interface asks for it, whatever its own attribute says, so a tracked hierarchy stays tracked. See [Polymorphism](/en/docs/v4/polymorphism).
 
-## Next
+## Pitfalls [#pitfalls]
+
+| Mistake | What happens | Caught by |
+| --- | --- | --- |
+| Reordering, inserting or removing members of a positional type whose data is stored or sent | Old data reads into the wrong members, or throws `NinoDataException` | nothing at compile time: use [version tolerance or keyed members](/en/docs/v4/evolving-data), and check the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) in CI |
+| Renaming or moving a type that is written with its type id | Old data's type id is unknown: `NinoDataException` | nothing: add [`[NinoFormerName]`](#former-name) |
+| A get-only property that no constructor parameter sets | It is not serialized | [NINO006](/en/docs/v4/analyzers#nino006) |
+| A member whose type Nino cannot serialize (a delegate, a `Task`) | It is skipped | [NINO007](/en/docs/v4/analyzers#nino007) |
+| Non-public members in a type that is not `partial`, on .NET Standard, .NET Framework or Unity | The generated code does not compile | [NINO002](/en/docs/v4/analyzers#nino002), with a code fix |
+| `[NinoUtf8]` on a member that holds no strings, that a `[NinoMemberFormatter]` writes, or that is never serialized | No effect | [NINO030](/en/docs/v4/analyzers#nino030) |
+| `[NinoUtf8]` on an interface member | No effect: the implementing member's attributes count | [NINO033](/en/docs/v4/analyzers#nino033), whose code fix moves it |
+| Adding or removing `[NinoUtf8]` on a member whose data is stored or sent | Data written in the other encoding does not read back | nothing: it changes the format, like a new member type |
+| Ignoring every field of a struct | It would be written as zero bytes | [NINO023](/en/docs/v4/analyzers#nino023) |
+
+## Next Steps [#next-steps]
 
 <Cards>
   <Card title="Supported Types" href="/en/docs/v4/types">Every built-in type, collection and how user collections work.</Card>
-  <Card title="Constructors" href="/en/docs/v4/constructors">How Nino creates instances: constructors, factories, records, `required` members.</Card>
+  <Card title="Custom Constructors" href="/en/docs/v4/constructors">How Nino creates instances: constructors, factories, records, `required` members.</Card>
 </Cards>

@@ -42,6 +42,7 @@ Nino 在每个平台上写出的字节都相同。在有向量指令的平台上
 - 64 位运行时内联拷贝不超过 64 字节的块（大多数字符串）；32 位 x86 和 WebAssembly 以及 Arm32 上的 .NET 在一次调用中同样拷贝（这些平台上非对齐的 8 字节加载不会出错）；Arm32 上的 Mono 和 IL2CPP 调用 `memmove`。
 - 6 KB 及以上的原始值块读取（无论读入新数组还是已有数组）用 `memmove` 拷贝：Intel x64 上它的 `rep movsb` 写入新的缓存行时不必先读入；AMD x64 CPU 上它比向量写入慢，改用 Nino 的向量循环。
 - 填充字节在支持 AVX-512 时用 512 位向量清零，否则在运行时加速 `Vector<T>` 时用它清零（Mono 上仅限装有 System.Numerics.Vectors 包时；Unity 上从不使用，即使它报告已加速，Mono 也不加速 Unity 的 `Vector<T>`），再不行就每次 8 字节。
+- [不可信模式](/zh/docs/v4/security#untrusted-mode)下，连续原始值中的 `bool`、`DateTime`、`decimal`、`DateOnly` 和 `TimeOnly` 字段，在 .NET 8 及以上且这些字段足够密集时整段按 `Vector<T>` 检查，掩码按值的步长重复；否则逐个字段扫过整段，不对每个值分支。`[NinoUtf8]` 字符串由 .NET 自带的 UTF-8 转换器转码（.NET 8+ 上是 `Utf8.FromUtf16` 和 `Utf8.ToUtf16`），用的是它们的向量路径。
 - Intel Ice Lake 一代（Ice Lake、Tiger Lake 和 Rocket Lake，按 CPU 型号识别）上，跨两个缓存行的 64 字节读取大约是对齐读取的两倍开销：填充字节改用 32 字节向量而不是 64 字节向量清零，按整个 4 字节字移动分组的元组和键值对从缓存行起点开始读取，在 Linux 上约 2 到 32 KB 的块交给 C 库的 `rep movsb` 拷贝。其他 CPU 仍走上面的路径；写出的字节相同。
 
 ## Unity [#unity]
@@ -90,3 +91,10 @@ TypeScript 运行时用 `DataView` 和类型化数组读写。它的向量代码
 | 支持 WebAssembly SIMD、GC 和 JS String Builtins 的浏览器和 Deno | 读取较长的 UTF-16 和 Latin-1 文本、写入超过 64 个字符的文本，在 SIMD 寄存器中每次 8 或 16 个字符（`useWasm(false)` 可关闭） | — |
 | Node、Bun、带 Node `Buffer` 的 Deno | 不用 Nino 自己的：`Buffer` 原生的 Latin-1 和 UTF-16 方法 | [其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#typescript) |
 | 不支持它们的引擎，或阻止编译 WebAssembly 的内容安全策略 | 无：JavaScript 路径和引擎内置的解码器；字节相同 | — |
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="性能原理" href="/zh/docs/v4/performance">Nino 为什么快，以及怎样让你的代码留在快速路径上。</Card>
+  <Card title=".NET 基准测试" href="/zh/docs/v4/benchmarks">全部用例，包括 MemoryPack、MessagePack 和 protobuf-net，以及测量它们的代码。</Card>
+</Cards>

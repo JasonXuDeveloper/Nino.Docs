@@ -89,7 +89,14 @@ public class Derived : Base
 }
 ```
 
-`[NinoType]` 接口的成员通过实现类型中同名的成员来序列化，用的是这些成员自己的特性：接口成员上的 `[NinoUtf8]`、`[NinoMemberFormatter]` 或 `[NinoIgnore]` 不起作用（警告 [NINO033](/zh/docs/v4/analyzers#nino033)，代码修复会把它移到实现成员上），只有它的 `[NinoMember(index)]` 有效。显式实现（`int IBase.A { get; set; }`）或默认实现是例外：那里写出的是接口的成员，通过接口访问，用的是接口成员上的特性。通过声明为接口或 `object` 的成员读取结构体时，结构体会被装箱。
+`[NinoType]` 接口的成员由每个实现类型写出，有两种情况：
+
+| 实现类型有 | 写出什么 | 用谁的特性 |
+| --- | --- | --- |
+| 同名的成员（`public int A { get; set; }`） | 这个成员 | 实现成员的。接口成员上只有 `[NinoMember(index)]` 有效，它决定成员的位置；那里的 `[NinoUtf8]`、`[NinoMemberFormatter]` 或 `[NinoIgnore]` 会报警告 [NINO033](/zh/docs/v4/analyzers#nino033)，代码修复把它移到实现成员上 |
+| 显式实现（`int IBase.A { get; set; }`）或接口的默认实现 | 接口的这个成员，通过接口访问（结构体不装箱） | 接口成员的 |
+
+通过声明为接口或 `object` 的成员读取结构体时，结构体会被装箱。
 
 泛型接口和泛型抽象类（`IRepository<T>`、`abstract class Box<T>`），以及嵌套在泛型类型里的抽象类，用法完全相同：`Serialize<Box<int>>(new IntBox())` 写入的是子类型，读取时会检查数据中的类型是 `Box<int>` 的子类型。类型参数可以是任何类型：基元类型、元组（`Box<(int, string)>`）、密封类，或者本身有子类型的类。每个封闭基类型（`Box<int>`、`Box<Order>`）对其所在程序集中声明的子类型，都和非泛型基类型一样使用生成的分派（见[分派](#dispatch)）。
 
