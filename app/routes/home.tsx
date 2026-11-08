@@ -1,24 +1,14 @@
 import { HomeLayout } from 'fumadocs-ui/layouts/home';
-import {
-  ArrowRight,
-  Boxes,
-  Cpu,
-  FileCode,
-  GitBranch,
-  Globe,
-  Hammer,
-  Recycle,
-  ShieldCheck,
-  Zap,
-} from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router';
-import { HomeCompare } from '@/components/home-compare';
+import { HomeBench, HomeV3 } from '@/components/home-compare';
 import { HomeInstall } from '@/components/home-install';
 import {
   HomeAbout,
   HomeFaq,
   HomeUseCases,
   homeFaq,
+  memoryPackVersion,
 } from '@/components/home-sections';
 import { build, headlineSerialize } from '@/lib/benchmarks';
 import { cn } from '@/lib/cn';
@@ -32,136 +22,133 @@ import type { Route } from './+types/home';
 /** v4's generated source against v3's (generator benchmark, `build` in src/lib/benchmarks.ts) */
 const generatedSourceRatio = build[0].ratio;
 
-interface Highlight {
-  icon: typeof Cpu;
-  label: string;
-  text: string;
+/** One of the four things the home page proves: a claim, its facts, the page that shows them */
+interface Claim {
+  title: string;
+  lead: string;
+  points: string[];
+  href: string;
+  link: string;
 }
 
 const copy: Record<
   Locale,
   {
     description: string;
-    pill: string;
     headline: [string, string];
     sub: string;
     start: string;
     github: string;
     why: string;
-    highlights: Highlight[];
+    claims: Claim[];
     older: string;
   }
 > = {
   en: {
     description: `Nino is a high-performance binary serializer for C# and .NET: source-generated, ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack, ` : ''}zero GC on hot paths. For RPC, messaging, caching and storage on .NET, Unity (IL2CPP, HybridCLR) and Godot, with the same bytes in TypeScript, Go and Rust.`,
-    pill: 'Nino v4 · C# binary serializer',
     headline: ['The fastest binary serializer', 'for C#.'],
     sub: 'Nino is source-generated and SIMD-accelerated (AVX-512, AVX2, Arm64, WebAssembly), with zero GC on hot paths. For services, networking and RPC, message queues, caching, storage and IPC, on .NET, Unity and Godot alike.',
     start: 'Get Started',
     github: 'View on GitHub',
     why: 'Why Nino',
-    highlights: [
+    claims: [
       {
-        icon: Cpu,
-        label: 'Zero reflection',
-        text: 'Formatters are generated at compile time, so Nino runs on IL2CPP, NativeAOT and HybridCLR.',
+        title: 'Fast',
+        lead: headlineSerialize
+          ? `Up to ${headlineSerialize}× faster than MemoryPack, and 0 B allocated per call on hot paths.`
+          : '0 B allocated per call on hot paths.',
+        points: [
+          'SIMD on every CPU: AVX-512, AVX2 and SSSE3 on x64, Arm64, WebAssembly, and Burst-compiled kernels in Unity.',
+          'Serialize into reused buffers; deserialize into existing objects and [NinoPooled] instances.',
+        ],
+        href: 'benchmarks',
+        link: 'Benchmarks',
       },
       {
-        icon: ShieldCheck,
-        label: 'Safe for untrusted data',
-        text: 'Crafted bytes cannot crash the process, allocate out of proportion or name a type to create: they throw one exception.',
+        title: 'Safe',
+        lead: "Bytes from a network peer or a user's file cannot crash the process: invalid input only ever throws NinoDataException.",
+        points: [
+          'Lengths are checked before allocating; depth and hash-collision limits live in NinoSettings.',
+          'The bytes cannot name a type to create, and every runtime is tested against the same corpus of malicious inputs.',
+        ],
+        href: 'security',
+        link: 'Untrusted data',
       },
       {
-        icon: Recycle,
-        label: 'Zero allocation',
-        text: 'Serialize into a reused buffer without garbage; deserialize into existing objects and pooled instances.',
+        title: 'Runs everywhere',
+        lead: '.NET Standard 2.0 to .NET 10, NativeAOT, ASP.NET Core, Unity (IL2CPP, HybridCLR) and Godot 4.',
+        points: [
+          'CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, x64 and Arm64 all write the same bytes.',
+          'nino-gen generates TypeScript, Go and Rust codecs from your [NinoType]s, so browsers, Node, Go and Rust read them too.',
+        ],
+        href: 'platforms',
+        link: 'Platforms',
       },
       {
-        icon: Boxes,
-        label: 'Polymorphism without tags',
-        text: 'Subtypes inherit [NinoType] and come back as their runtime type. No union tags to maintain.',
-      },
-      {
-        icon: GitBranch,
-        label: 'Data that evolves',
-        text: 'Keyed members, version tolerance and reference tracking, chosen per type.',
-      },
-      {
-        icon: Hammer,
-        label: 'Incremental generator',
-        text: `One file per type and ${generatedSourceRatio}× less code than v3; editing a type re-generates only that type.`,
-      },
-      {
-        icon: Globe,
-        label: 'Same bytes everywhere',
-        text: 'CoreCLR, Mono and IL2CPP, 64-bit and 32-bit all read and write the same format.',
-      },
-      {
-        icon: Zap,
-        label: 'SIMD on every CPU',
-        text: 'AVX-512, AVX2 and SSSE3 on x64, table lookups on Arm64, WebAssembly SIMD on .NET 10, Burst-compiled kernels in Unity; the same bytes on every path.',
-      },
-      {
-        icon: FileCode,
-        label: 'TypeScript, Go, Rust and ASP.NET Core',
-        text: 'Nino.Codegen generates TypeScript, Go or Rust codecs for your [NinoType]s after each build; Nino.AspNetCore reads and writes application/x-nino bodies for MVC and Minimal APIs.',
+        title: 'Built for production',
+        lead: 'Everything is generated at compile time: no reflection, no runtime code generation, no schema files.',
+        points: [
+          '33 analyzers report mistakes as you type, many with a code fix.',
+          'Polymorphism without tags; version tolerance, keyed members and reference tracking, chosen per type.',
+          `An incremental generator: one file per type, ${generatedSourceRatio}× less code than v3.`,
+        ],
+        href: 'analyzers',
+        link: 'Analyzers',
       },
     ],
     older: 'Older versions:',
   },
   zh: {
     description: `Nino 是高性能 C# / .NET 二进制序列化库：基于源生成器，${headlineSerialize ? `最高比 MemoryPack 快 ${headlineSerialize} 倍，` : ''}热路径零 GC 分配。适用于 RPC、消息、缓存与存储，支持 .NET、Unity（IL2CPP、HybridCLR）和 Godot，可与 TypeScript、Go 和 Rust 互通。`,
-    pill: 'Nino v4 · C# 二进制序列化库',
-    headline: ['最快的二进制序列化库', '为 C# 而生。'],
+    // U+200B: the one place the first line may break (keep-all keeps the words whole)
+    headline: ['最快的\u200b二进制序列化库', '为 C# 而生。'],
     sub: 'Nino 基于源生成器，用 SIMD 加速（AVX-512、AVX2、Arm64、WebAssembly），热路径零 GC 分配。适用于服务端、网络与 RPC、消息队列、缓存、存储和进程间通信，.NET、Unity 与 Godot 均可使用。',
     start: '快速开始',
     github: '在 GitHub 上查看',
     why: '为什么选择 Nino',
-    highlights: [
+    claims: [
       {
-        icon: Cpu,
-        label: '零反射',
-        text: '格式化器在编译期生成，所以 IL2CPP、NativeAOT 与 HybridCLR 都能直接使用。',
+        title: '快',
+        lead: headlineSerialize
+          ? `最高比 MemoryPack 快 ${headlineSerialize} 倍，热路径上每次调用 0 B 分配。`
+          : '热路径上每次调用 0 B 分配。',
+        points: [
+          '每种 CPU 都有 SIMD：x64 上的 AVX-512、AVX2 和 SSSE3，Arm64，WebAssembly，以及 Unity 中 Burst 编译的内核。',
+          '序列化到复用的缓冲区；反序列化直接填充已有对象和 [NinoPooled] 池化实例。',
+        ],
+        href: 'benchmarks',
+        link: '基准测试',
       },
       {
-        icon: ShieldCheck,
-        label: '放心读取不可信数据',
-        text: '伪造的字节不会让进程崩溃，不会分配与输入不成比例的内存，也无法指定要创建的类型，最多抛出同一种异常。',
+        title: '安全',
+        lead: '网络对端发来的字节、用户的文件，都不会让进程崩溃：任何无效输入都只抛出 NinoDataException。',
+        points: [
+          '先校验长度再分配内存；深度和哈希碰撞上限都在 NinoSettings 里。',
+          '字节无法指定要创建的类型；各语言的运行时都用同一套恶意输入样本测试。',
+        ],
+        href: 'security',
+        link: '不可信数据',
       },
       {
-        icon: Recycle,
-        label: '零分配',
-        text: '序列化到复用的缓冲区不产生垃圾；反序列化可以直接填充已有对象和池化实例。',
+        title: '哪都能用',
+        lead: '.NET Standard 2.0 到 .NET 10、NativeAOT、ASP.NET Core、Unity（IL2CPP、HybridCLR）和 Godot 4。',
+        points: [
+          'CoreCLR、Mono 和 IL2CPP，64 位和 32 位，x64 和 Arm64，写出的字节完全相同。',
+          'nino-gen 从你的 [NinoType] 生成 TypeScript、Go 和 Rust 编解码代码，浏览器、Node、Go 和 Rust 也能读写。',
+        ],
+        href: 'platforms',
+        link: '平台',
       },
       {
-        icon: Boxes,
-        label: '无需标签的多态',
-        text: '子类型自动继承 [NinoType]，读回时还原为运行时类型，不用维护 Union 标签。',
-      },
-      {
-        icon: GitBranch,
-        label: '数据可演进',
-        text: '键控成员、版本容错、引用追踪，每个类型按需选择。',
-      },
-      {
-        icon: Hammer,
-        label: '增量生成器',
-        text: `每个类型一个文件，生成的代码只有 v3 的 1/${generatedSourceRatio}；修改一个类型只重新生成这个类型。`,
-      },
-      {
-        icon: Globe,
-        label: '跨平台字节一致',
-        text: 'CoreCLR、Mono 还是 IL2CPP，64 位还是 32 位，读写的格式都一样。',
-      },
-      {
-        icon: Zap,
-        label: '每种 CPU 都有 SIMD',
-        text: 'x64 上用 AVX-512、AVX2 和 SSSE3，Arm64 上用查表指令，.NET 10 上用 WebAssembly SIMD，Unity 中用 Burst 编译的内核；无论走哪条路径，写出的字节都一样。',
-      },
-      {
-        icon: FileCode,
-        label: 'TypeScript、Go、Rust 与 ASP.NET Core',
-        text: 'Nino.Codegen 在每次构建后为你的 [NinoType] 生成 TypeScript、Go 或 Rust 编解码代码；Nino.AspNetCore 为 MVC 和 Minimal API 读写 application/x-nino 请求体。',
+        title: '专业可靠',
+        lead: '一切在编译期生成：没有反射，没有运行时代码生成，也不需要 schema 文件。',
+        points: [
+          '33 条分析器规则在写代码时就报告错误，许多带一键修复。',
+          '多态无需标签；版本容错、键控成员和引用追踪，每个类型按需选择。',
+          `增量生成器：每个类型一个文件，生成的代码只有 v3 的 1/${generatedSourceRatio}。`,
+        ],
+        href: 'analyzers',
+        link: '分析器',
       },
     ],
     older: '旧版本：',
@@ -207,102 +194,118 @@ export default function HomePage({ params }: Route.ComponentProps) {
   return (
     <HomeLayout {...baseOptions(lang)}>
       <main className="flex flex-1 flex-col items-center">
-        <section className="relative isolate flex w-full flex-col items-center px-6 pt-10 pb-10 md:pt-16 md:pb-14">
-          <div
-            aria-hidden="true"
-            className="nino-hero-glow pointer-events-none absolute inset-0 -z-10"
-          />
-          <div className="flex w-full max-w-5xl flex-col items-center text-center">
-            <span className="mb-4 rounded-full border border-fd-border bg-fd-secondary/50 px-3 py-1 text-xs font-medium text-fd-muted-foreground">
-              {t.pill}
-            </span>
-
-            <h1 className="text-4xl font-extrabold tracking-tight break-keep sm:text-5xl lg:text-6xl">
-              {t.headline[0]}
-              <br />
-              <span className="bg-linear-to-r/oklab from-nino-grad-from from-25% to-nino-grad-to bg-clip-text text-transparent">
-                {t.headline[1]}
-              </span>
-            </h1>
-
-            <p className="mt-3 max-w-xl text-base leading-relaxed text-balance text-fd-muted-foreground md:text-lg">
-              {t.sub}
-            </p>
-
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-              <Link
-                to={`${docs}/start`}
+        <section className="w-full px-6 pt-10 pb-14 md:pt-16 md:pb-20">
+          <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-14">
+            <div className="flex flex-col items-start">
+              <h1
                 className={cn(
-                  'inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-colors',
-                  'bg-fd-primary text-fd-primary-foreground hover:bg-fd-primary/90',
+                  'leading-[1.08] font-extrabold tracking-tight text-balance',
+                  lang === 'zh'
+                    ? 'break-keep text-4xl sm:text-5xl xl:text-[3.5rem]'
+                    : 'text-[2.6rem] sm:text-6xl lg:text-[4rem]',
                 )}
               >
-                {t.start}
-                <ArrowRight className="size-4" />
-              </Link>
-              <a
-                href={githubUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={cn(
-                  'inline-flex items-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors',
-                  'hover:bg-fd-accent hover:text-fd-accent-foreground',
-                )}
-              >
-                <GitHubIcon />
-                {t.github}
-              </a>
+                {t.headline[0]}
+                <br />
+                <span className="bg-linear-to-r/oklab from-nino-grad-from from-25% to-nino-grad-to bg-clip-text text-transparent">
+                  {t.headline[1]}
+                </span>
+              </h1>
+
+              <p className="mt-5 max-w-xl text-base leading-relaxed text-pretty text-fd-muted-foreground md:text-lg">
+                {t.sub}
+              </p>
+
+              <div className="mt-7 flex flex-wrap items-center gap-3">
+                <Link
+                  to={`${docs}/start`}
+                  className={cn(
+                    'inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-colors',
+                    'bg-fd-primary text-fd-primary-foreground hover:bg-fd-primary/90',
+                  )}
+                >
+                  {t.start}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+                <a
+                  href={githubUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    'inline-flex items-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors',
+                    'hover:bg-fd-accent hover:text-fd-accent-foreground',
+                  )}
+                >
+                  <GitHubIcon />
+                  {t.github}
+                </a>
+              </div>
+
+              <HomeInstall lang={lang} docs={docs} />
             </div>
 
-            <HomeInstall lang={lang} docs={docs} />
-          </div>
-        </section>
-
-        <section className="w-full border-t px-4 py-12 sm:px-6 md:py-16">
-          <div className="mx-auto max-w-5xl">
-            <HomeCompare lang={lang} docs={docs} />
+            <HomeBench lang={lang} docs={docs} memoryPack={memoryPackVersion} />
           </div>
         </section>
 
         <section className="w-full border-t px-6 py-12 md:py-16">
-          <div className="mx-auto max-w-5xl">
+          <div className="mx-auto max-w-6xl">
+            <h2 className="text-2xl font-bold tracking-tight">{t.why}</h2>
+            <div className="mt-8 grid gap-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-0 lg:divide-x">
+              {t.claims.map((claim) => (
+                <div
+                  key={claim.title}
+                  className="flex flex-col lg:px-6 lg:first:pl-0 lg:last:pr-0"
+                >
+                  <h3 className="text-xl font-bold tracking-tight">
+                    {claim.title}
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed font-medium">
+                    {claim.lead}
+                  </p>
+                  <ul className="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-fd-muted-foreground">
+                    {claim.points.map((point) => (
+                      <li key={point}>{point}</li>
+                    ))}
+                  </ul>
+                  <Link
+                    to={`${docs}/${claim.href}`}
+                    className="mt-auto pt-4 text-sm font-medium text-fd-primary underline-offset-4 hover:underline"
+                  >
+                    {claim.link}
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="w-full border-t px-6 py-12 md:py-16">
+          <div className="mx-auto max-w-6xl">
             <HomeAbout lang={lang} />
           </div>
         </section>
 
         <section className="w-full border-t px-6 py-12 md:py-16">
-          <div className="mx-auto max-w-5xl">
+          <div className="mx-auto max-w-6xl">
             <HomeUseCases lang={lang} docs={docs} />
           </div>
         </section>
 
-        <section className="w-full border-t px-6 py-12">
-          <h2 className="mx-auto mb-6 max-w-5xl text-2xl font-bold tracking-tight">
-            {t.why}
-          </h2>
-          <div className="mx-auto grid max-w-5xl gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
-            {t.highlights.map((h) => (
-              <div key={h.label} className="flex items-start gap-3">
-                <div className="mt-0.5 shrink-0 rounded-md bg-fd-primary/10 p-2 text-fd-primary">
-                  <h.icon className="size-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">{h.label}</p>
-                  <p className="text-sm text-fd-muted-foreground">{h.text}</p>
-                </div>
-              </div>
-            ))}
+        <section className="w-full border-t px-6 py-12 md:py-16">
+          <div className="mx-auto max-w-6xl">
+            <HomeV3 lang={lang} docs={docs} />
           </div>
         </section>
 
         <section className="w-full border-t px-6 py-12 md:py-16">
-          <div className="mx-auto max-w-5xl">
+          <div className="mx-auto max-w-6xl">
             <HomeFaq lang={lang} docs={docs} />
           </div>
         </section>
 
         <section className="w-full border-t px-6 py-6">
-          <p className="mx-auto max-w-5xl text-center text-sm text-fd-muted-foreground">
+          <p className="mx-auto max-w-6xl text-center text-sm text-fd-muted-foreground">
             {t.older}{' '}
             <Link
               to={`/${lang}/docs/v3`}

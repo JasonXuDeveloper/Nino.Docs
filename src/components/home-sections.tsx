@@ -27,7 +27,8 @@ import {
 import type { Locale } from '@/lib/i18n';
 import { release } from '@/lib/release';
 
-const memoryPackVersion = '1.21.4';
+/** The MemoryPack version of the benchmark (Nino's benchmarks/Directory.Packages.props) */
+export const memoryPackVersion = '1.21.4';
 const prerelease = release.prerelease ? ' --prerelease' : '';
 
 const range = (op: 'serialize' | 'deserialize') => {
@@ -84,7 +85,6 @@ const text: Record<
     aboutTitle: 'What is Nino?',
     about: [
       'Nino is a general-purpose, high-performance binary serializer for C# and .NET. A Roslyn source generator writes the serialization code at compile time, so there is no reflection, it runs under IL2CPP and NativeAOT, and serializing into a reused buffer allocates nothing.',
-      'Mark a class, struct, record or interface with [NinoType] and call NinoSerializer.Serialize and NinoDeserializer.Deserialize: no schema file, no registration. Values declared as a base class or interface come back as their runtime type, each type chooses whether it tolerates added members, uses keys or tracks shared references, and invalid input only ever throws NinoDataException. nino-gen generates TypeScript, Go and Rust code from the same types, so browsers, Node, Go and Rust programs read and write the same bytes as .NET.',
       'Nino is not the right choice when people need to read the data (use JSON) or when programs in Java, Python or C++ must read it (use Protocol Buffers or MessagePack).',
     ],
     facts: [
@@ -235,7 +235,6 @@ const text: Record<
     aboutTitle: 'Nino 是什么？',
     about: [
       'Nino 是通用的高性能 C# / .NET 二进制序列化库。Roslyn 源生成器在编译期生成序列化代码，没有反射，可在 IL2CPP 和 NativeAOT 下运行，序列化到复用的缓冲区时零分配。',
-      '给类、结构体、记录或接口加上 [NinoType]，再调用 NinoSerializer.Serialize 和 NinoDeserializer.Deserialize 就行，不用写 schema，也不用注册。声明为基类或接口的值，读回来还是它的实际类型；每个类型可以单独选择版本容错、键控成员或引用追踪；无效输入只会抛出 NinoDataException。nino-gen 还能从同一批类型生成 TypeScript、Go 和 Rust 代码，浏览器、Node、Go 和 Rust 程序读写的字节与 .NET 完全一致。',
       '数据需要人来看时用 JSON；数据要给 Java、Python、C++ 等程序读时，用 Protocol Buffers 或 MessagePack。这两种情况 Nino 不合适。',
     ],
     facts: [
@@ -427,19 +426,29 @@ export function HomeUseCases({ lang, docs }: { lang: Locale; docs: string }) {
     <>
       <h2 className="text-2xl font-bold tracking-tight">{t.useTitle}</h2>
       <p className="mt-2 text-fd-muted-foreground">{t.useLead}</p>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="mt-6 grid border-t sm:grid-cols-2 sm:gap-x-10">
         {t.useCases.map((u) => (
-          <Link
-            key={u.href}
-            to={`${docs}/${u.href}`}
-            className="group rounded-xl border bg-fd-card p-4 transition-colors hover:bg-fd-accent"
-          >
-            <u.icon className="size-5 text-fd-primary" aria-hidden="true" />
-            <h3 className="mt-3 text-sm font-semibold">{u.title}</h3>
-            <p className="mt-1 text-sm text-fd-muted-foreground">{u.text}</p>
-          </Link>
+          <li key={u.href} className="border-b">
+            <Link
+              to={`${docs}/${u.href}`}
+              className="group flex gap-3 py-4 transition-colors hover:text-fd-primary"
+            >
+              <u.icon
+                className="mt-0.5 size-4 shrink-0 text-fd-primary"
+                aria-hidden="true"
+              />
+              <div>
+                <h3 className="text-sm font-semibold group-hover:underline group-hover:underline-offset-4">
+                  {u.title}
+                </h3>
+                <p className="mt-1 text-sm text-fd-muted-foreground">
+                  {u.text}
+                </p>
+              </div>
+            </Link>
+          </li>
         ))}
-      </div>
+      </ul>
     </>
   );
 }
