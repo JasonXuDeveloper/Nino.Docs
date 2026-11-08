@@ -152,7 +152,7 @@ foreach (var message in messages)
 }
 ```
 
-过程中被丢弃的实例（数据中为 `null`、列表变短、字典少了某个键、多态类型变了）可以归还到对象池。Nino 没有 `out` 重载：要新实例就用返回值，要复用就用 `ref`。详见[复用与对象池](/zh/docs/v4/pooling)。
+过程中丢弃的实例（数据中为 `null`、列表变短、字典少了某个键、多态类型变了）可以归还到对象池。Nino 没有 `out` 重载：要新实例就用返回值，要复用就用 `ref`。详见[复用与对象池](/zh/docs/v4/pooling)。
 
 ### 从一个缓冲区读多个值 [#several-values-from-one-buffer]
 
@@ -211,7 +211,7 @@ NinoDeserializer.Deserialize(buffer.WrittenSpan, ref message); // 一个 Ping，
 
 ### 装箱 API [#the-boxed-api]
 
-**只有**当类型要到运行时才以 `Type` 的形式得知、而且这些类型没有共同的 `[NinoType]` 基类型时，才使用装箱 API：比如基于反射、面向任意类型的工具，像一个指向哪个字段就保存哪个字段的检视器。序列化和反序列化必须用**同一个**类型：
+装箱 API **只**用在一种情况：类型要到运行时才以 `Type` 的形式拿到，而且这些类型没有共同的 `[NinoType]` 基类型。比如基于反射、处理任意类型的工具，像指向哪个字段就保存哪个字段的检视器。序列化和反序列化必须用**同一个**类型：
 
 ```csharp
 Type type = field.FieldType;                                   // 运行时才知道
@@ -224,7 +224,7 @@ NinoDeserializer.DeserializeBoxed(bytes, ref current, type);
 field.SetValue(target, current);
 ```
 
-`SerializeBoxed(value, type)` 写出的字节与 `T` = `type` 时的 `Serialize<T>(value)` 完全相同（对可以为 null 的类型，`null` 也一样），所以泛型调用和装箱调用可以互相读取对方的数据。装箱 API 按 `Type` 查找格式化器（第一次用到时通过反射，之后查字典），值类型会被装箱。`NinoSerializer.IsSupported(type)` 判断 Nino 能否序列化和反序列化某个类型（`[NinoType]`、内置类型或有已注册格式化器的类型），供只有 `Type`、需要决定是否处理它的代码使用，比如 [ASP.NET Core 格式化器](/zh/docs/v4/advanced/aspnetcore#mvc)。
+`SerializeBoxed(value, type)` 写出的字节与 `T` = `type` 时的 `Serialize<T>(value)` 完全相同（对可以为 null 的类型，`null` 也一样），所以泛型调用和装箱调用可以互相读取对方的数据。装箱 API 按 `Type` 查找格式化器（第一次用到时通过反射，之后查字典），值类型会装箱。`NinoSerializer.IsSupported(type)` 判断 Nino 能否序列化和反序列化某个类型（`[NinoType]`、内置类型或有已注册格式化器的类型），适合手里只有 `Type`、要决定处理不处理它的代码，比如 [ASP.NET Core 格式化器](/zh/docs/v4/advanced/aspnetcore#mvc)。
 
 <Callout type="warn" title="不要把 object 当作 T">
 
@@ -234,7 +234,7 @@ field.SetValue(target, current);
 
 ## 深层对象图 [#deep-object-graphs]
 
-递归类型（链表、树、节点里又包含节点）可以嵌套任意深。前 128 层嵌套的对象，Nino 在原处直接写入；更深的对象会被**推迟**：之后从较浅的层级写入，读取时也一样。因此：
+递归类型（链表、树、节点里又包含节点）可以嵌套任意深。前 128 层嵌套的对象，Nino 在原处直接写入；更深的对象则**推迟**：之后从较浅的层级写入，读取时也一样。因此：
 
 - 无论对象图有多深，写入和读取占用的栈都有上限：10 万个节点的链表在 512 KB 栈的线程上也能正常往返。
 - 无法构造出让读取方栈溢出的数据，所以递归类型可以放心用在来自不可信来源的消息里。
@@ -253,25 +253,25 @@ byte[] bytes = NinoSerializer.Serialize(deepTree);
 var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
 ```
 
-像 `TreeNode` 这样的递归类型，只要数据是一棵树（每个节点只被引用一次），就不需要 `trackReferences`。如果某个节点出现了两次，或者对象图里有环，就给这个类型加上 [`trackReferences: true`](/zh/docs/v4/reference-tracking)。不加的话，共享的节点会被写成多份独立的副本；环（`a.Next = b; b.Next = a;`）会在写入时被检测出来，抛出带类型名并提示 `trackReferences` 的 `InvalidOperationException`，而不会无限循环下去。
+像 `TreeNode` 这样的递归类型，只要数据是一棵树（每个节点只引用一次），就不需要 `trackReferences`。如果某个节点出现了两次，或者对象图里有环，就给这个类型加上 [`trackReferences: true`](/zh/docs/v4/reference-tracking)。不加的话，共享的节点会写成多份独立的副本；环（`a.Next = b; b.Next = a;`）在写入时就会检测出来，抛出 `InvalidOperationException`，指明类型并提示 `trackReferences`，不会无限循环下去。
 
-被推迟的对象，在 Nino 读到存放它的成员或集合元素时就立即创建并放进去，它的成员则在同一次调用中稍后读取，所以复用反序列化和 `[NinoPooled]` 仍然会复用每一个实例。有两种类不能这样推迟，总是在原处嵌套：
+推迟的对象在 Nino 读到存放它的成员或集合元素时就立即创建并放进去，它的成员则在同一次调用中稍后读取，所以复用反序列化和 `[NinoPooled]` 仍然会复用每一个实例。有两种类不能这样推迟，总是在原处嵌套：
 
 - 由**构造函数**创建的类（位置记录、init-only 或只读成员），因为成员读完之前还没有实例；
 - **按值比较**的类（记录、重写了 `GetHashCode` 或实现了 `IComparable` 的类），因为 `HashSet<T>`、字典的键或有序集合可能会在成员读取之前就持有它。
 
-由这两种类组成的对象图，嵌套超过 [`NinoSettings.MaxDepth`](/zh/docs/v4/security#limits)（默认 512 层）就会抛出异常，写出和读取时都把外围包含自身的结构体中尚未结束的主体计算在内：序列化时抛出 `InvalidOperationException`，读取这样的数据时抛出 `NinoDataException`。需要深度递归的类型，请给它无参构造函数和可赋值的成员。
+由这两种类组成的对象图，嵌套超过 [`NinoSettings.MaxDepth`](/zh/docs/v4/security#limits)（默认 512 层）就会抛出异常，外围包含自身的结构体里尚未结束的主体也计入层数，写和读都一样：序列化时抛出 `InvalidOperationException`，读取这样的数据时抛出 `NinoDataException`。需要深度递归的类型，请给它无参构造函数和可赋值的成员。
 
 ## 无效数据 [#invalid-data]
 
-Nino 本来就是为读取不可信来源的数据而设计的：网络对端、用户交给你的文件、请求体。针对读取器伪造的数据，不会让进程崩溃，不会越过输入的末尾读取，不会分配与自身大小不成比例的内存，也不会让 Nino 创建你没有声明的类型：
+Nino 本来就是为读取不可信来源的数据而设计的：网络对端、用户交给你的文件、请求体。专门针对读取器构造的数据，不会让进程崩溃，不会越过输入的末尾读取，不会分配与自身大小不成比例的内存，也不会让 Nino 创建你没有声明的类型：
 
-- **分配之前先检查长度。** 每个元素个数都按元素最少占用的字节数和剩余字节比对；一个集合在读到元素之前，最多预先分配输入剩余字节数的 16 倍（至少 16 KB），超出的部分随实际读到的元素逐步扩容。用几个字节声称有十亿个元素的数据会被直接拒绝。
+- **分配之前先检查长度。** 每个元素个数都按元素最少占用的字节数和剩余字节比对；一个集合在读到元素之前，最多预先分配输入剩余字节数的 16 倍（至少 16 KB），超出的部分随实际读到的元素逐步扩容。几个字节就号称有十亿个元素的数据，直接拒绝。
 - **栈的用量有上限。** 嵌套超过 128 层的对象会推迟到较浅的层级再读取；不能推迟的（由构造函数创建或按值比较的类型、包含自身的结构体和集合）最多 [`NinoSettings.MaxDepth`](/zh/docs/v4/security#limits) 层（默认 512），途中还会检查剩余栈空间：更深的数据会抛出异常，而不是栈溢出。参见[深层对象图](#deep-object-graphs)。
-- **只创建你声明的类型。** 数据里只有类型 id，没有类型名：多态值只能是声明类型已注册的子类型之一，回指引用必须指向已经读过、类型与槽位相符的对象。`System.Type` 有意不支持序列化。
+- **只创建你声明的类型。** 数据里只有类型 ID，没有类型名：多态值只能是声明类型已注册的子类型之一，回引用必须指向已经读过、类型与槽位相符的对象。`System.Type` 有意不支持序列化。
 - **读取失败不会留下旧内存。** 读入已有值时，即使数据不够长或读到一半被拒绝（不是 0 或 1 的 `bool` 或存在字节、[不可信模式](/zh/docs/v4/security#untrusted-mode)检查的值），也不会在其中留下一个装着未初始化内存的数组。
 
-无效数据会抛出消息以 `Nino:` 开头的 `NinoDataException`（命名空间 `Nino.Core`，派生自 `InvalidOperationException`），不会抛出其他异常：被类型自身拒绝的值（格式错误的 `Uri`、不存在的区域或时区、越界的 `DateTimeOffset`、字典的 null 键）也以同样方式报告，原异常放在 `InnerException` 里。例如：
+无效数据只会抛出 `NinoDataException`（命名空间 `Nino.Core`，派生自 `InvalidOperationException`），消息以 `Nino:` 开头，不会是别的异常：类型自己拒绝的值（格式错误的 `Uri`、不存在的区域或时区、越界的 `DateTimeOffset`、字典的 null 键）也这样报告，原异常放在 `InnerException` 里。例如：
 
 - 数据被截断（"unexpected end of data"）；
 - 长度不合法；
@@ -283,17 +283,17 @@ Nino 本来就是为读取不可信来源的数据而设计的：网络对端、
 
 这些限制可以在 `NinoSettings` 中收紧，`NinoSettings.Untrusted` 会加上每次读取都要花时间的检查；参见[不可信数据](/zh/docs/v4/security)。
 
-在数据进入的地方捕获它，把输入当作坏数据处理。Nino 检查不了的部分要由你的代码负责，就像对待被用户改过的存档：
+在数据进入的地方捕获它，把输入当作坏数据处理。Nino 检查不了的部分要由你的代码负责，就像对待用户改过的存档：
 
-- **值。** 完整读出的值就是数据里写的值：负数的血量、没有名字的枚举值，以及（未设置 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 时）作为整块拷贝的非托管结构体中既不是 0 也不是 1 的 `bool` 字节。构造函数和 setter 会以这些值运行。请校验你的逻辑依赖的部分。
-- **类型。** 字节里不带 schema，所以按**另一个**布局兼容的类型写出的数据也能读出来而不报错。请自己给数据加上版本信息（参见[数据演进](/zh/docs/v4/evolving-data)和[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）；`Deserialize<object>` 接受任何已注册的类型。
-- **消息大小。** 分配量相对于输入是有界的，所以要限制输入：在缓冲之前限制帧或请求的大小（参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）。确实存在于数据中的元素会按其内存大小占用内存：一个成员全部省略的大型版本容错结构体，在数据里只占 4 字节。
+- **值。** 完整读出的值就是数据里写的值：负数的血量、没有名字的枚举值，以及（未设置 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 时）作为整块拷贝的非托管结构体中既不是 0 也不是 1 的 `bool` 字节。构造函数和 setter 拿到的就是这些值。请校验你的逻辑依赖的部分。
+- **类型。** 字节里不带 schema，所以为**另一个**布局兼容的类型写的数据，也能读出来而不报错。请自己给数据加上版本信息（参见[数据演进](/zh/docs/v4/evolving-data)和[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)）；`Deserialize<object>` 接受任何已注册的类型。
+- **消息大小。** 分配多少内存受输入大小约束，所以要限制输入：在缓冲之前限制帧或请求的大小（参见[为数据流分帧](/zh/docs/v4/advanced/networking#frame-the-stream)）。数据里真实存在的元素，照样占用它在内存中的大小：一个成员全部省略的大型版本容错结构体，在数据里只占 4 字节。
 
 本文档中有特定含义的词（顶层调用、格式化器、原始值、槽位等）见[术语表](/zh/docs/v4/glossary)。
 
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="定义类型" href="/zh/docs/v4/defining-types">哪些成员会被写入、按什么顺序写入，以及改变格式的选项。</Card>
+  <Card title="定义类型" href="/zh/docs/v4/defining-types">哪些成员会写出、按什么顺序，以及改变格式的选项。</Card>
   <Card title="支持的类型" href="/zh/docs/v4/types">基元类型、字符串、元组、集合，以及你自己的集合类型。</Card>
 </Cards>

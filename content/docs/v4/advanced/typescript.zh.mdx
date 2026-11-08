@@ -1,7 +1,7 @@
 ---
 title: TypeScript
 seoTitle: "在 TypeScript 中使用 Nino：从 [NinoType] 生成类和编解码器 – Nino v4 文档"
-description: "nino-gen 为你的 [NinoType] 生成的 TypeScript，用于浏览器和 Node：读写与 .NET 中 Nino 相同字节的类和编解码器，以及 API、类型映射、类型化数组、浏览器中的文本，和与 MemoryPack 的 TypeScript 的对比。"
+description: "nino-gen 为你的 [NinoType] 生成的 TypeScript，用于浏览器和 Node：与 .NET 互通的类和编解码器，以及 API、类型映射、类型化数组、浏览器中的文本，和与 MemoryPack 的 TypeScript 的对比。"
 icon: Globe
 ---
 
@@ -153,11 +153,11 @@ WebSocket 的用法相同：发送 `serialize` 的结果，设置 `binaryType = 
 
 ## API [#api]
 
-- **`serialize(codec, value)`** 返回一个 `Uint8Array`，内容与 .NET 中 `NinoSerializer.Serialize<T>` 写出的相同。结果不会被复制：每个结果都紧接在上一个结果之后写进一个共享的 64 KB 缓冲区，返回的是它上面的一个视图，之后的调用不会覆盖它（剩余空间不多，或某个结果超出缓冲区时，会换用新的缓冲区）。直接把这个 `Uint8Array` 交给 `fetch`、`WebSocket.send`、`Blob` 或流，它们会按 `byteOffset` 和 `length` 读取；不要使用它的 `.buffer`，其中还有其他结果。保留一个结果，就会让它所在的整个缓冲区一直存活：需要独占缓冲区的数组时，调用 `bytes.slice()`。
+- **`serialize(codec, value)`** 返回一个 `Uint8Array`，内容与 .NET 中 `NinoSerializer.Serialize<T>` 写出的相同。结果不做复制：每个结果都紧接在上一个结果之后写进一个共享的 64 KB 缓冲区，返回的是它上面的一个视图，之后的调用不会覆盖它（剩余空间不多，或某个结果超出缓冲区时，会换用新的缓冲区）。直接把这个 `Uint8Array` 交给 `fetch`、`WebSocket.send`、`Blob` 或流，它们会按 `byteOffset` 和 `length` 读取；不要使用它的 `.buffer`，其中还有其他结果。保留一个结果，就会让它所在的整个缓冲区一直存活：需要独占缓冲区的数组时，调用 `bytes.slice()`。
 - **`serializeInto(codec, value, target)`** 写进你自己的内存，相当于 .NET 中用复用的 `NinoArrayBufferWriter` 调用 `NinoSerializer.Serialize(value, bufferWriter)`，返回值的字节数。写进 `NinoWriter` 时追加在已有内容之后，按需扩容；`writer.reset()` 清空它并保留缓冲区，缓冲区足够大之后写入不再分配内存（不产生新的 `ArrayBuffer`，Node 24 大约每新增 64 MB 的 `ArrayBuffer` 就触发一次完整垃圾回收），`writer.written()` 在写入器下次写入之前都是这些字节的视图。写进 `Uint8Array` 时，值放得下就从数组开头写入；返回的字节数大于数组长度表示什么都没写。Go 有 `nino.Append` 和复用的 `Writer`，Rust 有 `serialize_into`。
 - **`deserialize(codec, bytes)`** 从一个 `Uint8Array`（Node 的 `Buffer` 也可以）中读取一个值。
 - **`deserializeInto(codec, bytes, value)`** 读进你已有的值，相当于 `NinoDeserializer.Deserialize(data, ref value)`，返回读到的值（除非数据是 null 或另一个类，否则就是 `value` 本身）。嵌套对象原地读取，数组保留存储并把每个元素读进同一下标的旧元素，映射和集合先清空再填充，按类型 ID 写出的成员只有在数据中是它自己的类时才读进它；追踪引用的对象和类型化数组总是新建。抛出异常时，`value` 保留出错前读到的内容，其余保持原样。Go 有 `nino.DeserializeInto` 配合生成的 `ReadXInto`，Rust 有 `deserialize_into`。
-- 每个类型 `X` 都有 **`XCodec`**：按 .NET 为其声明类型写出的头读写这个值。结构体没有头（`NinoCodec<X>`），密封类有空标记（`NinoCodec<X | null>`），非密封类和接口有类型 ID，所以 `AnimalCodec` 能读写 `Animal` 的任何生成子类型，与 `Serialize<Animal>` 一样。
+- 每个类型 `X` 都有 **`XCodec`**：读写这个值时，带上 .NET 按声明类型写的头。结构体没有头（`NinoCodec<X>`），密封类有存在字节（`NinoCodec<X | null>`），非密封类和接口有类型 ID，所以 `AnimalCodec` 能读写 `Animal` 的任何生成子类型，与 `Serialize<Animal>` 一样。
 - **`NinoWriter` 和 `NinoReader`** 把多个值写进一个缓冲区并按顺序读回，相当于 .NET 中的 `Writer` 和 `Reader`：先 `codec.write(writer, value)`，再 `writer.toBytes()`；读取时 `codec.read(new NinoReader(bytes))`。
 - 数据不是所读类型的有效值时（数据被截断、长度超出末尾、未知的类型 ID，以及[不可信数据](#untrusted-data)中的其他检查），以及值无法写出时，抛出 **`NinoError`**。
 
@@ -214,7 +214,7 @@ useWasm(true);  // 重新打开（在引擎允许的地方）
 
 ## 类型化数组 [#typed-arrays]
 
-默认情况下（`NumericArrays="plain"`），数字的数组或列表是 `number[]`（64 位整数为 `bigint[]`），在所有引擎中读取都最快。设置 `NumericArrays="typed"`（`--numeric-arrays typed`）后，`sbyte`、`short`、`ushort`、`int`、`uint`、`long`、`ulong`、`nint`、`nuint`、`float` 和 `double` 的数组、列表及其他序列（集合除外）改为类型化数组：`Int8Array`、`Int16Array`、`Uint16Array`、`Int32Array`、`Uint32Array`、`BigInt64Array`、`BigUint64Array`、`Float32Array` 和 `Float64Array`。线上的字节就是类型化数组自身的字节，所以字节不变，变的只是 TypeScript 类型。
+默认情况下（`NumericArrays="plain"`），数字的数组或列表是 `number[]`（64 位整数为 `bigint[]`），在所有引擎中读取都最快。设置 `NumericArrays="typed"`（`--numeric-arrays typed`）后，`sbyte`、`short`、`ushort`、`int`、`uint`、`long`、`ulong`、`nint`、`nuint`、`float` 和 `double` 的数组、列表及其他序列（集合除外）改为类型化数组：`Int8Array`、`Int16Array`、`Uint16Array`、`Int32Array`、`Uint32Array`、`BigInt64Array`、`BigUint64Array`、`Float32Array` 和 `Float64Array`。写出的字节就是类型化数组自身的字节，所以字节不变，变的只是 TypeScript 类型。
 
 ```csharp title="Mesh.cs"
 using System.Collections.Generic;
@@ -239,7 +239,7 @@ mesh.indices = Int32Array.of(0, 1, 2);
 
 - 超过 64 字节的数组整块复制；更短的逐个元素读写，因为 V8 把它们放在自己的堆上。
 - 读出的 65 字节到 8 KB 的数组是一个共享的 64 KB 缓冲区上的视图：转移其 `.buffer` 之前先 `slice()`。
-- 在 Node 和 Chromium 中序列化都更快，在 Node 中反序列化大的数字数组也更快。但每个类型化数组都需要自己的底层存储，很多读取中创建它们的开销比复制省下的更多：Chromium 反序列化几 KB 的数字数组比读成 `number[]` 慢 2 到 3.3 倍（Arm64 上约 2 倍，x64 上最多 3.3 倍），数组和其他成员混合的数据最多慢 1.4 倍，每个对象只带一个短数组的小对象列表在两种引擎中都慢 5% 到 25%。所以它不是默认值：在序列化为主、或在 Node 中读取大数组的场景再打开。
+- 在 Node 和 Chromium 中序列化都更快，在 Node 中反序列化大的数字数组也更快。但每个类型化数组都需要自己的底层存储，在很多读取场景里，创建它们的开销比复制省下的还多：Chromium 反序列化几 KB 的数字数组比读成 `number[]` 慢 2 到 3.3 倍（Arm64 上约 2 倍，x64 上最多 3.3 倍），数组和其他成员混合的数据最多慢 1.4 倍，每个对象只带一个短数组的小对象列表在两种引擎中都慢 5% 到 25%。所以它不是默认值：在序列化为主、或在 Node 中读取大数组的场景再打开。
 - `byte` 序列无论如何都是 `Uint8Array`。`bool`、`char`、`decimal`、`TimeSpan` 和枚举的序列仍是数组，集合仍是 `Set`。
 
 ## 泛型类型 [#generics]
@@ -266,16 +266,16 @@ mesh.indices = Int32Array.of(0, 1, 2);
 - 所有失败都是 `NinoError`。
 - 映射读入 `Map`，从不读入普通对象，所以 `__proto__` 这样的键只是数据。
 - `[NinoUtf8]` 字符串必须是给定字符数的严格 UTF-8。
-- V8 对数字、`bigint` 以及数组下标形式的字符串（`"0"` 到 `"4294967294"`，按其数值求哈希）求哈希时不带种子，数据可以挑出落进同一个桶的键。超过 128 个数字、`bigint` 或字符串键的映射或集合会让每个键经过 `NinoKeyGuard`（字符串只对数组下标形式的求哈希）：某个键在所在的桶里会碰到 100 个以上的键时，抛出 `NinoError`，和 .NET 的 [`MaxHashCollisions`](/zh/docs/v4/security#hash-flooding) 一样。这个防护只对 V8（Node、Chromium、Deno）精确，对 JavaScriptCore 和 SpiderMonkey 不精确，它们对键的哈希方式不同。Go 和 Rust 用随机种子求键的哈希。
+- V8 对数字、`bigint` 以及数组下标形式的字符串（`"0"` 到 `"4294967294"`，按其数值求哈希）求哈希时不带种子，数据就能专门挑选落进同一个桶的键。超过 128 个数字、`bigint` 或字符串键的映射或集合会让每个键经过 `NinoKeyGuard`（字符串只对数组下标形式的求哈希）：某个键在所在的桶里会碰到 100 个以上的键时，抛出 `NinoError`，和 .NET 的 [`MaxHashCollisions`](/zh/docs/v4/security#hash-flooding) 一样。这个防护只对 V8（Node、Chromium、Deno）精确，对 JavaScriptCore 和 SpiderMonkey 不精确，它们对键的哈希方式不同。Go 和 Rust 用随机种子求键的哈希。
 - 重复的键按 `Map` 和 `Set` 的方式比较：数字、`bigint`、字符串、布尔值和 `null` 按值比较。读成对象的键（读成 `Date` 的 `DateTime`、结构体、元组）以及只有小数位数不同的 `decimal` 不参与比较，这样的映射或集合会保留两个条目。
 
 ## TypeScript 不支持的内容 [#not-supported]
 
-除了[所有语言都不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated)，TypeScript 还会跳过编码暂时没有 TypeScript 形式的成员：多维数组、`DateTimeOffset`、`BigInteger`、`Version`、`BitArray`、`TimeZoneInfo`、`Uri`、`CultureInfo`、`StringBuilder`、`Memory<T>`、`ReadOnlyMemory<T>`、`ReadOnlySequence<T>`、`PriorityQueue<TElement, TPriority>`、`ILookup` 和 `IGrouping`、超过 7 项的元组，以及由 Nino.Core 以外的格式化器写出的成员：[自定义格式化器](/zh/docs/v4/custom-formatters)、`Nino.Immutable` 的不可变集合，以及 Unity 的 `AnimationCurve`、`Gradient` 和 `RectOffset`。包含它们的类型也会被跳过，并给出警告 NINOGEN002；含 `DateTimeOffset` 的原始结构体也一样（[原始结构体的字段](/zh/docs/v4/advanced/codegen#raw-struct-fields)）：`Date` 只到毫秒、读出来按 UTC，刻度和 kind 都回不来。
+除了[所有语言都不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated)，TypeScript 还会跳过编码暂时没有 TypeScript 形式的成员：多维数组、`DateTimeOffset`、`BigInteger`、`Version`、`BitArray`、`TimeZoneInfo`、`Uri`、`CultureInfo`、`StringBuilder`、`Memory<T>`、`ReadOnlyMemory<T>`、`ReadOnlySequence<T>`、`PriorityQueue<TElement, TPriority>`、`ILookup` 和 `IGrouping`、超过 7 项的元组，以及由 Nino.Core 以外的格式化器写出的成员：[自定义格式化器](/zh/docs/v4/custom-formatters)、`Nino.Immutable` 的不可变集合，以及 Unity 的 `AnimationCurve`、`Gradient` 和 `RectOffset`。包含它们的类型也一并跳过，并给出警告 NINOGEN002；含 `DateTimeOffset` 的原始结构体也一样（[原始结构体的字段](/zh/docs/v4/advanced/codegen#raw-struct-fields)）：`Date` 只到毫秒、读出来按 UTC，刻度和 kind 都回不来。
 
 ## 性能 [#performance]
 
-每次发布都会用 Nino 仓库中的 [`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench)，在 Node 中、相同数据上，对比生成的 TypeScript 与 Protocol Buffers（protobuf-es）、MessagePack（msgpackr）和 `JSON`。每个场景的值都由 .NET 中的 Nino 写出，计时之前每个值都必须读出再写回，得到完全相同的字节。每次遍历依次取数据的 64 个变体中的下一个，V8 无法复用上一次遍历在同一输入上的工作。JSON 拿到的是普通 JSON 数据（64 位整数为字符串，映射为对象），`JSON.parse` 的结果也不转换回 `bigint` 或 `Map`，所以 JSON 做的工作比生成的读取代码少。JSON 与二进制格式一样，计时包括转为 UTF-8 字节和从 UTF-8 字节读出（`TextEncoder`、`TextDecoder`）。测量方法以及 Go 和 Rust 的基准测试见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes)。
+每次发布都会用 Nino 仓库中的 [`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench)，在 Node 中、相同数据上，对比生成的 TypeScript 与 Protocol Buffers（protobuf-es）、MessagePack（msgpackr）和 `JSON`。每个场景的值都由 .NET 中的 Nino 写出，计时之前每个值都必须读出再写回，得到完全相同的字节。每次遍历依次取数据的 64 个变体中的下一个，这样 V8 无法复用上一次遍历在同一输入上的工作。JSON 拿到的是普通 JSON 数据（64 位整数为字符串，映射为对象），`JSON.parse` 的结果也不转换回 `bigint` 或 `Map`，所以 JSON 做的工作比生成的读取代码少。JSON 与二进制格式一样，计时包括转为 UTF-8 字节和从 UTF-8 字节读出（`TextEncoder`、`TextDecoder`）。测量方法以及 Go 和 Rust 的基准测试见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes)。
 
 <RuntimesTables lang="zh" only="typescript" />
 
@@ -289,7 +289,7 @@ mesh.indices = Int32Array.of(0, 1, 2);
 | 读取什么 | 发布的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)，即生成格式化器所依据的布局 | C# 源码，配合它自己的 TypeScript 读写代码 |
 | 配置 | 一个包引用和一个 `<NinoCodegen>` 项 | 需要用 `CompilerVisibleProperty` 项让编译器看到 MSBuild 属性，每个类型还要加特性 |
 | 运行时文件 | 版本变化导致内容变化时就重写 | 只在文件不存在时写入，升级 MemoryPack 不会更新已经写出的副本 |
-| 类型改名 | 旧文件会被删除 | 过时的 `.ts` 文件会留下（[#315](https://github.com/Cysharp/MemoryPack/issues/315)，以不计划修复关闭） |
+| 类型改名 | 删除旧文件 | 过时的 `.ts` 文件会留下（[#315](https://github.com/Cysharp/MemoryPack/issues/315)，以不计划修复关闭） |
 | 结构体 | ✅ | ❌ 只支持类 |
 | `char`、`decimal`、64 位枚举 | ✅ | ❌ |
 | 版本容错 | ✅ 版本容错和键控 | ❌ |
@@ -300,7 +300,7 @@ mesh.indices = Int32Array.of(0, 1, 2);
 
 Roslyn 不支持源生成器输出 C# 以外的文件（[dotnet/roslyn#49935](https://github.com/dotnet/roslyn/issues/49935)），分析器规则 RS1035 也禁止在生成器中读写文件；MemoryPack 没有启用包含这条规则的扩展分析器规则。它的 TypeScript 读写代码与 C# 格式化器分开编写，两者可能不一致：在 [#309](https://github.com/Cysharp/MemoryPack/issues/309) 中，TypeScript 写 `float?` 或 `double?` 的存在字节时宽度不对，C# 读出的是 `null`；在 [#166](https://github.com/Cysharp/MemoryPack/issues/166) 中，空字符串曾被写错。用户还报告过生成的代码无法通过严格的 `tsconfig`（[#426](https://github.com/Cysharp/MemoryPack/issues/426)）、导入了没有 `.ts` 文件的基类型（[#174](https://github.com/Cysharp/MemoryPack/issues/174)），以及换行符混用（[#311](https://github.com/Cysharp/MemoryPack/issues/311)）。
 
-Nino.Codegen 在构建之后运行，依据的正是 C# 格式化器所依据的布局，测试中还在 .NET 与 Node 之间逐字节往返并运行 `tsc --strict`，从而避开了这些问题。其他方案（Protocol Buffers、MessagePack）见[什么时候不适合](/zh/docs/v4#when-not-to-use-it)。
+Nino.Codegen 在构建之后运行，依据的正是 C# 格式化器所依据的布局，测试中还在 .NET 与 Node 之间逐字节往返并运行 `tsc --strict`，所以避开了这些问题。其他方案（Protocol Buffers、MessagePack）见[什么时候不适合](/zh/docs/v4#when-not-to-use-it)。
 
 ## 从 Nino.TypeScript 迁移 [#from-ninotypescript]
 
@@ -318,7 +318,7 @@ Nino.TypeScript（`nino-ts`，4.0 的候选版本直到 rc.7）由 Nino.Codegen 
 | `NINOTS001`、`NINOTS002` | `NINOGEN001`、`NINOGEN002` |
 | `.nino-ts` 清单 | `.nino-gen`；第一次运行会接管旧清单并删除它 |
 
-输出相同，只是文件头注释写的是 `nino-gen` 而不是 `Nino.TypeScript`。在声明项之前，`NinoTypeScript*` 属性仍然有效，但会给出警告 NINOGEN003：没有 `<NinoCodegen>` 项时，它们代表 `<NinoCodegen Include="typescript" ... />`（未设置 `NinoTypeScriptOutput` 时仍是 `ts/`）；与项同时存在时，它们被忽略。
+输出相同，只是文件头注释写的是 `nino-gen` 而不是 `Nino.TypeScript`。在声明项之前，`NinoTypeScript*` 属性仍然有效，但会给出警告 NINOGEN003：没有 `<NinoCodegen>` 项时，它们代表 `<NinoCodegen Include="typescript" ... />`（未设置 `NinoTypeScriptOutput` 时仍是 `ts/`）；与项同时存在时，直接忽略它们。
 
 ## 下一步 [#next-steps]
 

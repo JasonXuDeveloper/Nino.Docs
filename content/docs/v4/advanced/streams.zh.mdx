@@ -126,7 +126,7 @@ using (var file = File.OpenRead(path))
     checkpoint = StreamFrames.Read<Checkpoint>(file);
 ```
 
-`TryRead` 每帧租一个池化数组来读前缀和数据，并把结果复用反序列化到 `value` 中：`value` 的结构合适之后，写一帧、读一帧除了内容有变化的字符串之外都不分配内存。`Read` 每次返回新值。
+`TryRead` 每帧租一个池化数组来读前缀和数据，并直接读入 `value`：等 `value` 的结构对上之后，写一帧、读一帧，除了内容变了的字符串，什么都不分配。`Read` 每次返回新值。
 
 一串值（其他库用 `IAsyncEnumerable<T>` 流式传输的那种）就是连续的帧：每个元素写一帧，读到流结束为止，每一帧都读进同一个实例：
 
@@ -234,7 +234,7 @@ public static void Deserialize<T>(in ReadOnlySequence<byte> data, ref T value)
 
 ## 回调 [#callbacks]
 
-Nino 自己不调用任何钩子。把前后要执行的逻辑放进一个接口，再写一个小工具方法，在调用 Nino 的前后调用它们。由于泛型约束为该接口，这些调用不会对结构体装箱：
+Nino 自己不调用任何钩子。把前后要执行的逻辑放进一个接口，再写一个小工具方法，在调用 Nino 的前后调用它们。泛型参数约束为这个接口，所以调用不会给结构体装箱：
 
 ```csharp
 public interface ISerializationCallbacks
@@ -259,7 +259,7 @@ public static class CallbackSerializer
 }
 ```
 
-- 泛型工具方法里的调用不会被[拦截](/zh/docs/v4/performance#interceptors)，因为那里的 `T` 是类型参数。这些调用走常规路径，每次多花几纳秒。
+- 泛型工具方法里的调用不走[拦截器](/zh/docs/v4/performance#interceptors)，因为那里的 `T` 是类型参数。这些调用走常规路径，每次多花几纳秒。
 - 嵌套对象的钩子也由你的工具方法负责：在根对象的 `OnAfterDeserialize` 中调用它们。
 - 属于构造过程的逻辑，可以放在 [`[NinoConstructor]`](/zh/docs/v4/constructors) 或属性 setter 里，它们在反序列化过程中就会执行。
 
