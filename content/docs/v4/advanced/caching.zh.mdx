@@ -41,7 +41,7 @@ public sealed class RedisProfileCache
 
     public RedisProfileCache(IConnectionMultiplexer redis) => _db = redis.GetDatabase();
 
-    private static RedisKey Key(long id) => "profile:v1:" + id; // 键里带着结构版本
+    private static RedisKey Key(long id) => "profile:v1:" + id; // 键里带着schema 版本
 
     public void Set(UserProfile profile, TimeSpan ttl)
     {
@@ -228,7 +228,7 @@ public sealed class BlobCache<TKey, TValue>
 | 做法 | 方式 | 适用场景 |
 | --- | --- | --- |
 | 容错类型 | [`format: NinoFormat.VersionTolerant`](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）或 [`format: NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)（任意修改） | 条目需要在部署后继续可用。 |
-| 带版本的键 | 在键里加上结构版本（`profile:v2:42`），类型变化时递增 | 类型的改动超出上面两个选项能应付的范围，或者重新填充缓存的代价很低。 |
+| 带版本的键 | 在键里加上schema 版本（`profile:v2:42`），类型变化时递增 | 类型的改动超出上面两个选项能应付的范围，或者重新填充缓存的代价很低。 |
 | 失败即未命中 | 捕获无效数据抛出的 `NinoDataException`，删除该条目，再从数据源加载 | 一律加上，给前两种做法兜底。 |
 
 兜底替代不了前两种做法：另一个类型写的字节，只要布局兼容，就可能不报错地读出来。
@@ -239,7 +239,7 @@ Nino 读取时检查每个长度和边界，条目被截断或损坏时会抛异
 
 ## 检查清单 [#checklist]
 
-- [ ] 每种缓存的类型都是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，或者键里带结构版本。
+- [ ] 每种缓存的类型都是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，或者键里带schema 版本。
 - [ ] 写入时每个线程复用一个缓冲区；异步写入要等完成后再重置缓冲区。
 - [ ] 客户端提供池化内存（`Lease<byte>`、`ReadOnlySequence<byte>`）时，直接从这块内存反序列化。
 - [ ] 反序列化失败按缓存未命中处理。

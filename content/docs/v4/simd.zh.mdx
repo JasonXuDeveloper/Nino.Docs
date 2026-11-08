@@ -15,14 +15,14 @@ Nino 在每个平台上写出的字节都一样。平台有向量指令时，各
   { label: '有 SSSE3 的 x86 和 x64', cells: ['yes', 'yes', 'yes', 'partial: SSE4.1 和 SSSE3 路径', 'n/a: 看引擎'] },
   { label: 'Arm64', cells: ['yes: AdvSimd', 'yes: Neon', 'yes: NEON', 'yes: NEON', 'n/a: 看引擎'] },
   { label: '带 SIMD 的 WebAssembly', cells: ['yes: .NET 10', 'yes: WebGL，C 写的内核', 'no', 'no', 'yes: 支持 Wasm SIMD、GC 和 JS String Builtins 的浏览器'] },
-  { label: 'Arm32、无 SIMD、关闭硬件内联函数', cells: ['no', 'no', 'no', 'no', 'n/a: 看引擎'] },
+  { label: 'Arm32、无 SIMD、关闭硬件内部函数', cells: ['no', 'no', 'no', 'no', 'n/a: 看引擎'] },
 ]} />
 
 下面按平台列出 Nino 源码中现有的向量路径，并注明测量每条路径的基准测试。
 
 ## .NET [#dotnet]
 
-`Nino.Core` 的 `net8.0` 和 `net10.0` 版本使用 .NET 的硬件内联函数（hardware intrinsics）。JIT 只编译 CPU 支持的那条路径（`IsSupported` 检查对它来说是常量），其余路径没有任何开销。下文说的元组和 `KeyValuePair`，指由原始值组成、内存与字节不一致的那些。
+`Nino.Core` 的 `net8.0` 和 `net10.0` 版本使用 .NET 的硬件内部函数（hardware intrinsics）。JIT 只编译 CPU 支持的那条路径（`IsSupported` 检查对它来说是常量），其余路径没有任何开销。下文说的元组和 `KeyValuePair`，指由原始值组成、内存与字节不一致的那些。
 
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |
@@ -31,11 +31,11 @@ Nino 在每个平台上写出的字节都一样。平台有向量指令时，各
 | 支持 SSSE3 的 x64 | 带填充的元组和键值对按组处理，每个 16 字节向量由两次重排（`pshufb`）按位或得到（一组需要超过四个向量的块，与 AVX2 一样分成较小的组：十二个 `(byte, int)` 用四个向量）；其余每个值一次 16 字节重排；33 到 64 字节的块内联拷贝，用四次 16 字节移动，更大的块用 `memmove`；字符串每次 16 字节收窄和扩展 | [.NET 基准测试](/zh/docs/v4/benchmarks) |
 | Arm64（AdvSimd） | 带填充的元组和键值对，写入和读取都用查表（`TBL`）按组处理，每次若干个 16 字节向量：一组的窗口落在 16 字节网格上时，每个窗口只加载一次，成对加载（`LDP`），每次查表取一个窗口或相邻的两个（四个 `(int, long)` 由两对加载、三次查表写出）；填充字节用成对的 16 字节加载和存储（`LDP`/`STP`）清零；其余每个值一次 16 字节重排（`TBL`），不超过 8 字节的值每次处理八个，每写出 16 字节只用一次查表，查表只用到这 16 字节的来源所在的那几段（64 字节按 16 字节分成四段，用其中一到四个寄存器），只存储这些值实际占用的字节；33 到 64 字节的块内联拷贝，用四次 16 字节移动；65 字节到 64 KB 的块从对齐的源地址开始，每次 64 字节，用成对的加载和存储（`LDP`/`STP`）拷贝，更大的块用 `memmove`；字符串每次 16 字节收窄和扩展 | [.NET 基准测试](/zh/docs/v4/benchmarks)，Arm64 标签页 |
 | 支持 SIMD 的 WebAssembly（.NET 10） | 带填充的元组和键值对，写入和读取都按组处理，每个 16 字节向量用两次 swizzle（`i8x16.swizzle`），与 SSSE3 相同；其余每个值一次 16 字节重排（`PackedSimd`） | — |
-| Arm32，或关闭了硬件内联函数（`DOTNET_EnableHWIntrinsic=0`） | 无：需要重排的值逐个处理，超过 64 字节的块用 `memmove`；字节一致 | — |
+| Arm32，或关闭了硬件内部函数（`DOTNET_EnableHWIntrinsic=0`） | 无：需要重排的值逐个处理，超过 64 字节的块用 `memmove`；字节一致 | — |
 
 按组拷贝要对齐存储时，输出开头和结尾没对齐的部分，用与中间重叠的整组来覆盖，所以速度与输出缓冲区的起始地址无关。
 
-.NET Framework 和 .NET Core 3.0 到 .NET 7 加载 netstandard 版本，其中没有硬件内联函数，[单字节形式的字符串](/zh/docs/v4/wire-format#strings)每次转换四个字符；JIT 加速 `Vector<T>` 时，较长的 Latin-1 字符串用它收窄和扩展（Mono 和 Unity 上从不使用：Mono 的 `Vector.Narrow` 和 `Vector.Widen` 是软件实现，比标量代码慢）。
+.NET Framework 和 .NET Core 3.0 到 .NET 7 加载 netstandard 版本，其中没有硬件内部函数，[单字节形式的字符串](/zh/docs/v4/wire-format#strings)每次转换四个字符；JIT 加速 `Vector<T>` 时，较长的 Latin-1 字符串用它收窄和扩展（Mono 和 Unity 上从不使用：Mono 的 `Vector.Narrow` 和 `Vector.Widen` 是软件实现，比标量代码慢）。
 
 在所有版本和运行时上：
 
@@ -52,10 +52,10 @@ Unity 加载 `Nino.Core` 的 netstandard 版本。安装 `com.unity.burst` 1.8 �
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |
 | 支持 AVX2 的 x64，Burst AVX2 目标 | 256 个值及以上、每个值最多 16 字节的块的 `Permute`：每个 32 字节向量放两个或更多值，一个 `vpshufb` 掩码，各通道用 `vpermd` 拼接或分成两个 16 字节存储；其余部分、更宽的值和字符串走下面的 SSSE3 路径 | [Unity 基准测试](/zh/docs/v4/benchmarks-unity) |
-| 支持 SSSE3 的 x86 和 x64（x64 播放器中需要 SSE4 目标） | `Permute`：2 个及以上的元组、键值对和按块读写的 `[NinoType]` 结构体组成的数组和列表，每 16 字节一次字节重排（`pshufb`）读写，16 个及以上带填充的原始结构体在拷贝时清零填充；`Narrow` 和 `Widen`：16 个字符及以上的 Latin-1 字符串，每次 16 个字符；`NarrowAscii` 和 `WidenAscii`：16 个字符及以上的 `[NinoUtf8]` 字符串中直到第一个非 ASCII 字符为止的 ASCII 文本，其余部分交给 .NET 的 UTF-8 编码器和严格解码器 | [Unity 基准测试](/zh/docs/v4/benchmarks-unity) |
+| 支持 SSSE3 的 x86 和 x64（x64 Player 中需要 SSE4 目标） | `Permute`：2 个及以上的元组、键值对和按块读写的 `[NinoType]` 结构体组成的数组和列表，每 16 字节一次字节重排（`pshufb`）读写，16 个及以上带填充的原始结构体在拷贝时清零填充；`Narrow` 和 `Widen`：16 个字符及以上的 Latin-1 字符串，每次 16 个字符；`NarrowAscii` 和 `WidenAscii`：16 个字符及以上的 `[NinoUtf8]` 字符串中直到第一个非 ASCII 字符为止的 ASCII 文本，其余部分交给 .NET 的 UTF-8 编码器和严格解码器 | [Unity 基准测试](/zh/docs/v4/benchmarks-unity) |
 | Arm64（Neon） | 同样的内核，用 `tbl`，字符串用 `uzp1`/`zip` | — |
 | 用 WebAssembly SIMD 构建的 WebGL（Unity 6 的 Target WebAssembly 2023，或 2022.3 上的 `-msimd128`） | 那里没有 Burst：同样的内核用 C 写成（`Nino.WebGL`），使用 `i8x16.swizzle` 和向量收窄、扩展，处理 16 个字符及以上的 Latin-1 字符串和 `[NinoUtf8]` 字符串中的 ASCII 文本，其余的从 32 个值起。参见 [WebGL](/zh/docs/v4/advanced/unity#webgl-kernels) | — |
-| Armv7、没有 SIMD 的 WebGL、不支持 SSSE3（或没有包含它的目标）的 x86 和 x64、没有 Burst 的 IL2CPP 和 Mono 播放器（安装 Burst 即可使用内核） | 无：Nino 的 netstandard 标量路径；字节一致 | [Unity 基准测试](/zh/docs/v4/benchmarks-unity)，“不用 Burst”一列 |
+| Armv7、没有 SIMD 的 WebGL、不支持 SSSE3（或没有包含它的目标）的 x86 和 x64、没有 Burst 的 IL2CPP 和 Mono Player（安装 Burst 即可使用内核） | 无：Nino 的 netstandard 标量路径；字节一致 | [Unity 基准测试](/zh/docs/v4/benchmarks-unity)，“不用 Burst”一列 |
 
 ## Go [#go]
 

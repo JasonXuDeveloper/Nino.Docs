@@ -45,7 +45,7 @@ fn main() -> nino::Result<()> {
 | --- | --- |
 | `serialize`、`serialize_into` | 按声明类型写出一个值，和 `NinoSerializer.Serialize<T>` 一样。`serialize_into` 追加到一个 `Vec` 末尾，出错时截回原来的长度。 |
 | `deserialize`、`deserialize_exact` | 读取一个值。`deserialize_exact` 还会拒绝值后面多出的字节。 |
-| `deserialize_into` | 读入已有的值，和 `NinoDeserializer.Deserialize(data, ref value)` 一样：成员就地读取，复用 `Vec` 的缓冲区和元素，映射和 Set 先清空再填充，多态值只在类型相同时复用。 |
+| `deserialize_into` | 读入已有的值，和 `NinoDeserializer.Deserialize(data, ref value)` 一样：成员原地读取，复用 `Vec` 的缓冲区和元素，映射和 Set 先清空再填充，多态值只在类型相同时复用。 |
 
 ## 生成的代码 [#generated-code]
 
@@ -188,7 +188,7 @@ Rust 在编译时实例化泛型，所以用别的类型参数包含自身的泛
 
 声明了 [`[NinoType(trackReferences: true)]`](/zh/docs/v4/reference-tracking) 的类（比如 `Node`）是 `Option<nino::Shared<Node>>`：一个对象，可以有任意多处持有（克隆得到的还是同一个对象），按标识判断相等；用 `Shared::empty` 和 `fill` 构建循环。引用头和对它的检查与其他语言一样（[引用追踪](/zh/docs/v4/advanced/codegen#reference-tracking)）。
 
-在 Rust 中，一次读取创建的对象（包括循环）都归这次读取所有，并像 .NET 的垃圾回收器那样一起释放：时机是最后一个持有它们的 `Shared`（返回的值、它的任何克隆、存在所有追踪对象之外的 `Shared`）被 drop 时，或者读取失败时。丢掉读到的值后还想留下图的一部分，就克隆要留下的 `Shared`。手工构建的图（`Shared::new`、`Shared::empty` 和 `fill`）像 `Rc` 一样做引用计数，这样构建的循环不会释放。手写多态的追踪槽位的读取代码时，对槽位允许的每个类型，用 `r.shared_from::<T>(&r.back_ref(header)?)` 取回反向引用。
+在 Rust 中，一次读取创建的对象（包括循环）都归这次读取所有，并像 .NET 的垃圾回收器那样一起释放：时机是最后一个持有它们的 `Shared`（返回的值、它的任何克隆、存在所有追踪对象之外的 `Shared`）被 drop 时，或者读取失败时。丢掉读到的值后还想留下图的一部分，就克隆要留下的 `Shared`。手工构建的图（`Shared::new`、`Shared::empty` 和 `fill`）像 `Rc` 一样做引用计数，这样构建的循环不会释放。手写多态的追踪槽位的读取代码时，对槽位允许的每个类型，用 `r.shared_from::<T>(&r.back_ref(header)?)` 取回回引用。
 
 ## 不可信数据 [#untrusted-data]
 

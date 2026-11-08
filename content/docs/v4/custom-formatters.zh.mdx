@@ -233,7 +233,7 @@ public sealed class Level
 }
 ```
 
-- `[NinoRaw]` 只把 `T` 绑定到 Nino 按原始字节拷贝的类型：`Grid<byte>`、`Grid<Vector2>` 用这个格式化器，`Grid<string>` 成员则没有格式化器（NINO007）。运行时才遇到的类型按同样的规则绑定，Unity 的 IL2CPP 播放器里也一样：IL2CPP 不保留类型参数上的特性，所以你的程序集生成的注册表，会为它注册的格式化器记下 `[NinoRaw]`、`[NinoCreated]` 和 `unmanaged`。
+- `[NinoRaw]` 只把 `T` 绑定到 Nino 按原始字节拷贝的类型：`Grid<byte>`、`Grid<Vector2>` 用这个格式化器，`Grid<string>` 成员则没有格式化器（NINO007）。运行时才遇到的类型按同样的规则绑定，Unity 的 IL2CPP Player 里也一样：IL2CPP 不保留类型参数上的特性，所以你的程序集生成的注册表，会为它注册的格式化器记下 `[NinoRaw]`、`[NinoCreated]` 和 `unmanaged`。
 - `Writer.Write<T>(ReadOnlySpan<T>)` 和 `Reader.ReadUnmanagedRaw<T>(Span<T>)` 把元素整块拷贝；运行时的内存布局和规范布局不同时，逐字段转换。
 - 剩下的字节装不下这么多格子时，`ReadLength` 抛出异常，损坏的数据就没法让格式化器分配一个巨大的网格。
 
@@ -269,7 +269,7 @@ static void ReadBlock(ref Reader reader)
     // ...
     int consumed = slice.Position - start; // 切片内读取的字节数
     bool complete = slice.Eof;             // Remaining == 0：切片已读完
-    reader.EndSlice(in slice);             // 切片里读出的对象，之后的反向引用仍然能找到
+    reader.EndSlice(in slice);             // 切片里读出的对象，之后的回引用仍然能找到
 }
 ```
 

@@ -270,6 +270,11 @@ page):
 | hardware intrinsics | 硬件内部函数 (Microsoft Learn) | 硬件内联函数 (内联 is inlining), 硬件内在函数 |
 | a set (`HashSet`, `SortedSet`, `ISet`) | Set (Set 和字典, Set 中的字符串) | 集合 (that is collection) |
 | a case of a polymorphic slot or union | 分支 | 情况 |
+| a GitHub Actions runner | runner | 运行器 |
+| a Unity player (a built game) | Player (IL2CPP Player, WebGL Player, Player Settings) | 播放器 |
+| a schema (the shape of stored data) | schema (schema 版本) | 结构版本, 模式信息 |
+| a back reference (reference tracking) | 回引用 | 反向引用, 回指引用 |
+| in place | 原地 (原地填充; never 原地反序列化, which is 复用反序列化) | 就地 |
 | deserializing into an existing value (`Deserialize(data, ref value)`) | 复用反序列化 (English: reuse deserialization); 读入已有实例 for the act | 原地反序列化, in-place deserialization |
 | formatter, pool, untrusted, interceptor, polymorphism | 格式化器, 对象池, 不可信, 拦截器, 多态 | |
 

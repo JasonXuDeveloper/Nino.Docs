@@ -14,7 +14,7 @@ Nino 发布的运行时已经过优化，但生成器写出的格式化器，以
 | --- | --- | --- |
 | [.NET](#dotnet) | Release 构建；保持分层编译和动态 PGO 开启（默认）；用 .NET 8 SDK 或更新版本构建，以启用[拦截器](/zh/docs/v4/performance#interceptors) | `<TieredCompilation>false</TieredCompilation>`；测 Debug 构建 |
 | [.NET Native AOT](#native-aot) | 按你发布到的 CPU 设置 `<IlcInstructionSet>`；`<OptimizationPreference>Speed</OptimizationPreference>` | 不提高指令集却指望走 AVX2 或 AVX-512 路径 |
-| [Unity](#unity) | IL2CPP 播放器，C++ Compiler Configuration 选 Release 或 Master；安装 Burst；Burst AOT Settings 里勾上 SSE4 和 AVX2 | 不装 Burst 的播放器；Debug 的 C++ 配置 |
+| [Unity](#unity) | IL2CPP Player，C++ Compiler Configuration 选 Release 或 Master；安装 Burst；Burst AOT Settings 里勾上 SSE4 和 AVX2 | 不装 Burst 的 Player；Debug 的 C++ 配置 |
 | [Rust](#rust) | `[profile.release]` 里设 `lto` 和 `codegen-units = 1`；x86_64 上用 Rust 1.89 或更新版本 | 在别的机器上运行的二进制用 `-C target-cpu=native` |
 | [Go](#go) | 一份 `default.pgo`；所有机器都支持时设 `GOAMD64=v3` | `-tags purego` |
 | [TypeScript](#typescript) | 支持 WebAssembly SIMD、GC 和 JS String Builtins 的浏览器；内容安全策略里允许 `'wasm-unsafe-eval'` | 打包工具的目标低于 ES2020 |
@@ -62,8 +62,8 @@ Nino 发布的运行时已经过优化，但生成器写出的格式化器，以
 
 ## Unity [#unity]
 
-- **IL2CPP，Release 或 Master。** 播放器用 IL2CPP 构建，它把 Nino 和生成的格式化器编译成 C++，再编译成原生代码。在 **Player Settings > Other Settings > Configuration** 里把 **C++ Compiler Configuration** 设为 **Release** 或 **Master**：Debug 关掉 C++ 编译器的所有优化；Master 打开全部优化，构建时间可能比 Release 长得多（Unity 建议构建时间可以接受时，正式发布版用 Master）。**IL2CPP Code Generation** 保持默认的 **Optimize for runtime speed**：另一个选项生成的机器码更少，运行时可能更慢。
-- **安装 Burst**（`com.unity.burst` 1.8 或更新版本）。Unity 加载的是 `Nino.Core` 的 netstandard 构建，没有硬件内联函数；装了 Burst，Nino 在启动时为元组、带填充的结构体和字符串注册 SIMD 内核。没装时，IL2CPP 和 Mono 播放器停在标量路径上（字节一致）。x64 播放器要在 **Burst AOT Settings** 里勾上 **SSE4** 和 **AVX2** 两个目标，否则没有 AVX2 的 CPU 用不上任何内核。见 [Burst 加速内核](/zh/docs/v4/advanced/unity#burst-kernels)。
+- **IL2CPP，Release 或 Master。** Player 用 IL2CPP 构建，它把 Nino 和生成的格式化器编译成 C++，再编译成原生代码。在 **Player Settings > Other Settings > Configuration** 里把 **C++ Compiler Configuration** 设为 **Release** 或 **Master**：Debug 关掉 C++ 编译器的所有优化；Master 打开全部优化，构建时间可能比 Release 长得多（Unity 建议构建时间可以接受时，正式发布版用 Master）。**IL2CPP Code Generation** 保持默认的 **Optimize for runtime speed**：另一个选项生成的机器码更少，运行时可能更慢。
+- **安装 Burst**（`com.unity.burst` 1.8 或更新版本）。Unity 加载的是 `Nino.Core` 的 netstandard 构建，没有硬件内部函数；装了 Burst，Nino 在启动时为元组、带填充的结构体和字符串注册 SIMD 内核。没装时，IL2CPP 和 Mono Player 停在标量路径上（字节一致）。x64 Player 要在 **Burst AOT Settings** 里勾上 **SSE4** 和 **AVX2** 两个目标，否则没有 AVX2 的 CPU 用不上任何内核。见 [Burst 加速内核](/zh/docs/v4/advanced/unity#burst-kernels)。
 - **WebGL** 没有 Burst：用 WebAssembly SIMD 构建（Unity 6：**Target WebAssembly 2023**），才能用上 Nino 的 WebGL 内核；见 [WebGL](/zh/docs/v4/advanced/unity#webgl-kernels)。
 - **裁剪。** Nino 不带 `link.xml`，也不要求你加：每个生成的注册表都标了 `[RuntimeInitializeOnLoadMethod]`，IL2CPP 链接器不会把它裁掉。见 [IL2CPP](/zh/docs/v4/advanced/unity#il2cpp)。
 
@@ -94,10 +94,10 @@ codegen-units = 1
 
 ## 基准测试用的配置 [#what-the-benchmarks-use]
 
-公布的数字来自各工具链的默认设置，在 GitHub 的运行器上测得：
+公布的数字来自各工具链的默认设置，在 GitHub 的 runner 上测得：
 
 - [.NET](/zh/docs/v4/benchmarks)：BenchmarkDotNet 的 Release 构建，跑在 JIT 上，分层编译和动态 PGO 开启；不用 ReadyToRun，不用 Native AOT。
-- [Unity](/zh/docs/v4/benchmarks-unity)：IL2CPP 播放器，每个用例分别在不用和使用 Burst 内核时测量。
+- [Unity](/zh/docs/v4/benchmarks-unity)：IL2CPP Player，每个用例分别在不用和使用 Burst 内核时测量。
 - [Go、Rust 和 TypeScript](/zh/docs/v4/benchmarks-runtimes)：`go test -bench`，不用 PGO，`GOAMD64` 为默认值；`cargo bench`，Cargo 默认的 release 设置，不指定目标 CPU；Node 和无头 Chromium。
 
 ## 常见陷阱 [#pitfalls]
@@ -108,7 +108,7 @@ codegen-units = 1
 | 为了“数字更稳”把 `TieredCompilation` 设为 false | 没有动态 PGO；ReadyToRun 代码永远不会被替换 | 保持分层编译开启 |
 | x64 上用 Native AOT 却不设 `IlcInstructionSet` | 不走 AVX2 和 AVX-512 路径 | 提高到用户 CPU 都支持的级别 |
 | `IlcInstructionSet`、`-C target-cpu` 或 `GOAMD64` 高于用户的 CPU | 应用启动不了，或遇到非法指令而终止 | 选每台目标机器都支持的级别 |
-| Unity 播放器没装 Burst | 元组、带填充的结构体和字符串走标量路径 | 安装 `com.unity.burst`，勾上 SSE4 和 AVX2 目标 |
+| Unity Player 没装 Burst | 元组、带填充的结构体和字符串走标量路径 | 安装 `com.unity.burst`，勾上 SSE4 和 AVX2 目标 |
 | `go build -tags purego` | 没有字符串内核 | 去掉这个标签构建 |
 | 页面的 CSP 禁止编译 WebAssembly | 文本走 JavaScript 路径（浏览器可能报告一次 CSP 违规） | 允许 `'wasm-unsafe-eval'` |
 

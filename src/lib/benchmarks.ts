@@ -596,7 +596,7 @@ export function sourceNote(zh: boolean, ds = x64, machine = false) {
   const runner =
     ds.arch === 'arm64' && origin === 'release'
       ? zh
-        ? 'GitHub 的 ubuntu-24.04-arm 运行器'
+        ? 'GitHub 的 ubuntu-24.04-arm runner'
         : "GitHub's ubuntu-24.04-arm runners"
       : null;
   const env = environment ? environmentLabel(environment) : '';
