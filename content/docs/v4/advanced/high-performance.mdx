@@ -141,7 +141,7 @@ A `null` instance of a fixed-size sealed class is written as 1 byte; every other
 
 `NinoDeserializer` reads a `ReadOnlySpan<byte>`, so pass a slice of whatever buffer the bytes are already in: a pooled receive buffer, a pipe segment, a memory-mapped file. There is no need to copy them into a fresh `byte[]`, and reading allocates only the objects it returns ([what allocates](/en/docs/v4/advanced/zero-allocation#what-allocates)). A [receive loop](/en/docs/v4/advanced/zero-allocation#receive-loop) rents its buffer once per socket, not per message.
 
-For `ReadOnlySequence<byte>` (from `System.IO.Pipelines`), see [Networking](/en/docs/v4/advanced/networking#reading-frames).
+A `ReadOnlySequence<byte>` (from `System.IO.Pipelines`) is read the same way, with `NinoDeserializer.Deserialize<T>(sequence)`: one segment in place, several copied once ([Multi-Segment Input](/en/docs/v4/advanced/streams#readonlysequence-input); frames out of a pipe: [Reading Frames](/en/docs/v4/advanced/networking#reading-frames)).
 
 ## Deserialize into Existing Objects
 

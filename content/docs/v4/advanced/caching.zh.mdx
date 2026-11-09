@@ -105,7 +105,6 @@ public static class DistributedCacheExtensions
 `HybridCache`（`Microsoft.Extensions.Caching.Hybrid` 包）写入时交给序列化器一个 `IBufferWriter<byte>`，读取时交给它一个 `ReadOnlySequence<byte>`，正好对上 Nino 的 API：
 
 ```csharp title="NinoHybridSerializer.cs"
-using System;
 using System.Buffers;
 using Microsoft.Extensions.Caching.Hybrid;
 using Nino.Core;
@@ -114,31 +113,21 @@ public sealed class NinoHybridSerializer<T> : IHybridCacheSerializer<T>
 {
     public void Serialize(T value, IBufferWriter<byte> target) => NinoSerializer.Serialize(value, target);
 
-    public T Deserialize(ReadOnlySequence<byte> source)
-    {
-        if (source.IsSingleSegment)
-            return NinoDeserializer.Deserialize<T>(source.First.Span);
-
-        int length = checked((int)source.Length);
-        byte[] rented = ArrayPool<byte>.Shared.Rent(length);
-        try
-        {
-            source.CopyTo(rented);
-            return NinoDeserializer.Deserialize<T>(rented.AsSpan(0, length));
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(rented);
-        }
-    }
+    public T Deserialize(ReadOnlySequence<byte> source) => NinoDeserializer.Deserialize<T>(source); // [!code highlight]
 }
 ```
 
-从 rc.10 起，`Deserialize` 的方法体只需要一行：`NinoDeserializer.Deserialize<T>(source)` 会直接读取这个序列，做法和上面相同。
+序列只有一段时，`Deserialize` 直接在原内存上读；有多段时先拷贝一次到池化缓冲区（[多段输入](/zh/docs/v4/advanced/streams#readonlysequence-input)）。
 
 - 每种要缓存的类型用 `AddSerializer` 注册一个序列化器（见[注册](#registration)）。
 - `HybridCache` 给的缓冲区写入器不是 `NinoArrayBufferWriter`，所以 Nino 先序列化到当前线程的暂存缓冲区，再一次性复制过去。每次调用都不分配内存。
 - 泛型序列化器里的调用[拦截器](/zh/docs/v4/performance#interceptors)接管不了，因为 `T` 在那里是类型参数；这些调用走常规路径，每次多花几纳秒。
+
+<Callout title="rc.9 及更早的版本">
+
+`NinoDeserializer` 从 rc.10 起才能读 `ReadOnlySequence<byte>`。更早的版本里，`Deserialize` 改为返回 [rc.9 及更早版本用的序列辅助方法](/zh/docs/v4/advanced/streams#sequence-helpers-rc9)的结果。
+
+</Callout>
 
 ## 注册 [#registration]
 

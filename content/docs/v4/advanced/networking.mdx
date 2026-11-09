@@ -105,7 +105,7 @@ If your transport already frames messages (WebSocket messages, UDP datagrams, a 
 
 ## Reading Frames
 
-Read frames out of the `ReadOnlySequence<byte>` the pipe gives you. A frame that lies in one segment (the common case) is deserialized from the pipe's own memory; one that spans two segments is copied once, to the stack or to a pooled array. A read may end in the middle of a frame or hold several frames: the loop takes every complete frame and leaves the rest in the pipe for the next read.
+A pipe hands you whatever bytes have arrived, while `NinoDeserializer.Deserialize<T>(sequence)` reads exactly one value, so the loop below cuts each frame out of the `ReadOnlySequence<byte>` and passes it to Nino. A frame that lies in one segment (the common case) is deserialized from the pipe's own memory; one that spans two segments is copied once, to the stack or to a pooled array. A read may end in the middle of a frame or hold several frames: the loop takes every complete frame and leaves the rest in the pipe for the next read.
 
 ```csharp title="FrameReader.cs"
 using System;
@@ -132,7 +132,7 @@ public static class FrameReader
                 ReadOnlySequence<byte> buffer = result.Buffer;
 
                 while (TryReadFrame(ref buffer, out ReadOnlySequence<byte> frame))
-                    handle(Decode<Message>(frame));
+                    handle(NinoDeserializer.Deserialize<Message>(frame)); // [!code highlight]
 
                 input.AdvanceTo(buffer.Start, buffer.End);
                 if (replies != null)
@@ -166,42 +166,14 @@ public static class FrameReader
         buffer = buffer.Slice(4 + length);
         return true;
     }
-
-    public static T Decode<T>(in ReadOnlySequence<byte> frame) // a new instance
-    {
-        T value = default;
-        Decode(frame, ref value);
-        return value;
-    }
-
-    public static void Decode<T>(in ReadOnlySequence<byte> frame, ref T value) // into value: filled in place when it is the same type
-    {
-        if (frame.IsSingleSegment)                       // the common case: no copy
-        {
-            NinoDeserializer.Deserialize(frame.First.Span, ref value); // [!code highlight]
-            return;
-        }
-
-        int length = checked((int)frame.Length);         // spans segments: copy once
-        if (length <= 512)
-        {
-            Span<byte> stack = stackalloc byte[length];
-            frame.CopyTo(stack);
-            NinoDeserializer.Deserialize(stack, ref value);
-            return;
-        }
-        byte[] rented = ArrayPool<byte>.Shared.Rent(length);
-        try
-        {
-            frame.CopyTo(rented);
-            NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
-        }
-        finally { ArrayPool<byte>.Shared.Return(rented); }
-    }
 }
 ```
 
-Since rc.10, `NinoDeserializer.Deserialize<T>(frame)` and `Deserialize(frame, ref value)` take the `ReadOnlySequence<byte>` themselves, with the same single-segment path and one copy otherwise: on rc.10 and later, call them instead of the two `Decode` methods.
+<Callout title="On rc.9 and earlier">
+
+`NinoDeserializer` reads a `ReadOnlySequence<byte>` since rc.10. On earlier releases, call the [sequence helpers for rc.9 and earlier](/en/docs/v4/advanced/streams#sequence-helpers-rc9) where this page calls `NinoDeserializer.Deserialize(frame)`.
+
+</Callout>
 
 <Callout type="info">
 
@@ -456,7 +428,7 @@ public sealed partial class PriceUpdate : Message
 }
 
 // in the read loop
-Message message = FrameReader.Decode<Message>(frame);
+Message message = NinoDeserializer.Deserialize<Message>(frame);
 Handle(message);
 if (message is INinoPooled pooled)
     pooled.ReturnToPool();
@@ -474,7 +446,7 @@ private Message _last; // per connection, used by one thread at a time
 
 void OnFrame(in ReadOnlySequence<byte> frame) // each frame TryReadFrame returns
 {
-    FrameReader.Decode(frame, ref _last);
+    NinoDeserializer.Deserialize(frame, ref _last);
     Handle(_last);
 }
 ```
@@ -484,7 +456,7 @@ void OnFrame(in ReadOnlySequence<byte> frame) // each frame TryReadFrame returns
 
 ## gRPC [#grpc]
 
-gRPC for .NET does not require Protocol Buffers: a method is described by a `Method<TRequest, TResponse>` with a marshaller per message type. A Nino marshaller writes into the buffer writer gRPC provides (through Nino's scratch buffer, one copy) and reads the payload sequence it receives with `FrameReader.Decode` from [Reading Frames](#reading-frames), with no per-message `byte[]` on either side:
+gRPC for .NET does not require Protocol Buffers: a method is described by a `Method<TRequest, TResponse>` with a marshaller per message type. A Nino marshaller writes into the buffer writer gRPC provides (through Nino's scratch buffer, one copy) and reads the payload sequence it receives with the [sequence overload](/en/docs/v4/advanced/streams#readonlysequence-input), with no per-message `byte[]` on either side:
 
 ```csharp title="NinoMarshaller.cs"
 using Grpc.Core;
@@ -499,7 +471,7 @@ public static class NinoMarshaller
             context.Complete();
         },
         // the payload as it arrived: one segment is read in place, several are copied once
-        deserializer: context => FrameReader.Decode<T>(context.PayloadAsReadOnlySequence()));
+        deserializer: context => NinoDeserializer.Deserialize<T>(context.PayloadAsReadOnlySequence()));
 }
 
 [NinoType] public sealed class GetPriceRequest { public int InstrumentId; }

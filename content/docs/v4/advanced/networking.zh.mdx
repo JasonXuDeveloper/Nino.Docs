@@ -105,7 +105,7 @@ await pipe.Output.FlushAsync();
 
 ## 读取帧 [#reading-frames]
 
-从管道给出的 `ReadOnlySequence<byte>` 中切出每一帧。位于单个分段中的帧（最常见的情况）直接在管道自己的内存上反序列化；跨两个分段的帧拷贝一次，拷到栈上或池化的数组中。一次读取可能停在某帧的中间，也可能包含好几帧：循环取出所有完整的帧，剩下的留在管道里等下一次读取。
+管道到了多少字节就给多少，而 `NinoDeserializer.Deserialize<T>(sequence)` 只读一个值，所以下面的循环先从 `ReadOnlySequence<byte>` 里切出每一帧，再交给 Nino。整帧落在一个分段里（最常见）时，直接在管道自己的内存上反序列化；跨两个分段的帧拷贝一次，拷到栈上或池化数组里。一次读取可能停在某帧的中间，也可能包含好几帧：循环取出所有完整的帧，剩下的留在管道里等下一次读取。
 
 ```csharp title="FrameReader.cs"
 using System;
@@ -132,7 +132,7 @@ public static class FrameReader
                 ReadOnlySequence<byte> buffer = result.Buffer;
 
                 while (TryReadFrame(ref buffer, out ReadOnlySequence<byte> frame))
-                    handle(Decode<Message>(frame));
+                    handle(NinoDeserializer.Deserialize<Message>(frame)); // [!code highlight]
 
                 input.AdvanceTo(buffer.Start, buffer.End);
                 if (replies != null)
@@ -166,42 +166,14 @@ public static class FrameReader
         buffer = buffer.Slice(4 + length);
         return true;
     }
-
-    public static T Decode<T>(in ReadOnlySequence<byte> frame) // 新建一个实例
-    {
-        T value = default;
-        Decode(frame, ref value);
-        return value;
-    }
-
-    public static void Decode<T>(in ReadOnlySequence<byte> frame, ref T value) // 读入 value：同类型时原地填充
-    {
-        if (frame.IsSingleSegment)                       // 常见情况：不复制
-        {
-            NinoDeserializer.Deserialize(frame.First.Span, ref value); // [!code highlight]
-            return;
-        }
-
-        int length = checked((int)frame.Length);         // 跨多个段：复制一次
-        if (length <= 512)
-        {
-            Span<byte> stack = stackalloc byte[length];
-            frame.CopyTo(stack);
-            NinoDeserializer.Deserialize(stack, ref value);
-            return;
-        }
-        byte[] rented = ArrayPool<byte>.Shared.Rent(length);
-        try
-        {
-            frame.CopyTo(rented);
-            NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
-        }
-        finally { ArrayPool<byte>.Shared.Return(rented); }
-    }
 }
 ```
 
-从 rc.10 起，`NinoDeserializer.Deserialize<T>(frame)` 和 `Deserialize(frame, ref value)` 可以直接接收 `ReadOnlySequence<byte>`，单段时同样不拷贝，跨段时只拷一次：rc.10 及以后直接调用它们，不需要上面两个 `Decode` 方法。
+<Callout title="rc.9 及更早的版本">
+
+`NinoDeserializer` 从 rc.10 起才能读 `ReadOnlySequence<byte>`。更早的版本里，本页调用 `NinoDeserializer.Deserialize(frame)` 的地方，换成 [rc.9 及更早版本用的序列辅助方法](/zh/docs/v4/advanced/streams#sequence-helpers-rc9)。
+
+</Callout>
 
 <Callout type="info">
 
@@ -456,7 +428,7 @@ public sealed partial class PriceUpdate : Message
 }
 
 // 在读取循环中
-Message message = FrameReader.Decode<Message>(frame);
+Message message = NinoDeserializer.Deserialize<Message>(frame);
 Handle(message);
 if (message is INinoPooled pooled)
     pooled.ReturnToPool();
@@ -474,7 +446,7 @@ private Message _last; // 每个连接一个，同一时间只由一个线程使
 
 void OnFrame(in ReadOnlySequence<byte> frame) // TryReadFrame 取出的每一帧
 {
-    FrameReader.Decode(frame, ref _last);
+    NinoDeserializer.Deserialize(frame, ref _last);
     Handle(_last);
 }
 ```
@@ -484,7 +456,7 @@ void OnFrame(in ReadOnlySequence<byte> frame) // TryReadFrame 取出的每一帧
 
 ## gRPC [#grpc]
 
-.NET 的 gRPC 并不要求使用 Protocol Buffers：一个方法由 `Method<TRequest, TResponse>` 描述，每种消息类型配一个编组器（marshaller）。Nino 编组器写入 gRPC 提供的缓冲区写入器（经由 Nino 的暂存缓冲区，拷贝一次），收到的负载序列则交给[读取帧](#reading-frames)中的 `FrameReader.Decode` 读取，两端都不会为每条消息分配 `byte[]`：
+.NET 的 gRPC 并不要求使用 Protocol Buffers：一个方法由 `Method<TRequest, TResponse>` 描述，每种消息类型配一个编组器（marshaller）。Nino 编组器写入 gRPC 提供的缓冲区写入器（经由 Nino 的暂存缓冲区，拷贝一次），收到的负载序列直接交给[序列重载](/zh/docs/v4/advanced/streams#readonlysequence-input)读取，两端都不会为每条消息分配 `byte[]`：
 
 ```csharp title="NinoMarshaller.cs"
 using Grpc.Core;
@@ -499,7 +471,7 @@ public static class NinoMarshaller
             context.Complete();
         },
         // 负载保持到达时的样子：只有一个段就原地读取，多个段则复制一次
-        deserializer: context => FrameReader.Decode<T>(context.PayloadAsReadOnlySequence()));
+        deserializer: context => NinoDeserializer.Deserialize<T>(context.PayloadAsReadOnlySequence()));
 }
 
 [NinoType] public sealed class GetPriceRequest { public int InstrumentId; }

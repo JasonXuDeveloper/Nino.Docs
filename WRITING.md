@@ -111,6 +111,13 @@ A feature page has these parts, in this order (Chinese headings in brackets):
 7. **Pitfalls** [常见陷阱]: "Mistake | What happens | Caught by", naming the NINO rule or the exception.
 8. **Related** [相关页面]: `<Cards>` with two to four pages.
 
+**The newest release's API is the main text; older releases get a Callout.** Examples and prose use the built-in call
+of the release under audit; how earlier releases do it goes in one short Callout after it ("On rc.9 and earlier",
+"rc.9 及更早的版本"), its helper code in an Accordion. Never keep the old helper as the main code beside a note that
+the new API exists, nor show a built-in call and a hand-written replacement for the same job on one page; code a page
+still writes itself (frames, compression) says in its first sentence why no built-in call does it. The rule and its
+evidence are Nino's `audit-docs` skill, §2 item 1.
+
 Overview, FAQ and reference pages answer the questions their readers search for, one `##` per question.
 
 ## Visual forms

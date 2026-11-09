@@ -105,7 +105,6 @@ A store that hands you a `Stream` instead (a blob container, an S3 object, a fil
 `HybridCache` (the `Microsoft.Extensions.Caching.Hybrid` package) hands a serializer an `IBufferWriter<byte>` to write into and a `ReadOnlySequence<byte>` to read from, which matches Nino's API directly:
 
 ```csharp title="NinoHybridSerializer.cs"
-using System;
 using System.Buffers;
 using Microsoft.Extensions.Caching.Hybrid;
 using Nino.Core;
@@ -114,31 +113,21 @@ public sealed class NinoHybridSerializer<T> : IHybridCacheSerializer<T>
 {
     public void Serialize(T value, IBufferWriter<byte> target) => NinoSerializer.Serialize(value, target);
 
-    public T Deserialize(ReadOnlySequence<byte> source)
-    {
-        if (source.IsSingleSegment)
-            return NinoDeserializer.Deserialize<T>(source.First.Span);
-
-        int length = checked((int)source.Length);
-        byte[] rented = ArrayPool<byte>.Shared.Rent(length);
-        try
-        {
-            source.CopyTo(rented);
-            return NinoDeserializer.Deserialize<T>(rented.AsSpan(0, length));
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(rented);
-        }
-    }
+    public T Deserialize(ReadOnlySequence<byte> source) => NinoDeserializer.Deserialize<T>(source); // [!code highlight]
 }
 ```
 
-Since rc.10 the body of `Deserialize` is one call: `NinoDeserializer.Deserialize<T>(source)` reads the sequence itself, the same way.
+`Deserialize` reads the sequence where it lies when it is one segment, and copies it once into a pooled buffer when it is several ([Multi-Segment Input](/en/docs/v4/advanced/streams#readonlysequence-input)).
 
 - Register one serializer per cached type, with `AddSerializer` (see [Register Them](#registration)).
 - `HybridCache`'s buffer writer is not a `NinoArrayBufferWriter`, so Nino serializes into its per-thread scratch buffer and copies the result in once. Nothing is allocated per call.
 - Calls inside the generic serializer are not [intercepted](/en/docs/v4/performance#interceptors), because `T` is a type parameter there; they take the regular path, a few nanoseconds more per call.
+
+<Callout title="On rc.9 and earlier">
+
+`NinoDeserializer` reads a `ReadOnlySequence<byte>` since rc.10. On earlier releases, return the [sequence helper for rc.9 and earlier](/en/docs/v4/advanced/streams#sequence-helpers-rc9) from `Deserialize` instead.
+
+</Callout>
 
 ## Register Them [#registration]
 

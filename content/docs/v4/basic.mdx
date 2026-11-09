@@ -54,7 +54,7 @@ void NinoSerializer.Serialize<T>(in T value, IBufferWriter<byte> bufferWriter);
 // With an existing Writer (several values in one buffer, custom formatters)
 void NinoSerializer.Serialize<T>(in T value, ref Writer writer);
 
-// To a Stream: the same bytes, no framing (since rc.10; see Streams and Compression)
+// To a Stream: the same bytes, no framing (see Streams and Compression)
 void NinoSerializer.Serialize<T>(in T value, Stream stream);
 ValueTask NinoSerializer.SerializeAsync<T>(T value, Stream stream, CancellationToken cancellationToken = default);
 
@@ -131,7 +131,7 @@ void NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data, ref T value);
 T NinoDeserializer.Deserialize<T>(ref Reader reader);
 void NinoDeserializer.Deserialize<T>(ref Reader reader, ref T value);
 
-// A Stream, read to its end (since rc.10; see Streams and Compression)
+// A Stream, read to its end (see Streams and Compression)
 T NinoDeserializer.Deserialize<T>(Stream stream);
 void NinoDeserializer.Deserialize<T>(Stream stream, ref T value);
 ValueTask<T> NinoDeserializer.DeserializeAsync<T>(Stream stream, CancellationToken cancellationToken = default);
@@ -145,7 +145,7 @@ void NinoDeserializer.DeserializeBoxed(Stream stream, ref object value, Type typ
 ValueTask<object> NinoDeserializer.DeserializeBoxedAsync(Stream stream, Type type, CancellationToken cancellationToken = default);
 ```
 
-The data is a `ReadOnlySpan<byte>`: pass a `byte[]`, an `ArraySegment<byte>`, a `Span<byte>`, `Memory<byte>.Span` or a slice of any buffer you already have, without copying it. A `ReadOnlySequence<byte>` (from `System.IO.Pipelines`) has overloads of its own since rc.10, which copy only data that spans several segments: [Multi-Segment Input](/en/docs/v4/advanced/streams#readonlysequence-input). A `Stream` holding one value is read with `Deserialize<T>(stream)` or `await DeserializeAsync<T>(stream)`: [Streams](/en/docs/v4/advanced/streams#streams).
+The data is a `ReadOnlySpan<byte>`: pass a `byte[]`, an `ArraySegment<byte>`, a `Span<byte>`, `Memory<byte>.Span` or a slice of any buffer you already have, without copying it. A `ReadOnlySequence<byte>` (from `System.IO.Pipelines`) has overloads of its own, which copy only data that spans several segments: [Multi-Segment Input](/en/docs/v4/advanced/streams#readonlysequence-input). A `Stream` holding one value is read with `Deserialize<T>(stream)` or `await DeserializeAsync<T>(stream)`: [Streams](/en/docs/v4/advanced/streams#streams).
 
 ```csharp
 Order order = NinoDeserializer.Deserialize<Order>(bytes);

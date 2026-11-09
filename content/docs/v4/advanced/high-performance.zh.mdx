@@ -141,7 +141,7 @@ if (NinoSerializer.GetFixedSize<Tick>() < 0)
 
 `NinoDeserializer` 读取的是 `ReadOnlySpan<byte>`，字节在哪个缓冲区里（池化的接收缓冲区、管道的一段内存、内存映射文件），就直接传那块缓冲区的切片，不必再拷贝到新的 `byte[]`；读取时只分配它返回的对象（见[哪些调用会分配内存](/zh/docs/v4/advanced/zero-allocation#what-allocates)）。[接收循环](/zh/docs/v4/advanced/zero-allocation#receive-loop)每个 socket 只租一次缓冲区，而不是每条消息租一次。
 
-`ReadOnlySequence<byte>`（来自 `System.IO.Pipelines`）的处理方式见[网络](/zh/docs/v4/advanced/networking#reading-frames)。
+`ReadOnlySequence<byte>`（来自 `System.IO.Pipelines`）也一样，直接调 `NinoDeserializer.Deserialize<T>(sequence)`：只有一段时直接在原内存上读，有多段时拷贝一次（见[多段输入](/zh/docs/v4/advanced/streams#readonlysequence-input)；从管道里切帧见[读取帧](/zh/docs/v4/advanced/networking#reading-frames)）。
 
 ## 反序列化到已有对象 [#deserialize-into-existing-objects]
 

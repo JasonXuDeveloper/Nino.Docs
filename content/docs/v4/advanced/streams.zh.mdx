@@ -1,7 +1,7 @@
 ---
 title: 流与压缩
 seoTitle: "流、异步 I/O 与压缩 – Nino v4 文档"
-description: "用 NinoSerializer 和 NinoDeserializer 直接读写 Stream，同步异步都有；一个流上传多条消息时用带长度前缀的帧；ReadOnlySequence 输入；Brotli 或 GZip 压缩。"
+description: "用 NinoSerializer 和 NinoDeserializer 直接读写 Stream，同步异步都有，也能直接读 ReadOnlySequence；一个流上传多条消息时自己加带长度前缀的帧，再按需加 Brotli 或 GZip 压缩。"
 icon: ArrowDownUp
 ---
 
@@ -11,14 +11,14 @@ icon: ArrowDownUp
   }}
 />
 
-从 rc.10 起，`NinoSerializer` 和 `NinoDeserializer` 可以直接读写 `Stream`，同步、`await` 都行。一次调用往流里写一个值，或者从流里读一个值、一直读到流结束。一个流上要传多条消息，就得分帧；压缩在这之上再加几行代码。下面逐一介绍。
+`NinoSerializer` 和 `NinoDeserializer` 可以直接读写 `Stream`，同步、`await` 都行；管道给的 `ReadOnlySequence<byte>` 也能直接读。每次调用处理一个值。一个流上要传多条消息，就得分帧；想让字节更少，就得压缩。这两件事 Nino 都没有内置，本页给出要自己加的代码。
 
 | 你的场景 | 用法 |
 | --- | --- |
 | 一个流只放一个值：文件、HTTP 请求体、blob | [`Serialize(value, stream)`、`Deserialize<T>(stream)`](#streams) |
 | 同上，但要异步 I/O | [`SerializeAsync`、`DeserializeAsync`](#async) |
+| `PipeReader`、gRPC 或 `HybridCache` 给的 `ReadOnlySequence<byte>` | [`Deserialize<T>(sequence)`](#readonlysequence-input) |
 | 一个流上有很多值：socket、记录日志 | [分帧](#frames) |
-| `PipeReader` 给的 `ReadOnlySequence<byte>` | [`Deserialize<T>(sequence)`](#readonlysequence-input) |
 | 想让磁盘或网络上的字节更少 | [压缩](#compression) |
 
 ## 流 [#streams]
@@ -60,9 +60,62 @@ Checkpoint read = await NinoDeserializer.DeserializeAsync<Checkpoint>(stream, ct
 - 没有读入已有实例的异步版本（`async` 方法不能带 `ref` 参数）：用同步的 `Deserialize(stream, ref value)`，或者自己读出字节，再调 `Deserialize(span, ref value)`。
 - 异步调用需要 .NET Standard 2.1 及以上：.NET 8、.NET 10，以及 Nino 支持的所有 Unity 版本。.NET Framework 用的是 .NET Standard 2.0 版本，只有同步调用。
 
+## 多段输入（`ReadOnlySequence`） [#readonlysequence-input]
+
+`PipeReader`、gRPC 的负载和 `HybridCache` 给的都是 `ReadOnlySequence<byte>`，直接交给 `NinoDeserializer` 就行：只有一段时直接在原内存上读，不拷贝；有多段时拷贝一次，512 字节以内拷到栈上，更大的拷进池化数组。`ref` 重载会填充你保留的实例。
+
+```csharp
+Checkpoint read = NinoDeserializer.Deserialize<Checkpoint>(sequence); // [!code highlight]
+NinoDeserializer.Deserialize(sequence, ref checkpoint); // 填充同一个实例
+```
+
+管道每次读取通常只返回一段，所以大多数读取都不拷贝。序列里必须正好是一个值；要从管道的缓冲区里切出一帧帧数据，见[读取帧](/zh/docs/v4/advanced/networking#reading-frames)。
+
+<Callout title="rc.9 及更早的版本">
+
+序列重载是 rc.10 加的，之前的版本只能读 span：`sequence.IsSingleSegment` 为 true 时读 `sequence.First.Span`，否则先把序列拷进池化数组再读。
+
+<Accordions>
+<Accordion title="rc.9 及更早版本用的序列辅助方法" id="sequence-helpers-rc9" value="sequence-helpers-rc9">
+
+```csharp
+public static T Deserialize<T>(in ReadOnlySequence<byte> data)
+{
+    T value = default;
+    Deserialize(data, ref value);
+    return value;
+}
+
+public static void Deserialize<T>(in ReadOnlySequence<byte> data, ref T value)
+{
+    if (data.IsSingleSegment)
+    {
+        NinoDeserializer.Deserialize(data.First.Span, ref value); // .NET 5+ 上可用 data.FirstSpan
+        return;
+    }
+
+    int length = checked((int)data.Length);
+    byte[] rented = ArrayPool<byte>.Shared.Rent(length);
+    try
+    {
+        data.CopyTo(rented);
+        NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
+    }
+    finally
+    {
+        ArrayPool<byte>.Shared.Return(rented);
+    }
+}
+```
+
+</Accordion>
+</Accordions>
+
+</Callout>
+
 ## 一个流上的多条消息 [#frames]
 
-`Deserialize<T>(stream)` 读一个值，一直读到流结束。socket 或记录文件里有很多个值，所以每个值都写成一帧：先是 4 字节小端序的长度，再是数据。`Writer` 先预留长度的位置，接着序列化值，最后回填长度，全部在同一个缓冲区里完成：
+Nino 没有自己的帧格式：`Deserialize<T>(stream)` 只读一个值，一直读到流结束；socket 或记录文件里每条消息在哪里结束，由你的协议决定。常见的做法是每个值写成一帧：先是 4 字节小端序的长度，再是数据。`Writer` 先预留长度的位置，接着序列化值，最后回填长度，全部在同一个缓冲区里完成：
 
 ```csharp title="StreamFrames.cs"
 using System;
@@ -243,54 +296,25 @@ public static partial class StreamFrames
 
 `Fill` 和 `FillAsync` 在所有目标上都能用；在 .NET 7 及以上，也可以换成 `Stream.ReadAtLeast` / `ReadExactlyAsync`。`stream.Write(span)`、`WriteAsync(memory)` 和 `ReadAsync(memory)` 需要 .NET Standard 2.1，Nino 支持的所有 Unity 版本（2022.3 及以上）都满足；只面向 .NET Standard 2.0 时，改用 `byte[]` 重载，写入的数组用 `MemoryMarshal.TryGetArray(buffer.WrittenMemory, out var segment)` 取出。
 
-使用 `System.IO.Pipelines` 时，直接序列化到 `PipeWriter`（它就是 `IBufferWriter<byte>`），再从 `PipeReader` 中读取帧。完整的读取循环参见[读取帧](/zh/docs/v4/advanced/networking#reading-frames)，它解码每一帧的方式和下面的序列重载一样。
-
-## 多段输入（`ReadOnlySequence`） [#readonlysequence-input]
-
-`PipeReader` 或 `SequenceReader` 给出的是 `ReadOnlySequence<byte>`。从 rc.10 起，`NinoDeserializer` 可以直接读它：只有一段时原地反序列化，有多段时拷贝一次（512 字节以内拷到栈上，更大的拷进池化数组）；`ref` 重载会填充你保留的实例。
-
-```csharp
-Checkpoint read = NinoDeserializer.Deserialize<Checkpoint>(sequence);
-NinoDeserializer.Deserialize(sequence, ref checkpoint); // 填充同一个实例
-```
-
-rc.9 及更早的版本没有这两个重载，自己加上即可：
-
-```csharp
-public static T Deserialize<T>(in ReadOnlySequence<byte> data)
-{
-    T value = default;
-    Deserialize(data, ref value);
-    return value;
-}
-
-public static void Deserialize<T>(in ReadOnlySequence<byte> data, ref T value)
-{
-    if (data.IsSingleSegment)
-    {
-        NinoDeserializer.Deserialize(data.First.Span, ref value); // .NET 5+ 上可用 data.FirstSpan
-        return;
-    }
-
-    int length = checked((int)data.Length);
-    byte[] rented = ArrayPool<byte>.Shared.Rent(length);
-    try
-    {
-        data.CopyTo(rented);
-        NinoDeserializer.Deserialize(rented.AsSpan(0, length), ref value);
-    }
-    finally
-    {
-        ArrayPool<byte>.Shared.Return(rented);
-    }
-}
-```
-
-把这两个方法也加到 `StreamFrames` 中。不管用哪种写法，管道每次读取通常只返回一段，所以大多数帧走第一个分支，不需要任何拷贝。
+使用 `System.IO.Pipelines` 时，直接序列化到 `PipeWriter`（它就是 `IBufferWriter<byte>`），再从 `PipeReader` 中读取帧。完整的读取循环见[读取帧](/zh/docs/v4/advanced/networking#reading-frames)，每一帧都用[序列重载](#readonlysequence-input)读。
 
 ## 压缩 [#compression]
 
-压缩 Nino 写出的字节；读取前先解压到池化的缓冲区。使用 span 时，每帧开头写两个长度：压缩后的长度告诉读取方这一帧在哪里结束（同一个缓冲区里可以连着放多帧），压缩前的长度告诉它要租多大的缓冲区。`Compress` 可以写入任意 `IBufferWriter<byte>`（另一个你保留的 `NinoArrayBufferWriter`、`PipeWriter`），`Decompress` 填充你保留的实例，所以缓冲区增长到位之后两者都不分配内存：
+Nino 本身不压缩，它只管读写字节，压缩交给压缩库。用流的话，把流包一层，对外层的流调用 Nino 的流重载即可。`GZipStream` 在所有平台上都能用，包括 .NET Standard 2.0 和 Unity：
+
+```csharp
+using (var gzip = new GZipStream(File.Create(path), CompressionLevel.Fastest))
+    NinoSerializer.Serialize(checkpoint, gzip);
+
+using (var gzip = new GZipStream(File.OpenRead(path), CompressionMode.Decompress))
+    checkpoint = NinoDeserializer.Deserialize<Checkpoint>(gzip);
+```
+
+一个压缩流里要放多个值，就用 `StreamFrames` 往外层的流里写[帧](#frames)。解压流送出的字节数取决于数据能解压出多少，和文件本身多大无关，所以别人给的数据请按下面的压缩帧来读，它的 `MaxSize` 限制了解压后的长度。
+
+### 压缩帧 [#compressed-frames]
+
+用 span 时，压缩 Nino 写出的字节，读之前先解压到池化的缓冲区。每帧开头写两个长度：压缩后的长度告诉读取方这一帧在哪里结束（同一个缓冲区里可以连着放多帧），压缩前的长度告诉它要租多大的缓冲区。`Compress` 可以写入任意 `IBufferWriter<byte>`（另一个你保留的 `NinoArrayBufferWriter`、`PipeWriter`），`Decompress` 填充你保留的实例，所以缓冲区增长到位之后两者都不分配内存：
 
 ```csharp title="BrotliPayload.cs"
 using System;
@@ -348,18 +372,6 @@ public static class BrotliPayload
     }
 }
 ```
-
-使用流时，把流包一层，再对外层的流调用 Nino。`GZipStream` 在所有平台上都可用，包括 .NET Standard 2.0 和 Unity：
-
-```csharp
-using (var gzip = new GZipStream(File.Create(path), CompressionLevel.Fastest))
-    NinoSerializer.Serialize(checkpoint, gzip);
-
-using (var gzip = new GZipStream(File.OpenRead(path), CompressionMode.Decompress))
-    checkpoint = NinoDeserializer.Deserialize<Checkpoint>(gzip);
-```
-
-一个压缩流里要放多个值，就用 `StreamFrames` 往外层的流里写[帧](#frames)。解压流送出的字节数取决于数据能解压出多少，和文件本身多大无关，所以别人给的文件请用 `BrotliPayload` 读，它的 `MaxSize` 限制了解压后的长度。
 
 `BrotliEncoder`、`BrotliDecoder` 和 `BrotliStream` 需要 .NET Core 2.1 及以上，.NET Standard 中没有。如果想要更快、可以接受压缩率低一些，可以用 LZ4 库，它们提供和 `BrotliEncoder.TryCompress` 一样的 span 输入、span 输出接口。
 
