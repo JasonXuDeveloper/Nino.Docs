@@ -36,7 +36,7 @@ icon: Gauge
 | [`Writer` 与 `Reader`](#several-values-back-to-back) | 多个值共用一个缓冲区 | 每条消息调用一次 `Flush` 和 `ReleaseReferences` |
 | [直接从已有内存反序列化](#deserialize-from-the-memory-you-have) | 任何时候 | 无 |
 | [`Deserialize<T>(sequence)`](#deserialize-from-the-memory-you-have) | 管道或 gRPC 给的是 `ReadOnlySequence<byte>` | 只有一段时无；多段时拷贝一次 |
-| [`Serialize(value, stream)` 与 `Deserialize<T>(stream)`](#streams) | 一个文件、HTTP 请求体或 blob 只放一个值 | 从 Nino 的暂存缓冲区一次 `Write`；读取时租一个池化数组（缓冲区可公开访问的 `MemoryStream` 不用租） |
+| [`Serialize(value, stream)` 与 `Deserialize<T>(stream)`](#streams) | 一个文件、HTTP 请求体或 blob 只放一个值 | 从 Nino 的暂存缓冲区一次 `Write`；读取时租一个池化数组（缓冲区可公开访问的 `MemoryStream`、`UnmanagedMemoryStream` 和内存映射视图不用租） |
 | [复用反序列化（`ref`）](#deserialize-into-existing-objects) | 结构相同的消息，逐条处理 | 实例由你持有，每次读取都会改变它 |
 | [`[NinoPooled]`](#pool-what-you-create) 与[池容量](/zh/docs/v4/settings#pools) | 高频创建、保留或丢弃的实例 | 类必须是 `sealed partial`，自己持有的实例要 `ReturnToPool()`，池占用内存 |
 | [非托管结构体及其布局](/zh/docs/v4/advanced/type-design#keep-bulk-data-raw) | 批量数据和热数据 | 布局是格式的一部分 |
@@ -154,7 +154,7 @@ NinoSerializer.Serialize(checkpoint, file);                 // 每次调用不�
 NinoDeserializer.Deserialize(file, ref checkpoint);         // 填充你保留的实例
 ```
 
-- **开销：** 写入时先序列化到线程级暂存缓冲区，再一次 `Write` 交给流：0 B。读取时把流里的字节读进从 `ArrayPool<byte>.Shared` 租来的数组（缓冲区可公开访问的 `MemoryStream` 直接在原缓冲区上读），读完就还回去。I/O 立刻完成时，`SerializeAsync` 和 `DeserializeAsync` 也不会多分配。
+- **开销：** 写入时先序列化到线程级暂存缓冲区，再一次 `Write` 交给流：0 B。读取时把流里的字节读进从 `ArrayPool<byte>.Shared` 租来的数组（缓冲区可公开访问的 `MemoryStream`、`UnmanagedMemoryStream` 和内存映射视图直接在原内存上读），读完就还回去。I/O 立刻完成时，`SerializeAsync` 和 `DeserializeAsync` 也不会多分配。
 - 先 `NinoSerializer.Serialize(value)` 再 `stream.Write(bytes)`，就多分配了一个流重载本来能省掉的数组。
 - 一次调用读到流的结尾，所以一个流只放一个值。一个流上要传多条消息就得分帧：见[流与压缩](/zh/docs/v4/advanced/streams#frames)，以及不分配内存的[分帧读写流](/zh/docs/v4/advanced/zero-allocation#framed-streams)做法。
 

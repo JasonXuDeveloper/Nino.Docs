@@ -18,7 +18,7 @@ icon: Leaf
 | `NinoDeserializer.Deserialize<T>(span)` | 返回的对象：数据里的类实例、集合和字符串；只含非托管成员的结构体不分配 |
 | `NinoDeserializer.Deserialize(span, ref value)` | 现有对象图容纳不下的部分（新增的列表元素、长度变化的数组），以及内容有变化的字符串（内容不变的字符串会保留；非 ASCII 的 `[NinoUtf8]` 文本总是读成新字符串） |
 | `NinoDeserializer.Deserialize<T>(sequence)` | 和 span 调用一样；多段的序列先拷贝一次，512 字节以内拷到栈上，更大的拷进池化数组 |
-| `NinoDeserializer.Deserialize<T>(stream)`、`DeserializeAsync` | 和 span 调用一样；流里的字节读进池化数组，读完就还回去（缓冲区可公开访问的 `MemoryStream` 直接在原缓冲区上读） |
+| `NinoDeserializer.Deserialize<T>(stream)`、`DeserializeAsync` | 和 span 调用一样；流里的字节读进池化数组，读完就还回去（缓冲区可公开访问的 `MemoryStream`、`UnmanagedMemoryStream` 和内存映射视图直接在原内存上读） |
 | Nino 需要创建的 `[NinoPooled]` 类 | 对象池里有实例时不分配 |
 
 序列化用的缓冲区在最初几次调用时增长，之后一直复用；`NinoArrayBufferWriter` 的数组租自 `ArrayPool<byte>.Shared`。Nino 不会为每次调用在堆上保留任何状态。

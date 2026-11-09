@@ -36,7 +36,7 @@ It opens the performance track; the pages after it go deeper, in this order: [De
 | [`Writer` and `Reader`](#several-values-back-to-back) | several values share one buffer | `Flush` and `ReleaseReferences` once per message |
 | [Deserializing from the memory you have](#deserialize-from-the-memory-you-have) | always | nothing |
 | [`Deserialize<T>(sequence)`](#deserialize-from-the-memory-you-have) | a pipe or gRPC hands you a `ReadOnlySequence<byte>` | nothing for one segment; one copy for several |
-| [`Serialize(value, stream)` and `Deserialize<T>(stream)`](#streams) | one value per file, HTTP body or blob | one `Write` from Nino's scratch buffer; reading rents a pooled array (none for a `MemoryStream` whose buffer is exposed) |
+| [`Serialize(value, stream)` and `Deserialize<T>(stream)`](#streams) | one value per file, HTTP body or blob | one `Write` from Nino's scratch buffer; reading rents a pooled array (none for a `MemoryStream` whose buffer is exposed, an `UnmanagedMemoryStream` or a memory-mapped view) |
 | [Reuse deserialization (`ref`)](#deserialize-into-existing-objects) | messages of the same shape, one at a time | you keep the instance, and it changes with every read |
 | [`[NinoPooled]`](#pool-what-you-create) and [pool sizes](/en/docs/v4/settings#pools) | instances created, kept or dropped at a high rate | `sealed partial` classes, a `ReturnToPool()` per instance you own, memory the pools hold |
 | [Unmanaged structs and their layout](/en/docs/v4/advanced/type-design#keep-bulk-data-raw) | bulk and hot data | the layout is part of the format |
@@ -154,7 +154,7 @@ NinoSerializer.Serialize(checkpoint, file);                 // no byte[] per cal
 NinoDeserializer.Deserialize(file, ref checkpoint);         // fills the instance you keep
 ```
 
-- **Cost:** writing serializes into the per-thread scratch buffer and hands it to the stream in one `Write`: 0 B. Reading takes the stream's bytes into an array rented from `ArrayPool<byte>.Shared` (a `MemoryStream` whose buffer is exposed is read in place) and returns it after the read. `SerializeAsync` and `DeserializeAsync` allocate nothing more when the I/O completes at once.
+- **Cost:** writing serializes into the per-thread scratch buffer and hands it to the stream in one `Write`: 0 B. Reading takes the stream's bytes into an array rented from `ArrayPool<byte>.Shared` (a `MemoryStream` whose buffer is exposed, an `UnmanagedMemoryStream` and a memory-mapped view are read in place) and returns it after the read. `SerializeAsync` and `DeserializeAsync` allocate nothing more when the I/O completes at once.
 - `NinoSerializer.Serialize(value)` and then `stream.Write(bytes)` allocates the array the stream overload avoids.
 - One call reads to the end of the stream, so a stream carries one value. Several messages on one stream need frames: [Streams and Compression](/en/docs/v4/advanced/streams#frames), and the allocation-free [framed stream](/en/docs/v4/advanced/zero-allocation#framed-streams) recipe.
 

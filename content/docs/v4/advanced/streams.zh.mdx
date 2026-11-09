@@ -37,7 +37,7 @@ using (var file = File.OpenRead(path))
 ```
 
 - **写出的字节。** 流里的内容和 `NinoSerializer.Serialize(checkpoint)` 返回的字节完全相同：不加长度，也不加头。Nino 先序列化到池化的<Term id="scratch-buffer" lang="zh">暂存缓冲区</Term>，再一次 `Write` 交给流，每次调用都不分配数组。
-- **读取。** 从流的当前位置读到结尾，读进从 `ArrayPool<byte>.Shared` 租来的数组，读完就还回去。缓冲区可以公开访问的 `MemoryStream`（`TryGetBuffer` 能成功：用 `new MemoryStream()` 写进去的，或者创建时传了 `publiclyVisible: true` 的）直接在原缓冲区上读，不拷贝，读完后流停在末尾；`new MemoryStream(bytes)` 不公开缓冲区，字节会先拷进租来的数组。手里已经有数组的话，直接交给 `Deserialize<T>(bytes)`，别再包一层流。之后就和读 span 一样，所有检查照做：[不可信模式](/zh/docs/v4/security#untrusted-mode)同样生效，包括拒绝值后面多出的字节；流提前结束会抛 `NinoDataException`。
+- **读取。** 从流的当前位置读到结尾，读进从 `ArrayPool<byte>.Shared` 租来的数组，读完就还回去。缓冲区可以公开访问的 `MemoryStream`（`TryGetBuffer` 能成功：用 `new MemoryStream()` 写进去的，或者创建时传了 `publiclyVisible: true` 的）直接在原缓冲区上读，不拷贝，读完后流停在末尾，`UnmanagedMemoryStream` 和 `MemoryMappedViewStream`（内存映射文件）也一样；`new MemoryStream(bytes)` 不公开缓冲区，字节会先拷进租来的数组。手里已经有数组的话，直接交给 `Deserialize<T>(bytes)`，别再包一层流。之后就和读 span 一样，所有检查照做：[不可信模式](/zh/docs/v4/security#untrusted-mode)同样生效，包括拒绝值后面多出的字节；流提前结束会抛 `NinoDataException`。
 - **扩容。** 不能 seek 的流从 4 KiB 开始，数组满了才翻倍。能 seek 的流按 `Length` 定第一个数组的大小，但最多 1 MiB，因为长度只是流自己声称的。Nino 占用的内存最多比流实际送来的字节多一倍左右。
 - **调用方式。** 编译时知道类型的调用和 span 调用一样会被[拦截](/zh/docs/v4/performance#interceptors)，直接调用生成的格式化器。只有运行时才知道 `Type` 时，[装箱 API](/zh/docs/v4/basic#the-boxed-api) 也能读写流：`SerializeBoxed(value, stream, type)`、`DeserializeBoxed(stream, type)` 和 `DeserializeBoxed(stream, ref value, type)`。
 
@@ -115,9 +115,34 @@ public static void Deserialize<T>(in ReadOnlySequence<byte> data, ref T value)
 
 ## 一个流上的多条消息 [#frames]
 
-Nino 没有自己的帧格式：`Deserialize<T>(stream)` 只读一个值，一直读到流结束；socket 或记录文件里每条消息在哪里结束，由你的协议决定。常见的做法是每个值写成一帧：先是 4 字节小端序的长度，再是数据。`Writer` 先预留长度的位置，接着序列化值，最后回填长度，全部在同一个缓冲区里完成：
+Nino 没有自己的帧格式：`Deserialize<T>(stream)` 只读一个值，一直读到流结束；socket 或记录文件里每条消息在哪里结束，由你的协议决定。常见的做法是每个值写成一帧：先是 4 字节小端序的长度，再是数据。流可以定位（`MemoryStream`、你写入的文件）时，直接在流上预留长度：记下位置，先写 4 个空字节，把值直接序列化到流里，再跳回去补上长度，不需要自己准备缓冲区。不能定位的流（socket、管道、`GZipStream`）回不去，就在缓冲区里拼好整帧：`Writer` 先预留长度的位置，接着序列化值，最后回填长度，然后一次写进流里：
 
-```csharp title="StreamFrames.cs"
+```csharp title="StreamFrames.cs" tab="可定位的流"
+using System;
+using System.Buffers.Binary;
+using System.IO;
+using Nino.Core;
+
+public static partial class StreamFrames
+{
+    // [int32 长度][数据]，长度直接回填在流上
+    public static void WriteInPlace<T>(Stream stream, T value)
+    {
+        Span<byte> prefix = stackalloc byte[4];
+        prefix.Clear();
+        long start = stream.Position;
+        stream.Write(prefix);                    // 长度占位
+        NinoSerializer.Serialize(value, stream); // [!code highlight]
+        long end = stream.Position;
+        BinaryPrimitives.WriteInt32LittleEndian(prefix, checked((int)(end - start - 4)));
+        stream.Position = start;
+        stream.Write(prefix);                    // 回填长度
+        stream.Position = end;
+    }
+}
+```
+
+```csharp title="StreamFrames.cs" tab="任意流"
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
@@ -149,6 +174,8 @@ public static partial class StreamFrames
     }
 }
 ```
+
+在 `MemoryStream` 上定位几乎没有开销；`FileStream` 每次定位都会把缓冲区写出去，所以往一个文件里写大量小帧时，用缓冲区的写法写盘次数更少。
 
 读取正好反过来：读 4 字节前缀，检查长度，读满这么多字节，再反序列化。流一次可能返回比要求少的字节，所以 `Fill` 循环读，直到读够为止：
 

@@ -37,7 +37,7 @@ using (var file = File.OpenRead(path))
 ```
 
 - **The bytes.** The stream gets exactly what `NinoSerializer.Serialize(checkpoint)` returns: no length, no header. Nino serializes into its pooled <Term id="scratch-buffer">scratch buffer</Term> and hands it to the stream in one `Write`, so a call allocates no array.
-- **Reading.** From the stream's position to its end, into an array rented from `ArrayPool<byte>.Shared` and returned after the read. A `MemoryStream` whose buffer is exposed (`TryGetBuffer` succeeds: one you wrote into with `new MemoryStream()`, or one made with `publiclyVisible: true`) is read in place, with no copy, and left at its end; `new MemoryStream(bytes)` hides its buffer, so its bytes are copied into the rented array. When you already hold the array, pass it to `Deserialize<T>(bytes)` instead of wrapping it in a stream. The bytes are then read as a span is, with every check: [untrusted mode](/en/docs/v4/security#untrusted-mode) applies, bytes after the value included, and a stream that ends early throws `NinoDataException`.
+- **Reading.** From the stream's position to its end, into an array rented from `ArrayPool<byte>.Shared` and returned after the read. A `MemoryStream` whose buffer is exposed (`TryGetBuffer` succeeds: one you wrote into with `new MemoryStream()`, or one made with `publiclyVisible: true`) is read in place, with no copy, and left at its end, and so are an `UnmanagedMemoryStream` and a `MemoryMappedViewStream` (a memory-mapped file); `new MemoryStream(bytes)` hides its buffer, so its bytes are copied into the rented array. When you already hold the array, pass it to `Deserialize<T>(bytes)` instead of wrapping it in a stream. The bytes are then read as a span is, with every check: [untrusted mode](/en/docs/v4/security#untrusted-mode) applies, bytes after the value included, and a stream that ends early throws `NinoDataException`.
 - **Growth.** A stream that cannot seek starts with 4 KiB and doubles the array only when it is full. A seekable stream's `Length` sizes the first array up to 1 MiB, since a length is only a claim. Nino never holds much more than twice what the stream delivered.
 - **Calls.** With a type known at compile time, both calls are [intercepted](/en/docs/v4/performance#interceptors) like the span calls and go straight to the generated formatter. For a type known only as a `Type`, the [boxed calls](/en/docs/v4/basic#the-boxed-api) take a stream too: `SerializeBoxed(value, stream, type)`, `DeserializeBoxed(stream, type)` and `DeserializeBoxed(stream, ref value, type)`.
 
@@ -115,9 +115,34 @@ public static void Deserialize<T>(in ReadOnlySequence<byte> data, ref T value)
 
 ## Several Messages on One Stream [#frames]
 
-Nino has no frame format of its own: `Deserialize<T>(stream)` reads one value up to the end of the stream, and where each message ends on a socket or in a file of records is your protocol's choice. A common one is a frame per value: a 4-byte little-endian length, then the payload. `Writer` reserves the length slot, serializes the value after it and then patches in the length, all in one buffer:
+Nino has no frame format of its own: `Deserialize<T>(stream)` reads one value up to the end of the stream, and where each message ends on a socket or in a file of records is your protocol's choice. A common one is a frame per value: a 4-byte little-endian length, then the payload. On a stream that can seek (a `MemoryStream`, a file you write), reserve the length on the stream itself: remember the position, write 4 empty bytes, serialize the value straight to the stream, then go back and patch in the length. No buffer of your own is needed. A stream that cannot seek (a socket, a pipe, a `GZipStream`) cannot go back, so build the frame in a buffer instead: `Writer` reserves the length slot, serializes the value after it and patches in the length, and the stream gets the whole frame in one write:
 
-```csharp title="StreamFrames.cs"
+```csharp title="StreamFrames.cs" tab="A stream that can seek"
+using System;
+using System.Buffers.Binary;
+using System.IO;
+using Nino.Core;
+
+public static partial class StreamFrames
+{
+    // [int32 length][payload], the length patched in on the stream itself
+    public static void WriteInPlace<T>(Stream stream, T value)
+    {
+        Span<byte> prefix = stackalloc byte[4];
+        prefix.Clear();
+        long start = stream.Position;
+        stream.Write(prefix);                    // the length slot
+        NinoSerializer.Serialize(value, stream); // [!code highlight]
+        long end = stream.Position;
+        BinaryPrimitives.WriteInt32LittleEndian(prefix, checked((int)(end - start - 4)));
+        stream.Position = start;
+        stream.Write(prefix);                    // patch in the length
+        stream.Position = end;
+    }
+}
+```
+
+```csharp title="StreamFrames.cs" tab="Any stream"
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
@@ -149,6 +174,8 @@ public static partial class StreamFrames
     }
 }
 ```
+
+Seeking costs nothing on a `MemoryStream`. A `FileStream` writes out its buffer on every seek, so for many small frames in one file the buffer form makes fewer writes.
 
 Reading is the mirror image: read the 4-byte prefix, check the length, read exactly that many bytes, then deserialize. A stream may return fewer bytes than asked, so `Fill` loops until it has them all:
 
