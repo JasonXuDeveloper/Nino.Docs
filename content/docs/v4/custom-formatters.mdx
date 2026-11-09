@@ -8,6 +8,18 @@ icon: Puzzle
 
 Nino has formatters for the [built-in types](/en/docs/v4/types) and generates one for every `[NinoType]`. Write your own to encode one member differently (a varint, a fixed-point number) or to serialize a type Nino does not know (a third-party collection, a type from another library).
 
+<Callout type="idea" title="Use it for">
+
+One member in an encoding of your own ([`[NinoMemberFormatter]`](#for-one-member)), and types you cannot mark `[NinoType]` and Nino does not support ([`[assembly: NinoFormatter]`](#for-a-type-assembly-ninoformatter)).
+
+</Callout>
+
+<Callout type="warn" title="Skip it for">
+
+Types of your own (mark them `[NinoType]`), types Nino already supports ([Supported Types](/en/docs/v4/types); `NinoSerializer.IsSupported(type)` answers at run time), UTF-8 strings (`[NinoUtf8]`) and hot structs that should stay [raw](/en/docs/v4/advanced/type-design#keep-bulk-data-raw). A formatter's bytes are known only to its code: the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) shows a member it writes as `formatter(F)`, and [generated TypeScript](/en/docs/v4/advanced/typescript#not-supported) leaves out the types that hold one.
+
+</Callout>
+
 A formatter is a **struct** implementing `INinoFormatter<T>`:
 
 ```csharp nocheck
@@ -149,8 +161,6 @@ There is no call that registers or replaces a formatter at run time: every forma
 
 </Callout>
 
-The bytes a formatter of your own writes are known only to its code: the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) shows a member it writes as `formatter(F)`, and [generated TypeScript](/en/docs/v4/advanced/typescript#not-supported) leaves out the types that hold one.
-
 ### Binding the Formatter's Type Parameters
 
 Nino binds each type parameter of a registered formatter when it meets a type the formatter can format:
@@ -281,7 +291,10 @@ The element formatter is the last type arguments, after the types: `ListFormatte
 
 `CachedFormatter<T>` reads the formatter from a static field. Where `T` is a concrete type, the JIT calls it directly and can inline it; in shared generic code (a `T` that is a class) and on AOT runtimes (IL2CPP, Native AOT) each value costs one virtual call. In a generic formatter you register with `[assembly: NinoFormatter]`, take the element formatter as a type parameter (`where TFormatter : struct, INinoFormatter<T>`, as `RingFormatter` does) instead: Nino binds the exact formatter there.
 
-Every built-in formatter, by what it formats (`TF`, `TKF` and `TVF` are element, key and value formatters; `-1` is the length of `null`):
+<Accordions>
+<Accordion title="Every built-in formatter" id="every-built-in-formatter" value="every-built-in-formatter">
+
+By what it formats (`TF`, `TKF` and `TVF` are element, key and value formatters; `-1` is the length of `null`):
 
 | Formatter | Formats | Writes |
 | --- | --- | --- |
@@ -315,6 +328,9 @@ Every built-in formatter, by what it formats (`TF`, `TKF` and `TVF` are element,
 | `BigIntegerFormatter`, `UriFormatter`, `VersionFormatter`, `StringBuilderFormatter`, `BitArrayFormatter`, `CultureInfoFormatter`, `TimeZoneInfoFormatter` | those types | see [Supported Types](/en/docs/v4/types) |
 | `CachedFormatter<T>` | any `T` Nino supports | what Nino uses for `T` (above) |
 
+</Accordion>
+</Accordions>
+
 The type parameters marked `[NinoCreated]` (`TList`, `TSet`, `TDictionary`, ...) are created with `NinoActivator<T>.Create()` when the slot is `null`; reading into an existing collection reuses or refills it, as [reuse deserialization](/en/docs/v4/pooling) does everywhere. A built-in formatter with an element formatter of yours writes bytes only your code knows: give the reading side the same composition.
 
 ## Writer and Reader
@@ -336,6 +352,28 @@ A formatter writes with `Writer` and reads with `Reader`, both `ref struct`s. Th
 | `Position` | `Position`, `Remaining`, `Eof` | where you are: `Position` is an absolute offset, `Remaining` the bytes left |
 
 `Write(string)` writes a header of 1, 3 or 5 bytes and the chars: `0` for `null`; `2 × length + 1` and one byte a char when every char is at most U+00FF (`1` for empty, with nothing after it); otherwise `2 × length` and the UTF-16 code units. `WriteUtf8` writes the length in chars plus one as a header (`0` for `null`, `1` for empty), then the byte count as a second header and exactly that many UTF-8 bytes: `"é😀"` is `04` `06` `C3 A9 F0 9F 98 80`. An unpaired surrogate is written as U+FFFD. See [Strings](/en/docs/v4/wire-format#strings).
+
+### Values with Their Own Formatter [#nested-values]
+
+To write a value that has its own formatter (a `[NinoType]`, a `List<T>`), call the regular API with the writer or reader, so its references and polymorphism are handled as usual:
+
+```csharp
+// in a formatter for Contract, whose Owner field is a [NinoType]
+public void Serialize(Contract value, ref Writer writer)
+{
+    writer.Write(value.Id);
+    NinoSerializer.Serialize(value.Owner, ref writer); // [!code highlight]
+}
+
+public void Deserialize(ref Reader reader, ref Contract value)
+{
+    value ??= new Contract();
+    reader.Read(out value.Id);
+    NinoDeserializer.Deserialize(ref reader, ref value.Owner); // [!code highlight]
+}
+```
+
+Always read exactly what you wrote, in the same order: the bytes carry no schema.
 
 ### Raw Bytes [#raw-bytes]
 
@@ -408,25 +446,22 @@ static void ReadBlock(ref Reader reader)
 
 `Writer.Position` is likewise the absolute position in the `NinoArrayBufferWriter`.
 
-To write a value that has its own formatter (a `[NinoType]`, a `List<T>`), call the regular API with the writer or reader, so its references and polymorphism are handled as usual:
+## Keep It Fast [#keep-it-fast]
 
-```csharp
-// in a formatter for Contract, whose Owner field is a [NinoType]
-public void Serialize(Contract value, ref Writer writer)
-{
-    writer.Write(value.Id);
-    NinoSerializer.Serialize(value.Owner, ref writer); // [!code highlight]
-}
+A formatter is called directly and inlined like a generated one, so it is as fast as the code you write in it. Copy unmanaged runs as one block, read into the current value and keep its strings, and check lengths before allocating: [Custom Formatters on Hot Paths](/en/docs/v4/advanced/type-design#custom-formatters) has each with its method. A member with a `[NinoMemberFormatter]` makes its type no longer raw or fixed-size, so a hot struct is better off with built-in member types.
 
-public void Deserialize(ref Reader reader, ref Contract value)
-{
-    value ??= new Contract();
-    reader.Read(out value.Id);
-    NinoDeserializer.Deserialize(ref reader, ref value.Owner); // [!code highlight]
-}
-```
+## Pitfalls [#pitfalls]
 
-Always read exactly what you wrote, in the same order: the bytes carry no schema.
+| Mistake | What happens | Caught by |
+| --- | --- | --- |
+| A member formatter that is a class, or formats another type than the member's | The build fails | NINO008 |
+| A registration Nino cannot use (a type parameter it cannot infer, a formatter nested in a generic type, two `INinoFormatter<P>`) | The build fails, and the registration is ignored | NINO020 |
+| A `[NinoType]` member whose type has no formatter (a `Grid<string>` where `T` is `[NinoRaw]`) | The member cannot be serialized | NINO007 |
+| `Utf8StringFormatter` named on a member | Works, but it is meant for generated code | NINO031: mark the member `[NinoUtf8]` |
+| A length or capacity read from the data and allocated for without a check | A few hostile bytes make the formatter allocate gigabytes | nothing: `ReadLength(minElementSize)`, or a bound of your own ([`RingFormatter`](#for-a-type-assembly-ninoformatter)) |
+| Overwriting `value` in `Deserialize` instead of `NinoRecycler.Discard` or `Replace` | The dropped instance never reaches [recyclers and pools](/en/docs/v4/pooling#where-dropped-instances-go) | nothing |
+| Reading in another order, or another number of items, than you wrote | Wrong values, or `NinoDataException` further on | nothing: the bytes carry no schema |
+| Writing through the `ref` from `Reserve` after another write | Memory the pool gave to something else is corrupted | nothing: [fill it right away](#raw-bytes) |
 
 ## Next Steps
 

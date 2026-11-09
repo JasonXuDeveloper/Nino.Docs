@@ -29,14 +29,14 @@ public sealed class SampleBlock
 
 - 非托管元素的数组和 `List<T>` 只需一次拷贝。
 - 含有 `string` 或数组的结构体不能按原始内存写入；如果这个结构体处在热路径上，把这些字段挪到单独的类里。
-- `NinoFormat.VersionTolerant`、`NinoFormat.Keyed` 和自定义成员格式化器都会关闭该结构体的原始内存拷贝。
+- `NinoFormat.VersionTolerant`、`NinoFormat.Keyed` 和自定义成员格式化器都会让这个结构体不再按原始内存拷贝。
 - 只由非托管成员组成的结构体或密封类是[固定大小的](/zh/docs/v4/performance#fixed-size-types)：`NinoSerializer.Serialize(value)` 会把它直接写进大小正好的 `byte[]`，不经过暂存缓冲区，也没有拷贝。固定大小的记录还可以在文件或共享内存中按下标定位：见[固定大小的记录](/zh/docs/v4/advanced/zero-allocation#fixed-size-records)。
 
 **热路径上的结构体布局不留填充。** 没有填充的结构体是一次普通的块拷贝；有填充的结构体要经过一个把空隙清零的掩码拷贝，开销稍高；声明为 `[StructLayout(LayoutKind.Auto)]` 的结构体根本不按原始内存拷贝，而是逐个字段写入。把字段按从大到小排列，或设置 `Pack`，就能去掉填充。两者都会改变字节，所以要在保存数据之前定好布局。参见[结构体布局](/zh/docs/v4/performance#struct-layout)。
 
 ### 确定性的字节 [#deterministic-bytes]
 
-Nino 会把填充字节清零，所以相等的结构体总是产生相同的字节，即使它是在未初始化的内存中构造的（`stackalloc`、`SkipLocalsInit`）。（字典和集合按枚举顺序写出，`-0.0` 和 `0.0` 的字节也不同，所以这些值相等时字节仍可能不同。）因此可以直接对数据做哈希或比较，例如跳过发送没有变化的状态：
+Nino 会把填充字节清零，所以相等的结构体总是产生相同的字节，即使它是在未初始化的内存中构造的（`stackalloc`、`SkipLocalsInit`）。（字典和 Set 按枚举顺序写出，`-0.0` 和 `0.0` 的字节也不同，所以这些值相等时字节仍可能不同。）因此可以直接对数据做哈希或比较，例如跳过发送没有变化的状态：
 
 ```csharp
 buffer.ResetWrittenCount();
@@ -52,8 +52,8 @@ if (hash != lastHash) { Send(buffer.WrittenSpan); lastHash = hash; }
 | 选项 | 额外字节 | 额外工作 |
 | --- | --- | --- |
 | 按位置（只写 `[NinoType]`） | 无 | 无：原始结构体按内存拷贝，[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)直接写进它的 `byte[]` |
-| `format: NinoFormat.VersionTolerant` | 每个对象 4 字节 | 每个对象一个长度；该类型不再按原始内存拷贝，也不再是固定大小 |
-| `format: NinoFormat.Keyed` | 每个成员 8 字节，外加每个对象 4 字节 | 每个成员一个键和一个长度，读取时每个成员要检查一次键；该类型不再按原始内存拷贝，也不再是固定大小 |
+| `format: NinoFormat.VersionTolerant` | 每个对象 4 字节 | 每个对象一个长度；类型不再按原始内存拷贝，也不再是固定大小 |
+| `format: NinoFormat.Keyed` | 每个成员 8 字节，外加每个对象 4 字节 | 每个成员一个键和一个长度，读取时每个成员要检查一次键；类型不再按原始内存拷贝，也不再是固定大小 |
 | `trackReferences: true` | 每个被追踪的对象 4 字节 | 每个被追踪的对象一次身份查找，外加每次顶层调用一点固定开销 |
 
 - 由同一版本写入和读取的消息和缓存保持按位置格式；只有要跨版本保留的数据才用版本容错或键控成员，参见[如何选择](/zh/docs/v4/evolving-data#choosing)。
@@ -105,7 +105,7 @@ Nino 在类的值前面写什么，取决于存放它的位置的声明类型（
 设置后，以下调用会预取：
 
 - `NinoSerializer.Serialize(collection)`（带或不带 `IBufferWriter<byte>`），以及 `NinoDeserializer.Deserialize(bytes, ref collection)` 读入元素个数相同的现有集合（其中的对象被复用，所以读入的正是这些散落的对象）；
-- 其中 `collection` 是非泛型 `[NinoType]` 类（包括抽象基类）的 `T[]` 或 `List<T>`，且该类不是[固定大小](/zh/docs/v4/performance#fixed-size-types)的；集合被直接写入或读取（而不是作为其他类型的成员），并且调用经由[拦截器](/zh/docs/v4/advanced/high-performance#per-call-overhead)转发（项目用 .NET 8 SDK 或更高版本构建），运行在 x64 或 Arm64 上的 .NET 8 或更高版本；
+- 其中 `collection` 是非泛型 `[NinoType]` 类（包括抽象基类）的 `T[]` 或 `List<T>`，且这个类不是[固定大小](/zh/docs/v4/performance#fixed-size-types)的；集合被直接写入或读取（而不是作为其他类型的成员），并且调用经由[拦截器](/zh/docs/v4/advanced/high-performance#per-call-overhead)转发（项目用 .NET 8 SDK 或更高版本构建），运行在 x64 或 Arm64 上的 .NET 8 或更高版本；
 - 并且只在集合大于 CPU 末级缓存的四分之一、且前几个对象不是按分配顺序排列时。其他集合的读写与之前完全相同。
 
 无论设置与否，字节一致。热路径会序列化这类集合时再设置，并用你自己的数据[测量](/zh/docs/v4/advanced/high-performance#measure)：放得进缓存的集合，或对象仍按分配顺序排列的集合，不会更快。Unity 项目不受影响：Unity 使用生成器的 Roslyn 4.3 版本编译，没有拦截器，这个属性在 Unity 中不起作用。

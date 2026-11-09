@@ -345,6 +345,19 @@ The pool and recycler settings are static members of `NinoSettings` (namespace `
 
 </Callout>
 
+## Pitfalls [#pitfalls]
+
+| Mistake | What happens | Caught by |
+| --- | --- | --- |
+| Using an instance after the next `Deserialize(data, ref value)` into it, or after `ReturnToPool()` | The next message, or the next rent from the pool, overwrites it under the code that still holds it | nothing: finish with an instance before reading into it again; hand other code an instance of its own (a pooled one it returns) |
+| Calling `ReturnToPool()` twice on one instance | `InvalidOperationException` | the pool |
+| A `[NinoPooled]` class that is not `sealed`, not `partial`, has read-only or constructor-only members, or lacks the two hooks | The build fails | NINO018, NINO002, NINO019 (with a code fix that adds the hooks) |
+| A `[NinoFactory]` method that is not `public static`, takes required parameters or returns another type | The build fails | NINO017 |
+| `[NinoFactory]` on a type with a `[NinoConstructor]` | The factory is never called: the type is re-created through its constructor | NINO025 |
+| A pooled child (a `[NinoPooled]` element, a `PooledList<T>`) inside a class that is not pooled | When the parent is dropped, its children go to the garbage collector with it, and the pools drain | nothing: pool the parent too |
+| `SetRecycler<T>` for a type whose instances code outside the graph still holds | The pool rents the instance out again while that code uses it | nothing: register recyclers only for objects the graph owns |
+| Changing a pool or recycler setting after the first call | Threads may see the old value; `PoolMaxRetained` applies only to pools created afterwards | nothing: set them at startup ([Settings](#settings)) |
+
 ## Next Steps
 
 <Cards>

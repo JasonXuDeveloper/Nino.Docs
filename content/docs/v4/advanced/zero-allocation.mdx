@@ -1,7 +1,7 @@
 ---
 title: Zero-Allocation Patterns
 seoTitle: "Zero-Allocation (Zero-GC) Serialization in C# – Nino v4 Docs"
-description: "Copy-paste recipes for a 0 B steady state: per-owner and caller-provided buffers, batches, receive loops, reused instances, framed streams, memory-mapped records, an allocation test and the checklist."
+description: "Copy-paste recipes for a 0 B steady state: what each Nino call allocates, per-owner and caller-provided buffers, batches, receive loops, reused instances, framed streams, memory-mapped records, an allocation test and the checklist."
 icon: Leaf
 ---
 
@@ -14,8 +14,11 @@ A recipe book for hot paths that must not allocate: message loops, market data a
 | `NinoSerializer.Serialize(value)` | the returned `byte[]`, of exactly the data's size: written in place for a [fixed-size type](/en/docs/v4/performance#fixed-size-types) and for an array or list of fixed-size elements, otherwise copied out of a per-thread scratch buffer |
 | `NinoSerializer.Serialize(value, bufferWriter)` | nothing; a `NinoArrayBufferWriter` is written in place, any other `IBufferWriter<byte>` gets one copy from a per-thread scratch buffer |
 | `NinoSerializer.Serialize(value, ref writer)` | nothing |
+| `NinoSerializer.Serialize(value, stream)`, `SerializeAsync` | nothing: one `Write` from the per-thread scratch buffer (an async write that completes at once included) |
 | `NinoDeserializer.Deserialize<T>(span)` | the objects it returns: the class instances, collections and strings in the data; nothing for a struct made of unmanaged members |
 | `NinoDeserializer.Deserialize(span, ref value)` | what does not fit the existing graph (a new list element, an array of a different length) and each string whose text changed (an unchanged string is kept; non-ASCII `[NinoUtf8]` text is always read into a new string) |
+| `NinoDeserializer.Deserialize<T>(sequence)` | as the span call; a sequence of several segments is first copied once, to the stack up to 512 bytes, otherwise into a pooled array |
+| `NinoDeserializer.Deserialize<T>(stream)`, `DeserializeAsync` | as the span call; the stream's bytes go into a pooled array returned after the read (a `MemoryStream` whose buffer is exposed is read in place) |
 | a `[NinoPooled]` class Nino has to create | nothing while its pool has instances |
 
 The buffer you serialize into grows on the first calls and is then reused, and a `NinoArrayBufferWriter` rents its array from `ArrayPool<byte>.Shared`. Nino keeps no per-call state on the heap.
@@ -204,7 +207,7 @@ The [zero-GC state sync example](/en/docs/v4/pooling#example) combines all of th
 
 ## Framed Streams Without Per-Message Allocations [#framed-streams]
 
-[Several Messages on One Stream](/en/docs/v4/advanced/streams#frames) shows a portable frame helper. On .NET 7 and later, keep both buffers in a per-connection object and read the length prefix into a `stackalloc` span, and a stream of frames takes no allocations at all:
+Nino's stream calls read one value to the end of the stream, so several messages on one stream need frames of your own; [Several Messages on One Stream](/en/docs/v4/advanced/streams#frames) shows a portable helper. On .NET 7 and later, keep both buffers in a per-connection object and read the length prefix into a `stackalloc` span, and a stream of frames takes no allocations at all:
 
 ```csharp title="FrameStream.cs"
 using System;
@@ -454,7 +457,8 @@ public class AllocationTests
 - [ ] One `NinoArrayBufferWriter` per thread or owner, reset before each use.
 - [ ] Memory you already own is wrapped in a reusable `IBufferWriter<byte>`.
 - [ ] Small records are batched in one buffer.
-- [ ] Bytes are deserialized from spans of the memory they arrived in, not copied into a new `byte[]`.
+- [ ] Bytes are deserialized from spans of the memory they arrived in (or the `ReadOnlySequence<byte>` a pipe hands you), not copied into a new `byte[]`.
+- [ ] A value alone in a file or body goes through `Serialize(value, stream)` and `Deserialize(stream, ref value)`, not a `byte[]` of your own; several values on one stream go in frames.
 - [ ] Hot messages are deserialized into existing instances with `ref`; varying counts use `List<T>`.
 - [ ] Classes created and dropped at a high rate are `[NinoPooled]`.
 - [ ] Bulk data is kept in arrays or lists of unmanaged structs; indexed records are unmanaged structs, sized with `GetFixedSize<T>()`.

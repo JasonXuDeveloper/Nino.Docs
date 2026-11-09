@@ -8,6 +8,18 @@ icon: Puzzle
 
 Nino 自带[内置类型](/zh/docs/v4/types)的格式化器，并为每个 `[NinoType]` 生成一个。想换种方式编码某个成员（变长整数、定点数），或者要序列化 Nino 不认识的类型（第三方集合、别的库里的类型），就自己写一个格式化器。
 
+<Callout type="idea" title="适合">
+
+单个成员换一种编码（[`[NinoMemberFormatter]`](#for-one-member)），以及没法标 `[NinoType]`、Nino 又不支持的类型（[`[assembly: NinoFormatter]`](#for-a-type-assembly-ninoformatter)）。
+
+</Callout>
+
+<Callout type="warn" title="不适合">
+
+自己的类型（标 `[NinoType]` 就行）、Nino 已经支持的类型（见[支持的类型](/zh/docs/v4/types)；运行时可以用 `NinoSerializer.IsSupported(type)` 判断）、UTF-8 字符串（用 `[NinoUtf8]`），以及应该保持[原始内存拷贝](/zh/docs/v4/advanced/type-design#keep-bulk-data-raw)的热点结构体。格式化器写出什么字节，只有它自己的代码知道：[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)把它负责的成员显示为 `formatter(F)`，[生成的 TypeScript](/zh/docs/v4/advanced/typescript#not-supported) 也会跳过含有这类成员的类型。
+
+</Callout>
+
 格式化器是实现了 `INinoFormatter<T>` 的**结构体**：
 
 ```csharp nocheck
@@ -149,8 +161,6 @@ public sealed class RingHolder
 
 </Callout>
 
-自己写的格式化器写出什么字节，只有它的代码知道：[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)把它负责的成员显示为 `formatter(F)`，[生成的 TypeScript](/zh/docs/v4/advanced/typescript#not-supported) 也会跳过含有这类成员的类型。
-
 ### 绑定格式化器的类型参数 [#binding-the-formatters-type-parameters]
 
 Nino 遇到注册的格式化器能处理的类型时，按下面的方式绑定格式化器的每个类型参数：
@@ -281,7 +291,10 @@ public sealed class Trade
 
 `CachedFormatter<T>` 从静态字段取格式化器。`T` 是具体类型时，JIT 直接调用它，还能内联；在共享泛型代码里（`T` 是类）和 AOT 运行时（IL2CPP、Native AOT）上，每个值多一次虚调用。用 `[assembly: NinoFormatter]` 注册的泛型格式化器，请像 `RingFormatter` 那样把元素格式化器声明成类型参数（`where TFormatter : struct, INinoFormatter<T>`）：Nino 会在那里绑定确切的格式化器。
 
-全部内置格式化器，按格式化的类型排列（`TF`、`TKF`、`TVF` 分别是元素、键、值的格式化器；`-1` 是 `null` 的长度）：
+<Accordions>
+<Accordion title="全部内置格式化器" id="every-built-in-formatter" value="every-built-in-formatter">
+
+按格式化的类型排列（`TF`、`TKF`、`TVF` 分别是元素、键、值的格式化器；`-1` 是 `null` 的长度）：
 
 | 格式化器 | 格式化的类型 | 写法 |
 | --- | --- | --- |
@@ -315,6 +328,9 @@ public sealed class Trade
 | `BigIntegerFormatter`、`UriFormatter`、`VersionFormatter`、`StringBuilderFormatter`、`BitArrayFormatter`、`CultureInfoFormatter`、`TimeZoneInfoFormatter` | 对应的类型 | 见[支持的类型](/zh/docs/v4/types) |
 | `CachedFormatter<T>` | Nino 支持的任意 `T` | Nino 给 `T` 用的格式化器（见上文） |
 
+</Accordion>
+</Accordions>
+
 标了 `[NinoCreated]` 的类型参数（`TList`、`TSet`、`TDictionary` 等）在槽位为 `null` 时用 `NinoActivator<T>.Create()` 创建；读入已有集合时会复用或重新填充它，和[复用反序列化](/zh/docs/v4/pooling)在别处的做法一样。内置格式化器配上你自己的元素格式化器后，写出的字节只有你的代码认识：读的一端要用同样的组合。
 
 ## Writer 与 Reader [#writer-and-reader]
@@ -332,10 +348,32 @@ public sealed class Trade
 | `WriteLength(int)`、`WriteNullLength()` | `ReadLength(minElementSize = 1)` | 集合长度，`-1` 表示 null；剩下的字节装不下这么多个至少 `minElementSize` 字节的元素时，`ReadLength` 抛出异常 |
 | `ReserveInt32()`、`PatchInt32(...)`、`PatchLength(...)` | | 先占 4 字节，稍后回填，例如字节长度 |
 | `WriteRaw(ReadOnlySpan<byte>)` | `ReadRaw(int)`、`Advance(int)` | 原始字节，或跳过若干字节 |
-| `Reserve(int)` | `ReadBlock(int)` | 定长的若干字节，通过 `ref byte` 自己编码（[原始字节](#raw-bytes)） |
+| `Reserve(int)` | `ReadBlock(int)` | 固定数量的字节，通过 `ref byte` 自己编码（[原始字节](#raw-bytes)） |
 | `Position` | `Position`、`Remaining`、`Eof` | 当前位置：`Position` 是绝对偏移，`Remaining` 是剩余字节数 |
 
 `Write(string)` 先写一个 1、3 或 5 字节的头，再写字符：`null` 的头是 `0`；所有字符都不超过 U+00FF 时，头是 `2 × 长度 + 1`，后面每个字符一个字节（空串的头是 `1`，后面没有内容）；否则头是 `2 × 长度`，后面是 UTF-16 码元。`WriteUtf8` 的第一个头是字符数加一（`null` 为 `0`，空串为 `1`），第二个头是字节数，后面正好是这么多 UTF-8 字节：`"é😀"` 写成 `04` `06` `C3 A9 F0 9F 98 80`。未配对的代理项写成 U+FFFD。参见[字符串](/zh/docs/v4/wire-format#strings)。
+
+### 自带格式化器的值 [#nested-values]
+
+要写的值有自己的格式化器时（`[NinoType]`、`List<T>` 等），就把 writer 或 reader 传给常规 API，引用和多态都会照常处理：
+
+```csharp
+// Contract 的格式化器里，它的 Owner 字段是 [NinoType]
+public void Serialize(Contract value, ref Writer writer)
+{
+    writer.Write(value.Id);
+    NinoSerializer.Serialize(value.Owner, ref writer); // [!code highlight]
+}
+
+public void Deserialize(ref Reader reader, ref Contract value)
+{
+    value ??= new Contract();
+    reader.Read(out value.Id);
+    NinoDeserializer.Deserialize(ref reader, ref value.Owner); // [!code highlight]
+}
+```
+
+读的时候必须按写的顺序、一项不差地读回来：字节里不带 schema。
 
 ### 原始字节 [#raw-bytes]
 
@@ -408,25 +446,22 @@ static void ReadBlock(ref Reader reader)
 
 `Writer.Position` 同样是在 `NinoArrayBufferWriter` 里的绝对位置。
 
-要写的值有自己的格式化器时（`[NinoType]`、`List<T>` 等），就把 writer 或 reader 传给常规 API，引用和多态都会照常处理：
+## 写得快 [#keep-it-fast]
 
-```csharp
-// Contract 的格式化器里，它的 Owner 字段是 [NinoType]
-public void Serialize(Contract value, ref Writer writer)
-{
-    writer.Write(value.Id);
-    NinoSerializer.Serialize(value.Owner, ref writer); // [!code highlight]
-}
+格式化器和生成的格式化器一样，直接调用、可以内联，所以它有多快取决于你在里面写的代码。连续的非托管数据整块拷贝，读入当前的值并保留它的字符串，分配之前先检查长度：每一条对应的方法见[热路径上的自定义格式化器](/zh/docs/v4/advanced/type-design#custom-formatters)。成员上加了 `[NinoMemberFormatter]`，它所在的类型就不再按原始内存拷贝、也不再是固定大小，热点结构体最好只用内置的成员类型。
 
-public void Deserialize(ref Reader reader, ref Contract value)
-{
-    value ??= new Contract();
-    reader.Read(out value.Id);
-    NinoDeserializer.Deserialize(ref reader, ref value.Owner); // [!code highlight]
-}
-```
+## 常见陷阱 [#pitfalls]
 
-读的时候必须按写的顺序、一项不差地读回来：字节里不带 schema。
+| 错误 | 后果 | 由谁发现 |
+| --- | --- | --- |
+| 成员格式化器是类，或者格式化的类型和成员类型不一致 | 编译失败 | NINO008 |
+| Nino 用不了的注册（推断不出某个类型参数、格式化器嵌套在泛型类型里、实现了两个 `INinoFormatter<P>`） | 编译失败，这条注册不生效 | NINO020 |
+| `[NinoType]` 的成员类型没有格式化器（`T` 标了 `[NinoRaw]`，成员却是 `Grid<string>`） | 这个成员无法序列化 | NINO007 |
+| 在成员上直接写 `Utf8StringFormatter` | 能用，但它是给生成代码用的 | NINO031：改成给成员加 `[NinoUtf8]` |
+| 从数据里读出长度或容量，不检查就按它分配 | 几个恶意字节就能让格式化器分配好几 GB | 无：用 `ReadLength(minElementSize)`，或者自己设上限（见 [`RingFormatter`](#for-a-type-assembly-ninoformatter)） |
+| 在 `Deserialize` 里直接覆盖 `value`，不用 `NinoRecycler.Discard` 或 `Replace` | 丢弃的实例到不了[回收器和对象池](/zh/docs/v4/pooling#where-dropped-instances-go) | 无 |
+| 读的顺序或项数和写的不一样 | 值读错，或者在后面抛 `NinoDataException` | 无：字节里不带 schema |
+| 又写了别的数据之后，还通过 `Reserve` 返回的 `ref` 写入 | 写坏对象池已经交给别人的内存 | 无：[拿到就立刻填](#raw-bytes) |
 
 ## 下一步 [#next-steps]
 

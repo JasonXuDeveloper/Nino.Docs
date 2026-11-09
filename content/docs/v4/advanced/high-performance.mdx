@@ -1,6 +1,6 @@
 ---
 title: High-Performance Serialization
-description: "Every lever for Nino's speed at the call site, when to use it and what it costs: buffer writers, exact-size arrays, Writer and Reader, reading from the memory you have, reuse deserialization, pools, startup, per-call overhead, thread safety and measuring."
+description: "Every lever for Nino's speed at the call site, when to use it and what it costs: buffer writers, exact-size arrays, Writer and Reader, spans, sequences and streams, reuse deserialization, pools, startup, per-call overhead, thread safety and measuring."
 icon: Gauge
 ---
 
@@ -22,7 +22,7 @@ icon: Gauge
   }}
 />
 
-You know `NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)` from [Serialize and Deserialize](/en/docs/v4/basic). They are already fast, but each call allocates its result. This page takes the same calls to **0 B per call**: where each call writes, what it reads from and what it costs, then startup, per-call overhead, thread safety and how to measure. The choices in your own types that keep those calls fast (formats, sealed and polymorphic classes, collections, strings, custom formatters) are the next page, [Designing Types for Speed](/en/docs/v4/advanced/type-design). The [table below](#levers) lists the levers of both pages in one place.
+You know `NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)` from [Serialize and Deserialize](/en/docs/v4/basic). They are already fast, but each call allocates its result. This page takes the same calls to **0 B per call**: where each call writes (a reused buffer, any `IBufferWriter<byte>`, a `Stream`), what it reads from (a span, a `ReadOnlySequence<byte>`, a `Stream`) and what it costs, then startup, per-call overhead, thread safety and how to measure. The choices in your own types that keep those calls fast (formats, sealed and polymorphic classes, collections, strings, custom formatters) are the next page, [Designing Types for Speed](/en/docs/v4/advanced/type-design). The [table below](#levers) lists the levers of both pages in one place.
 
 It opens the performance track; the pages after it go deeper, in this order: [Designing Types for Speed](/en/docs/v4/advanced/type-design), [Reuse and Pooling](/en/docs/v4/pooling) (the exact rules of reuse deserialization and pools), [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation) (copy-paste recipes and the checklist) and [Build Configuration](/en/docs/v4/advanced/build-configuration) (Release, tiered compilation, Native AOT, Unity's IL2CPP and Burst). The internals (inlined formatters, struct layout) are in [Performance Internals](/en/docs/v4/performance).
 
@@ -35,6 +35,8 @@ It opens the performance track; the pages after it go deeper, in this order: [De
 | [`Serialize(value)` into an exact-size `byte[]`](#exact-size-arrays) | an API needs a `byte[]` | one allocation per call |
 | [`Writer` and `Reader`](#several-values-back-to-back) | several values share one buffer | `Flush` and `ReleaseReferences` once per message |
 | [Deserializing from the memory you have](#deserialize-from-the-memory-you-have) | always | nothing |
+| [`Deserialize<T>(sequence)`](#deserialize-from-the-memory-you-have) | a pipe or gRPC hands you a `ReadOnlySequence<byte>` | nothing for one segment; one copy for several |
+| [`Serialize(value, stream)` and `Deserialize<T>(stream)`](#streams) | one value per file, HTTP body or blob | one `Write` from Nino's scratch buffer; reading rents a pooled array (none for a `MemoryStream` whose buffer is exposed) |
 | [Reuse deserialization (`ref`)](#deserialize-into-existing-objects) | messages of the same shape, one at a time | you keep the instance, and it changes with every read |
 | [`[NinoPooled]`](#pool-what-you-create) and [pool sizes](/en/docs/v4/settings#pools) | instances created, kept or dropped at a high rate | `sealed partial` classes, a `ReturnToPool()` per instance you own, memory the pools hold |
 | [Unmanaged structs and their layout](/en/docs/v4/advanced/type-design#keep-bulk-data-raw) | bulk and hot data | the layout is part of the format |
@@ -143,9 +145,22 @@ A `null` instance of a fixed-size sealed class is written as 1 byte; every other
 
 A `ReadOnlySequence<byte>` (from `System.IO.Pipelines`) is read the same way, with `NinoDeserializer.Deserialize<T>(sequence)`: one segment in place, several copied once ([Multi-Segment Input](/en/docs/v4/advanced/streams#readonlysequence-input); frames out of a pipe: [Reading Frames](/en/docs/v4/advanced/networking#reading-frames)).
 
+## Write to and Read from a Stream [#streams]
+
+For one value in a file, an HTTP body or a blob, pass the `Stream` to Nino rather than a `byte[]` you write yourself:
+
+```csharp
+NinoSerializer.Serialize(checkpoint, file);                 // no byte[] per call
+NinoDeserializer.Deserialize(file, ref checkpoint);         // fills the instance you keep
+```
+
+- **Cost:** writing serializes into the per-thread scratch buffer and hands it to the stream in one `Write`: 0 B. Reading takes the stream's bytes into an array rented from `ArrayPool<byte>.Shared` (a `MemoryStream` whose buffer is exposed is read in place) and returns it after the read. `SerializeAsync` and `DeserializeAsync` allocate nothing more when the I/O completes at once.
+- `NinoSerializer.Serialize(value)` and then `stream.Write(bytes)` allocates the array the stream overload avoids.
+- One call reads to the end of the stream, so a stream carries one value. Several messages on one stream need frames: [Streams and Compression](/en/docs/v4/advanced/streams#frames), and the allocation-free [framed stream](/en/docs/v4/advanced/zero-allocation#framed-streams) recipe.
+
 ## Deserialize into Existing Objects
 
-Pass the previous result by `ref` and Nino fills it in place: the same object, the same nested objects, lists, arrays and dictionaries. A steady stream of messages of the same shape then allocates nothing.
+Pass the previous result by `ref` and Nino fills it in place: the same object, the same nested objects, lists, arrays and dictionaries. A steady stream of messages of the same shape then allocates nothing, and in the benchmarks it is up to <BenchValue k="reuse.max" /> faster than MemoryPack's overwrite mode ([.NET Benchmarks](/en/docs/v4/benchmarks#pooling)). Every read overload has this form: span, `ReadOnlySequence<byte>`, `Stream` and `ref Reader`.
 
 ```csharp
 MetricsBatch batch = null;

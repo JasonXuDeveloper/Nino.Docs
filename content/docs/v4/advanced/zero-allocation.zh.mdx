@@ -1,7 +1,7 @@
 ---
 title: 零分配模式
 seoTitle: "C# 零分配（零 GC）序列化 – Nino v4 文档"
-description: "可直接复制的做法，让稳定运行时保持 0 B：按归属方复用缓冲区与调用方提供的内存、批量写入、接收循环、复用实例、分帧的流、内存映射的记录、分配测试与检查清单。"
+description: "可直接复制的做法，让稳定运行时保持 0 B：Nino 每种调用分配什么、按归属方复用缓冲区与调用方提供的内存、批量写入、接收循环、复用实例、分帧的流、内存映射的记录、分配测试与检查清单。"
 icon: Leaf
 ---
 
@@ -14,8 +14,11 @@ icon: Leaf
 | `NinoSerializer.Serialize(value)` | 返回的 `byte[]`，大小正好等于数据：[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)以及元素大小固定的数组或列表直接写入其中，其他值从线程级暂存缓冲区拷贝出来 |
 | `NinoSerializer.Serialize(value, bufferWriter)` | 不分配；`NinoArrayBufferWriter` 直接写入，其他 `IBufferWriter<byte>` 从线程级暂存缓冲区拷贝一次 |
 | `NinoSerializer.Serialize(value, ref writer)` | 不分配 |
+| `NinoSerializer.Serialize(value, stream)`、`SerializeAsync` | 不分配：从线程级暂存缓冲区一次 `Write`（立刻完成的异步写入也一样） |
 | `NinoDeserializer.Deserialize<T>(span)` | 返回的对象：数据里的类实例、集合和字符串；只含非托管成员的结构体不分配 |
 | `NinoDeserializer.Deserialize(span, ref value)` | 现有对象图容纳不下的部分（新增的列表元素、长度变化的数组），以及内容有变化的字符串（内容不变的字符串会保留；非 ASCII 的 `[NinoUtf8]` 文本总是读成新字符串） |
+| `NinoDeserializer.Deserialize<T>(sequence)` | 和 span 调用一样；多段的序列先拷贝一次，512 字节以内拷到栈上，更大的拷进池化数组 |
+| `NinoDeserializer.Deserialize<T>(stream)`、`DeserializeAsync` | 和 span 调用一样；流里的字节读进池化数组，读完就还回去（缓冲区可公开访问的 `MemoryStream` 直接在原缓冲区上读） |
 | Nino 需要创建的 `[NinoPooled]` 类 | 对象池里有实例时不分配 |
 
 序列化用的缓冲区在最初几次调用时增长，之后一直复用；`NinoArrayBufferWriter` 的数组租自 `ArrayPool<byte>.Shared`。Nino 不会为每次调用在堆上保留任何状态。
@@ -204,7 +207,7 @@ while (TryReceive(out ReadOnlySpan<byte> frame))
 
 ## 分帧读写流，不按消息分配 [#framed-streams]
 
-[一个流上的多条消息](/zh/docs/v4/advanced/streams#frames)一节给出了一个可移植的分帧辅助类。在 .NET 7 及以上版本中，把两个缓冲区都放进每个连接各自的对象里，长度前缀读到 `stackalloc` 的 span 中，读写一连串帧就完全不分配内存：
+Nino 的流调用一次读一个值、一直读到流结束，所以一个流上的多条消息要自己分帧；[一个流上的多条消息](/zh/docs/v4/advanced/streams#frames)一节给出了一个可移植的辅助类。在 .NET 7 及以上版本中，把两个缓冲区都放进每个连接各自的对象里，长度前缀读到 `stackalloc` 的 span 中，读写一连串帧就完全不分配内存：
 
 ```csharp title="FrameStream.cs"
 using System;
@@ -454,7 +457,8 @@ public class AllocationTests
 - [ ] 每个线程或归属方一个 `NinoArrayBufferWriter`，每次使用前重置。
 - [ ] 已有的内存用可复用的 `IBufferWriter<byte>` 包装。
 - [ ] 小记录批量写进同一个缓冲区。
-- [ ] 直接从字节所在内存的 span 反序列化，不拷贝到新的 `byte[]`。
+- [ ] 直接从字节所在内存的 span（或管道给的 `ReadOnlySequence<byte>`）反序列化，不拷贝到新的 `byte[]`。
+- [ ] 文件或请求体里只有一个值时，用 `Serialize(value, stream)` 和 `Deserialize(stream, ref value)`，不要先序列化成 `byte[]` 再自己写；一个流上的多个值要分帧。
 - [ ] 热点消息用 `ref` 反序列化到已有实例；条数会变化的用 `List<T>`。
 - [ ] 高频创建和丢弃的类标记为 `[NinoPooled]`。
 - [ ] 批量数据放在非托管结构体的数组或列表中；按下标访问的记录是非托管结构体，大小用 `GetFixedSize<T>()` 确定。

@@ -22,6 +22,7 @@ public struct Tick
 
 [NinoType] public sealed class Header { public int Kind; public int Length; }
 [NinoType] public sealed class Body { public string Text; }
+[NinoType] public sealed class Checkpoint { public long Sequence; public List<string> Keys; }
 [NinoType] public sealed class MetricsBatch { public long Sequence; public List<double> Values; }
 
 public partial class Snippets
@@ -33,4 +34,6 @@ public partial class Snippets
     public static Quote message;
     public static PipeWriter pipeWriter;
     public static byte[] payload;
+    public static Checkpoint checkpoint;
+    public static Stream file;
 }

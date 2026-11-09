@@ -344,6 +344,19 @@ foreach (ReadOnlyMemory<byte> message in messages)
 
 </Callout>
 
+## 常见陷阱 [#pitfalls]
+
+| 错误 | 后果 | 由谁发现 |
+| --- | --- | --- |
+| 下一次 `Deserialize(data, ref value)` 读入这个实例之后，或者 `ReturnToPool()` 之后，还在用它 | 下一条消息、或者池的下一次借出会覆盖它，而别的代码还拿着它 | 无：读入下一条消息之前先用完；要交给别的代码，就给它一个单独的实例（用完由它归还的池化实例） |
+| 同一个实例调用两次 `ReturnToPool()` | 抛 `InvalidOperationException` | 对象池 |
+| `[NinoPooled]` 类没有 `sealed`、没有 `partial`，有只读成员或只能通过构造函数设置的成员，或者没实现两个钩子方法 | 编译失败 | NINO018、NINO002、NINO019（有代码修复，可以补上两个钩子方法） |
+| `[NinoFactory]` 方法不是 `public static`、有必填参数，或者返回别的类型 | 编译失败 | NINO017 |
+| 在有 `[NinoConstructor]` 的类型上用 `[NinoFactory]` | Nino 永远不调用工厂方法：这个类型总是通过构造函数重新创建 | NINO025 |
+| 池化的子对象（`[NinoPooled]` 元素、`PooledList<T>`）放在没有池化的类里 | 父对象丢弃时，子对象跟着一起交给 GC，池越用越空 | 无：把父对象也池化 |
+| 为一个类型注册了 `SetRecycler<T>`，但对象图之外的代码还持有它的实例 | 那段代码还在用，池就把实例又借出去了 | 无：只为完全属于对象图的对象注册回收器 |
+| 第一次调用之后才修改对象池或回收器的设置 | 其他线程可能还看到旧值；`PoolMaxRetained` 只对之后新建的池生效 | 无：在启动时设置（见[设置](#settings)） |
+
 ## 下一步 [#next-steps]
 
 <Cards>

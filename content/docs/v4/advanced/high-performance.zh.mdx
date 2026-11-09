@@ -1,6 +1,6 @@
 ---
 title: 高性能序列化
-description: "在调用上让 Nino 更快的所有手段，什么时候用、代价是什么：缓冲区写入器、大小精确的数组、Writer 与 Reader、直接从已有内存读取、复用反序列化、对象池、启动、每次调用的固定开销、线程安全，以及怎样测量。"
+description: "在调用上让 Nino 更快的所有手段，什么时候用、代价是什么：缓冲区写入器、大小精确的数组、Writer 与 Reader、span、序列和流、复用反序列化、对象池、启动、每次调用的固定开销、线程安全，以及怎样测量。"
 icon: Gauge
 ---
 
@@ -22,7 +22,7 @@ icon: Gauge
   }}
 />
 
-`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 你已经在[序列化与反序列化](/zh/docs/v4/basic)里用过了。它们本身已经很快，只是每次调用都要为结果分配内存。这一页讲怎样让同样的调用做到**每次调用 0 B**：每种调用写到哪里、从哪里读、开销多少，然后是启动、每次调用的固定开销、线程安全和怎样测量。类型本身怎么写才能让调用一直快（格式、密封类与多态类、集合、字符串、自定义格式化器），放在下一页[面向性能的类型设计](/zh/docs/v4/advanced/type-design)。[下表](#levers)把这两页的手段列在一处。
+`NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)` 你已经在[序列化与反序列化](/zh/docs/v4/basic)里用过了。它们本身已经很快，只是每次调用都要为结果分配内存。这一页讲怎样让同样的调用做到**每次调用 0 B**：每种调用写到哪里（复用的缓冲区、任意 `IBufferWriter<byte>`、`Stream`）、从哪里读（span、`ReadOnlySequence<byte>`、`Stream`）、开销多少，然后是启动、每次调用的固定开销、线程安全和怎样测量。类型本身怎么写才能让调用一直快（格式、密封类与多态类、集合、字符串、自定义格式化器），放在下一页[面向性能的类型设计](/zh/docs/v4/advanced/type-design)。[下表](#levers)把这两页的手段列在一处。
 
 性能部分从这一页开始，后面几页依次深入：[面向性能的类型设计](/zh/docs/v4/advanced/type-design)、[复用与对象池](/zh/docs/v4/pooling)（复用反序列化和对象池的具体规则）、[零分配模式](/zh/docs/v4/advanced/zero-allocation)（可以直接复制的做法和检查清单）、[构建配置](/zh/docs/v4/advanced/build-configuration)（Release、分层编译、Native AOT、Unity 的 IL2CPP 与 Burst）。内部实现（内联的格式化器、结构体布局）见[性能原理](/zh/docs/v4/performance)。
 
@@ -35,6 +35,8 @@ icon: Gauge
 | [`Serialize(value)` 得到大小精确的 `byte[]`](#exact-size-arrays) | 某个 API 需要 `byte[]` | 每次调用分配一次 |
 | [`Writer` 与 `Reader`](#several-values-back-to-back) | 多个值共用一个缓冲区 | 每条消息调用一次 `Flush` 和 `ReleaseReferences` |
 | [直接从已有内存反序列化](#deserialize-from-the-memory-you-have) | 任何时候 | 无 |
+| [`Deserialize<T>(sequence)`](#deserialize-from-the-memory-you-have) | 管道或 gRPC 给的是 `ReadOnlySequence<byte>` | 只有一段时无；多段时拷贝一次 |
+| [`Serialize(value, stream)` 与 `Deserialize<T>(stream)`](#streams) | 一个文件、HTTP 请求体或 blob 只放一个值 | 从 Nino 的暂存缓冲区一次 `Write`；读取时租一个池化数组（缓冲区可公开访问的 `MemoryStream` 不用租） |
 | [复用反序列化（`ref`）](#deserialize-into-existing-objects) | 结构相同的消息，逐条处理 | 实例由你持有，每次读取都会改变它 |
 | [`[NinoPooled]`](#pool-what-you-create) 与[池容量](/zh/docs/v4/settings#pools) | 高频创建、保留或丢弃的实例 | 类必须是 `sealed partial`，自己持有的实例要 `ReturnToPool()`，池占用内存 |
 | [非托管结构体及其布局](/zh/docs/v4/advanced/type-design#keep-bulk-data-raw) | 批量数据和热数据 | 布局是格式的一部分 |
@@ -143,9 +145,22 @@ if (NinoSerializer.GetFixedSize<Tick>() < 0)
 
 `ReadOnlySequence<byte>`（来自 `System.IO.Pipelines`）也一样，直接调 `NinoDeserializer.Deserialize<T>(sequence)`：只有一段时直接在原内存上读，有多段时拷贝一次（见[多段输入](/zh/docs/v4/advanced/streams#readonlysequence-input)；从管道里切帧见[读取帧](/zh/docs/v4/advanced/networking#reading-frames)）。
 
+## 读写流 [#streams]
+
+一个文件、HTTP 请求体或 blob 里只放一个值时，直接把 `Stream` 交给 Nino，不要自己先拿 `byte[]` 再写：
+
+```csharp
+NinoSerializer.Serialize(checkpoint, file);                 // 每次调用不分配 byte[]
+NinoDeserializer.Deserialize(file, ref checkpoint);         // 填充你保留的实例
+```
+
+- **开销：** 写入时先序列化到线程级暂存缓冲区，再一次 `Write` 交给流：0 B。读取时把流里的字节读进从 `ArrayPool<byte>.Shared` 租来的数组（缓冲区可公开访问的 `MemoryStream` 直接在原缓冲区上读），读完就还回去。I/O 立刻完成时，`SerializeAsync` 和 `DeserializeAsync` 也不会多分配。
+- 先 `NinoSerializer.Serialize(value)` 再 `stream.Write(bytes)`，就多分配了一个流重载本来能省掉的数组。
+- 一次调用读到流的结尾，所以一个流只放一个值。一个流上要传多条消息就得分帧：见[流与压缩](/zh/docs/v4/advanced/streams#frames)，以及不分配内存的[分帧读写流](/zh/docs/v4/advanced/zero-allocation#framed-streams)做法。
+
 ## 反序列化到已有对象 [#deserialize-into-existing-objects]
 
-用 `ref` 传入上一次的结果，Nino 把数据读入这个实例：还是同一个对象，同样的嵌套对象、列表、数组和字典。这样，结构相同的消息源源不断地到来，也不会分配内存。
+用 `ref` 传入上一次的结果，Nino 把数据读入这个实例：还是同一个对象，同样的嵌套对象、列表、数组和字典。这样，结构相同的消息源源不断地到来，也不会分配内存；基准测试里，它比 MemoryPack 的覆盖模式最高快 <BenchValue k="reuse.max" />（见[.NET 基准测试](/zh/docs/v4/benchmarks#pooling)）。每种读取重载都有这个形式：span、`ReadOnlySequence<byte>`、`Stream` 和 `ref Reader`。
 
 ```csharp
 MetricsBatch batch = null;

@@ -6,6 +6,22 @@ icon: Share2
 
 默认情况下，Nino 把对象图当成一棵树来写。同一个对象引用两次就写两次，读回来是两个实例。对象图里有环（`a.Next = b; b.Next = a;`）时，序列化会检测出来，抛出 `InvalidOperationException`，消息里指明类型、提示加上 `trackReferences`，不会无限循环。很深的树什么都不用加，见[深层对象图](#deep-object-graphs)。
 
+## 什么时候用 [#when-to-use-it]
+
+<Callout type="idea" title="适合对象图">
+
+有关联关系的领域模型（多个订单指向同一个客户）、撤销栈、多个对象指向同一个对象的文档、带父节点引用的树：凡是对象身份要紧或者有环的地方都用得上。一个列表把同一个追踪对象重复 100 次，字节数和耗时都只有不追踪时的零头。
+
+</Callout>
+
+<Callout type="warn" title="消息和普通数据别开">
+
+网络消息、配置和其他树状数据没有共享引用，嵌套多深都一样。这些地方别开追踪：不追踪的类型没有任何开销，连 4 字节的头都没有。
+
+</Callout>
+
+## 怎么用 [#how-to-use-it]
+
 给类加上 `trackReferences: true`，对象图就能原样保留。它的所有子类型也都会追踪，哪怕子类型自己声明的 `[NinoType]` 没写这个选项：
 
 ```csharp
@@ -50,6 +66,7 @@ var loaded = NinoDeserializer.Deserialize<List<Employee>>(bytes);
 - 不管成员声明成什么类型（包括 `object` 和接口），共享引用都保持同一个对象。
 - 只追踪 `[NinoType]` 类，不管集合：同一个 `List<T>` 出现在两个成员里，还是写两次。
 - 开销：你每调用一次 `NinoSerializer`/`NinoDeserializer`（<Term id="top-level-call" lang="zh">顶层调用</Term>）有一笔很小的固定开销；每个追踪的对象再多 4 字节和一次身份查找。不涉及追踪对象的调用没有任何开销。
+- 复用反序列化对新对象照常工作；遇到指回已读对象的回引用时，直接替换当前值，不回收旧值，因为对象图里别的地方可能还引用着它。
 
 一个 `Node { V = 5 }` 被密封类 `Holder` 引用两次（先是 `object` 成员，再是 `Node` 成员），字节来自[规范](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#a5-reference-tracking)：
 
@@ -69,6 +86,10 @@ var loaded = NinoDeserializer.Deserialize<List<Employee>>(bytes);
 必须靠构造函数参数或只读成员重建的类型（例如位置记录）不能追踪（NINO016）。结构体上的 `trackReferences` 直接忽略，并报警告（NINO015）。
 
 </Callout>
+
+### 自己用 Writer 写多个值 [#own-writer]
+
+传一个值进去、返回字节（或写进缓冲区写入器、流）的调用，以及读出一个值的调用，引用表只在这一次调用里有效。自己创建 `Writer` 或 `Reader` 时，经它写的所有内容共享引用，直到调用 `ReleaseReferences()` 为止：每条逻辑消息结束时调用一次；同一个 `Writer` 写的值要用同一个 `Reader` 读（见[连续写入多个值](/zh/docs/v4/advanced/high-performance#several-values-back-to-back)）。
 
 ## 深层对象图 [#deep-object-graphs]
 
@@ -100,27 +121,17 @@ var copy = NinoDeserializer.Deserialize<TreeNode>(bytes);
 
 由这两种类组成的对象图，嵌套超过 [`NinoSettings.MaxDepth`](/zh/docs/v4/settings#limits)（默认 512 层）就会抛异常，外围包含自身的结构体里尚未结束的主体也计入层数，写和读都一样：序列化时抛 `InvalidOperationException`，读取这样的数据时抛 `NinoDataException`。需要深度递归的类型，请给它无参构造函数和可赋值的成员。
 
-## 什么时候用 [#when-to-use-it]
+## 常见陷阱 [#pitfalls]
 
-<Accordions type="single">
-<Accordion title="用于对象图">
-
-有关联关系的领域模型（多个订单指向同一个客户）、撤销栈、多个对象指向同一个对象的文档、带父节点引用的树：凡是对象身份要紧或者有环的地方都用得上。一个列表把同一个追踪对象重复 100 次，字节数和耗时都只有不追踪时的零头。
-
-</Accordion>
-<Accordion title="消息和普通数据不需要">
-
-网络消息、配置和其他树状数据没有共享引用。这些地方别开追踪：不追踪的类型没有任何开销，连 4 字节的头都没有。
-
-</Accordion>
-<Accordion title="自己连续写入、读取多个值时">
-
-传一个值进去、返回字节（或写进缓冲区写入器）的调用，以及从 span 读出一个值的调用，引用表只在这一次调用里有效。自己创建 `Writer` 或 `Reader` 时，经它写的所有内容共享引用，直到调用 `ReleaseReferences()` 为止。每条逻辑消息结束时调用一次。
-
-</Accordion>
-</Accordions>
-
-复用反序列化对新对象照常工作；遇到指回已读对象的回引用时，直接替换当前值，不回收旧值，因为对象图里别的地方可能还引用着它。
+| 错误 | 后果 | 由谁发现 |
+| --- | --- | --- |
+| 没开 `trackReferences` 的类型之间有环 | 序列化时抛 `InvalidOperationException`，消息里指明类型 | 序列化器 |
+| 两个成员共用一个对象，它的类型却没开追踪 | 读回来是两个对象，改了一个，另一个看不到 | 无：给共享的那个类型加上 `trackReferences: true` |
+| 给要靠构造函数重建的类型（位置记录、init-only 或只读成员）开 `trackReferences` | 编译失败 | NINO016 |
+| 给结构体开 `trackReferences` | 直接忽略 | NINO015（警告） |
+| 同一个集合放在两个成员里 | 写两次，读回来是两个集合 | 无：把它放进一个开了追踪的 `[NinoType]` 类 |
+| 用同一个 `Writer` 写多条消息，中间没调 `ReleaseReferences()` | 后面的消息会回引用前面消息里的对象，单独读不出来 | 无：每条消息结束时调用（见[上文](#own-writer)） |
+| 构造函数创建或按值比较的类嵌套超过 `MaxDepth` | 序列化时抛 `InvalidOperationException`，读取时抛 `NinoDataException` | 序列化器和读取方 |
 
 ## 下一步 [#next-steps]
 
