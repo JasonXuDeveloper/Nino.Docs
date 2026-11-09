@@ -11,14 +11,14 @@ You do not need any of this to use Nino from C#: the generator writes and reads 
 
 ## Try It [#try-it]
 
-Pick an example to see the bytes Nino writes for it, each run labelled. They are the specification's dumps of a real run.
+Pick an example to see the bytes Nino writes for it, each run labelled. They are the specification's dumps of a real run. To see the same breakdown for a message of your own types, run [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect).
 
 <BytePlayground lang="en" />
 
 ## Conventions [#conventions]
 
 - **Little-endian, unaligned.** Every multi-byte value is little-endian, and each value starts right after the previous one. The only padding on the wire is inside raw structs and nullable elements of raw arrays, written as zeros. The .NET implementation refuses to run on big-endian hosts.
-- **No envelope.** A payload is the top-level value under its declared type, followed by any deferred bodies. There is no magic number, version, length or type descriptor: the declared type alone decides how the bytes are read. Bytes after the value are ignored by default and rejected in [untrusted mode](/en/docs/v4/security#untrusted-mode).
+- **No envelope.** A payload is the top-level value under its declared type, followed by any deferred bodies. There is no magic number, version, length or type descriptor: the declared type alone decides how the bytes are read. Bytes after the value are ignored by default and rejected in [untrusted mode](/en/docs/v4/security#untrusted-mode). `Serialize(value, stream)` adds nothing either, so messages that share a stream need [frames](/en/docs/v4/advanced/streams#frames).
 - **Fixed-size integers.** Lengths and counts are `int32`, with `-1` for null; sealed classes and nullable values have a presence byte (`0` or `1`). The one variable-length integer is the [string header](#strings), whose first byte gives its size.
 - **Versioning.** The format is versioned with Nino's major version: v4 does not read v3 data. A change to the bytes inside v4 is announced in the [changelog](/en/docs/v4/changelog) under "Wire Format". Adding members to a type is handled per type by the [version-tolerant and keyed formats](/en/docs/v4/evolving-data), not by format versions.
 
@@ -113,7 +113,7 @@ Every reader must implement deferral, or it cannot read a linked list of more th
 
 ## Layout Metadata [#layout-metadata]
 
-For every `[NinoType]`, the generator publishes how it is written as `[assembly: NinoTypeLayout(...)]`: the format, header, type id, whether it is raw, tracked or deferrable, and each member's name, type and encoding (`raw(4)`, `string`, `seq(...)`, `map(K,V)`, `type(T)`, ...). The specification gives its grammar. Code generators for other languages, such as [nino-gen](/en/docs/v4/advanced/codegen), read only this metadata. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata).
+For every `[NinoType]`, the generator publishes how it is written as `[assembly: NinoTypeLayout(...)]`: the format, header, type id, whether it is raw, tracked or deferrable, and each member's name, type and encoding (`raw(4)`, `string`, `seq(...)`, `map(K,V)`, `type(T)`, ...). The specification gives its grammar. Code generators for other languages, such as [nino-gen](/en/docs/v4/advanced/codegen), read only this metadata, and so do `nino-gen inspect` and the [layout baseline](/en/docs/v4/evolving-data#layout-baseline), which compares it with the layouts you saved to report a change that breaks old data. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata).
 
 ## Validation [#validation]
 

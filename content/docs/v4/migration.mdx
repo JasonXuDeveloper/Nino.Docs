@@ -1,6 +1,6 @@
 ---
 title: Migrating from v3
-description: "Upgrade a Nino v3 project to v4 step by step: package changes, renamed attributes and APIs, before/after code, and converting data written by v3."
+description: "Upgrade a Nino v3 project to v4 step by step: package changes, renamed attributes and APIs, before/after code, converting data written by v3, and upgrading from a v4 beta or an earlier release candidate."
 icon: ArrowRightLeft
 ---
 
@@ -45,6 +45,11 @@ Build, and fix what the analyzer reports (`NINO001`–`NINO044`); many diagnosti
 Convert or discard persisted v3 data.
 
 </Step>
+<Step>
+
+Once your saved and sent types are on v4, create a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) (`NinoLayouts.cs`): from then on the analyzer reports, as you type, any change to them that would break the data v4 writes.
+
+</Step>
 </Steps>
 
 ## Serialization API
@@ -60,6 +65,8 @@ In v3, the generator emitted static `Serializer` and `Deserializer` classes (and
 | `Deserializer.Deserialize(data, out T value)` | `T value = NinoDeserializer.Deserialize<T>(data)` |
 | `Deserializer.Deserialize(out T value, ref reader)` | `T value = NinoDeserializer.Deserialize<T>(ref reader)` |
 | `Serializer.GetBufferWriter()` / `ReturnBufferWriter(...)` | a reused `NinoArrayBufferWriter` (see [Serialize and Deserialize](/en/docs/v4/basic#reusing-a-buffer)) |
+| a `Stream` written through a `byte[]` or your own `IBufferWriter<byte>` | `NinoSerializer.Serialize(obj, stream)`, `SerializeAsync(obj, stream)` (see [Streams](/en/docs/v4/advanced/streams#streams)) |
+| a `Stream` read into a `byte[]` first | `NinoDeserializer.Deserialize<T>(stream)`, `DeserializeAsync<T>(stream)`; from a `PipeReader`, `Deserialize<T>(in ReadOnlySequence<byte>)` (see [Multi-Segment Input](/en/docs/v4/advanced/streams#readonlysequence-input)) |
 | (none) | `NinoDeserializer.Deserialize(data, ref value)`: deserialize into an existing instance |
 | (none) | `NinoSerializer.SerializeBoxed(value, type)`, `NinoDeserializer.DeserializeBoxed(data, type)`: only for a type known only at run time that shares no common `[NinoType]` base with the others (see [Runtime Types](/en/docs/v4/basic#runtime-types)) |
 
@@ -114,7 +121,7 @@ v3's generated `Serialize` accepted `Span<T>` values. In v4, `T` is a generic ty
 | `[NinoMember(index)]`, `[NinoIgnore]`, `[NinoUtf8]`, `[NinoConstructor(...)]` | unchanged (`[NinoConstructor]` still marks a constructor or a static factory method) |
 | `[NinoExplicitOrder(...)]` | removed; use `[NinoType(false)]` and give each member a `[NinoMember(index)]`, numbered in the order the members were written (see [Member Order](/en/docs/v4/defining-types#member-order)) |
 | `[NinoPrivateProxy]` (emitted by the generator) | removed; private members are reached through `[UnsafeAccessor]` (.NET 8+) or a generated accessor in the `partial` type |
-| (none) | `[NinoPooled]`, `[NinoFactory]`, `[NinoMemberFormatter]`, `[assembly: NinoFormatter]` |
+| (none) | `[NinoPooled]`, `[NinoFactory]`, `[NinoMemberFormatter]`, `[assembly: NinoFormatter]`; the callbacks `[NinoOnSerializing]`, `[NinoOnSerialized]`, `[NinoOnDeserializing]`, `[NinoOnDeserialized]` ([Callbacks](/en/docs/v4/defining-types#callbacks)); `[assembly: NinoLayouts]`, the [layout baseline](/en/docs/v4/evolving-data#layout-baseline) |
 
 ### Version Tolerance [#version-tolerance]
 
@@ -305,6 +312,8 @@ The release candidates keep the format of 4.0.0-rc.1, except for the changes the
 | `[NinoMemberFormatter(typeof(Utf8StringFormatter))]` | `[NinoUtf8]` (the old form still compiles and writes the same bytes; [NINO031](/en/docs/v4/analyzers#nino031) rewrites it) |
 | Calls only generated code makes: `NinoPolymorphic.Register<TSub, TFormatter>(id)`, `RegisterTracked`, `NinoFormatterCache<T>.TryRegisterFixed`, `TryRegisterTop` | `Nino.Core.CompilerServices.NinoTypes.Register`, `RegisterFixed`, `RegisterTop`, `RegisterTracked<T, TFormatter>(id)`: rebuild every assembly an earlier release generated code for |
 | Rust: a generated type's `Cat::TYPE_ID` | `Cat::NINO_TYPE_ID`, as `NINO_TYPE_NAME` and `NINO_LAYOUT`: regenerate (`<Cat as NinoReadBody>::TYPE_ID` is unchanged) |
+
+**4.0.0-rc.10** keeps the bytes and renames nothing. Its `Stream`, async and `ReadOnlySequence<byte>` overloads do what the helpers on earlier releases' [Streams](/en/docs/v4/advanced/streams) page did: delete the copied helpers and call `NinoSerializer.Serialize(value, stream)`, `NinoDeserializer.Deserialize<T>(stream)` or `Deserialize<T>(in ReadOnlySequence<byte>)`, which write and read the same bytes.
 
 ## Next Steps [#next-steps]
 

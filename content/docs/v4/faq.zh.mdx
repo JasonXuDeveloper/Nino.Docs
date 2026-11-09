@@ -10,7 +10,7 @@ faq: true
 
 ## Nino 是什么？ [#what-is-nino]
 
-Nino 是一个通用的高性能 C# / .NET 二进制序列化库。给类型加上 `[NinoType]`，Roslyn 源生成器就会在编译期写好它的序列化代码；运行时调用 `NinoSerializer.Serialize` 和 `NinoDeserializer.Deserialize` 就行。不用反射，不在运行时生成代码，没有 schema 文件，也不用注册。Nino 以 MIT 协议开源：[github.com/JasonXuDeveloper/Nino](https://github.com/JasonXuDeveloper/Nino)。参见[介绍](/zh/docs/v4)。
+Nino 是一个通用的高性能 C# / .NET 二进制序列化库。给类型加上 `[NinoType]`，Roslyn 源生成器就会在编译期写好它的序列化代码；运行时调用 `NinoSerializer.Serialize` 和 `NinoDeserializer.Deserialize` 就行。读写成员不靠反射，不在运行时生成代码，没有 schema 文件，也不用注册。Nino 以 MIT 协议开源：[github.com/JasonXuDeveloper/Nino](https://github.com/JasonXuDeveloper/Nino)。参见[介绍](/zh/docs/v4)。
 
 ## 怎么安装 Nino？ [#how-do-i-install-nino]
 
@@ -22,7 +22,7 @@ Nino 是一个通用的高性能 C# / .NET 二进制序列化库。给类型加�
 
 ## Nino 用反射吗？能在 IL2CPP 和 NativeAOT 下用吗？ [#does-nino-use-reflection-does-it-work-with-il2cpp-and-nativeaot]
 
-不用反射：源生成器在编译期给每个类型生成一个格式化器，所以 IL2CPP、NativeAOT 和 HybridCLR 这些不能在运行时生成代码的环境里，Nino 照样能用。参见[性能原理](/zh/docs/v4/performance)。
+读写数据不用反射：源生成器在编译期给每个类型生成一个格式化器，所以 IL2CPP、NativeAOT 和 HybridCLR 这些不能在运行时生成代码的环境里，Nino 照样能用。反射只用在这条路径之外，比如第一次用到某个程序集里的类型时找它生成的注册表，以及装箱 API 第一次按 `Type` 找格式化器。参见[性能原理](/zh/docs/v4/performance)。
 
 Nino.Core 的 net8.0 和 net10.0 版本还带了裁剪和 Native AOT 标注：用 `PublishTrimmed` 或 `PublishAot` 发布，Nino 不报任何警告。Native AOT 下，Nino 只用生成器写好的格式化器，所以要序列化的每个类型，都得出现在生成器看得到的代码里（当成员类型，或者当 `NinoSerializer`/`NinoDeserializer` 调用的类型实参或 `typeof` 参数）。只在运行时才出现的类型会报错，错误里写明是哪个类型，绝不会读写出错的数据。参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
 
@@ -40,7 +40,11 @@ Nino.Core 的 net8.0 和 net10.0 版本还带了裁剪和 Native AOT 标注：�
 
 ## 数据写出后还能修改类型吗？ [#can-i-change-my-types-after-data-has-been-written]
 
-可以，前提是事先选对格式。普通的 `[NinoType]` 按位置写，最快；`[NinoType(format: NinoFormat.VersionTolerant)]` 可以在末尾追加成员；`[NinoType(format: NinoFormat.Keyed)]` 可以增删成员、调整顺序。参见[数据演进](/zh/docs/v4/evolving-data)。
+可以，前提是事先选对格式。普通的 `[NinoType]` 按位置写，最快；`[NinoType(format: NinoFormat.VersionTolerant)]` 可以在末尾追加成员；`[NinoType(format: NinoFormat.Keyed)]` 可以增删成员、调整顺序。数据发出去以后，再建一个[布局基线](/zh/docs/v4/evolving-data#layout-baseline)：哪个改动会弄坏这些数据，分析器在你写代码时就会指出来。参见[数据演进](/zh/docs/v4/evolving-data)。
+
+## Nino 能在序列化前后执行我的代码吗？ [#callbacks]
+
+能。给 `[NinoType]` 的无参方法标上 `[NinoOnSerializing]`、`[NinoOnSerialized]`、`[NinoOnDeserializing]` 或 `[NinoOnDeserialized]`，生成的代码会在这个类型的每个值写入、读取前后调用它们，不管值在哪里：写之前打个时间戳，读完之后重建缓存或索引。MemoryPack 的四个回调换成它们即可，IL2CPP 和 Native AOT 下照样能用。参见[回调](/zh/docs/v4/defining-types#callbacks)。
 
 ## Nino 支持多态和共享引用吗？ [#does-nino-support-polymorphism-and-shared-references]
 
@@ -49,6 +53,10 @@ Nino.Core 的 net8.0 和 net10.0 版本还带了裁剪和 Native AOT 标注：�
 ## 怎么序列化多种消息类型，或者运行时才知道的类型？ [#how-do-i-serialize-many-message-types-or-a-type-known-only-at-run-time]
 
 给这些类型一个共同的 `[NinoType]` 基类或接口，再调用 `Serialize<TBase>` / `Deserialize<TBase>`：类型 ID 由生成的代码写入和分派，这是最快的做法，还能配合复用反序列化和对象池，每条消息除了内容变了的字符串，什么都不分配。RPC 和消息分派、插件系统、编辑器工具都适合这么做。只有手里只有一个 `Type`、这些类型又没有共同基类时（比如靠反射处理任意类型的工具），才用 `SerializeBoxed(value, type)` 和 `DeserializeBoxed(data, type)`。别把 `object` 当类型实参：它只接受 `[NinoType]` 的值，而且要经过全局注册表分派，开销更大。参见[运行时类型](/zh/docs/v4/basic#runtime-types)。
+
+## 能直接写进 Stream、从 PipeReader 读吗？ [#streams]
+
+能。`NinoSerializer.Serialize(value, stream)` 和 `SerializeAsync` 写一条消息；`NinoDeserializer.Deserialize<T>(stream)` 和 `DeserializeAsync<T>` 把流读到结尾；`Deserialize<T>(in ReadOnlySequence<byte>)` 直接读 `PipeReader` 或 gRPC 交给你的数据。它们读写的字节和 span 版本相同，前面不带长度，所以一个流（socket、日志文件）上传多条消息时要[分帧](/zh/docs/v4/advanced/streams#frames)。参见[流与压缩](/zh/docs/v4/advanced/streams)。
 
 ## Nino 是线程安全的吗？ [#is-nino-thread-safe]
 
@@ -86,7 +94,11 @@ Native AOT 下，错误信息会说运行时没法现场构建格式化器：只
 
 ## 为什么旧数据读不出来了，或者读出的值不对？ [#old-data]
 
-只写 `[NinoType]` 就是按位置格式：增删成员、调整顺序都会改变字节，这时读旧数据会抛异常（`unexpected end of data`、`invalid length`），更糟的是读出错的值，因为字节里不带 schema。要存下来的数据，写第一份之前就选好 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`；版本容错的继承体系里，只往没有子类的类追加成员。想在 CI 里发现改动，就比较每次构建的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)。参见[数据演进](/zh/docs/v4/evolving-data)。
+只写 `[NinoType]` 就是按位置格式：增删成员、调整顺序都会改变字节，这时读旧数据会抛异常（`unexpected end of data`、`invalid length`），更糟的是读出错的值，因为字节里不带 schema。要存下来的数据，写第一份之前就选好 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`；版本容错的继承体系里，只往没有子类的类追加成员。想在发布前发现这类改动，就保留一个[布局基线](/zh/docs/v4/evolving-data#layout-baseline)：写代码时分析器就会报出来（NINO034、NINO035），CI 里 `nino-gen layouts --check` 会让构建失败。参见[数据演进](/zh/docs/v4/evolving-data)。
+
+## 一条消息读不出来，怎么看它里面是什么？ [#inspect]
+
+运行 `nino-gen inspect --assembly MyApp.dll --type MyApp.Order order.bin`。它按程序集发布的布局读这条消息，列出每个成员的偏移、长度、编码和值；数据有问题时，先显示已经读到的部分，再给出出错的偏移和没通过的检查。`--hex` 读十六进制转储，`--json` 输出给工具用的结果树。参见[查看一条消息](/zh/docs/v4/advanced/codegen#inspect)。
 
 ## 为什么拦截器没接管我的调用？ [#not-intercepted]
 

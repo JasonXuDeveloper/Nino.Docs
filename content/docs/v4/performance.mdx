@@ -1,7 +1,7 @@
 ---
 title: Performance Internals
 seoTitle: "How Nino Is Fast: Performance Internals – Nino v4 Docs"
-description: "How Nino v4 gets its speed, and what you can do to keep it: interceptors, raw structs, buffer reuse, threading."
+description: "How Nino v4 gets its speed, and how to keep your types and calls on the fast paths: interceptors, inlined struct formatters, raw memory for unmanaged data, fixed-size types, allocation, thread safety and polymorphism."
 icon: Zap
 ---
 
@@ -28,6 +28,7 @@ The saving is a few nanoseconds per call, which matters most when small values a
 - **It depends on the compiler, not the target framework**: a `netstandard2.0` library built with the .NET 8+ SDK is intercepted too.
 - **Older compilers simply use the regular path**, which writes the same bytes. The Unity package ships the generator's Roslyn 4.3 build, so Unity projects never intercept.
 - Some calls are left alone, because intercepting them would gain nothing: raw values and arrays of raw elements (the regular path already copies them directly; only `Deserialize<T>(data)` of a raw value is intercepted, to a single load), `[NinoType]`s declared in another assembly (the calling project reaches their formatter only through the formatter cache, as the regular call does), and calls inside generic code.
+- Every overload can be intercepted, not only the `byte[]` and span ones: `IBufferWriter<byte>`, `Writer` and `Reader`, `Stream` and its async forms, and `ReadOnlySequence<byte>`. The intercepted `Stream` and sequence calls run the generated formatter directly and keep the I/O, the copy of a multi-segment sequence and the async state machine out of line.
 - `Serialize(value)` of a [fixed-size type](#fixed-size-types) is routed to code that writes straight into a `byte[]` of the type's size.
 - With `<NinoPrefetchLargeCollections>true</NinoPrefetchLargeCollections>` in the project, intercepted calls of large arrays and lists of classes also prefetch their objects; see [Large Collections of Scattered Objects](/en/docs/v4/advanced/type-design#large-collections).
 - Intercepted and regular calls always use the same formatter: formatters are declared with attributes and cannot be replaced at run time, so the generator knows the one the runtime would find.

@@ -1,6 +1,6 @@
 ---
 title: 从 v3 迁移
-description: "把 Nino v3 项目逐步升级到 v4：包的变化、改名的特性与 API、修改前后的代码，以及如何转换 v3 写出的数据。"
+description: "把 Nino v3 项目逐步升级到 v4：包的变化、改名的特性与 API、修改前后的代码、如何转换 v3 写出的数据，以及从 v4 测试版或更早的候选版本升级。"
 icon: ArrowRightLeft
 ---
 
@@ -45,6 +45,11 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
 转换或丢弃持久化的 v3 数据。
 
 </Step>
+<Step>
+
+要存储或传输的类型都迁到 v4 之后，建一个[布局基线](/zh/docs/v4/evolving-data#layout-baseline)（`NinoLayouts.cs`）：以后对这些类型的改动，只要会弄坏 v4 写出的数据，写代码时分析器就会报出来。
+
+</Step>
 </Steps>
 
 ## 序列化 API [#serialization-api]
@@ -60,6 +65,8 @@ v3 的生成器会在每个程序集的 `<AssemblyName>.NinoGen` 命名空间里
 | `Deserializer.Deserialize(data, out T value)` | `T value = NinoDeserializer.Deserialize<T>(data)` |
 | `Deserializer.Deserialize(out T value, ref reader)` | `T value = NinoDeserializer.Deserialize<T>(ref reader)` |
 | `Serializer.GetBufferWriter()` / `ReturnBufferWriter(...)` | 复用一个 `NinoArrayBufferWriter`（参见[序列化与反序列化](/zh/docs/v4/basic#reusing-a-buffer)） |
+| 写 `Stream` 时先写成 `byte[]`，或自己包一个 `IBufferWriter<byte>` | `NinoSerializer.Serialize(obj, stream)`、`SerializeAsync(obj, stream)`（参见[流](/zh/docs/v4/advanced/streams#streams)） |
+| 读 `Stream` 时先读进 `byte[]` | `NinoDeserializer.Deserialize<T>(stream)`、`DeserializeAsync<T>(stream)`；`PipeReader` 的数据用 `Deserialize<T>(in ReadOnlySequence<byte>)`（参见[多段输入](/zh/docs/v4/advanced/streams#readonlysequence-input)） |
 | （无） | `NinoDeserializer.Deserialize(data, ref value)`：反序列化到已有实例 |
 | （无） | `NinoSerializer.SerializeBoxed(value, type)`、`NinoDeserializer.DeserializeBoxed(data, type)`：仅用于运行时才知道、并且与其他类型没有共同 `[NinoType]` 基类型的类型（参见[运行时类型](/zh/docs/v4/basic#runtime-types)） |
 
@@ -114,7 +121,7 @@ v3 生成的 `Serialize` 可以接收 `Span<T>`。v4 中 `T` 是泛型类型参�
 | `[NinoMember(index)]`、`[NinoIgnore]`、`[NinoUtf8]`、`[NinoConstructor(...)]` | 不变（`[NinoConstructor]` 照旧可以标记构造函数或静态工厂方法） |
 | `[NinoExplicitOrder(...)]` | 已移除；改用 `[NinoType(false)]`，并按成员原来的写入顺序给每个成员编上 `[NinoMember(index)]`（参见[成员顺序](/zh/docs/v4/defining-types#member-order)） |
 | `[NinoPrivateProxy]`（由生成器生成） | 已移除；私有成员通过 `[UnsafeAccessor]`（.NET 8+）或 `partial` 类型中生成的访问器访问 |
-| （无） | `[NinoPooled]`、`[NinoFactory]`、`[NinoMemberFormatter]`、`[assembly: NinoFormatter]` |
+| （无） | `[NinoPooled]`、`[NinoFactory]`、`[NinoMemberFormatter]`、`[assembly: NinoFormatter]`；回调 `[NinoOnSerializing]`、`[NinoOnSerialized]`、`[NinoOnDeserializing]`、`[NinoOnDeserialized]`（[回调](/zh/docs/v4/defining-types#callbacks)）；`[assembly: NinoLayouts]`，即[布局基线](/zh/docs/v4/evolving-data#layout-baseline) |
 
 ### 版本容错 [#version-tolerance]
 
@@ -305,6 +312,8 @@ v4 读不了 v3 的数据，而且同一个项目不能同时引用两个版本�
 | `[NinoMemberFormatter(typeof(Utf8StringFormatter))]` | `[NinoUtf8]`（旧写法仍能编译，字节不变；[NINO031](/zh/docs/v4/analyzers#nino031) 会改写它） |
 | 只有生成代码才调用的 `NinoPolymorphic.Register<TSub, TFormatter>(id)`、`RegisterTracked`、`NinoFormatterCache<T>.TryRegisterFixed`、`TryRegisterTop` | `Nino.Core.CompilerServices.NinoTypes.Register`、`RegisterFixed`、`RegisterTop`、`RegisterTracked<T, TFormatter>(id)`：由更早版本生成代码的程序集都要重新编译 |
 | Rust：生成类型的 `Cat::TYPE_ID` | `Cat::NINO_TYPE_ID`，与 `NINO_TYPE_NAME`、`NINO_LAYOUT` 的命名一致：重新生成即可（`<Cat as NinoReadBody>::TYPE_ID` 不变） |
+
+**4.0.0-rc.10** 字节不变，也没有改名。它新增的 `Stream`、异步和 `ReadOnlySequence<byte>` 重载，做的就是以前版本[流与压缩](/zh/docs/v4/advanced/streams)页让你复制的辅助方法做的事：删掉这些辅助方法，改调 `NinoSerializer.Serialize(value, stream)`、`NinoDeserializer.Deserialize<T>(stream)` 或 `Deserialize<T>(in ReadOnlySequence<byte>)`，读写的字节相同。
 
 ## 下一步 [#next-steps]
 

@@ -1,7 +1,7 @@
 ---
 title: 性能原理
 seoTitle: "Nino 为什么快：性能原理 – Nino v4 文档"
-description: "Nino v4 为什么快，你怎样让它一直快：拦截器、原始结构体、缓冲区复用、多线程。"
+description: "Nino v4 为什么快，怎样让你的类型和调用一直走快路径：拦截器、可内联的结构体格式化器、非托管数据按原始内存处理、固定大小类型、内存分配、线程安全和多态。"
 icon: Zap
 ---
 
@@ -28,6 +28,7 @@ static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 - **看编译器，不看目标框架**：用 .NET 8+ SDK 编译的 `netstandard2.0` 库一样会拦截。
 - **旧编译器直接走常规路径**，字节一样。Unity 包里是生成器的 Roslyn 4.3 版本，所以 Unity 项目从不拦截。
 - 有些调用不拦截，因为拦截了也没好处：原始值和原始元素数组（常规路径本来就直接拷贝；只有原始值的 `Deserialize<T>(data)` 会拦截，变成一次读取）；在别的程序集里声明的 `[NinoType]`（调用方项目只能经格式化器缓存拿到它的格式化器，和常规调用一样）；以及泛型代码里的调用。
+- 不只是 `byte[]` 和 span 的重载，每个重载都能拦截：`IBufferWriter<byte>`、`Writer` 和 `Reader`、`Stream` 及其异步版本，以及 `ReadOnlySequence<byte>`。拦截后的 `Stream` 和 sequence 调用直接调用生成的格式化器，I/O、多段 sequence 的拷贝和异步状态机都放在主路径之外。
 - [固定大小类型](#fixed-size-types)的 `Serialize(value)` 会改调专门的代码，直接写进大小正好的 `byte[]`。
 - 项目里设了 `<NinoPrefetchLargeCollections>true</NinoPrefetchLargeCollections>` 后，类的大数组和大列表的拦截调用还会预取里面的对象；见[散落在内存中的大型集合](/zh/docs/v4/advanced/type-design#large-collections)。
 - 拦截的调用和常规调用用的总是同一个格式化器：格式化器都用特性声明，运行时换不掉，所以生成器知道运行时会找到哪一个。
