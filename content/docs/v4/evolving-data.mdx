@@ -1,6 +1,6 @@
 ---
 title: Evolving Your Data
-description: "Positional, version-tolerant and keyed formats: what each one lets you change after data has been written."
+description: "Positional, version-tolerant and keyed formats and what each lets you change once data is written, renaming with [NinoFormerName], and the layout baseline that flags a breaking change as you type."
 icon: GitBranch
 ---
 
@@ -59,12 +59,6 @@ Not tolerated: appending members to a base class that has `[NinoType]` subclasse
 
 </Callout>
 
-<Callout type="info">
-
-Up to 4.0.0-rc.8, defining the symbol `WEAK_VERSION_TOLERANCE` made every positional type of a project version-tolerant. The symbol is removed: where a project still defines it, error [NINO032](/en/docs/v4/analyzers#nino032) marks each such type, and its code fix adds `format: NinoFormat.VersionTolerant`, which keeps the bytes. Then remove the symbol.
-
-</Callout>
-
 ### Appending to a Base Class [#appending-to-a-base-class]
 
 In a version-tolerant hierarchy, append members only to the classes that have no subclasses. If a base class needs a new member, make the hierarchy [`NinoFormat.Keyed`](#keyed-members) instead. Here is why.
@@ -96,7 +90,7 @@ After its header, an `Invoice { Id = 1, Revision = 2, CustomerId = 7 }` is writt
 - **Version 2 reads version 1 data:** `Revision` gets the bytes of `CustomerId`, and the data ends before `CustomerId`, which keeps its value like any missing member (`0` in a new `Invoice`).
 - **Version 1 reads version 2 data:** `CustomerId` gets the bytes of `Revision`, and the real `CustomerId` is skipped as an unknown trailing member.
 
-Here the two members have the same type, so the values are merely wrong. When the types differ, the bytes are misread as another type, and the result is wrong values or a `NinoDataException`. Nothing reports the mistake at compile time, because the generator only ever sees one version of your code.
+Here the two members have the same type, so the values are merely wrong. When the types differ, the bytes are misread as another type, and the result is wrong values or a `NinoDataException`. The generator sees only one version of your code, so only a [layout baseline](#layout-baseline), which remembers the last one, reports the mistake (NINO034 on each subclass). To see what each byte of such a message is read as, run [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) on it.
 
 Instances of `Document` itself are not affected (`Revision` is their last member); the data of every subclass is. So append members only to the classes at the bottom of a hierarchy, such as sealed message classes. Put a member that every subclass needs into each subclass, or make the hierarchy [`NinoFormat.Keyed`](#keyed-members), where members can be added to any class.
 
@@ -120,6 +114,44 @@ Each member is written with a **key** (the 32-bit FNV-1a hash of its name, compu
 - Keyed structs are never written as raw memory. Polymorphism works as usual: the type id comes before the body.
 
 This is the format for data kept for a long time and edited by many releases: configuration, documents, settings files, content authored in tools.
+
+## Choosing
+
+| Question | Answer | Use |
+| --- | --- | --- |
+| Do the writer and the reader always run the same build? | yes | `Positional` |
+| Will you only append members, to classes without subclasses? | yes | `VersionTolerant` |
+| Will you remove, reorder, or add members to a base class? | yes | `Keyed` |
+
+
+<Accordions type="single">
+<Accordion title="Messages between a client and a server">
+
+Positional, when both sides always run the same build. If clients and servers are upgraded at different times (rolling upgrades, old app versions in the wild), use `NinoFormat.VersionTolerant` and only ever **append** fields to the message classes themselves (not to their shared base class), or `NinoFormat.Keyed` if you also need to retire fields or add them to the base. See [Networking](/en/docs/v4/advanced/networking).
+
+</Accordion>
+<Accordion title="Saved documents and user files">
+
+`NinoFormat.VersionTolerant` if you only add fields over time, to classes without subclasses; `NinoFormat.Keyed` if you want the freedom to remove and reorder them. Add [`trackReferences`](/en/docs/v4/reference-tracking) when the saved graph shares objects or has cycles. See [Persistence](/en/docs/v4/advanced/persistence).
+
+</Accordion>
+<Accordion title="Configuration edited by people">
+
+`NinoFormat.Keyed`: the people who maintain it add, remove and reorder fields all the time, and the cost (8 bytes per member) rarely matters for configuration.
+
+</Accordion>
+<Accordion title="Caches and in-memory snapshots">
+
+Positional. If the schema changes, throw the cache away and rebuild it.
+
+</Accordion>
+</Accordions>
+
+<Callout type="idea">
+
+The options can be mixed: a keyed settings file can hold positional raw structs (such as `Guid` or your own `[NinoType]` structs) inside it. Each type has its own format.
+
+</Callout>
 
 ## Renaming [#renaming]
 
@@ -167,36 +199,6 @@ public class UserProfile
 - In positional and version-tolerant types the attribute has no effect, since they write no names; the analyzer warns about it there (NINO024).
 - Old code still knows only the old name, so data written after the rename loses this member when old code reads it.
 
-## Layout Metadata
-
-For every `[NinoType]`, the generator records how the type is written in the assembly's metadata, as an `[assembly: NinoTypeLayout]`: the format, the header in front of the body (`None` for a struct, `Presence` for a sealed class, `TypeId` otherwise), whether references are tracked, whether the type is a raw struct, its type id, whether a body nested too deep is [deferred](/en/docs/v4/reference-tracking#deep-object-graphs) (`deferrable`, which readers in other languages need), and its members in the order they are written. Tools that check data compatibility (a schema check in CI, a diff between two builds, a migration tool) can read it instead of re-implementing Nino's rules:
-
-```csharp
-using System.Reflection; // GetCustomAttributes<T>()
-
-foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutAttribute>())
-    Console.WriteLine($"{layout.Type}: {layout}");
-
-// Game.Move: format=Positional; header=None; trackReferences=false; raw=true; id=0x…; deferrable=false;
-//            members=raw(8){VelocityX:float@0:raw(4),VelocityY:float@4:raw(4)}
-```
-
-- Members are listed in the order they are written, separated by `;`. Each member is written as `name:type:encoding`, and the encoding describes the bytes, not the formatter class that writes them, so a tool can read and write them without knowing Nino.Core's formatters ([nino-gen](/en/docs/v4/advanced/codegen) does):
-  - `raw(n)` or `raw(n){...}`: a value copied as raw memory (next point); `raw` alone: one whose size is known only at run time;
-  - `string`: a string in the default encoding; `utf8`: a `[NinoUtf8]` string;
-  - `type(T)`: a `[NinoType]`, as its own layout describes it; `object`: a `[NinoType]` behind its type id;
-  - `nullable(E)`: a presence byte, then `E`;
-  - `seq(E)`: an `int32` count (`-1` = null), then the elements; `map(K,V)`: a count, then each key and value; `grid(rank,E)`: each dimension's length, then the elements in row-major order;
-  - `pair(K,V)` and `tuple(E,...)`: the items in order; `group(K,E)`: an element count, the key, then the elements;
-  - `datetimeoffset`, `bigint`, `version`, `bits`, `timezone`: those built-in types;
-  - `formatter(F)`: written by `F`, a formatter outside Nino.Core: a [custom formatter](/en/docs/v4/custom-formatters), another library's, or those of `Nino.Immutable` and of Unity's `AnimationCurve`, `Gradient` and `RectOffset`.
-
-  A `Dictionary<string, int[]> Inventory` reads `Inventory:System.Collections.Generic.Dictionary<string, int[]>:map(string,seq(raw(4)))`. In a keyed type each member ends with `:key=0x…`, its key, and `:former=0x…,0x…` for the keys of its [former names](#renaming-keyed-members). A `[NinoType]` collection starts with `[elements]::` and the encoding of its elements. Up to 4.0.0-rc.5, members that were not raw named their formatter class instead.
-- A raw layout is the value's bytes in Nino's canonical layout: `raw(n)` for a primitive, enum, `decimal`, `Guid`, `DateTime` or `TimeSpan` of `n` bytes, and `raw(n){name:type@offset:encoding,...}` for a struct of `n` bytes, with each field at its offset. An id such as `readonly record struct PlayerId(long Value)` shows as `Id:Game.PlayerId:raw(8){Value:long@0:raw(8)}`. Every struct inside a raw value is spelled out, `[NinoType]` or not, so a changed field, `[StructLayout]` `Pack` or `Size`, or `[FieldOffset]` changes the layout. A raw struct's members are just its raw layout, as `Move` shows above.
-- A generic type is recorded once, as its open definition (`typeof(Box<>)`), with type id 0: the id of each closed type is computed at run time.
-- Two types have the same layout exactly when Nino writes them the same way. A member of another `[NinoType]` reads `type(T)` and refers to that type's own layout, so a change inside it shows up only in its own entry; a member copied as raw memory spells out its bytes in place. To catch every change, record the layouts of all your types, keyed by `layout.Type`, and compare each `layout.ToString()` with what you recorded for the last release: any difference means the bytes changed. Whether old data still reads correctly then depends on the format, as described above.
-- Because the layout is metadata, a tool can also read it from referenced assemblies, even without loading them (`System.Reflection.Metadata`). A project gets the same layouts in every target framework.
-
 ## Layout Baseline [#layout-baseline]
 
 Data you save or send outlives the build that wrote it. A layout baseline is a file in your project that records the [layout](#layout-metadata) of every type whose bytes outlive a build: each version-tolerant and keyed `[NinoType]`, and every type their members reach (positional types and polymorphic subtypes included). The analyzer compares your types with it as you type and reports, on the member or type that changed, when a change breaks old data or old builds.
@@ -223,45 +225,46 @@ members = [
   - Appending to a version-tolerant type and adding a keyed member are compatible and report nothing.
 - **Fix or accept.** Each finding offers the fix that undoes the break, where there is one: a former name, `sealed` back, the inserted member moved to the end. When old data or old builds no longer matter, *Accept the change into the layout baseline* rewrites that type's section, and Fix All accepts every change at once. The change then shows in the baseline's diff, in the pull request.
 - **In CI**, `nino-gen layouts --assembly MyGame.dll --out NinoLayouts.cs --check` runs the same rules on a built assembly and exits with 1 on NINO034 or NINO035. To fail the build itself instead, set `dotnet_diagnostic.NINO034.severity = error` in `.editorconfig`.
+- **A baseline the analyzer cannot read** (a hand edit that broke its TOML) is warning [NINO037](/en/docs/v4/analyzers#nino037), and nothing is checked until it is fixed: write it again with the refactoring or `nino-gen layouts`.
 - **Not checked**, because a layout does not show it: enum values renumbered (an enum is just its bytes), what a [custom formatter](/en/docs/v4/custom-formatters) writes, and polymorphic subtypes removed while old data may still hold them.
 
-## Choosing
+## Layout Metadata
 
-| Question | Answer | Use |
-| --- | --- | --- |
-| Do the writer and the reader always run the same build? | yes | `Positional` |
-| Will you only append members, to classes without subclasses? | yes | `VersionTolerant` |
-| Will you remove, reorder, or add members to a base class? | yes | `Keyed` |
+For every `[NinoType]`, the generator records how the type is written in the assembly's metadata, as an `[assembly: NinoTypeLayout]`: the format, the header in front of the body (`None` for a struct, `Presence` for a sealed class, `TypeId` otherwise), whether references are tracked, whether the type is a raw struct, its type id, whether a body nested too deep is [deferred](/en/docs/v4/reference-tracking#deep-object-graphs) (`deferrable`, which readers in other languages need), and its members in the order they are written. [nino-gen](/en/docs/v4/advanced/codegen) reads it to generate code and to write the [layout baseline](#layout-baseline); tools of your own (a diff between two builds, a migration tool) can read it too, instead of re-implementing Nino's rules:
 
+```csharp
+using System.Reflection; // GetCustomAttributes<T>()
 
-<Accordions type="single">
-<Accordion title="Messages between a client and a server">
+foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutAttribute>())
+    Console.WriteLine($"{layout.Type}: {layout}");
 
-Positional, when both sides always run the same build. If clients and servers are upgraded at different times (rolling upgrades, old app versions in the wild), use `NinoFormat.VersionTolerant` and only ever **append** fields to the message classes themselves (not to their shared base class), or `NinoFormat.Keyed` if you also need to retire fields or add them to the base. See [Networking](/en/docs/v4/advanced/networking).
+// Game.Move: format=Positional; header=None; trackReferences=false; raw=true; id=0x…; deferrable=false;
+//            members=raw(8){VelocityX:float@0:raw(4),VelocityY:float@4:raw(4)}
+```
 
-</Accordion>
-<Accordion title="Saved documents and user files">
+Members are listed in the order they are written, separated by `;`. Each member is written as `name:type:encoding`, and the encoding describes the bytes, not the formatter class that writes them, so a tool can read and write them without knowing Nino.Core's formatters ([nino-gen](/en/docs/v4/advanced/codegen) does). The encodings are listed below.
 
-`NinoFormat.VersionTolerant` if you only add fields over time, to classes without subclasses; `NinoFormat.Keyed` if you want the freedom to remove and reorder them. Add [`trackReferences`](/en/docs/v4/reference-tracking) when the saved graph shares objects or has cycles. See [Persistence](/en/docs/v4/advanced/persistence).
+<Accordions>
+<Accordion title="Member encodings" id="layout-encodings" value="layout-encodings">
 
-</Accordion>
-<Accordion title="Configuration edited by people">
+- `raw(n)` or `raw(n){...}`: a value copied as raw memory (see below); `raw` alone: one whose size is known only at run time;
+- `string`: a string in the default encoding; `utf8`: a `[NinoUtf8]` string;
+- `type(T)`: a `[NinoType]`, as its own layout describes it; `object`: a `[NinoType]` behind its type id;
+- `nullable(E)`: a presence byte, then `E`;
+- `seq(E)`: an `int32` count (`-1` = null), then the elements; `map(K,V)`: a count, then each key and value; `grid(rank,E)`: each dimension's length, then the elements in row-major order;
+- `pair(K,V)` and `tuple(E,...)`: the items in order; `group(K,E)`: an element count, the key, then the elements;
+- `datetimeoffset`, `bigint`, `version`, `bits`, `timezone`: those built-in types;
+- `formatter(F)`: written by `F`, a formatter outside Nino.Core: a [custom formatter](/en/docs/v4/custom-formatters), another library's, or those of `Nino.Immutable` and of Unity's `AnimationCurve`, `Gradient` and `RectOffset`.
 
-`NinoFormat.Keyed`: the people who maintain it add, remove and reorder fields all the time, and the cost (8 bytes per member) rarely matters for configuration.
-
-</Accordion>
-<Accordion title="Caches and in-memory snapshots">
-
-Positional. If the schema changes, throw the cache away and rebuild it.
+A `Dictionary<string, int[]> Inventory` reads `Inventory:System.Collections.Generic.Dictionary<string, int[]>:map(string,seq(raw(4)))`. In a keyed type each member ends with `:key=0x…`, its key, and `:former=0x…,0x…` for the keys of its [former names](#renaming-keyed-members). A `[NinoType]` collection starts with `[elements]::` and the encoding of its elements. Up to 4.0.0-rc.5, members that were not raw named their formatter class instead.
 
 </Accordion>
 </Accordions>
 
-<Callout type="idea">
-
-The options can be mixed: a keyed settings file can hold positional raw structs (such as `Guid` or your own `[NinoType]` structs) inside it. Each type has its own format.
-
-</Callout>
+- A raw layout is the value's bytes in Nino's canonical layout: `raw(n)` for a primitive, enum, `decimal`, `Guid`, `DateTime` or `TimeSpan` of `n` bytes, and `raw(n){name:type@offset:encoding,...}` for a struct of `n` bytes, with each field at its offset. An id such as `readonly record struct PlayerId(long Value)` shows as `Id:Game.PlayerId:raw(8){Value:long@0:raw(8)}`. Every struct inside a raw value is spelled out, `[NinoType]` or not, so a changed field, `[StructLayout]` `Pack` or `Size`, or `[FieldOffset]` changes the layout. A raw struct's members are just its raw layout, as `Move` shows above.
+- A generic type is recorded once, as its open definition (`typeof(Box<>)`), with type id 0: the id of each closed type is computed at run time.
+- Two types have the same layout exactly when Nino writes them the same way. A member of another `[NinoType]` reads `type(T)` and refers to that type's own layout, so a change inside it shows up only in its own entry; a member copied as raw memory spells out its bytes in place. To catch every change, record the layouts of all your types, keyed by `layout.Type`, and compare each `layout.ToString()` with what you recorded for the last release: any difference means the bytes changed. Whether old data still reads correctly then depends on the format, as described above.
+- Because the layout is metadata, a tool can also read it from referenced assemblies, even without loading them (`System.Reflection.Metadata`). A project gets the same layouts in every target framework.
 
 ## Pitfalls [#pitfalls]
 
@@ -274,7 +277,7 @@ The options can be mixed: a keyed settings file can hold positional raw structs 
 | Renaming a keyed member without `[NinoFormerName]` | Old data's value for it is skipped as an unknown key | a [layout baseline](#layout-baseline) (NINO035, whose code fix adds the former name) |
 | Two keyed members (or a former name) that hash to the same key | The build fails | [NINO014](/en/docs/v4/analyzers#nino014) |
 | `[NinoFormerName]` on a member of a positional or version-tolerant type | No effect: those formats write no names | [NINO024](/en/docs/v4/analyzers#nino024), with a code fix |
-| A project that still defines `WEAK_VERSION_TOLERANCE` | The types it made version tolerant would be positional and stop reading their data | [NINO032](/en/docs/v4/analyzers#nino032), whose code fix keeps the bytes |
+| A project that still defines `WEAK_VERSION_TOLERANCE` (rc.8 and earlier made every positional type version-tolerant with it) | The types it made version tolerant would be positional and stop reading their data | [NINO032](/en/docs/v4/analyzers#nino032), whose code fix keeps the bytes |
 
 ## Next Steps
 

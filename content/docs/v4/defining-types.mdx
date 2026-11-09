@@ -114,7 +114,7 @@ public NinoTypeAttribute(
   }}
 />
 
-`NinoFormat` is an enum in `Nino.Core` with three values: `Positional`, `VersionTolerant` and `Keyed`. Use named arguments for readability: `[NinoType(format: NinoFormat.VersionTolerant)]`. A bare `[NinoType]` gives the fastest and most compact format: [positional](/en/docs/v4/evolving-data#positional) (members in declaration order, with no names or lengths), no per-member overhead.
+Use named arguments: `[NinoType(format: NinoFormat.VersionTolerant)]`. A bare `[NinoType]` is [positional](/en/docs/v4/evolving-data#positional): members in declaration order with no names or lengths, the fastest and most compact format.
 
 ## Which Members Are Serialized
 
@@ -185,7 +185,7 @@ public partial class Account
 ```
 
 - On .NET 8 and later, generated code reaches private members through `[UnsafeAccessor]`; in generic types, on .NET 9 and later (the compilation defines `NET9_0_OR_GREATER`).
-- Before that (.NET Standard, .NET Framework and Unity; generic types on .NET 8), it uses an accessor generated **inside** the type, so the type and every type containing it must be `partial` (NINO002, with a code fix). So does a generic type on .NET 9+ that serializes a non-public member of a generic base whose type arguments are not its own first type parameters in order: `class D<T> : Base<List<T>>` or `Base<int>` needs `partial`, `class D<T, U> : Base<T>` does not.
+- Before that (.NET Standard, .NET Framework and Unity; generic types on .NET 8), it uses an accessor generated **inside** the type, so the type and every type containing it must be `partial` (NINO002, with a code fix). On .NET 9+ a generic type needs `partial` too when it serializes a non-public member of a generic base whose type arguments are not its own leading type parameters in order (`class D<T> : Base<List<T>>` or `Base<int>`, but not `class D<T, U> : Base<T>`).
 - A non-public `[NinoMember]` without `includeNonPublicMembers` is an error (NINO009).
 - Private members of a base class are never part of a subtype.
 
@@ -203,7 +203,7 @@ Reordering, inserting or removing members (or changing their indices) breaks pre
 
 ## String Encoding
 
-By default Nino picks the form of each string: one byte a char when every char is at most U+00FF (ASCII and Latin-1: English, identifiers, keys, Western European text), and UTF-16 otherwise. Both are a single pass that narrows, widens or copies the chars, vectorized on .NET 8 and later. Mark a member with `[NinoUtf8]` to write UTF-8 instead. It pays off for text that is mostly ASCII but holds a few chars above U+00FF (curly quotes, emoji, a name in another script), which the default writes entirely as UTF-16, at the cost of transcoding and a byte count (one byte up to 127 bytes of UTF-8): chat messages and user names sent to many clients, or large text tables on disk. Keep the default for text that is mostly CJK, which takes 3 bytes per character in UTF-8 instead of 2.
+By default Nino writes each string in one byte a char when every char is at most U+00FF (ASCII and Latin-1: English, identifiers, keys, Western European text), and as UTF-16 otherwise, in one pass (vectorized on .NET 8 and later). Mark a member `[NinoUtf8]` to write UTF-8 instead, for text that is mostly ASCII with a few chars above U+00FF (curly quotes, emoji, a name in another script), which the default writes entirely as UTF-16: chat messages and user names sent to many clients, large text tables on disk. It costs a transcode and a byte count. Keep the default for mostly CJK text, which takes 3 bytes a char in UTF-8 and 2 in UTF-16.
 
 | Text of n chars (headers aside) | Default | `[NinoUtf8]` |
 | --- | --- | --- |
@@ -343,8 +343,7 @@ They run for every value of the type, wherever it is: at the top level, as a mem
 - **Which instance.** An instance `[NinoOnDeserializing]` runs on the instance the members are read into: the one you pass to `Deserialize(data, ref value)`, one from a [`[NinoPooled]`](/en/docs/v4/pooling#ninopooled) pool, or a new one. Pooled instances are still reset in `OnNinoPoolReturn`. A type Nino creates from what it reads (a record's primary constructor, constructor parameters, `init` or `readonly` members) has no instance yet: only a static `[NinoOnDeserializing]` can run ([NINO043](/en/docs/v4/analyzers#nino043)).
 - **Structs.** `[NinoOnSerializing]` runs on the copy being written: what it changes is written, not kept. The read callbacks run on the value in its slot (a field, an array element), so what they set is kept. A struct written as [raw memory](#structs) runs no code, so callbacks on it are an error ([NINO044](/en/docs/v4/analyzers#nino044)): call the work from the holding type's callback, or make the struct `NinoFormat.VersionTolerant`, which changes its bytes.
 - **Cost.** A type with callbacks is no longer [fixed-size](/en/docs/v4/performance#fixed-size-types): it loses the direct write into an array of its size and the block copies in collections, though its bytes stay the same.
-- **Exceptions** from a callback end the call unchanged, and the `[NinoOnSerialized]` or `[NinoOnDeserialized]` of that value does not run.
-- **Other languages.** The TypeScript, Go and Rust code [nino-gen](/en/docs/v4/advanced/codegen) writes does not call them.
+- **Exceptions** from a callback end the call unchanged, and the `[NinoOnSerialized]` or `[NinoOnDeserialized]` of that value does not run. The TypeScript, Go and Rust code [nino-gen](/en/docs/v4/advanced/codegen) writes calls no callbacks.
 
 <Accordions>
 <Accordion title="Reference tracking and deep nesting" id="callbacks-graphs" value="callbacks-graphs">
@@ -358,15 +357,17 @@ With [`trackReferences`](/en/docs/v4/reference-tracking), an object written agai
 
 | Mistake | What happens | Caught by |
 | --- | --- | --- |
-| Reordering, inserting or removing members of a positional type whose data is stored or sent | Old data reads into the wrong members, or throws `NinoDataException` | nothing at compile time: use [version tolerance or keyed members](/en/docs/v4/evolving-data), and check the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) in CI |
-| A get-only property that no constructor parameter sets | It is not serialized | [NINO006](/en/docs/v4/analyzers#nino006) |
+| Reordering, inserting or removing members of a positional type whose data is stored or sent | Old data reads into the wrong members, or throws `NinoDataException` | a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) (NINO034) when a version-tolerant or keyed type reaches it; otherwise nothing: use [version tolerance or keyed members](/en/docs/v4/evolving-data) |
+| A get-only property that no constructor parameter sets | It is not serialized, silently | nothing: give it a setter or a constructor parameter ([Constructors](/en/docs/v4/constructors)) |
+| A `readonly` field that no constructor parameter sets | It is written, and its value is dropped on read | [NINO006](/en/docs/v4/analyzers#nino006), whose code fix adds `[NinoIgnore]` |
 | A member whose type Nino cannot serialize (a delegate, a `Task`) | It is skipped | [NINO007](/en/docs/v4/analyzers#nino007) |
 | Non-public members in a type that is not `partial`, on .NET Standard, .NET Framework or Unity | The generated code does not compile | [NINO002](/en/docs/v4/analyzers#nino002), with a code fix |
 | `[NinoUtf8]` on a member that holds no strings, that a `[NinoMemberFormatter]` writes, or that is never serialized | No effect | [NINO030](/en/docs/v4/analyzers#nino030) |
 | `[NinoUtf8]` on an interface member | No effect: the implementing member's attributes count | [NINO033](/en/docs/v4/analyzers#nino033), whose code fix moves it |
 | Adding or removing `[NinoUtf8]` on a member whose data is stored or sent | Data written in the other encoding does not read back | nothing: it changes the format, like a new member type |
 | Ignoring every field of a struct | It would be written as zero bytes | [NINO023](/en/docs/v4/analyzers#nino023) |
-| A callback that takes parameters, returns a value or is `private` | It is never called | [NINO038](/en/docs/v4/analyzers#nino038), [NINO039](/en/docs/v4/analyzers#nino039), with a code fix |
+| A callback that takes parameters, returns a value, is `private`, or is `static` on anything but `[NinoOnDeserializing]` | It is never called | [NINO038](/en/docs/v4/analyzers#nino038), [NINO039](/en/docs/v4/analyzers#nino039) (with a code fix), [NINO042](/en/docs/v4/analyzers#nino042) |
+| Two methods marked with the same callback attribute in one type | Only one is called | [NINO041](/en/docs/v4/analyzers#nino041) |
 | An instance `[NinoOnDeserializing]` on a record or a type built from constructor parameters | There is no instance to call it on | [NINO043](/en/docs/v4/analyzers#nino043): make it static, or use `[NinoOnDeserialized]` |
 | A callback on a struct written as raw memory | It is never called | [NINO044](/en/docs/v4/analyzers#nino044) |
 

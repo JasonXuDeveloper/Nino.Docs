@@ -20,7 +20,7 @@ icon: Shapes
   }}
 />
 
-本页列出 Nino 开箱即用支持的类型。它们都可以直接传给 `NinoSerializer.Serialize`，也可以用作 `[NinoType]` 的成员或集合元素，嵌套多少层都可以。BCL 类（从 `BigInteger` 到 `Lazy<T>`）、`Memory<T>`、`ReadOnlyMemory<T>`、`ReadOnlySequence<T>`、`BlockingCollection<T>`、`ILookup`、`IGrouping`、`ReadOnlyCollection<T>`、`ReadOnlyObservableCollection<T>`，以及 `Nino.Immutable` 中 `ImmutableArray<T>` 和 `ImmutableList<T>` 之外的不可变集合，从 4.0.0-rc.5 起支持。
+本页列出 Nino 开箱即用支持的类型。它们都可以直接传给 `NinoSerializer.Serialize`，也可以用作 `[NinoType]` 的成员或集合元素，嵌套多少层都可以。
 
 <Callout type="idea">
 
@@ -151,7 +151,7 @@ public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 
 ## 不支持的类型 [#not-supported]
 
-下列类型没有格式化器，这些类型的成员会被跳过，并报告警告 NINO007（可以用 `[NinoIgnore]` 忽略，或为它写[自定义格式化器](/zh/docs/v4/custom-formatters)）：
+下列类型没有格式化器，这些类型的成员直接跳过，并报警告 NINO007（可以用 `[NinoIgnore]` 忽略，或为它写[自定义格式化器](/zh/docs/v4/custom-formatters)）：
 
 - 委托、`Task`、指针等只在运行时有意义的类型；
 - 本来就不能作为类成员的 `Span<T>` 和 `ReadOnlySpan<T>`；
@@ -161,6 +161,12 @@ public class MultiMap<TKey, TValue> : SortedDictionary<TKey, List<TValue>> { }
 - Unity 和 Godot 的**类**（`Texture2D`、`ScriptableObject`、`Node`、`Resource` 等），Unity 的 `AnimationCurve`、`Gradient` 和 `RectOffset` 除外（[Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)）；引擎的非托管结构体则支持。
 
 `System.Numerics.Vector<T>` 一律拒绝，无论单独出现还是在别的类型里（数组、集合、元组、普通结构体）：写代码时报错误 NINO029，运行时抛 `NotSupportedException`。它是 16、32 或 64 字节，由 CPU 决定，任何平台都没法读回所有其他平台写的字节；请改存固定数量的通道（见 [`Vector<T>` 不能序列化](/zh/docs/v4/struct-layouts#vector-t)）。`Vector64<T>` 到 `Vector512<T>` 是支持的。
+
+<Callout type="info" title="rc.4 及更早的版本">
+
+BCL 类（从 `BigInteger` 到 `Lazy<T>`）、`Memory<T>`、`ReadOnlyMemory<T>`、`ReadOnlySequence<T>`、`BlockingCollection<T>`、`ILookup`、`IGrouping`、`ReadOnlyCollection<T>`、`ReadOnlyObservableCollection<T>`，以及 `Nino.Immutable` 中 `ImmutableArray<T>` 和 `ImmutableList<T>` 之外的不可变集合，从 4.0.0-rc.5 起支持。
+
+</Callout>
 
 ## 你自己的类型 [#your-own-types]
 

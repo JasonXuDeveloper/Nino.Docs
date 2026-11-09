@@ -1,7 +1,7 @@
 ---
 title: Serialize and Deserialize
 seoTitle: "Serialize and Deserialize in C# – Nino v4 Docs"
-description: "Serialize and deserialize with NinoSerializer and NinoDeserializer, reuse buffers and instances, handle runtime types and catch invalid data."
+description: "Every NinoSerializer and NinoDeserializer call: byte arrays, buffer writers, spans, sequences and streams, reused buffers and instances, types known only at run time, and the one exception invalid data throws."
 icon: Play
 ---
 
@@ -130,6 +130,10 @@ void NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data, ref T value);
 // With an existing Reader
 T NinoDeserializer.Deserialize<T>(ref Reader reader);
 void NinoDeserializer.Deserialize<T>(ref Reader reader, ref T value);
+
+// A ReadOnlySequence<byte> from a PipeReader (see Streams and Compression)
+T NinoDeserializer.Deserialize<T>(in ReadOnlySequence<byte> data);
+void NinoDeserializer.Deserialize<T>(in ReadOnlySequence<byte> data, ref T value);
 
 // A Stream, read to its end (see Streams and Compression)
 T NinoDeserializer.Deserialize<T>(Stream stream);

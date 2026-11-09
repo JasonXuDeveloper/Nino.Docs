@@ -39,7 +39,7 @@ catch (NinoDataException e)
 }
 ```
 
-`NinoDataException` derives from `InvalidOperationException`, which Nino threw for invalid data up to 4.0.0-rc.7, so a `catch (InvalidOperationException)` still catches it. Mistakes of the caller keep their own types: a null argument, a type with no formatter, deserializing into a read-only collection, a [setting changed too late](#limits). So does a failure while **serializing** (an object graph with an untracked cycle, or nested deeper than `MaxDepth`), which throws `InvalidOperationException`: that object is yours, not invalid data. [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) answers an invalid body with 400.
+`NinoDataException` derives from `InvalidOperationException`, which Nino threw for invalid data up to 4.0.0-rc.7, so a `catch (InvalidOperationException)` still catches it. Mistakes of the caller keep their own types: a null argument, a type with no formatter, deserializing into a read-only collection, a [setting changed too late](#limits). So does a failure while **serializing** (an object graph with an untracked cycle, or nested deeper than `MaxDepth`), which throws `InvalidOperationException`: that object is yours, not invalid data. [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) answers an invalid body with 400. To see where a message goes wrong, [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) prints what each byte is, and the offset and check that failed.
 
 ## What Is Rejected [#what-is-rejected]
 
@@ -139,15 +139,6 @@ Keys built to share one hash bucket make every insert scan all the keys before i
 
 [`UntrustedTest`](/en/docs/v4/benchmarks#common-types-and-collections) reads a list of 1,000 raw structs with a `DateTime` and a `bool` in this mode, against MemoryPack, which copies them unchecked; its row is in [All Measurements](/en/docs/v4/benchmarks#results).
 
-## Pitfalls [#pitfalls]
-
-| Mistake | What happens | Caught by |
-| --- | --- | --- |
-| Setting `Untrusted` or a limit after the first Nino call | The read and write paths already took them as constants | `InvalidOperationException` on the setter |
-| Reading crafted data without `Untrusted` | A `bool` or `Nullable` flag other than 0 or 1 inside a raw struct is copied as it is: undefined behavior to the JIT | nothing: set `Untrusted` ([What Is Rejected](#what-is-rejected)) |
-| Catching `Exception` around a read | Your own mistakes (a type without a formatter, a read-only collection) look like bad data | catch `NinoDataException` ([above](#ninodataexception)) |
-| Buffering a whole frame before checking its size | A peer sends one huge frame; allocation is bounded by the input, not by you | nothing: cap the frame ([What Stays Your Job](#what-stays-your-job)) |
-
 ## What Stays Your Job [#what-stays-your-job]
 
 Nino checks the structure of the data, not what it means, as with a save file a user has edited:
@@ -159,6 +150,15 @@ Nino checks the structure of the data, not what it means, as with a save file a 
 ## Other Languages [#other-languages]
 
 The [TypeScript, Go and Rust readers](/en/docs/v4/advanced/codegen#untrusted-data) make the same checks: bounds and lengths before allocating, depth counted as .NET counts it, type ids limited to the types a slot allows, and strict bytes. Each throws or returns one error type of its own. Go and Rust also reject some bytes .NET accepts outside untrusted mode, such as out-of-range dates and decimals. The rules every reader follows are in the [wire format](/en/docs/v4/wire-format#validation).
+
+## Pitfalls [#pitfalls]
+
+| Mistake | What happens | Caught by |
+| --- | --- | --- |
+| Setting `Untrusted` or a limit after the first Nino call | The read and write paths already took them as constants | `InvalidOperationException` on the setter |
+| Reading crafted data without `Untrusted` | A `bool` or `Nullable` flag other than 0 or 1 inside a raw struct is copied as it is: undefined behavior to the JIT | nothing: set `Untrusted` ([What Is Rejected](#what-is-rejected)) |
+| Catching `Exception` around a read | Your own mistakes (a type without a formatter, a read-only collection) look like bad data | catch `NinoDataException` ([above](#ninodataexception)) |
+| Buffering a whole frame before checking its size | A peer sends one huge frame; allocation is bounded by the input, not by you | nothing: cap the frame ([What Stays Your Job](#what-stays-your-job)) |
 
 ## Next Steps [#next-steps]
 

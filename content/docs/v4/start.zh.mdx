@@ -44,7 +44,7 @@ Nino v4 目前仍是预发行版，所以必须加 `--prerelease`（或勾选**�
 </Step>
 <Step>
 
-**构建。** `Nino` 包会带上两个包，缺一不可：运行时库 `Nino.Serialization`（`Nino.Core.dll`），以及源生成器 `Nino.Generator`（含分析器和代码修复）。用 .NET 8 SDK 及以上版本编译时，编译期能确定类型的 `NinoSerializer`/`NinoDeserializer` 调用会直接转给生成的格式化器（[拦截器](/zh/docs/v4/performance#interceptors)）。这一步自动完成，字节不变。
+**构建。** `Nino` 会带上运行时库（`Nino.Serialization`，即 `Nino.Core.dll`）和源生成器（`Nino.Generator`，含分析器和代码修复），两个都不能少。用 .NET 8 SDK 及以上版本编译时，编译期能确定类型的调用会直接走生成的代码（[拦截器](/zh/docs/v4/performance#interceptors)），字节不变。
 
 </Step>
 <Step>
@@ -54,13 +54,19 @@ Nino v4 目前仍是预发行版，所以必须加 `--prerelease`（或勾选**�
 </Step>
 </Steps>
 
-可选包，安装方式相同（同样要加 `--prerelease`）：
+<Accordions>
+<Accordion title="可选包" id="optional-packages" value="optional-packages">
+
+安装方式相同，同样要加 `--prerelease`：
 
 | 包 | 作用 |
 |---|---|
 | `Nino.Immutable` | `System.Collections.Immutable` 的格式化器，从 `ImmutableArray<T>` 到 `ImmutableSortedDictionary<TKey, TValue>`（[不可变集合](/zh/docs/v4/types#immutable-collections)） |
 | `Nino.AspNetCore` | 在 ASP.NET Core 中读写请求体和响应体：`application/x-nino` 的 MVC 格式化器与 Minimal API 请求体（[ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)） |
 | `Nino.Codegen` | 每次构建后，把你的类型及其编解码器写成 TypeScript、Go 或 Rust（[TypeScript、Go 与 Rust](/zh/docs/v4/advanced/codegen)） |
+
+</Accordion>
+</Accordions>
 
 </Tab>
 <Tab value="Unity" id="unity-project" forceMount>
@@ -164,16 +170,6 @@ dotnet add package Nino --prerelease
 </Tab>
 </Tabs>
 
-### AI 编程助手 [#ai-coding-assistants]
-
-Claude Code、Codex、Cursor 等编程助手可以通过 Nino 仓库里的 `nino-serialization` skill 学会 Nino：推荐写法和高性能写法、各种格式、常见坑，以及每个 NINO 诊断的含义。
-
-```shell
-npx skills add JasonXuDeveloper/Nino
-```
-
-不支持 skill 的助手可以从 [llms.txt](https://nino.xgamedev.net/llms.txt) 和 [llms-full.txt](https://nino.xgamedev.net/llms-full.txt) 以纯文本读取整个网站。
-
 ## 第一次序列化 [#first-serialization]
 
 源生成器会在编译期为每个 `[NinoType]` 生成**格式化器**，也就是读写这个类型的代码。你只需要调用 `NinoSerializer` 和 `NinoDeserializer`（命名空间 `Nino.Core`）：
@@ -259,11 +255,21 @@ Nino 不需要任何初始化调用：生成的代码会自行注册，之后加
 
 自定义格式化器也不需要调用任何方法：它们用特性声明（参见[自定义格式化器](/zh/docs/v4/custom-formatters)）。Unity 和 HybridCLR 项目请参见[启动检查清单](/zh/docs/v4/advanced/unity#startup-checklist)。
 
+## AI 编程助手 [#ai-coding-assistants]
+
+Claude Code、Codex、Cursor 等编程助手可以通过 Nino 仓库里的 `nino-serialization` skill 学会 Nino：推荐写法和高性能写法、各种格式、常见坑，以及每个 NINO 诊断的含义。
+
+```shell
+npx skills add JasonXuDeveloper/Nino
+```
+
+不支持 skill 的助手可以从 [llms.txt](https://nino.xgamedev.net/llms.txt) 和 [llms-full.txt](https://nino.xgamedev.net/llms-full.txt) 以纯文本读取整个网站。
+
 ## 下一步 [#next-steps]
 
 接下来按侧边栏的第一条路线“基础”往下读，读完这条路线，第一个版本就能上线（参见[从这里开始](/zh/docs/v4#start-here)）。从 v3 升级？先看 [v4 新特性](/zh/docs/v4/whats-new)和[从 v3 迁移](/zh/docs/v4/migration)：v4 的二进制格式与 v3 以及更早的 v4 beta 版本**不兼容**。
 
 <Cards>
-  <Card title="序列化与反序列化" href="/zh/docs/v4/basic">日常要用的调用：缓冲区写入器、Span、`Writer`/`Reader`、装箱值。</Card>
-  <Card title="定义类型" href="/zh/docs/v4/defining-types">选择成员和顺序，私有成员、记录、泛型。</Card>
+  <Card title="序列化与反序列化" href="/zh/docs/v4/basic">日常要用的调用：复用缓冲区，读 Span 和流，填充已有对象，捕获无效数据。</Card>
+  <Card title="定义类型" href="/zh/docs/v4/defining-types">哪些成员会写、按什么顺序写，私有成员、结构体、记录、泛型和回调。</Card>
 </Cards>

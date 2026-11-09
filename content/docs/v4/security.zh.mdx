@@ -39,7 +39,7 @@ catch (NinoDataException e)
 }
 ```
 
-`NinoDataException` 派生自 `InvalidOperationException`，也就是 Nino 在 4.0.0-rc.7 及以前遇到无效数据时抛的类型，所以 `catch (InvalidOperationException)` 照样能接住它。调用方自己的错误保留各自的异常类型：参数为 null、类型没有格式化器、反序列化到只读集合、[设置改得太晚](#limits)。**序列化**时的失败也一样（对象图有没追踪的环，或嵌套超过 `MaxDepth`），抛 `InvalidOperationException`：那是你的对象，不是无效数据。[Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 对无效请求体返回 400。
+`NinoDataException` 派生自 `InvalidOperationException`，也就是 Nino 在 4.0.0-rc.7 及以前遇到无效数据时抛的类型，所以 `catch (InvalidOperationException)` 照样能接住它。调用方自己的错误保留各自的异常类型：参数为 null、类型没有格式化器、反序列化到只读集合、[设置改得太晚](#limits)。**序列化**时的失败也一样（对象图有没追踪的环，或嵌套超过 `MaxDepth`），抛 `InvalidOperationException`：那是你的对象，不是无效数据。[Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 对无效请求体返回 400。想知道一条消息具体坏在哪个字节，用 [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect)：它打印每个字节是什么，以及没通过的那项检查和它的偏移。
 
 ## 拒绝哪些数据 [#what-is-rejected]
 
@@ -139,15 +139,6 @@ NinoSettings.MaxCollectionLength = 100_000; // 我们的消息不会超过这个
 
 [`UntrustedTest`](/zh/docs/v4/benchmarks#common-types-and-collections) 在这个模式下读一个由 1,000 个原始结构体组成的列表，结构体里有一个 `DateTime` 和一个 `bool`，对照不检查、直接复制的 MemoryPack；结果见[全部测量结果](/zh/docs/v4/benchmarks#results)。
 
-## 常见陷阱 [#pitfalls]
-
-| 错误 | 后果 | 由谁发现 |
-| --- | --- | --- |
-| 第一次调用 Nino 之后才设 `Untrusted` 或某个限制 | 读写路径已经把它们当常量用了 | setter 抛 `InvalidOperationException` |
-| 不开 `Untrusted` 就读可能被伪造的数据 | 原始结构体里 0 和 1 以外的 `bool` 或 `Nullable` 存在字节原样复制，对 JIT 来说是未定义行为 | 没有：打开 `Untrusted`（见[拒绝哪些数据](#what-is-rejected)） |
-| 读取时捕获 `Exception` | 你自己的错误（类型没有格式化器、只读集合）看起来也像坏数据 | 捕获 `NinoDataException`（见[上文](#ninodataexception)） |
-| 先缓冲整帧再检查大小 | 对方发来一个巨大的帧；内存分配只跟着输入走，不由你控制 | 没有：限制帧的大小（见[仍要你负责的事](#what-stays-your-job)） |
-
 ## 仍要你负责的事 [#what-stays-your-job]
 
 Nino 检查数据的结构，不管数据的含义，就像面对一个被用户改过的存档文件：
@@ -159,6 +150,15 @@ Nino 检查数据的结构，不管数据的含义，就像面对一个被用户
 ## 其他语言 [#other-languages]
 
 [TypeScript、Go 和 Rust 的读取器](/zh/docs/v4/advanced/codegen#untrusted-data)做同样的检查：分配之前检查边界和长度，深度和 .NET 一样计算，类型 ID 只能是槽位允许的类型，字节严格检查。每个读取器都只抛或只返回自己的一种错误类型。Go 和 Rust 还会拒绝一些 .NET 在不可信模式之外接受的字节，比如超出范围的日期和 decimal。所有读取器遵守的规则见[二进制格式](/zh/docs/v4/wire-format#validation)。
+
+## 常见陷阱 [#pitfalls]
+
+| 错误 | 后果 | 由谁发现 |
+| --- | --- | --- |
+| 第一次调用 Nino 之后才设 `Untrusted` 或某个限制 | 读写路径已经把它们当常量用了 | setter 抛 `InvalidOperationException` |
+| 不开 `Untrusted` 就读可能被伪造的数据 | 原始结构体里 0 和 1 以外的 `bool` 或 `Nullable` 存在字节原样复制，对 JIT 来说是未定义行为 | 没有：打开 `Untrusted`（见[拒绝哪些数据](#what-is-rejected)） |
+| 读取时捕获 `Exception` | 你自己的错误（类型没有格式化器、只读集合）看起来也像坏数据 | 捕获 `NinoDataException`（见[上文](#ninodataexception)） |
+| 先缓冲整帧再检查大小 | 对方发来一个巨大的帧；内存分配只跟着输入走，不由你控制 | 没有：限制帧的大小（见[仍要你负责的事](#what-stays-your-job)） |
 
 ## 下一步 [#next-steps]
 

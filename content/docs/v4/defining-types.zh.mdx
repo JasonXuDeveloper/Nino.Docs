@@ -114,7 +114,7 @@ public NinoTypeAttribute(
   }}
 />
 
-`NinoFormat` 是 `Nino.Core` 里的枚举，有三个值：`Positional`、`VersionTolerant` 和 `Keyed`。建议用命名参数，读起来清楚：`[NinoType(format: NinoFormat.VersionTolerant)]`。不带参数的 `[NinoType]` 就是最快、最紧凑的格式：[按位置](/zh/docs/v4/evolving-data#positional)写（成员按声明顺序排，不带名字和长度），每个成员没有额外开销。
+建议用命名参数：`[NinoType(format: NinoFormat.VersionTolerant)]`。不带参数的 `[NinoType]` 是[按位置](/zh/docs/v4/evolving-data#positional)格式：成员按声明顺序写，不带名字和长度，最快也最紧凑。
 
 ## 哪些成员参与序列化 [#which-members-are-serialized]
 
@@ -185,7 +185,7 @@ public partial class Account
 ```
 
 - 在 .NET 8 及以上版本，生成代码通过 `[UnsafeAccessor]` 访问私有成员；泛型类型需要 .NET 9 及以上（编译定义了 `NET9_0_OR_GREATER`）。
-- 更早的平台（.NET Standard、.NET Framework 和 Unity；以及 .NET 8 上的泛型类型）上，生成代码在类型**内部**生成访问器，所以这个类型和它的所有外层类型都必须是 `partial`（NINO002，带代码修复）。在 .NET 9+ 上，泛型类型要序列化泛型基类的非公开成员，而基类的类型实参又不是它自己按顺序排列的前几个类型参数时，也需要 `partial`：`class D<T> : Base<List<T>>` 或 `Base<int>` 需要，`class D<T, U> : Base<T>` 不需要。
+- 更早的平台（.NET Standard、.NET Framework 和 Unity；以及 .NET 8 上的泛型类型）上，生成代码在类型**内部**生成访问器，所以这个类型和它的所有外层类型都必须是 `partial`（NINO002，带代码修复）。在 .NET 9+ 上，泛型类型序列化泛型基类的非公开成员，而基类的类型实参不是它自己按顺序排在前面的类型参数时，也要 `partial`（`class D<T> : Base<List<T>>` 或 `Base<int>` 要，`class D<T, U> : Base<T>` 不要）。
 - 没设置 `includeNonPublicMembers` 却给非公开成员标 `[NinoMember]`，报错（NINO009）。
 - 基类的私有成员永远不属于子类型。
 
@@ -203,7 +203,7 @@ public partial class Account
 
 ## 字符串编码 [#string-encoding]
 
-默认情况下，Nino 为每个字符串单独选写法：所有字符都不超过 U+00FF（ASCII 和 Latin-1：英文、标识符、键名、西欧文字）时每个字符一个字节，否则用 UTF-16。两种写法都只是把字符收窄、展宽或拷贝一遍，在 .NET 8 及以上做了向量化。给成员加上 `[NinoUtf8]` 就改写 UTF-8。以 ASCII 为主、夹着少量 U+00FF 以上字符（弯引号、emoji、其他文字的名字）的文本，默认编码会整串写成 UTF-16，这时 `[NinoUtf8]` 才划算；代价是要转码，还要多写一个字节数（UTF-8 不超过 127 字节时占 1 字节）。典型场景：要发给大量客户端的聊天内容和用户名，或者存盘的大型文本表。以中日韩文字为主的文本请保持默认编码：这类字符在 UTF-8 下每个占 3 字节，在 UTF-16 下只占 2 字节。
+默认情况下，所有字符都不超过 U+00FF（ASCII 和 Latin-1：英文、标识符、键名、西欧文字）的字符串每个字符写一个字节，否则写 UTF-16，都只过一遍（.NET 8 及以上做了向量化）。给成员加上 `[NinoUtf8]` 就改写 UTF-8。它适合以 ASCII 为主、夹着少量 U+00FF 以上字符（弯引号、emoji、其他文字的名字）的文本，默认编码会把这种字符串整串写成 UTF-16：比如要发给大量客户端的聊天内容和用户名，或者存盘的大型文本表。代价是一次转码和一个字节数。以中日韩文字为主的文本请保持默认：这类字符 UTF-8 每个占 3 字节，UTF-16 只占 2 字节。
 
 | n 个字符的文本（不计头） | 默认 | `[NinoUtf8]` |
 | --- | --- | --- |
@@ -343,8 +343,7 @@ public class Item
 - **在哪个实例上调用。** 实例方法的 `[NinoOnDeserializing]` 在要读入成员的实例上执行：传给 `Deserialize(data, ref value)` 的那个、[`[NinoPooled]`](/zh/docs/v4/pooling#ninopooled) 对象池里取出的那个，或者新建的那个。对象池里的实例照旧在 `OnNinoPoolReturn` 里重置。Nino 用读到的成员来创建的类型（记录的主构造函数、构造函数参数、`init` 或 `readonly` 成员）这时还没有实例，只能用静态的 `[NinoOnDeserializing]`（[NINO043](/zh/docs/v4/analyzers#nino043)）。
 - **结构体。** `[NinoOnSerializing]` 在要写出的副本上执行：它改的内容会写出去，但不会留在原值里。读取的回调在槽位里的值（字段、数组元素）上执行，所以它们设置的内容会保留。按[原始内存](#structs)写的结构体不执行任何代码，在它上面标回调会报错（[NINO044](/zh/docs/v4/analyzers#nino044)）：在持有它的类型的回调里做这件事，或者把结构体改成 `NinoFormat.VersionTolerant`，这会改变它的字节。
 - **开销。** 带回调的类型不再是[固定大小](/zh/docs/v4/performance#fixed-size-types)的：没法直接写进大小正好的数组，集合里也不能整块拷贝，不过字节不变。
-- **异常。** 回调抛出的异常原样结束这次调用，这个值的 `[NinoOnSerialized]` 或 `[NinoOnDeserialized]` 不再执行。
-- **其他语言。** [nino-gen](/zh/docs/v4/advanced/codegen) 生成的 TypeScript、Go 和 Rust 代码不调用回调。
+- **异常。** 回调抛出的异常原样结束这次调用，这个值的 `[NinoOnSerialized]` 或 `[NinoOnDeserialized]` 不再执行。[nino-gen](/zh/docs/v4/advanced/codegen) 生成的 TypeScript、Go 和 Rust 代码不调用回调。
 
 <Accordions>
 <Accordion title="引用追踪与深层嵌套" id="callbacks-graphs" value="callbacks-graphs">
@@ -358,17 +357,19 @@ public class Item
 
 | 错误 | 后果 | 由谁发现 |
 | --- | --- | --- |
-| 按位置格式的类型，数据已经存下或发出后，又调整成员顺序、插入或删除成员 | 旧数据读进错误的成员，或者抛出 `NinoDataException` | 编译时发现不了：改用[版本容错或键控成员](/zh/docs/v4/evolving-data)，并在 CI 中检查[布局元数据](/zh/docs/v4/evolving-data#layout-metadata) |
-| 只读属性没有对应的构造函数参数 | 不参与序列化 | [NINO006](/zh/docs/v4/analyzers#nino006) |
+| 按位置格式的类型，数据已经存下或发出后，又调整成员顺序、插入或删除成员 | 旧数据读进错误的成员，或者抛出 `NinoDataException` | 有版本容错或键控类型用到它时，[布局基线](/zh/docs/v4/evolving-data#layout-baseline)（NINO034）；否则发现不了：改用[版本容错或键控成员](/zh/docs/v4/evolving-data) |
+| 只读属性没有对应的构造函数参数 | 不参与序列化，也没有任何提示 | 无：给它加 setter，或加进构造函数参数（[构造函数](/zh/docs/v4/constructors)） |
+| `readonly` 字段没有对应的构造函数参数 | 照样写出，读取时值直接丢掉 | [NINO006](/zh/docs/v4/analyzers#nino006)，代码修复会加上 `[NinoIgnore]` |
 | 成员的类型 Nino 无法序列化（委托、`Task`） | 跳过这个成员 | [NINO007](/zh/docs/v4/analyzers#nino007) |
 | 在 .NET Standard、.NET Framework 或 Unity 上，类型有非公开成员却不是 `partial` | 生成的代码无法编译 | [NINO002](/zh/docs/v4/analyzers#nino002)，带代码修复 |
 | `[NinoUtf8]` 加在不含字符串、由 `[NinoMemberFormatter]` 写出或从不序列化的成员上 | 不起作用 | [NINO030](/zh/docs/v4/analyzers#nino030) |
 | `[NinoUtf8]` 加在接口成员上 | 不起作用：只认实现成员上的特性 | [NINO033](/zh/docs/v4/analyzers#nino033)，代码修复会把它移过去 |
 | 数据已经存下或发出后，给成员加上或去掉 `[NinoUtf8]` | 按另一种编码写出的数据读不回来 | 无：这会改变格式，和换掉成员类型一样 |
 | 结构体的字段全被忽略 | 它会写成 0 字节 | [NINO023](/zh/docs/v4/analyzers#nino023) |
-| 回调带参数、有返回值，或者是 `private` | 永远不会被调用 | [NINO038](/zh/docs/v4/analyzers#nino038)、[NINO039](/zh/docs/v4/analyzers#nino039)，带代码修复 |
+| 回调带参数、有返回值、是 `private`，或者 `[NinoOnDeserializing]` 以外的回调是 `static` | Nino 永远不调用它 | [NINO038](/zh/docs/v4/analyzers#nino038)、[NINO039](/zh/docs/v4/analyzers#nino039)（带代码修复）、[NINO042](/zh/docs/v4/analyzers#nino042) |
+| 一个类型里两个方法标了同一种回调特性 | 只调用其中一个 | [NINO041](/zh/docs/v4/analyzers#nino041) |
 | 在记录或由构造函数参数创建的类型上，用实例方法的 `[NinoOnDeserializing]` | 没有实例可以调用 | [NINO043](/zh/docs/v4/analyzers#nino043)：改成静态方法，或者改用 `[NinoOnDeserialized]` |
-| 在按原始内存写的结构体上标回调 | 永远不会被调用 | [NINO044](/zh/docs/v4/analyzers#nino044) |
+| 在按原始内存写的结构体上标回调 | Nino 永远不调用它 | [NINO044](/zh/docs/v4/analyzers#nino044) |
 
 ## 下一步 [#next-steps]
 

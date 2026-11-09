@@ -96,7 +96,7 @@ const copy: Record<
       {
         icon: GitBranch,
         label: 'Data that evolves',
-        text: 'Keyed members, version tolerance and reference tracking, chosen per type.',
+        text: 'Keyed members, version tolerance and reference tracking, chosen per type; a layout baseline flags a breaking change as you type.',
       },
       {
         icon: Hammer,
@@ -168,7 +168,7 @@ const copy: Record<
     pill: 'Nino v4 · C# 二进制序列化库',
     // U+200B: the one place the first line may break on a phone (break-keep keeps the words whole)
     headline: ['最快的\u200b二进制序列化库', '为 C# 而生。'],
-    sub: '一套字节格式，.NET、Unity、Godot 与 TypeScript、Go、Rust 读写的字节完全相同。基于源生成器，用 SIMD 加速（AVX-512、AVX2、Arm64、WebAssembly），热路径零 GC 分配，不可信的输入也能放心读取。适用于服务端、网络与 RPC、消息队列、缓存、存储和进程间通信。',
+    sub: '一套二进制格式，.NET、Unity、Godot 跨平台、跨运行时字节一致，还能与 TypeScript、Go 和 Rust 互通。基于源生成器，用 SIMD 加速（AVX-512、AVX2、Arm64、WebAssembly），热路径零 GC 分配，不可信的输入也能放心读取。适用于服务端、网络与 RPC、消息队列、缓存、存储和进程间通信。',
     start: '快速开始',
     github: '在 GitHub 上查看',
     why: '为什么选择 Nino',
@@ -181,7 +181,7 @@ const copy: Record<
       {
         icon: ShieldCheck,
         label: '放心读取不可信数据',
-        text: '伪造的字节不会让进程崩溃，不会分配与输入不成比例的内存，也无法指定要创建的类型，最多抛出同一种异常。',
+        text: '伪造的字节不会让进程崩溃，不会分配与输入不成比例的内存，也无法指定要创建的类型，只会抛出同一种异常。',
       },
       {
         icon: Recycle,
@@ -196,7 +196,7 @@ const copy: Record<
       {
         icon: GitBranch,
         label: '数据可演进',
-        text: '键控成员、版本容错、引用追踪，每个类型按需选择。',
+        text: '键控成员、版本容错、引用追踪，每个类型按需选择；布局基线在写代码时就指出会破坏已有数据的改动。',
       },
       {
         icon: Hammer,

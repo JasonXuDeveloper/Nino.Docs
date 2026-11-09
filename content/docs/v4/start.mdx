@@ -44,7 +44,7 @@ Nino v4 is still a prerelease, so `--prerelease` (or **Include prerelease**) is 
 </Step>
 <Step>
 
-**Build.** The `Nino` package brings in two packages, both required: `Nino.Serialization`, the runtime library (`Nino.Core.dll`), and `Nino.Generator`, the source generator, analyzers and code fixes. With the .NET 8 SDK or later, each `NinoSerializer`/`NinoDeserializer` call whose type is known at compile time is redirected to the generated formatter ([interceptors](/en/docs/v4/performance#interceptors)). This is automatic and writes the same bytes.
+**Build.** `Nino` brings in the runtime library (`Nino.Serialization`, which is `Nino.Core.dll`) and the source generator with its analyzers and code fixes (`Nino.Generator`); both are required. On the .NET 8 SDK and later, calls whose type is known at compile time go straight to the generated code ([interceptors](/en/docs/v4/performance#interceptors)), with the same bytes.
 
 </Step>
 <Step>
@@ -54,13 +54,19 @@ Nino v4 is still a prerelease, so `--prerelease` (or **Include prerelease**) is 
 </Step>
 </Steps>
 
-Optional packages, added the same way (with `--prerelease`):
+<Accordions>
+<Accordion title="Optional packages" id="optional-packages" value="optional-packages">
+
+Added the same way, with `--prerelease`:
 
 | Package | Adds |
 |---|---|
 | `Nino.Immutable` | Formatters for `System.Collections.Immutable`, from `ImmutableArray<T>` to `ImmutableSortedDictionary<TKey, TValue>` ([Immutable Collections](/en/docs/v4/types#immutable-collections)) |
 | `Nino.AspNetCore` | Request and response bodies in ASP.NET Core: MVC formatters and Minimal API bodies for `application/x-nino` ([ASP.NET Core](/en/docs/v4/advanced/aspnetcore)) |
 | `Nino.Codegen` | Your types and their codecs as TypeScript, Go or Rust, written after each build ([TypeScript, Go and Rust](/en/docs/v4/advanced/codegen)) |
+
+</Accordion>
+</Accordions>
 
 </Tab>
 <Tab value="Unity" id="unity-project" forceMount>
@@ -164,16 +170,6 @@ dotnet add package Nino --prerelease
 </Tab>
 </Tabs>
 
-### AI Coding Assistants
-
-Claude Code, Codex, Cursor and other coding agents can learn Nino from the `nino-serialization` skill in the Nino repository: the recommended and fast forms, the formats, the pitfalls and what each NINO diagnostic means.
-
-```shell
-npx skills add JasonXuDeveloper/Nino
-```
-
-Agents without skills can read the whole site as text from [llms.txt](https://nino.xgamedev.net/llms.txt) and [llms-full.txt](https://nino.xgamedev.net/llms-full.txt).
-
 ## First Serialization
 
 At compile time, the source generator writes a **formatter** for every `[NinoType]`: the code that writes and reads that type. `NinoSerializer` and `NinoDeserializer` (namespace `Nino.Core`) are the only API you call:
@@ -259,11 +255,21 @@ Nino needs no initialization call: generated code registers itself, and assembli
 
 Custom formatters need no call either: they are declared with attributes ([Custom Formatters](/en/docs/v4/custom-formatters)). For Unity and HybridCLR projects, see the [startup checklist](/en/docs/v4/advanced/unity#startup-checklist).
 
+## AI Coding Assistants [#ai-coding-assistants]
+
+Claude Code, Codex, Cursor and other coding agents can learn Nino from the `nino-serialization` skill in the Nino repository: the recommended and fast forms, the formats, the pitfalls and what each NINO diagnostic means.
+
+```shell
+npx skills add JasonXuDeveloper/Nino
+```
+
+Agents without skills can read the whole site as text from [llms.txt](https://nino.xgamedev.net/llms.txt) and [llms-full.txt](https://nino.xgamedev.net/llms-full.txt).
+
 ## Next Steps
 
 The next pages follow the sidebar's first track, Basics, which ends with a first version you can ship ([Start Here](/en/docs/v4#start-here)). Coming from v3? Read [What's New in v4](/en/docs/v4/whats-new) and [Migrating from v3](/en/docs/v4/migration): the v4 binary format is **not compatible** with v3 or the earlier v4 betas.
 
 <Cards>
-  <Card title="Serialize and Deserialize" href="/en/docs/v4/basic">The calls you use every day: buffer writers, spans, `Writer`/`Reader`, boxed values.</Card>
-  <Card title="Defining Types" href="/en/docs/v4/defining-types">Choose members, order, private members, records, generics.</Card>
+  <Card title="Serialize and Deserialize" href="/en/docs/v4/basic">The calls you use every day: reused buffers, spans and streams, filling existing objects, catching invalid data.</Card>
+  <Card title="Defining Types" href="/en/docs/v4/defining-types">Which members are written and in what order, private members, structs, records, generics and callbacks.</Card>
 </Cards>

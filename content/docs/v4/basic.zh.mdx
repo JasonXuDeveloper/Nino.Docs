@@ -1,7 +1,7 @@
 ---
 title: 序列化与反序列化
 seoTitle: "C# 序列化与反序列化 – Nino v4 文档"
-description: "用 NinoSerializer 和 NinoDeserializer 序列化与反序列化，复用缓冲区和实例，处理运行时类型，捕获无效数据。"
+description: "NinoSerializer 和 NinoDeserializer 的全部调用：字节数组、缓冲区写入器、Span、ReadOnlySequence 和流，复用缓冲区和实例，运行时才知道的类型，以及无效数据抛出的那一种异常。"
 icon: Play
 ---
 
@@ -130,6 +130,10 @@ void NinoDeserializer.Deserialize<T>(ReadOnlySpan<byte> data, ref T value);
 // 用已有的 Reader
 T NinoDeserializer.Deserialize<T>(ref Reader reader);
 void NinoDeserializer.Deserialize<T>(ref Reader reader, ref T value);
+
+// PipeReader 给出的 ReadOnlySequence<byte>（见流与压缩）
+T NinoDeserializer.Deserialize<T>(in ReadOnlySequence<byte> data);
+void NinoDeserializer.Deserialize<T>(in ReadOnlySequence<byte> data, ref T value);
 
 // 从 Stream 读，一直读到结尾（见流与压缩）
 T NinoDeserializer.Deserialize<T>(Stream stream);

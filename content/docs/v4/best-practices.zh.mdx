@@ -1,6 +1,6 @@
 ---
 title: 最佳实践
-description: "Nino 数据上线前的检查清单：每个类型的格式、密封类与共同基类、怎么调用 Nino、改名与持久保存的数据、不可信的输入，以及项目配置。"
+description: "Nino 数据上线前的检查清单：每个类型的格式、密封类与共同基类、怎么调用 Nino、改名、为存下的数据维护布局基线、不可信的输入，以及项目配置。"
 icon: ListChecks
 ---
 
@@ -31,14 +31,14 @@ icon: ListChecks
 
 - **用写入时的类型来读取。** 多态值按基类序列化（`Serialize<TBase>`），再用 `Deserialize<TBase>` 读取；[装箱 API](/zh/docs/v4/basic#the-boxed-api) 只用于运行时才以 `Type` 形式得知的类型。
 - **在热路径上复用缓冲区和实例**：缓冲区写入器一直复用，反序列化时读入手上已有的实例。所有手段见高性能序列化的[一览表](/zh/docs/v4/advanced/high-performance#levers)。
-- **自己创建的 `Writer` 或 `Reader` 要收尾**：每条逻辑消息结束时调用 `Flush()` 和 `ReleaseReferences()`（`Reader` 调用 `ReleaseReferences()`）。参见[一个缓冲区中的多个值](/zh/docs/v4/basic#several-values-in-one-buffer)。
+- **自己创建的 `Writer` 或 `Reader` 要收尾**：每条逻辑消息结束时调用 `Flush()` 和 `ReleaseReferences()`（`Reader` 调用 `ReleaseReferences()`）。参见[一个缓冲区写多个值](/zh/docs/v4/basic#several-values-in-one-buffer)。
 - **在启动时配置 `NinoSettings`**，赶在任何线程第一次调用之前：读取这些值时不加同步。参见[设置](/zh/docs/v4/settings#startup)。
 
 ## 保存与交换的数据 [#stored-data]
 
 - **在保存的数据前面加上你自己的文件头**：一个魔数和一个格式版本号，让以后的版本知道自己读的是什么。参见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)。
 - **改名时使用 `[NinoFormerName]`。** 用在类型上，它保留已有数据使用的类型 ID；用在键控类型的成员上，它继续读取旧名称。参见[重命名](/zh/docs/v4/evolving-data#renaming)。
-- **在版本之间检查布局。** 在 CI 中把每次构建的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)与上一个版本比较，并在测试中保留旧的数据（[测试旧文件](/zh/docs/v4/advanced/persistence#test-old-files)）。
+- **维护一份布局基线。** 类型要存盘或发出去的项目，提交一个 [`NinoLayouts.cs`](/zh/docs/v4/evolving-data#layout-baseline)：改出会破坏已有数据的改动时，分析器在写代码时就会指出来，`nino-gen layouts --check` 在 CI 里做同样的检查。测试里也留几份旧数据（[测试旧文件](/zh/docs/v4/advanced/persistence#test-old-files)），哪份读不了，就用 [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect) 看看。
 - **谨慎修改字符串编码和集合的声明。** 增加或去掉 `[NinoUtf8]`，或者把可空元素的列表在数组、`List<T?>` 与接口之间改来改去，都会改变字节。参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)和[集合类型](/zh/docs/v4/types#collection-types)。
 - **两端分别升级时，只用容错的格式。** 客户端和服务器分开发布时，消息要用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`。参见[网络](/zh/docs/v4/advanced/networking)。
 
@@ -52,7 +52,7 @@ icon: ListChecks
 
 - **每个声明了 `[NinoType]` 的项目都要安装 `Nino`**，源生成器才会在这个项目里运行。在 Unity 中，每个声明了这些类型的程序集定义都要引用 `Nino.Core`。参见[快速开始](/zh/docs/v4/start)。
 - **用 .NET 8 SDK 或更高版本构建**，才能用上[拦截器](/zh/docs/v4/performance#interceptors)。项目自己设置了 `InterceptorsNamespaces` 的话，在原值后面追加。
-- **不要忽略分析器的警告。** NINO006 和 NINO007 表示某个成员的值会丢掉或跳过。参见[分析器](/zh/docs/v4/analyzers)。
+- **不要忽略分析器的警告。** NINO006 和 NINO007 表示某个成员的值会丢掉或跳过；NINO034 和 NINO035 表示某个改动会破坏已存的数据，或者让它悄悄丢失。参见[分析器](/zh/docs/v4/analyzers)。
 
 ## 下一步 [#next-steps]
 

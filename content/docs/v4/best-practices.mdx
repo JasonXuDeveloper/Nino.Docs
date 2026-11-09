@@ -1,6 +1,6 @@
 ---
 title: Best Practices
-description: "The checklist before Nino data ships: the format of each type, sealed classes and common bases, how to call Nino, renames and stored data, untrusted input and project setup."
+description: "The checklist before Nino data ships: the format of each type, sealed classes and common bases, how to call Nino, renames, a layout baseline for stored data, untrusted input and project setup."
 icon: ListChecks
 ---
 
@@ -38,7 +38,7 @@ The checklist before your data ships. Nino works with its defaults, and most of 
 
 - **Put your own header in front of stored data**: a magic number and a format version, so a later build can tell what it reads. See [Add a File Header](/en/docs/v4/advanced/persistence#add-a-file-header).
 - **Rename with `[NinoFormerName]`.** On a type, it keeps the type id that existing data uses; on a member of a keyed type, it keeps reading the old name. See [Renaming](/en/docs/v4/evolving-data#renaming).
-- **Check layouts between releases.** Compare the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) of each build with the last release's in CI, and keep old payloads in your tests ([Test Old Files](/en/docs/v4/advanced/persistence#test-old-files)).
+- **Keep a layout baseline.** Commit a [`NinoLayouts.cs`](/en/docs/v4/evolving-data#layout-baseline) in each project whose types are stored or sent: the analyzer then flags, as you type, a change that would break data already written, and `nino-gen layouts --check` does the same in CI. Keep old payloads in your tests too ([Test Old Files](/en/docs/v4/advanced/persistence#test-old-files)), and read one that fails with [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect).
 - **Change string encodings and collection declarations deliberately.** Adding or removing `[NinoUtf8]`, or changing a nullable list between an array or `List<T?>` and an interface, changes the bytes. See [String Encoding](/en/docs/v4/defining-types#string-encoding) and [Collection Types](/en/docs/v4/types#collection-types).
 - **Upgrade peers at different times only with a tolerant format.** Clients and servers that roll out separately need `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` messages. See [Networking](/en/docs/v4/advanced/networking).
 
@@ -52,7 +52,7 @@ The checklist before your data ships. Nino works with its defaults, and most of 
 
 - **Install `Nino` in every project that declares `[NinoType]`s**, so the generator runs there. In Unity, keep `Nino.Core` referenced by each assembly definition that declares them. See [Quick Start](/en/docs/v4/start).
 - **Build with the .NET 8 SDK or later** to get [interceptors](/en/docs/v4/performance#interceptors). If the project sets `InterceptorsNamespaces` itself, append to it.
-- **Keep the analyzer's warnings visible.** NINO006 and NINO007 mean a member's value is dropped or skipped. See [Analyzers](/en/docs/v4/analyzers).
+- **Keep the analyzer's warnings visible.** NINO006 and NINO007 mean a member's value is dropped or skipped; NINO034 and NINO035 mean a change breaks or silently loses stored data. See [Analyzers](/en/docs/v4/analyzers).
 
 ## Next Steps
 
