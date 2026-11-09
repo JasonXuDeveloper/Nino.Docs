@@ -20,7 +20,7 @@ The deepest difference is what the bytes are. MessagePack is a self-describing f
 | Strings | one byte a char when every char is at most U+00FF, else UTF-16; UTF-8 with [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) | UTF-8 |
 | `Guid`, `DateTime` | 16 bytes; ticks and kind | a 36-character string; a MessagePack timestamp, in UTC (native resolvers change both) |
 | Readers in other languages | Go, Rust and TypeScript, through code generated from your C# types | any MessagePack library; your code there maps arrays or maps to its own types |
-| Reading the bytes as text | — | `MessagePackSerializer.ConvertToJson` |
+| Reading the bytes without your code | [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) prints every member with its offset and value, from your assembly's layouts | `MessagePackSerializer.ConvertToJson`, without the types |
 
 ## Untrusted Input [#untrusted-input]
 
@@ -70,6 +70,7 @@ Payload sizes differ by format, not by effort: MessagePack writes small integers
   { label: 'Add members; old code reads new data', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>, <code>NinoFormat.Keyed</code></>], 'yes: tested with integer keys'] },
   { label: 'Remove members', cells: [['yes', <><code>NinoFormat.Keyed</code></>], 'partial: keep the key unused; gaps in integer keys are written as nil placeholders'] },
   { label: 'Reorder or rename members', cells: [['yes', <><code>NinoFormat.Keyed</code>, renames with <code>[NinoFormerName]</code></>], 'yes: integer keys fix the order; renames only with integer keys'] },
+  { label: 'Breaking changes reported while you type', cells: [['yes', <>a <a href="/en/docs/v4/evolving-data#layout-baseline">layout baseline</a> in the project: NINO034–NINO037, with code fixes</>], 'n/a: not documented'] },
   { group: 'Object graphs and allocation' },
   { label: 'Shared and circular references', cells: [['yes', <><code>trackReferences</code></>], 'no: a shared object is written once per reference; a cycle cannot be written (tested: the stack overflowed)'] },
   { label: 'Deserialize into an existing instance', cells: ['yes: fills objects, lists and dictionaries in place', 'no: new instances only'] },
@@ -77,7 +78,7 @@ Payload sizes differ by format, not by effort: MessagePack writes small integers
   { group: 'I/O and integrations' },
   { label: <><code>IBufferWriter&lt;byte&gt;</code>, spans, <code>ReadOnlySequence&lt;byte&gt;</code></>, cells: [['yes', <>all three built in (<a href="/en/docs/v4/advanced/streams#readonlysequence-input">Multi-Segment Input</a>)</>], 'yes'] },
   { label: <><code>Stream</code> and async I/O</>, cells: [['yes', <>built in (<a href="/en/docs/v4/advanced/streams#streams">Streams</a>); several messages on one stream as <a href="/en/docs/v4/advanced/streams#frames">frames</a></>], ['yes', <><code>SerializeAsync</code>, <code>MessagePackStreamReader</code></>]] },
-  { label: 'Untyped reading', cells: ['no: every read names a type', ['yes', <><code>Deserialize&lt;dynamic&gt;</code>, <code>ConvertToJson</code></>]] },
+  { label: 'Untyped reading', cells: [['no', <>every read names a type; <code>nino-gen inspect</code> decodes a payload for debugging</>], ['yes', <><code>Deserialize&lt;dynamic&gt;</code>, <code>ConvertToJson</code></>]] },
   { label: 'Serialization callbacks', cells: [['yes', <><code>[NinoOnSerializing]</code>, <code>[NinoOnDeserialized]</code> and two more, called by generated code (<a href="/en/docs/v4/defining-types#callbacks">Callbacks</a>)</>], ['yes', <><code>IMessagePackSerializationCallbackReceiver</code></>]] },
   { label: 'Custom formatters', cells: [['yes', <>struct formatters, inlined (<a href="/en/docs/v4/custom-formatters">Custom Formatters</a>)</>], ['yes', <><code>IMessagePackFormatter&lt;T&gt;</code>, resolvers, <code>[MessagePackFormatter]</code></>]] },
   { label: 'Compression', cells: [['partial', <><code>System.IO.Compression</code> over the output (<a href="/en/docs/v4/advanced/streams#compression">example</a>)</>], ['yes', <>LZ4, <code>MessagePackCompression.Lz4BlockArray</code></>]] },
@@ -88,7 +89,7 @@ Payload sizes differ by format, not by effort: MessagePack writes small integers
 
 ## Where MessagePack Is Ahead
 
-- **Any language reads the data.** MessagePack is a standard format with libraries in many languages, and its data can be read without your types: as JSON with `ConvertToJson`, or as `Deserialize<dynamic>`. Nino's data is read through your C# types, or through Go, Rust and TypeScript code generated from them.
+- **Any language reads the data.** MessagePack is a standard format with libraries in many languages, and its data can be read without your types: as JSON with `ConvertToJson`, or as `Deserialize<dynamic>`. Nino's data is read through your C# types, or through Go, Rust and TypeScript code generated from them; to look into a payload, [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) decodes it with the layouts of the assembly that wrote it.
 - **No attributes needed.** `ContractlessStandardResolver` writes any public type by member name, much like a JSON serializer. Nino needs `[NinoType]` on each type or its base.
 - **Smaller integers.** Small numbers take fewer bytes than their full width.
 - **Compression built in.** LZ4 is an option of each call; with Nino, you compress the output with `System.IO.Compression` ([example](/en/docs/v4/advanced/streams#compression)).

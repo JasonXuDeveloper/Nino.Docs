@@ -1,6 +1,6 @@
 ---
 title: 局限性
-description: "选择 Nino v4 前需要了解的事：依赖源生成器、无法读取 v3 数据、默认按位置存储，有意不支持 System.Type，生成的 TypeScript、Go 和 Rust 也没有覆盖所有类型。"
+description: "选择 Nino v4 前需要了解的事：依赖源生成器、无法读取 v3 数据、默认按位置存储，写出的字节离开你的类型就读不了，设置是进程级的，不支持 System.Type，也不自带压缩，生成的 TypeScript、Go 和 Rust 也没有覆盖所有类型。"
 icon: TriangleAlert
 ---
 
@@ -10,7 +10,10 @@ icon: TriangleAlert
 - **离不开源生成器。** Nino 依赖自己的源生成器（Roslyn 4.3 及以上），声明 `[NinoType]` 的项目需要 C# 9 及以上。
 - **不兼容 v3 数据。** v4 无法读取 v3 以及 v4 测试版、预览版写出的数据。参见[从 v3 迁移](/zh/docs/v4/migration#converting-v3-data)。
 - **默认按位置存储。** 不带参数的 `[NinoType]` 最快，但成员一改，旧数据就读不了。需要保存或跨版本交换的数据，请在写入之前选好 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`：参见[数据演进](/zh/docs/v4/evolving-data)。
+- **字节本身不带描述。** 数据里没有类型标记，也没有成员名：只有你的 C# 类型，或者 [nino-gen](/zh/docs/v4/advanced/codegen) 从这些类型生成的代码才读得懂。要一种不用你的类型、任何语言都能读的格式，见 [Nino 与 MessagePack 对比](/zh/docs/v4/vs-messagepack)和 [Nino 与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net)；调试时想看看一条消息里有什么，可以用 [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect)，它按你程序集里的布局来解读。
+- **设置是进程级的。** 没有按调用传的选项：[`NinoSettings`](/zh/docs/v4/settings) 的成员对每次调用都生效，各项限制在第一次使用时就固定下来；每个类型怎么写，由它的特性决定。
 - **部分类型没有内置格式化器。** `System.Type` 故意不支持（让数据决定要创建哪个类型，正是反序列化攻击的手法），委托、非泛型集合，以及 Unity 的 `AnimationCurve`、`Gradient`、`RectOffset` 之外的引擎类也没有。参见[支持的类型](/zh/docs/v4/types#not-supported)；用[自定义格式化器](/zh/docs/v4/custom-formatters)可以支持其中任何一种。
+- **不自带压缩，一次流调用只读一个值。** 压缩请在输出外面套 `System.IO.Compression`（[压缩](/zh/docs/v4/advanced/streams#compression)）。`NinoDeserializer.Deserialize<T>(stream)` 会一直读到流结束，所以一个流上要传多条消息，得由你的代码按[帧](/zh/docs/v4/advanced/streams#frames)来写。
 - **生成的 TypeScript、Go 和 Rust 覆盖大多数类型，但不是全部。** 某种语言表达不了的类型，[Nino.Codegen](/zh/docs/v4/advanced/codegen#not-generated) 会连同包含它的类型一起跳过，并给出构建警告：所有语言都跳过槽位里没有任何地方点名的封闭泛型类型；TypeScript 还会跳过多维数组、`DateTimeOffset`、自定义格式化器等成员；Rust 跳过以浮点数为键的字典和集合。各语言的完整清单：[TypeScript](/zh/docs/v4/advanced/typescript#not-supported)、[Go](/zh/docs/v4/advanced/go#not-supported)、[Rust](/zh/docs/v4/advanced/rust#not-supported)。浏览器客户端如果需要这些类型，可以在 [.NET WebAssembly](/zh/docs/v4/advanced/browser) 上直接运行 C# 类型。
 
 ## 平台说明 [#platform-notes]

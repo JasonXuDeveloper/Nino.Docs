@@ -93,6 +93,7 @@ Nino 跨平台、跨运行时字节一致：[原始值](/zh/docs/v4/wire-format#
   { label: '重新排序或插入成员', cells: [['yes', <><code>NinoFormat.Keyed</code></>], ['partial', <><code>VersionTolerant</code>：声明可以挪动，写入顺序由 <code>[MemoryPackOrder]</code> 编号固定</>]] },
   { label: '重命名成员', cells: [['yes', <>按位置、<code>NinoFormat.VersionTolerant</code>；<code>NinoFormat.Keyed</code> 配合 <code>[NinoFormerName]</code></>], 'yes'] },
   { label: '重命名或移动类型', cells: [['yes', <><code>[NinoFormerName]</code></>], 'yes: Union 标签与名称无关'] },
+  { label: '写代码时就报出破坏数据的改动', cells: [['yes', <>项目里放一份<a href="/zh/docs/v4/evolving-data#layout-baseline">布局基线</a>：NINO034–NINO037，带代码修复</>], 'n/a: 未见文档说明'] },
   { group: '对象图' },
   { label: '共享引用与循环引用', cells: [['yes', <><code>trackReferences</code>，任何能原地填充的构造方式都行</>], ['partial', <><code>GenerateType.CircularReference</code>，仅限无参构造函数</>]] },
   { group: '内存分配' },
@@ -101,6 +102,7 @@ Nino 跨平台、跨运行时字节一致：[原始值](/zh/docs/v4/wire-format#
   { group: '工具' },
   { label: '分析器', cells: ['yes: NINO001–NINO044，许多带代码修复', ['yes', <>35 条规则，<code>MEMPACK001</code>–<code>MEMPACK035</code></>]] },
   { label: '编译期调用拦截', cells: ['yes: Roslyn 4.8+（.NET 8 SDK）', 'n/a: 未见文档说明'] },
+  { label: '逐字节解读一条消息', cells: [['yes', <><a href="/zh/docs/v4/advanced/codegen#inspect"><code>nino-gen inspect</code></a>，按你程序集里的布局解读</>], 'n/a: 未见文档说明'] },
   { group: 'I/O 与集成' },
   { label: <><code>IBufferWriter&lt;byte&gt;</code> / <code>PipeWriter</code></>, cells: ['yes', 'yes'] },
   { label: <>反序列化 <code>ReadOnlySpan&lt;byte&gt;</code></>, cells: ['yes', 'yes'] },
@@ -125,32 +127,12 @@ Nino 跨平台、跨运行时字节一致：[原始值](/zh/docs/v4/wire-format#
 
 压缩不在这张单子上：在 Nino 的缓冲区和 span API 上写几行就有（[压缩](/zh/docs/v4/advanced/streams#compression)）。流、异步 I/O 和序列化回调都已内置。
 
-## 基准测试中发现的 MemoryPack 问题 [#memorypack-bugs-found-while-benchmarking]
-
-对比两个库都支持的所有内置类型时，我们在计时之前先让每个值在 MemoryPack 1.21.4 里写出再读回一次。两个类型没通过，所以基准测试里这两个只测 Nino；还有一个换个运行时就读错：
-
-- **`BigInteger`。** 它的格式化器在 255 字节的栈缓冲区上写的是 `temp.Slice(written)`，本意是 `temp.Slice(0, written)`：写出去的是缓冲区没用到的尾巴，不是这个值。255 字节以内的 `BigInteger`（包括 `3^10`）读回来都变成了别的值，哪个运行时都一样；更大的值走另一条路径，能正确读回。
-- **.NET 10 上的 `BitArray`。** 它的格式化器把 `BitArray` 强转成 `{ int[] m_array; int m_length }`，那是 .NET 8 上的布局。.NET 10 的 `BitArray` 里存的是 `byte[] _array`，于是 MemoryPack 写出错的字节，读的时候还会破坏堆，把进程搞崩。
-
-- **跨运行时的非托管元组。** MemoryPack 把非托管值（包括 `(int, long)`）按内存原样拷贝。`ValueTuple` 是 `LayoutKind.Auto`：CoreCLR 把 `long` 排在前面，Mono 按声明顺序排。所以在 .NET 上写的 `(1, 2L)`（`02000000 00000000 01000000 00000000`，最后 4 字节是填充），到 Mono 上读回来（Mono 6.8 实测）是 `(2, 1)`，Unity 也一样，它的 Mono 和 IL2CPP 后端都这样排元组；填充字节写出去的也是内存里残留的东西。基准测试里的 `(int, long)` 列表只在 .NET 上能正确读回。
-
-Nino 把 `BigInteger` 写成二进制补码字节，`BitArray` 经公开 API 读写，元组按声明顺序逐项写、不带填充（`(int, long)` 是 12 字节），都不依赖运行时的私有布局。见[其他内置类型](/zh/docs/v4/types#other-built-in-types)和[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
-
-## 类型 ID 与 Union 标签 [#type-ids-and-union-tags]
-
-MemoryPack 写 1 字节的 Union 标签（超过 249 时 3 字节），Nino 写 4 字节的类型 ID。这是有意的取舍：
-
-- Nino 的 ID 由类型本身决定（类型名的 FNV-1a 哈希），所以子类型不用标签。子类型可以放在任何程序集里（插件、HybridCLR 热更新、继承你基类的库），增删子类型时 ID 也不会重新编号。
-- MemoryPack 要在基类上用 `[MemoryPackUnion(tag, type)]` 列出所有子类型，或者用 Union 格式化器手动注册，标签还得自己保证不变。
-
-代价是每个多态值多 3 字节。见[多态](/zh/docs/v4/polymorphism)。
-
 ## Nino 领先的地方 [#where-nino-is-ahead]
 
 - **不可信输入**：Nino 本来就是为读网络对端和用户文件的数据设计的（见[不可信输入](#untrusted-input)）；MemoryPack 现在只用于可信数据。
 - **速度**：序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象图最高快 <BenchValue k="deserialize.max" />，数据见上文。
 - **零分配复用**：复用反序列化直接填充嵌套的对象、列表和字典；有 `[NinoPooled]` 对象池；每个被丢弃的实例都能交给回收器。
-- **数据能演进**：键控成员在继承体系的任何一个类里都能调整顺序、删除、插入，不用维护顺序编号；键控类型和版本容错类型，旧代码都能读新数据。
+- **数据能演进**：键控成员在继承体系的任何一个类里都能调整顺序、删除、插入，不用维护顺序编号；键控类型和版本容错类型，旧代码都能读新数据；有了[布局基线](/zh/docs/v4/evolving-data#layout-baseline)，改出会读坏旧数据的改动时，写代码的当下就会报出来（NINO034）。
 - **多态不用记账**：没有标签，任何非密封类都能当基类，泛型基类（`Box<T>`、`IRepository<T>`）也行，别的程序集和热更新 DLL 里的子类型也能自动找到。MemoryPack 的 Union 特性不能加在泛型类型上：每个封闭类型都要手动注册 Union 格式化器（见[泛型基类型基准测试](/zh/docs/v4/benchmarks#more-cases)）。
 - **可移植、确定的字节**：CoreCLR、Mono、IL2CPP，64 位和 32 位，字节都一样，填充清零。
 - **覆盖面更广**：支持 `netstandard2.0`，Unity 有 OpenUPM 包，HybridCLR 不用初始化调用。
@@ -230,6 +212,26 @@ IMessage message = MemoryPackSerializer.Deserialize<IMessage>(old); // MemoryPac
 byte[] bytes = NinoSerializer.Serialize(message);                   // 用 Nino 重新写出
 IMessage back = NinoDeserializer.Deserialize<IMessage>(bytes);      // 一个 Chat
 ```
+
+## 类型 ID 与 Union 标签 [#type-ids-and-union-tags]
+
+MemoryPack 写 1 字节的 Union 标签（超过 249 时 3 字节），Nino 写 4 字节的类型 ID。这是有意的取舍：
+
+- Nino 的 ID 由类型本身决定（类型名的 FNV-1a 哈希），所以子类型不用标签。子类型可以放在任何程序集里（插件、HybridCLR 热更新、继承你基类的库），增删子类型时 ID 也不会重新编号。
+- MemoryPack 要在基类上用 `[MemoryPackUnion(tag, type)]` 列出所有子类型，或者用 Union 格式化器手动注册，标签还得自己保证不变。
+
+代价是每个多态值多 3 字节。见[多态](/zh/docs/v4/polymorphism)。
+
+## 基准测试中发现的 MemoryPack 问题 [#memorypack-bugs-found-while-benchmarking]
+
+对比两个库都支持的所有内置类型时，我们在计时之前先让每个值在 MemoryPack 1.21.4 里写出再读回一次。两个类型没通过，所以基准测试里这两个只测 Nino；还有一个换个运行时就读错：
+
+- **`BigInteger`。** 它的格式化器在 255 字节的栈缓冲区上写的是 `temp.Slice(written)`，本意是 `temp.Slice(0, written)`：写出去的是缓冲区没用到的尾巴，不是这个值。255 字节以内的 `BigInteger`（包括 `3^10`）读回来都变成了别的值，哪个运行时都一样；更大的值走另一条路径，能正确读回。
+- **.NET 10 上的 `BitArray`。** 它的格式化器把 `BitArray` 强转成 `{ int[] m_array; int m_length }`，那是 .NET 8 上的布局。.NET 10 的 `BitArray` 里存的是 `byte[] _array`，于是 MemoryPack 写出错的字节，读的时候还会破坏堆，把进程搞崩。
+
+- **跨运行时的非托管元组。** MemoryPack 把非托管值（包括 `(int, long)`）按内存原样拷贝。`ValueTuple` 是 `LayoutKind.Auto`：CoreCLR 把 `long` 排在前面，Mono 按声明顺序排。所以在 .NET 上写的 `(1, 2L)`（`02000000 00000000 01000000 00000000`，最后 4 字节是填充），到 Mono 上读回来（Mono 6.8 实测）是 `(2, 1)`，Unity 也一样，它的 Mono 和 IL2CPP 后端都这样排元组；填充字节写出去的也是内存里残留的东西。基准测试里的 `(int, long)` 列表只在 .NET 上能正确读回。
+
+Nino 把 `BigInteger` 写成二进制补码字节，`BitArray` 经公开 API 读写，元组按声明顺序逐项写、不带填充（`(int, long)` 是 12 字节），都不依赖运行时的私有布局。见[其他内置类型](/zh/docs/v4/types#other-built-in-types)和[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
 
 ## 下一步 [#next-steps]
 

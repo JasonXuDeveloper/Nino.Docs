@@ -4,11 +4,22 @@
       "id": "top-level-call",
       "en": {
         "term": "Top-level call",
-        "definition": "A `NinoSerializer.Serialize(...)` or `NinoDeserializer.Deserialize(...)` call that takes your value and a `byte[]`, span or buffer writer, as opposed to a call that passes a `Writer` or `Reader` you created yourself, and to the values Nino reads and writes inside a call. Each top-level call is self-contained: it starts and ends its own [reference tracking](/en/docs/v4/reference-tracking)."
+        "definition": "A `NinoSerializer.Serialize(...)` or `NinoDeserializer.Deserialize(...)` call that takes your value and a `byte[]`, span, `ReadOnlySequence<byte>`, buffer writer or `Stream`, as opposed to a call that passes a `Writer` or `Reader` you created yourself, and to the values Nino reads and writes inside a call. Each top-level call is self-contained: it starts and ends its own [reference tracking](/en/docs/v4/reference-tracking)."
       },
       "zh": {
         "term": "顶层调用",
-        "definition": "`NinoSerializer.Serialize(...)` 或 `NinoDeserializer.Deserialize(...)` 这类调用：直接传入你的值和 `byte[]`、span 或缓冲区写入器。与之相对的，是传入你自己创建的 `Writer` 或 `Reader` 的调用，以及 Nino 在一次调用内部读写的值。每次顶层调用都自成一体，自己开始、自己结束[引用追踪](/zh/docs/v4/reference-tracking)。"
+        "definition": "`NinoSerializer.Serialize(...)` 或 `NinoDeserializer.Deserialize(...)` 这类调用：直接传入你的值和 `byte[]`、span、`ReadOnlySequence<byte>`、缓冲区写入器或 `Stream`。与之相对的，是传入你自己创建的 `Writer` 或 `Reader` 的调用，以及 Nino 在一次调用内部读写的值。每次顶层调用都自成一体，自己开始、自己结束[引用追踪](/zh/docs/v4/reference-tracking)。"
+      }
+    },
+    {
+      "id": "frame",
+      "en": {
+        "term": "Frame",
+        "definition": "One message on a stream that carries several, with its length in front (commonly 4 bytes, little-endian) so the reader knows where it ends. Nino writes no frames of its own: `Deserialize<T>(stream)` reads one value up to the end of the stream, so a socket or a file of records frames each value; see [Several Messages on One Stream](/en/docs/v4/advanced/streams#frames)."
+      },
+      "zh": {
+        "term": "帧",
+        "definition": "一个流上传多条消息时，其中的一条，前面带着它的长度（通常是 4 字节小端），读的一方据此知道它在哪里结束。Nino 自己不写帧：`Deserialize<T>(stream)` 会一直读到流结束，只读出一个值，所以 socket 或记录文件要给每个值分帧；参见[一个流上的多条消息](/zh/docs/v4/advanced/streams#frames)。"
       }
     },
     {
@@ -97,6 +108,17 @@
       "zh": {
         "term": "版本容错与键控",
         "definition": "另外两种格式（`NinoFormat.VersionTolerant` 和 `NinoFormat.Keyed`）。版本容错的对象先写入自己的字节长度，以后可以追加成员；键控的对象为每个成员写入一个键（成员名的哈希）和长度，成员可以增删、重排和改名。参见[数据演进](/zh/docs/v4/evolving-data)。"
+      }
+    },
+    {
+      "id": "layout-baseline",
+      "en": {
+        "term": "Layout baseline",
+        "definition": "A C# file in your project (`[assembly: NinoLayouts(...)]`, usually `NinoLayouts.cs`) that records the layout of every type whose bytes outlive a build. The analyzer compares your types with it as you type and reports a change that would break data already written or builds already shipped (NINO034 to NINO037). Created with the refactoring *Create the layout baseline* or `nino-gen layouts`, never written by hand, and never part of your assembly; see [Layout Baseline](/en/docs/v4/evolving-data#layout-baseline)."
+      },
+      "zh": {
+        "term": "布局基线",
+        "definition": "项目里的一个 C# 文件（`[assembly: NinoLayouts(...)]`，通常叫 `NinoLayouts.cs`），记下所有字节会比当前构建活得更久的类型的布局。你写代码时，分析器拿你的类型和它比对，改动会读坏已写出的数据、或让已发布的版本读不了新数据时，就报出来（NINO034 到 NINO037）。用重构“创建布局基线”（*Create the layout baseline*）或 `nino-gen layouts` 生成，不用手写，也不会编进你的程序集；参见[布局基线](/zh/docs/v4/evolving-data#layout-baseline)。"
       }
     },
     {

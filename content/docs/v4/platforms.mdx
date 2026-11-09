@@ -24,6 +24,8 @@ Nino runs on .NET Standard 2.0 and later, Unity 2022.3+ (Mono and IL2CPP) and Go
 
 **Every target writes identical bytes.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` each use the best primitives available to them ([SIMD](#simd), `[UnsafeAccessor]` on .NET 8+), and the test suite checks the same golden payloads against each build. Data written by a .NET 10 server can be read by a Unity IL2CPP client on a 32-bit Android phone, and the other way round.
 
+**The async calls need `netstandard2.1` or later.** The `netstandard2.0` build, which .NET Framework projects get, has no `SerializeAsync` and `DeserializeAsync` (it has no `ValueTask`); its synchronous `Serialize(value, stream)` and `Deserialize<T>(stream)` are there ([Async](/en/docs/v4/advanced/streams#async)). Unity gets the `netstandard2.1` build, which has both.
+
 ## Binary Format
 
 Every platform writes the format the [Wire Format](/en/docs/v4/wire-format) page describes, byte by byte in the specification it links to: little-endian values written unaligned, with no envelope, schema or field names, since the declared type decides how the bytes are read. A string has a header of 1, 3 or 5 bytes and is written in one byte a char when every char is at most U+00FF, otherwise as UTF-16 ([Strings](/en/docs/v4/wire-format#strings)); an unmanaged value is its bytes in one canonical layout ([Raw Values](/en/docs/v4/wire-format#raw-values)); an object has a header chosen by its declared type and a body in its type's format ([Objects](/en/docs/v4/wire-format#objects)). Every length is checked against the bytes left before anything is allocated ([Untrusted Data](/en/docs/v4/security)). How Nino keeps these bytes the same where runtimes lay out memory differently is the next section.

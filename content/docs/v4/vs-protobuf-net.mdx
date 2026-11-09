@@ -65,6 +65,7 @@ Payload sizes differ by format, not by effort: protobuf writes small integers as
   { group: 'Evolving data' },
   { label: 'Add members; old code reads new data', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>, <code>NinoFormat.Keyed</code></>], 'yes: every type; unknown fields are skipped (tested)'] },
   { label: 'Remove, reorder or rename members', cells: [['yes', <><code>NinoFormat.Keyed</code>, renames with <code>[NinoFormerName]</code></>], 'yes: field numbers fix the data; names are not written'] },
+  { label: 'Breaking changes reported while you type', cells: [['yes', <>a <a href="/en/docs/v4/evolving-data#layout-baseline">layout baseline</a> in the project: NINO034–NINO037, with code fixes</>], 'n/a: not documented'] },
   { group: 'Object graphs and allocation' },
   { label: 'Shared and circular references', cells: [['yes', <><code>trackReferences</code></>], 'no: not implemented in v3; a cycle throws (tested)'] },
   { label: 'Null and empty collections kept apart', cells: ['yes', 'no: an empty collection reads back as null'] },
@@ -86,7 +87,7 @@ Payload sizes differ by format, not by effort: protobuf writes small integers as
 - **gRPC.** protobuf-net.Grpc serves and calls gRPC services from C# interfaces, and gRPC peers in other languages talk to them.
 - **Every type tolerates change.** Field numbers are written with the data, so members can be added, removed, reordered and renamed, and readers skip fields they do not know. In Nino this is a choice per type ([`NinoFormat.Keyed`](/en/docs/v4/evolving-data#keyed-members)); the default positional format breaks when members change.
 - **Smaller integers.** Varints take one byte for small numbers.
-- **Tools for the bytes.** [protobuf-net.dev](https://protobuf-net.dev/) decodes a raw payload in the browser without its schema.
+- **Tools for the bytes.** [protobuf-net.dev](https://protobuf-net.dev/) decodes a raw payload in the browser without its schema. Nino's [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) decodes one as well, with the layouts of your assembly instead of a schema.
 
 ## Where Nino Is Ahead
 

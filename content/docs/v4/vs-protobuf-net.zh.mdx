@@ -65,6 +65,7 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
   { group: '数据演进' },
   { label: '增加成员；旧代码读新数据', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>、<code>NinoFormat.Keyed</code></>], 'yes: 所有类型都可以；不认识的字段直接跳过（实测）'] },
   { label: '删除、调整顺序或重命名成员', cells: [['yes', <><code>NinoFormat.Keyed</code>，用 <code>[NinoFormerName]</code> 重命名</>], 'yes: 字段号固定数据，名字不写进数据'] },
+  { label: '写代码时就报出破坏数据的改动', cells: [['yes', <>项目里放一份<a href="/zh/docs/v4/evolving-data#layout-baseline">布局基线</a>：NINO034–NINO037，带代码修复</>], 'n/a: 未见文档说明'] },
   { group: '对象图与分配' },
   { label: '共享引用和循环引用', cells: [['yes', <><code>trackReferences</code></>], 'no: 第 3 版没有实现；遇到循环会抛异常（实测）'] },
   { label: '区分 null 集合与空集合', cells: ['yes', 'no: 空集合读回来是 null'] },
@@ -86,7 +87,7 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
 - **gRPC。** protobuf-net.Grpc 可以用 C# 接口提供和调用 gRPC 服务，其他语言的 gRPC 对端也能与之通信。
 - **每个类型都能承受修改。** 字段号随数据一起写出，所以成员可以增加、删除、调整顺序和重命名，读取方会跳过不认识的字段。在 Nino 里这是按类型选择的（[`NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)）；默认的按位置格式在成员改变后就读不了旧数据。
 - **小整数更小。** varint 让小的数字只占 1 字节。
-- **查看字节的工具。** [protobuf-net.dev](https://protobuf-net.dev/) 可以在浏览器里不借助 schema 解码原始载荷。
+- **查看字节的工具。** [protobuf-net.dev](https://protobuf-net.dev/) 可以在浏览器里不借助 schema 解码原始载荷。Nino 的 [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect) 也能解码，它不靠 schema，靠的是你程序集里的布局。
 
 ## Nino 的优势 [#where-nino-is-ahead]
 
