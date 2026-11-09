@@ -9,7 +9,7 @@ icon: Globe
 
 nino-gen 把你的 `[NinoType]` 写成带编解码器的 TypeScript 类，用于浏览器、Node、Bun 和 Deno：普通的 TypeScript（类、`const` 对象和函数），没有装饰器，也没有依赖。声明一个 `<NinoCodegen Include="typescript" />` 项（[在构建中生成](/zh/docs/v4/advanced/codegen#setup)）；它的选项是 `Names`、`ImportExtension`、`Runtime` 和 `NumericArrays`（[选项](/zh/docs/v4/advanced/codegen#options)）。生成的代码需要 TypeScript 5.7 或更高版本（它返回的类型化数组标明了 `ArrayBuffer` 类型）和 ES2022 环境：当前的浏览器，或者 Node 15 及以上（npm 包编译为 ES2022，见它 `package.json` 里的 `engines`）。
 
-TypeScript 的输出是两个文件：`<程序集名>.ts`，为每个类型生成一个类、为每个枚举生成一个 `as const` 对象、为每个类型生成一个编解码器；以及 `nino.ts`，即读写 Nino 格式的运行时。新版本一旦改变 `nino.ts`，就会重写它，并在 `ninoVersion` 中记下版本号。这个运行时也是 npm 包 `nino-serialization`（[runtimes/typescript](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript)），与 Rust crate 同名，每次发布都以 Nino 的版本号发布：设置 `Runtime="nino-serialization"`（并 `npm install nino-serialization@%NINO_VERSION%`，与你的 Nino 包版本相同）后，生成的代码从这个包导入运行时，而不是在你的代码旁边写一份 `nino.ts`。
+TypeScript 的输出是两个文件：`<程序集名>.ts`，为每个类型生成一个类、为每个枚举生成一个 `as const` 对象、为每个类型生成一个编解码器；以及 `nino.ts`，即读写 Nino 格式的运行时。新版本一旦改变 `nino.ts`，就会重写它，并在 `ninoVersion` 中记下版本号。这个运行时也是 npm 包 `nino-serialization`（[runtimes/typescript](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript)），与 Rust crate 同名，版本号始终和 Nino 一致。设置 `Runtime="nino-serialization"`，再装上和 Nino 包同版本的运行时（`npm install nino-serialization@%NINO_VERSION%`），生成的代码就会从这个包导入运行时，不再在你的代码旁边写一份 `nino.ts`。
 
 ## 示例 [#example]
 
