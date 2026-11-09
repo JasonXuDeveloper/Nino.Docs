@@ -7,6 +7,16 @@ icon: SlidersHorizontal
 
 Nino 运行时的设置都是 `NinoSettings`（命名空间 `Nino.Core`）的静态成员，对整个进程生效。没有每次调用单独传入的选项对象；按类型设置的，只有对象池和回收器这几个成员。本页把它们列在一起，每行都链到对应的指南，那里讲什么时候需要它。
 
+**这些设置都不是必须的。** Nino 不需要初始化调用（见[启动时](/zh/docs/v4/start#at-startup)），不设的项就用表里"默认值"那一列的值。默认值按读自己程序写出的数据来定，即便如此，无效输入也只会抛 `NinoDataException`，每个长度在分配内存前都会先和剩余字节数比对。只有下面这些情况才需要改：
+
+| 场景 | 设置 |
+| --- | --- |
+| 数据来自外部（客户端、用户上传、别的服务） | `Untrusted = true`，并把 `MaxCollectionLength` 设成最大的合法消息需要的长度（[不可信数据](/zh/docs/v4/security#untrusted-mode)） |
+| 对象嵌套超过 512 层 | `MaxDepth` |
+| 字典或集合的键哈希码分布很差 | `MaxHashCollisions` |
+| `[NinoPooled]` 类型的突发量超过 256 个实例 | `PoolMaxRetained` 或 `SetPoolMaxRetained<T>` |
+| 想把丢下的实例交给自己的池 | `SetRecycler<T>` |
+
 ## 在启动时设置 [#startup]
 
 ```csharp title="Program.cs"
@@ -18,7 +28,7 @@ NinoSettings.MaxCollectionLength = 100_000; // 我们的消息不会超过这个
 NinoSettings.PoolMaxRetained = 1024;        // 此后新建的每个池最多保留 1024 个
 ```
 
-所有设置随时都能读取。每一项都可以不设：Nino 不需要初始化调用（见[启动时](/zh/docs/v4/start#at-startup)）。
+所有设置随时都能读取。
 
 ## 读取数据的限制 [#limits]
 
@@ -40,8 +50,8 @@ NinoSettings.PoolMaxRetained = 1024;        // 此后新建的每个池最多保
 | 成员 | 类型 | 默认值 | 取值 | 作用 |
 | --- | --- | --- | --- | --- |
 | `PoolMaxRetained` | `int` | `256` | 不小于 0 | 此后新建的 `[NinoPooled]` 池，共享栈最多保留几个实例（某个类型第一次反序列化或归还时，它的池才创建）。见[设置](/zh/docs/v4/pooling#settings) |
-| `SetPoolMaxRetained<T>(int maxRetained)` | 方法 | | 不小于 0；`T` 是 `[NinoPooled]` 类 | 只设 `T` 的池，不管这个池是否已经创建。每个线程另外还各留最多 64 个。见[内置对象池](/zh/docs/v4/pooling#ninopooled) |
-| `SetRecycler<T>(Action<T> handler)` | 方法 | 无 | 传 `null` 即移除 | 复用反序列化时，从声明为 `T` 的槽位上丢下的实例交给这个处理函数，不再还回池里。见[为什么要注册回收器](/zh/docs/v4/pooling#why-setrecycler) |
+| `SetPoolMaxRetained<T>(int maxRetained)` | 方法 | 池创建时的 `PoolMaxRetained` | 不小于 0；`T` 是 `[NinoPooled]` 类 | 只设 `T` 的池，不管这个池是否已经创建。每个线程另外还各留最多 64 个。见[内置对象池](/zh/docs/v4/pooling#ninopooled) |
+| `SetRecycler<T>(Action<T> handler)` | 方法 | 不注册：丢下的实例还回自己的池，没有池就交给 GC | 传 `null` 即移除 | 复用反序列化时，从声明为 `T` 的槽位上丢下的实例交给这个处理函数，不再还回池里。见[为什么要注册回收器](/zh/docs/v4/pooling#why-setrecycler) |
 
 这几项不会冻结，但和限制一样都是普通字段，读的时候不加同步。其他线程正在序列化时修改，新值迟早生效，但正在进行的调用不一定立刻看到，所以也请在启动时设置。`PoolMaxRetained` 只在创建池时读取，已经存在的池不受影响。
 

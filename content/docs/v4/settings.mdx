@@ -7,6 +7,16 @@ icon: SlidersHorizontal
 
 Every setting of the Nino runtime is a static member of `NinoSettings` (namespace `Nino.Core`). They apply to the whole process: there is no options object to pass per call, and only the pool and recycler members take a type. This page lists them all; each row links the guide that explains when you need it.
 
+**None of them has to be set.** Nino needs no initialization call ([At Startup](/en/docs/v4/start#at-startup)), and a setting you leave alone keeps the default in its row's Default column. The defaults suit data your own code wrote: even then, invalid input only throws `NinoDataException`, and every length is checked against the bytes left before anything is allocated. Set a value only when your case calls for it:
+
+| When | Set |
+| --- | --- |
+| The data comes from outside (clients, uploads, other services) | `Untrusted = true`, and `MaxCollectionLength` sized to your largest valid message ([Untrusted Data](/en/docs/v4/security#untrusted-mode)) |
+| Objects nest deeper than 512 levels | `MaxDepth` |
+| Dictionary or set keys with poor hash codes | `MaxHashCollisions` |
+| `[NinoPooled]` types meet bursts larger than 256 instances | `PoolMaxRetained` or `SetPoolMaxRetained<T>` |
+| Dropped instances should go to a pool of your own | `SetRecycler<T>` |
+
 ## Set Them at Startup [#startup]
 
 ```csharp title="Program.cs"
@@ -18,7 +28,7 @@ NinoSettings.MaxCollectionLength = 100_000; // no message of ours holds more
 NinoSettings.PoolMaxRetained = 1024;        // each pool created from now on keeps up to 1,024
 ```
 
-You can read every setting at any time. Every one is optional: Nino needs no initialization call ([At Startup](/en/docs/v4/start#at-startup)).
+You can read every setting at any time.
 
 ## Limits for the Data You Read [#limits]
 
@@ -40,8 +50,8 @@ The read and write paths take these four as constants: all four are frozen the f
 | Member | Type | Default | Allowed | What it does |
 | --- | --- | --- | --- | --- |
 | `PoolMaxRetained` | `int` | `256` | 0 or more | How many instances the shared stack of each `[NinoPooled]` pool keeps, for pools created from now on (a pool is created when its type is first deserialized or returned). [Settings](/en/docs/v4/pooling#settings) |
-| `SetPoolMaxRetained<T>(int maxRetained)` | method | | 0 or more; `T` a `[NinoPooled]` class | The same for `T`'s pool, whether or not it exists yet. Each thread keeps up to 64 more of its own. [Built-in Pools](/en/docs/v4/pooling#ninopooled) |
-| `SetRecycler<T>(Action<T> handler)` | method | none | `null` removes it | Receives each instance that reuse deserialization drops from a slot declared as `T`, instead of the pool. [Why Register a Recycler](/en/docs/v4/pooling#why-setrecycler) |
+| `SetPoolMaxRetained<T>(int maxRetained)` | method | `PoolMaxRetained` when the pool is created | 0 or more; `T` a `[NinoPooled]` class | The same for `T`'s pool, whether or not it exists yet. Each thread keeps up to 64 more of its own. [Built-in Pools](/en/docs/v4/pooling#ninopooled) |
+| `SetRecycler<T>(Action<T> handler)` | method | none: dropped instances go back to their pool, else to the GC | `null` removes it | Receives each instance that reuse deserialization drops from a slot declared as `T`, instead of the pool. [Why Register a Recycler](/en/docs/v4/pooling#why-setrecycler) |
 
 These are not frozen, but like the limits they are plain fields read without synchronization: a change made while other threads serialize takes effect at some point, not at once for the calls in flight. Set them at startup too. `PoolMaxRetained` is applied when a pool is created, so it leaves the pools that already exist as they are.
 
