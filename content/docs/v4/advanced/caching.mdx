@@ -238,7 +238,7 @@ A shared cache outlives the process that wrote it: during a rolling deployment, 
 | Versioned keys | Put a schema version in the key (`profile:v2:42`) and bump it when the type changes | The type changes in ways the options above do not cover, or the cache is cheap to refill. |
 | Treat failures as misses | Catch the `NinoDataException` that invalid data throws, delete the entry and load from the source | Always, as a safety net on top of either approach. |
 
-The safety net does not replace the other two: bytes written for a different type with a compatible layout can deserialize without an error. With tolerant types, commit a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) for the cached types' assembly: a change that entries written by the running deployment cannot survive is then reported on the member you changed, as you type (NINO034, NINO035).
+The safety net does not replace the other two: bytes written for a different type with a compatible layout can deserialize without an error. With tolerant types, commit a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) for the cached types' assembly: a change that entries written by the running deployment cannot survive is then reported on the member you changed, as you type (NINO034, NINO035), and `nino-gen layouts --check` fails CI on one.
 
 A [positional](/en/docs/v4/evolving-data#positional) type (bare `[NinoType]`) is the smallest and fastest, but any change to its members makes old entries unreadable. Use it for cached values only together with versioned keys.
 

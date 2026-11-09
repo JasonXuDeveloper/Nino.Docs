@@ -238,7 +238,7 @@ public sealed class BlobCache<TKey, TValue>
 | 带版本的键 | 在键里加上 schema 版本（`profile:v2:42`），类型变化时递增 | 类型的改动超出上面两个选项能应付的范围，或者重新填充缓存的代价很低。 |
 | 失败即未命中 | 捕获无效数据抛出的 `NinoDataException`，删除该条目，再从数据源加载 | 一律加上，给前两种做法兜底。 |
 
-兜底替代不了前两种做法：另一个类型写的字节，只要布局兼容，就可能不报错地读出来。用容错类型时，给缓存类型所在的程序集提交一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)：改出线上部署写的条目读不了的改动时，分析器在你敲代码时就会在改动的成员上报出来（NINO034、NINO035）。
+兜底替代不了前两种做法：另一个类型写的字节，只要布局兼容，就可能不报错地读出来。用容错类型时，给缓存类型所在的程序集提交一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)：改出线上部署写的条目读不了的改动时，分析器在你敲代码时就会在改动的成员上报出来（NINO034、NINO035），CI 里 `nino-gen layouts --check` 也会失败。
 
 [按位置](/zh/docs/v4/evolving-data#positional)的类型（不带参数的 `[NinoType]`）最小、最快，但成员的任何改动都会让旧条目无法读取。缓存的值要用它，就得配上带版本的键。
 
