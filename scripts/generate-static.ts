@@ -296,9 +296,10 @@ const llmsCopy: Record<
       'v4 is still a prerelease on NuGet: without `--prerelease`, NuGet installs the stable 3.9.x, a test build of v4 features that is not compatible with v4.',
       'Go, Rust and TypeScript: code that nino-gen generates from your C# `[NinoType]`s, with the runtimes published with every release from 4.0.0-rc.8: `go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4` ([Go module](https://pkg.go.dev/github.com/JasonXuDeveloper/Nino/runtimes/go/v4)), `cargo add nino-serialization` ([crates.io](https://crates.io/crates/nino-serialization); library `nino`), `npm install nino-serialization` ([npm](https://www.npmjs.com/package/nino-serialization)); they read and write the same bytes as .NET',
       'Unity 2022.3+ on Mono and IL2CPP, and HybridCLR hot-update assemblies with no initialization call; with `com.unity.burst` installed, Burst-compiled SIMD kernels move arrays of tuples and structs and Latin-1 strings. Godot 4 .NET projects use the NuGet package',
-      'Analyzer: diagnostics NINO001 to NINO029 while you type, many with a code fix, in the `Nino` package; nino-gen adds NINOGEN001 to NINOGEN004',
+      'Analyzer: diagnostics NINO001 to NINO044 while you type, many with a code fix, in the `Nino` package; nino-gen adds NINOGEN001 to NINOGEN004',
+      'Stored data: a committed layout baseline (`NinoLayouts.cs`, kept by a code fix or `nino-gen layouts`) makes the analyzer report a change that breaks data already written (NINO034), and `nino-gen layouts --check` does the same in CI; `nino-gen inspect` prints what each byte of a message is',
       'AI coding agents: `npx skills add JasonXuDeveloper/Nino` installs the `nino-serialization` skill (Claude Code, Codex, Cursor, Copilot and other agents)',
-      'Usage: mark a class, struct, record or interface with `[NinoType]`, then call `NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)`',
+      'Usage: mark a class, struct, record or interface with `[NinoType]`, then call `NinoSerializer.Serialize(value)` and `NinoDeserializer.Deserialize<T>(bytes)`; `Serialize` also writes into an `IBufferWriter<byte>` or a `Stream` (`SerializeAsync` too), `Deserialize` also reads a `Stream` (`DeserializeAsync` too) or a `ReadOnlySequence<byte>` from a `PipeReader`, and `[NinoOnSerializing]`, `[NinoOnSerialized]`, `[NinoOnDeserializing]` and `[NinoOnDeserialized]` methods run around each value',
       ...(headlineSerialize
         ? [
             `Performance: up to ${headlineSerialize}× faster serialization than MemoryPack in the same benchmark run; see [Nino vs MemoryPack](${siteUrl}/en/docs/${latestVersion}/vs-memorypack)`,
@@ -322,9 +323,10 @@ const llmsCopy: Record<
       'v4 在 NuGet 上仍是预发行版：不加 `--prerelease` 时 NuGet 会安装稳定版 3.9.x，它是测试 v4 功能的过渡版本，与 v4 不兼容。',
       'Go、Rust 和 TypeScript：使用 nino-gen 从你的 C# `[NinoType]` 生成的代码，运行时从 4.0.0-rc.8 起随每个版本发布：`go get github.com/JasonXuDeveloper/Nino/runtimes/go/v4`（[Go 模块](https://pkg.go.dev/github.com/JasonXuDeveloper/Nino/runtimes/go/v4)）、`cargo add nino-serialization`（[crates.io](https://crates.io/crates/nino-serialization)，库名 `nino`）、`npm install nino-serialization`（[npm](https://www.npmjs.com/package/nino-serialization)），与 .NET 字节一致、可以互通',
       'Unity 2022.3+ 的 Mono 与 IL2CPP，以及 HybridCLR 热更新程序集，无需初始化调用；安装 `com.unity.burst` 后，元组数组、结构体数组和 Latin-1 字符串交给 Burst 编译的 SIMD 内核搬运。Godot 4 的 .NET 项目直接使用 NuGet 包',
-      '分析器：写代码时报告 NINO001 至 NINO029 诊断，多数附带代码修复，包含在 `Nino` 包中；nino-gen 另有 NINOGEN001 至 NINOGEN004',
+      '分析器：写代码时报告 NINO001 至 NINO044 诊断，多数附带代码修复，包含在 `Nino` 包中；nino-gen 另有 NINOGEN001 至 NINOGEN004',
+      '已存数据：把布局基线（`NinoLayouts.cs`，由代码修复或 `nino-gen layouts` 维护）提交进仓库后，改坏已写数据的修改会被分析器报出来（NINO034），CI 里用 `nino-gen layouts --check` 做同样的检查；`nino-gen inspect` 能逐字节列出一条消息的内容',
       'AI 编程助手：`npx skills add JasonXuDeveloper/Nino` 安装 `nino-serialization` skill（Claude Code、Codex、Cursor、Copilot 等）',
-      '用法：用 `[NinoType]` 标记类、结构体、记录或接口，然后调用 `NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)`',
+      '用法：用 `[NinoType]` 标记类、结构体、记录或接口，然后调用 `NinoSerializer.Serialize(value)` 和 `NinoDeserializer.Deserialize<T>(bytes)`；`Serialize` 还能写进 `IBufferWriter<byte>` 或 `Stream`（也有 `SerializeAsync`），`Deserialize` 还能直接读 `Stream`（也有 `DeserializeAsync`）或 `PipeReader` 给的 `ReadOnlySequence<byte>`；标了 `[NinoOnSerializing]`、`[NinoOnSerialized]`、`[NinoOnDeserializing]`、`[NinoOnDeserialized]` 的方法会在每个值读写前后执行',
       ...(headlineSerialize
         ? [
             `性能：在同一次基准测试中，序列化最高比 MemoryPack 快 ${headlineSerialize} 倍；参见 [Nino 对比 MemoryPack](${siteUrl}/zh/docs/${latestVersion}/vs-memorypack)`,
