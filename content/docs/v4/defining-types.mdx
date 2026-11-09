@@ -166,7 +166,7 @@ public record Shipment(
 
 <Callout type="info">
 
-The analyzer keeps these consistent: `[NinoMember]` is redundant with `autoCollect: true` (NINO010) and `[NinoIgnore]` with `autoCollect: false` (NINO011), a member cannot have both (NINO012), and indices must be unique (NINO013). Each comes with a code fix.
+The analyzer keeps these consistent: `[NinoMember]` is redundant with `autoCollect: true` (NINO010) and `[NinoIgnore]` with `autoCollect: false` (NINO011), a member cannot have both (NINO012), indices must be unique (NINO013), and `[NinoMember]` on a member Nino never serializes (a static member, a constant, a property with no setter that no constructor takes) is reported (NINO028). Each comes with a code fix.
 
 </Callout>
 
@@ -360,6 +360,7 @@ With [`trackReferences`](/en/docs/v4/reference-tracking), an object written agai
 | Reordering, inserting or removing members of a positional type whose data is stored or sent | Old data reads into the wrong members, or throws `NinoDataException` | a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) (NINO034) when a version-tolerant or keyed type reaches it; otherwise nothing: use [version tolerance or keyed members](/en/docs/v4/evolving-data) |
 | A get-only property that no constructor parameter sets | It is not serialized, silently | nothing: give it a setter or a constructor parameter ([Constructors](/en/docs/v4/constructors)) |
 | A `readonly` field that no constructor parameter sets | It is written, and its value is dropped on read | [NINO006](/en/docs/v4/analyzers#nino006), whose code fix adds `[NinoIgnore]` |
+| `[NinoMember]` on a static member, a constant or a get-only property no constructor takes | Nothing is written for it | [NINO028](/en/docs/v4/analyzers#nino028), whose code fix removes the attribute |
 | A member whose type Nino cannot serialize (a delegate, a `Task`) | It is skipped | [NINO007](/en/docs/v4/analyzers#nino007) |
 | Non-public members in a type that is not `partial`, on .NET Standard, .NET Framework or Unity | The generated code does not compile | [NINO002](/en/docs/v4/analyzers#nino002), with a code fix |
 | `[NinoUtf8]` on a member that holds no strings, that a `[NinoMemberFormatter]` writes, or that is never serialized | No effect | [NINO030](/en/docs/v4/analyzers#nino030) |

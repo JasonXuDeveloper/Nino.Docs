@@ -75,8 +75,8 @@ const copy: Record<
     highlights: [
       {
         icon: Cpu,
-        label: 'Zero reflection',
-        text: 'Formatters are generated at compile time, so Nino runs on IL2CPP, NativeAOT and HybridCLR.',
+        label: 'Compile-time formatters',
+        text: 'Formatters are generated at compile time, with no reflection over your members, so Nino runs on IL2CPP, NativeAOT and HybridCLR.',
       },
       {
         icon: ShieldCheck,
@@ -86,7 +86,7 @@ const copy: Record<
       {
         icon: Recycle,
         label: 'Zero allocation',
-        text: 'Serialize into a reused buffer without garbage; deserialize into existing objects and pooled instances.',
+        text: 'Serialize into a reused buffer or straight to a Stream without garbage; deserialize into existing objects and pooled instances.',
       },
       {
         icon: Boxes,
@@ -126,7 +126,7 @@ const copy: Record<
       {
         icon: ListChecks,
         label: 'Mistakes caught as you type',
-        text: '44 analyzer rules, many with a code fix.',
+        text: '44 analyzer rules, many with a code fix; nino-gen inspect shows what a message holds, byte by byte.',
       },
     ],
     claims: [
@@ -155,7 +155,7 @@ const copy: Record<
       },
       {
         title: 'Built for production',
-        lead: 'Everything is generated at compile time: no reflection, no runtime code generation, no schema files.',
+        lead: 'Everything is generated at compile time: no reflection over your members, no runtime code generation, no schema files.',
         items: [10, 3, 4, 5],
         href: 'analyzers',
         link: 'Analyzers',
@@ -175,8 +175,8 @@ const copy: Record<
     highlights: [
       {
         icon: Cpu,
-        label: '零反射',
-        text: '格式化器在编译期生成，所以 IL2CPP、NativeAOT 与 HybridCLR 都能直接使用。',
+        label: '编译期生成',
+        text: '格式化器在编译期生成，不靠反射读写成员，所以 IL2CPP、NativeAOT 与 HybridCLR 都能直接使用。',
       },
       {
         icon: ShieldCheck,
@@ -186,7 +186,7 @@ const copy: Record<
       {
         icon: Recycle,
         label: '零分配',
-        text: '序列化到复用的缓冲区不产生垃圾；反序列化可以直接填充已有对象和池化实例。',
+        text: '序列化到复用的缓冲区或直接写入 Stream，不产生垃圾；反序列化可以直接填充已有对象和池化实例。',
       },
       {
         icon: Boxes,
@@ -226,7 +226,7 @@ const copy: Record<
       {
         icon: ListChecks,
         label: '写代码时就发现错误',
-        text: '44 条分析器规则，许多带一键修复。',
+        text: '44 条分析器规则，许多带一键修复；nino-gen inspect 能逐字节解读一条消息。',
       },
     ],
     claims: [
@@ -255,7 +255,7 @@ const copy: Record<
       },
       {
         title: '专业可靠',
-        lead: '一切在编译期生成：没有反射，没有运行时代码生成，也不需要 schema 文件。',
+        lead: '一切在编译期生成：不靠反射读写成员，没有运行时代码生成，也不需要 schema 文件。',
         items: [10, 3, 4, 5],
         href: 'analyzers',
         link: '分析器',
