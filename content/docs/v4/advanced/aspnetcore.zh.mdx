@@ -141,8 +141,16 @@ request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(NinoMediaType));
 
 using HttpResponseMessage response = await http.SendAsync(request);
 response.EnsureSuccessStatusCode(); // 错误响应是 problem+json，不是 Nino
-Order saved = NinoDeserializer.Deserialize<Order>(await response.Content.ReadAsByteArrayAsync());
+Order saved = await NinoDeserializer.DeserializeAsync<Order>(await response.Content.ReadAsStreamAsync());
 ```
+
+`DeserializeAsync` 从响应内容的流里读，读进从 `ArrayPool<byte>.Shared` 租来的数组，客户端不用为响应体分配 `byte[]`（[异步](/zh/docs/v4/advanced/streams#async)）。
+
+<Callout title="rc.9 及更早的版本">
+
+`Stream` 重载是 rc.10 新增的：先用 `ReadAsByteArrayAsync()` 读出响应体，再把数组交给 `NinoDeserializer.Deserialize<Order>`。
+
+</Callout>
 
 浏览器或 Node 客户端可以使用 [Nino.Codegen](/zh/docs/v4/advanced/typescript#with-aspnet-core) 从同一组类型生成的编解码器，或者在 [.NET WebAssembly](/zh/docs/v4/advanced/browser) 上直接运行 C# 类型。
 

@@ -37,7 +37,7 @@ using (var file = File.OpenRead(path))
 ```
 
 - **The bytes.** The stream gets exactly what `NinoSerializer.Serialize(checkpoint)` returns: no length, no header. Nino serializes into its pooled <Term id="scratch-buffer">scratch buffer</Term> and hands it to the stream in one `Write`, so a call allocates no array.
-- **Reading.** From the stream's position to its end, into an array rented from `ArrayPool<byte>.Shared` and returned after the read. A `MemoryStream` whose buffer is exposed is read in place, with no copy, and left at its end. The bytes are then read as a span is, with every check: [untrusted mode](/en/docs/v4/security#untrusted-mode) applies, bytes after the value included, and a stream that ends early throws `NinoDataException`.
+- **Reading.** From the stream's position to its end, into an array rented from `ArrayPool<byte>.Shared` and returned after the read. A `MemoryStream` whose buffer is exposed (`TryGetBuffer` succeeds: one you wrote into with `new MemoryStream()`, or one made with `publiclyVisible: true`) is read in place, with no copy, and left at its end; `new MemoryStream(bytes)` hides its buffer, so its bytes are copied into the rented array. When you already hold the array, pass it to `Deserialize<T>(bytes)` instead of wrapping it in a stream. The bytes are then read as a span is, with every check: [untrusted mode](/en/docs/v4/security#untrusted-mode) applies, bytes after the value included, and a stream that ends early throws `NinoDataException`.
 - **Growth.** A stream that cannot seek starts with 4 KiB and doubles the array only when it is full. A seekable stream's `Length` sizes the first array up to 1 MiB, since a length is only a claim. Nino never holds much more than twice what the stream delivered.
 - **Calls.** With a type known at compile time, both calls are [intercepted](/en/docs/v4/performance#interceptors) like the span calls and go straight to the generated formatter. For a type known only as a `Type`, the [boxed calls](/en/docs/v4/basic#the-boxed-api) take a stream too: `SerializeBoxed(value, stream, type)`, `DeserializeBoxed(stream, type)` and `DeserializeBoxed(stream, ref value, type)`.
 
@@ -379,7 +379,7 @@ public static class BrotliPayload
 
 | Mistake | What happens | Caught by |
 | --- | --- | --- |
-| Several values written to one stream with `Serialize(value, stream)` | `Deserialize<T>(stream)` reads to the end: the first value comes back and the rest is ignored, or rejected in untrusted mode | nothing: write [frames](#frames) |
+| Several values written to one stream with `Serialize(value, stream)` | `Deserialize<T>(stream)` reads to the end and returns the first value: the bytes after it are ignored, and with [`NinoSettings.Untrusted`](/en/docs/v4/security#untrusted-mode) the call throws `NinoDataException` (bytes after the value) | nothing: write [frames](#frames) |
 | Reading a stream someone else controls without a size limit | Nino holds as much as they send | nothing: cap the stream or the frame ([above](#streams)) |
 | Reusing the buffer of `StreamFrames.WriteAsync` before its task completes | The pending write sends the next frame's bytes | nothing: await the task first |
 | `SerializeAsync` or `DeserializeAsync` in a .NET Framework or .NET Standard 2.0 project | It does not compile: that build has only the synchronous calls | the compiler |

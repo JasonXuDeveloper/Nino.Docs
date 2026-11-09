@@ -148,10 +148,11 @@ public static class SaveFile
 }
 ```
 
-`System.IO` works too, with the folder's real path: `File.WriteAllBytes(ProjectSettings.GlobalizePath(SavePath), bytes)`. Either way:
+`System.IO` works too, with the folder's real path, and then Nino writes into the file without the array: `using var file = File.Create(ProjectSettings.GlobalizePath(SavePath));` and `NinoSerializer.Serialize(save, file);`, and `NinoDeserializer.Deserialize<SaveGame>(file)` to read ([Streams](/en/docs/v4/advanced/streams#streams)). The two helpers of the persistence guide below work this way. Either way:
 
 - Put a header with a magic number and a format version in front of the data, so a later build knows what it reads: [Add a File Header](/en/docs/v4/advanced/persistence#add-a-file-header).
 - Write to a temporary file and replace the save only once it is complete, so a crash during a save does not destroy the last one: [Write Safely](/en/docs/v4/advanced/persistence#write-safely).
+- Commit a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) for the save types: the analyzer then reports a change that existing saves cannot survive on the member you changed, as you type.
 - Data that does not change between builds (level data exported from your tools) can stay positional, which is smaller and faster.
 
 ## Networking [#networking]
@@ -224,7 +225,7 @@ public partial class StateBroadcast : Node
 ```
 
 - Received packets still arrive as a `byte[]` (the `PeerPacket` signal, `PacketPeer.GetPacket`), allocated by Godot. A `StreamPeer` (TCP) is a stream of bytes, so put a length in front of each message: see [Frame the Stream](/en/docs/v4/advanced/networking#frame-the-stream).
-- Reading into `_latest` reuses the same `WorldState` and its list on every packet, so Nino allocates nothing once warmed up; see [Handle Messages Without Allocating](/en/docs/v4/advanced/zero-allocation#message-loop).
+- Reading into `_latest` reuses the same `WorldState` and its list on every packet, so Nino allocates nothing once warmed up; see [A Complete Message Loop](/en/docs/v4/advanced/zero-allocation#message-loop).
 - Clients and servers that are updated separately need `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` messages: see [Rolling Upgrades](/en/docs/v4/advanced/networking#rolling-upgrades). Peers running the same build can keep messages positional.
 - For a polymorphic message type, send the base class (`Serialize<Message>(...)`) and read it as the base: [Polymorphism](/en/docs/v4/polymorphism).
 
@@ -281,7 +282,7 @@ Nino does not serialize Godot's classes. Store an id, a path or the values you n
 </Accordion>
 <Accordion title="Data from an older build cannot be read">
 
-Nino's default format is positional: changing a type's members breaks old data. Use `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` for saves and other stored data. See [Evolving Your Data](/en/docs/v4/evolving-data). Data written by a double-precision build cannot be read by a single-precision one if it contains Godot's structs.
+Nino's default format is positional: changing a type's members breaks old data. Use `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` for saves and other stored data, with a [layout baseline](/en/docs/v4/evolving-data#layout-baseline); [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) shows where an old save stops matching. See [Evolving Your Data](/en/docs/v4/evolving-data). Data written by a double-precision build cannot be read by a single-precision one if it contains Godot's structs.
 
 </Accordion>
 </Accordions>

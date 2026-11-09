@@ -1,11 +1,11 @@
 ---
 title: 持久化
 seoTitle: "C# 数据持久化与存储：更新后依然可读 – Nino v4 文档"
-description: "把 Nino 数据存进文件、数据库等存储，升级后照样能读：键控与版本容错类型、带共享引用的对象图、文件头和安全写入。"
+description: "把 Nino 数据存进文件、键值存储、追加日志和快照，升级后照样能读：键控与版本容错类型、改名和改类型、用 Stream API 写文件头、安全写入和布局基线。"
 icon: Save
 ---
 
-存下来的数据，将来读它的版本在写入时还不存在：桌面应用的文档、用户设置、本地缓存、游戏存档、快照、事件日志都是这样。这篇以一个文档文件为例，讲怎样安排持久化数据，让明年的版本还能打开今年的文件；后半部分讲[键值存储](#key-value-stores)、[追加日志](#append-only-logs)和[快照](#snapshots-and-checkpoints)。
+存下来的数据，往往要由写入时还不存在的版本来读：桌面应用的文档、用户设置、本地缓存、游戏存档、快照、事件日志都是这样。这篇以一个文档文件为例，讲怎样安排持久化数据，让明年的版本还能打开今年的文件；后半部分讲[键值存储](#key-value-stores)、[追加日志](#append-only-logs)和[快照](#snapshots-and-checkpoints)。
 
 ## 按类型选择格式 [#pick-a-format-per-type]
 
@@ -125,10 +125,11 @@ public class TaskItem
 
 ## 添加文件头 [#add-a-file-header]
 
-Nino 自己不写魔数，也不写格式版本。在数据前面加一个小文件头，用来认出文件、决定怎么迁移。编码到调用方传进来的缓冲区，这样每次保存都能用同一个复用的缓冲区：
+Nino 自己不写魔数，也不写格式版本。在数据前面加一个小文件头，用来认出文件、决定怎么迁移：先把文件头的字节写进文件，再用 `NinoSerializer.Serialize(document, stream)` 写文档。`NinoDeserializer.Deserialize<T>(stream)` 从流的当前位置读到末尾，所以先读文件头，剩下的交给 Nino：
 
 ```csharp title="DocumentFile.cs"
 using System;
+using System.Buffers.Binary;
 using System.IO;
 using Nino.Core;
 
@@ -137,28 +138,28 @@ public static class DocumentFile
     private const int Magic = 0x434F444E;   // 随便选一个常量（"NDOC"）
     private const int FormatVersion = 3;    // 手动修改布局时递增
 
-    public static void Encode(Document document, NinoArrayBufferWriter buffer)
-    {
-        buffer.ResetWrittenCount();
-        var writer = new Writer(buffer);
-        writer.Write(Magic);
-        writer.Write(FormatVersion);
-        NinoSerializer.Serialize(document, ref writer);
-        writer.Flush();
-        writer.ReleaseReferences();         // 把引用表（trackReferences 类型用到的）还给它的池
-    }
+    public static void Save(string path, Document document) =>
+        SafeFile.Write(path, file =>
+        {
+            Span<byte> header = stackalloc byte[8];
+            BinaryPrimitives.WriteInt32LittleEndian(header, Magic);
+            BinaryPrimitives.WriteInt32LittleEndian(header.Slice(4), FormatVersion);
+            file.Write(header);
+            NinoSerializer.Serialize(document, file); // [!code highlight]
+        });
 
-    public static Document Decode(ReadOnlySpan<byte> data)
+    public static Document Load(string path)
     {
-        var reader = new Reader(data);
-        if (reader.Read<int>() != Magic)
+        using var file = File.OpenRead(path);
+        Span<byte> header = stackalloc byte[8];
+        if (file.ReadAtLeast(header, 8, throwOnEndOfStream: false) < 8
+            || BinaryPrimitives.ReadInt32LittleEndian(header) != Magic)
             throw new InvalidDataException("Not a document file");
-        int version = reader.Read<int>();
+        int version = BinaryPrimitives.ReadInt32LittleEndian(header.Slice(4));
         if (version > FormatVersion)
             throw new InvalidDataException("File from a newer version of the app");
 
-        var document = NinoDeserializer.Deserialize<Document>(ref reader); // [!code highlight]
-        reader.ReleaseReferences();
+        var document = NinoDeserializer.Deserialize<Document>(file); // [!code highlight]
         return Migrate(document, version);
     }
 
@@ -167,24 +168,33 @@ public static class DocumentFile
 }
 ```
 
+- **保存**时序列化进 Nino 池化的暂存缓冲区，一次 `Write` 交给文件；**加载**时把文件剩下的部分读进从 `ArrayPool<byte>.Shared` 租来的数组。两头都不用为文件分配 `byte[]`（[流](/zh/docs/v4/advanced/streams#streams)）。
+- 不是文档的文件，或者只写了一半的文件，都会抛异常：文件头检查抛 `InvalidDataException`，Nino 抛 `NinoDataException`。
+- `Stream.ReadAtLeast` 要求 .NET 7 或更高版本；其他平台（包括 Unity）循环调用 `Read`，直到读满 8 字节。在 Unity 里，文件放在 `Application.persistentDataPath` 下。
+
+<Callout title="rc.9 及更早的版本">
+
+`Stream` 重载是 rc.10 新增的。更早的版本里，用同一个 `Writer` 把文件头和文档写进 `NinoArrayBufferWriter`（`writer.Write(Magic)`、`writer.Write(FormatVersion)`、`NinoSerializer.Serialize(document, ref writer)`，最后 `writer.Flush()`），再把它的 `WrittenSpan` 写进文件；加载时把文件读进缓冲区，用 `Reader` 依次读出文件头和文档。写出的字节完全一样。
+
+</Callout>
+
 ## 安全写入 [#write-safely]
 
-写到一半崩溃或断电，不能把上一份文件也毁了。先写临时文件，刷到磁盘，再换掉正式文件。读的时候也读进复用的缓冲区，这样加载也不用单独分配 `byte[]`：
+写到一半崩溃或断电，不能把上一份文件也毁了。先写临时文件，刷到磁盘，再换掉正式文件。`SafeFile.Write` 把这套步骤包在真正写文件的代码外面，这里就是 `DocumentFile.Save` 写的文件头和文档：
 
 ```csharp title="SafeFile.cs"
 using System;
 using System.IO;
-using Nino.Core;
 
 public static class SafeFile
 {
     /// <summary>替换 path 处的文件；崩溃时留下的要么是旧文件，要么是新文件，绝不会新旧混杂。</summary>
-    public static void Write(string path, ReadOnlySpan<byte> bytes)
+    public static void Write(string path, Action<Stream> write)
     {
         string temp = path + ".tmp";
-        using (var file = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 1))
+        using (var file = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
         {
-            file.Write(bytes);
+            write(file);
             file.Flush(flushToDisk: true);              // 替换旧文件之前先落盘
         }
         if (File.Exists(path))
@@ -192,36 +202,13 @@ public static class SafeFile
         else
             File.Move(temp, path);
     }
-
-    /// <summary>把整个文件读入 buffer，buffer 在多次调用之间复用。</summary>
-    public static ReadOnlySpan<byte> Read(string path, NinoArrayBufferWriter buffer)
-    {
-        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1);
-        int length = checked((int)file.Length);
-        buffer.ResetWrittenCount();
-        file.ReadExactly(buffer.GetSpan(length).Slice(0, length));
-        buffer.Advance(length);
-        return buffer.WrittenSpan;
-    }
 }
 ```
 
 ```csharp
-using var buffer = new NinoArrayBufferWriter(64 * 1024); // 或者每个线程保留一个并复用
-
-DocumentFile.Encode(document, buffer);
-SafeFile.Write(path, buffer.WrittenSpan);
-
-Document loaded = DocumentFile.Decode(SafeFile.Read(path, buffer));
+DocumentFile.Save(path, document);
+Document loaded = DocumentFile.Load(path);
 ```
-
-<Callout type="info">
-
-`bufferSize: 1` 关掉 `FileStream` 自带的缓冲区：一次读写一整块时，它只会多一次拷贝。`Stream.ReadExactly` 要求 .NET 7 或更高版本；其他平台（包括 Unity）循环调用 `Read`，直到读满 `length` 字节。在 Unity 里，文件写到 `Application.persistentDataPath` 下。
-
-没有文件头的文件不用自己准备缓冲区：把 `file.Write(bytes)` 换成 `NinoSerializer.Serialize(document, file)`，读的时候用 `NinoDeserializer.Deserialize<Document>(file)`（[流](/zh/docs/v4/advanced/streams#streams)）。
-
-</Callout>
 
 ## 键值存储 [#key-value-stores]
 
@@ -408,26 +395,25 @@ public sealed class AccountSnapshot
 
 public static class Snapshots
 {
-    public static void Write(string path, AccountSnapshot snapshot, NinoArrayBufferWriter buffer)
-    {
-        buffer.ResetWrittenCount();
-        NinoSerializer.Serialize(snapshot, buffer);
-        SafeFile.Write(path, buffer.WrittenSpan); // 绝不会留下写了一半的快照
-    }
+    public static void Write(string path, AccountSnapshot snapshot) =>
+        SafeFile.Write(path, file => NinoSerializer.Serialize(snapshot, file)); // 绝不会留下写了一半的快照
 
-    public static AccountSnapshot Load(string snapshotPath, string logPath, NinoArrayBufferWriter buffer)
+    /// <summary>返回状态，logEnd 是打开 EventLog 的位置。</summary>
+    public static AccountSnapshot Load(string snapshotPath, string logPath, out long logEnd)
     {
-        var state = File.Exists(snapshotPath)
-            ? NinoDeserializer.Deserialize<AccountSnapshot>(SafeFile.Read(snapshotPath, buffer))
-            : new AccountSnapshot();
-        if (File.Exists(logPath))
-            EventLog.Replay(logPath, state.Apply);   // 读取整个日志；Apply 跳过快照已经包含的部分
+        AccountSnapshot state = new();
+        if (File.Exists(snapshotPath))
+        {
+            using var file = File.OpenRead(snapshotPath);
+            state = NinoDeserializer.Deserialize<AccountSnapshot>(file);
+        }
+        logEnd = EventLog.Replay(logPath, state.Apply); // 读取整个日志；Apply 跳过快照已经包含的部分
         return state;
     }
 }
 ```
 
-`SafeFile` 就是[安全写入](#write-safely)里的辅助类。任何长时间运行的计算（模拟、流处理、训练任务）都能这样打检查点：把状态和已经处理到的输入位置一起序列化，安全地写盘，重启后从那里接着跑。对象图里有共享引用的话，快照类型要开 [`trackReferences`](#object-graphs)。
+`SafeFile` 就是[安全写入](#write-safely)里的辅助类。服务启动时先 `var state = Snapshots.Load(snapshotPath, logPath, out long end);`，再 `using var log = new EventLog(logPath, end);`，这样追加下一条之前，残缺的末尾已经截掉了。任何长时间运行的计算（模拟、流处理、训练任务）都能这样打检查点：把状态和已经处理到的输入位置一起序列化，安全地写盘，重启后从那里接着跑。对象图里有共享引用的话，快照类型要开 [`trackReferences`](#object-graphs)。
 
 ## 测试旧文件 [#test-old-files]
 
@@ -439,11 +425,13 @@ public void OpensEveryShippedDocument()
 {
     foreach (var file in Directory.GetFiles("TestData/Documents", "*.ndoc"))
     {
-        var document = DocumentFile.Decode(File.ReadAllBytes(file));
+        Document document = DocumentFile.Load(file);
         Assert.IsNotNull(document.Owner);
     }
 }
 ```
+
+测试只能证明你留下的那几份文件。想在改代码的当下就知道改坏了，给存放这些类型的程序集提交一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)：分析器在你敲代码时拿每个类型和它比对，旧文件读不了的改动会直接报在改动的成员上（NINO034；键控成员改名却没留旧名称时报 NINO035），CI 里 `nino-gen layouts --check` 也会失败。
 
 ## 检查清单 [#checklist]
 
@@ -453,7 +441,7 @@ public void OpensEveryShippedDocument()
 - [ ] 改过名的类型和键控成员都带 `[NinoFormerName]`。
 - [ ] 文件开头是你自己的魔数和版本。
 - [ ] 文件先写临时文件、刷到磁盘，再替换。
-- [ ] 测试会加载每个发布过的版本的文件。
+- [ ] 提交了布局基线，测试会加载每个发布过的版本的文件。
 
 ## 下一步 [#next-steps]
 

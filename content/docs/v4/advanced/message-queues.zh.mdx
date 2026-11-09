@@ -328,13 +328,14 @@ public sealed class SampleConsumer
 - `NinoFormat.VersionTolerant` 的继承体系里，只往具体的事件类（`OrderPlaced` 等）追加成员，别加到 `OrderEvent` 上：基类追加一个成员，每个子类的成员都会往后挪。基类确实要加成员，就改用 `NinoFormat.Keyed`。见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
 - 消费者收到不认识的事件**类型**就读不了：反序列化抛 `NinoDataException`（未知的类型 ID）。先部署消费者，再部署发新事件类型的生产者；或者把新类型放到新主题上。
 - 同一次部署内就消费完的消息（几秒内清空的任务队列），用[按位置](/zh/docs/v4/evolving-data#positional)的类型（不带参数的 `[NinoType]`）就行。成员一改，它们的字节就变。
+- 给事件所在的程序集提交一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)：改出主题里已有的消息或还没更新的消费者读不了的改动时，分析器在你敲代码时就会在改动的成员上报出来（NINO034、NINO035），CI 里 `nino-gen layouts --check` 也会失败。
 
 文件里的追加日志（在本地存储上做事件溯源）见[追加日志](/zh/docs/v4/advanced/persistence#append-only-logs)。
 
 ## 检查清单 [#checklist]
 
 - [ ] 事件都从同一个 `[NinoType]` 基类派生；改过名的事件带 `[NinoFormerName]`。
-- [ ] 长期保留的主题上，事件类型用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`。
+- [ ] 长期保留的主题上，事件类型用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，并提交了布局基线。
 - [ ] 新事件类型先部署到消费者，生产者再开始发。
 - [ ] 小而频繁的事件批量发送；记录是列表里的非托管结构体。
 - [ ] 热点主题上的消费者读入复用的实例。

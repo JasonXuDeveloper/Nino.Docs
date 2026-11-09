@@ -1,7 +1,7 @@
 ---
 title: Guides Overview
 seoTitle: "Advanced Guides: Nino in Real Systems – Nino v4 Docs"
-description: "Guides for using Nino in real systems: networking and RPC, ASP.NET Core, TypeScript, Go, Rust and browser clients, message queues, caching, persistence and storage, plus Unity, HybridCLR and Godot."
+description: "Which guide and which feature you need: networking and gRPC, ASP.NET Core, message queues, caching, persistence, Unity, HybridCLR, Godot, browser clients, and TypeScript, Go and Rust with nino-gen."
 icon: Map
 ---
 
@@ -38,14 +38,19 @@ The feature pages explain what each option does. These guides put them together 
 | An ASP.NET Core API (MVC or Minimal APIs) that takes and returns Nino bodies | [ASP.NET Core](/en/docs/v4/advanced/aspnetcore) |
 | A web or Node front end (JavaScript or TypeScript) that talks to a Nino server | [TypeScript](/en/docs/v4/advanced/typescript), or [Browser Clients](/en/docs/v4/advanced/browser) to run the C# types themselves |
 | A Go or Rust service that exchanges data with .NET | [Go](/en/docs/v4/advanced/go) or [Rust](/en/docs/v4/advanced/rust) |
+| Code in several languages from one set of types, or the generator in a build or CI step | [TypeScript, Go and Rust](/en/docs/v4/advanced/codegen) (`<NinoCodegen>` items, the `nino-gen` tool) |
+| Bytes that will not read: from another language, a packet capture, a log or a save | [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) |
 | Producers and consumers on Kafka, RabbitMQ or another broker | [Message Queues](/en/docs/v4/advanced/message-queues) |
 | Telemetry, metrics or market-data feeds | [Telemetry and Tick Streams](/en/docs/v4/advanced/message-queues#telemetry-and-tick-streams) |
+| An HTTP body, a file or a blob read from or written to a `Stream`, sync or async | [Streams](/en/docs/v4/advanced/streams#streams) |
 | A Redis or `IDistributedCache` layer, or an in-process cache of blobs | [Caching](/en/docs/v4/advanced/caching) |
 | Files, documents, save data, local key-value stores | [Persistence](/en/docs/v4/advanced/persistence) |
+| Saved data or deployed clients that a change must not break | [Layout Baseline](/en/docs/v4/evolving-data#layout-baseline), then [Persistence](/en/docs/v4/advanced/persistence) or [Rolling Upgrades](/en/docs/v4/advanced/networking#rolling-upgrades) |
 | An event store, a journal, snapshots or checkpoints | [Append-Only Logs](/en/docs/v4/advanced/persistence#append-only-logs) |
 | IPC over named pipes or sockets | [Framed Streams](/en/docs/v4/advanced/zero-allocation#framed-streams) |
 | Records in shared or memory-mapped files | [Fixed-Size Records](/en/docs/v4/advanced/zero-allocation#fixed-size-records) |
-| A Unity, Godot or HybridCLR project | [Unity and HybridCLR](/en/docs/v4/advanced/unity), [Godot](/en/docs/v4/advanced/godot) |
+| A Unity or HybridCLR project | [Unity and HybridCLR](/en/docs/v4/advanced/unity) |
+| A Godot 4 .NET project | [Godot](/en/docs/v4/advanced/godot) |
 
 ## Hot Paths and Streams [#hot-paths-and-io]
 
@@ -91,7 +96,7 @@ Unity and Godot take Nino with a setup of their own, and a browser can run your 
   </Card>
 </Cards>
 
-## Which Feature Do I Need?
+## Which Feature Do I Need? [#which-feature-do-i-need]
 
 | You want to | Use |
 | --- | --- |
@@ -106,10 +111,13 @@ Unity and Godot take Nino with a setup of their own, and a browser can run your 
 | Serialize a type known only at run time | [Runtime types](/en/docs/v4/basic#runtime-types) |
 | Write several values into one buffer | [`Writer` and `Reader`](/en/docs/v4/basic#several-values-in-one-buffer) |
 | Read from or write to a `Stream`, async | [Streams](/en/docs/v4/advanced/streams#streams) and [Async](/en/docs/v4/advanced/streams#async) |
+| Read the `ReadOnlySequence<byte>` of a `PipeReader`, gRPC or `HybridCache` | [`Deserialize<T>(sequence)`](/en/docs/v4/advanced/streams#readonlysequence-input) |
 | Several messages on one stream | [Frames](/en/docs/v4/advanced/streams#frames) |
 | Run code before serializing or after deserializing | [Callbacks](/en/docs/v4/defining-types#callbacks) |
 | Compress the output | [Compression](/en/docs/v4/advanced/streams#compression) |
-| Check that a type's bytes did not change between builds | [Layout metadata](/en/docs/v4/evolving-data#layout-metadata) |
+| Be told, as you type, about a change that breaks old data | [Layout baseline](/en/docs/v4/evolving-data#layout-baseline) (NINO034 to NINO037, `nino-gen layouts`) |
+| Read how a type is written, in a tool of your own | [Layout metadata](/en/docs/v4/evolving-data#layout-metadata) |
+| See what each byte of a message is | [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) |
 | Rent serialization buffers from your own `ArrayPool<byte>` | [`NinoArrayBufferWriter`](/en/docs/v4/basic#reusing-a-buffer) |
 | Hot-reload logic in a collectible `AssemblyLoadContext` | [Unloading assemblies](/en/docs/v4/platforms#unloading-assemblies) |
 | Publish trimmed or with Native AOT | [Trimming and Native AOT](/en/docs/v4/platforms#trimming-and-native-aot) |

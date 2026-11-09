@@ -1,7 +1,7 @@
 ---
 title: 缓存
 seoTitle: "C# 缓存序列化：Redis 与 IDistributedCache – Nino v4 文档"
-description: "用 Nino 存缓存的值：Redis 等分布式缓存、IDistributedCache 与 HybridCache、在进程内缓存序列化后的字节，以及跨部署时类型结构的变化。"
+description: "用 Nino 存缓存的值：Redis 等分布式缓存、IDistributedCache 与 HybridCache、在进程内缓存序列化后的字节，以及跨部署的 schema 变化。"
 icon: DatabaseZap
 ---
 
@@ -228,25 +228,25 @@ public sealed class BlobCache<TKey, TValue>
 
 代价是每次读取都要反序列化一次。如果值读得远比改得多，读取方也从不修改它，直接缓存对象更划算。
 
-## 跨部署的结构变化 [#schema-changes]
+## 跨部署的 schema 变化 [#schema-changes]
 
 共享缓存比写它的进程活得久：滚动部署期间，新旧实例会读到对方写的条目。每种缓存的类型从前两种做法里选一种，再加上第三种：
 
 | 做法 | 方式 | 适用场景 |
 | --- | --- | --- |
 | 容错类型 | [`format: NinoFormat.VersionTolerant`](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）或 [`format: NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)（任意修改） | 条目需要在部署后继续可用。 |
-| 带版本的键 | 在键里加上schema 版本（`profile:v2:42`），类型变化时递增 | 类型的改动超出上面两个选项能应付的范围，或者重新填充缓存的代价很低。 |
+| 带版本的键 | 在键里加上 schema 版本（`profile:v2:42`），类型变化时递增 | 类型的改动超出上面两个选项能应付的范围，或者重新填充缓存的代价很低。 |
 | 失败即未命中 | 捕获无效数据抛出的 `NinoDataException`，删除该条目，再从数据源加载 | 一律加上，给前两种做法兜底。 |
 
-兜底替代不了前两种做法：另一个类型写的字节，只要布局兼容，就可能不报错地读出来。
+兜底替代不了前两种做法：另一个类型写的字节，只要布局兼容，就可能不报错地读出来。用容错类型时，给缓存类型所在的程序集提交一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)：改出线上部署写的条目读不了的改动时，分析器在你敲代码时就会在改动的成员上报出来（NINO034、NINO035）。
 
 [按位置](/zh/docs/v4/evolving-data#positional)的类型（不带参数的 `[NinoType]`）最小、最快，但成员的任何改动都会让旧条目无法读取。缓存的值要用它，就得配上带版本的键。
 
-Nino 读取时检查每个长度和边界，条目被截断或损坏时会抛异常，不会越界读取。不过字节里不带结构信息，见[无效数据](/zh/docs/v4/basic#invalid-data)。
+Nino 读取时检查每个长度和边界，条目被截断或损坏时会抛异常，不会越界读取。不过字节里不带 schema，见[无效数据](/zh/docs/v4/basic#invalid-data)。
 
 ## 检查清单 [#checklist]
 
-- [ ] 每种缓存的类型都是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，或者键里带schema 版本。
+- [ ] 每种缓存的类型都是 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`，或者键里带 schema 版本。
 - [ ] 写入时每个线程复用一个缓冲区；异步写入要等完成后再重置缓冲区。
 - [ ] 客户端提供池化内存（`Lease<byte>`、`ReadOnlySequence<byte>`）时，直接从这块内存反序列化。
 - [ ] 反序列化失败按缓存未命中处理。

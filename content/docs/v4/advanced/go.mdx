@@ -130,6 +130,8 @@ The generated readers and the struct-tag functions take untrusted input with the
 - Every failure is a `*nino.Error` (`Code`, `Offset`, `Detail`; `errors.Is(err, nino.ErrTooDeep)` ...), and `Deserialize` returns the zero value with it, never part of a value; `Unmarshal` leaves its target unchanged.
 - Stricter than .NET outside [untrusted mode](/en/docs/v4/security#untrusted-mode), or always: it also rejects `DateTime` ticks past `DateTime.MaxValue`, invalid `decimal`s, out-of-range `DateOnly` and `TimeOnly`, bools inside raw structs other than 0 or 1, a key repeated in a keyed body and non-minimal `BigInteger`s.
 
+When bytes from .NET do not read here, or .NET rejects what this side wrote, run them through [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect): it shows which member each byte belongs to and the offset and check that failed.
+
 ## What Go Leaves Out [#not-supported]
 
 Besides what [no language gets](/en/docs/v4/advanced/codegen#not-generated), Go leaves out, with warning NINOGEN002 and with the types that hold them:

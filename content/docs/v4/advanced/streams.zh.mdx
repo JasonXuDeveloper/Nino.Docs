@@ -37,7 +37,7 @@ using (var file = File.OpenRead(path))
 ```
 
 - **写出的字节。** 流里的内容和 `NinoSerializer.Serialize(checkpoint)` 返回的字节完全相同：不加长度，也不加头。Nino 先序列化到池化的<Term id="scratch-buffer" lang="zh">暂存缓冲区</Term>，再一次 `Write` 交给流，每次调用都不分配数组。
-- **读取。** 从流的当前位置读到结尾，读进从 `ArrayPool<byte>.Shared` 租来的数组，读完就还回去。缓冲区可以公开访问的 `MemoryStream` 直接在原缓冲区上读，不拷贝，读完后流停在末尾。之后就和读 span 一样，所有检查照做：[不可信模式](/zh/docs/v4/security#untrusted-mode)同样生效，包括拒绝值后面多出的字节；流提前结束会抛 `NinoDataException`。
+- **读取。** 从流的当前位置读到结尾，读进从 `ArrayPool<byte>.Shared` 租来的数组，读完就还回去。缓冲区可以公开访问的 `MemoryStream`（`TryGetBuffer` 能成功：用 `new MemoryStream()` 写进去的，或者创建时传了 `publiclyVisible: true` 的）直接在原缓冲区上读，不拷贝，读完后流停在末尾；`new MemoryStream(bytes)` 不公开缓冲区，字节会先拷进租来的数组。手里已经有数组的话，直接交给 `Deserialize<T>(bytes)`，别再包一层流。之后就和读 span 一样，所有检查照做：[不可信模式](/zh/docs/v4/security#untrusted-mode)同样生效，包括拒绝值后面多出的字节；流提前结束会抛 `NinoDataException`。
 - **扩容。** 不能 seek 的流从 4 KiB 开始，数组满了才翻倍。能 seek 的流按 `Length` 定第一个数组的大小，但最多 1 MiB，因为长度只是流自己声称的。Nino 占用的内存最多比流实际送来的字节多一倍左右。
 - **调用方式。** 编译时知道类型的调用和 span 调用一样会被[拦截](/zh/docs/v4/performance#interceptors)，直接调用生成的格式化器。只有运行时才知道 `Type` 时，[装箱 API](/zh/docs/v4/basic#the-boxed-api) 也能读写流：`SerializeBoxed(value, stream, type)`、`DeserializeBoxed(stream, type)` 和 `DeserializeBoxed(stream, ref value, type)`。
 
@@ -379,7 +379,7 @@ public static class BrotliPayload
 
 | 错误 | 后果 | 由谁发现 |
 | --- | --- | --- |
-| 用 `Serialize(value, stream)` 往一个流里写了多个值 | `Deserialize<T>(stream)` 一直读到结尾：只拿回第一个值，后面的被忽略，不可信模式下直接拒绝 | 无：改用[分帧](#frames) |
+| 用 `Serialize(value, stream)` 往一个流里写了多个值 | `Deserialize<T>(stream)` 一直读到结尾，返回第一个值：后面的字节直接忽略；开了 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 时抛 `NinoDataException`（值后面有多余字节） | 无：改用[分帧](#frames) |
 | 读别人能控制的流，却不限制大小 | 对方发多少，Nino 就占多少内存 | 无：给流或帧设上限（[见上文](#streams)） |
 | `StreamFrames.WriteAsync` 的任务还没完成，就复用它的缓冲区 | 还在进行的写入发出去的是下一帧的字节 | 无：先 await 任务 |
 | 在 .NET Framework 或 .NET Standard 2.0 项目里用 `SerializeAsync` 或 `DeserializeAsync` | 编译不过：那个版本只有同步调用 | 编译器 |

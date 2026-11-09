@@ -276,6 +276,8 @@ var asset = Resources.Load<TextAsset>("Config/items");
 ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
 ```
 
+Commit a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) (`NinoLayouts.cs`) in the table types' assembly definition, as for saves and network messages: the analyzer then reports, in the Unity console and the IDE, a change that files exported before it (or players on an older build) cannot read. Create it with the refactoring in Rider or Visual Studio, or with [`nino-gen layouts`](/en/docs/v4/advanced/codegen#command-line) on the compiled assembly (Unity writes it to `Library/ScriptAssemblies`); a batch-mode CI build runs the same command with `--check`.
+
 ## Frame-Time Tips
 
 - **No GC spikes from network or replay data:** deserialize each tick into the previous tick's object with `ref`, and mark the classes you create in bulk (bullets, events) `[NinoPooled]`. See [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation).
@@ -303,7 +305,7 @@ The type serializes private members, or is `[NinoPooled]`, and Unity has no `[Un
 </Accordion>
 <Accordion title="Data from an older build cannot be read">
 
-Nino's default format is positional: changing a type's members breaks old data. Use `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` for anything that is stored. See [Evolving Your Data](/en/docs/v4/evolving-data). Data written by Nino v3 cannot be read by v4 at all; see [Migrating from v3](/en/docs/v4/migration).
+Nino's default format is positional: changing a type's members breaks old data. Use `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` for anything that is stored, and a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) to hear about the next breaking change as you make it. To see where the old bytes stop matching, run them through [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect). See [Evolving Your Data](/en/docs/v4/evolving-data). Data written by Nino v3 cannot be read by v4 at all; see [Migrating from v3](/en/docs/v4/migration).
 
 </Accordion>
 </Accordions>

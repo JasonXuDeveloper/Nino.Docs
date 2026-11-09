@@ -1,11 +1,11 @@
 ---
 title: Networking
 seoTitle: "Network Protocol and RPC Serialization in C# – Nino v4 Docs"
-description: "Build a message protocol on Nino: framing, polymorphic messages, System.IO.Pipelines, pooling per connection, rolling upgrades."
+description: "Build a message protocol on Nino: length-prefixed TCP frames over System.IO.Pipelines, WebSocket and UDP, gRPC marshallers, polymorphic messages, reuse per connection and rolling upgrades."
 icon: Network
 ---
 
-Service-to-service messaging, real-time servers (games, trading, collaboration) and device links all need a message format. This guide builds the serialization half of a TCP protocol: a message hierarchy, length-prefixed frames written to a `PipeWriter`, frames read from a `PipeReader` without copying, and messages reused per connection. The transport (sockets, Kestrel connections, your engine's networking) is up to you; anything that gives you a `PipeReader`/`PipeWriter`, a `Stream` or raw buffers works the same way.
+Service-to-service messaging, real-time servers (games, trading, collaboration) and device links all need a message format. This guide builds the serialization half of a TCP protocol: a message hierarchy, length-prefixed frames written to a `PipeWriter`, frames read from a `PipeReader` without copying, and messages reused per connection; then the same messages over WebSocket, UDP and gRPC, and how to change them while old peers are still connected. The transport (sockets, Kestrel connections, your engine's networking) is up to you; anything that gives you a `PipeReader`/`PipeWriter`, a `Stream` or raw buffers works the same way.
 
 ## Define the Messages
 
@@ -169,20 +169,13 @@ public static class FrameReader
 }
 ```
 
+- **Hostile frames.** Nino checks every length inside a frame against the bytes left before it allocates, throws a `NinoDataException` on truncated or malformed data instead of reading past the end, and bounds nesting (`NinoSettings.MaxDepth`); [Untrusted Data](/en/docs/v4/security) lists every check. The frame length is yours to check: `MaxFrameSize` keeps a peer from making the pipe buffer gigabytes.
+- **A frame that will not read.** Run its bytes through [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect): it shows which member each byte belongs to and, for malformed data, the offset and the check that failed. Pipe a hex dump in with `--hex`, and skip the length prefix with `--offset 4`.
+
 <Callout title="On rc.9 and earlier">
 
 `NinoDeserializer` reads a `ReadOnlySequence<byte>` since rc.10. On earlier releases, call the [sequence helpers for rc.9 and earlier](/en/docs/v4/advanced/streams#sequence-helpers-rc9) where this page calls `NinoDeserializer.Deserialize(frame)`.
 
-</Callout>
-
-<Callout type="info">
-
-Nino validates every length inside the payload against the bytes left before allocating, and a collection allocates ahead of its elements at most 16 times the bytes left, so a malicious frame cannot make it allocate out of proportion to its size; truncated data throws instead of reading past the end. Still cap the frame size yourself, as above, so a peer cannot make the pipe buffer gigabytes. Deeply nested payloads cannot overflow the server's stack either: objects nested more than 128 levels deep are deferred and read from a shallower level, and what cannot be deferred is limited to `NinoSettings.MaxDepth` (512 by default). See [Invalid Data](/en/docs/v4/basic#invalid-data) and [Deep Object Graphs](/en/docs/v4/reference-tracking#deep-object-graphs).
-
-</Callout>
-
-<Callout title="A frame that will not read">
-Run its bytes through [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect): it shows which member each byte belongs to and, for malformed data, the offset and the check that failed. Pipe a hex dump in with `--hex`, and skip your length prefix with `--offset`.
 </Callout>
 
 ## Connect It to a Socket [#connect-to-a-socket]
@@ -509,7 +502,7 @@ When clients and servers are not always on the same build, choose the format wit
 - A reused or pooled message is filled in place, so there a missing field keeps the value of the **previous** message: reset such fields in `OnNinoPoolReturn`, or do not reuse instances while old peers are connected.
 - A peer that receives a **message type it does not know** cannot deserialize it: the call throws a `NinoDataException` (unknown type id). Negotiate a protocol version in your handshake and only send new message types to peers that announced support; `NinoTypeId.Of(typeof(T))` gives the id of each message type if you want to exchange the list.
 - If both sides always ship together (two services deployed as one unit, a game client and its dedicated server), stay positional: it is the smallest and fastest format.
-- To see every change to what your messages write before it ships, record the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) of each message type and of every type it contains in CI, compare it with the last release's, and check each difference against the table above.
+- Commit a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) for the message assembly: the analyzer then reports a change that old peers cannot read on the member you changed, as you type (NINO034, NINO035), and `nino-gen layouts --check` fails CI on one.
 
 See [Evolving Your Data](/en/docs/v4/evolving-data) for the exact rules.
 

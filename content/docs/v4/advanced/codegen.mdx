@@ -1,7 +1,7 @@
 ---
 title: TypeScript, Go and Rust
 seoTitle: "Nino in TypeScript, Go and Rust: Codecs Generated from Your [NinoType]s – Nino v4 Docs"
-description: "Nino.Codegen writes your [NinoType]s as TypeScript, Go or Rust types with codecs after each build (or from a built assembly with the nino-gen tool), so browsers, Node, Go services and Rust programs read and write exactly the bytes Nino writes in .NET."
+description: "Nino.Codegen writes your [NinoType]s as TypeScript, Go or Rust types with codecs after each build (or from a built assembly with the nino-gen tool), so browsers, Node, Go services and Rust programs read and write exactly the bytes Nino writes in .NET; nino-gen also checks layout baselines and shows what each byte of a message is."
 icon: Languages
 ---
 
@@ -10,7 +10,7 @@ icon: Languages
 Nino writes your `[NinoType]`s as **TypeScript**, **Go** or **Rust**: one type per `[NinoType]`, with codecs that read and write exactly the bytes Nino writes in .NET. A browser, a Node server, a Go service or a Rust program then exchanges the same bytes as your .NET code, without a .NET runtime. The generator is **nino-gen**, and it comes in two packages with the same options and the same output:
 
 - **Nino.Codegen**, a build package: after each compile of the project that references it, it writes what the project's `<NinoCodegen>` items ask for ([In a Build](#setup)).
-- **Nino.Codegen.Tool**, the `nino-gen` .NET tool, for a built assembly from the command line, a script or a CI step ([From the Command Line](#command-line)).
+- **Nino.Codegen.Tool**, the `nino-gen` .NET tool, for a built assembly from the command line, a script or a CI step. It also writes and checks a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) and [shows what each byte of a message is](#inspect) ([From the Command Line](#command-line)).
 
 ```xml title="Shop.Contracts.csproj"
 <ItemGroup>
@@ -24,7 +24,7 @@ Each language has a page of its own, and a runtime next to the generated code th
 
 | Language | Runtime | Needs |
 | --- | --- | --- |
-| [TypeScript](/en/docs/v4/advanced/typescript) | `nino.ts`, written next to the code, or the npm package `nino-serialization` ([`Runtime`](#options)) | TypeScript 5.7 or later, an ES2020 environment such as a browser or Node |
+| [TypeScript](/en/docs/v4/advanced/typescript) | `nino.ts`, written next to the code, or the npm package `nino-serialization` ([`Runtime`](#options)) | TypeScript 5.7 or later, an ES2022 environment: a current browser, or Node 15 or later |
 | [Go](/en/docs/v4/advanced/go) | the module `github.com/JasonXuDeveloper/Nino/runtimes/go/v4` (package `nino`) | Go 1.22 or later, nothing outside the standard library |
 | [Rust](/en/docs/v4/advanced/rust) | the crate `nino-serialization` (library `nino`), with its `indexmap` feature unless [`Maps="std"`](#options) | Rust 1.88 or later |
 
@@ -150,11 +150,22 @@ The build passes the assembly it compiled and its references itself. nino-gen ch
 
 ## From the Command Line [#command-line]
 
+The `nino-gen` tool reads a built assembly's layouts and has three commands:
+
+| Command | What it does | |
+| --- | --- | --- |
+| `nino-gen --assembly <dll> --lang ts\|go\|rust` | Writes the TypeScript, Go or Rust code, as a build does. | below |
+| `nino-gen layouts --assembly <dll> --out NinoLayouts.cs [--check]` | Writes the [layout baseline](/en/docs/v4/evolving-data#layout-baseline) of the assembly's types; with `--check`, compares the assembly with it and exits with 1 on a change that breaks old data (NINO034, NINO035). | [Layout Baseline](/en/docs/v4/evolving-data#layout-baseline) |
+| `nino-gen inspect --assembly <dll> --type <name> [<file>]` | Prints what each byte of one message is. | [Inspecting a Message](#inspect) |
+
 ```shell
 dotnet tool install -g Nino.Codegen.Tool --prerelease
 dotnet publish -c Release -o publish   # the assembly with its dependencies, Nino.Core.dll among them
 nino-gen --assembly publish/Shop.Contracts.dll --lang go --out ../server/protocol
+nino-gen layouts --assembly publish/Shop.Contracts.dll --out Shop.Contracts/NinoLayouts.cs --check
 ```
+
+Each command takes `--references` (below) and prints its usage with `--help`. The rest of this section is code generation:
 
 ```text
 nino-gen --assembly <dll> --lang ts|go|rust --out <dir> [--references <file>] [--name <file name>]
@@ -221,6 +232,7 @@ A keyed message written by an older version, read as the current type:
 
 - It makes every check a reader makes on [untrusted data](/en/docs/v4/security#untrusted-mode), so hostile bytes cannot crash or hang it. On malformed data it prints what it read, then the offset and the check that failed (`nino-gen: malformed data at offset 1: type id 0xAD792380 is Conformance.Cat, not a Conformance.Dog`), and exits with code 2; a mistake on the command line exits with 1.
 - Bytes after the value are reported with their offset, not read, so you can see where the next frame starts.
+- It needs the assembly the message was written with, or a later one whose layouts still read it: with a later build that changed the type, the output shows what that build would read, which is how you check that it still reads old data.
 - A member written by a [custom formatter](/en/docs/v4/custom-formatters) is shown as its bytes inside a keyed entry or as the last member of a version-tolerant type; anywhere else nothing says where its bytes end, and reading stops there.
 
 ## Types in Each Language [#types]
@@ -246,7 +258,7 @@ Every type, and how to build the .NET values: [TypeScript](/en/docs/v4/advanced/
 
 ## Fields of Raw Structs [#raw-struct-fields]
 
-A raw struct (an unmanaged struct written as one block, [Raw Values](/en/docs/v4/wire-format#raw-values)) is generated as a type of its fields at their offsets in the canonical layout, padding zeroed. The fields whose .NET size or layout depends on the host (`nint`, `nuint`, pointers, `Int128`, `DateTimeOffset`, a `T?` of a raw `T`) have the fixed bytes the wire format gives them, and a fixed type in each language: [TypeScript](/en/docs/v4/advanced/typescript#type-mapping), [Go](/en/docs/v4/advanced/go#values), [Rust](/en/docs/v4/advanced/rust#types). An array of `Int128?` has a stride of 32 bytes (the flag, 15 zeros, the value). The `Vector64<T>` to `Vector512<T>` fields are NINOGEN002 in every language, as is a layout from an older build that holds a `System.Numerics.Vector<T>`: `Vector<T>` is [not serializable](/en/docs/v4/struct-layouts#vector-t).
+A raw struct (an unmanaged struct written as one block, [Raw Values](/en/docs/v4/wire-format#raw-values)) is generated as a type of its fields at their offsets in the canonical layout, padding zeroed. The fields whose .NET size or layout depends on the host (`nint`, `nuint`, pointers, `Int128`, `DateTimeOffset`, a `T?` of a raw `T`) have the fixed bytes the wire format gives them, and a fixed type in each language: [TypeScript](/en/docs/v4/advanced/typescript#type-mapping), [Go](/en/docs/v4/advanced/go#values), [Rust](/en/docs/v4/advanced/rust#types). TypeScript has no type for a `DateTimeOffset` field and leaves its struct out ([What TypeScript Leaves Out](/en/docs/v4/advanced/typescript#not-supported)). An array of `Int128?` has a stride of 32 bytes (the flag, 15 zeros, the value). The `Vector64<T>` to `Vector512<T>` fields are NINOGEN002 in every language, as is a layout from an older build that holds a `System.Numerics.Vector<T>`: `Vector<T>` is [not serializable](/en/docs/v4/struct-layouts#vector-t).
 
 ## Generic Types [#generics]
 
@@ -317,6 +329,8 @@ nino-gen leaves out, with warning NINOGEN002, every type its language cannot exp
 - closed generic types in slots that neither the assembly nor a slot names: their ids are unknown ([Closed Generic Types in Slots](#closed-generic-types-in-slots));
 - a generic type with `trackReferences`;
 - the `Vector64<T>` to `Vector512<T>` fields of raw structs ([Fields of Raw Structs](#raw-struct-fields)), and layouts from an older build that hold a `System.Numerics.Vector<T>`.
+
+[Serialization callbacks](/en/docs/v4/defining-types#callbacks) (`[NinoOnSerializing]` and the three others) change no byte, so the generated code is the same with or without them, and it calls nothing of the kind: work a callback does in .NET (checking values, filling a cache) is done in TypeScript, Go or Rust by the code that calls the codec.
 
 What each language leaves out besides: [TypeScript](/en/docs/v4/advanced/typescript#not-supported), [Go](/en/docs/v4/advanced/go#not-supported), [Rust](/en/docs/v4/advanced/rust#not-supported).
 

@@ -1,7 +1,7 @@
 ---
 title: 指南概览
 seoTitle: "进阶指南：在真实项目中使用 Nino – Nino v4 文档"
-description: "在真实项目中使用 Nino：网络与 RPC、ASP.NET Core、TypeScript、Go、Rust 与浏览器客户端、消息队列、缓存、持久化与存储，以及 Unity、HybridCLR 与 Godot。"
+description: "做什么系统该看哪篇指南、用哪个功能：网络与 gRPC、ASP.NET Core、消息队列、缓存、持久化、Unity、HybridCLR、Godot、浏览器客户端，以及用 nino-gen 生成的 TypeScript、Go 和 Rust。"
 icon: Map
 ---
 
@@ -52,14 +52,19 @@ import { DatabaseZap, Gamepad2, Globe, Joystick, Languages, MessagesSquare, Netw
 | 接收并返回 Nino 数据的 ASP.NET Core API（MVC 或 Minimal API） | [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore) |
 | 与 Nino 服务端通信的网页或 Node 前端（JavaScript 或 TypeScript） | [TypeScript](/zh/docs/v4/advanced/typescript)；要直接运行 C# 类型，见[浏览器客户端](/zh/docs/v4/advanced/browser) |
 | 与 .NET 交换数据的 Go 或 Rust 服务 | [Go](/zh/docs/v4/advanced/go) 或 [Rust](/zh/docs/v4/advanced/rust) |
+| 一套类型生成几种语言的代码，或在构建、CI 里跑生成器 | [TypeScript、Go 与 Rust](/zh/docs/v4/advanced/codegen)（`<NinoCodegen>` 项、`nino-gen` 工具） |
+| 读不出来的字节：别的语言发来的、抓包抓到的、日志或存档里的 | [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect) |
 | Kafka、RabbitMQ 等消息中间件上的生产者和消费者 | [消息队列](/zh/docs/v4/advanced/message-queues) |
 | 遥测、指标或行情数据流 | [遥测与行情数据流](/zh/docs/v4/advanced/message-queues#telemetry-and-tick-streams) |
+| 从 `Stream` 读写 HTTP 请求体、文件或 blob，同步或异步 | [流](/zh/docs/v4/advanced/streams#streams) |
 | Redis 或 `IDistributedCache` 缓存层，或进程内的序列化数据缓存 | [缓存](/zh/docs/v4/advanced/caching) |
 | 文件、文档、存档、本地键值存储 | [持久化](/zh/docs/v4/advanced/persistence) |
+| 改代码时不能读坏的存档或已部署的客户端 | 先看[布局基线](/zh/docs/v4/evolving-data#layout-baseline)，再看[持久化](/zh/docs/v4/advanced/persistence)或[滚动升级](/zh/docs/v4/advanced/networking#rolling-upgrades) |
 | 事件存储、变更日志、快照或检查点 | [追加日志](/zh/docs/v4/advanced/persistence#append-only-logs) |
 | 基于命名管道或 socket 的进程间通信 | [分帧读写流](/zh/docs/v4/advanced/zero-allocation#framed-streams) |
 | 共享内存或内存映射文件中的记录 | [固定大小的记录](/zh/docs/v4/advanced/zero-allocation#fixed-size-records) |
-| Unity、Godot 或 HybridCLR 项目 | [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)、[Godot](/zh/docs/v4/advanced/godot) |
+| Unity 或 HybridCLR 项目 | [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity) |
+| Godot 4 .NET 项目 | [Godot](/zh/docs/v4/advanced/godot) |
 
 ## 热路径与流 [#hot-paths-and-io]
 
@@ -120,10 +125,13 @@ Unity 和 Godot 各有自己的配置方式，浏览器也可以在 .NET WebAsse
 | 序列化运行时才知道的类型 | [运行时类型](/zh/docs/v4/basic#runtime-types) |
 | 在一个缓冲区里写入多个值 | [`Writer` 与 `Reader`](/zh/docs/v4/basic#several-values-in-one-buffer) |
 | 读写 `Stream`，或异步读写 | [流](/zh/docs/v4/advanced/streams#streams)和[异步](/zh/docs/v4/advanced/streams#async) |
+| 读 `PipeReader`、gRPC 或 `HybridCache` 给的 `ReadOnlySequence<byte>` | [`Deserialize<T>(sequence)`](/zh/docs/v4/advanced/streams#readonlysequence-input) |
 | 一个流上传多条消息 | [分帧](/zh/docs/v4/advanced/streams#frames) |
 | 在序列化前或反序列化后执行代码 | [回调](/zh/docs/v4/defining-types#callbacks) |
 | 压缩输出 | [压缩](/zh/docs/v4/advanced/streams#compression) |
-| 检查类型的字节在两次构建之间有没有变 | [布局元数据](/zh/docs/v4/evolving-data#layout-metadata) |
+| 改出读不了旧数据的改动时，敲代码的当下就收到提示 | [布局基线](/zh/docs/v4/evolving-data#layout-baseline)（NINO034 到 NINO037、`nino-gen layouts`） |
+| 在自己的工具里读出类型是怎么写的 | [布局元数据](/zh/docs/v4/evolving-data#layout-metadata) |
+| 看一条消息的每个字节是什么 | [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect) |
 | 从自己的 `ArrayPool<byte>` 租用序列化缓冲区 | [`NinoArrayBufferWriter`](/zh/docs/v4/basic#reusing-a-buffer) |
 | 在可回收的 `AssemblyLoadContext` 中热重载逻辑 | [卸载程序集](/zh/docs/v4/platforms#unloading-assemblies) |
 | 裁剪发布或用 Native AOT 发布 | [裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot) |

@@ -1,7 +1,7 @@
 ---
 title: TypeScript、Go 与 Rust
 seoTitle: "在 TypeScript、Go 和 Rust 中使用 Nino：从 [NinoType] 生成编解码器 – Nino v4 文档"
-description: "Nino.Codegen 在每次构建后（或用 nino-gen 工具从构建好的程序集）把你的 [NinoType] 写成带编解码器的 TypeScript、Go 或 Rust 类型，浏览器、Node、Go 服务和 Rust 程序由此与 .NET 中的 Nino 互通，字节完全一致。"
+description: "Nino.Codegen 在每次构建后（或用 nino-gen 工具从构建好的程序集）把你的 [NinoType] 写成带编解码器的 TypeScript、Go 或 Rust 类型，浏览器、Node、Go 服务和 Rust 程序由此与 .NET 中的 Nino 互通，字节完全一致；nino-gen 还能检查布局基线，列出一条消息的每个字节是什么。"
 icon: Languages
 ---
 
@@ -10,7 +10,7 @@ icon: Languages
 Nino 可以把你的 `[NinoType]` 写成 **TypeScript**、**Go** 或 **Rust**：每个 `[NinoType]` 一个类型，编解码器与 .NET 中的 Nino 字节一致。这样，浏览器、Node 服务端、Go 服务或 Rust 程序不需要 .NET 运行时，就能与你的 .NET 代码互通。生成器是 **nino-gen**，它有两个包，选项相同，输出也相同：
 
 - **Nino.Codegen**，构建包：引用它的项目每次编译之后，按项目中的 `<NinoCodegen>` 项写出代码（[在构建中生成](#setup)）。
-- **Nino.Codegen.Tool**，即 `nino-gen` .NET 工具，在命令行、脚本或 CI 步骤中处理构建好的程序集（[在命令行中生成](#command-line)）。
+- **Nino.Codegen.Tool**，即 `nino-gen` .NET 工具，在命令行、脚本或 CI 步骤中处理构建好的程序集。它还能写出、检查[布局基线](/zh/docs/v4/evolving-data#layout-baseline)，[列出一条消息的每个字节是什么](#inspect)（[命令行用法](#command-line)）。
 
 ```xml title="Shop.Contracts.csproj"
 <ItemGroup>
@@ -24,7 +24,7 @@ Nino 可以把你的 `[NinoType]` 写成 **TypeScript**、**Go** 或 **Rust**：
 
 | 语言 | 运行时 | 需要 |
 | --- | --- | --- |
-| [TypeScript](/zh/docs/v4/advanced/typescript) | `nino.ts`，写在生成的代码旁边；或者 npm 包 `nino-serialization`（[`Runtime`](#options)） | TypeScript 5.7 或更高版本，浏览器、Node 等 ES2020 环境 |
+| [TypeScript](/zh/docs/v4/advanced/typescript) | `nino.ts`，写在生成的代码旁边；或者 npm 包 `nino-serialization`（[`Runtime`](#options)） | TypeScript 5.7 或更高版本，ES2022 环境：当前的浏览器，或 Node 15 及以上 |
 | [Go](/zh/docs/v4/advanced/go) | 模块 `github.com/JasonXuDeveloper/Nino/runtimes/go/v4`（包 `nino`） | Go 1.22 或更高版本，除标准库外没有依赖 |
 | [Rust](/zh/docs/v4/advanced/rust) | crate `nino-serialization`（库名 `nino`），除非用 [`Maps="std"`](#options)，否则打开它的 `indexmap` 功能 | Rust 1.88 或更高版本 |
 
@@ -148,13 +148,24 @@ dotnet build Shop.Contracts
 | `NinoCodegenTargetFramework` | `TargetFrameworks` 中的第一个 | 有多个目标框架时，由哪个目标框架的构建写出文件。 |
 | `NinoCodegenEnabled` | `true` | 设为 `false` 即关闭。 |
 
-## 在命令行中生成 [#command-line]
+## 命令行用法 [#command-line]
+
+`nino-gen` 工具读构建好的程序集里的布局，有三个命令：
+
+| 命令 | 作用 | |
+| --- | --- | --- |
+| `nino-gen --assembly <dll> --lang ts\|go\|rust` | 写出 TypeScript、Go 或 Rust 代码，和构建时一样。 | 见下文 |
+| `nino-gen layouts --assembly <dll> --out NinoLayouts.cs [--check]` | 写出程序集里类型的[布局基线](/zh/docs/v4/evolving-data#layout-baseline)；加 `--check` 时拿程序集和基线比对，有改动会让旧数据读不了（NINO034、NINO035）就以退出码 1 结束。 | [布局基线](/zh/docs/v4/evolving-data#layout-baseline) |
+| `nino-gen inspect --assembly <dll> --type <name> [<file>]` | 列出一条消息的每个字节是什么。 | [查看一条消息](#inspect) |
 
 ```shell
 dotnet tool install -g Nino.Codegen.Tool --prerelease
 dotnet publish -c Release -o publish   # 和程序集放在一起的依赖，Nino.Core.dll 也在其中
 nino-gen --assembly publish/Shop.Contracts.dll --lang go --out ../server/protocol
+nino-gen layouts --assembly publish/Shop.Contracts.dll --out Shop.Contracts/NinoLayouts.cs --check
 ```
+
+每个命令都接受 `--references`（见下表），加 `--help` 会打印用法。本节下面讲的是生成代码：
 
 ```text
 nino-gen --assembly <dll> --lang ts|go|rust --out <dir> [--references <file>] [--name <file name>]
@@ -169,9 +180,9 @@ nino-gen --assembly <dll> --lang ts|go|rust --out <dir> [--references <file>] [-
 | --- | --- |
 | `--assembly` | 构建好的程序集。 |
 | `--lang` | `ts`（或 `typescript`）、`go` 或 `rust`。 |
-| `--references` | 一个文件，每行一个程序集路径，用于解析引用；`.dll` 所在目录和正在运行的 .NET 总会被搜索。类库的 `bin/` 中没有它所用包的副本（包括 `Nino.Core.dll`）：把它们列在这里。使用 Nino.Codegen 的构建会把这个文件写到 `obj/<configuration>/<framework>/nino-gen/references`。 |
+| `--references` | 一个文件，每行一个程序集路径，用于解析引用；`.dll` 所在目录和正在运行的 .NET 总会去找。类库的 `bin/` 中没有它所用包的副本（包括 `Nino.Core.dll`）：把它们列在这里。使用 Nino.Codegen 的构建会把这个文件写到 `obj/<configuration>/<framework>/nino-gen/references`。 |
 
-未知的选项、重复给出的选项、属于其他语言的选项或取值不被接受的选项都是错误，缺少参数也是。`--serde` 后面可以跟 `true` 或 `false`。
+未知的选项、重复给出的选项、属于其他语言的选项或取值不对的选项都是错误，缺少参数也是。`--serde` 后面可以跟 `true` 或 `false`。
 
 ### 诊断 [#diagnostics]
 
@@ -180,7 +191,7 @@ nino-gen 按 MSBuild 的消息格式报告，所以构建会把它们显示为�
 | ID | 严重级别 | |
 | --- | --- | --- |
 | `NINOGEN001` | 错误 | 参数或项的元数据无效，或无法读取程序集。工具以退出码 1 结束，构建失败。 |
-| `NINOGEN002` | 警告 | 某个类型因目标语言无法表达而被跳过，并说明原因（见[不会生成的内容](#not-generated)）。 |
+| `NINOGEN002` | 警告 | 某个类型目标语言无法表达，所以跳过，并说明原因（见[不会生成的内容](#not-generated)）。 |
 | `NINOGEN003` | 警告 | 项目设置了 Nino.TypeScript 的 `NinoTypeScript*` 属性（见[从 Nino.TypeScript 迁移](/zh/docs/v4/advanced/typescript#from-ninotypescript)）。 |
 | `NINOGEN004` | 警告 | 项目引用了 Nino.Codegen，却没有声明 `<NinoCodegen>` 项，所以什么也不写出：添加一项，或把 `NinoCodegenEnabled` 设为 `false`。 |
 
@@ -190,7 +201,7 @@ nino-gen : warning NINOGEN002: Samples.Nest`1 is not written to Go: it holds its
 
 ## 查看一条消息 [#inspect]
 
-`nino-gen inspect` 按程序集发布的布局读一条消息，把每个字节是什么列出来：每个成员的偏移、长度、编码和值，类型 ID 对应的类型，键控条目的键（不认识的键显示为跳过的字节），旧数据里缺少的成员，引用头和延后读取的对象体。别的语言发来的数据、抓包、日志或存档读不出来，或者读出来的值不对时，用它来排查。
+`nino-gen inspect` 按程序集发布的布局读一条消息，把每个字节是什么列出来：每个成员的偏移、长度、编码和值，类型 ID 对应的类型，键控条目的键（不认识的键显示为跳过的字节），旧数据里缺少的成员，引用头和推迟的对象体。别的语言发来的数据、抓包、日志或存档读不出来，或者读出来的值不对时，用它来排查。
 
 ```shell
 nino-gen inspect --assembly publish/Shop.Contracts.dll --type Shop.Contracts.Order order.bin
@@ -202,7 +213,7 @@ xxd -p frame.bin | nino-gen inspect --assembly publish/Shop.Contracts.dll --type
 | `--assembly`、`--references` | 和生成代码时一样。必须给出程序集：按位置格式的数据里没有成员名、长度和类型，离开布局就读不了。 |
 | `--type` | 消息写出时的类型，用运行时形式的名字：`Namespace.Outer+Inner`、`Namespace.Box<System.Int32>`、`System.Collections.Generic.List<Namespace.Point>`。 |
 | `<file>` | 消息文件；省略或写 `-` 时从标准输入读。 |
-| `--hex` | 输入是十六进制文本；字节之间的空白、`,`、`:`、`-` 和 `0x` 都会被忽略。 |
+| `--hex` | 输入是十六进制文本；字节之间的空白、`,`、`:`、`-` 和 `0x` 都忽略。 |
 | `--offset` | 从这个字节开始读，用于大缓冲区里的一帧（比如跳过你自己的长度前缀）。输出里的偏移按整个输入算。 |
 | `--json` | 把结果树写成 JSON 给工具用：每个节点有 `name`、`type`、`encoding`、`offset`、`length` 和 `value`，顶层还有 `error` 和 `trailing`。 |
 
@@ -221,6 +232,7 @@ xxd -p frame.bin | nino-gen inspect --assembly publish/Shop.Contracts.dll --type
 
 - 它做的检查和读取[不可信数据](/zh/docs/v4/security#untrusted-mode)时完全一样，恶意字节不会让它崩溃或卡住。数据有问题时，它先输出已经读到的部分，再给出出错的偏移和没通过的检查（`nino-gen: malformed data at offset 1: type id 0xAD792380 is Conformance.Cat, not a Conformance.Dog`），以退出码 2 结束；命令行写错时退出码是 1。
 - 值后面多出来的字节只报告偏移，不往下读，方便你看出下一帧从哪里开始。
+- 程序集要用写出这条消息的那个，或者之后的版本，只要它的布局还能读这条消息：用改过类型的新版本来读，输出就是新版本会读到的内容，正好用来检查新版本还能不能读旧数据。
 - 由[自定义格式化器](/zh/docs/v4/custom-formatters)写出的成员，在键控条目里或作为版本容错类型的最后一个成员时，会原样显示它的字节；在其他位置，没有任何信息说明它的字节到哪里结束，读到这里就会停下。
 
 ## 各语言中的类型 [#types]
@@ -246,7 +258,7 @@ Set 中的字符串在每种语言里都可以是 null，与 .NET 一致（`Hash
 
 ## 原始结构体的字段 [#raw-struct-fields]
 
-原始结构体（按一整块写出的非托管结构体，见[原始值](/zh/docs/v4/wire-format#raw-values)）生成为一个由其字段组成的类型，各字段位于规范布局中的偏移处，填充为 0。在 .NET 里大小或布局随主机变化的字段（`nint`、`nuint`、指针、`Int128`、`DateTimeOffset`、原始类型 `T` 的 `T?`）按二进制格式规定的固定字节写出，在每种语言里也有固定的类型：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。`Int128?` 数组的步长是 32 字节（存在字节、15 个 0、值）。`Vector64<T>` 到 `Vector512<T>` 字段在每种语言里都报 NINOGEN002；旧版本构建的布局里如果有 `System.Numerics.Vector<T>`，也一样：`Vector<T>` [不能序列化](/zh/docs/v4/struct-layouts#vector-t)。
+原始结构体（按一整块写出的非托管结构体，见[原始值](/zh/docs/v4/wire-format#raw-values)）生成为一个由其字段组成的类型，各字段位于规范布局中的偏移处，填充为 0。在 .NET 里大小或布局随主机变化的字段（`nint`、`nuint`、指针、`Int128`、`DateTimeOffset`、原始类型 `T` 的 `T?`）按二进制格式规定的固定字节写出，在每种语言里也有固定的类型：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。TypeScript 表达不了 `DateTimeOffset` 字段，含它的结构体会跳过（[TypeScript 不支持的内容](/zh/docs/v4/advanced/typescript#not-supported)）。`Int128?` 数组的步长是 32 字节（存在字节、15 个 0、值）。`Vector64<T>` 到 `Vector512<T>` 字段在每种语言里都报 NINOGEN002；旧版本构建的布局里如果有 `System.Numerics.Vector<T>`，也一样：`Vector<T>` [不能序列化](/zh/docs/v4/struct-layouts#vector-t)。
 
 ## 泛型类型 [#generics]
 
@@ -290,9 +302,9 @@ public sealed class Box<T>
 
 声明了 [`[NinoType(trackReferences: true)]`](/zh/docs/v4/reference-tracking) 的类型会为每种语言生成，并带有 .NET 写出的引用头：0 表示 null，-1 表示之前没写过的对象（后面跟着它的主体），或者之前写过的对象的编号。对象在创建时、读取主体之前就被记录，所以主体可以持有它所在的对象（循环）。没有子类型的被追踪类、按类型 ID 写出的被追踪类或接口，以及位于不追踪的槽位（`object`、未追踪的基类）中的被追踪类型，读写方式都与 .NET 相同。
 
-被追踪的类 `Node` 在 [TypeScript](/zh/docs/v4/advanced/typescript#reference-tracking) 中是 `Node | null`，在 [Go](/zh/docs/v4/advanced/go#reference-tracking) 中是 `*Node`，在 [Rust](/zh/docs/v4/advanced/rust#reference-tracking) 中是 `Option<nino::Shared<Node>>`，对它的每个引用都是同一个对象。
+追踪引用的类 `Node` 在 [TypeScript](/zh/docs/v4/advanced/typescript#reference-tracking) 中是 `Node | null`，在 [Go](/zh/docs/v4/advanced/go#reference-tracking) 中是 `*Node`，在 [Rust](/zh/docs/v4/advanced/rust#reference-tracking) 中是 `Option<nino::Shared<Node>>`，对它的每个引用都是同一个对象。
 
-引用头不是 -1、0 或已读对象的编号时会被拒绝，回引用指向的对象类型不被槽位允许时，同样拒绝；每个新对象至少占 4 个字节的引用头，所以对象表的增长不会快于数据。
+引用头不是 -1、0 或已读对象的编号时直接拒绝；回引用指向的对象类型槽位不允许时，同样拒绝；每个新对象至少占 4 个字节的引用头，所以对象表的增长不会快于数据。
 
 ## `[NinoType]` 集合 [#ninotype-collections]
 
@@ -317,6 +329,8 @@ nino-gen 会跳过目标语言无法表达的类型以及包含它们的类型�
 - 槽位中，程序集和槽位都没有提到的封闭泛型类型：它们的 ID 是未知的（[槽位中的封闭泛型类型](#closed-generic-types-in-slots)）；
 - 带 `trackReferences` 的泛型类型；
 - 原始结构体的 `Vector64<T>` 到 `Vector512<T>` 字段（[原始结构体的字段](#raw-struct-fields)），以及旧版本构建的、含 `System.Numerics.Vector<T>` 的布局。
+
+[序列化回调](/zh/docs/v4/defining-types#callbacks)（`[NinoOnSerializing]` 等四个特性）不改变任何字节，有没有它们，生成的代码都一样，而且生成的代码不会调用这类方法：回调在 .NET 里做的事（检查值、填缓存），在 TypeScript、Go 或 Rust 里由调用编解码器的代码来做。
 
 各语言另外跳过的内容：[TypeScript](/zh/docs/v4/advanced/typescript#not-supported)、[Go](/zh/docs/v4/advanced/go#not-supported)、[Rust](/zh/docs/v4/advanced/rust#not-supported)。
 

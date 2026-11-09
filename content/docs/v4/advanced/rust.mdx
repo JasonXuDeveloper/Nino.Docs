@@ -199,6 +199,8 @@ The generated readers, the derive and the crate's own readers take untrusted inp
 - Deferred bodies go onto a heap work list. Up-front allocation for collections comes from one budget per read (16 bytes per input byte, plus 4 KiB).
 - Stricter than .NET outside [untrusted mode](/en/docs/v4/security#untrusted-mode), or always: it also rejects out-of-range dates and times, invalid `decimal`s, non-zero padding in raw structs, unused `BitArray` bits that are not zero and non-minimal `BigInteger`s.
 
+When bytes from .NET do not read here, or .NET rejects what this side wrote, run them through [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect): it shows which member each byte belongs to and the offset and check that failed.
+
 ## What Rust Leaves Out [#not-supported]
 
 Besides what [no language gets](/en/docs/v4/advanced/codegen#not-generated), Rust leaves out, with warning NINOGEN002 and with the types that hold them:

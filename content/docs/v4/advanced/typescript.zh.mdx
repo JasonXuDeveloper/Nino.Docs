@@ -7,7 +7,7 @@ icon: Globe
 
 <AnchorRedirect map={{ 'how-it-works': '/zh/docs/v4/advanced/codegen#how-it-works', 'setup': '/zh/docs/v4/advanced/codegen#setup', 'options': '/zh/docs/v4/advanced/codegen#options', 'compared-with-json': '/zh/docs/v4/advanced/typescript#performance' }} />
 
-nino-gen 把你的 `[NinoType]` 写成带编解码器的 TypeScript 类，用于浏览器、Node、Bun 和 Deno：普通的 TypeScript（类、`const` 对象和函数），没有装饰器，也没有依赖。声明一个 `<NinoCodegen Include="typescript" />` 项（[在构建中生成](/zh/docs/v4/advanced/codegen#setup)）；它的选项是 `Names`、`ImportExtension`、`Runtime` 和 `NumericArrays`（[选项](/zh/docs/v4/advanced/codegen#options)）。生成的代码需要 TypeScript 5.7 或更高版本（它返回的类型化数组标明了 `ArrayBuffer` 类型）和 ES2020 环境。
+nino-gen 把你的 `[NinoType]` 写成带编解码器的 TypeScript 类，用于浏览器、Node、Bun 和 Deno：普通的 TypeScript（类、`const` 对象和函数），没有装饰器，也没有依赖。声明一个 `<NinoCodegen Include="typescript" />` 项（[在构建中生成](/zh/docs/v4/advanced/codegen#setup)）；它的选项是 `Names`、`ImportExtension`、`Runtime` 和 `NumericArrays`（[选项](/zh/docs/v4/advanced/codegen#options)）。生成的代码需要 TypeScript 5.7 或更高版本（它返回的类型化数组标明了 `ArrayBuffer` 类型）和 ES2022 环境：当前的浏览器，或者 Node 15 及以上（npm 包编译为 ES2022，见它 `package.json` 里的 `engines`）。
 
 TypeScript 的输出是两个文件：`<程序集名>.ts`，为每个类型生成一个类、为每个枚举生成一个 `as const` 对象、为每个类型生成一个编解码器；以及 `nino.ts`，即读写 Nino 格式的运行时。新版本一旦改变 `nino.ts`，就会重写它，并在 `ninoVersion` 中记下版本号。这个运行时也是 npm 包 `nino-serialization`（[runtimes/typescript](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript)），与 Rust crate 同名，每次发布都以 Nino 的版本号发布：设置 `Runtime="nino-serialization"`（并 `npm install nino-serialization@%NINO_VERSION%`，与你的 Nino 包版本相同）后，生成的代码从这个包导入运行时，而不是在你的代码旁边写一份 `nino.ts`。
 
@@ -268,6 +268,8 @@ mesh.indices = Int32Array.of(0, 1, 2);
 - `[NinoUtf8]` 字符串必须是给定字符数的严格 UTF-8。
 - V8 对数字、`bigint` 以及数组下标形式的字符串（`"0"` 到 `"4294967294"`，按其数值求哈希）求哈希时不带种子，数据就能专门挑选落进同一个桶的键。超过 128 个数字、`bigint` 或字符串键的映射或 Set 会让每个键经过 `NinoKeyGuard`（字符串只对数组下标形式的求哈希）：某个键在所在的桶里会碰到 100 个以上的键时，抛出 `NinoError`，和 .NET 的 [`MaxHashCollisions`](/zh/docs/v4/security#hash-flooding) 一样。这个防护只对 V8（Node、Chromium、Deno）精确，对 JavaScriptCore 和 SpiderMonkey 不精确，它们对键的哈希方式不同。Go 和 Rust 用随机种子求键的哈希。
 - 重复的键按 `Map` 和 `Set` 的方式比较：数字、`bigint`、字符串、布尔值和 `null` 按值比较。读成对象的键（读成 `Date` 的 `DateTime`、结构体、元组）以及只有小数位数不同的 `decimal` 不参与比较，这样的映射或 Set 会保留两个条目。
+
+这边读不了 .NET 写的字节，或者 .NET 不认这边写的字节时，把字节交给 [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect)：它会列出每个字节属于哪个成员，以及出错的偏移和没通过的检查。
 
 ## TypeScript 不支持的内容 [#not-supported]
 

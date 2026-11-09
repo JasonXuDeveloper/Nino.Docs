@@ -1,7 +1,7 @@
 ---
 title: Persistence
 seoTitle: "Persistence and Storage in C#: Data That Survives Updates – Nino v4 Docs"
-description: "Store Nino data in files, databases and other storage so it survives updates: keyed and version-tolerant types, object graphs with shared references, headers and safe writes."
+description: "Store Nino data in files, key-value stores, append-only logs and snapshots so it survives updates: keyed and version-tolerant types, renames and type changes, a file header with the Stream API, safe writes and a layout baseline."
 icon: Save
 ---
 
@@ -125,10 +125,11 @@ Each object is written once; later references are written as a 4-byte index, and
 
 ## Add a File Header
 
-Nino writes no magic number or format version of its own. Put a small header in front of the data so you can recognize the file and decide how to migrate it. Encode into a buffer you pass in, so a reused buffer serves every save:
+Nino writes no magic number or format version of its own. Put a small header in front of the data so you can recognize the file and decide how to migrate it: write its bytes to the file, then the document with `NinoSerializer.Serialize(document, stream)`. `NinoDeserializer.Deserialize<T>(stream)` reads from the stream's position to its end, so read the header first and let Nino read the rest:
 
 ```csharp title="DocumentFile.cs"
 using System;
+using System.Buffers.Binary;
 using System.IO;
 using Nino.Core;
 
@@ -137,28 +138,28 @@ public static class DocumentFile
     private const int Magic = 0x434F444E;   // any constant you like ("NDOC")
     private const int FormatVersion = 3;    // bump when you change the layout by hand
 
-    public static void Encode(Document document, NinoArrayBufferWriter buffer)
-    {
-        buffer.ResetWrittenCount();
-        var writer = new Writer(buffer);
-        writer.Write(Magic);
-        writer.Write(FormatVersion);
-        NinoSerializer.Serialize(document, ref writer);
-        writer.Flush();
-        writer.ReleaseReferences();         // returns the reference table (trackReferences types) to its pool
-    }
+    public static void Save(string path, Document document) =>
+        SafeFile.Write(path, file =>
+        {
+            Span<byte> header = stackalloc byte[8];
+            BinaryPrimitives.WriteInt32LittleEndian(header, Magic);
+            BinaryPrimitives.WriteInt32LittleEndian(header.Slice(4), FormatVersion);
+            file.Write(header);
+            NinoSerializer.Serialize(document, file); // [!code highlight]
+        });
 
-    public static Document Decode(ReadOnlySpan<byte> data)
+    public static Document Load(string path)
     {
-        var reader = new Reader(data);
-        if (reader.Read<int>() != Magic)
+        using var file = File.OpenRead(path);
+        Span<byte> header = stackalloc byte[8];
+        if (file.ReadAtLeast(header, 8, throwOnEndOfStream: false) < 8
+            || BinaryPrimitives.ReadInt32LittleEndian(header) != Magic)
             throw new InvalidDataException("Not a document file");
-        int version = reader.Read<int>();
+        int version = BinaryPrimitives.ReadInt32LittleEndian(header.Slice(4));
         if (version > FormatVersion)
             throw new InvalidDataException("File from a newer version of the app");
 
-        var document = NinoDeserializer.Deserialize<Document>(ref reader); // [!code highlight]
-        reader.ReleaseReferences();
+        var document = NinoDeserializer.Deserialize<Document>(file); // [!code highlight]
         return Migrate(document, version);
     }
 
@@ -167,24 +168,33 @@ public static class DocumentFile
 }
 ```
 
+- **Saving** serializes into Nino's pooled scratch buffer and hands it to the file in one `Write`; **loading** reads the rest of the file into an array rented from `ArrayPool<byte>.Shared`. Neither allocates a `byte[]` for the file ([Streams](/en/docs/v4/advanced/streams#streams)).
+- A file that is not a document, or one cut short, throws: `InvalidDataException` from the header check, `NinoDataException` from Nino.
+- `Stream.ReadAtLeast` needs .NET 7 or later; elsewhere (Unity included), call `Read` in a loop until the 8 bytes are in. On Unity, keep files under `Application.persistentDataPath`.
+
+<Callout title="On rc.9 and earlier">
+
+The `Stream` overloads are new in rc.10. On earlier releases, write the header and the document into a `NinoArrayBufferWriter` through one `Writer` (`writer.Write(Magic)`, `writer.Write(FormatVersion)`, `NinoSerializer.Serialize(document, ref writer)`, then `writer.Flush()`) and write its `WrittenSpan` to the file; to load, read the file into a buffer and read the header and the document from it with a `Reader`. The bytes are the same.
+
+</Callout>
+
 ## Write Safely
 
-A crash or power loss in the middle of a write must not destroy the previous file. Write to a temporary file, flush it to disk, then swap it in. Read files back into a reused buffer, so loading needs no `byte[]` of its own either:
+A crash or power loss in the middle of a write must not destroy the previous file. Write to a temporary file, flush it to disk, then swap it in. `SafeFile.Write` does that around whatever writes the file, here `DocumentFile.Save`'s header and document:
 
 ```csharp title="SafeFile.cs"
 using System;
 using System.IO;
-using Nino.Core;
 
 public static class SafeFile
 {
     /// <summary>Replaces the file at path; a crash leaves the old file or the new one, never a mix.</summary>
-    public static void Write(string path, ReadOnlySpan<byte> bytes)
+    public static void Write(string path, Action<Stream> write)
     {
         string temp = path + ".tmp";
-        using (var file = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 1))
+        using (var file = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
         {
-            file.Write(bytes);
+            write(file);
             file.Flush(flushToDisk: true);              // on disk before it replaces the old file
         }
         if (File.Exists(path))
@@ -192,36 +202,13 @@ public static class SafeFile
         else
             File.Move(temp, path);
     }
-
-    /// <summary>Reads the whole file into buffer, which is reused from call to call.</summary>
-    public static ReadOnlySpan<byte> Read(string path, NinoArrayBufferWriter buffer)
-    {
-        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1);
-        int length = checked((int)file.Length);
-        buffer.ResetWrittenCount();
-        file.ReadExactly(buffer.GetSpan(length).Slice(0, length));
-        buffer.Advance(length);
-        return buffer.WrittenSpan;
-    }
 }
 ```
 
 ```csharp
-using var buffer = new NinoArrayBufferWriter(64 * 1024); // or keep one per thread and reuse it
-
-DocumentFile.Encode(document, buffer);
-SafeFile.Write(path, buffer.WrittenSpan);
-
-Document loaded = DocumentFile.Decode(SafeFile.Read(path, buffer));
+DocumentFile.Save(path, document);
+Document loaded = DocumentFile.Load(path);
 ```
-
-<Callout type="info">
-
-`bufferSize: 1` turns off `FileStream`'s own buffer, which would only add a copy for a single large read or write. `Stream.ReadExactly` needs .NET 7 or later; elsewhere (Unity included), call `Read` in a loop until `length` bytes are in. On Unity, write under `Application.persistentDataPath`.
-
-A file with no header needs no buffer of yours: write `NinoSerializer.Serialize(document, file)` in place of `file.Write(bytes)`, and read with `NinoDeserializer.Deserialize<Document>(file)` ([Streams](/en/docs/v4/advanced/streams#streams)).
-
-</Callout>
 
 ## Key-Value Stores [#key-value-stores]
 
@@ -409,26 +396,25 @@ public sealed class AccountSnapshot
 
 public static class Snapshots
 {
-    public static void Write(string path, AccountSnapshot snapshot, NinoArrayBufferWriter buffer)
-    {
-        buffer.ResetWrittenCount();
-        NinoSerializer.Serialize(snapshot, buffer);
-        SafeFile.Write(path, buffer.WrittenSpan); // never leaves a half-written snapshot
-    }
+    public static void Write(string path, AccountSnapshot snapshot) =>
+        SafeFile.Write(path, file => NinoSerializer.Serialize(snapshot, file)); // never a half-written snapshot
 
-    public static AccountSnapshot Load(string snapshotPath, string logPath, NinoArrayBufferWriter buffer)
+    /// <summary>The state, and in logEnd the position to open the EventLog at.</summary>
+    public static AccountSnapshot Load(string snapshotPath, string logPath, out long logEnd)
     {
-        var state = File.Exists(snapshotPath)
-            ? NinoDeserializer.Deserialize<AccountSnapshot>(SafeFile.Read(snapshotPath, buffer))
-            : new AccountSnapshot();
-        if (File.Exists(logPath))
-            EventLog.Replay(logPath, state.Apply);   // reads the whole log; Apply skips what the snapshot covers
+        AccountSnapshot state = new();
+        if (File.Exists(snapshotPath))
+        {
+            using var file = File.OpenRead(snapshotPath);
+            state = NinoDeserializer.Deserialize<AccountSnapshot>(file);
+        }
+        logEnd = EventLog.Replay(logPath, state.Apply); // reads the whole log; Apply skips what the snapshot covers
         return state;
     }
 }
 ```
 
-`SafeFile` is the helper from [Write Safely](#write-safely). The same pattern checkpoints any long-running computation (a simulation, a stream processor, a training job): serialize its state and the input position it has reached, write it safely, and resume from it after a restart. Object graphs with shared references need [`trackReferences`](#object-graphs) in the snapshot types.
+`SafeFile` is the helper from [Write Safely](#write-safely). Start the service with `var state = Snapshots.Load(snapshotPath, logPath, out long end);` and `using var log = new EventLog(logPath, end);`, so a torn tail is cut off before the next append. The same pattern checkpoints any long-running computation (a simulation, a stream processor, a training job): serialize its state and the input position it has reached, write it safely, and resume from it after a restart. Object graphs with shared references need [`trackReferences`](#object-graphs) in the snapshot types.
 
 ## Test Old Files
 
@@ -440,11 +426,13 @@ public void OpensEveryShippedDocument()
 {
     foreach (var file in Directory.GetFiles("TestData/Documents", "*.ndoc"))
     {
-        var document = DocumentFile.Decode(File.ReadAllBytes(file));
+        Document document = DocumentFile.Load(file);
         Assert.IsNotNull(document.Owner);
     }
 }
 ```
+
+The test proves the files you kept. To hear about a breaking change while you make it, commit a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) for the assembly that holds the stored types: the analyzer compares every type with it as you type and reports a change that old files cannot survive on the member you changed (NINO034, or NINO035 for a keyed member renamed without its former name), and `nino-gen layouts --check` fails CI on one.
 
 ## Checklist
 
@@ -454,7 +442,7 @@ public void OpensEveryShippedDocument()
 - [ ] Renamed types and renamed keyed members carry `[NinoFormerName]`.
 - [ ] The file starts with your own magic number and version.
 - [ ] Files are written to a temporary file, flushed to disk and swapped in.
-- [ ] Files from every shipped version are loaded in a test.
+- [ ] A layout baseline is committed, and files from every shipped version are loaded in a test.
 
 ## Next Steps [#next-steps]
 

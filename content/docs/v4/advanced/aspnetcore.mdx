@@ -141,8 +141,16 @@ request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(NinoMediaType));
 
 using HttpResponseMessage response = await http.SendAsync(request);
 response.EnsureSuccessStatusCode(); // an error response is problem+json, not Nino
-Order saved = NinoDeserializer.Deserialize<Order>(await response.Content.ReadAsByteArrayAsync());
+Order saved = await NinoDeserializer.DeserializeAsync<Order>(await response.Content.ReadAsStreamAsync());
 ```
+
+`DeserializeAsync` reads the response from its content stream into an array rented from `ArrayPool<byte>.Shared`, so the client allocates no `byte[]` for the body ([Async](/en/docs/v4/advanced/streams#async)).
+
+<Callout title="On rc.9 and earlier">
+
+The `Stream` overloads are new in rc.10: read the body with `ReadAsByteArrayAsync()` and pass the array to `NinoDeserializer.Deserialize<Order>`.
+
+</Callout>
 
 A browser or Node client uses the codecs that [Nino.Codegen](/en/docs/v4/advanced/typescript#with-aspnet-core) generates from the same types, or runs the C# types themselves on [.NET WebAssembly](/en/docs/v4/advanced/browser).
 
