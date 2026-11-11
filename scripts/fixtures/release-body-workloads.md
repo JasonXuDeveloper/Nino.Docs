@@ -1,5 +1,5 @@
 <!--
-Parser test fixture: release-body-unity.md with WorkloadTest's rows (the six
+Parser test fixture: release-body-unity.md with WorkloadTest's rows (the twelve
 workloads against Nino, MemoryPack, MessagePack, protobuf-net
 (Protobuf), Google.Protobuf (GoogleProtobuf) and System.Text.Json (Json),
 serialize and deserialize) appended to the x64 report and to the Arm64
@@ -413,78 +413,150 @@ IterationCount=15  LaunchCount=1  WarmupCount=5
 | SimpleTest          | MemoryPackSerializeVectors                  |     4,326.0336 ns |     4,331.5631 ns |     4,101.5232 ns |     4,553.1488 ns |   1.03 | 160,004 B |       - |       - |       - |         - |          NA |
 | SimpleTest          | MessagePackSerializeVectors                 |   126,388.6037 ns |   126,359.8853 ns |   118,694.3779 ns |   134,574.5696 ns |  30.23 | 210,003 B |       - |       - |       - |         - |          NA |
 | SimpleTest          | ProtobufSerializeVectors                        |    10,045.9099 ns |     4,210.3811 ns |     3,919.2227 ns |     4,510.8003 ns |   1.00 | 160,004 B |       - |       - |       - |         - |          NA |
-| WorkloadTest        | NinoSerializeRpcRequest | 16.0812 ns | 16.0812 ns | 15.7596 ns | 16.4029 ns | 1.00 | 84,159 B | - | - | - | - | NA |
-| WorkloadTest        | MemoryPackSerializeRpcRequest | 364.8867 ns | 364.8867 ns | 357.5890 ns | 372.1845 ns | 22.69 | 251,640 B | - | - | - | - | NA |
-| WorkloadTest        | MessagePackSerializeRpcRequest | 8.6590 ns | 8.6590 ns | 8.4858 ns | 8.8322 ns | 0.54 | 260,887 B | - | - | - | - | NA |
-| WorkloadTest        | ProtobufSerializeRpcRequest | 15.9950 ns | 15.9950 ns | 15.6751 ns | 16.3149 ns | 0.99 | 134,694 B | - | - | - | - | NA |
-| WorkloadTest        | GoogleProtobufSerializeRpcRequest | 15.6743 ns | 15.6743 ns | 15.3608 ns | 15.9877 ns | 0.97 | 143,997 B | - | - | - | - | NA |
-| WorkloadTest        | JsonSerializeRpcRequest | 15.6142 ns | 15.6142 ns | 15.3019 ns | 15.9265 ns | 0.97 | 257,667 B | - | - | - | 699373 B | NA |
-| WorkloadTest        | NinoDeserializeRpcRequest | 56.8359 ns | 56.8359 ns | 55.6992 ns | 57.9726 ns | 1.00 | - | - | - | - | 403978 B | NA |
-| WorkloadTest        | MemoryPackDeserializeRpcRequest | 533.8853 ns | 533.8853 ns | 523.2076 ns | 544.5630 ns | 9.39 | - | - | - | - | 327450 B | NA |
-| WorkloadTest        | MessagePackDeserializeRpcRequest | 57.9222 ns | 57.9222 ns | 56.7638 ns | 59.0806 ns | 1.02 | - | - | - | - | 206143 B | NA |
-| WorkloadTest        | ProtobufDeserializeRpcRequest | 57.9941 ns | 57.9941 ns | 56.8342 ns | 59.1540 ns | 1.02 | - | - | - | - | 109578 B | NA |
-| WorkloadTest        | GoogleProtobufDeserializeRpcRequest | 57.1270 ns | 57.1270 ns | 55.9845 ns | 58.2696 ns | 1.01 | - | - | - | - | 225191 B | NA |
-| WorkloadTest        | JsonDeserializeRpcRequest | 57.5390 ns | 57.5390 ns | 56.3882 ns | 58.6898 ns | 1.01 | - | - | - | - | 853490 B | NA |
-| WorkloadTest        | NinoSerializeOrdersPage | 10,504.2076 ns | 10,504.2076 ns | 10,294.1234 ns | 10,714.2917 ns | 1.00 | 164,683 B | - | - | - | - | NA |
-| WorkloadTest        | MemoryPackSerializeOrdersPage | 7,574.9283 ns | 7,574.9283 ns | 7,423.4298 ns | 7,726.4269 ns | 0.72 | 133,342 B | - | - | - | - | NA |
-| WorkloadTest        | MessagePackSerializeOrdersPage | 7,204.8949 ns | 7,204.8949 ns | 7,060.7970 ns | 7,348.9928 ns | 0.69 | 188,269 B | - | - | - | - | NA |
-| WorkloadTest        | ProtobufSerializeOrdersPage | 44,448.9117 ns | 44,448.9117 ns | 43,559.9335 ns | 45,337.8900 ns | 4.23 | 87,149 B | - | - | - | - | NA |
-| WorkloadTest        | GoogleProtobufSerializeOrdersPage | 10,356.5778 ns | 10,356.5778 ns | 10,149.4463 ns | 10,563.7094 ns | 0.99 | 158,247 B | - | - | - | - | NA |
-| WorkloadTest        | JsonSerializeOrdersPage | 10,758.8873 ns | 10,758.8873 ns | 10,543.7096 ns | 10,974.0651 ns | 1.02 | 67,115 B | - | - | - | 275125 B | NA |
-| WorkloadTest        | NinoDeserializeOrdersPage | 25,390.8317 ns | 25,390.8317 ns | 24,883.0151 ns | 25,898.6483 ns | 1.00 | - | - | - | - | 495476 B | NA |
-| WorkloadTest        | MemoryPackDeserializeOrdersPage | 448,583.7986 ns | 448,583.7986 ns | 439,612.1227 ns | 457,555.4746 ns | 17.67 | - | - | - | - | 228393 B | NA |
-| WorkloadTest        | MessagePackDeserializeOrdersPage | 149,428.4356 ns | 149,428.4356 ns | 146,439.8669 ns | 152,417.0043 ns | 5.89 | - | - | - | - | 887286 B | NA |
-| WorkloadTest        | ProtobufDeserializeOrdersPage | 22,155.7639 ns | 22,155.7639 ns | 21,712.6487 ns | 22,598.8792 ns | 0.87 | - | - | - | - | 336522 B | NA |
-| WorkloadTest        | GoogleProtobufDeserializeOrdersPage | 22,993.8597 ns | 22,993.8597 ns | 22,533.9825 ns | 23,453.7369 ns | 0.91 | - | - | - | - | 395343 B | NA |
-| WorkloadTest        | JsonDeserializeOrdersPage | 26,042.4342 ns | 26,042.4342 ns | 25,521.5855 ns | 26,563.2829 ns | 1.03 | - | - | - | - | 386451 B | NA |
-| WorkloadTest        | NinoSerializeUserProfile | 150.1259 ns | 150.1259 ns | 147.1234 ns | 153.1284 ns | 1.00 | 31,682 B | - | - | - | - | NA |
-| WorkloadTest        | MemoryPackSerializeUserProfile | 3,505.6520 ns | 3,505.6520 ns | 3,435.5390 ns | 3,575.7651 ns | 23.35 | 63,296 B | - | - | - | - | NA |
-| WorkloadTest        | MessagePackSerializeUserProfile | 151.4857 ns | 151.4857 ns | 148.4560 ns | 154.5155 ns | 1.01 | 59,887 B | - | - | - | - | NA |
-| WorkloadTest        | ProtobufSerializeUserProfile | 1,880.3278 ns | 1,880.3278 ns | 1,842.7213 ns | 1,917.9344 ns | 12.53 | 43,539 B | - | - | - | - | NA |
-| WorkloadTest        | GoogleProtobufSerializeUserProfile | 84.8221 ns | 84.8221 ns | 83.1256 ns | 86.5185 ns | 0.57 | 40,201 B | - | - | - | - | NA |
-| WorkloadTest        | JsonSerializeUserProfile | 2,125.9273 ns | 2,125.9273 ns | 2,083.4087 ns | 2,168.4458 ns | 14.16 | 60,731 B | - | - | - | 254023 B | NA |
-| WorkloadTest        | NinoDeserializeUserProfile | 368.9199 ns | 368.9199 ns | 361.5415 ns | 376.2983 ns | 1.00 | - | - | - | - | 526706 B | NA |
-| WorkloadTest        | MemoryPackDeserializeUserProfile | 1,552.0193 ns | 1,552.0193 ns | 1,520.9789 ns | 1,583.0596 ns | 4.21 | - | - | - | - | 692518 B | NA |
-| WorkloadTest        | MessagePackDeserializeUserProfile | 366.0999 ns | 366.0999 ns | 358.7779 ns | 373.4219 ns | 0.99 | - | - | - | - | 618769 B | NA |
-| WorkloadTest        | ProtobufDeserializeUserProfile | 291.0983 ns | 291.0983 ns | 285.2764 ns | 296.9203 ns | 0.79 | - | - | - | - | 86091 B | NA |
-| WorkloadTest        | GoogleProtobufDeserializeUserProfile | 307.5899 ns | 307.5899 ns | 301.4381 ns | 313.7417 ns | 0.83 | - | - | - | - | 610309 B | NA |
-| WorkloadTest        | JsonDeserializeUserProfile | 198.3710 ns | 198.3710 ns | 194.4035 ns | 202.3384 ns | 0.54 | - | - | - | - | 350804 B | NA |
-| WorkloadTest        | NinoSerializeGameSnapshot | 855.4190 ns | 855.4190 ns | 838.3106 ns | 872.5274 ns | 1.00 | 126,157 B | - | - | - | - | NA |
-| WorkloadTest        | MemoryPackSerializeGameSnapshot | 1,618.7634 ns | 1,618.7634 ns | 1,586.3881 ns | 1,651.1386 ns | 1.89 | 91,978 B | - | - | - | - | NA |
-| WorkloadTest        | MessagePackSerializeGameSnapshot | 846.6044 ns | 846.6044 ns | 829.6723 ns | 863.5365 ns | 0.99 | 93,851 B | - | - | - | - | NA |
-| WorkloadTest        | ProtobufSerializeGameSnapshot | 701.9967 ns | 701.9967 ns | 687.9567 ns | 716.0366 ns | 0.82 | 124,678 B | - | - | - | - | NA |
-| WorkloadTest        | GoogleProtobufSerializeGameSnapshot | 5,724.1509 ns | 5,724.1509 ns | 5,609.6678 ns | 5,838.6339 ns | 6.69 | 106,741 B | - | - | - | - | NA |
-| WorkloadTest        | JsonSerializeGameSnapshot | 629.0838 ns | 629.0838 ns | 616.5021 ns | 641.6655 ns | 0.74 | 67,342 B | - | - | - | 89466 B | NA |
-| WorkloadTest        | NinoDeserializeGameSnapshot | 1,711.3751 ns | 1,711.3751 ns | 1,677.1476 ns | 1,745.6026 ns | 1.00 | - | - | - | - | 229928 B | NA |
-| WorkloadTest        | MemoryPackDeserializeGameSnapshot | 1,196.1763 ns | 1,196.1763 ns | 1,172.2528 ns | 1,220.0998 ns | 0.70 | - | - | - | - | 720047 B | NA |
-| WorkloadTest        | MessagePackDeserializeGameSnapshot | 1,006.3735 ns | 1,006.3735 ns | 986.2460 ns | 1,026.5009 ns | 0.59 | - | - | - | - | 391615 B | NA |
-| WorkloadTest        | ProtobufDeserializeGameSnapshot | 1,528.9754 ns | 1,528.9754 ns | 1,498.3959 ns | 1,559.5549 ns | 0.89 | - | - | - | - | 497457 B | NA |
-| WorkloadTest        | GoogleProtobufDeserializeGameSnapshot | 29,533.4448 ns | 29,533.4448 ns | 28,942.7759 ns | 30,124.1137 ns | 17.26 | - | - | - | - | 11480 B | NA |
-| WorkloadTest        | JsonDeserializeGameSnapshot | 1,755.1885 ns | 1,755.1885 ns | 1,720.0848 ns | 1,790.2923 ns | 1.03 | - | - | - | - | 671119 B | NA |
-| WorkloadTest        | NinoSerializeLogBatch | 44,606.8469 ns | 44,606.8469 ns | 43,714.7100 ns | 45,498.9838 ns | 1.00 | 3,714 B | - | - | - | - | NA |
-| WorkloadTest        | MemoryPackSerializeLogBatch | 44,214.2662 ns | 44,214.2662 ns | 43,329.9809 ns | 45,098.5515 ns | 0.99 | 6,694 B | - | - | - | - | NA |
-| WorkloadTest        | MessagePackSerializeLogBatch | 28,714.9168 ns | 28,714.9168 ns | 28,140.6185 ns | 29,289.2151 ns | 0.64 | 7,180 B | - | - | - | - | NA |
-| WorkloadTest        | ProtobufSerializeLogBatch | 1,172,897.0974 ns | 1,172,897.0974 ns | 1,149,439.1555 ns | 1,196,355.0394 ns | 26.29 | 6,661 B | - | - | - | - | NA |
-| WorkloadTest        | GoogleProtobufSerializeLogBatch | 26,965.1800 ns | 26,965.1800 ns | 26,425.8764 ns | 27,504.4836 ns | 0.60 | 4,116 B | - | - | - | - | NA |
-| WorkloadTest        | JsonSerializeLogBatch | 33,875.3134 ns | 33,875.3134 ns | 33,197.8071 ns | 34,552.8197 ns | 0.76 | 6,920 B | - | - | - | 637832 B | NA |
-| WorkloadTest        | NinoDeserializeLogBatch | 149,492.7172 ns | 149,492.7172 ns | 146,502.8628 ns | 152,482.5715 ns | 1.00 | - | - | - | - | 247218 B | NA |
-| WorkloadTest        | MemoryPackDeserializeLogBatch | 149,128.0549 ns | 149,128.0549 ns | 146,145.4938 ns | 152,110.6160 ns | 1.00 | - | - | - | - | 522446 B | NA |
-| WorkloadTest        | MessagePackDeserializeLogBatch | 1,563,623.7610 ns | 1,563,623.7610 ns | 1,532,351.2858 ns | 1,594,896.2362 ns | 10.46 | - | - | - | - | 40983 B | NA |
-| WorkloadTest        | ProtobufDeserializeLogBatch | 149,505.4272 ns | 149,505.4272 ns | 146,515.3187 ns | 152,495.5357 ns | 1.00 | - | - | - | - | 582799 B | NA |
-| WorkloadTest        | GoogleProtobufDeserializeLogBatch | 78,073.2441 ns | 78,073.2441 ns | 76,511.7792 ns | 79,634.7090 ns | 0.52 | - | - | - | - | 896350 B | NA |
-| WorkloadTest        | JsonDeserializeLogBatch | 84,106.8213 ns | 84,106.8213 ns | 82,424.6849 ns | 85,788.9578 ns | 0.56 | - | - | - | - | 4730 B | NA |
-| WorkloadTest        | NinoSerializeEventStream | 4,396.7026 ns | 4,396.7026 ns | 4,308.7685 ns | 4,484.6366 ns | 1.00 | 130,225 B | - | - | - | - | NA |
-| WorkloadTest        | MemoryPackSerializeEventStream | 4,365.5602 ns | 4,365.5602 ns | 4,278.2490 ns | 4,452.8714 ns | 0.99 | 144,071 B | - | - | - | - | NA |
-| WorkloadTest        | MessagePackSerializeEventStream | 2,218.2295 ns | 2,218.2295 ns | 2,173.8649 ns | 2,262.5940 ns | 0.50 | 111,303 B | - | - | - | - | NA |
-| WorkloadTest        | ProtobufSerializeEventStream | 73,467.7977 ns | 73,467.7977 ns | 71,998.4417 ns | 74,937.1536 ns | 16.71 | 100,399 B | - | - | - | - | NA |
-| WorkloadTest        | GoogleProtobufSerializeEventStream | 60,650.2531 ns | 60,650.2531 ns | 59,437.2481 ns | 61,863.2582 ns | 13.79 | 123,931 B | - | - | - | - | NA |
-| WorkloadTest        | JsonSerializeEventStream | 49,267.5817 ns | 49,267.5817 ns | 48,282.2300 ns | 50,252.9333 ns | 11.21 | 138,592 B | - | - | - | 664696 B | NA |
-| WorkloadTest        | NinoDeserializeEventStream | 11,548.4941 ns | 11,548.4941 ns | 11,317.5242 ns | 11,779.4639 ns | 1.00 | - | - | - | - | 869023 B | NA |
-| WorkloadTest        | MemoryPackDeserializeEventStream | 7,693.1413 ns | 7,693.1413 ns | 7,539.2784 ns | 7,847.0041 ns | 0.67 | - | - | - | - | 156657 B | NA |
-| WorkloadTest        | MessagePackDeserializeEventStream | 85,230.5504 ns | 85,230.5504 ns | 83,525.9394 ns | 86,935.1614 ns | 7.38 | - | - | - | - | 760234 B | NA |
-| WorkloadTest        | ProtobufDeserializeEventStream | 94,189.1349 ns | 94,189.1349 ns | 92,305.3522 ns | 96,072.9176 ns | 8.16 | - | - | - | - | 523977 B | NA |
-| WorkloadTest        | GoogleProtobufDeserializeEventStream | 11,794.7072 ns | 11,794.7072 ns | 11,558.8131 ns | 12,030.6014 ns | 1.02 | - | - | - | - | 461501 B | NA |
-| WorkloadTest        | JsonDeserializeEventStream | 11,435.8602 ns | 11,435.8602 ns | 11,207.1430 ns | 11,664.5774 ns | 0.99 | - | - | - | - | 48237 B | NA |
+| WorkloadTest        | NinoSerializeMediaContent | 16.0812 ns | 16.0812 ns | 15.7596 ns | 16.4029 ns | 1.00 | 84,159 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeMediaContent | 364.8867 ns | 364.8867 ns | 357.5890 ns | 372.1845 ns | 22.69 | 251,640 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeMediaContent | 8.6590 ns | 8.6590 ns | 8.4858 ns | 8.8322 ns | 0.54 | 260,887 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeMediaContent | 15.9950 ns | 15.9950 ns | 15.6751 ns | 16.3149 ns | 0.99 | 134,694 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeMediaContent | 15.6743 ns | 15.6743 ns | 15.3608 ns | 15.9877 ns | 0.97 | 143,997 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeMediaContent | 15.6142 ns | 15.6142 ns | 15.3019 ns | 15.9265 ns | 0.97 | 257,667 B | - | - | - | 699373 B | NA |
+| WorkloadTest        | NinoDeserializeMediaContent | 56.8359 ns | 56.8359 ns | 55.6992 ns | 57.9726 ns | 1.00 | - | - | - | - | 403978 B | NA |
+| WorkloadTest        | MemoryPackDeserializeMediaContent | 533.8853 ns | 533.8853 ns | 523.2076 ns | 544.5630 ns | 9.39 | - | - | - | - | 327450 B | NA |
+| WorkloadTest        | MessagePackDeserializeMediaContent | 57.9222 ns | 57.9222 ns | 56.7638 ns | 59.0806 ns | 1.02 | - | - | - | - | 206143 B | NA |
+| WorkloadTest        | ProtobufDeserializeMediaContent | 57.9941 ns | 57.9941 ns | 56.8342 ns | 59.1540 ns | 1.02 | - | - | - | - | 109578 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeMediaContent | 57.1270 ns | 57.1270 ns | 55.9845 ns | 58.2696 ns | 1.01 | - | - | - | - | 225191 B | NA |
+| WorkloadTest        | JsonDeserializeMediaContent | 57.5390 ns | 57.5390 ns | 56.3882 ns | 58.6898 ns | 1.01 | - | - | - | - | 853490 B | NA |
+| WorkloadTest        | NinoSerializeStackOverflowPage | 10,504.2076 ns | 10,504.2076 ns | 10,294.1234 ns | 10,714.2917 ns | 1.00 | 164,683 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeStackOverflowPage | 7,574.9283 ns | 7,574.9283 ns | 7,423.4298 ns | 7,726.4269 ns | 0.72 | 133,342 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeStackOverflowPage | 7,204.8949 ns | 7,204.8949 ns | 7,060.7970 ns | 7,348.9928 ns | 0.69 | 188,269 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeStackOverflowPage | 44,448.9117 ns | 44,448.9117 ns | 43,559.9335 ns | 45,337.8900 ns | 4.23 | 87,149 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeStackOverflowPage | 10,356.5778 ns | 10,356.5778 ns | 10,149.4463 ns | 10,563.7094 ns | 0.99 | 158,247 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeStackOverflowPage | 10,758.8873 ns | 10,758.8873 ns | 10,543.7096 ns | 10,974.0651 ns | 1.02 | 67,115 B | - | - | - | 275125 B | NA |
+| WorkloadTest        | NinoDeserializeStackOverflowPage | 25,390.8317 ns | 25,390.8317 ns | 24,883.0151 ns | 25,898.6483 ns | 1.00 | - | - | - | - | 495476 B | NA |
+| WorkloadTest        | MemoryPackDeserializeStackOverflowPage | 448,583.7986 ns | 448,583.7986 ns | 439,612.1227 ns | 457,555.4746 ns | 17.67 | - | - | - | - | 228393 B | NA |
+| WorkloadTest        | MessagePackDeserializeStackOverflowPage | 149,428.4356 ns | 149,428.4356 ns | 146,439.8669 ns | 152,417.0043 ns | 5.89 | - | - | - | - | 887286 B | NA |
+| WorkloadTest        | ProtobufDeserializeStackOverflowPage | 22,155.7639 ns | 22,155.7639 ns | 21,712.6487 ns | 22,598.8792 ns | 0.87 | - | - | - | - | 336522 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeStackOverflowPage | 22,993.8597 ns | 22,993.8597 ns | 22,533.9825 ns | 23,453.7369 ns | 0.91 | - | - | - | - | 395343 B | NA |
+| WorkloadTest        | JsonDeserializeStackOverflowPage | 26,042.4342 ns | 26,042.4342 ns | 25,521.5855 ns | 26,563.2829 ns | 1.03 | - | - | - | - | 386451 B | NA |
+| WorkloadTest        | NinoSerializeRpcCall | 150.1259 ns | 150.1259 ns | 147.1234 ns | 153.1284 ns | 1.00 | 31,682 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeRpcCall | 3,505.6520 ns | 3,505.6520 ns | 3,435.5390 ns | 3,575.7651 ns | 23.35 | 63,296 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeRpcCall | 151.4857 ns | 151.4857 ns | 148.4560 ns | 154.5155 ns | 1.01 | 59,887 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeRpcCall | 1,880.3278 ns | 1,880.3278 ns | 1,842.7213 ns | 1,917.9344 ns | 12.53 | 43,539 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeRpcCall | 84.8221 ns | 84.8221 ns | 83.1256 ns | 86.5185 ns | 0.57 | 40,201 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeRpcCall | 2,125.9273 ns | 2,125.9273 ns | 2,083.4087 ns | 2,168.4458 ns | 14.16 | 60,731 B | - | - | - | 254023 B | NA |
+| WorkloadTest        | NinoDeserializeRpcCall | 368.9199 ns | 368.9199 ns | 361.5415 ns | 376.2983 ns | 1.00 | - | - | - | - | 526706 B | NA |
+| WorkloadTest        | MemoryPackDeserializeRpcCall | 1,552.0193 ns | 1,552.0193 ns | 1,520.9789 ns | 1,583.0596 ns | 4.21 | - | - | - | - | 692518 B | NA |
+| WorkloadTest        | MessagePackDeserializeRpcCall | 366.0999 ns | 366.0999 ns | 358.7779 ns | 373.4219 ns | 0.99 | - | - | - | - | 618769 B | NA |
+| WorkloadTest        | ProtobufDeserializeRpcCall | 291.0983 ns | 291.0983 ns | 285.2764 ns | 296.9203 ns | 0.79 | - | - | - | - | 86091 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeRpcCall | 307.5899 ns | 307.5899 ns | 301.4381 ns | 313.7417 ns | 0.83 | - | - | - | - | 610309 B | NA |
+| WorkloadTest        | JsonDeserializeRpcCall | 198.3710 ns | 198.3710 ns | 194.4035 ns | 202.3384 ns | 0.54 | - | - | - | - | 350804 B | NA |
+| WorkloadTest        | NinoSerializeProfileCache | 855.4190 ns | 855.4190 ns | 838.3106 ns | 872.5274 ns | 1.00 | 126,157 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeProfileCache | 1,618.7634 ns | 1,618.7634 ns | 1,586.3881 ns | 1,651.1386 ns | 1.89 | 91,978 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeProfileCache | 846.6044 ns | 846.6044 ns | 829.6723 ns | 863.5365 ns | 0.99 | 93,851 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeProfileCache | 701.9967 ns | 701.9967 ns | 687.9567 ns | 716.0366 ns | 0.82 | 124,678 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeProfileCache | 5,724.1509 ns | 5,724.1509 ns | 5,609.6678 ns | 5,838.6339 ns | 6.69 | 106,741 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeProfileCache | 629.0838 ns | 629.0838 ns | 616.5021 ns | 641.6655 ns | 0.74 | 67,342 B | - | - | - | 89466 B | NA |
+| WorkloadTest        | NinoDeserializeProfileCache | 1,711.3751 ns | 1,711.3751 ns | 1,677.1476 ns | 1,745.6026 ns | 1.00 | - | - | - | - | 229928 B | NA |
+| WorkloadTest        | MemoryPackDeserializeProfileCache | 1,196.1763 ns | 1,196.1763 ns | 1,172.2528 ns | 1,220.0998 ns | 0.70 | - | - | - | - | 720047 B | NA |
+| WorkloadTest        | MessagePackDeserializeProfileCache | 1,006.3735 ns | 1,006.3735 ns | 986.2460 ns | 1,026.5009 ns | 0.59 | - | - | - | - | 391615 B | NA |
+| WorkloadTest        | ProtobufDeserializeProfileCache | 1,528.9754 ns | 1,528.9754 ns | 1,498.3959 ns | 1,559.5549 ns | 0.89 | - | - | - | - | 497457 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeProfileCache | 29,533.4448 ns | 29,533.4448 ns | 28,942.7759 ns | 30,124.1137 ns | 17.26 | - | - | - | - | 11480 B | NA |
+| WorkloadTest        | JsonDeserializeProfileCache | 1,755.1885 ns | 1,755.1885 ns | 1,720.0848 ns | 1,790.2923 ns | 1.03 | - | - | - | - | 671119 B | NA |
+| WorkloadTest        | NinoSerializeEventStream | 44,606.8469 ns | 44,606.8469 ns | 43,714.7100 ns | 45,498.9838 ns | 1.00 | 3,714 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeEventStream | 44,214.2662 ns | 44,214.2662 ns | 43,329.9809 ns | 45,098.5515 ns | 0.99 | 6,694 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeEventStream | 28,714.9168 ns | 28,714.9168 ns | 28,140.6185 ns | 29,289.2151 ns | 0.64 | 7,180 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeEventStream | 1,172,897.0974 ns | 1,172,897.0974 ns | 1,149,439.1555 ns | 1,196,355.0394 ns | 26.29 | 6,661 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeEventStream | 26,965.1800 ns | 26,965.1800 ns | 26,425.8764 ns | 27,504.4836 ns | 0.60 | 4,116 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeEventStream | 33,875.3134 ns | 33,875.3134 ns | 33,197.8071 ns | 34,552.8197 ns | 0.76 | 6,920 B | - | - | - | 637832 B | NA |
+| WorkloadTest        | NinoDeserializeEventStream | 149,492.7172 ns | 149,492.7172 ns | 146,502.8628 ns | 152,482.5715 ns | 1.00 | - | - | - | - | 247218 B | NA |
+| WorkloadTest        | MemoryPackDeserializeEventStream | 149,128.0549 ns | 149,128.0549 ns | 146,145.4938 ns | 152,110.6160 ns | 1.00 | - | - | - | - | 522446 B | NA |
+| WorkloadTest        | MessagePackDeserializeEventStream | 1,563,623.7610 ns | 1,563,623.7610 ns | 1,532,351.2858 ns | 1,594,896.2362 ns | 10.46 | - | - | - | - | 40983 B | NA |
+| WorkloadTest        | ProtobufDeserializeEventStream | 149,505.4272 ns | 149,505.4272 ns | 146,515.3187 ns | 152,495.5357 ns | 1.00 | - | - | - | - | 582799 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeEventStream | 78,073.2441 ns | 78,073.2441 ns | 76,511.7792 ns | 79,634.7090 ns | 0.52 | - | - | - | - | 896350 B | NA |
+| WorkloadTest        | JsonDeserializeEventStream | 84,106.8213 ns | 84,106.8213 ns | 82,424.6849 ns | 85,788.9578 ns | 0.56 | - | - | - | - | 4730 B | NA |
+| WorkloadTest        | NinoSerializeLogBatch | 4,396.7026 ns | 4,396.7026 ns | 4,308.7685 ns | 4,484.6366 ns | 1.00 | 130,225 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeLogBatch | 4,365.5602 ns | 4,365.5602 ns | 4,278.2490 ns | 4,452.8714 ns | 0.99 | 144,071 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeLogBatch | 2,218.2295 ns | 2,218.2295 ns | 2,173.8649 ns | 2,262.5940 ns | 0.50 | 111,303 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeLogBatch | 73,467.7977 ns | 73,467.7977 ns | 71,998.4417 ns | 74,937.1536 ns | 16.71 | 100,399 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeLogBatch | 60,650.2531 ns | 60,650.2531 ns | 59,437.2481 ns | 61,863.2582 ns | 13.79 | 123,931 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeLogBatch | 49,267.5817 ns | 49,267.5817 ns | 48,282.2300 ns | 50,252.9333 ns | 11.21 | 138,592 B | - | - | - | 664696 B | NA |
+| WorkloadTest        | NinoDeserializeLogBatch | 11,548.4941 ns | 11,548.4941 ns | 11,317.5242 ns | 11,779.4639 ns | 1.00 | - | - | - | - | 869023 B | NA |
+| WorkloadTest        | MemoryPackDeserializeLogBatch | 7,693.1413 ns | 7,693.1413 ns | 7,539.2784 ns | 7,847.0041 ns | 0.67 | - | - | - | - | 156657 B | NA |
+| WorkloadTest        | MessagePackDeserializeLogBatch | 85,230.5504 ns | 85,230.5504 ns | 83,525.9394 ns | 86,935.1614 ns | 7.38 | - | - | - | - | 760234 B | NA |
+| WorkloadTest        | ProtobufDeserializeLogBatch | 94,189.1349 ns | 94,189.1349 ns | 92,305.3522 ns | 96,072.9176 ns | 8.16 | - | - | - | - | 523977 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeLogBatch | 11,794.7072 ns | 11,794.7072 ns | 11,558.8131 ns | 12,030.6014 ns | 1.02 | - | - | - | - | 461501 B | NA |
+| WorkloadTest        | JsonDeserializeLogBatch | 11,435.8602 ns | 11,435.8602 ns | 11,207.1430 ns | 11,664.5774 ns | 0.99 | - | - | - | - | 48237 B | NA |
+| WorkloadTest        | NinoSerializeStateSnapshot | 16.0812 ns | 16.0812 ns | 15.7596 ns | 16.4029 ns | 1.00 | 84,159 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeStateSnapshot | 364.8867 ns | 364.8867 ns | 357.5890 ns | 372.1845 ns | 22.69 | 251,640 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeStateSnapshot | 8.6590 ns | 8.6590 ns | 8.4858 ns | 8.8322 ns | 0.54 | 260,887 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeStateSnapshot | 15.9950 ns | 15.9950 ns | 15.6751 ns | 16.3149 ns | 0.99 | 134,694 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeStateSnapshot | 15.6743 ns | 15.6743 ns | 15.3608 ns | 15.9877 ns | 0.97 | 143,997 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeStateSnapshot | 15.6142 ns | 15.6142 ns | 15.3019 ns | 15.9265 ns | 0.97 | 257,667 B | - | - | - | 699373 B | NA |
+| WorkloadTest        | NinoDeserializeStateSnapshot | 56.8359 ns | 56.8359 ns | 55.6992 ns | 57.9726 ns | 1.00 | - | - | - | - | 403978 B | NA |
+| WorkloadTest        | MemoryPackDeserializeStateSnapshot | 533.8853 ns | 533.8853 ns | 523.2076 ns | 544.5630 ns | 9.39 | - | - | - | - | 327450 B | NA |
+| WorkloadTest        | MessagePackDeserializeStateSnapshot | 57.9222 ns | 57.9222 ns | 56.7638 ns | 59.0806 ns | 1.02 | - | - | - | - | 206143 B | NA |
+| WorkloadTest        | ProtobufDeserializeStateSnapshot | 57.9941 ns | 57.9941 ns | 56.8342 ns | 59.1540 ns | 1.02 | - | - | - | - | 109578 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeStateSnapshot | 57.1270 ns | 57.1270 ns | 55.9845 ns | 58.2696 ns | 1.01 | - | - | - | - | 225191 B | NA |
+| WorkloadTest        | JsonDeserializeStateSnapshot | 57.5390 ns | 57.5390 ns | 56.3882 ns | 58.6898 ns | 1.01 | - | - | - | - | 853490 B | NA |
+| WorkloadTest        | NinoSerializeLockstepFrames | 10,504.2076 ns | 10,504.2076 ns | 10,294.1234 ns | 10,714.2917 ns | 1.00 | 164,683 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeLockstepFrames | 7,574.9283 ns | 7,574.9283 ns | 7,423.4298 ns | 7,726.4269 ns | 0.72 | 133,342 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeLockstepFrames | 7,204.8949 ns | 7,204.8949 ns | 7,060.7970 ns | 7,348.9928 ns | 0.69 | 188,269 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeLockstepFrames | 44,448.9117 ns | 44,448.9117 ns | 43,559.9335 ns | 45,337.8900 ns | 4.23 | 87,149 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeLockstepFrames | 10,356.5778 ns | 10,356.5778 ns | 10,149.4463 ns | 10,563.7094 ns | 0.99 | 158,247 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeLockstepFrames | 10,758.8873 ns | 10,758.8873 ns | 10,543.7096 ns | 10,974.0651 ns | 1.02 | 67,115 B | - | - | - | 275125 B | NA |
+| WorkloadTest        | NinoDeserializeLockstepFrames | 25,390.8317 ns | 25,390.8317 ns | 24,883.0151 ns | 25,898.6483 ns | 1.00 | - | - | - | - | 495476 B | NA |
+| WorkloadTest        | MemoryPackDeserializeLockstepFrames | 448,583.7986 ns | 448,583.7986 ns | 439,612.1227 ns | 457,555.4746 ns | 17.67 | - | - | - | - | 228393 B | NA |
+| WorkloadTest        | MessagePackDeserializeLockstepFrames | 149,428.4356 ns | 149,428.4356 ns | 146,439.8669 ns | 152,417.0043 ns | 5.89 | - | - | - | - | 887286 B | NA |
+| WorkloadTest        | ProtobufDeserializeLockstepFrames | 22,155.7639 ns | 22,155.7639 ns | 21,712.6487 ns | 22,598.8792 ns | 0.87 | - | - | - | - | 336522 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeLockstepFrames | 22,993.8597 ns | 22,993.8597 ns | 22,533.9825 ns | 23,453.7369 ns | 0.91 | - | - | - | - | 395343 B | NA |
+| WorkloadTest        | JsonDeserializeLockstepFrames | 26,042.4342 ns | 26,042.4342 ns | 25,521.5855 ns | 26,563.2829 ns | 1.03 | - | - | - | - | 386451 B | NA |
+| WorkloadTest        | NinoSerializeAoiUpdate | 150.1259 ns | 150.1259 ns | 147.1234 ns | 153.1284 ns | 1.00 | 31,682 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeAoiUpdate | 3,505.6520 ns | 3,505.6520 ns | 3,435.5390 ns | 3,575.7651 ns | 23.35 | 63,296 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeAoiUpdate | 151.4857 ns | 151.4857 ns | 148.4560 ns | 154.5155 ns | 1.01 | 59,887 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeAoiUpdate | 1,880.3278 ns | 1,880.3278 ns | 1,842.7213 ns | 1,917.9344 ns | 12.53 | 43,539 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeAoiUpdate | 84.8221 ns | 84.8221 ns | 83.1256 ns | 86.5185 ns | 0.57 | 40,201 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeAoiUpdate | 2,125.9273 ns | 2,125.9273 ns | 2,083.4087 ns | 2,168.4458 ns | 14.16 | 60,731 B | - | - | - | 254023 B | NA |
+| WorkloadTest        | NinoDeserializeAoiUpdate | 368.9199 ns | 368.9199 ns | 361.5415 ns | 376.2983 ns | 1.00 | - | - | - | - | 526706 B | NA |
+| WorkloadTest        | MemoryPackDeserializeAoiUpdate | 1,552.0193 ns | 1,552.0193 ns | 1,520.9789 ns | 1,583.0596 ns | 4.21 | - | - | - | - | 692518 B | NA |
+| WorkloadTest        | MessagePackDeserializeAoiUpdate | 366.0999 ns | 366.0999 ns | 358.7779 ns | 373.4219 ns | 0.99 | - | - | - | - | 618769 B | NA |
+| WorkloadTest        | ProtobufDeserializeAoiUpdate | 291.0983 ns | 291.0983 ns | 285.2764 ns | 296.9203 ns | 0.79 | - | - | - | - | 86091 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeAoiUpdate | 307.5899 ns | 307.5899 ns | 301.4381 ns | 313.7417 ns | 0.83 | - | - | - | - | 610309 B | NA |
+| WorkloadTest        | JsonDeserializeAoiUpdate | 198.3710 ns | 198.3710 ns | 194.4035 ns | 202.3384 ns | 0.54 | - | - | - | - | 350804 B | NA |
+| WorkloadTest        | NinoSerializeWorldRegion | 855.4190 ns | 855.4190 ns | 838.3106 ns | 872.5274 ns | 1.00 | 126,157 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeWorldRegion | 1,618.7634 ns | 1,618.7634 ns | 1,586.3881 ns | 1,651.1386 ns | 1.89 | 91,978 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeWorldRegion | 846.6044 ns | 846.6044 ns | 829.6723 ns | 863.5365 ns | 0.99 | 93,851 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeWorldRegion | 701.9967 ns | 701.9967 ns | 687.9567 ns | 716.0366 ns | 0.82 | 124,678 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeWorldRegion | 5,724.1509 ns | 5,724.1509 ns | 5,609.6678 ns | 5,838.6339 ns | 6.69 | 106,741 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeWorldRegion | 629.0838 ns | 629.0838 ns | 616.5021 ns | 641.6655 ns | 0.74 | 67,342 B | - | - | - | 89466 B | NA |
+| WorkloadTest        | NinoDeserializeWorldRegion | 1,711.3751 ns | 1,711.3751 ns | 1,677.1476 ns | 1,745.6026 ns | 1.00 | - | - | - | - | 229928 B | NA |
+| WorkloadTest        | MemoryPackDeserializeWorldRegion | 1,196.1763 ns | 1,196.1763 ns | 1,172.2528 ns | 1,220.0998 ns | 0.70 | - | - | - | - | 720047 B | NA |
+| WorkloadTest        | MessagePackDeserializeWorldRegion | 1,006.3735 ns | 1,006.3735 ns | 986.2460 ns | 1,026.5009 ns | 0.59 | - | - | - | - | 391615 B | NA |
+| WorkloadTest        | ProtobufDeserializeWorldRegion | 1,528.9754 ns | 1,528.9754 ns | 1,498.3959 ns | 1,559.5549 ns | 0.89 | - | - | - | - | 497457 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeWorldRegion | 29,533.4448 ns | 29,533.4448 ns | 28,942.7759 ns | 30,124.1137 ns | 17.26 | - | - | - | - | 11480 B | NA |
+| WorkloadTest        | JsonDeserializeWorldRegion | 1,755.1885 ns | 1,755.1885 ns | 1,720.0848 ns | 1,790.2923 ns | 1.03 | - | - | - | - | 671119 B | NA |
+| WorkloadTest        | NinoSerializeCardBattleLog | 44,606.8469 ns | 44,606.8469 ns | 43,714.7100 ns | 45,498.9838 ns | 1.00 | 3,714 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeCardBattleLog | 44,214.2662 ns | 44,214.2662 ns | 43,329.9809 ns | 45,098.5515 ns | 0.99 | 6,694 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeCardBattleLog | 28,714.9168 ns | 28,714.9168 ns | 28,140.6185 ns | 29,289.2151 ns | 0.64 | 7,180 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeCardBattleLog | 1,172,897.0974 ns | 1,172,897.0974 ns | 1,149,439.1555 ns | 1,196,355.0394 ns | 26.29 | 6,661 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeCardBattleLog | 26,965.1800 ns | 26,965.1800 ns | 26,425.8764 ns | 27,504.4836 ns | 0.60 | 4,116 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeCardBattleLog | 33,875.3134 ns | 33,875.3134 ns | 33,197.8071 ns | 34,552.8197 ns | 0.76 | 6,920 B | - | - | - | 637832 B | NA |
+| WorkloadTest        | NinoDeserializeCardBattleLog | 149,492.7172 ns | 149,492.7172 ns | 146,502.8628 ns | 152,482.5715 ns | 1.00 | - | - | - | - | 247218 B | NA |
+| WorkloadTest        | MemoryPackDeserializeCardBattleLog | 149,128.0549 ns | 149,128.0549 ns | 146,145.4938 ns | 152,110.6160 ns | 1.00 | - | - | - | - | 522446 B | NA |
+| WorkloadTest        | MessagePackDeserializeCardBattleLog | 1,563,623.7610 ns | 1,563,623.7610 ns | 1,532,351.2858 ns | 1,594,896.2362 ns | 10.46 | - | - | - | - | 40983 B | NA |
+| WorkloadTest        | ProtobufDeserializeCardBattleLog | 149,505.4272 ns | 149,505.4272 ns | 146,515.3187 ns | 152,495.5357 ns | 1.00 | - | - | - | - | 582799 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeCardBattleLog | 78,073.2441 ns | 78,073.2441 ns | 76,511.7792 ns | 79,634.7090 ns | 0.52 | - | - | - | - | 896350 B | NA |
+| WorkloadTest        | JsonDeserializeCardBattleLog | 84,106.8213 ns | 84,106.8213 ns | 82,424.6849 ns | 85,788.9578 ns | 0.56 | - | - | - | - | 4730 B | NA |
+| WorkloadTest        | NinoSerializeIdleSave | 4,396.7026 ns | 4,396.7026 ns | 4,308.7685 ns | 4,484.6366 ns | 1.00 | 130,225 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeIdleSave | 4,365.5602 ns | 4,365.5602 ns | 4,278.2490 ns | 4,452.8714 ns | 0.99 | 144,071 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeIdleSave | 2,218.2295 ns | 2,218.2295 ns | 2,173.8649 ns | 2,262.5940 ns | 0.50 | 111,303 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeIdleSave | 73,467.7977 ns | 73,467.7977 ns | 71,998.4417 ns | 74,937.1536 ns | 16.71 | 100,399 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeIdleSave | 60,650.2531 ns | 60,650.2531 ns | 59,437.2481 ns | 61,863.2582 ns | 13.79 | 123,931 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeIdleSave | 49,267.5817 ns | 49,267.5817 ns | 48,282.2300 ns | 50,252.9333 ns | 11.21 | 138,592 B | - | - | - | 664696 B | NA |
+| WorkloadTest        | NinoDeserializeIdleSave | 11,548.4941 ns | 11,548.4941 ns | 11,317.5242 ns | 11,779.4639 ns | 1.00 | - | - | - | - | 869023 B | NA |
+| WorkloadTest        | MemoryPackDeserializeIdleSave | 7,693.1413 ns | 7,693.1413 ns | 7,539.2784 ns | 7,847.0041 ns | 0.67 | - | - | - | - | 156657 B | NA |
+| WorkloadTest        | MessagePackDeserializeIdleSave | 85,230.5504 ns | 85,230.5504 ns | 83,525.9394 ns | 86,935.1614 ns | 7.38 | - | - | - | - | 760234 B | NA |
+| WorkloadTest        | ProtobufDeserializeIdleSave | 94,189.1349 ns | 94,189.1349 ns | 92,305.3522 ns | 96,072.9176 ns | 8.16 | - | - | - | - | 523977 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeIdleSave | 11,794.7072 ns | 11,794.7072 ns | 11,558.8131 ns | 12,030.6014 ns | 1.02 | - | - | - | - | 461501 B | NA |
+| WorkloadTest        | JsonDeserializeIdleSave | 11,435.8602 ns | 11,435.8602 ns | 11,207.1430 ns | 11,664.5774 ns | 0.99 | - | - | - | - | 48237 B | NA |
 
 </details>
 
@@ -669,78 +741,150 @@ IterationCount=15  LaunchCount=1  WarmupCount=5
 | SimpleTest          | MemoryPackSerializeVectors                  |     4,326.0336 ns |     4,331.5631 ns |     4,101.5232 ns |     4,553.1488 ns |   1.03 | 160,004 B |       - |       - |       - |         - |          NA |
 | SimpleTest          | MessagePackSerializeVectors                 |   126,388.6037 ns |   126,359.8853 ns |   118,694.3779 ns |   134,574.5696 ns |  30.23 | 210,003 B |       - |       - |       - |         - |          NA |
 | SimpleTest          | ProtobufSerializeVectors                        |    10,045.9099 ns |     4,210.3811 ns |     3,919.2227 ns |     4,510.8003 ns |   1.00 | 160,004 B |       - |       - |       - |         - |          NA |
-| WorkloadTest        | NinoSerializeRpcRequest | 19.5554 ns | 19.5554 ns | 19.1643 ns | 19.9465 ns | 1.00 | 97,548 B | - | - | - | - | NA |
-| WorkloadTest        | MemoryPackSerializeRpcRequest | 13.9897 ns | 13.9897 ns | 13.7099 ns | 14.2695 ns | 0.72 | 77,959 B | - | - | - | - | NA |
-| WorkloadTest        | MessagePackSerializeRpcRequest | 19.5252 ns | 19.5252 ns | 19.1347 ns | 19.9157 ns | 1.00 | 99,570 B | - | - | - | - | NA |
-| WorkloadTest        | ProtobufSerializeRpcRequest | 132.0573 ns | 132.0573 ns | 129.4162 ns | 134.6985 ns | 6.75 | 80,068 B | - | - | - | - | NA |
-| WorkloadTest        | GoogleProtobufSerializeRpcRequest | 19.5210 ns | 19.5210 ns | 19.1306 ns | 19.9114 ns | 1.00 | 66,663 B | - | - | - | - | NA |
-| WorkloadTest        | JsonSerializeRpcRequest | 10.7894 ns | 10.7894 ns | 10.5736 ns | 11.0052 ns | 0.55 | 86,225 B | - | - | - | 790985 B | NA |
-| WorkloadTest        | NinoDeserializeRpcRequest | 49.7018 ns | 49.7018 ns | 48.7078 ns | 50.6959 ns | 1.00 | - | - | - | - | 488644 B | NA |
-| WorkloadTest        | MemoryPackDeserializeRpcRequest | 40.8870 ns | 40.8870 ns | 40.0693 ns | 41.7048 ns | 0.82 | - | - | - | - | 174811 B | NA |
-| WorkloadTest        | MessagePackDeserializeRpcRequest | 34.5583 ns | 34.5583 ns | 33.8671 ns | 35.2495 ns | 0.70 | - | - | - | - | 730726 B | NA |
-| WorkloadTest        | ProtobufDeserializeRpcRequest | 104.5592 ns | 104.5592 ns | 102.4681 ns | 106.6504 ns | 2.10 | - | - | - | - | 282603 B | NA |
-| WorkloadTest        | GoogleProtobufDeserializeRpcRequest | 35.3518 ns | 35.3518 ns | 34.6448 ns | 36.0588 ns | 0.71 | - | - | - | - | 415577 B | NA |
-| WorkloadTest        | JsonDeserializeRpcRequest | 149.8676 ns | 149.8676 ns | 146.8703 ns | 152.8650 ns | 3.02 | - | - | - | - | 570658 B | NA |
-| WorkloadTest        | NinoSerializeOrdersPage | 10,039.8567 ns | 10,039.8567 ns | 9,839.0595 ns | 10,240.6538 ns | 1.00 | 91,885 B | - | - | - | - | NA |
-| WorkloadTest        | MemoryPackSerializeOrdersPage | 10,039.7116 ns | 10,039.7116 ns | 9,838.9174 ns | 10,240.5058 ns | 1.00 | 109,086 B | - | - | - | - | NA |
-| WorkloadTest        | MessagePackSerializeOrdersPage | 10,222.5161 ns | 10,222.5161 ns | 10,018.0658 ns | 10,426.9664 ns | 1.02 | 129,063 B | - | - | - | - | NA |
-| WorkloadTest        | ProtobufSerializeOrdersPage | 9,864.3459 ns | 9,864.3459 ns | 9,667.0590 ns | 10,061.6329 ns | 0.98 | 61,776 B | - | - | - | - | NA |
-| WorkloadTest        | GoogleProtobufSerializeOrdersPage | 7,986.1047 ns | 7,986.1047 ns | 7,826.3827 ns | 8,145.8268 ns | 0.80 | 80,998 B | - | - | - | - | NA |
-| WorkloadTest        | JsonSerializeOrdersPage | 27,964.8311 ns | 27,964.8311 ns | 27,405.5345 ns | 28,524.1277 ns | 2.79 | 54,017 B | - | - | - | 659019 B | NA |
-| WorkloadTest        | NinoDeserializeOrdersPage | 25,281.0227 ns | 25,281.0227 ns | 24,775.4022 ns | 25,786.6431 ns | 1.00 | - | - | - | - | 23375 B | NA |
-| WorkloadTest        | MemoryPackDeserializeOrdersPage | 25,760.9411 ns | 25,760.9411 ns | 25,245.7223 ns | 26,276.1599 ns | 1.02 | - | - | - | - | 111179 B | NA |
-| WorkloadTest        | MessagePackDeserializeOrdersPage | 22,246.5613 ns | 22,246.5613 ns | 21,801.6300 ns | 22,691.4925 ns | 0.88 | - | - | - | - | 548479 B | NA |
-| WorkloadTest        | ProtobufDeserializeOrdersPage | 494,498.2957 ns | 494,498.2957 ns | 484,608.3298 ns | 504,388.2616 ns | 19.56 | - | - | - | - | 190803 B | NA |
-| WorkloadTest        | GoogleProtobufDeserializeOrdersPage | 25,350.7165 ns | 25,350.7165 ns | 24,843.7022 ns | 25,857.7308 ns | 1.00 | - | - | - | - | 295452 B | NA |
-| WorkloadTest        | JsonDeserializeOrdersPage | 681,121.1234 ns | 681,121.1234 ns | 667,498.7009 ns | 694,743.5459 ns | 26.94 | - | - | - | - | 602985 B | NA |
-| WorkloadTest        | NinoSerializeUserProfile | 155.5564 ns | 155.5564 ns | 152.4453 ns | 158.6676 ns | 1.00 | 223,155 B | - | - | - | - | NA |
-| WorkloadTest        | MemoryPackSerializeUserProfile | 3,914.6342 ns | 3,914.6342 ns | 3,836.3415 ns | 3,992.9269 ns | 25.17 | 175,479 B | - | - | - | - | NA |
-| WorkloadTest        | MessagePackSerializeUserProfile | 149.1205 ns | 149.1205 ns | 146.1381 ns | 152.1029 ns | 0.96 | 146,777 B | - | - | - | - | NA |
-| WorkloadTest        | ProtobufSerializeUserProfile | 158.0797 ns | 158.0797 ns | 154.9181 ns | 161.2413 ns | 1.02 | 174,265 B | - | - | - | - | NA |
-| WorkloadTest        | GoogleProtobufSerializeUserProfile | 148.9742 ns | 148.9742 ns | 145.9947 ns | 151.9537 ns | 0.96 | 181,890 B | - | - | - | - | NA |
-| WorkloadTest        | JsonSerializeUserProfile | 133.7152 ns | 133.7152 ns | 131.0409 ns | 136.3895 ns | 0.86 | 150,821 B | - | - | - | 322182 B | NA |
-| WorkloadTest        | NinoDeserializeUserProfile | 400.6301 ns | 400.6301 ns | 392.6175 ns | 408.6428 ns | 1.00 | - | - | - | - | 24303 B | NA |
-| WorkloadTest        | MemoryPackDeserializeUserProfile | 312.5215 ns | 312.5215 ns | 306.2710 ns | 318.7719 ns | 0.78 | - | - | - | - | 638990 B | NA |
-| WorkloadTest        | MessagePackDeserializeUserProfile | 405.6348 ns | 405.6348 ns | 397.5221 ns | 413.7475 ns | 1.01 | - | - | - | - | 231700 B | NA |
-| WorkloadTest        | ProtobufDeserializeUserProfile | 409.6601 ns | 409.6601 ns | 401.4669 ns | 417.8533 ns | 1.02 | - | - | - | - | 160663 B | NA |
-| WorkloadTest        | GoogleProtobufDeserializeUserProfile | 400.6276 ns | 400.6276 ns | 392.6150 ns | 408.6401 ns | 1.00 | - | - | - | - | 169879 B | NA |
-| WorkloadTest        | JsonDeserializeUserProfile | 371.1139 ns | 371.1139 ns | 363.6916 ns | 378.5362 ns | 0.93 | - | - | - | - | 395855 B | NA |
-| WorkloadTest        | NinoSerializeGameSnapshot | 733.9254 ns | 733.9254 ns | 719.2469 ns | 748.6039 ns | 1.00 | 391,392 B | - | - | - | - | NA |
-| WorkloadTest        | MemoryPackSerializeGameSnapshot | 518.8371 ns | 518.8371 ns | 508.4604 ns | 529.2139 ns | 0.71 | 146,701 B | - | - | - | - | NA |
-| WorkloadTest        | MessagePackSerializeGameSnapshot | 12,216.2007 ns | 12,216.2007 ns | 11,971.8766 ns | 12,460.5247 ns | 16.65 | 364,521 B | - | - | - | - | NA |
-| WorkloadTest        | ProtobufSerializeGameSnapshot | 11,934.8724 ns | 11,934.8724 ns | 11,696.1749 ns | 12,173.5698 ns | 16.26 | 433,672 B | - | - | - | - | NA |
-| WorkloadTest        | GoogleProtobufSerializeGameSnapshot | 425.4883 ns | 425.4883 ns | 416.9785 ns | 433.9980 ns | 0.58 | 425,400 B | - | - | - | - | NA |
-| WorkloadTest        | JsonSerializeGameSnapshot | 477.8245 ns | 477.8245 ns | 468.2680 ns | 487.3809 ns | 0.65 | 271,128 B | - | - | - | 219729 B | NA |
-| WorkloadTest        | NinoDeserializeGameSnapshot | 1,811.9927 ns | 1,811.9927 ns | 1,775.7529 ns | 1,848.2326 ns | 1.00 | - | - | - | - | 834789 B | NA |
-| WorkloadTest        | MemoryPackDeserializeGameSnapshot | 1,136.1138 ns | 1,136.1138 ns | 1,113.3916 ns | 1,158.8361 ns | 0.63 | - | - | - | - | 718589 B | NA |
-| WorkloadTest        | MessagePackDeserializeGameSnapshot | 1,862.6581 ns | 1,862.6581 ns | 1,825.4049 ns | 1,899.9112 ns | 1.03 | - | - | - | - | 365239 B | NA |
-| WorkloadTest        | ProtobufDeserializeGameSnapshot | 1,073.1145 ns | 1,073.1145 ns | 1,051.6522 ns | 1,094.5768 ns | 0.59 | - | - | - | - | 729835 B | NA |
-| WorkloadTest        | GoogleProtobufDeserializeGameSnapshot | 1,857.8210 ns | 1,857.8210 ns | 1,820.6646 ns | 1,894.9774 ns | 1.03 | - | - | - | - | 859354 B | NA |
-| WorkloadTest        | JsonDeserializeGameSnapshot | 1,143.3760 ns | 1,143.3760 ns | 1,120.5085 ns | 1,166.2435 ns | 0.63 | - | - | - | - | 95281 B | NA |
-| WorkloadTest        | NinoSerializeLogBatch | 51,558.7343 ns | 51,558.7343 ns | 50,527.5596 ns | 52,589.9090 ns | 1.00 | 104,235 B | - | - | - | - | NA |
-| WorkloadTest        | MemoryPackSerializeLogBatch | 51,957.7167 ns | 51,957.7167 ns | 50,918.5623 ns | 52,996.8710 ns | 1.01 | 181,200 B | - | - | - | - | NA |
-| WorkloadTest        | MessagePackSerializeLogBatch | 30,076.5276 ns | 30,076.5276 ns | 29,474.9970 ns | 30,678.0581 ns | 0.58 | 143,859 B | - | - | - | - | NA |
-| WorkloadTest        | ProtobufSerializeLogBatch | 1,343,964.2894 ns | 1,343,964.2894 ns | 1,317,085.0036 ns | 1,370,843.5752 ns | 26.07 | 142,149 B | - | - | - | - | NA |
-| WorkloadTest        | GoogleProtobufSerializeLogBatch | 876,827.4393 ns | 876,827.4393 ns | 859,290.8905 ns | 894,363.9881 ns | 17.01 | 193,976 B | - | - | - | - | NA |
-| WorkloadTest        | JsonSerializeLogBatch | 476,102.5449 ns | 476,102.5449 ns | 466,580.4940 ns | 485,624.5958 ns | 9.23 | 171,790 B | - | - | - | 563670 B | NA |
-| WorkloadTest        | NinoDeserializeLogBatch | 144,520.9409 ns | 144,520.9409 ns | 141,630.5220 ns | 147,411.3597 ns | 1.00 | - | - | - | - | 205519 B | NA |
-| WorkloadTest        | MemoryPackDeserializeLogBatch | 145,241.2492 ns | 145,241.2492 ns | 142,336.4242 ns | 148,146.0742 ns | 1.00 | - | - | - | - | 370489 B | NA |
-| WorkloadTest        | MessagePackDeserializeLogBatch | 145,394.5067 ns | 145,394.5067 ns | 142,486.6165 ns | 148,302.3968 ns | 1.01 | - | - | - | - | 321243 B | NA |
-| WorkloadTest        | ProtobufDeserializeLogBatch | 3,295,415.7419 ns | 3,295,415.7419 ns | 3,229,507.4271 ns | 3,361,324.0568 ns | 22.80 | - | - | - | - | 435962 B | NA |
-| WorkloadTest        | GoogleProtobufDeserializeLogBatch | 4,219,147.1917 ns | 4,219,147.1917 ns | 4,134,764.2479 ns | 4,303,530.1355 ns | 29.19 | - | - | - | - | 55770 B | NA |
-| WorkloadTest        | JsonDeserializeLogBatch | 2,550,297.7774 ns | 2,550,297.7774 ns | 2,499,291.8218 ns | 2,601,303.7329 ns | 17.65 | - | - | - | - | 889498 B | NA |
-| WorkloadTest        | NinoSerializeEventStream | 5,899.5604 ns | 5,899.5604 ns | 5,781.5692 ns | 6,017.5516 ns | 1.00 | 62,341 B | - | - | - | - | NA |
-| WorkloadTest        | MemoryPackSerializeEventStream | 3,948.9114 ns | 3,948.9114 ns | 3,869.9332 ns | 4,027.8896 ns | 0.67 | 117,595 B | - | - | - | - | NA |
-| WorkloadTest        | MessagePackSerializeEventStream | 5,882.5462 ns | 5,882.5462 ns | 5,764.8953 ns | 6,000.1971 ns | 1.00 | 91,567 B | - | - | - | - | NA |
-| WorkloadTest        | ProtobufSerializeEventStream | 4,329.0772 ns | 4,329.0772 ns | 4,242.4957 ns | 4,415.6588 ns | 0.73 | 106,927 B | - | - | - | - | NA |
-| WorkloadTest        | GoogleProtobufSerializeEventStream | 85,584.2263 ns | 85,584.2263 ns | 83,872.5417 ns | 87,295.9108 ns | 14.51 | 107,154 B | - | - | - | - | NA |
-| WorkloadTest        | JsonSerializeEventStream | 5,829.0746 ns | 5,829.0746 ns | 5,712.4931 ns | 5,945.6561 ns | 0.99 | 72,855 B | - | - | - | 451912 B | NA |
-| WorkloadTest        | NinoDeserializeEventStream | 13,971.9767 ns | 13,971.9767 ns | 13,692.5372 ns | 14,251.4162 ns | 1.00 | - | - | - | - | 855459 B | NA |
-| WorkloadTest        | MemoryPackDeserializeEventStream | 14,305.0928 ns | 14,305.0928 ns | 14,018.9909 ns | 14,591.1946 ns | 1.02 | - | - | - | - | 59038 B | NA |
-| WorkloadTest        | MessagePackDeserializeEventStream | 354,470.5792 ns | 354,470.5792 ns | 347,381.1676 ns | 361,559.9908 ns | 25.37 | - | - | - | - | 810106 B | NA |
-| WorkloadTest        | ProtobufDeserializeEventStream | 7,494.7478 ns | 7,494.7478 ns | 7,344.8528 ns | 7,644.6427 ns | 0.54 | - | - | - | - | 666280 B | NA |
-| WorkloadTest        | GoogleProtobufDeserializeEventStream | 13,832.9891 ns | 13,832.9891 ns | 13,556.3293 ns | 14,109.6489 ns | 0.99 | - | - | - | - | 125969 B | NA |
-| WorkloadTest        | JsonDeserializeEventStream | 14,244.1498 ns | 14,244.1498 ns | 13,959.2668 ns | 14,529.0328 ns | 1.02 | - | - | - | - | 454445 B | NA |
+| WorkloadTest        | NinoSerializeMediaContent | 19.5554 ns | 19.5554 ns | 19.1643 ns | 19.9465 ns | 1.00 | 97,548 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeMediaContent | 13.9897 ns | 13.9897 ns | 13.7099 ns | 14.2695 ns | 0.72 | 77,959 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeMediaContent | 19.5252 ns | 19.5252 ns | 19.1347 ns | 19.9157 ns | 1.00 | 99,570 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeMediaContent | 132.0573 ns | 132.0573 ns | 129.4162 ns | 134.6985 ns | 6.75 | 80,068 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeMediaContent | 19.5210 ns | 19.5210 ns | 19.1306 ns | 19.9114 ns | 1.00 | 66,663 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeMediaContent | 10.7894 ns | 10.7894 ns | 10.5736 ns | 11.0052 ns | 0.55 | 86,225 B | - | - | - | 790985 B | NA |
+| WorkloadTest        | NinoDeserializeMediaContent | 49.7018 ns | 49.7018 ns | 48.7078 ns | 50.6959 ns | 1.00 | - | - | - | - | 488644 B | NA |
+| WorkloadTest        | MemoryPackDeserializeMediaContent | 40.8870 ns | 40.8870 ns | 40.0693 ns | 41.7048 ns | 0.82 | - | - | - | - | 174811 B | NA |
+| WorkloadTest        | MessagePackDeserializeMediaContent | 34.5583 ns | 34.5583 ns | 33.8671 ns | 35.2495 ns | 0.70 | - | - | - | - | 730726 B | NA |
+| WorkloadTest        | ProtobufDeserializeMediaContent | 104.5592 ns | 104.5592 ns | 102.4681 ns | 106.6504 ns | 2.10 | - | - | - | - | 282603 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeMediaContent | 35.3518 ns | 35.3518 ns | 34.6448 ns | 36.0588 ns | 0.71 | - | - | - | - | 415577 B | NA |
+| WorkloadTest        | JsonDeserializeMediaContent | 149.8676 ns | 149.8676 ns | 146.8703 ns | 152.8650 ns | 3.02 | - | - | - | - | 570658 B | NA |
+| WorkloadTest        | NinoSerializeStackOverflowPage | 10,039.8567 ns | 10,039.8567 ns | 9,839.0595 ns | 10,240.6538 ns | 1.00 | 91,885 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeStackOverflowPage | 10,039.7116 ns | 10,039.7116 ns | 9,838.9174 ns | 10,240.5058 ns | 1.00 | 109,086 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeStackOverflowPage | 10,222.5161 ns | 10,222.5161 ns | 10,018.0658 ns | 10,426.9664 ns | 1.02 | 129,063 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeStackOverflowPage | 9,864.3459 ns | 9,864.3459 ns | 9,667.0590 ns | 10,061.6329 ns | 0.98 | 61,776 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeStackOverflowPage | 7,986.1047 ns | 7,986.1047 ns | 7,826.3827 ns | 8,145.8268 ns | 0.80 | 80,998 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeStackOverflowPage | 27,964.8311 ns | 27,964.8311 ns | 27,405.5345 ns | 28,524.1277 ns | 2.79 | 54,017 B | - | - | - | 659019 B | NA |
+| WorkloadTest        | NinoDeserializeStackOverflowPage | 25,281.0227 ns | 25,281.0227 ns | 24,775.4022 ns | 25,786.6431 ns | 1.00 | - | - | - | - | 23375 B | NA |
+| WorkloadTest        | MemoryPackDeserializeStackOverflowPage | 25,760.9411 ns | 25,760.9411 ns | 25,245.7223 ns | 26,276.1599 ns | 1.02 | - | - | - | - | 111179 B | NA |
+| WorkloadTest        | MessagePackDeserializeStackOverflowPage | 22,246.5613 ns | 22,246.5613 ns | 21,801.6300 ns | 22,691.4925 ns | 0.88 | - | - | - | - | 548479 B | NA |
+| WorkloadTest        | ProtobufDeserializeStackOverflowPage | 494,498.2957 ns | 494,498.2957 ns | 484,608.3298 ns | 504,388.2616 ns | 19.56 | - | - | - | - | 190803 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeStackOverflowPage | 25,350.7165 ns | 25,350.7165 ns | 24,843.7022 ns | 25,857.7308 ns | 1.00 | - | - | - | - | 295452 B | NA |
+| WorkloadTest        | JsonDeserializeStackOverflowPage | 681,121.1234 ns | 681,121.1234 ns | 667,498.7009 ns | 694,743.5459 ns | 26.94 | - | - | - | - | 602985 B | NA |
+| WorkloadTest        | NinoSerializeRpcCall | 155.5564 ns | 155.5564 ns | 152.4453 ns | 158.6676 ns | 1.00 | 223,155 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeRpcCall | 3,914.6342 ns | 3,914.6342 ns | 3,836.3415 ns | 3,992.9269 ns | 25.17 | 175,479 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeRpcCall | 149.1205 ns | 149.1205 ns | 146.1381 ns | 152.1029 ns | 0.96 | 146,777 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeRpcCall | 158.0797 ns | 158.0797 ns | 154.9181 ns | 161.2413 ns | 1.02 | 174,265 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeRpcCall | 148.9742 ns | 148.9742 ns | 145.9947 ns | 151.9537 ns | 0.96 | 181,890 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeRpcCall | 133.7152 ns | 133.7152 ns | 131.0409 ns | 136.3895 ns | 0.86 | 150,821 B | - | - | - | 322182 B | NA |
+| WorkloadTest        | NinoDeserializeRpcCall | 400.6301 ns | 400.6301 ns | 392.6175 ns | 408.6428 ns | 1.00 | - | - | - | - | 24303 B | NA |
+| WorkloadTest        | MemoryPackDeserializeRpcCall | 312.5215 ns | 312.5215 ns | 306.2710 ns | 318.7719 ns | 0.78 | - | - | - | - | 638990 B | NA |
+| WorkloadTest        | MessagePackDeserializeRpcCall | 405.6348 ns | 405.6348 ns | 397.5221 ns | 413.7475 ns | 1.01 | - | - | - | - | 231700 B | NA |
+| WorkloadTest        | ProtobufDeserializeRpcCall | 409.6601 ns | 409.6601 ns | 401.4669 ns | 417.8533 ns | 1.02 | - | - | - | - | 160663 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeRpcCall | 400.6276 ns | 400.6276 ns | 392.6150 ns | 408.6401 ns | 1.00 | - | - | - | - | 169879 B | NA |
+| WorkloadTest        | JsonDeserializeRpcCall | 371.1139 ns | 371.1139 ns | 363.6916 ns | 378.5362 ns | 0.93 | - | - | - | - | 395855 B | NA |
+| WorkloadTest        | NinoSerializeProfileCache | 733.9254 ns | 733.9254 ns | 719.2469 ns | 748.6039 ns | 1.00 | 391,392 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeProfileCache | 518.8371 ns | 518.8371 ns | 508.4604 ns | 529.2139 ns | 0.71 | 146,701 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeProfileCache | 12,216.2007 ns | 12,216.2007 ns | 11,971.8766 ns | 12,460.5247 ns | 16.65 | 364,521 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeProfileCache | 11,934.8724 ns | 11,934.8724 ns | 11,696.1749 ns | 12,173.5698 ns | 16.26 | 433,672 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeProfileCache | 425.4883 ns | 425.4883 ns | 416.9785 ns | 433.9980 ns | 0.58 | 425,400 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeProfileCache | 477.8245 ns | 477.8245 ns | 468.2680 ns | 487.3809 ns | 0.65 | 271,128 B | - | - | - | 219729 B | NA |
+| WorkloadTest        | NinoDeserializeProfileCache | 1,811.9927 ns | 1,811.9927 ns | 1,775.7529 ns | 1,848.2326 ns | 1.00 | - | - | - | - | 834789 B | NA |
+| WorkloadTest        | MemoryPackDeserializeProfileCache | 1,136.1138 ns | 1,136.1138 ns | 1,113.3916 ns | 1,158.8361 ns | 0.63 | - | - | - | - | 718589 B | NA |
+| WorkloadTest        | MessagePackDeserializeProfileCache | 1,862.6581 ns | 1,862.6581 ns | 1,825.4049 ns | 1,899.9112 ns | 1.03 | - | - | - | - | 365239 B | NA |
+| WorkloadTest        | ProtobufDeserializeProfileCache | 1,073.1145 ns | 1,073.1145 ns | 1,051.6522 ns | 1,094.5768 ns | 0.59 | - | - | - | - | 729835 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeProfileCache | 1,857.8210 ns | 1,857.8210 ns | 1,820.6646 ns | 1,894.9774 ns | 1.03 | - | - | - | - | 859354 B | NA |
+| WorkloadTest        | JsonDeserializeProfileCache | 1,143.3760 ns | 1,143.3760 ns | 1,120.5085 ns | 1,166.2435 ns | 0.63 | - | - | - | - | 95281 B | NA |
+| WorkloadTest        | NinoSerializeEventStream | 51,558.7343 ns | 51,558.7343 ns | 50,527.5596 ns | 52,589.9090 ns | 1.00 | 104,235 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeEventStream | 51,957.7167 ns | 51,957.7167 ns | 50,918.5623 ns | 52,996.8710 ns | 1.01 | 181,200 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeEventStream | 30,076.5276 ns | 30,076.5276 ns | 29,474.9970 ns | 30,678.0581 ns | 0.58 | 143,859 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeEventStream | 1,343,964.2894 ns | 1,343,964.2894 ns | 1,317,085.0036 ns | 1,370,843.5752 ns | 26.07 | 142,149 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeEventStream | 876,827.4393 ns | 876,827.4393 ns | 859,290.8905 ns | 894,363.9881 ns | 17.01 | 193,976 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeEventStream | 476,102.5449 ns | 476,102.5449 ns | 466,580.4940 ns | 485,624.5958 ns | 9.23 | 171,790 B | - | - | - | 563670 B | NA |
+| WorkloadTest        | NinoDeserializeEventStream | 144,520.9409 ns | 144,520.9409 ns | 141,630.5220 ns | 147,411.3597 ns | 1.00 | - | - | - | - | 205519 B | NA |
+| WorkloadTest        | MemoryPackDeserializeEventStream | 145,241.2492 ns | 145,241.2492 ns | 142,336.4242 ns | 148,146.0742 ns | 1.00 | - | - | - | - | 370489 B | NA |
+| WorkloadTest        | MessagePackDeserializeEventStream | 145,394.5067 ns | 145,394.5067 ns | 142,486.6165 ns | 148,302.3968 ns | 1.01 | - | - | - | - | 321243 B | NA |
+| WorkloadTest        | ProtobufDeserializeEventStream | 3,295,415.7419 ns | 3,295,415.7419 ns | 3,229,507.4271 ns | 3,361,324.0568 ns | 22.80 | - | - | - | - | 435962 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeEventStream | 4,219,147.1917 ns | 4,219,147.1917 ns | 4,134,764.2479 ns | 4,303,530.1355 ns | 29.19 | - | - | - | - | 55770 B | NA |
+| WorkloadTest        | JsonDeserializeEventStream | 2,550,297.7774 ns | 2,550,297.7774 ns | 2,499,291.8218 ns | 2,601,303.7329 ns | 17.65 | - | - | - | - | 889498 B | NA |
+| WorkloadTest        | NinoSerializeLogBatch | 5,899.5604 ns | 5,899.5604 ns | 5,781.5692 ns | 6,017.5516 ns | 1.00 | 62,341 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeLogBatch | 3,948.9114 ns | 3,948.9114 ns | 3,869.9332 ns | 4,027.8896 ns | 0.67 | 117,595 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeLogBatch | 5,882.5462 ns | 5,882.5462 ns | 5,764.8953 ns | 6,000.1971 ns | 1.00 | 91,567 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeLogBatch | 4,329.0772 ns | 4,329.0772 ns | 4,242.4957 ns | 4,415.6588 ns | 0.73 | 106,927 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeLogBatch | 85,584.2263 ns | 85,584.2263 ns | 83,872.5417 ns | 87,295.9108 ns | 14.51 | 107,154 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeLogBatch | 5,829.0746 ns | 5,829.0746 ns | 5,712.4931 ns | 5,945.6561 ns | 0.99 | 72,855 B | - | - | - | 451912 B | NA |
+| WorkloadTest        | NinoDeserializeLogBatch | 13,971.9767 ns | 13,971.9767 ns | 13,692.5372 ns | 14,251.4162 ns | 1.00 | - | - | - | - | 855459 B | NA |
+| WorkloadTest        | MemoryPackDeserializeLogBatch | 14,305.0928 ns | 14,305.0928 ns | 14,018.9909 ns | 14,591.1946 ns | 1.02 | - | - | - | - | 59038 B | NA |
+| WorkloadTest        | MessagePackDeserializeLogBatch | 354,470.5792 ns | 354,470.5792 ns | 347,381.1676 ns | 361,559.9908 ns | 25.37 | - | - | - | - | 810106 B | NA |
+| WorkloadTest        | ProtobufDeserializeLogBatch | 7,494.7478 ns | 7,494.7478 ns | 7,344.8528 ns | 7,644.6427 ns | 0.54 | - | - | - | - | 666280 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeLogBatch | 13,832.9891 ns | 13,832.9891 ns | 13,556.3293 ns | 14,109.6489 ns | 0.99 | - | - | - | - | 125969 B | NA |
+| WorkloadTest        | JsonDeserializeLogBatch | 14,244.1498 ns | 14,244.1498 ns | 13,959.2668 ns | 14,529.0328 ns | 1.02 | - | - | - | - | 454445 B | NA |
+| WorkloadTest        | NinoSerializeStateSnapshot | 19.5554 ns | 19.5554 ns | 19.1643 ns | 19.9465 ns | 1.00 | 97,548 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeStateSnapshot | 13.9897 ns | 13.9897 ns | 13.7099 ns | 14.2695 ns | 0.72 | 77,959 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeStateSnapshot | 19.5252 ns | 19.5252 ns | 19.1347 ns | 19.9157 ns | 1.00 | 99,570 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeStateSnapshot | 132.0573 ns | 132.0573 ns | 129.4162 ns | 134.6985 ns | 6.75 | 80,068 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeStateSnapshot | 19.5210 ns | 19.5210 ns | 19.1306 ns | 19.9114 ns | 1.00 | 66,663 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeStateSnapshot | 10.7894 ns | 10.7894 ns | 10.5736 ns | 11.0052 ns | 0.55 | 86,225 B | - | - | - | 790985 B | NA |
+| WorkloadTest        | NinoDeserializeStateSnapshot | 49.7018 ns | 49.7018 ns | 48.7078 ns | 50.6959 ns | 1.00 | - | - | - | - | 488644 B | NA |
+| WorkloadTest        | MemoryPackDeserializeStateSnapshot | 40.8870 ns | 40.8870 ns | 40.0693 ns | 41.7048 ns | 0.82 | - | - | - | - | 174811 B | NA |
+| WorkloadTest        | MessagePackDeserializeStateSnapshot | 34.5583 ns | 34.5583 ns | 33.8671 ns | 35.2495 ns | 0.70 | - | - | - | - | 730726 B | NA |
+| WorkloadTest        | ProtobufDeserializeStateSnapshot | 104.5592 ns | 104.5592 ns | 102.4681 ns | 106.6504 ns | 2.10 | - | - | - | - | 282603 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeStateSnapshot | 35.3518 ns | 35.3518 ns | 34.6448 ns | 36.0588 ns | 0.71 | - | - | - | - | 415577 B | NA |
+| WorkloadTest        | JsonDeserializeStateSnapshot | 149.8676 ns | 149.8676 ns | 146.8703 ns | 152.8650 ns | 3.02 | - | - | - | - | 570658 B | NA |
+| WorkloadTest        | NinoSerializeLockstepFrames | 10,039.8567 ns | 10,039.8567 ns | 9,839.0595 ns | 10,240.6538 ns | 1.00 | 91,885 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeLockstepFrames | 10,039.7116 ns | 10,039.7116 ns | 9,838.9174 ns | 10,240.5058 ns | 1.00 | 109,086 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeLockstepFrames | 10,222.5161 ns | 10,222.5161 ns | 10,018.0658 ns | 10,426.9664 ns | 1.02 | 129,063 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeLockstepFrames | 9,864.3459 ns | 9,864.3459 ns | 9,667.0590 ns | 10,061.6329 ns | 0.98 | 61,776 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeLockstepFrames | 7,986.1047 ns | 7,986.1047 ns | 7,826.3827 ns | 8,145.8268 ns | 0.80 | 80,998 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeLockstepFrames | 27,964.8311 ns | 27,964.8311 ns | 27,405.5345 ns | 28,524.1277 ns | 2.79 | 54,017 B | - | - | - | 659019 B | NA |
+| WorkloadTest        | NinoDeserializeLockstepFrames | 25,281.0227 ns | 25,281.0227 ns | 24,775.4022 ns | 25,786.6431 ns | 1.00 | - | - | - | - | 23375 B | NA |
+| WorkloadTest        | MemoryPackDeserializeLockstepFrames | 25,760.9411 ns | 25,760.9411 ns | 25,245.7223 ns | 26,276.1599 ns | 1.02 | - | - | - | - | 111179 B | NA |
+| WorkloadTest        | MessagePackDeserializeLockstepFrames | 22,246.5613 ns | 22,246.5613 ns | 21,801.6300 ns | 22,691.4925 ns | 0.88 | - | - | - | - | 548479 B | NA |
+| WorkloadTest        | ProtobufDeserializeLockstepFrames | 494,498.2957 ns | 494,498.2957 ns | 484,608.3298 ns | 504,388.2616 ns | 19.56 | - | - | - | - | 190803 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeLockstepFrames | 25,350.7165 ns | 25,350.7165 ns | 24,843.7022 ns | 25,857.7308 ns | 1.00 | - | - | - | - | 295452 B | NA |
+| WorkloadTest        | JsonDeserializeLockstepFrames | 681,121.1234 ns | 681,121.1234 ns | 667,498.7009 ns | 694,743.5459 ns | 26.94 | - | - | - | - | 602985 B | NA |
+| WorkloadTest        | NinoSerializeAoiUpdate | 155.5564 ns | 155.5564 ns | 152.4453 ns | 158.6676 ns | 1.00 | 223,155 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeAoiUpdate | 3,914.6342 ns | 3,914.6342 ns | 3,836.3415 ns | 3,992.9269 ns | 25.17 | 175,479 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeAoiUpdate | 149.1205 ns | 149.1205 ns | 146.1381 ns | 152.1029 ns | 0.96 | 146,777 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeAoiUpdate | 158.0797 ns | 158.0797 ns | 154.9181 ns | 161.2413 ns | 1.02 | 174,265 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeAoiUpdate | 148.9742 ns | 148.9742 ns | 145.9947 ns | 151.9537 ns | 0.96 | 181,890 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeAoiUpdate | 133.7152 ns | 133.7152 ns | 131.0409 ns | 136.3895 ns | 0.86 | 150,821 B | - | - | - | 322182 B | NA |
+| WorkloadTest        | NinoDeserializeAoiUpdate | 400.6301 ns | 400.6301 ns | 392.6175 ns | 408.6428 ns | 1.00 | - | - | - | - | 24303 B | NA |
+| WorkloadTest        | MemoryPackDeserializeAoiUpdate | 312.5215 ns | 312.5215 ns | 306.2710 ns | 318.7719 ns | 0.78 | - | - | - | - | 638990 B | NA |
+| WorkloadTest        | MessagePackDeserializeAoiUpdate | 405.6348 ns | 405.6348 ns | 397.5221 ns | 413.7475 ns | 1.01 | - | - | - | - | 231700 B | NA |
+| WorkloadTest        | ProtobufDeserializeAoiUpdate | 409.6601 ns | 409.6601 ns | 401.4669 ns | 417.8533 ns | 1.02 | - | - | - | - | 160663 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeAoiUpdate | 400.6276 ns | 400.6276 ns | 392.6150 ns | 408.6401 ns | 1.00 | - | - | - | - | 169879 B | NA |
+| WorkloadTest        | JsonDeserializeAoiUpdate | 371.1139 ns | 371.1139 ns | 363.6916 ns | 378.5362 ns | 0.93 | - | - | - | - | 395855 B | NA |
+| WorkloadTest        | NinoSerializeWorldRegion | 733.9254 ns | 733.9254 ns | 719.2469 ns | 748.6039 ns | 1.00 | 391,392 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeWorldRegion | 518.8371 ns | 518.8371 ns | 508.4604 ns | 529.2139 ns | 0.71 | 146,701 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeWorldRegion | 12,216.2007 ns | 12,216.2007 ns | 11,971.8766 ns | 12,460.5247 ns | 16.65 | 364,521 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeWorldRegion | 11,934.8724 ns | 11,934.8724 ns | 11,696.1749 ns | 12,173.5698 ns | 16.26 | 433,672 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeWorldRegion | 425.4883 ns | 425.4883 ns | 416.9785 ns | 433.9980 ns | 0.58 | 425,400 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeWorldRegion | 477.8245 ns | 477.8245 ns | 468.2680 ns | 487.3809 ns | 0.65 | 271,128 B | - | - | - | 219729 B | NA |
+| WorkloadTest        | NinoDeserializeWorldRegion | 1,811.9927 ns | 1,811.9927 ns | 1,775.7529 ns | 1,848.2326 ns | 1.00 | - | - | - | - | 834789 B | NA |
+| WorkloadTest        | MemoryPackDeserializeWorldRegion | 1,136.1138 ns | 1,136.1138 ns | 1,113.3916 ns | 1,158.8361 ns | 0.63 | - | - | - | - | 718589 B | NA |
+| WorkloadTest        | MessagePackDeserializeWorldRegion | 1,862.6581 ns | 1,862.6581 ns | 1,825.4049 ns | 1,899.9112 ns | 1.03 | - | - | - | - | 365239 B | NA |
+| WorkloadTest        | ProtobufDeserializeWorldRegion | 1,073.1145 ns | 1,073.1145 ns | 1,051.6522 ns | 1,094.5768 ns | 0.59 | - | - | - | - | 729835 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeWorldRegion | 1,857.8210 ns | 1,857.8210 ns | 1,820.6646 ns | 1,894.9774 ns | 1.03 | - | - | - | - | 859354 B | NA |
+| WorkloadTest        | JsonDeserializeWorldRegion | 1,143.3760 ns | 1,143.3760 ns | 1,120.5085 ns | 1,166.2435 ns | 0.63 | - | - | - | - | 95281 B | NA |
+| WorkloadTest        | NinoSerializeCardBattleLog | 51,558.7343 ns | 51,558.7343 ns | 50,527.5596 ns | 52,589.9090 ns | 1.00 | 104,235 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeCardBattleLog | 51,957.7167 ns | 51,957.7167 ns | 50,918.5623 ns | 52,996.8710 ns | 1.01 | 181,200 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeCardBattleLog | 30,076.5276 ns | 30,076.5276 ns | 29,474.9970 ns | 30,678.0581 ns | 0.58 | 143,859 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeCardBattleLog | 1,343,964.2894 ns | 1,343,964.2894 ns | 1,317,085.0036 ns | 1,370,843.5752 ns | 26.07 | 142,149 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeCardBattleLog | 876,827.4393 ns | 876,827.4393 ns | 859,290.8905 ns | 894,363.9881 ns | 17.01 | 193,976 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeCardBattleLog | 476,102.5449 ns | 476,102.5449 ns | 466,580.4940 ns | 485,624.5958 ns | 9.23 | 171,790 B | - | - | - | 563670 B | NA |
+| WorkloadTest        | NinoDeserializeCardBattleLog | 144,520.9409 ns | 144,520.9409 ns | 141,630.5220 ns | 147,411.3597 ns | 1.00 | - | - | - | - | 205519 B | NA |
+| WorkloadTest        | MemoryPackDeserializeCardBattleLog | 145,241.2492 ns | 145,241.2492 ns | 142,336.4242 ns | 148,146.0742 ns | 1.00 | - | - | - | - | 370489 B | NA |
+| WorkloadTest        | MessagePackDeserializeCardBattleLog | 145,394.5067 ns | 145,394.5067 ns | 142,486.6165 ns | 148,302.3968 ns | 1.01 | - | - | - | - | 321243 B | NA |
+| WorkloadTest        | ProtobufDeserializeCardBattleLog | 3,295,415.7419 ns | 3,295,415.7419 ns | 3,229,507.4271 ns | 3,361,324.0568 ns | 22.80 | - | - | - | - | 435962 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeCardBattleLog | 4,219,147.1917 ns | 4,219,147.1917 ns | 4,134,764.2479 ns | 4,303,530.1355 ns | 29.19 | - | - | - | - | 55770 B | NA |
+| WorkloadTest        | JsonDeserializeCardBattleLog | 2,550,297.7774 ns | 2,550,297.7774 ns | 2,499,291.8218 ns | 2,601,303.7329 ns | 17.65 | - | - | - | - | 889498 B | NA |
+| WorkloadTest        | NinoSerializeIdleSave | 5,899.5604 ns | 5,899.5604 ns | 5,781.5692 ns | 6,017.5516 ns | 1.00 | 62,341 B | - | - | - | - | NA |
+| WorkloadTest        | MemoryPackSerializeIdleSave | 3,948.9114 ns | 3,948.9114 ns | 3,869.9332 ns | 4,027.8896 ns | 0.67 | 117,595 B | - | - | - | - | NA |
+| WorkloadTest        | MessagePackSerializeIdleSave | 5,882.5462 ns | 5,882.5462 ns | 5,764.8953 ns | 6,000.1971 ns | 1.00 | 91,567 B | - | - | - | - | NA |
+| WorkloadTest        | ProtobufSerializeIdleSave | 4,329.0772 ns | 4,329.0772 ns | 4,242.4957 ns | 4,415.6588 ns | 0.73 | 106,927 B | - | - | - | - | NA |
+| WorkloadTest        | GoogleProtobufSerializeIdleSave | 85,584.2263 ns | 85,584.2263 ns | 83,872.5417 ns | 87,295.9108 ns | 14.51 | 107,154 B | - | - | - | - | NA |
+| WorkloadTest        | JsonSerializeIdleSave | 5,829.0746 ns | 5,829.0746 ns | 5,712.4931 ns | 5,945.6561 ns | 0.99 | 72,855 B | - | - | - | 451912 B | NA |
+| WorkloadTest        | NinoDeserializeIdleSave | 13,971.9767 ns | 13,971.9767 ns | 13,692.5372 ns | 14,251.4162 ns | 1.00 | - | - | - | - | 855459 B | NA |
+| WorkloadTest        | MemoryPackDeserializeIdleSave | 14,305.0928 ns | 14,305.0928 ns | 14,018.9909 ns | 14,591.1946 ns | 1.02 | - | - | - | - | 59038 B | NA |
+| WorkloadTest        | MessagePackDeserializeIdleSave | 354,470.5792 ns | 354,470.5792 ns | 347,381.1676 ns | 361,559.9908 ns | 25.37 | - | - | - | - | 810106 B | NA |
+| WorkloadTest        | ProtobufDeserializeIdleSave | 7,494.7478 ns | 7,494.7478 ns | 7,344.8528 ns | 7,644.6427 ns | 0.54 | - | - | - | - | 666280 B | NA |
+| WorkloadTest        | GoogleProtobufDeserializeIdleSave | 13,832.9891 ns | 13,832.9891 ns | 13,556.3293 ns | 14,109.6489 ns | 0.99 | - | - | - | - | 125969 B | NA |
+| WorkloadTest        | JsonDeserializeIdleSave | 14,244.1498 ns | 14,244.1498 ns | 13,959.2668 ns | 14,529.0328 ns | 1.02 | - | - | - | - | 454445 B | NA |
 
 </details>
 

@@ -264,17 +264,30 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
  * benchmark's workloads is an edit here.
  */
 export const workloadCases: CaseInfo[] = [
-  { key: 'RpcRequest', name: 'RPC request', zh: 'RPC 请求' },
   {
-    key: 'OrdersPage',
-    name: 'Web API page, 100 orders',
-    zh: 'Web API 分页，100 个订单',
+    key: 'MediaContent',
+    name: 'MediaContent (jvm-serializers)',
+    zh: 'MediaContent（jvm-serializers）',
   },
-  { key: 'UserProfile', name: 'Cached user profile', zh: '缓存的用户资料' },
   {
-    key: 'GameSnapshot',
-    name: 'Game snapshot, 500 entities',
-    zh: '游戏快照，500 个实体',
+    key: 'StackOverflowPage',
+    name: 'Stack Exchange API page, 20 questions',
+    zh: 'Stack Exchange API 一页，20 个问题',
+  },
+  {
+    key: 'RpcCall',
+    name: 'RPC call, interface result',
+    zh: 'RPC 调用，结果为接口',
+  },
+  {
+    key: 'ProfileCache',
+    name: 'Cached profile, previous version',
+    zh: '缓存的用户资料，上个版本写入',
+  },
+  {
+    key: 'EventStream',
+    name: 'Event store page, generic envelopes',
+    zh: '事件流，泛型信封',
   },
   {
     key: 'LogBatch',
@@ -282,9 +295,34 @@ export const workloadCases: CaseInfo[] = [
     zh: '日志批次，1,000 条',
   },
   {
-    key: 'EventStream',
-    name: 'Event stream, 500 polymorphic events',
-    zh: '事件流，500 个多态事件',
+    key: 'StateSnapshot',
+    name: 'State-sync snapshot, in place',
+    zh: '状态同步快照，读进已有对象',
+  },
+  {
+    key: 'LockstepFrames',
+    name: 'Lockstep, 10 frames of 8 players',
+    zh: '帧同步，10 帧 × 8 名玩家',
+  },
+  {
+    key: 'AoiUpdate',
+    name: 'MMO AOI update, 200 events',
+    zh: 'MMO AOI 增量，200 个事件',
+  },
+  {
+    key: 'WorldRegion',
+    name: 'SLG map region, shared alliances',
+    zh: 'SLG 地图区域，共享联盟',
+  },
+  {
+    key: 'CardBattleLog',
+    name: 'Card battle replay, shared cards',
+    zh: '卡牌战斗回放，共享卡牌',
+  },
+  {
+    key: 'IdleSave',
+    name: 'Idle save, previous version, in place',
+    zh: '放置游戏存档，上个版本，读进已有对象',
   },
 ];
 

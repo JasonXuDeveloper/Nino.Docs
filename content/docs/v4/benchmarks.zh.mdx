@@ -60,9 +60,9 @@ icon: ChartColumn
 
 ### 真实负载 [#workloads]
 
-照着真实应用的数据造的负载（[`WorkloadTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/WorkloadTest.cs)，类型在 [`WorkloadModels.cs`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/WorkloadModels.cs)），从一次 RPC 请求，到订单分页、游戏快照、日志批次和多态事件流，每个库都写一遍、读一遍。本站和 Nino README 的头条数字都出自这里。有两个库只在这里测：
+照着真实应用的数据造的负载（[`WorkloadTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Workloads/WorkloadTest.cs)，类型在 [`Workloads/`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark/Workloads)），每个库都写一遍、读一遍。本站和 Nino README 的头条数字都出自这里。其中两个是常见序列化基准自带的数据：jvm-serializers 的 `MediaContent`，和一页 Stack Exchange API 数据（Jil、MessagePack-CSharp、MemoryPack 的基准用的都是这套模型）。四个是服务端会发的：结果为接口、带泛型实现的 RPC 调用，上个版本写进缓存的用户资料（Nino 用键控格式、MemoryPack 用版本容忍格式来读），两层事件继承外加泛型信封的事件流，以及 1,000 条日志。六个是游戏会发的：组件是接口、读进客户端已有对象的状态同步快照，8 名玩家的帧同步输入帧，MMO 的 AOI 增量，城池、军队和动作共享对象的 SLG 地图区域与卡牌战斗回放，以及上个版本的放置游戏存档，读进游戏手里已有的存档对象。某个库缺的功能就用它常见的绕法：MessagePack 和 protobuf 对每个引用各写一份共享对象的副本（System.Text.Json 用它的 `Preserve` 引用），不能读进已有对象的库就新建一个。有两个库只在这里测：
 
-- **Google.Protobuf 3.36.2** 用它自己的消息类型，由 `protoc` 从 [`workloads.proto`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/workloads.proto) 生成：值相同，字段号也和 protobuf-net 的契约一致，两者写出的 protobuf 消息一样，大小也一样。写用 `WriteTo`，写进复用的 `ArrayBufferWriter<byte>`；读用 `Parser.ParseFrom(ReadOnlySpan<byte>)`。
+- **Google.Protobuf 3.36.2** 用它自己的消息类型，由 `protoc` 从 [`workloads.proto`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Workloads/workloads.proto) 生成：schema 就是同一套模型的 protobuf-net 契约生成的，数据也是从 protobuf-net 写出的字节解析而来，两者写出的 protobuf 消息一样，大小也一样。写用 `WriteTo`，写进复用的 `ArrayBufferWriter<byte>`；读用 `Parser.ParseFrom(ReadOnlySpan<byte>)`。
 - **System.Text.Json**（.NET 10）用源生成器（`JsonSerializerContext`），通过复用的 `Utf8JsonWriter` 把 UTF-8 写进 `ArrayBufferWriter<byte>`，读的也是 UTF-8 字节。
 
 <WorkloadTables lang="zh" />
