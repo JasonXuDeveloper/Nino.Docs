@@ -210,7 +210,7 @@ function Panel({
           )}
         </p>
         <p className="flex shrink-0 items-baseline gap-1.5 leading-none">
-          <span className="text-2xl font-semibold tracking-tight tabular-nums">
+          <span className="bg-linear-to-r/oklab from-nino-grad-from to-nino-grad-to bg-clip-text text-2xl font-semibold tracking-tight text-transparent tabular-nums">
             {row.ratio}
           </span>
           <span className="text-xs text-fd-muted-foreground">{row.unit}</span>

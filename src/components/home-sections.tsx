@@ -64,7 +64,20 @@ function othersSentence(zh: boolean) {
 interface Fact {
   label: string;
   value: string;
-  code?: boolean;
+}
+
+/** The facts card beside "What is Nino?": version, license, platforms, install commands, speed */
+interface Card {
+  version: Fact;
+  license: Fact;
+  runsOn: Fact;
+  install: string;
+  commands: Fact[];
+  speed: string;
+  speedNote: string;
+  library: string;
+  serialize: string;
+  deserialize: string;
 }
 
 interface UseCase {
@@ -85,7 +98,7 @@ const text: Record<
   {
     aboutTitle: string;
     about: string[];
-    facts: Fact[];
+    card: Card;
     useTitle: string;
     useLead: string;
     useCases: UseCase[];
@@ -102,48 +115,29 @@ const text: Record<
       'Mark a class, struct, record or interface with [NinoType] and call NinoSerializer.Serialize and NinoDeserializer.Deserialize: no schema file, no registration. Values declared as a base class or interface come back as their runtime type, each type chooses whether it tolerates added members, uses keys or tracks shared references, and invalid input only ever throws NinoDataException. nino-gen generates TypeScript, Go and Rust code from the same types, so browsers, Node, Go and Rust programs read and write the same bytes as .NET.',
       'Nino is not the right choice when people need to read the data (use JSON) or when programs in Java, Python or C++ must read it (use Protocol Buffers or MessagePack).',
     ],
-    facts: [
-      {
+    card: {
+      version: {
         label: 'Latest version',
         value: `${release.version}${release.prerelease ? ' (prerelease)' : ''}`,
       },
-      {
-        label: 'Install',
-        value: `dotnet add package Nino${prerelease}`,
-        code: true,
-      },
-      {
-        label: 'Unity',
-        value: 'openupm add com.jasonxudeveloper.nino',
-        code: true,
-      },
-      {
-        label: 'AI coding agents',
-        value: 'npx skills add JasonXuDeveloper/Nino',
-        code: true,
-      },
-      {
+      license: { label: 'License', value: 'MIT, open source' },
+      runsOn: {
         label: 'Runs on',
         value:
-          '.NET Standard 2.0+, .NET 8, .NET 10, NativeAOT, ASP.NET Core, Unity 2022.3+ (Mono, IL2CPP, HybridCLR), Godot 4; browsers, Node, Go and Rust through generated code (TypeScript, Go, Rust)',
+          '.NET Standard 2.0+, .NET 8, .NET 10, NativeAOT, ASP.NET Core, Unity 2022.3+ (Mono, IL2CPP, HybridCLR), Godot 4; TypeScript, Go and Rust through generated code',
       },
-      ...(serializeRange
-        ? [
-            {
-              label: `vs MemoryPack ${memoryPackVersion}`,
-              value: `${serializeRange} faster serialization and ${deserializeRange} faster deserialization of classes and polymorphic types`,
-            },
-          ]
-        : []),
-      ...otherRanges.map((o) => ({
-        label: `vs ${o.label} ${o.version}`,
-        value: `${o.serialize} faster serialization and ${o.deserialize} faster deserialization`,
-      })),
-      {
-        label: 'License',
-        value: 'MIT, open source on GitHub',
-      },
-    ],
+      install: 'Install',
+      commands: [
+        { label: '.NET', value: `dotnet add package Nino${prerelease}` },
+        { label: 'Unity', value: 'openupm add com.jasonxudeveloper.nino' },
+        { label: 'AI agents', value: 'npx skills add JasonXuDeveloper/Nino' },
+      ],
+      speed: 'How much faster Nino v4 is',
+      speedNote: 'Classes and polymorphic types, same BenchmarkDotNet run',
+      library: 'Against',
+      serialize: 'Serialize',
+      deserialize: 'Deserialize',
+    },
     useTitle: 'Use Nino wherever objects become bytes',
     useLead:
       'One serializer for every layer of a .NET system, from the network edge to storage, and in game engines too.',
@@ -278,45 +272,29 @@ const text: Record<
       '给类、结构体、记录或接口加上 [NinoType]，再调用 NinoSerializer.Serialize 和 NinoDeserializer.Deserialize 就行，不用写 schema，也不用注册。声明为基类或接口的值，读回来还是它的实际类型；每个类型可以单独选择版本容错、键控成员或引用追踪；无效输入只会抛出 NinoDataException。nino-gen 还能从同一批类型生成 TypeScript、Go 和 Rust 代码，浏览器、Node、Go 和 Rust 程序读写的字节与 .NET 完全一致。',
       '数据需要人来看时用 JSON；数据要给 Java、Python、C++ 等程序读时，用 Protocol Buffers 或 MessagePack。这两种情况 Nino 不合适。',
     ],
-    facts: [
-      {
+    card: {
+      version: {
         label: '最新版本',
         value: `${release.version}${release.prerelease ? '（预发行版）' : ''}`,
       },
-      {
-        label: '安装',
-        value: `dotnet add package Nino${prerelease}`,
-        code: true,
-      },
-      {
-        label: 'Unity',
-        value: 'openupm add com.jasonxudeveloper.nino',
-        code: true,
-      },
-      {
-        label: 'AI 编程助手',
-        value: 'npx skills add JasonXuDeveloper/Nino',
-        code: true,
-      },
-      {
+      license: { label: '协议', value: 'MIT 开源' },
+      runsOn: {
         label: '运行环境',
         value:
-          '.NET Standard 2.0+、.NET 8、.NET 10、NativeAOT、ASP.NET Core、Unity 2022.3+（Mono、IL2CPP、HybridCLR）、Godot 4；浏览器、Node、Go 和 Rust 通过生成的代码（TypeScript、Go、Rust）使用',
+          '.NET Standard 2.0+、.NET 8、.NET 10、NativeAOT、ASP.NET Core、Unity 2022.3+（Mono、IL2CPP、HybridCLR）、Godot 4；TypeScript、Go 和 Rust 通过生成的代码使用',
       },
-      ...(serializeRange
-        ? [
-            {
-              label: `对比 MemoryPack ${memoryPackVersion}`,
-              value: `类和多态类型的序列化快 ${serializeRange}，反序列化快 ${deserializeRange}`,
-            },
-          ]
-        : []),
-      ...otherRanges.map((o) => ({
-        label: `对比 ${o.label} ${o.version}`,
-        value: `序列化快 ${o.serialize}，反序列化快 ${o.deserialize}`,
-      })),
-      { label: '协议', value: 'MIT，在 GitHub 上开源' },
-    ],
+      install: '安装',
+      commands: [
+        { label: '.NET', value: `dotnet add package Nino${prerelease}` },
+        { label: 'Unity', value: 'openupm add com.jasonxudeveloper.nino' },
+        { label: 'AI 助手', value: 'npx skills add JasonXuDeveloper/Nino' },
+      ],
+      speed: 'Nino v4 快多少',
+      speedNote: '类和多态类型，同一次 BenchmarkDotNet 测试',
+      library: '对比',
+      serialize: '序列化',
+      deserialize: '反序列化',
+    },
     useTitle: '对象与字节互转的地方，都能用 Nino',
     useLead:
       '从网络入口到存储，.NET 系统的每一层都可以用同一个序列化库，游戏引擎里也一样。',
@@ -453,6 +431,101 @@ export function homeFaq(lang: Locale) {
     .map(({ question, answer }) => ({ question, answer }));
 }
 
+/** MemoryPack, MessagePack and protobuf-net, each with its serialize and deserialize range */
+const speedRows = [
+  ...(serializeRange
+    ? [
+        {
+          label: 'MemoryPack',
+          version: memoryPackVersion,
+          serialize: serializeRange,
+          deserialize: deserializeRange,
+        },
+      ]
+    : []),
+  ...otherRanges.map((o) => ({
+    label: o.label,
+    version: o.version,
+    serialize: o.serialize,
+    deserialize: o.deserialize,
+  })),
+];
+
+function FactsCard({ card }: { card: Card }) {
+  const fact = (f: Fact) => (
+    <div>
+      <dt className="text-xs text-fd-muted-foreground">{f.label}</dt>
+      <dd className="mt-0.5 font-medium">{f.value}</dd>
+    </div>
+  );
+  return (
+    <div className="flex flex-col divide-y self-start rounded-xl border bg-fd-card text-sm">
+      <dl className="grid grid-cols-2 gap-4 p-5">
+        {fact(card.version)}
+        {fact(card.license)}
+      </dl>
+      <div className="p-5">
+        <h3 className="text-xs text-fd-muted-foreground">{card.install}</h3>
+        <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1.5">
+          {card.commands.map((c) => (
+            <div key={c.label} className="contents">
+              <dt className="text-xs font-medium">{c.label}</dt>
+              <dd className="font-mono text-xs break-all text-fd-muted-foreground">
+                {c.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      {speedRows.length > 0 && (
+        <div className="p-5">
+          <h3 className="text-xs text-fd-muted-foreground">{card.speed}</h3>
+          <table className="mt-2 w-full text-left text-xs tabular-nums sm:text-sm">
+            <thead className="text-xs text-fd-muted-foreground">
+              <tr>
+                <th className="pb-1 font-normal">{card.library}</th>
+                <th className="pb-1 text-right font-normal">
+                  {card.serialize}
+                </th>
+                <th className="pb-1 text-right font-normal">
+                  {card.deserialize}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {speedRows.map((row) => (
+                <tr key={row.label} className="border-t">
+                  <th scope="row" className="py-1.5 pr-2 text-left font-medium">
+                    {row.label}{' '}
+                    <span className="text-xs font-normal text-fd-muted-foreground">
+                      {row.version}
+                    </span>
+                  </th>
+                  <td className="py-1.5 pl-2 text-right whitespace-nowrap">
+                    {row.serialize}
+                  </td>
+                  <td className="py-1.5 pl-2 text-right whitespace-nowrap">
+                    {row.deserialize}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-xs text-fd-muted-foreground">
+            {card.speedNote}
+          </p>
+        </div>
+      )}
+      <dl className="p-5">
+        <dt className="text-xs text-fd-muted-foreground">
+          {card.runsOn.label}
+        </dt>
+        <dd className="mt-0.5 leading-relaxed">{card.runsOn.value}</dd>
+      </dl>
+    </div>
+  );
+}
+
 export function HomeAbout({ lang }: { lang: Locale }) {
   const t = text[lang];
   return (
@@ -468,20 +541,7 @@ export function HomeAbout({ lang }: { lang: Locale }) {
           </p>
         ))}
       </div>
-      <dl className="grid content-start gap-3 rounded-xl border bg-fd-card p-5 text-sm">
-        {t.facts.map((fact) => (
-          <div key={fact.label}>
-            <dt className="font-medium">{fact.label}</dt>
-            <dd className="mt-0.5 text-fd-muted-foreground">
-              {fact.code ? (
-                <code className="font-mono text-xs">{fact.value}</code>
-              ) : (
-                fact.value
-              )}
-            </dd>
-          </div>
-        ))}
-      </dl>
+      <FactsCard card={t.card} />
     </div>
   );
 }
