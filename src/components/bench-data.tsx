@@ -2,10 +2,12 @@
  * MDX components that print the v4 runtime benchmarks from src/lib/benchmarks.ts
  * (synced from the release report), so no page types those numbers in.
  *
- * The .NET tables compare Nino with MemoryPack, and with MessagePack and
- * protobuf-net in a column each once the synced release measured them ("—"
+ * The .NET tables compare Nino with MemoryPack, and with the other libraries
+ * (`otherLibs`) in a column each once the synced release measured them ("—"
  * for a case a library cannot express); LibraryTables compares Nino with one of
- * those two alone, for its comparison page. RuntimesTables prints the Go, Rust and
+ * them alone, for its comparison page; WorkloadTables shows WorkloadTest's
+ * workloads against every library, and IfWorkloads picks the prose that fits
+ * the synced data (the headline comes from the workloads once it has them). RuntimesTables prints the Go, Rust and
  * TypeScript benchmarks of the same release, UnityTables and UnityHighlights
  * the Unity player's times without and with the Burst kernels.
  *
@@ -26,7 +28,10 @@ import {
   formatClassRange,
   formatRatio,
   formatTime,
+  formatWorkloadRange,
+  hasWorkloads,
   isOnPar,
+  type Opponent,
   type OtherLib,
   otherLibs,
   payload,
@@ -43,6 +48,8 @@ import {
   unity,
   unitySource,
   type Versus,
+  versusOf,
+  workloadRange,
   x64,
 } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
@@ -411,8 +418,8 @@ export function ExtraRuntimeTables({ lang = 'en', markdown }: ArchProps) {
 /**
  * Nino against one other .NET serializer (MessagePack or protobuf-net): a
  * serialize and a deserialize table of every case the synced report measured
- * for that library (the main cases, then reference tracking, version tolerance
- * and fixed-size types), and the size of one SimpleClass. A note stands in for
+ * for that library (the workloads, the main cases, then reference tracking,
+ * version tolerance and fixed-size types), and the size of one SimpleClass. A note stands in for
  * them until a release report includes the library. For the comparison pages.
  */
 export function LibraryTables({
@@ -446,9 +453,11 @@ export function LibraryTables({
 function libraryRows(ds: BenchDataset, lib: OtherLib) {
   if (!ds.libraries.includes(lib)) return [];
   return (['serialize', 'deserialize'] as const).flatMap((op) => {
-    const rows = [...ds.runtime[op], ...ds.extraRuntime[op]].filter(
-      (row) => row.others[lib],
-    );
+    const rows = [
+      ...ds.workloads[op],
+      ...ds.runtime[op],
+      ...ds.extraRuntime[op],
+    ].filter((row) => row.others[lib]);
     return rows.length > 0 ? [{ op, rows }] : [];
   });
 }
@@ -537,6 +546,172 @@ function libraryTables(
             : `One serialized SimpleClass: ${formatBytes(ninoBytes)} in Nino, ${formatBytes(otherBytes)} in ${label}.`}
         </p>
       )}
+    </>
+  );
+}
+
+/** Shows its children only when the synced data has the workloads (or, with `not`, only when it has none) */
+export function IfWorkloads({
+  children,
+  not,
+}: {
+  children?: ReactNode;
+  not?: boolean;
+}) {
+  return hasWorkloads === !not ? children : null;
+}
+
+/** Nino, MemoryPack, then the other libraries the workloads measured */
+function workloadColumns(ds: BenchDataset) {
+  const rows = [...ds.workloads.serialize, ...ds.workloads.deserialize];
+  return [
+    { key: 'v4' as const, label: 'Nino' },
+    { key: 'memorypack' as const, label: 'MemoryPack' },
+    ...otherLibs
+      .filter((lib) => rows.some((row) => row.others[lib.key]))
+      .map((lib) => ({ key: lib.key, label: lib.label })),
+  ];
+}
+
+/**
+ * WorkloadTest against every library: a time table per operation (each time
+ * with how many times faster Nino is), the payload of each workload and the
+ * bytes allocated per call. A note stands in for them until a release report
+ * has them.
+ */
+export function WorkloadTables({ lang = 'en', markdown }: ArchProps) {
+  const zh = lang === 'zh';
+  if (!hasWorkloads)
+    return (
+      <p className="text-sm text-fd-muted-foreground">
+        {zh
+          ? '这些负载已在 Nino 的基准测试项目中，但已发布的报告还没有收录。等某个版本的报告收录后，结果会显示在这里。'
+          : "These workloads are in Nino's benchmark project, but the published report does not include them yet. Their results appear here once a release report does."}
+      </p>
+    );
+  return ArchTabs({
+    markdown,
+    render: (ds, tabbed) => (
+      <>
+        {workloadTables(ds, zh, markdown)}
+        {tabbed && sourceLine(ds, zh, true)}
+      </>
+    ),
+  });
+}
+
+/** "Google.Protobuf" may break after its dots on the page ("System.Text.Json" is the widest header) */
+function breakable(label: string, markdown?: boolean) {
+  if (markdown) return label;
+  return label
+    .split('.')
+    .flatMap((part, i, parts) =>
+      i < parts.length - 1 ? [`${part}.`, <wbr key={part} />] : [part],
+    );
+}
+
+function workloadTables(ds: BenchDataset, zh: boolean, markdown?: boolean) {
+  const columns = workloadColumns(ds);
+  const { serialize, deserialize } = ds.workloads;
+  if (serialize.length === 0)
+    return (
+      <p className="text-sm text-fd-muted-foreground">
+        {zh
+          ? '这次运行没有测量这些负载。'
+          : 'This run did not measure the workloads.'}
+      </p>
+    );
+  const name = (row: RuntimeCase) => (zh && row.zh ? row.zh : row.name);
+  const size = (value: number | null | undefined) =>
+    value === null || value === undefined ? '—' : formatBytes(value);
+  const table = (
+    head: string,
+    rows: RuntimeCase[],
+    cell: (row: RuntimeCase, key: 'v4' | Opponent) => ReactNode,
+  ) => (
+    // Seven columns: a smaller type keeps them inside the column from 1024px
+    <div className="relative overflow-auto prose-no-margin my-6 text-sm">
+      <table>
+        <thead>
+          <tr>
+            <th>{head}</th>
+            {columns.map((column) => (
+              <th key={column.key} className="text-right">
+                {breakable(column.label, markdown)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key}>
+              <td>{name(row)}</td>
+              {columns.map((column) => (
+                <td key={column.key} className="text-right tabular-nums">
+                  {cell(row, column.key)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+  const time = (row: RuntimeCase, key: 'v4' | Opponent) => {
+    if (key === 'v4')
+      return <span className="whitespace-nowrap">{row.v4.text}</span>;
+    const vs = versusOf(row, key);
+    if (!vs) return '—';
+    const note = versusNote(vs, zh);
+    // On the page the multiple goes on a line of its own, so the table fits the column
+    return (
+      <>
+        <span className="whitespace-nowrap">{vs.time.text}</span>
+        {note && (markdown ? note : <span className="block">{note}</span>)}
+      </>
+    );
+  };
+  const deserializeOf = (row: RuntimeCase) =>
+    deserialize.find((other) => other.key === row.key);
+  const label = (en: string, cn: string) => (
+    <p>
+      <strong>{zh ? cn : en}</strong>
+    </p>
+  );
+  const workload = zh ? '负载' : 'Workload';
+  return (
+    <>
+      {label('Serialize', '序列化')}
+      {table(workload, serialize, time)}
+      {label('Deserialize (new instances)', '反序列化（新实例）')}
+      {table(workload, deserialize, time)}
+      {versusLegend(zh, 'Nino')}
+      {label('Payload', '序列化后的大小')}
+      {table(workload, serialize, (row, key) => (
+        <span className="whitespace-nowrap">
+          {size(row.bytes[key]?.payload)}
+        </span>
+      ))}
+      {label(
+        markdown
+          ? 'Allocated per call (serialize / deserialize)'
+          : 'Allocated per call (serialize, then deserialize)',
+        markdown
+          ? '每次调用分配（序列化 / 反序列化）'
+          : '每次调用分配（上为序列化，下为反序列化）',
+      )}
+      {table(workload, serialize, (row, key) => {
+        const ser = row.bytes[key]?.allocated;
+        const des = deserializeOf(row)?.bytes[key]?.allocated;
+        if (ser === undefined && des === undefined) return '—';
+        if (markdown) return `${size(ser)} / ${size(des)}`;
+        return (
+          <>
+            <span className="block whitespace-nowrap">{size(ser)}</span>
+            <span className="block whitespace-nowrap">{size(des)}</span>
+          </>
+        );
+      })}
     </>
   );
 }
@@ -1013,7 +1188,9 @@ export function UnityHighlights({
  * payload.memorypack (bytes for one SimpleClass),
  * messagepack.serialize / messagepack.deserialize / protobuf.serialize /
  * protobuf.deserialize (the range of wins on classes and polymorphic types;
- * with .max, its top), or
+ * with .max, its top),
+ * workloads.<memorypack|messagepack|protobuf|googleprotobuf|json>.<serialize|deserialize>
+ * (the range of wins over the workloads; with .max, its top), or
  * serialize:<case key> / deserialize:<case key> (ratio of one case).
  */
 export function BenchValue({ k }: { k: string }) {
@@ -1022,6 +1199,22 @@ export function BenchValue({ k }: { k: string }) {
 
 export function benchValue(k: string): string {
   const [op, which] = k.split(/[.:]/) as [string, string];
+  const workload = /^workloads\.(\w+)\.(serialize|deserialize)(\.max)?$/.exec(
+    k,
+  );
+  if (
+    workload &&
+    (workload[1] === 'memorypack' ||
+      otherLibs.some((lib) => lib.key === workload[1]))
+  ) {
+    const lib = workload[1] as Opponent;
+    const verb = workload[2] as Op;
+    if (workload[3]) {
+      const { max } = workloadRange(verb, lib);
+      return Number.isFinite(max) ? formatRatio(max) : '—';
+    }
+    return formatWorkloadRange(verb, lib) || '—';
+  }
   if (k === 'reuse.max')
     return formatRatio(Math.max(...reuse.map(reuseSpeedup)));
   if (

@@ -1,7 +1,7 @@
 ---
 title: .NET 基准测试
 seoTitle: "基准测试：Nino 对比 MemoryPack、MessagePack、protobuf-net 与 v3 – Nino v4 文档"
-description: "Nino v4 对比 v3（3.3.13）、MemoryPack 1.21.4、MessagePack 3.1.12 和 protobuf-net 3.4.40 的构建时间与运行时基准测试，附复现步骤。"
+description: "Nino v4 对比 v3（3.3.13）、MemoryPack 1.21.4、MessagePack 3.1.12、protobuf-net 3.4.40、Google.Protobuf 3.36.2 和 System.Text.Json 的构建时间与运行时基准测试，涵盖真实负载和单个类型，附复现步骤。"
 icon: ChartColumn
 ---
 
@@ -23,9 +23,10 @@ icon: ChartColumn
 
 | 对比对象 | 原因 | 测量内容 |
 | --- | --- | --- |
-| [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | .NET 上用得最广的二进制序列化库里最快的一个，和 Nino 一样基于源生成器 | 运行时性能，在同一次 BenchmarkDotNet 运行里测：[序列化](#serialize-to-a-reused-buffer-writer)、[反序列化](#deserialize-new-instances)、[多态对象图](#polymorphism)、[复用实例](#pooling)、[引用追踪、版本容错和固定大小的类型](#more-cases) |
+| [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | .NET 上用得最广的二进制序列化库里最快的一个，和 Nino 一样基于源生成器 | 运行时性能，在同一次 BenchmarkDotNet 运行里测：[真实负载](#workloads)、[序列化](#serialize-to-a-reused-buffer-writer)、[反序列化](#deserialize-new-instances)、[多态对象图](#polymorphism)、[复用实例](#pooling)、[引用追踪、版本容错和固定大小的类型](#more-cases) |
 | Nino v3 **3.3.13** | v3 API 的最后一个版本，也就是你要从它升级的版本 | 运行时性能，和 v4 在同一台机器上前后紧挨着测（运行时表格里的 **v4 对比 v3** 列），以及[构建时间](#build-time-and-generated-code) |
 | [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) **3.1.12** 和 [protobuf-net](https://github.com/protobuf-net/protobuf-net) **3.4.40** | .NET 里最常用的二进制格式，和 .NET 里最常用的 Protocol Buffers 库 | 运行时性能，在同一次 BenchmarkDotNet 运行里测，格式能写出相同数据的用例都测：运行时表格里各占一列，[全部测量结果](#results)里各有若干行（见 [MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)）。它们加入之前的发布报告里没有这些行，表格就只显示 Nino 和 MemoryPack |
+| [Google.Protobuf](https://github.com/protocolbuffers/protobuf/tree/main/csharp) **3.36.2** 和 [System.Text.Json](https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/overview)（.NET 10） | Google 官方的 Protocol Buffers 运行时，和 .NET 自带的 JSON 序列化库 | 运行时性能，只测[真实负载](#workloads)，在同一次 BenchmarkDotNet 运行里测。它们加入之前的发布报告里没有这些行 |
 
 绝对耗时因机器而异，看倍数。Go、Rust 和 TypeScript 里的 Nino 对比 Protocol Buffers、MessagePack 和各语言常用序列化库的结果，见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes)。比功能而不是比速度，见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)和 [v3 与 v4 对比](/zh/docs/v4/whats-new#features)。
 
@@ -56,6 +57,15 @@ icon: ChartColumn
 下面的图把 Nino 和测过的每个序列化库放在一起比：可以选架构、序列化或反序列化、用例分组，以及单看某个库或全部一起看。每根条是那个库的耗时相当于 Nino 的几倍（Nino 为 1×），条越长，耗时越多；悬停或聚焦柱条可以看具体数值。完整数字在图下方的表格里：时间后面的 “· 2.00×” 是这个用例里 Nino 快几倍，“—” 表示这个库表达不了这个用例。
 
 <DotnetChart lang="zh" />
+
+### 真实负载 [#workloads]
+
+照着真实应用的数据造的负载（[`WorkloadTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/WorkloadTest.cs)，类型在 [`WorkloadModels.cs`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/WorkloadModels.cs)），从一次 RPC 请求，到订单分页、游戏快照、日志批次和多态事件流，每个库都写一遍、读一遍。本站和 Nino README 的头条数字都出自这里。有两个库只在这里测：
+
+- **Google.Protobuf 3.36.2** 用它自己的消息类型，由 `protoc` 从 [`workloads.proto`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/workloads.proto) 生成：值相同，字段号也和 protobuf-net 的契约一致，两者写出的 protobuf 消息一样，大小也一样。写用 `WriteTo`，写进复用的 `ArrayBufferWriter<byte>`；读用 `Parser.ParseFrom(ReadOnlySpan<byte>)`。
+- **System.Text.Json**（.NET 10）用源生成器（`JsonSerializerContext`），通过复用的 `Utf8JsonWriter` 把 UTF-8 写进 `ArrayBufferWriter<byte>`，读的也是 UTF-8 字节。
+
+<WorkloadTables lang="zh" />
 
 ### 序列化（到复用的缓冲区写入器） [#serialize-to-a-reused-buffer-writer]
 
@@ -118,7 +128,7 @@ Nino 把数据读入已有的对象图（[复用反序列化](/zh/docs/v4/poolin
 
 从 v4.0.0-rc.5 起又加测了三个测试类，结果在[全部测量结果](#results)里：
 
-- **常用类型**（[`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/CommonTypesTest.cs)）：贴近常见应用的数据，`List<Player>`（100 个）、`List<Order>`（100 个）、`List<Shape>`（1,000 个，声明为抽象基类）、一棵 `TreeNode` 树（1,365 个节点）、`InventoryItem[1000]`（带填充的结构体）、`Waypoint[1000]`（含一个元组的固定大小结构体，写出 15 字节，内存里占 20 字节）和 `Dictionary<string, string>`（1,000 项）。
+- **常用类型**（[`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/CommonTypesTest.cs)）：常见的类型形状，一棵 `TreeNode` 树（1,365 个节点）、`InventoryItem[1000]`（带填充的结构体）、`Waypoint[1000]`（含一个元组的固定大小结构体，写出 15 字节，内存里占 20 字节）和 `Dictionary<string, string>`（1,000 项）。v4.0.0-rc.9 及之前的报告里还有 `List<Player>`（100 个）、`List<Order>`（100 个）和 `List<Shape>`（1,000 个，声明为抽象基类），后来换成了[真实负载](#workloads)。
 - **集合**（[`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/CollectionsTest.cs)）：基础类库里的集合，各 1,000 个元素：`List<(int, long)>`、`KeyValuePair<int, int>[]`、`HashSet<int>`、`Dictionary<int, int>`、`Queue<int>`、`LinkedList<int>`、`SortedSet<int>`、`SortedDictionary<int, int>`、`SortedList<int, int>` 和 `ConcurrentDictionary<int, int>`；另有 `SelfTree`，一个包含自身的 `List` 子类，6 层、每层 4 个。
 - **BCL 类型**（[`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/BclTypesTest.cs)）：两个库都有格式化器的其余基础类库类型：`BigInteger`（3^1000）、`Uri`、`Version`、`StringBuilder`（1,000 个字符）、`BitArray`（1,000 位）、`CultureInfo`、`TimeZoneInfo`、`Lazy<string>`，以及各 1,000 个元素的 `Memory<int>`、`ReadOnlySequence<int>`、`ReadOnlyCollection<int>`、`ILookup<int, int>`、`BlockingCollection<int>` 和 `Nino.Immutable` 里的不可变集合（`ImmutableHashSet`、`ImmutableSortedSet`、`ImmutableQueue`、`ImmutableStack`、`ImmutableDictionary`、`ImmutableSortedDictionary`）。`TimeZoneInfo` 这一项测的主要是设计差异，不是速度：Nino 按 ID 写系统时区，读的时候直接取系统缓存的时区；MemoryPack 每次都写出并解析时区完整的序列化字符串。`BigInteger` 和 `BitArray` 只测 Nino：MemoryPack 1.21.4 写出去再读回来就不对了（见[基准测试中发现的 MemoryPack 问题](/zh/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)）。
 
@@ -895,6 +905,9 @@ benchmarks/run.sh
 
 # 运行时，只测 v4 的一部分
 dotnet run -c Release --project benchmarks/Nino.Benchmark -- --filter '*SimpleTest*' --launchCount 3 --warmupCount 5 --iterationCount 15
+
+# 真实负载，所有库
+dotnet run -c Release --project benchmarks/Nino.Benchmark -- --filter '*WorkloadTest*'
 
 # 引用追踪、版本容错和固定大小的类型
 dotnet run -c Release --project benchmarks/Nino.Benchmark -- --filter '*ReferenceTest*' '*VersionTolerantTest*' '*FixedSizeTest*'

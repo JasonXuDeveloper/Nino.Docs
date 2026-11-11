@@ -20,6 +20,7 @@ import {
   BenchSource,
   BenchValue,
   ExtraRuntimeTables,
+  IfWorkloads,
   LibraryTables,
   ResultsTable,
   ReuseTable,
@@ -27,6 +28,7 @@ import {
   RuntimeTable,
   UnityHighlights,
   UnityTables,
+  WorkloadTables,
 } from '@/components/bench-data';
 import { BytePlayground } from '@/components/byte-playground';
 import { Bytes, Matrix } from '@/components/bytes';
@@ -109,6 +111,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     BytePlayground,
     Bytes,
     ExtraRuntimeTables,
+    IfWorkloads,
     ResultsTable,
     LibraryTables,
     ReuseTable,
@@ -116,6 +119,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     RuntimeTable,
     UnityHighlights,
     UnityTables,
+    WorkloadTables,
     CountUp,
     File,
     Files,

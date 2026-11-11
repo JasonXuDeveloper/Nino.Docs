@@ -18,12 +18,17 @@
  * so the same rules (FLOOR_NS, on par, ratios) apply to both; `arm64` is null
  * until a release has that section. Comparisons with v3 are x64 only.
  *
- * MessagePack (MessagePack-CSharp) and protobuf-net: the `MessagePack…` and
- * `Protobuf…` rows of the same reports, in releases since they joined the
- * benchmark; a case a library cannot express has no row. `libraries` lists the
- * ones a dataset has, so pages show their columns only when the synced release
- * measured them. Every comparison (MemoryPack, MessagePack, protobuf-net)
- * goes through `versus()`, with the same FLOOR_NS and on-par rules.
+ * The other serializers (`otherLibs`: MessagePack-CSharp, protobuf-net,
+ * Google.Protobuf, System.Text.Json): their rows of the same reports, by
+ * method prefix, in releases since they joined the benchmark; a case a library
+ * cannot express has no row. `libraries` lists the ones a dataset has, so pages
+ * show their columns only when the synced release measured them. Every
+ * comparison goes through `versus()`, with the same FLOOR_NS and on-par rules.
+ *
+ * Workloads (WorkloadTest, `workloadCases`): payloads shaped like real ones,
+ * every library on each. Once the synced report has them (`hasWorkloads`),
+ * the headline numbers come from them; until then from SimpleTest and
+ * PolymorphicTest, as before.
  *
  * Runtimes outside .NET (Go, Rust, TypeScript): src/data/bench-runtimes.json
  * (`runtimes` below), synced from the runtime sections of the same release.
@@ -122,7 +127,7 @@ function ratioOf(slower: number, faster: number) {
 /* ------------------------------------------------------------------ */
 
 /** The .NET serializers besides Nino and MemoryPack, by their method prefix */
-export type OtherLib = 'messagepack' | 'protobuf';
+export type OtherLib = 'messagepack' | 'protobuf' | 'googleprotobuf' | 'json';
 
 /** The versions Nino's Directory.Packages.props pins (the `benchmark` skill: update them with an upgrade) */
 export const otherLibs: {
@@ -143,7 +148,24 @@ export const otherLibs: {
     label: 'protobuf-net',
     version: '3.4.40',
   },
+  // WorkloadTest only, on its own protoc-generated messages (the same values and field numbers as protobuf-net's)
+  {
+    key: 'googleprotobuf',
+    prefix: 'GoogleProtobuf',
+    label: 'Google.Protobuf',
+    version: '3.36.2',
+  },
+  // WorkloadTest only, source-generated, UTF-8; the version is the runtime's
+  {
+    key: 'json',
+    prefix: 'Json',
+    label: 'System.Text.Json',
+    version: '.NET 10',
+  },
 ];
+
+/** Every serializer Nino is compared with, MemoryPack first */
+export type Opponent = 'memorypack' | OtherLib;
 
 /** Nino against one other serializer in one case */
 export interface Versus {
@@ -182,8 +204,15 @@ export interface RuntimeCase {
   /** v4 under FLOOR_NS in V3_RUNTIME, v3 above it: faster than v3, too fast to measure */
   v3TooFast?: boolean;
   v3?: Measure;
-  /** MessagePack and protobuf-net, for the cases they can express */
+  /** The other libraries, for the cases they can express */
   others: Partial<Record<OtherLib, Versus>>;
+  /** Payload (serialize rows) and bytes allocated per call, per library */
+  bytes: Partial<
+    Record<
+      'v4' | Opponent,
+      { payload: number | null; allocated: number | null }
+    >
+  >;
   /** Marked * in the tables: re-run with more iterations (local snapshot only) */
   rerun?: boolean;
   /** Dominated by gen-2 GC of a 160 KB array (see the footnote) */
@@ -228,6 +257,36 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
     { name: 'Vector4[10000]', code: true, key: 'Vectors', gcBound: true },
   ],
 };
+
+/**
+ * WorkloadTest's workloads, for both operations: the one list of them on the
+ * site (pages, tables, chart and headlines all read it). Changing the
+ * benchmark's workloads is an edit here.
+ */
+export const workloadCases: CaseInfo[] = [
+  { key: 'RpcRequest', name: 'RPC request', zh: 'RPC 请求' },
+  {
+    key: 'OrdersPage',
+    name: 'Web API page, 100 orders',
+    zh: 'Web API 分页，100 个订单',
+  },
+  { key: 'UserProfile', name: 'Cached user profile', zh: '缓存的用户资料' },
+  {
+    key: 'GameSnapshot',
+    name: 'Game snapshot, 500 entities',
+    zh: '游戏快照，500 个实体',
+  },
+  {
+    key: 'LogBatch',
+    name: 'Log batch, 1,000 events',
+    zh: '日志批次，1,000 条',
+  },
+  {
+    key: 'EventStream',
+    name: 'Event stream, 500 polymorphic events',
+    zh: '事件流，500 个多态事件',
+  },
+];
 
 /* ------------------------------------------------------------------ */
 /* V3_RUNTIME: Nino v3 3.3.13 (NuGet) against v4, measured back to back */
@@ -455,18 +514,14 @@ export interface BenchDataset {
   runtime: Record<'serialize' | 'deserialize', RuntimeCase[]>;
   /** See extraCases */
   extraRuntime: Record<'serialize' | 'deserialize', RuntimeCase[]>;
+  /** WorkloadTest (workloadCases); empty until a report has it */
+  workloads: Record<'serialize' | 'deserialize', RuntimeCase[]>;
   reuse: ReuseCase[];
   /** True when every serialize case allocated 0 B in both libraries */
   serializeAllocatesNothing: boolean;
   /** Bytes written for one SimpleClass */
-  payload: {
-    name: string;
-    v4: number | null;
-    memorypack: number | null;
-    messagepack: number | null;
-    protobuf: number | null;
-  };
-  /** MessagePack and protobuf-net, when the report has any of their rows */
+  payload: { name: string } & Record<'v4' | Opponent, number | null>;
+  /** The other libraries the report has any rows of */
   libraries: OtherLib[];
 }
 
@@ -490,9 +545,20 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
     const v3Row = v3[`${op}:${info.key}`];
     const { ratio, tooFast } = versus(v4, memorypack);
     const others: RuntimeCase['others'] = {};
+    const sizes = (method: string) => {
+      const row = rows.get(method);
+      return row
+        ? { payload: row.payloadBytes, allocated: row.allocatedBytes }
+        : undefined;
+    };
+    const caseBytes: RuntimeCase['bytes'] = {
+      v4: sizes(`Nino${verb}${info.key}`),
+      memorypack: sizes(`MemoryPack${verb}${info.key}`),
+    };
     for (const lib of otherLibs) {
       const time = measure(`${lib.prefix}${verb}${info.key}`);
       if (time) others[lib.key] = versus(v4, time);
+      caseBytes[lib.key] = sizes(`${lib.prefix}${verb}${info.key}`);
     }
     const result: RuntimeCase = {
       ...info,
@@ -501,6 +567,7 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
       ratio,
       tooFast,
       others,
+      bytes: caseBytes,
       rerun: nino.rerun,
     };
     if (v3Row) {
@@ -555,6 +622,7 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
     rows: file.rows,
     runtime: build(cases),
     extraRuntime: build(extraCases),
+    workloads: build({ serialize: workloadCases, deserialize: workloadCases }),
     reuse,
     serializeAllocatesNothing: cases.serialize.every((info) =>
       ['Nino', 'MemoryPack'].every(
@@ -566,9 +634,12 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
       v4: rows.get('NinoSerializeSimpleClass')?.payloadBytes ?? null,
       memorypack:
         rows.get('MemoryPackSerializeSimpleClass')?.payloadBytes ?? null,
-      messagepack:
-        rows.get('MessagePackSerializeSimpleClass')?.payloadBytes ?? null,
-      protobuf: rows.get('ProtobufSerializeSimpleClass')?.payloadBytes ?? null,
+      ...(Object.fromEntries(
+        otherLibs.map((lib) => [
+          lib.key,
+          rows.get(`${lib.prefix}SerializeSimpleClass`)?.payloadBytes ?? null,
+        ]),
+      ) as Record<OtherLib, number | null>),
     },
     libraries: otherLibs
       .filter((lib) =>
@@ -683,6 +754,62 @@ export const bestReuse = x64.reuse.reduce<ReuseCase | undefined>(
  * as published ("221×", "3.1×").
  */
 export const formatRatio = (value: number) => `${value.toFixed(2)}×`;
+
+/* ------------------------------------------------------------------ */
+/* Workloads and the headline                                          */
+/* ------------------------------------------------------------------ */
+
+/** True once the synced report (x64) has WorkloadTest: the headlines then come from it */
+export const hasWorkloads = x64.workloads.serialize.length > 0;
+
+/** Nino against one opponent in one case, by the same rule as the tables */
+export function versusOf(row: RuntimeCase, lib: Opponent): Versus | undefined {
+  if (lib === 'memorypack')
+    return { time: row.memorypack, ratio: row.ratio, tooFast: row.tooFast };
+  return row.others[lib];
+}
+
+/** Fastest / slowest win over the workloads against one library (on par and losses left out) */
+export function workloadRange(
+  op: 'serialize' | 'deserialize',
+  lib: Opponent,
+  ds = x64,
+) {
+  const wins = ds.workloads[op]
+    .map((row) => versusOf(row, lib)?.ratio)
+    .filter((ratio): ratio is number => ratio !== undefined && ratio > 1);
+  return { min: Math.min(...wins), max: Math.max(...wins) };
+}
+
+/** "1.46–2.83×" (one win: "2.83×"), or '' without a win */
+export function formatWorkloadRange(
+  op: 'serialize' | 'deserialize',
+  lib: Opponent,
+) {
+  const { min, max } = workloadRange(op, lib);
+  if (!Number.isFinite(max)) return '';
+  return min === max
+    ? formatRatio(max)
+    : `${min.toFixed(2)}–${formatRatio(max)}`;
+}
+
+/**
+ * The headline's "up to" against one library (two decimals, "4.33"), or null:
+ * the best workload win once the report has workloads; until then the best
+ * win of the main cases (MemoryPack) or of the classes and polymorphic types
+ * (the others).
+ */
+export function headlineMax(
+  op: 'serialize' | 'deserialize',
+  lib: Opponent,
+): string | null {
+  const { max } = hasWorkloads
+    ? workloadRange(op, lib)
+    : lib === 'memorypack'
+      ? ratioRange(op)
+      : classRatioRange(op, x64, lib);
+  return Number.isFinite(max) ? max.toFixed(2) : null;
+}
 export const formatBuildRatio = (value: number) => `${value}×`;
 
 /* ------------------------------------------------------------------ */
@@ -1006,7 +1133,4 @@ export const buildLarge = {
 /* ------------------------------------------------------------------ */
 
 /** Best serialize win over MemoryPack, two decimals ("4.33"), from the raw means */
-export const headlineSerialize = (() => {
-  const { max } = ratioRange('serialize');
-  return Number.isFinite(max) ? max.toFixed(2) : null;
-})();
+export const headlineSerialize = headlineMax('serialize', 'memorypack');

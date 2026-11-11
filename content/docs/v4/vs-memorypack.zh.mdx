@@ -38,6 +38,20 @@ Nino 生来就是为读不可信数据设计的，快速路径也守着这些保
 
 ### 汇总 [#summary]
 
+<IfWorkloads>
+
+| | Nino v4 对比 MemoryPack |
+| --- | --- |
+| 序列化 | 在 Nino 领先的[真实负载](/zh/docs/v4/benchmarks#workloads)上**快 <BenchValue k="workloads.memorypack.serialize" />**（各负载见表格） |
+| 反序列化 | 在 Nino 领先的真实负载上**快 <BenchValue k="workloads.memorypack.deserialize" />** |
+| 反序列化到已有 / 池化实例 | 分配 **0 B**，最高比 MemoryPack 的覆盖模式**快 <BenchValue k="reuse.max" />** |
+| 序列化时的内存分配 | 两者都是 0 B |
+| 数据大小 | `SimpleClass` 差不多：Nino 是 <BenchValue k="payload.v4" /> 字节，MemoryPack 是 <BenchValue k="payload.memorypack" /> 字节。字符串看文本：ASCII 两边都是每个字符一个字节；ASCII 以外的 Latin-1 文本和中日韩文本 Nino 更小（每个字符一个和两个字节，UTF-8 是两个和三个）；以 ASCII 为主、夹着少量更宽字符的文本 UTF-8 更小，Nino 用 `[NinoUtf8]` 就能写成 UTF-8 |
+
+</IfWorkloads>
+
+<IfWorkloads not>
+
 | | Nino v4 对比 MemoryPack |
 | --- | --- |
 | 序列化 | Nino 领先的用例中**快 <BenchValue k="serialize.min" />–<BenchValue k="serialize.max" />**；差距最小的是非托管结构体数组，两者都是整块拷贝（各用例见图表） |
@@ -45,6 +59,8 @@ Nino 生来就是为读不可信数据设计的，快速路径也守着这些保
 | 反序列化到已有 / 池化实例 | 分配 **0 B**，最高比 MemoryPack 的覆盖模式**快 <BenchValue k="reuse.max" />** |
 | 序列化时的内存分配 | 两者都是 0 B |
 | 数据大小 | `SimpleClass` 差不多：Nino 是 <BenchValue k="payload.v4" /> 字节，MemoryPack 是 <BenchValue k="payload.memorypack" /> 字节。字符串看文本：ASCII 两边都是每个字符一个字节；ASCII 以外的 Latin-1 文本和中日韩文本 Nino 更小（每个字符一个和两个字节，UTF-8 是两个和三个）；以 ASCII 为主、夹着少量更宽字符的文本 UTF-8 更小，Nino 用 `[NinoUtf8]` 就能写成 UTF-8 |
+
+</IfWorkloads>
 
 <Callout type="info" title="非托管结构体数组">
 
@@ -130,7 +146,7 @@ Nino 跨平台、跨运行时字节一致：[原始值](/zh/docs/v4/wire-format#
 ## Nino 领先的地方 [#where-nino-is-ahead]
 
 - **不可信输入**：Nino 本来就是为读网络对端和用户文件的数据设计的（见[不可信输入](#untrusted-input)）；MemoryPack 现在只用于可信数据。
-- **速度**：序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象图最高快 <BenchValue k="deserialize.max" />，数据见上文。
+- **速度**：<IfWorkloads>真实负载上序列化最高快 <BenchValue k="workloads.memorypack.serialize.max" />，反序列化最高快 <BenchValue k="workloads.memorypack.deserialize.max" /></IfWorkloads><IfWorkloads not>序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象图最高快 <BenchValue k="deserialize.max" /></IfWorkloads>，数据见上文。
 - **零分配复用**：复用反序列化直接填充嵌套的对象、列表和字典；有 `[NinoPooled]` 对象池；每个被丢弃的实例都能交给回收器。
 - **数据能演进**：键控成员在继承体系的任何一个类里都能调整顺序、删除、插入，不用维护顺序编号；键控类型和版本容错类型，旧代码都能读新数据；有了[布局基线](/zh/docs/v4/evolving-data#layout-baseline)，改出会读坏旧数据的改动时，写代码的当下就会报出来（NINO034）。
 - **多态不用记账**：没有标签，任何非密封类都能当基类，泛型基类（`Box<T>`、`IRepository<T>`）也行，别的程序集和热更新 DLL 里的子类型也能自动找到。MemoryPack 的 Union 特性不能加在泛型类型上：每个封闭类型都要手动注册 Union 格式化器（见[泛型基类型基准测试](/zh/docs/v4/benchmarks#more-cases)）。

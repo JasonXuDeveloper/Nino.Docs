@@ -1,7 +1,7 @@
 ---
 title: .NET Benchmarks
 seoTitle: "Benchmarks: Nino vs MemoryPack, MessagePack, protobuf-net and v3 – Nino v4 Docs"
-description: "Build-time and runtime benchmarks of Nino v4 against v3 (3.3.13), MemoryPack 1.21.4, MessagePack 3.1.12 and protobuf-net 3.4.40, with the setup to reproduce them."
+description: "Build-time and runtime benchmarks of Nino v4 against v3 (3.3.13), MemoryPack 1.21.4, MessagePack 3.1.12, protobuf-net 3.4.40, Google.Protobuf 3.36.2 and System.Text.Json, on real-world workloads and single types, with the setup to reproduce them."
 icon: ChartColumn
 ---
 
@@ -23,9 +23,10 @@ This page has every benchmark number the documentation quotes, the code that pro
 
 | Against | Why | What is measured |
 | --- | --- | --- |
-| [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | The fastest widely used binary serializer for .NET, and source-generated like Nino | Runtime, in the same BenchmarkDotNet run: [serialize](#serialize-to-a-reused-buffer-writer), [deserialize](#deserialize-new-instances), [polymorphic graphs](#polymorphism), [reusing instances](#pooling), [reference tracking, version tolerance and fixed-size types](#more-cases) |
+| [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | The fastest widely used binary serializer for .NET, and source-generated like Nino | Runtime, in the same BenchmarkDotNet run: [real-world workloads](#workloads), [serialize](#serialize-to-a-reused-buffer-writer), [deserialize](#deserialize-new-instances), [polymorphic graphs](#polymorphism), [reusing instances](#pooling), [reference tracking, version tolerance and fixed-size types](#more-cases) |
 | Nino v3 **3.3.13** | The last release of the v3 API, the version you would upgrade from | Runtime, back to back with v4 on the same machine (the **v4 vs v3** column of the runtime tables), and [build time](#build-time-and-generated-code) |
 | [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) **3.1.12** and [protobuf-net](https://github.com/protobuf-net/protobuf-net) **3.4.40** | The most common binary format in .NET, and the most common Protocol Buffers library for .NET | Runtime, in the same BenchmarkDotNet run, in every case where the format can write the same data: a column each in the runtime tables, a row each in [All Measurements](#results) (see [MessagePack and protobuf-net](#messagepack-and-protobuf-net)). Release reports before they joined the benchmark have no rows for them, and the tables then show Nino and MemoryPack only |
+| [Google.Protobuf](https://github.com/protocolbuffers/protobuf/tree/main/csharp) **3.36.2** and [System.Text.Json](https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/overview) (.NET 10) | Google's own Protocol Buffers runtime, and the JSON serializer built into .NET | Runtime, on the [real-world workloads](#workloads) only, in the same BenchmarkDotNet run. Release reports before they joined the benchmark have no rows for them |
 
 Absolute times depend on the machine; compare the ratios. For Nino in Go, Rust and TypeScript against Protocol Buffers, MessagePack and each language's usual serializers, see [Other-Language Benchmarks](/en/docs/v4/benchmarks-runtimes). For features rather than speed, see [Nino vs MemoryPack](/en/docs/v4/vs-memorypack) and [v3 vs v4](/en/docs/v4/whats-new#features).
 
@@ -56,6 +57,15 @@ The code of every benchmark is in [Benchmark Code](#benchmark-code).
 The chart compares Nino with every other serializer measured: pick the architecture, serialize or deserialize, the group of cases and one library, or all of them. Each bar is that library's time as a multiple of Nino's (Nino = 1×), so a longer bar took longer; hover or focus a bar for the numbers. The tables below it hold every time, where “· 2.00×” after a time says how many times faster Nino is in that case and “—” marks a case the library cannot express.
 
 <DotnetChart lang="en" />
+
+### Real-World Workloads [#workloads]
+
+Payloads shaped like the data of real applications ([`WorkloadTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/WorkloadTest.cs), types in [`WorkloadModels.cs`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/WorkloadModels.cs)), from one RPC request to pages of orders, game snapshots, log batches and streams of polymorphic events, each written and read by every library. The headline numbers of this site and of Nino's README come from them. Two libraries run here only:
+
+- **Google.Protobuf 3.36.2** runs on its own messages, which `protoc` generates from [`workloads.proto`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/workloads.proto): they hold the same values, with the same field numbers as protobuf-net's contracts, so both write the same protobuf messages and their payloads are the same size. It writes with `WriteTo` into a reused `ArrayBufferWriter<byte>` and reads with `Parser.ParseFrom(ReadOnlySpan<byte>)`.
+- **System.Text.Json** (.NET 10) runs with its source generator (a `JsonSerializerContext`), writing UTF-8 through a reused `Utf8JsonWriter` into an `ArrayBufferWriter<byte>` and reading from the UTF-8 bytes.
+
+<WorkloadTables lang="en" />
 
 ### Serialize (to a Reused Buffer Writer) [#serialize-to-a-reused-buffer-writer]
 
@@ -118,7 +128,7 @@ Four more benchmark classes compare features that change how a type is written, 
 
 Three more classes, measured since v4.0.0-rc.5; their rows are in [All Measurements](#results):
 
-- **Common types** ([`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/CommonTypesTest.cs)): data shaped like that of common applications, `List<Player>` (100), `List<Order>` (100), `List<Shape>` (1,000 through an abstract base), a `TreeNode` tree (1,365 nodes), `InventoryItem[1000]` (a padded struct), `Waypoint[1000]` (a fixed-size struct holding a tuple, 15 bytes on the wire and 20 in memory) and `Dictionary<string, string>` (1,000).
+- **Common types** ([`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/CommonTypesTest.cs)): common type shapes, a `TreeNode` tree (1,365 nodes), `InventoryItem[1000]` (a padded struct), `Waypoint[1000]` (a fixed-size struct holding a tuple, 15 bytes on the wire and 20 in memory) and `Dictionary<string, string>` (1,000). Reports up to v4.0.0-rc.9 also have `List<Player>` (100), `List<Order>` (100) and `List<Shape>` (1,000 through an abstract base), which the [real-world workloads](#workloads) replaced.
 - **Collections** ([`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/CollectionsTest.cs)): collections of the base class library, 1,000 elements each: `List<(int, long)>`, `KeyValuePair<int, int>[]`, `HashSet<int>`, `Dictionary<int, int>`, `Queue<int>`, `LinkedList<int>`, `SortedSet<int>`, `SortedDictionary<int, int>`, `SortedList<int, int>` and `ConcurrentDictionary<int, int>`, and `SelfTree`, a `List` subclass that holds itself, 6 levels of 4.
 - **BCL types** ([`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/BclTypesTest.cs)): the other base class library types both libraries have formatters for: `BigInteger` (3^1000), `Uri`, `Version`, `StringBuilder` (1,000 chars), `BitArray` (1,000 bits), `CultureInfo`, `TimeZoneInfo`, `Lazy<string>`, and with 1,000 elements `Memory<int>`, `ReadOnlySequence<int>`, `ReadOnlyCollection<int>`, `ILookup<int, int>`, `BlockingCollection<int>` and the immutable collections of `Nino.Immutable` (`ImmutableHashSet`, `ImmutableSortedSet`, `ImmutableQueue`, `ImmutableStack`, `ImmutableDictionary`, `ImmutableSortedDictionary`). The `TimeZoneInfo` case measures a design difference more than speed: Nino writes a system time zone by its id and reads it back from the system's cached zones, MemoryPack writes and parses the zone's whole serialized string on every call. `BigInteger` and `BitArray` are timed for Nino only: MemoryPack 1.21.4 does not round-trip them (see [MemoryPack Bugs Found While Benchmarking](/en/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)).
 
@@ -895,6 +905,9 @@ benchmarks/run.sh
 
 # runtime, v4 only, a subset
 dotnet run -c Release --project benchmarks/Nino.Benchmark -- --filter '*SimpleTest*' --launchCount 3 --warmupCount 5 --iterationCount 15
+
+# the real-world workloads, every library
+dotnet run -c Release --project benchmarks/Nino.Benchmark -- --filter '*WorkloadTest*'
 
 # reference tracking, version tolerance and fixed-size types
 dotnet run -c Release --project benchmarks/Nino.Benchmark -- --filter '*ReferenceTest*' '*VersionTolerantTest*' '*FixedSizeTest*'

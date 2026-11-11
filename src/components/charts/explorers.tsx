@@ -8,8 +8,9 @@
  * - UnityChart: per case, the time with Burst as a share of the time without
  *   it (100 %), with the speedup beside the case.
  *
- * - DotnetChart: per .NET case, MemoryPack, MessagePack, protobuf-net and v3
- *   as multiples of Nino v4's time, per architecture.
+ * - DotnetChart: per .NET case, MemoryPack, the other libraries (otherLibs)
+ *   and v3 as multiples of Nino v4's time, per architecture; the workloads
+ *   first once the report has them.
  *
  * The default selection is prerendered; the rest is drawn after a click.
  */
@@ -23,7 +24,8 @@ import {
   formatRatio,
   formatTime,
   gcNote,
-  type OtherLib,
+  type Opponent as Library,
+  otherLibs,
   type RuntimeCase,
   type RuntimeLang,
   runtimes,
@@ -31,6 +33,7 @@ import {
   unity,
   type Versus,
   v3SourceNote,
+  versusOf,
 } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
 import { BarChart, type ChartRow, type ChartSeries } from './bar-chart';
@@ -48,6 +51,7 @@ const otherColors = [
   'color-mix(in oklab, var(--nino-chart-other) 70%, var(--nino-chart-faint))',
   'var(--nino-chart-faint)',
   'color-mix(in oklab, var(--nino-chart-faint) 60%, transparent)',
+  'color-mix(in oklab, var(--nino-chart-faint) 35%, transparent)',
 ];
 
 /** Bars past this many times Nino's are cut at the edge; their labels give the value */
@@ -284,32 +288,31 @@ export function UnityChart({ lang = 'en' }: { lang?: Locale }) {
   );
 }
 
-type Opponent = 'all' | 'memorypack' | OtherLib | 'v3';
-type CaseGroup = 'common' | 'more';
+type Opponent = 'all' | Library | 'v3';
+type CaseGroup = 'workloads' | 'common' | 'more';
+
+/** Every opponent in legend order: MemoryPack, the other libraries, v3 */
+const opponentKeys: Exclude<Opponent, 'all'>[] = [
+  'memorypack',
+  ...otherLibs.map((lib) => lib.key),
+  'v3',
+];
 
 const opponentNames: Record<Opponent, { en: string; zh: string }> = {
   all: { en: 'All', zh: '全部' },
   memorypack: { en: 'MemoryPack', zh: 'MemoryPack' },
-  messagepack: { en: 'MessagePack', zh: 'MessagePack' },
-  protobuf: { en: 'protobuf-net', zh: 'protobuf-net' },
+  ...(Object.fromEntries(
+    otherLibs.map((lib) => [lib.key, { en: lib.label, zh: lib.label }]),
+  ) as Record<Exclude<Library, 'memorypack'>, { en: string; zh: string }>),
   v3: { en: 'Nino v3 (3.3.13)', zh: 'Nino v3（3.3.13）' },
 };
 
-const opponentColors: Record<Exclude<Opponent, 'all'>, string> = {
-  memorypack: 'var(--nino-chart-other-strong)',
-  messagepack: 'var(--nino-chart-other)',
-  protobuf: 'var(--nino-chart-faint)',
-  v3: 'color-mix(in oklab, var(--nino-chart-faint) 60%, transparent)',
-};
+/** Greys from dark to light, in opponentKeys order */
+const opponentColor = (key: Exclude<Opponent, 'all'>) =>
+  otherColors[Math.min(opponentKeys.indexOf(key), otherColors.length - 1)];
 
 /** One opponent's time in a case, by the same rule as the tables */
 function opponentOf(row: RuntimeCase, key: Exclude<Opponent, 'all'>) {
-  if (key === 'memorypack')
-    return {
-      time: row.memorypack,
-      ratio: row.ratio,
-      tooFast: row.tooFast,
-    } satisfies Versus;
   if (key === 'v3')
     return row.v3
       ? ({
@@ -318,7 +321,7 @@ function opponentOf(row: RuntimeCase, key: Exclude<Opponent, 'all'>) {
           tooFast: row.v3TooFast,
         } satisfies Versus)
       : undefined;
-  return row.others[key];
+  return versusOf(row, key);
 }
 
 function versusText(v: Versus, zh: boolean) {
@@ -348,28 +351,33 @@ export function DotnetChart({ lang = 'en' }: { lang?: Locale }) {
   const t = (names: { en: string; zh: string }) => (zh ? names.zh : names.en);
   const [arch, setArch] = useState<Arch>('x64');
   const [op, setOp] = useState<'serialize' | 'deserialize'>('serialize');
-  const [group, setGroup] = useState<CaseGroup>('common');
-  const [picked, setOpponent] = useState<Opponent>('all');
+  const [pickedGroup, setGroup] = useState<CaseGroup>('workloads');
+  const [pickedOpponent, setOpponent] = useState<Opponent>('all');
   const ds = datasets.find((d) => d.arch === arch) ?? datasets[0];
-  const groups: CaseGroup[] = ds.extraRuntime[op].length
-    ? ['common', 'more']
-    : ['common'];
-  const cases =
-    group === 'more' && groups.includes('more')
-      ? ds.extraRuntime[op]
-      : ds.runtime[op];
-  const keys = (
-    ['memorypack', 'messagepack', 'protobuf', 'v3'] as const
-  ).filter((key) => cases.some((row) => opponentOf(row, key)));
+  const sets: Record<CaseGroup, RuntimeCase[]> = {
+    workloads: ds.workloads[op],
+    common: ds.runtime[op],
+    more: ds.extraRuntime[op],
+  };
+  const groups = (Object.keys(sets) as CaseGroup[]).filter(
+    (g) => sets[g].length > 0,
+  );
+  const group = groups.includes(pickedGroup) ? pickedGroup : groups[0];
+  const cases = sets[group] ?? [];
+  const keys = opponentKeys.filter((key) =>
+    cases.some((row) => opponentOf(row, key)),
+  );
   const opponent: Opponent =
-    picked !== 'all' && keys.includes(picked) ? picked : 'all';
+    pickedOpponent !== 'all' && keys.includes(pickedOpponent)
+      ? pickedOpponent
+      : 'all';
   const shown = opponent === 'all' ? keys : [opponent];
   const series: ChartSeries[] = [
     { key: 'v4', label: 'Nino v4', color: 'var(--nino-chart-v4)' },
     ...shown.map((key) => ({
       key,
       label: t(opponentNames[key]),
-      color: opponentColors[key],
+      color: opponentColor(key),
     })),
   ];
   const rows: ChartRow[] = cases.flatMap((row) => {
@@ -478,10 +486,11 @@ const deserializeNew = {
 };
 
 const groupLabels: Record<CaseGroup, { en: string; zh: string }> = {
+  workloads: { en: 'Workloads', zh: '真实负载' },
   common: { en: 'Common cases', zh: '常规用例' },
   more: {
     en: 'Tracking, tolerance, fixed size, generics',
-    zh: '引用追踪、版本容错、定长、泛型',
+    zh: '引用追踪、版本容错、固定大小、泛型',
   },
 };
 

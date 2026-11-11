@@ -8,9 +8,11 @@ import {
   formatBuildRatio,
   formatBytes,
   formatRatio,
+  hasWorkloads,
   otherLibs,
   type RuntimeCase,
   runtime,
+  x64,
 } from '@/lib/benchmarks';
 import { cn } from '@/lib/cn';
 import type { Locale } from '@/lib/i18n';
@@ -18,7 +20,8 @@ import type { Locale } from '@/lib/i18n';
 /*
  * The home page's numbers, in two layers:
  *
- * 1. One monumental figure: Nino's biggest serialize win over MemoryPack,
+ * 1. One monumental figure: Nino's biggest serialize win over MemoryPack
+ *    (among the workloads once the report has them, as every headline),
  *    beside the two measured times on a shared axis. Static: the number is
  *    the first thing read, so it never counts up from 0.
  * 2. Three panels on one grid (vs MemoryPack, vs MessagePack and
@@ -34,10 +37,13 @@ import type { Locale } from '@/lib/i18n';
 const find = (op: 'serialize' | 'deserialize', name: string) =>
   runtime[op].find((r) => r.name === name);
 
-/** The case where Nino beats MemoryPack by the most */
+/** The headline's cases: the workloads once the report has them */
+const headlineCases = hasWorkloads ? x64.workloads : runtime;
+
+/** The headline case where Nino beats MemoryPack by the most */
 const best = (op: 'serialize' | 'deserialize') =>
-  runtime[op].reduce<RuntimeCase | undefined>(
-    (top, row) => ((row.ratio ?? 0) > (top?.ratio ?? 0) ? row : top),
+  headlineCases[op].reduce<RuntimeCase | undefined>(
+    (top, row) => ((row.ratio ?? 0) > Math.max(1, top?.ratio ?? 0) ? row : top),
     undefined,
   );
 
@@ -50,9 +56,14 @@ const count = (n: number) => n.toLocaleString('en-US');
 /** Case name inside a sentence: "polymorphic class array", "SimpleClass", "多态类数组" */
 function caseName(row: RuntimeCase, zh: boolean) {
   if (zh && row.zh) return row.zh;
-  if (row.code) return row.name;
+  // "RPC request" keeps its capitals
+  if (row.code || !/^[A-Z][a-z]/.test(row.name)) return row.name;
   return row.name.charAt(0).toLowerCase() + row.name.slice(1);
 }
+
+/** "a" or "an" before a case name: "an RPC request", "a log batch" */
+const article = (row: RuntimeCase) =>
+  /^([aeiou]|RPC\b)/i.test(caseName(row, false)) ? 'an' : 'a';
 
 /** "Serialize SimpleClass", "反序列化多态类数组", "序列化 SimpleClass" */
 const action = (verb: string, row: RuntimeCase, zh: boolean) =>
@@ -460,7 +471,7 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
             <p className="max-w-md text-base leading-snug text-pretty sm:text-lg">
               {zh
                 ? `${action('序列化', polySer, zh)}，Nino v4 用时 ${polySer.v4.text}，MemoryPack ${[polySer.memorypack.text, ...otherTimes(polySer).map((m) => `${m.label} ${m.text}`)].join('，')}。`
-                : `${action('Serializing a', polySer, zh)}: ${polySer.v4.text} with Nino v4, ${(() => {
+                : `${action(`Serializing ${article(polySer)}`, polySer, zh)}: ${polySer.v4.text} with Nino v4, ${(() => {
                     const all = [
                       `${polySer.memorypack.text} with MemoryPack`,
                       ...otherTimes(polySer).map(

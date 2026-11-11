@@ -22,8 +22,12 @@ import {
   bestReuse,
   formatClassRange,
   formatRatio,
+  formatWorkloadRange,
+  hasWorkloads,
+  type Opponent,
   otherLibs,
   reuseSpeedup,
+  workloadCases,
 } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
 import { release } from '@/lib/release';
@@ -31,22 +35,48 @@ import { release } from '@/lib/release';
 const memoryPackVersion = '1.21.4';
 const prerelease = release.prerelease ? ' --prerelease' : '';
 
-const serializeRange = formatClassRange('serialize');
-const deserializeRange = formatClassRange('deserialize');
-/** The same ranges against MessagePack and protobuf-net */
+/**
+ * Nino's range of wins against one library: over the workloads once the
+ * report has them, until then on classes and polymorphic types
+ */
+const range = (op: 'serialize' | 'deserialize', lib: Opponent) =>
+  hasWorkloads
+    ? formatWorkloadRange(op, lib)
+    : formatClassRange(op, lib === 'memorypack' ? undefined : lib);
 
+const serializeRange = range('serialize', 'memorypack');
+const deserializeRange = range('deserialize', 'memorypack');
+
+/** The same ranges against the other libraries the report measured */
 const otherRanges = otherLibs
   .map((other) => ({
     ...other,
-    serialize: formatClassRange('serialize', other.key),
-    deserialize: formatClassRange('deserialize', other.key),
+    serialize: range('serialize', other.key),
+    deserialize: range('deserialize', other.key),
   }))
   .filter((other) => other.serialize && other.deserialize);
+
+/** "RPC request; web API page, 100 orders; ..." / "RPC 请求、……" */
+const workloadList = (zh: boolean) =>
+  workloadCases
+    .map((w) =>
+      zh ? w.zh : w.name.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase()),
+    )
+    .join(zh ? '、' : '; ');
 const reuseMax = bestReuse ? formatRatio(reuseSpeedup(bestReuse)) : '';
 
 /** One sentence on speed against MemoryPack, from the synced benchmark data */
 function speedSentence(zh: boolean) {
   if (!serializeRange) return '';
+  const reuse = reuseMax
+    ? zh
+      ? `反序列化到已有对象时零分配，比 MemoryPack 的覆盖模式最高快 ${reuseMax}。`
+      : ` Deserializing into existing objects allocates nothing and is up to ${reuseMax} faster than MemoryPack's overwrite mode.`
+    : '';
+  if (hasWorkloads)
+    return zh
+      ? `在同一次 BenchmarkDotNet 测试中，用 ${workloadCases.length} 个贴近真实业务的负载（${workloadList(true)}）和 MemoryPack ${memoryPackVersion} 比，在 Nino 领先的负载上，Nino v4 序列化快 ${serializeRange}，反序列化快 ${deserializeRange}。${reuse}`
+      : `In the same BenchmarkDotNet run, over ${workloadCases.length} real-world workloads (${workloadList(false)}), Nino v4 serializes ${serializeRange} faster and deserializes ${deserializeRange} faster than MemoryPack ${memoryPackVersion} in the workloads where it leads.${reuse}`;
   return zh
     ? `在同一次 BenchmarkDotNet 测试中，与 MemoryPack ${memoryPackVersion} 相比，Nino v4 序列化类和多态类型快 ${serializeRange}，反序列化快 ${deserializeRange}；非托管结构体数组两者都是整块拷贝，性能持平。${reuseMax ? `反序列化到已有对象时零分配，比 MemoryPack 的覆盖模式最高快 ${reuseMax}。` : ''}`
     : `In the same BenchmarkDotNet run against MemoryPack ${memoryPackVersion}, Nino v4 serializes classes and polymorphic types ${serializeRange} faster and deserializes them ${deserializeRange} faster; arrays of unmanaged structs are on par, since both copy them as one block.${reuseMax ? ` Deserializing into existing objects allocates nothing and is up to ${reuseMax} faster than MemoryPack's overwrite mode.` : ''}`;
@@ -54,11 +84,19 @@ function speedSentence(zh: boolean) {
 
 /** Speed against MessagePack and protobuf-net, and when to choose them instead */
 function othersSentence(zh: boolean) {
-  const [mp, pb] = otherRanges;
+  const mp = otherRanges.find((o) => o.key === 'messagepack');
+  const pb = otherRanges.find((o) => o.key === 'protobuf');
   if (!mp || !pb) return '';
+  const what = hasWorkloads
+    ? zh
+      ? '在领先的真实负载上'
+      : 'on the real-world workloads where it leads'
+    : zh
+      ? '类和多态类型'
+      : 'classes and polymorphic types';
   return zh
-    ? `在同一次 BenchmarkDotNet 测试中，Nino v4 序列化类和多态类型比 ${mp.label} ${mp.version} 快 ${mp.serialize}，比 ${pb.label} ${pb.version} 快 ${pb.serialize}；反序列化分别快 ${mp.deserialize} 和 ${pb.deserialize}。这两种格式不依赖你的 C# 类型，Java、Python、C++ 等程序也能读，数据要给这些语言用时选它们；.NET 程序之间，以及与 nino-gen 生成代码的 Go、Rust、TypeScript 程序之间，用 Nino 更快。`
-    : `In the same BenchmarkDotNet run, Nino v4 serializes classes and polymorphic types ${mp.serialize} faster than ${mp.label} ${mp.version} and ${pb.serialize} faster than ${pb.label} ${pb.version}, and deserializes them ${mp.deserialize} and ${pb.deserialize} faster. Both formats can be read without your C# types, so choose them when Java, Python or C++ programs must read the data; between .NET programs, and with Go, Rust or TypeScript through the code nino-gen generates, Nino is faster.`;
+    ? `在同一次 BenchmarkDotNet 测试中，Nino v4 ${hasWorkloads ? `${what}序列化` : `序列化${what}`}比 ${mp.label} ${mp.version} 快 ${mp.serialize}，比 ${pb.label} ${pb.version} 快 ${pb.serialize}；反序列化分别快 ${mp.deserialize} 和 ${pb.deserialize}。这两种格式不依赖你的 C# 类型，Java、Python、C++ 等程序也能读，数据要给这些语言用时选它们；.NET 程序之间，以及与 nino-gen 生成代码的 Go、Rust、TypeScript 程序之间，用 Nino 更快。`
+    : `In the same BenchmarkDotNet run, ${hasWorkloads ? `${what}, Nino v4 serializes` : `Nino v4 serializes ${what}`} ${mp.serialize} faster than ${mp.label} ${mp.version} and ${pb.serialize} faster than ${pb.label} ${pb.version}, and deserializes ${hasWorkloads ? '' : 'them '}${mp.deserialize} and ${pb.deserialize} faster. Both formats can be read without your C# types, so choose them when Java, Python or C++ programs must read the data; between .NET programs, and with Go, Rust or TypeScript through the code nino-gen generates, Nino is faster.`;
 }
 
 interface Fact {
@@ -116,7 +154,9 @@ const text: Record<
         value: `${release.version}${release.prerelease ? ' (prerelease)' : ''}`,
       },
       license: { label: 'License', value: 'MIT, open source' },
-      speed: 'Nino v4 speedup on classes and polymorphic types',
+      speed: hasWorkloads
+        ? 'Nino v4 speedup on real-world workloads'
+        : 'Nino v4 speedup on classes and polymorphic types',
       serialize: 'Serialize',
       deserialize: 'Deserialize',
     },
@@ -259,7 +299,9 @@ const text: Record<
         value: `${release.version}${release.prerelease ? '（预发行版）' : ''}`,
       },
       license: { label: '协议', value: 'MIT 开源' },
-      speed: 'Nino v4 在类和多态类型上快多少',
+      speed: hasWorkloads
+        ? 'Nino v4 在真实负载上快多少'
+        : 'Nino v4 在类和多态类型上快多少',
       serialize: '序列化',
       deserialize: '反序列化',
     },

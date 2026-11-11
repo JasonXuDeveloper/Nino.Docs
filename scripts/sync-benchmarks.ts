@@ -21,9 +21,11 @@
  *   src/data/bench-unity.json, from the same release.
  *
  * The Performance Report and the Arm64 section have a row per method, and every
- * row is kept: since MessagePack (MessagePack-CSharp) and protobuf-net joined
- * the .NET benchmark, their `MessagePack…` and `Protobuf…` rows too. Releases
- * before that lack them; `requiredMethods` never asks for them.
+ * row is kept, whatever its method prefix (`MessagePack…`, `Protobuf…`,
+ * `GoogleProtobuf…`, `Json…`) or benchmark class (WorkloadTest's workloads
+ * among them). `requiredMethods` never asks for the other libraries or the
+ * workloads: releases before they joined the benchmark lack them, and the site
+ * then leaves them out.
  *
  *   bun scripts/sync-benchmarks.ts                       # newest v4.* release with a report
  *   bun scripts/sync-benchmarks.ts --fixture <file.md>   # parse a release body from a file
@@ -38,7 +40,10 @@
  * release-body-libraries.md (release-body-arm64.md plus MessagePack and
  * protobuf-net rows and the three runtime sections, with invented numbers: for
  * parser tests only) and release-body-unity.md (release-body-libraries.md plus
- * a Unity section, with invented numbers: for parser tests only).
+ * a Unity section, with invented numbers: for parser tests only) and
+ * release-body-workloads.md (release-body-unity.md plus WorkloadTest's rows
+ * for every library in the x64 report and the Arm64 section, with invented
+ * numbers: for parser tests only).
  *
  * Runs before every build. It never fails the build: on any error (network,
  * rate limit, no matching release, a table it cannot read) it prints a warning

@@ -28,6 +28,7 @@ import {
   RuntimeTable,
   UnityHighlights,
   UnityTables,
+  WorkloadTables,
 } from '@/components/bench-data';
 import { byteCountText, byteExamples } from '@/components/byte-playground';
 import {
@@ -39,6 +40,7 @@ import {
 import { chartProps } from '@/components/charts/benchmark-charts';
 import { type ChartId, isArchChart } from '@/components/charts/ids';
 import { glossary, glossaryHref } from '@/components/glossary';
+import { hasWorkloads } from '@/lib/benchmarks';
 import { getMDXComponents } from '@/mdx-components';
 import type { Locale } from './i18n';
 import { siteUrl } from './site';
@@ -401,6 +403,16 @@ function markdownComponents(lang: Locale, pageUrl: string) {
     LibraryTables(props: ComponentProps<typeof LibraryTables>) {
       asMarkdown();
       return LibraryTables({ ...props, markdown: true });
+    },
+    WorkloadTables(props: ComponentProps<typeof WorkloadTables>) {
+      asMarkdown();
+      return WorkloadTables({ ...props, markdown: true });
+    },
+    // The prose that fits the synced data (see IfWorkloads in bench-data.tsx)
+    IfWorkloads({ children, not }: Children & { not?: boolean }) {
+      asMarkdown();
+      // No line breaks of its own: it wraps inline text as often as blocks
+      return hasWorkloads === !not ? md`${children}` : null;
     },
     ReuseTable(props: ComponentProps<typeof ReuseTable>) {
       asMarkdown();

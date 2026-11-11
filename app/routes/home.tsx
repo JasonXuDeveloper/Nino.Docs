@@ -24,9 +24,9 @@ import {
 } from '@/components/home-sections';
 import {
   build,
-  classRatioRange,
+  headlineMax,
   headlineSerialize,
-  type OtherLib,
+  otherLibs,
 } from '@/lib/benchmarks';
 import { cn } from '@/lib/cn';
 import { getLocale, type Locale } from '@/lib/i18n';
@@ -39,14 +39,23 @@ import type { Route } from './+types/home';
 /** v4's generated source against v3's (generator benchmark, `build` in src/lib/benchmarks.ts) */
 const generatedSourceRatio = build[0].ratio;
 
-/** Best serialize win over MessagePack or protobuf-net on classes and polymorphic types ("9.81"), or null */
-const otherHeadline = (lib: OtherLib) => {
-  const { max } = classRatioRange('serialize', undefined, lib);
-  return Number.isFinite(max) ? max.toFixed(2) : null;
-};
-const messagePackHeadline = otherHeadline('messagepack');
-const protobufHeadline = otherHeadline('protobuf');
-const othersHeadline = messagePackHeadline && protobufHeadline;
+/** The best serialize win over each other library the report measured (headlineMax), e.g. "9.81" */
+const otherHeadlines = otherLibs.flatMap((lib) => {
+  const max = headlineMax('serialize', lib.key);
+  return max ? [{ label: lib.label, max }] : [];
+});
+
+/** ", 9.81× than MessagePack and 12.3× than protobuf-net" / "、比 MessagePack 快 9.81 倍……" */
+function othersHeadline(zh: boolean, sep: string) {
+  const parts = otherHeadlines.map(({ label, max }) =>
+    zh ? `比 ${label} 快 ${max} 倍` : `${max}× than ${label}`,
+  );
+  if (parts.length === 0) return '';
+  if (zh) return `${sep}${parts.join(sep)}`;
+  return parts.length > 1
+    ? `, ${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`
+    : `, ${parts[0]}`;
+}
 
 /** One of the four things the page proves, with the highlights (by index) that show it */
 interface Claim {
@@ -79,7 +88,7 @@ const copy: Record<
   }
 > = {
   en: {
-    description: `Nino is a high-performance binary serializer for C# and .NET: source-generated, ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack${othersHeadline ? `, ${messagePackHeadline}× than MessagePack and ${protobufHeadline}× than protobuf-net` : ''}, ` : ''}zero GC on hot paths. For RPC, messaging, caching and storage on .NET, NativeAOT, Unity (IL2CPP, HybridCLR) and Godot, with Go, Rust and TypeScript writing and reading the same bytes.`,
+    description: `Nino is a high-performance binary serializer for C# and .NET: source-generated, ${headlineSerialize ? `up to ${headlineSerialize}× faster than MemoryPack${othersHeadline(false, ', ')}, ` : ''}zero GC on hot paths. For RPC, messaging, caching and storage on .NET, NativeAOT, Unity (IL2CPP, HybridCLR) and Godot, with Go, Rust and TypeScript writing and reading the same bytes.`,
     pill: 'Nino v4 · C# binary serializer',
     headline: ['The fastest binary serializer', 'for C#.'],
     sub: 'One binary format, the same bytes on .NET, Unity, Godot, TypeScript, Go and Rust. Source-generated and SIMD-accelerated (AVX-512, AVX2, Arm64, WebAssembly), with zero GC on hot paths and safe on untrusted input: for services, networking and RPC, message queues, caching, storage and IPC.',
@@ -147,7 +156,7 @@ const copy: Record<
       {
         title: 'Fast',
         lead: headlineSerialize
-          ? `Up to ${headlineSerialize}× faster than MemoryPack${othersHeadline ? `, ${messagePackHeadline}× than MessagePack and ${protobufHeadline}× than protobuf-net` : ''}, and 0 B allocated per call on hot paths.`
+          ? `Up to ${headlineSerialize}× faster than MemoryPack${othersHeadline(false, ', ')}, and 0 B allocated per call on hot paths.`
           : '0 B allocated per call on hot paths.',
         items: [7, 2],
         href: 'benchmarks',
@@ -178,7 +187,7 @@ const copy: Record<
     older: 'Older versions:',
   },
   zh: {
-    description: `Nino 是高性能 C# / .NET 二进制序列化库：基于源生成器，${headlineSerialize ? `最高比 MemoryPack 快 ${headlineSerialize} 倍${othersHeadline ? `、比 MessagePack 快 ${messagePackHeadline} 倍、比 protobuf-net 快 ${protobufHeadline} 倍` : ''}，` : ''}热路径零 GC 分配。适用于 RPC、消息、缓存与存储，支持 .NET、NativeAOT、Unity（IL2CPP、HybridCLR）和 Godot；Go、Rust 和 TypeScript 也能读写同样的字节。`,
+    description: `Nino 是高性能 C# / .NET 二进制序列化库：基于源生成器，${headlineSerialize ? `最高比 MemoryPack 快 ${headlineSerialize} 倍${othersHeadline(true, '、')}，` : ''}热路径零 GC 分配。适用于 RPC、消息、缓存与存储，支持 .NET、NativeAOT、Unity（IL2CPP、HybridCLR）和 Godot；Go、Rust 和 TypeScript 也能读写同样的字节。`,
     pill: 'Nino v4 · C# 二进制序列化库',
     // U+200B: the one place the first line may break on a phone (break-keep keeps the words whole)
     headline: ['最快的\u200b二进制序列化库', '为 C# 而生。'],
@@ -247,7 +256,7 @@ const copy: Record<
       {
         title: '快',
         lead: headlineSerialize
-          ? `最高比 MemoryPack 快 ${headlineSerialize} 倍${othersHeadline ? `，比 MessagePack 快 ${messagePackHeadline} 倍，比 protobuf-net 快 ${protobufHeadline} 倍` : ''}；热路径上每次调用 0 B 分配。`
+          ? `最高比 MemoryPack 快 ${headlineSerialize} 倍${othersHeadline(true, '，')}；热路径上每次调用 0 B 分配。`
           : '热路径上每次调用 0 B 分配。',
         items: [7, 2],
         href: 'benchmarks',
