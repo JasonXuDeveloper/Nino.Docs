@@ -1,5 +1,5 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
-import { BookOpen, Gauge } from 'lucide-react';
+import { BookOpen, Gauge, MessageCircle } from 'lucide-react';
 import type { Locale } from './i18n';
 import { githubUrl } from './site';
 import { latestVersion } from './versions';
@@ -36,6 +36,18 @@ export function baseOptions(lang: Locale): BaseLayoutProps {
         icon: <Gauge />,
         on: 'nav',
       },
+      // The Chinese community's QQ group (1054653934); the English site has none.
+      ...(zh
+        ? [
+            {
+              text: 'QQ 群',
+              url: 'https://qm.qq.com/q/Octgj3BS8g',
+              icon: <MessageCircle />,
+              external: true,
+              on: 'nav' as const,
+            },
+          ]
+        : []),
     ],
     githubUrl,
   };
