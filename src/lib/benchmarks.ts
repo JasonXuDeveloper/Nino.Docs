@@ -623,15 +623,29 @@ export function ratioRange(op: 'serialize' | 'deserialize', ds = x64) {
 const structKeys = new Set(['SimpleStruct', 'SimpleStructs', 'Vectors']);
 
 /**
- * Fastest / slowest win against MemoryPack on classes and polymorphic types
- * (the cases that are not unmanaged structs)
+ * Fastest / slowest win on classes and polymorphic types (the cases that are
+ * not unmanaged structs), against MemoryPack or, with `lib`, MessagePack or
+ * protobuf-net
  */
-export function classRatioRange(op: 'serialize' | 'deserialize', ds = x64) {
+export function classRatioRange(
+  op: 'serialize' | 'deserialize',
+  ds = x64,
+  lib?: OtherLib,
+) {
   const wins = ds.runtime[op]
     .filter((row) => !structKeys.has(row.key))
-    .map((row) => row.ratio)
+    .map((row) => (lib ? row.others[lib]?.ratio : row.ratio))
     .filter((ratio): ratio is number => ratio !== undefined && ratio > 1);
   return { min: Math.min(...wins), max: Math.max(...wins) };
+}
+
+/** classRatioRange as prose ("1.23–4.56×"), or '' without data */
+export function formatClassRange(
+  op: 'serialize' | 'deserialize',
+  lib?: OtherLib,
+) {
+  const { min, max } = classRatioRange(op, x64, lib);
+  return Number.isFinite(min) ? `${min.toFixed(2)}–${formatRatio(max)}` : '';
 }
 
 /** How many times faster Nino reusing is than MemoryPack overwrite (two decimals, from the raw means) */

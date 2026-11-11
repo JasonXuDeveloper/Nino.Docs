@@ -22,6 +22,7 @@ import {
   type BenchDataset,
   datasets,
   formatBytes,
+  formatClassRange,
   formatRatio,
   formatTime,
   isOnPar,
@@ -1008,7 +1009,9 @@ export function UnityHighlights({
  * One number from the data (x64), for prose:
  * serialize.max / serialize.min / deserialize.max / deserialize.min (ratios
  * against MemoryPack), reuse.max (vs MemoryPack's overwrite), payload.v4 /
- * payload.memorypack (bytes for one SimpleClass), or
+ * payload.memorypack (bytes for one SimpleClass),
+ * messagepack.serialize / messagepack.deserialize / protobuf.serialize /
+ * protobuf.deserialize (the range of wins on classes and polymorphic types), or
  * serialize:<case key> / deserialize:<case key> (ratio of one case).
  */
 export function BenchValue({ k }: { k: string }) {
@@ -1019,6 +1022,11 @@ export function benchValue(k: string): string {
   const [op, which] = k.split(/[.:]/) as [string, string];
   if (k === 'reuse.max')
     return formatRatio(Math.max(...reuse.map(reuseSpeedup)));
+  if (
+    (op === 'messagepack' || op === 'protobuf') &&
+    (which === 'serialize' || which === 'deserialize')
+  )
+    return formatClassRange(which, op) || '—';
   if (op === 'payload') {
     const value = which === 'v4' ? payload.v4 : payload.memorypack;
     return value === null ? '—' : value.toLocaleString('en-US');

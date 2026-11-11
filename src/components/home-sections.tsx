@@ -20,7 +20,7 @@ import {
 import { Link } from 'react-router';
 import {
   bestReuse,
-  classRatioRange,
+  formatClassRange,
   formatRatio,
   reuseSpeedup,
 } from '@/lib/benchmarks';
@@ -28,22 +28,32 @@ import type { Locale } from '@/lib/i18n';
 import { release } from '@/lib/release';
 
 const memoryPackVersion = '1.21.4';
+const messagePackVersion = '3.1.12';
+const protobufVersion = '3.4.40';
 const prerelease = release.prerelease ? ' --prerelease' : '';
 
-const range = (op: 'serialize' | 'deserialize') => {
-  const { min, max } = classRatioRange(op);
-  return Number.isFinite(min) ? `${min.toFixed(2)}–${formatRatio(max)}` : '';
-};
-const serializeRange = range('serialize');
-const deserializeRange = range('deserialize');
+const serializeRange = formatClassRange('serialize');
+const deserializeRange = formatClassRange('deserialize');
+/** The same ranges against MessagePack and protobuf-net */
+const others = [
+  { label: 'MessagePack', version: messagePackVersion, lib: 'messagepack' },
+  { label: 'protobuf-net', version: protobufVersion, lib: 'protobuf' },
+] as const;
+const otherRanges = others
+  .map((other) => ({
+    ...other,
+    serialize: formatClassRange('serialize', other.lib),
+    deserialize: formatClassRange('deserialize', other.lib),
+  }))
+  .filter((other) => other.serialize && other.deserialize);
 const reuseMax = bestReuse ? formatRatio(reuseSpeedup(bestReuse)) : '';
 
 /** One sentence on speed against MemoryPack, from the synced benchmark data */
 function speedSentence(zh: boolean) {
   if (!serializeRange) return '';
   return zh
-    ? `在同一次 BenchmarkDotNet 测试中，与 MemoryPack ${memoryPackVersion} 相比，Nino v4 序列化类和多态类型快 ${serializeRange}，反序列化快 ${deserializeRange}；非托管结构体数组两者都是整块拷贝，性能持平。${reuseMax ? `反序列化到已有对象时零分配，比 MemoryPack 的覆盖模式最高快 ${reuseMax}。` : ''}`
-    : `In the same BenchmarkDotNet run against MemoryPack ${memoryPackVersion}, Nino v4 serializes classes and polymorphic types ${serializeRange} faster and deserializes them ${deserializeRange} faster; arrays of unmanaged structs are on par, since both copy them as one block.${reuseMax ? ` Deserializing into existing objects allocates nothing and is up to ${reuseMax} faster than MemoryPack's overwrite mode.` : ''}`;
+    ? `在同一次 BenchmarkDotNet 测试中，与 MemoryPack ${memoryPackVersion} 相比，Nino v4 序列化类和多态类型快 ${serializeRange}，反序列化快 ${deserializeRange}；非托管结构体数组两者都是整块拷贝，性能持平。${otherRanges.map((o) => `对比 ${o.label} ${o.version}，类和多态类型的序列化快 ${o.serialize}，反序列化快 ${o.deserialize}。`).join('')}${reuseMax ? `反序列化到已有对象时零分配，比 MemoryPack 的覆盖模式最高快 ${reuseMax}。` : ''}`
+    : `In the same BenchmarkDotNet run against MemoryPack ${memoryPackVersion}, Nino v4 serializes classes and polymorphic types ${serializeRange} faster and deserializes them ${deserializeRange} faster; arrays of unmanaged structs are on par, since both copy them as one block.${otherRanges.map((o) => ` Against ${o.label} ${o.version}, it serializes them ${o.serialize} faster and deserializes them ${o.deserialize} faster.`).join('')}${reuseMax ? ` Deserializing into existing objects allocates nothing and is up to ${reuseMax} faster than MemoryPack's overwrite mode.` : ''}`;
 }
 
 interface Fact {
@@ -120,6 +130,10 @@ const text: Record<
             },
           ]
         : []),
+      ...otherRanges.map((o) => ({
+        label: `vs ${o.label} ${o.version}`,
+        value: `${o.serialize} faster serialization and ${o.deserialize} faster deserialization`,
+      })),
       {
         label: 'License',
         value: 'MIT, open source on GitHub',
@@ -271,6 +285,10 @@ const text: Record<
             },
           ]
         : []),
+      ...otherRanges.map((o) => ({
+        label: `对比 ${o.label} ${o.version}`,
+        value: `序列化快 ${o.serialize}，反序列化快 ${o.deserialize}`,
+      })),
       { label: '协议', value: 'MIT，在 GitHub 上开源' },
     ],
     useTitle: '对象与字节互转的地方，都能用 Nino',

@@ -1,7 +1,7 @@
 ---
 title: 介绍
 seoTitle: "Nino 介绍：高性能 C# / .NET 二进制序列化库 – Nino v4 文档"
-description: "Nino 是通用的高性能 C# / .NET 二进制序列化库：基于源生成器，热路径零 GC 分配，适用于服务、消息、缓存与存储，支持 .NET、Unity（IL2CPP、HybridCLR）和 Godot，可与 TypeScript、Go 和 Rust 互通。"
+description: "Nino 是通用的高性能 C# / .NET 二进制序列化库：基于源生成器，热路径零 GC 分配，适用于服务、消息、缓存与存储，支持 .NET、Unity（IL2CPP、HybridCLR）和 Godot，Go、Rust 和 TypeScript 也能读写同样的字节。"
 icon: BookOpen
 ---
 
@@ -59,13 +59,13 @@ flowchart LR
 
 ## 为什么选 Nino [#why-nino]
 
-- **快。** 和 MemoryPack 在同一轮测试中比，Nino 序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象图最高快 <BenchValue k="deserialize.max" />；非托管结构体数组两者都整块拷贝，至少打平。详见 [.NET 基准测试](/zh/docs/v4/benchmarks)。
+- **快。** 和 MemoryPack 在同一轮测试中比，Nino 序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象图最高快 <BenchValue k="deserialize.max" />；非托管结构体数组两者都整块拷贝，至少打平。对类和多态类型，序列化比 MessagePack 快 <BenchValue k="messagepack.serialize" />、比 protobuf-net 快 <BenchValue k="protobuf.serialize" />，反序列化分别快 <BenchValue k="messagepack.deserialize" /> 和 <BenchValue k="protobuf.deserialize" />。详见 [.NET 基准测试](/zh/docs/v4/benchmarks)。
 - **不可信数据也安全。** 网络对端发来的数据、用户的文件，都不会让进程崩溃，不会让 Nino 分配与数据大小不成比例的内存，也不会让 Nino 创建你没声明的类型：任何无效输入都只抛出 `NinoDataException`。详见[不可信数据](/zh/docs/v4/security)。
 - **热路径零 GC。** [序列化到复用的缓冲区](/zh/docs/v4/basic#reusing-a-buffer)时不分配内存；[反序列化到已有对象或池化实例](/zh/docs/v4/pooling)时同样不分配：文本没变的字符串原样保留，只有变了的文本才读成新字符串。
 - **一切在编译期完成。** 源生成器为每个类型生成一个格式化器，所以 IL2CPP、NativeAOT 和 HybridCLR 上都能直接用。用 .NET 8 SDK 及以上版本编译时，[拦截器](/zh/docs/v4/performance#interceptors)会把每次调用直接转给对应的格式化器。生成器是增量的：改一个类型只重新生成这个类型，生成的代码编译起来也比 v3 快得多（参见[构建时间](/zh/docs/v4/whats-new#faster-to-build)）。
 - **多态无需标签。** 声明为基类或接口的值，读回来还是它的实际类型。类型 ID 是类型名的哈希，不用维护标签表；其他程序集里的子类型，Nino 也能自己找到。详见[多态](/zh/docs/v4/polymorphism)。
 - **数据可以演进。** 每个类型可以单独选择[版本容错](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）、[键控成员](/zh/docs/v4/evolving-data#keyed-members)（增删、重排成员）或[引用追踪](/zh/docs/v4/reference-tracking)（共享引用和循环引用）。不开启的类型没有任何额外开销。项目里放一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)，改出会破坏已有数据的改动时，写代码时就会提示。
-- **跨平台、跨运行时字节一致。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 在 CoreCLR、Mono、IL2CPP 上，在 64 位和 32 位、x64 和 Arm64 平台上，写出的字节完全相同。Unity 客户端和 .NET 服务端可以直接读对方的数据。详见[平台](/zh/docs/v4/platforms)。
+- **跨平台、跨语言字节一致。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 在 CoreCLR、Mono、IL2CPP 上，在 64 位和 32 位、x64 和 Arm64 平台上，写出的字节完全相同。Unity 客户端和 .NET 服务端可以直接读对方的数据，Go、Rust 和 TypeScript 的运行时也读写同样的字节。详见[平台](/zh/docs/v4/platforms)。
 - **线程安全。** `NinoSerializer` 和 `NinoDeserializer` 的所有方法都可以在任意多个线程上同时调用，热路径上没有锁。
 - **写代码时就发现错误。** 共 44 条[分析器](/zh/docs/v4/analyzers)（NINO001–NINO044），许多都带一键代码修复。
 
