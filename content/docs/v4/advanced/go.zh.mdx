@@ -127,6 +127,7 @@ Go 在编译期实例化泛型。泛型类型如果以别的类型实参包含�
 生成的读取代码和结构体标签函数把输入一律当作不可信数据，做[每种语言都做的检查](/zh/docs/v4/advanced/codegen#untrusted-data)。在 Go 里：
 
 - 任何输入都不会让读取 panic，这靠代码结构保证，不靠 `recover`；长度上限和 .NET 一样。错误会一直保留：第一次失败之后，每次读取都返回零值，所以循环总能结束。
+- 一次读取里，集合在读元素之前预先分配的内存来自同一份额度（每字节输入 16 字节，再加 16 KB）；超出部分切片边读边扩容，所以声称元素比数据多的嵌套集合，不能每层都按剩余字节数分配。
 - 所有失败都是 `*nino.Error`（`Code`、`Offset`、`Detail`；`errors.Is(err, nino.ErrTooDeep)`……）。`Deserialize` 出错时返回零值，从不返回读了一半的值；`Unmarshal` 出错时不动目标。
 - 有些检查在[不可信模式](/zh/docs/v4/security#untrusted-mode)之外比 .NET 严，有些一直比 .NET 严：它还拒绝超过 `DateTime.MaxValue` 的 `DateTime` tick 数、无效的 `decimal`、超出范围的 `DateOnly` 和 `TimeOnly`、原始结构体里不是 0 或 1 的 bool、键控主体里重复的键，以及不是最简形式的 `BigInteger`。
 

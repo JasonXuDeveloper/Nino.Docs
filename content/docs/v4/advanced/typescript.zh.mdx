@@ -264,6 +264,7 @@ mesh.indices = Int32Array.of(0, 1, 2);
 生成的读取代码按不可信输入处理数据，做[每种语言都做的检查](/zh/docs/v4/advanced/codegen#untrusted-data)。在 TypeScript 中：
 
 - 所有失败都是 `NinoError`。
+- 一次读取里，数组在读元素之前预先分配的内存，以及下面键防护用的表，都来自同一份额度（每字节输入 16 字节，再加 16 KB）；超出部分数组边读边扩容，所以声称元素比数据多的嵌套集合，不能每层都按剩余字节数分配。
 - 映射读入 `Map`，从不读入普通对象，所以 `__proto__` 这样的键只是数据。
 - `[NinoUtf8]` 字符串必须是给定字符数的严格 UTF-8。
 - V8 对数字、`bigint` 以及数组下标形式的字符串（`"0"` 到 `"4294967294"`，按其数值求哈希）求哈希时不带种子，数据就能专门挑选落进同一个桶的键。超过 128 个数字、`bigint` 或字符串键的映射或 Set 会让每个键经过 `NinoKeyGuard`（字符串只对数组下标形式的求哈希）：某个键在所在的桶里会碰到 100 个以上的键时，抛出 `NinoError`，和 .NET 的 [`MaxHashCollisions`](/zh/docs/v4/security#hash-flooding) 一样。这个防护只对 V8（Node、Chromium、Deno）精确，对 JavaScriptCore 和 SpiderMonkey 不精确，它们对键的哈希方式不同。Go 和 Rust 用随机种子求键的哈希。

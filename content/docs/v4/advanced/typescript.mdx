@@ -264,6 +264,7 @@ A class declared with [`[NinoType(trackReferences: true)]`](/en/docs/v4/referenc
 The generated readers take untrusted input with the checks [every language makes](/en/docs/v4/advanced/codegen#untrusted-data). In TypeScript:
 
 - Every failure is a `NinoError`.
+- What the arrays of one read allocate before their elements are read, and the tables of the key guard below, come from one budget per read (16 bytes per input byte, plus 16 KB); past it an array grows as it reads, so nested collections that claim more elements than the data holds cannot each allocate the bytes left.
 - Maps are read into `Map`s, never plain objects, so keys such as `__proto__` are data.
 - `[NinoUtf8]` strings must be strict UTF-8 of the char count given.
 - V8 hashes numbers, `bigint`s and strings that are array indexes (`"0"` to `"4294967294"`, hashed by their value) without a seed, so data could choose keys that share a bucket of its table. A map or set of more than 128 number, `bigint` or string keys passes them through `NinoKeyGuard` (of strings, only array indexes are hashed), which throws a `NinoError` when a key would find more than 100 keys in its bucket, as .NET's [`MaxHashCollisions`](/en/docs/v4/security#hash-flooding) does. The guard is exact for V8 (Node, Chromium, Deno), not for JavaScriptCore or SpiderMonkey, which hash keys their own way. Go and Rust hash keys with a random seed.
