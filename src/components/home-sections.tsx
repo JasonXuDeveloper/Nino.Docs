@@ -66,13 +66,10 @@ interface Fact {
   value: string;
 }
 
-/** The facts card beside "What is Nino?": version, license, platforms, install commands, speed */
+/** The facts card beside "What is Nino?": version, license and speed (install is in the hero, platforms in the FAQ) */
 interface Card {
   version: Fact;
   license: Fact;
-  runsOn: Fact;
-  install: string;
-  commands: Fact[];
   speed: string;
   serialize: string;
   deserialize: string;
@@ -119,17 +116,6 @@ const text: Record<
         value: `${release.version}${release.prerelease ? ' (prerelease)' : ''}`,
       },
       license: { label: 'License', value: 'MIT, open source' },
-      runsOn: {
-        label: 'Runs on',
-        value:
-          '.NET Standard 2.0+, .NET 8, .NET 10, NativeAOT, ASP.NET Core, Unity 2022.3+ (Mono, IL2CPP, HybridCLR), Godot 4; TypeScript, Go and Rust through generated code',
-      },
-      install: 'Install',
-      commands: [
-        { label: '.NET', value: `dotnet add package Nino${prerelease}` },
-        { label: 'Unity', value: 'openupm add com.jasonxudeveloper.nino' },
-        { label: 'AI agents', value: 'npx skills add JasonXuDeveloper/Nino' },
-      ],
       speed: 'Nino v4 speedup on classes and polymorphic types',
       serialize: 'Serialize',
       deserialize: 'Deserialize',
@@ -253,8 +239,7 @@ const text: Record<
       },
       {
         question: 'How do I install Nino?',
-        answer:
-          'Run dotnet add package Nino --prerelease in a .NET project, or openupm add com.jasonxudeveloper.nino in a Unity project. Go, Rust and TypeScript programs use code that nino-gen (Nino.Codegen) generates from your C# types, with the runtime from go get, cargo add or npm install. For AI coding agents, npx skills add JasonXuDeveloper/Nino installs the nino-serialization skill. Nino is free and MIT licensed.',
+        answer: `Run dotnet add package Nino${prerelease} in a .NET project, or openupm add com.jasonxudeveloper.nino in a Unity project. Go, Rust and TypeScript programs use code that nino-gen (Nino.Codegen) generates from your C# types, with the runtime from go get, cargo add or npm install. For AI coding agents, npx skills add JasonXuDeveloper/Nino installs the nino-serialization skill. Nino is free and MIT licensed.`,
         href: 'start',
       },
     ],
@@ -274,17 +259,6 @@ const text: Record<
         value: `${release.version}${release.prerelease ? '（预发行版）' : ''}`,
       },
       license: { label: '协议', value: 'MIT 开源' },
-      runsOn: {
-        label: '运行环境',
-        value:
-          '.NET Standard 2.0+、.NET 8、.NET 10、NativeAOT、ASP.NET Core、Unity 2022.3+（Mono、IL2CPP、HybridCLR）、Godot 4；TypeScript、Go 和 Rust 通过生成的代码使用',
-      },
-      install: '安装',
-      commands: [
-        { label: '.NET', value: `dotnet add package Nino${prerelease}` },
-        { label: 'Unity', value: 'openupm add com.jasonxudeveloper.nino' },
-        { label: 'AI 助手', value: 'npx skills add JasonXuDeveloper/Nino' },
-      ],
       speed: 'Nino v4 在类和多态类型上快多少',
       serialize: '序列化',
       deserialize: '反序列化',
@@ -408,8 +382,7 @@ const text: Record<
       },
       {
         question: '如何安装 Nino？',
-        answer:
-          '在 .NET 项目中运行 dotnet add package Nino --prerelease；Unity 项目中运行 openupm add com.jasonxudeveloper.nino。Go、Rust 和 TypeScript 程序用 nino-gen（Nino.Codegen）从你的 C# 类型生成代码，运行时用 go get、cargo add 或 npm install 安装。给 AI 编程助手用的 nino-serialization skill 用 npx skills add JasonXuDeveloper/Nino 安装。Nino 免费，采用 MIT 协议。',
+        answer: `在 .NET 项目中运行 dotnet add package Nino${prerelease}；Unity 项目中运行 openupm add com.jasonxudeveloper.nino。Go、Rust 和 TypeScript 程序用 nino-gen（Nino.Codegen）从你的 C# 类型生成代码，运行时用 go get、cargo add 或 npm install 安装。给 AI 编程助手用的 nino-serialization skill 用 npx skills add JasonXuDeveloper/Nino 安装。Nino 免费，采用 MIT 协议。`,
         href: 'start',
       },
     ],
@@ -449,39 +422,26 @@ function FactsCard({ card }: { card: Card }) {
   const fact = (f: Fact) => (
     <div>
       <dt className="text-xs text-fd-muted-foreground">{f.label}</dt>
-      <dd className="mt-0.5 font-medium">{f.value}</dd>
+      <dd className="mt-1 font-medium">{f.value}</dd>
     </div>
   );
   return (
     <div className="flex flex-col divide-y self-start rounded-xl border bg-fd-card text-sm">
-      <dl className="grid grid-cols-2 gap-4 p-5">
+      <dl className="grid grid-cols-2 gap-4 p-5 sm:p-6">
         {fact(card.version)}
         {fact(card.license)}
       </dl>
-      <div className="p-5">
-        <h3 className="text-xs text-fd-muted-foreground">{card.install}</h3>
-        <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1.5">
-          {card.commands.map((c) => (
-            <div key={c.label} className="contents">
-              <dt className="text-xs font-medium">{c.label}</dt>
-              <dd className="font-mono text-xs break-all text-fd-muted-foreground">
-                {c.value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </div>
       {speedRows.length > 0 && (
-        <div className="p-5">
+        <div className="p-5 sm:p-6">
           <h3 className="text-xs text-fd-muted-foreground">{card.speed}</h3>
-          <table className="mt-2 w-full text-left text-xs tabular-nums sm:text-sm">
+          <table className="mt-3 w-full text-xs tabular-nums sm:text-sm">
             <thead className="text-xs text-fd-muted-foreground">
               <tr>
                 <td />
-                <th className="pb-1 text-right font-normal">
+                <th className="pb-2 text-right font-normal">
                   {card.serialize}
                 </th>
-                <th className="pb-1 text-right font-normal">
+                <th className="pb-2 text-right font-normal">
                   {card.deserialize}
                 </th>
               </tr>
@@ -489,16 +449,16 @@ function FactsCard({ card }: { card: Card }) {
             <tbody>
               {speedRows.map((row) => (
                 <tr key={row.label} className="border-t">
-                  <th scope="row" className="py-1.5 pr-2 text-left font-medium">
+                  <th scope="row" className="py-2.5 pr-2 text-left font-medium">
                     {row.label}{' '}
-                    <span className="text-xs font-normal text-fd-muted-foreground">
+                    <span className="block text-xs font-normal text-fd-muted-foreground sm:inline">
                       {row.version}
                     </span>
                   </th>
-                  <td className="py-1.5 pl-2 text-right whitespace-nowrap">
+                  <td className="py-2.5 pl-2 text-right whitespace-nowrap sm:pl-3">
                     {row.serialize}
                   </td>
-                  <td className="py-1.5 pl-2 text-right whitespace-nowrap">
+                  <td className="py-2.5 pl-2 text-right whitespace-nowrap sm:pl-3">
                     {row.deserialize}
                   </td>
                 </tr>
@@ -507,12 +467,6 @@ function FactsCard({ card }: { card: Card }) {
           </table>
         </div>
       )}
-      <dl className="p-5">
-        <dt className="text-xs text-fd-muted-foreground">
-          {card.runsOn.label}
-        </dt>
-        <dd className="mt-0.5 leading-relaxed">{card.runsOn.value}</dd>
-      </dl>
     </div>
   );
 }
@@ -520,7 +474,7 @@ function FactsCard({ card }: { card: Card }) {
 export function HomeAbout({ lang }: { lang: Locale }) {
   const t = text[lang];
   return (
-    <div className="grid gap-8 lg:grid-cols-[3fr_2fr]">
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] lg:gap-12">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">{t.aboutTitle}</h2>
         {t.about.map((paragraph) => (
