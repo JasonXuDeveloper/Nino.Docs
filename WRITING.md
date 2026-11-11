@@ -255,7 +255,7 @@ Overview, FAQ and reference pages answer the questions their readers search for,
 
 Never type a benchmark number. Runtime numbers come from `src/data/bench-*.json` (synced from the release's
 Performance Report, AGENTS.md) through `BenchValue`, `RuntimeTable`, `ReuseTable`, `ExtraRuntimeTables`,
-`ResultsTable`, `BenchSource`, `BenchmarkChart`, `RuntimesTables`, `UnityTables` and `UnityHighlights`. Within 5 % is
+`ResultsTable`, `WorkloadTables`, `BenchSource`, `BenchmarkChart`, `RuntimesTables`, `UnityTables` and `UnityHighlights`. Within 5 % is
 on par and is written so; never call Nino "slower"; v3 means 3.3.13.
 
 ## Headings and links
