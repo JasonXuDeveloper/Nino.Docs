@@ -219,6 +219,14 @@ export interface RuntimeCase {
   gcBound?: boolean;
 }
 
+/** A case of moreCases: MemoryPack is absent where it cannot round-trip the data (BigInteger, BitArray) */
+export type TableCase = Omit<RuntimeCase, 'memorypack'> & {
+  memorypack?: Measure;
+};
+
+const hasMemoryPack = (row: TableCase): row is RuntimeCase =>
+  row.memorypack !== undefined;
+
 interface CaseInfo {
   name: string;
   zh?: string;
@@ -479,6 +487,126 @@ const extraCases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
   ],
 };
 
+/** The same cases for both operations; a case shows for an operation only when the report has its rows */
+const bothOps = (list: CaseInfo[]) => ({ serialize: list, deserialize: list });
+
+/**
+ * The benchmark classes of common types, collections, BCL types, scattered
+ * objects and untrusted reads (CommonTypesTest, CollectionsTest, BclTypesTest,
+ * ScatteredTest, UntrustedTest), against every library that can express each
+ * case. Only the Benchmarks page shows them (`<MoreRuntimeTables set=...>`).
+ */
+export type MoreSet =
+  | 'common'
+  | 'collections'
+  | 'bcl'
+  | 'scattered'
+  | 'untrusted';
+
+const moreCases: Record<
+  MoreSet,
+  Record<'serialize' | 'deserialize', CaseInfo[]>
+> = {
+  common: bothOps([
+    {
+      name: 'TreeNode tree, 1,365 nodes',
+      zh: 'TreeNode 树，1,365 个节点',
+      key: 'Tree',
+    },
+    { name: 'InventoryItem[1000]', code: true, key: 'Inventory' },
+    { name: 'Waypoint[1000]', code: true, key: 'Waypoints' },
+    {
+      name: 'Dictionary<string, string> (1,000)',
+      code: true,
+      key: 'StringDictionary',
+    },
+    // Reports up to v4.0.0-rc.9 (the workloads replaced them)
+    { name: 'List<Player> (100)', code: true, key: 'Players' },
+    { name: 'List<Order> (100)', code: true, key: 'Orders' },
+    { name: 'List<Shape> (1,000)', code: true, key: 'Shapes' },
+  ]),
+  collections: bothOps([
+    { name: 'List<(int, long)>', code: true, key: 'TupleList' },
+    { name: 'KeyValuePair<int, int>[]', code: true, key: 'KeyValuePairs' },
+    { name: 'HashSet<int>', code: true, key: 'HashSet' },
+    { name: 'Dictionary<int, int>', code: true, key: 'IntDictionary' },
+    { name: 'Queue<int>', code: true, key: 'Queue' },
+    { name: 'LinkedList<int>', code: true, key: 'LinkedList' },
+    { name: 'SortedSet<int>', code: true, key: 'SortedSet' },
+    { name: 'SortedDictionary<int, int>', code: true, key: 'SortedDictionary' },
+    { name: 'SortedList<int, int>', code: true, key: 'SortedList' },
+    {
+      name: 'ConcurrentDictionary<int, int>',
+      code: true,
+      key: 'ConcurrentDictionary',
+    },
+    { name: 'SelfTree', code: true, key: 'SelfTree' },
+  ]),
+  bcl: bothOps([
+    { name: 'BigInteger', code: true, key: 'BigInteger' },
+    { name: 'Uri', code: true, key: 'Uri' },
+    { name: 'Version', code: true, key: 'Version' },
+    { name: 'StringBuilder', code: true, key: 'StringBuilder' },
+    { name: 'BitArray', code: true, key: 'BitArray' },
+    { name: 'CultureInfo', code: true, key: 'CultureInfo' },
+    { name: 'TimeZoneInfo', code: true, key: 'TimeZoneInfo' },
+    { name: 'Lazy<string>', code: true, key: 'Lazy' },
+    { name: 'Memory<int>', code: true, key: 'Memory' },
+    { name: 'ReadOnlySequence<int>', code: true, key: 'ReadOnlySequence' },
+    { name: 'ReadOnlyCollection<int>', code: true, key: 'ReadOnlyCollection' },
+    { name: 'ILookup<int, int>', code: true, key: 'Lookup' },
+    { name: 'BlockingCollection<int>', code: true, key: 'BlockingCollection' },
+    { name: 'ImmutableHashSet<int>', code: true, key: 'ImmutableHashSet' },
+    { name: 'ImmutableSortedSet<int>', code: true, key: 'ImmutableSortedSet' },
+    { name: 'ImmutableQueue<int>', code: true, key: 'ImmutableQueue' },
+    { name: 'ImmutableStack<int>', code: true, key: 'ImmutableStack' },
+    {
+      name: 'ImmutableDictionary<int, int>',
+      code: true,
+      key: 'ImmutableDictionary',
+    },
+    {
+      name: 'ImmutableSortedDictionary<int, int>',
+      code: true,
+      key: 'ImmutableSortedDictionary',
+    },
+  ]),
+  scattered: bothOps([
+    {
+      name: 'Shapes, shuffled (1M)',
+      zh: '形状，打乱顺序（100 万）',
+      key: 'ScatteredShapes',
+    },
+    {
+      name: 'Shapes, allocation order (1M)',
+      zh: '形状，分配顺序（100 万）',
+      key: 'InOrderShapes',
+    },
+    {
+      name: 'Shapes, in cache (8,192)',
+      zh: '形状，在缓存中（8,192）',
+      key: 'HotShapes',
+    },
+    {
+      name: 'Classes with a string, shuffled (1M)',
+      zh: '带字符串的类，打乱顺序（100 万）',
+      key: 'ScatteredItems',
+    },
+    {
+      name: 'Classes with a string, shuffled, into an existing array',
+      zh: '带字符串的类，打乱顺序，读进已有数组',
+      key: 'ScatteredItemsInto',
+    },
+  ]),
+  untrusted: bothOps([
+    {
+      name: 'List of 1,000 raw structs, Untrusted on',
+      zh: '1,000 个原始结构体的列表，开启 Untrusted',
+      key: 'UntrustedList',
+    },
+  ]),
+};
+
 /* ------------------------------------------------------------------ */
 /* Deserializing into existing objects                                 */
 /* ------------------------------------------------------------------ */
@@ -494,6 +622,8 @@ export interface ReuseCase {
   /** MemoryPack's overwrite mode (deserialize into an existing instance) */
   memorypackOverwrite: Measure;
   memorypackOverwriteBytes: number;
+  /** MessagePack and protobuf-net read new instances only (neither can overwrite one) */
+  othersNew: Partial<Record<OtherLib, Measure>>;
 }
 
 const reuseCases = [
@@ -552,6 +682,8 @@ export interface BenchDataset {
   runtime: Record<'serialize' | 'deserialize', RuntimeCase[]>;
   /** See extraCases */
   extraRuntime: Record<'serialize' | 'deserialize', RuntimeCase[]>;
+  /** See moreCases */
+  more: Record<MoreSet, Record<'serialize' | 'deserialize', TableCase[]>>;
   /** WorkloadTest (workloadCases); empty until a report has it */
   workloads: Record<'serialize' | 'deserialize', RuntimeCase[]>;
   reuse: ReuseCase[];
@@ -579,9 +711,11 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
     const nino = rows.get(`Nino${verb}${info.key}`);
     const v4 = measure(`Nino${verb}${info.key}`);
     const memorypack = measure(`MemoryPack${verb}${info.key}`);
-    if (!v4 || !memorypack || !nino) return [];
+    if (!v4 || !nino) return [];
     const v3Row = v3[`${op}:${info.key}`];
-    const { ratio, tooFast } = versus(v4, memorypack);
+    const { ratio, tooFast } = memorypack
+      ? versus(v4, memorypack)
+      : { ratio: undefined, tooFast: undefined };
     const others: RuntimeCase['others'] = {};
     const sizes = (method: string) => {
       const row = rows.get(method);
@@ -598,7 +732,9 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
       if (time) others[lib.key] = versus(v4, time);
       caseBytes[lib.key] = sizes(`${lib.prefix}${verb}${info.key}`);
     }
-    const result: RuntimeCase = {
+    // A case no other library was measured in compares nothing
+    if (!memorypack && Object.keys(others).length === 0) return [];
+    const result: TableCase = {
       ...info,
       v4,
       memorypack,
@@ -617,12 +753,20 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
     }
     return [result];
   }
-  const build = (set: Record<'serialize' | 'deserialize', CaseInfo[]>) => ({
+  const buildAll = (set: Record<'serialize' | 'deserialize', CaseInfo[]>) => ({
     serialize: set.serialize.flatMap((info) => buildCase('serialize', info)),
     deserialize: set.deserialize.flatMap((info) =>
       buildCase('deserialize', info),
     ),
   });
+  // The main, extra and workload tables, the charts and the headlines: cases MemoryPack ran
+  const build = (set: Record<'serialize' | 'deserialize', CaseInfo[]>) => {
+    const all = buildAll(set);
+    return {
+      serialize: all.serialize.filter(hasMemoryPack),
+      deserialize: all.deserialize.filter(hasMemoryPack),
+    };
+  };
 
   const reuse = reuseCases.flatMap(
     ({ name, zh, methods: [ninoNew, ninoReuse, mpNew, mpOverwrite] }) => {
@@ -643,6 +787,12 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
           memorypackNew: c,
           memorypackOverwrite: d,
           memorypackOverwriteBytes: dBytes,
+          othersNew: Object.fromEntries(
+            otherLibs.flatMap((lib) => {
+              const time = measure(mpNew.replace(/^MemoryPack/, lib.prefix));
+              return time ? [[lib.key, time]] : [];
+            }),
+          ),
         },
       ];
     },
@@ -660,6 +810,9 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
     rows: file.rows,
     runtime: build(cases),
     extraRuntime: build(extraCases),
+    more: Object.fromEntries(
+      Object.entries(moreCases).map(([set, list]) => [set, buildAll(list)]),
+    ) as BenchDataset['more'],
     workloads: build({ serialize: workloadCases, deserialize: workloadCases }),
     reuse,
     serializeAllocatesNothing: cases.serialize.every((info) =>
@@ -801,9 +954,11 @@ export const formatRatio = (value: number) => `${value.toFixed(2)}×`;
 export const workloadsMeasured = x64.workloads.serialize.length > 0;
 
 /** Nino against one opponent in one case, by the same rule as the tables */
-export function versusOf(row: RuntimeCase, lib: Opponent): Versus | undefined {
+export function versusOf(row: TableCase, lib: Opponent): Versus | undefined {
   if (lib === 'memorypack')
-    return { time: row.memorypack, ratio: row.ratio, tooFast: row.tooFast };
+    return row.memorypack
+      ? { time: row.memorypack, ratio: row.ratio, tooFast: row.tooFast }
+      : undefined;
   return row.others[lib];
 }
 

@@ -45,7 +45,7 @@ icon: ChartColumn
 
 - **序列化**测试写进一个缓冲区写入器，它只创建一次，每次调用前重置（Nino 用 `NinoArrayBufferWriter`，其他库用 `ArrayBufferWriter<byte>`），所以测的是序列化本身，不是数组分配。每个库用的都是它能直接写入的写入器：换成其他 `IBufferWriter<byte>`，原始值和固定大小的值 Nino 照样直接写入，其他值先写进池化的缓冲区再整体复制过去，比这些表格多一次复制。
 - **反序列化**测试读的是各个库启动时写好的字节，每次调用都创建新对象。
-- **先验证**：跑基准测试之前，`--verify`（[`Verify.cs`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Verify.cs)）把每个用例跑一遍，检查每个序列化用例写出的正是载荷的字节，各个库读回的值也逐层比较、完全相同。测试数据用固定种子，每次跑序列化的都是同样的值。
+- **先验证**：跑基准测试之前，`--verify`（[`Verify.cs`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Harness/Verify.cs)）把每个用例跑一遍，检查每个序列化用例写出的正是载荷的字节，各个库读回的值也逐层比较、完全相同。测试数据用固定种子，每次跑序列化的都是同样的值。
 - **1 ns 以下**（大约三个时钟周期）的耗时分不出快慢：读一个 40 字节的结构体，扣掉 BenchmarkDotNet 的空方法开销后，两个库测出来都在 0.05 到 0.8 ns 之间晃。两边都低于 1 ns 记为持平；Nino 低于 1 ns、对方测得出时，记为更快（快到测不出），不给倍数。相差 5% 以内也记为持平。
 - **复用**测试读入已有的对象：Nino 用 `ref` 和 `[NinoPooled]` 对象池，MemoryPack 用它的覆盖模式。
 - **MessagePack 与 protobuf-net** 用同样的类型，读写和 Nino、MemoryPack 一样的值，各自用文档推荐的最快 API；见 [MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)。
@@ -111,17 +111,17 @@ icon: ChartColumn
 
 上面两张表里的多态用例，放在一起看。每个值都声明为抽象基类，读回时还原成运行时类型；数据类型：[`PolymorphicTest`](#polymorphictest)。
 
-| 用例 | 内容 | 序列化对比 MemoryPack | 反序列化对比 MemoryPack |
-| --- | --- | ---: | ---: |
-| 多态类 | 一个 `PolymorphicClass`，列表里有 1,000 个 `Foo` 子类型实例，字典里有 12 个 | <BenchValue k="serialize:PolymorphicClass" /> | <BenchValue k="deserialize:PolymorphicClass" /> |
-| 多态类数组 | 100 个这样的对象，每个含 50 个 `Foo` | <BenchValue k="serialize:PolymorphicClassArray" /> | <BenchValue k="deserialize:PolymorphicClassArray" /> |
-| 多态 `Foo[]` | 1,000 个元素，共 20 种子类型，继承深度最多 9 层 | <BenchValue k="serialize:PolymorphicFooArray" /> | <BenchValue k="deserialize:PolymorphicFooArray" /> |
+| 用例 | 内容 | 对比 MemoryPack | 对比 MessagePack | 对比 protobuf-net |
+| --- | --- | ---: | ---: | ---: |
+| 多态类 | 一个 `PolymorphicClass`，列表里有 1,000 个 `Foo` 子类型实例，字典里有 12 个 | <BenchValue k="serialize:PolymorphicClass" /> / <BenchValue k="deserialize:PolymorphicClass" /> | <BenchValue k="serialize:PolymorphicClass:messagepack" /> / <BenchValue k="deserialize:PolymorphicClass:messagepack" /> | <BenchValue k="serialize:PolymorphicClass:protobuf" /> / <BenchValue k="deserialize:PolymorphicClass:protobuf" /> |
+| 多态类数组 | 100 个这样的对象，每个含 50 个 `Foo` | <BenchValue k="serialize:PolymorphicClassArray" /> / <BenchValue k="deserialize:PolymorphicClassArray" /> | <BenchValue k="serialize:PolymorphicClassArray:messagepack" /> / <BenchValue k="deserialize:PolymorphicClassArray:messagepack" /> | <BenchValue k="serialize:PolymorphicClassArray:protobuf" /> / <BenchValue k="deserialize:PolymorphicClassArray:protobuf" /> |
+| 多态 `Foo[]` | 1,000 个元素，共 20 种子类型，继承深度最多 9 层 | <BenchValue k="serialize:PolymorphicFooArray" /> / <BenchValue k="deserialize:PolymorphicFooArray" /> | <BenchValue k="serialize:PolymorphicFooArray:messagepack" /> / <BenchValue k="deserialize:PolymorphicFooArray:messagepack" /> | <BenchValue k="serialize:PolymorphicFooArray:protobuf" /> / <BenchValue k="deserialize:PolymorphicFooArray:protobuf" /> |
 
-倍数大于 1× 表示 Nino 更快。Nino 给每个值写一个 4 字节的类型 ID，用生成的代码分派；MemoryPack 用 `[MemoryPackUnion]` 标签。见[多态](/zh/docs/v4/polymorphism)。
+每格是“序列化 / 反序列化”，倍数大于 1× 表示 Nino 更快。Nino 给每个值写一个 4 字节的类型 ID，用生成的代码分派；MemoryPack 用 `[MemoryPackUnion]` 标签，MessagePack 用 `[Union]` 的键，protobuf-net 则在继承层次的每一层嵌一条消息（`[ProtoInclude]`）。见[多态](/zh/docs/v4/polymorphism)。
 
 ### 反序列化到已有实例（对象池） [#pooling]
 
-Nino 把数据读入已有的对象图（[复用反序列化](/zh/docs/v4/pooling)），要新实例时从 `[NinoPooled]` 对象池里取；MemoryPack 则覆盖已有实例。数据类型：[`PooledTest`](#pooledtest) 和 [`PooledGraphTest`](#pooledgraphtest)。
+Nino 把数据读入已有的对象图（[复用反序列化](/zh/docs/v4/pooling)），要新实例时从 `[NinoPooled]` 对象池里取；MemoryPack 则覆盖已有实例。MessagePack 和 protobuf-net 不能读进已有对象，它们那两列是把同样的数据读成新对象。数据类型：[`PooledTest`](#pooledtest) 和 [`PooledGraphTest`](#pooledgraphtest)。
 
 <ReuseTable lang="zh" />
 
@@ -129,7 +129,7 @@ Nino 把数据读入已有的对象图（[复用反序列化](/zh/docs/v4/poolin
 
 ### 内存分配与载荷大小 [#allocations-and-payload-size]
 
-每次调用分配的字节数，以及一个 `SimpleClass` 序列化后的大小（Nino 为 <BenchValue k="payload.v4" /> 字节，MemoryPack 为 <BenchValue k="payload.memorypack" /> 字节；报告有了 MessagePack 和 protobuf-net 后，图里也会显示）。序列化时，所有序列化库都不分配内存。从 4.0.0-rc.6 起，如果文本的每个字符都不超过 U+00FF，Nino 每个字符只写一个字节（[字符串](/zh/docs/v4/wire-format#strings)），所以早期版本上测到的、含这类字符串的载荷，比 rc.6 写出的大；这里的大小出自[测量方法](#setup)里注明的版本。
+每次调用分配的字节数，以及一个 `SimpleClass` 序列化后的大小（Nino 为 <BenchValue k="payload.v4" /> 字节，MemoryPack 为 <BenchValue k="payload.memorypack" /> 字节；MessagePack 和 protobuf-net 见图）。序列化时 Nino 和 MemoryPack 都不分配内存；MessagePack 和 protobuf-net 每个用例分配多少，见[全部测量结果](#results)里对应的行，标 ? 的是那次运行没测出来的分配。从 4.0.0-rc.6 起，如果文本的每个字符都不超过 U+00FF，Nino 每个字符只写一个字节（[字符串](/zh/docs/v4/wire-format#strings)），所以早期版本上测到的、含这类字符串的载荷，比 rc.6 写出的大；这里的大小出自[测量方法](#setup)里注明的版本。
 
 <BenchmarkChart chart={['allocation', 'payload']} lang="zh" />
 
@@ -146,19 +146,39 @@ Nino 把数据读入已有的对象图（[复用反序列化](/zh/docs/v4/poolin
 
 ### 常用类型、集合与 BCL 类型 [#common-types-and-collections]
 
-从 v4.0.0-rc.5 起又加测了三个测试类，结果在[全部测量结果](#results)里：
+从 v4.0.0-rc.5 起又加测了三个测试类，凡是能写出相同数据的库都一起比：
 
-- **常用类型**（[`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/CommonTypesTest.cs)）：常见的类型形状，一棵 `TreeNode` 树（1,365 个节点）、`InventoryItem[1000]`（带填充的结构体）、`Waypoint[1000]`（含一个元组的固定大小结构体，写出 15 字节，内存里占 20 字节）和 `Dictionary<string, string>`（1,000 项）。v4.0.0-rc.9 及之前的报告里还有 `List<Player>`（100 个）、`List<Order>`（100 个）和 `List<Shape>`（1,000 个，声明为抽象基类），后来换成了[真实负载](#workloads)。
-- **集合**（[`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/CollectionsTest.cs)）：基础类库里的集合，各 1,000 个元素：`List<(int, long)>`、`KeyValuePair<int, int>[]`、`HashSet<int>`、`Dictionary<int, int>`、`Queue<int>`、`LinkedList<int>`、`SortedSet<int>`、`SortedDictionary<int, int>`、`SortedList<int, int>` 和 `ConcurrentDictionary<int, int>`；另有 `SelfTree`，一个包含自身的 `List` 子类，6 层、每层 4 个。
-- **BCL 类型**（[`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/BclTypesTest.cs)）：两个库都有格式化器的其余基础类库类型：`BigInteger`（3^1000）、`Uri`、`Version`、`StringBuilder`（1,000 个字符）、`BitArray`（1,000 位）、`CultureInfo`、`TimeZoneInfo`、`Lazy<string>`，以及各 1,000 个元素的 `Memory<int>`、`ReadOnlySequence<int>`、`ReadOnlyCollection<int>`、`ILookup<int, int>`、`BlockingCollection<int>` 和 `Nino.Immutable` 里的不可变集合（`ImmutableHashSet`、`ImmutableSortedSet`、`ImmutableQueue`、`ImmutableStack`、`ImmutableDictionary`、`ImmutableSortedDictionary`）。`TimeZoneInfo` 这一项测的主要是设计差异，不是速度：Nino 按 ID 写系统时区，读的时候直接取系统缓存的时区；MemoryPack 每次都写出并解析时区完整的序列化字符串。`BigInteger` 和 `BitArray` 只测 Nino：MemoryPack 1.21.4 写出去再读回来就不对了（见[基准测试中发现的 MemoryPack 问题](/zh/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)）。
+- **常用类型**（[`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CommonTypesTest.cs)）：常见的类型形状，一棵 `TreeNode` 树（1,365 个节点）、`InventoryItem[1000]`（带填充的结构体）、`Waypoint[1000]`（含一个元组的固定大小结构体，写出 15 字节，内存里占 20 字节）和 `Dictionary<string, string>`（1,000 项）。v4.0.0-rc.9 及之前的报告里还有 `List<Player>`（100 个）、`List<Order>`（100 个）和 `List<Shape>`（1,000 个，声明为抽象基类），后来换成了[真实负载](#workloads)。
+- **集合**（[`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CollectionsTest.cs)）：基础类库里的集合，各 1,000 个元素：`List<(int, long)>`、`KeyValuePair<int, int>[]`、`HashSet<int>`、`Dictionary<int, int>`、`Queue<int>`、`LinkedList<int>`、`SortedSet<int>`、`SortedDictionary<int, int>`、`SortedList<int, int>` 和 `ConcurrentDictionary<int, int>`；另有 `SelfTree`，一个包含自身的 `List` 子类，6 层、每层 4 个。
+- **BCL 类型**（[`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/BclTypesTest.cs)）：两个库都有格式化器的其余基础类库类型：`BigInteger`（3^1000）、`Uri`、`Version`、`StringBuilder`（1,000 个字符）、`BitArray`（1,000 位）、`CultureInfo`、`TimeZoneInfo`、`Lazy<string>`，以及各 1,000 个元素的 `Memory<int>`、`ReadOnlySequence<int>`、`ReadOnlyCollection<int>`、`ILookup<int, int>`、`BlockingCollection<int>` 和 `Nino.Immutable` 里的不可变集合（`ImmutableHashSet`、`ImmutableSortedSet`、`ImmutableQueue`、`ImmutableStack`、`ImmutableDictionary`、`ImmutableSortedDictionary`）。`TimeZoneInfo` 这一项测的主要是设计差异，不是速度：Nino 按 ID 写系统时区，读的时候直接取系统缓存的时区；MemoryPack 每次都写出并解析时区完整的序列化字符串。`BigInteger` 和 `BitArray` 只和 MessagePack 比：MemoryPack 1.21.4 写出去再读回来就不对了（见[基准测试中发现的 MemoryPack 问题](/zh/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)）。
 
 这三个类都序列化到复用的缓冲区写入器，反序列化成新实例。
 
-**分散的对象**（[`ScatteredTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/ScatteredTest.cs)，从 v4.0.0-rc.8 起测）序列化一百万个对象的数组，数组里的顺序和它们在内存里的顺序不一样，就像程序运行久了、对象换过也排过序之后那样：一组是声明为抽象基类的形状，一组是带字符串的小类，都在分配之后打乱，每个元素都是一次缓存未命中。作为对照，还测了按分配顺序排列的同一批形状（只靠硬件预取），以及 8,192 个能留在缓存里的形状。打乱的小类还会读回到已有的数组里（Nino 和 MemoryPack）。这里 Nino 用的是默认设置，没有打开 [`NinoPrefetchLargeCollections`](/zh/docs/v4/advanced/type-design#large-collections)。结果在[全部测量结果](#results)里。
-
-**不可信读取**（[`UntrustedTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/UntrustedTest.cs)，从 v4.0.0-rc.8 起测，只测反序列化）打开 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode)，读一个由 1,000 个原始结构体组成的列表，结构体里有一个 `DateTime` 和一个 `bool`，每个值的这两个字段都要检查；对照的 MemoryPack 不检查，直接复制。结果在[全部测量结果](#results)里。
-
 `InventoryItem` 和 `(int, long)` 在内存里有填充，MemoryPack 原样拷贝，Nino 则写成零或干脆不写：这对耗时、大小和字节本身有什么影响，见[带填充的结构体和元组](/zh/docs/v4/vs-memorypack#padded-values)。
+
+#### 常用类型 [#common-types]
+
+<ExtraRuntimeTables set="common" lang="zh" />
+
+#### 集合 [#collections]
+
+<ExtraRuntimeTables set="collections" lang="zh" />
+
+#### BCL 类型 [#bcl-types]
+
+<ExtraRuntimeTables set="bcl" lang="zh" />
+
+#### 分散的对象 [#scattered-objects]
+
+这组用例（[`ScatteredTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Graphs/ScatteredTest.cs)，从 v4.0.0-rc.8 起测）序列化一百万个对象的数组，数组里的顺序和它们在内存里的顺序不一样，就像程序运行久了、对象换过也排过序之后那样：一组是声明为抽象基类的形状，一组是带字符串的小类，都在分配之后打乱，每个元素都是一次缓存未命中。作为对照，还测了按分配顺序排列的同一批形状（只靠硬件预取），以及 8,192 个能留在缓存里的形状。打乱的小类还会读回到已有的数组里（Nino 和 MemoryPack）。这里 Nino 用的是默认设置，没有打开 [`NinoPrefetchLargeCollections`](/zh/docs/v4/advanced/type-design#large-collections)。MessagePack 和 protobuf-net 不能读进已有数组。
+
+<ExtraRuntimeTables set="scattered" lang="zh" />
+
+#### 不可信读取 [#untrusted-reads]
+
+这组用例（[`UntrustedTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Scenarios/UntrustedTest.cs)，从 v4.0.0-rc.8 起测，只测反序列化）打开 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode)，读一个由 1,000 个原始结构体组成的列表，结构体里有一个 `DateTime` 和一个 `bool`，每个值的这两个字段都要检查；对照的 MemoryPack 不检查，直接复制。
+
+<ExtraRuntimeTables set="untrusted" lang="zh" />
 
 ### MessagePack 与 protobuf-net [#messagepack-and-protobuf-net]
 

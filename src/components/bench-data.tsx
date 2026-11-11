@@ -31,6 +31,7 @@ import {
   formatWorkloadRange,
   hasWorkloads,
   isOnPar,
+  type MoreSet,
   type Opponent,
   type OtherLib,
   otherLibs,
@@ -44,6 +45,7 @@ import {
   runtimes,
   runtimesSource,
   sourceNote,
+  type TableCase,
   type UnityCase,
   unity,
   unitySource,
@@ -57,6 +59,15 @@ import type { Locale } from '@/lib/i18n';
 import { siteUrl } from '@/lib/site';
 
 type Op = 'serialize' | 'deserialize';
+
+/** The main cases, extraCases, or one of the classes of moreCases */
+type TableSet = 'main' | 'extra' | MoreSet;
+
+function setRows(ds: BenchDataset, set: TableSet) {
+  if (set === 'main') return ds.runtime;
+  if (set === 'extra') return ds.extraRuntime;
+  return ds.more[set];
+}
 
 /**
  * One groupId for every architecture switch on the site, persisted: picking
@@ -124,7 +135,7 @@ function sourceLine(ds: BenchDataset, zh: boolean, tabbed: boolean) {
   );
 }
 
-function caseName(row: RuntimeCase, zh: boolean) {
+function caseName(row: TableCase, zh: boolean) {
   const name = zh && row.zh ? row.zh : row.name;
   return row.code ? <code>{name}</code> : name;
 }
@@ -244,7 +255,7 @@ export function RuntimeTable({
   markdown,
 }: ArchProps & {
   op: Op;
-  set?: 'main' | 'extra';
+  set?: TableSet;
 }) {
   const zh = lang === 'zh';
   return ArchTabs({
@@ -272,11 +283,11 @@ function otherCell(vs: Versus | undefined, zh: boolean) {
 function runtimeTable(
   ds: BenchDataset,
   op: Op,
-  set: 'main' | 'extra',
+  set: TableSet,
   zh: boolean,
   markdown?: boolean,
 ) {
-  const rows = (set === 'extra' ? ds.extraRuntime : ds.runtime)[op];
+  const rows = setRows(ds, set)[op];
   if (rows.length === 0)
     return (
       <p className="text-sm text-fd-muted-foreground">
@@ -326,17 +337,23 @@ function runtimeTable(
                   {row.v4.text}
                 </td>
                 <td className="text-right tabular-nums whitespace-nowrap">
-                  {row.memorypack.text}
+                  {row.memorypack?.text ?? '—'}
                 </td>
                 <td className="text-right tabular-nums">
-                  {ratioCell(row.ratio, zh, row.tooFast)}
-                  {!markdown && (
-                    <TimeBars
-                      bars={[
-                        { label: 'v4', time: row.v4, nino: true },
-                        { label: 'MemoryPack', time: row.memorypack },
-                      ]}
-                    />
+                  {row.memorypack ? (
+                    <>
+                      {ratioCell(row.ratio, zh, row.tooFast)}
+                      {!markdown && (
+                        <TimeBars
+                          bars={[
+                            { label: 'v4', time: row.v4, nino: true },
+                            { label: 'MemoryPack', time: row.memorypack },
+                          ]}
+                        />
+                      )}
+                    </>
+                  ) : (
+                    '—'
                   )}
                 </td>
                 {others.map((lib) => (
@@ -383,14 +400,18 @@ function runtimeTable(
  * note until then. RuntimeTable is called, not rendered as an element, so the
  * Markdown copies (src/lib/markdown.tsx) get the table itself.
  */
-export function ExtraRuntimeTables({ lang = 'en', markdown }: ArchProps) {
+export function ExtraRuntimeTables({
+  lang = 'en',
+  markdown,
+  set = 'extra',
+}: ArchProps & { set?: Exclude<TableSet, 'main'> }) {
   const zh = lang === 'zh';
   return ArchTabs({
     markdown,
     render: (ds, tabbed) => {
-      const { serialize, deserialize } = ds.extraRuntime;
+      const { serialize, deserialize } = setRows(ds, set);
       if (serialize.length + deserialize.length === 0)
-        return runtimeTable(ds, 'serialize', 'extra', zh, markdown);
+        return runtimeTable(ds, 'serialize', set, zh, markdown);
       return (
         <>
           {serialize.length > 0 && (
@@ -398,7 +419,7 @@ export function ExtraRuntimeTables({ lang = 'en', markdown }: ArchProps) {
               <p>
                 <strong>{zh ? '序列化' : 'Serialize'}</strong>
               </p>
-              {runtimeTable(ds, 'serialize', 'extra', zh, markdown)}
+              {runtimeTable(ds, 'serialize', set, zh, markdown)}
             </>
           )}
           {deserialize.length > 0 && (
@@ -406,7 +427,7 @@ export function ExtraRuntimeTables({ lang = 'en', markdown }: ArchProps) {
               <p>
                 <strong>{zh ? '反序列化' : 'Deserialize'}</strong>
               </p>
-              {runtimeTable(ds, 'deserialize', 'extra', zh, markdown)}
+              {runtimeTable(ds, 'deserialize', set, zh, markdown)}
             </>
           )}
           {tabbed && sourceLine(ds, zh, true)}
@@ -458,6 +479,7 @@ function libraryRows(ds: BenchDataset, lib: OtherLib) {
       ...ds.workloads[op],
       ...ds.runtime[op],
       ...ds.extraRuntime[op],
+      ...Object.values(ds.more).flatMap((set) => set[op]),
     ].filter((row) => row.others[lib]);
     return rows.length > 0 ? [{ op, rows }] : [];
   });
@@ -732,6 +754,10 @@ export function ReuseTable({ lang = 'en', markdown }: ArchProps) {
 }
 
 function reuseTable(ds: BenchDataset, zh: boolean, markdown?: boolean) {
+  // MessagePack and protobuf-net read new instances only: a "new" column each
+  const others = otherLibs.filter((lib) =>
+    ds.reuse.some((row) => row.othersNew[lib.key]),
+  );
   const table = (
     <table>
       <thead>
@@ -745,6 +771,11 @@ function reuseTable(ds: BenchDataset, zh: boolean, markdown?: boolean) {
           <th className="text-right">
             {zh ? 'MemoryPack 覆盖' : 'MemoryPack overwrite'}
           </th>
+          {others.map((lib) => (
+            <th key={lib.key} className="text-right">
+              {zh ? `${lib.label} 新建` : `${lib.label} new`}
+            </th>
+          ))}
         </tr>
       </thead>
       <tbody>
@@ -782,6 +813,14 @@ function reuseTable(ds: BenchDataset, zh: boolean, markdown?: boolean) {
                   />
                 )}
               </td>
+              {others.map((lib) => (
+                <td
+                  key={lib.key}
+                  className="text-right tabular-nums whitespace-nowrap"
+                >
+                  {row.othersNew[lib.key]?.text ?? '—'}
+                </td>
+              ))}
             </tr>
           );
         })}
@@ -1192,7 +1231,8 @@ export function UnityHighlights({
  * with .max, its top),
  * workloads.<memorypack|messagepack|protobuf|googleprotobuf|json>.<serialize|deserialize>
  * (the range of wins over the workloads; with .max, its top), or
- * serialize:<case key> / deserialize:<case key> (ratio of one case).
+ * serialize:<case key> / deserialize:<case key> (ratio of one case against
+ * MemoryPack; serialize:<case key>:messagepack or :protobuf against that library).
  */
 export function BenchValue({ k }: { k: string }) {
   return <>{benchValue(k)}</>;
@@ -1240,6 +1280,13 @@ export function benchValue(k: string): string {
   if (op === 'serialize' || op === 'deserialize') {
     const row = runtime[op].find((r) => r.key === which);
     if (!row) return '—';
+    // serialize:<case>:<library>: against MessagePack or protobuf-net
+    const lib = k.split(':')[2] as OtherLib | undefined;
+    if (lib) {
+      const vs = row.others[lib];
+      if (!vs) return '—';
+      return vs.tooFast ? '—' : formatRatio(vs.ratio ?? 1);
+    }
     return formatRatio(row.ratio ?? 1);
   }
   throw new Error(`Unknown benchmark value: ${k}`);

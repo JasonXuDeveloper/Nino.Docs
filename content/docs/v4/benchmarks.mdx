@@ -45,7 +45,7 @@ Absolute times depend on the machine; compare the ratios. For Nino in Go, Rust a
 
 - **Serialize** benchmarks write into a buffer writer that is created once and reset before each call (`NinoArrayBufferWriter` for Nino, `ArrayBufferWriter<byte>` for the others), so they measure the serializer, not array allocation. Each library gets the writer it writes in place: into any other `IBufferWriter<byte>`, Nino writes raw and fixed-size values in place too, and everything else into a pooled buffer that it then copies over, one copy more than these tables measure.
 - **Deserialize** benchmarks read bytes that each serializer wrote at startup, and create new objects on every call.
-- **Verified first**: before the benchmarks run, `--verify` ([`Verify.cs`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Verify.cs)) runs every case and checks that each serialize case writes its payload's bytes and that every library reads back the same value, deep-compared. The test data is seeded, so every run serializes the same values.
+- **Verified first**: before the benchmarks run, `--verify` ([`Verify.cs`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Harness/Verify.cs)) runs every case and checks that each serialize case writes its payload's bytes and that every library reads back the same value, deep-compared. The test data is seeded, so every run serializes the same values.
 - **Under 1 ns** (about three clock cycles), times cannot be told apart: reading a 40-byte struct measures anywhere from 0.05 to 0.8 ns in both libraries once BenchmarkDotNet subtracts its empty-method overhead. Two times under 1 ns are on par; Nino under it against a measurable time is faster, too fast to measure, with no ratio. Within 5% is on par too.
 - **Reuse** benchmarks deserialize into objects that already exist: Nino by `ref` and from `[NinoPooled]` pools, MemoryPack with its overwrite mode.
 - **MessagePack and protobuf-net** read and write the same values as Nino and MemoryPack, through the same types, each with the API its documentation recommends for speed; see [MessagePack and protobuf-net](#messagepack-and-protobuf-net).
@@ -111,17 +111,17 @@ The same values, read back into new objects on every call. Data types: [`SimpleT
 
 The polymorphic rows of the two tables above, side by side. Every value is declared as an abstract base class and read back as its runtime type; data types: [`PolymorphicTest`](#polymorphictest).
 
-| Case | What it holds | Serialize vs MemoryPack | Deserialize vs MemoryPack |
-| --- | --- | ---: | ---: |
-| Polymorphic class | one `PolymorphicClass` with 1,000 `Foo` subtypes in a list, 12 in a dictionary | <BenchValue k="serialize:PolymorphicClass" /> | <BenchValue k="deserialize:PolymorphicClass" /> |
-| Polymorphic class array | 100 of them, 50 `Foo`s each | <BenchValue k="serialize:PolymorphicClassArray" /> | <BenchValue k="deserialize:PolymorphicClassArray" /> |
-| Polymorphic `Foo[]` | 1,000 elements of 20 subtypes, up to 9 levels deep | <BenchValue k="serialize:PolymorphicFooArray" /> | <BenchValue k="deserialize:PolymorphicFooArray" /> |
+| Case | What it holds | vs MemoryPack | vs MessagePack | vs protobuf-net |
+| --- | --- | ---: | ---: | ---: |
+| Polymorphic class | one `PolymorphicClass` with 1,000 `Foo` subtypes in a list, 12 in a dictionary | <BenchValue k="serialize:PolymorphicClass" /> / <BenchValue k="deserialize:PolymorphicClass" /> | <BenchValue k="serialize:PolymorphicClass:messagepack" /> / <BenchValue k="deserialize:PolymorphicClass:messagepack" /> | <BenchValue k="serialize:PolymorphicClass:protobuf" /> / <BenchValue k="deserialize:PolymorphicClass:protobuf" /> |
+| Polymorphic class array | 100 of them, 50 `Foo`s each | <BenchValue k="serialize:PolymorphicClassArray" /> / <BenchValue k="deserialize:PolymorphicClassArray" /> | <BenchValue k="serialize:PolymorphicClassArray:messagepack" /> / <BenchValue k="deserialize:PolymorphicClassArray:messagepack" /> | <BenchValue k="serialize:PolymorphicClassArray:protobuf" /> / <BenchValue k="deserialize:PolymorphicClassArray:protobuf" /> |
+| Polymorphic `Foo[]` | 1,000 elements of 20 subtypes, up to 9 levels deep | <BenchValue k="serialize:PolymorphicFooArray" /> / <BenchValue k="deserialize:PolymorphicFooArray" /> | <BenchValue k="serialize:PolymorphicFooArray:messagepack" /> / <BenchValue k="deserialize:PolymorphicFooArray:messagepack" /> | <BenchValue k="serialize:PolymorphicFooArray:protobuf" /> / <BenchValue k="deserialize:PolymorphicFooArray:protobuf" /> |
 
-A ratio above 1× means Nino is faster. Nino writes a 4-byte type id per value and dispatches with generated code; MemoryPack uses its `[MemoryPackUnion]` tags. See [Polymorphism](/en/docs/v4/polymorphism).
+Each cell is serialize / deserialize; a ratio above 1× means Nino is faster. Nino writes a 4-byte type id per value and dispatches with generated code; MemoryPack uses its `[MemoryPackUnion]` tags, MessagePack its `[Union]` keys, and protobuf-net nests one message per level of the hierarchy (`[ProtoInclude]`). See [Polymorphism](/en/docs/v4/polymorphism).
 
 ### Deserialize into Existing Instances (Pooling) [#pooling]
 
-Nino deserializes into an existing object graph ([reuse deserialization](/en/docs/v4/pooling)) and takes new instances from `[NinoPooled]` pools; MemoryPack overwrites existing instances. Data types: [`PooledTest`](#pooledtest) and [`PooledGraphTest`](#pooledgraphtest).
+Nino deserializes into an existing object graph ([reuse deserialization](/en/docs/v4/pooling)) and takes new instances from `[NinoPooled]` pools; MemoryPack overwrites existing instances. MessagePack and protobuf-net cannot read into an existing object, so their columns are a new read of the same data. Data types: [`PooledTest`](#pooledtest) and [`PooledGraphTest`](#pooledgraphtest).
 
 <ReuseTable lang="en" />
 
@@ -129,7 +129,7 @@ Nino deserializes into an existing object graph ([reuse deserialization](/en/doc
 
 ### Allocations and Payload Size [#allocations-and-payload-size]
 
-Bytes allocated per call, and the size of one serialized `SimpleClass` (<BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack; MessagePack and protobuf-net in the chart once the report has them). No serializer allocates on the serialize paths. Since 4.0.0-rc.6, Nino writes text whose chars are all at most U+00FF in one byte a char ([Strings](/en/docs/v4/wire-format#strings)), so payloads with such strings measured on an earlier release are larger than what rc.6 writes; the sizes here come from the release named under [How It Is Measured](#setup).
+Bytes allocated per call, and the size of one serialized `SimpleClass` (<BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack; MessagePack and protobuf-net in the chart). Neither Nino nor MemoryPack allocates on the serialize paths; what MessagePack and protobuf-net allocate per case is in each case's row of [All Measurements](#results), where a ? marks an allocation the run failed to measure. Since 4.0.0-rc.6, Nino writes text whose chars are all at most U+00FF in one byte a char ([Strings](/en/docs/v4/wire-format#strings)), so payloads with such strings measured on an earlier release are larger than what rc.6 writes; the sizes here come from the release named under [How It Is Measured](#setup).
 
 <BenchmarkChart chart={['allocation', 'payload']} lang="en" />
 
@@ -146,19 +146,39 @@ Four more benchmark classes compare features that change how a type is written, 
 
 ### Common Types, Collections and BCL Types [#common-types-and-collections]
 
-Three more classes, measured since v4.0.0-rc.5; their rows are in [All Measurements](#results):
+Three more classes, measured since v4.0.0-rc.5, each against every library that can write the same data:
 
-- **Common types** ([`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/CommonTypesTest.cs)): common type shapes, a `TreeNode` tree (1,365 nodes), `InventoryItem[1000]` (a padded struct), `Waypoint[1000]` (a fixed-size struct holding a tuple, 15 bytes on the wire and 20 in memory) and `Dictionary<string, string>` (1,000). Reports up to v4.0.0-rc.9 also have `List<Player>` (100), `List<Order>` (100) and `List<Shape>` (1,000 through an abstract base), which the [real-world workloads](#workloads) replaced.
-- **Collections** ([`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/CollectionsTest.cs)): collections of the base class library, 1,000 elements each: `List<(int, long)>`, `KeyValuePair<int, int>[]`, `HashSet<int>`, `Dictionary<int, int>`, `Queue<int>`, `LinkedList<int>`, `SortedSet<int>`, `SortedDictionary<int, int>`, `SortedList<int, int>` and `ConcurrentDictionary<int, int>`, and `SelfTree`, a `List` subclass that holds itself, 6 levels of 4.
-- **BCL types** ([`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/BclTypesTest.cs)): the other base class library types both libraries have formatters for: `BigInteger` (3^1000), `Uri`, `Version`, `StringBuilder` (1,000 chars), `BitArray` (1,000 bits), `CultureInfo`, `TimeZoneInfo`, `Lazy<string>`, and with 1,000 elements `Memory<int>`, `ReadOnlySequence<int>`, `ReadOnlyCollection<int>`, `ILookup<int, int>`, `BlockingCollection<int>` and the immutable collections of `Nino.Immutable` (`ImmutableHashSet`, `ImmutableSortedSet`, `ImmutableQueue`, `ImmutableStack`, `ImmutableDictionary`, `ImmutableSortedDictionary`). The `TimeZoneInfo` case measures a design difference more than speed: Nino writes a system time zone by its id and reads it back from the system's cached zones, MemoryPack writes and parses the zone's whole serialized string on every call. `BigInteger` and `BitArray` are timed for Nino only: MemoryPack 1.21.4 does not round-trip them (see [MemoryPack Bugs Found While Benchmarking](/en/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)).
+- **Common types** ([`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CommonTypesTest.cs)): common type shapes, a `TreeNode` tree (1,365 nodes), `InventoryItem[1000]` (a padded struct), `Waypoint[1000]` (a fixed-size struct holding a tuple, 15 bytes on the wire and 20 in memory) and `Dictionary<string, string>` (1,000). Reports up to v4.0.0-rc.9 also have `List<Player>` (100), `List<Order>` (100) and `List<Shape>` (1,000 through an abstract base), which the [real-world workloads](#workloads) replaced.
+- **Collections** ([`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CollectionsTest.cs)): collections of the base class library, 1,000 elements each: `List<(int, long)>`, `KeyValuePair<int, int>[]`, `HashSet<int>`, `Dictionary<int, int>`, `Queue<int>`, `LinkedList<int>`, `SortedSet<int>`, `SortedDictionary<int, int>`, `SortedList<int, int>` and `ConcurrentDictionary<int, int>`, and `SelfTree`, a `List` subclass that holds itself, 6 levels of 4.
+- **BCL types** ([`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/BclTypesTest.cs)): the other base class library types both libraries have formatters for: `BigInteger` (3^1000), `Uri`, `Version`, `StringBuilder` (1,000 chars), `BitArray` (1,000 bits), `CultureInfo`, `TimeZoneInfo`, `Lazy<string>`, and with 1,000 elements `Memory<int>`, `ReadOnlySequence<int>`, `ReadOnlyCollection<int>`, `ILookup<int, int>`, `BlockingCollection<int>` and the immutable collections of `Nino.Immutable` (`ImmutableHashSet`, `ImmutableSortedSet`, `ImmutableQueue`, `ImmutableStack`, `ImmutableDictionary`, `ImmutableSortedDictionary`). The `TimeZoneInfo` case measures a design difference more than speed: Nino writes a system time zone by its id and reads it back from the system's cached zones, MemoryPack writes and parses the zone's whole serialized string on every call. `BigInteger` and `BitArray` are compared with MessagePack only: MemoryPack 1.21.4 does not round-trip them (see [MemoryPack Bugs Found While Benchmarking](/en/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)).
 
 All three serialize to a reused buffer writer and deserialize into new instances.
 
-**Scattered objects** ([`ScatteredTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/ScatteredTest.cs), measured since v4.0.0-rc.8) serialize arrays of a million objects whose order in the array is not their order in memory, as in a program that replaced and reordered its objects over time: shapes through their abstract base and small classes with a string, shuffled after they were allocated, so every element is a cache miss; for comparison, the same shapes in allocation order (what the hardware prefetcher does alone) and 8,192 of them, which stay in the cache. The shuffled classes are also read into an existing array (Nino and MemoryPack). Nino runs with its defaults here, without [`NinoPrefetchLargeCollections`](/en/docs/v4/advanced/type-design#large-collections). Its rows are in [All Measurements](#results).
-
-**Untrusted reads** ([`UntrustedTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/UntrustedTest.cs), measured since v4.0.0-rc.8, deserialize only) read a list of 1,000 raw structs with a `DateTime` and a `bool` with [`NinoSettings.Untrusted`](/en/docs/v4/security#untrusted-mode) on, which checks both fields of every value, against MemoryPack, which copies them unchecked. Its rows are in [All Measurements](#results).
-
 `InventoryItem` and `(int, long)` have padding in memory, which MemoryPack copies as it is and Nino writes as zeros or leaves out: see [Padded Structs and Tuples](/en/docs/v4/vs-memorypack#padded-values) for what that changes in time, size and the bytes themselves.
+
+#### Common types [#common-types]
+
+<ExtraRuntimeTables set="common" lang="en" />
+
+#### Collections [#collections]
+
+<ExtraRuntimeTables set="collections" lang="en" />
+
+#### BCL types [#bcl-types]
+
+<ExtraRuntimeTables set="bcl" lang="en" />
+
+#### Scattered objects [#scattered-objects]
+
+These benchmarks ([`ScatteredTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Graphs/ScatteredTest.cs), measured since v4.0.0-rc.8) serialize arrays of a million objects whose order in the array is not their order in memory, as in a program that replaced and reordered its objects over time: shapes through their abstract base and small classes with a string, shuffled after they were allocated, so every element is a cache miss; for comparison, the same shapes in allocation order (what the hardware prefetcher does alone) and 8,192 of them, which stay in the cache. The shuffled classes are also read into an existing array (Nino and MemoryPack). Nino runs with its defaults here, without [`NinoPrefetchLargeCollections`](/en/docs/v4/advanced/type-design#large-collections). MessagePack and protobuf-net cannot read into an existing array.
+
+<ExtraRuntimeTables set="scattered" lang="en" />
+
+#### Untrusted reads [#untrusted-reads]
+
+These reads ([`UntrustedTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Scenarios/UntrustedTest.cs), measured since v4.0.0-rc.8, deserialize only) read a list of 1,000 raw structs with a `DateTime` and a `bool` with [`NinoSettings.Untrusted`](/en/docs/v4/security#untrusted-mode) on, which checks both fields of every value, against MemoryPack, which copies them unchecked.
+
+<ExtraRuntimeTables set="untrusted" lang="en" />
 
 ### MessagePack and protobuf-net [#messagepack-and-protobuf-net]
 
