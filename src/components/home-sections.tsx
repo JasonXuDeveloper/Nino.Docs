@@ -48,8 +48,17 @@ const reuseMax = bestReuse ? formatRatio(reuseSpeedup(bestReuse)) : '';
 function speedSentence(zh: boolean) {
   if (!serializeRange) return '';
   return zh
-    ? `在同一次 BenchmarkDotNet 测试中，与 MemoryPack ${memoryPackVersion} 相比，Nino v4 序列化类和多态类型快 ${serializeRange}，反序列化快 ${deserializeRange}；非托管结构体数组两者都是整块拷贝，性能持平。${otherRanges.map((o) => `对比 ${o.label} ${o.version}，类和多态类型的序列化快 ${o.serialize}，反序列化快 ${o.deserialize}。`).join('')}${reuseMax ? `反序列化到已有对象时零分配，比 MemoryPack 的覆盖模式最高快 ${reuseMax}。` : ''}`
-    : `In the same BenchmarkDotNet run against MemoryPack ${memoryPackVersion}, Nino v4 serializes classes and polymorphic types ${serializeRange} faster and deserializes them ${deserializeRange} faster; arrays of unmanaged structs are on par, since both copy them as one block.${otherRanges.map((o) => ` Against ${o.label} ${o.version}, it serializes them ${o.serialize} faster and deserializes them ${o.deserialize} faster.`).join('')}${reuseMax ? ` Deserializing into existing objects allocates nothing and is up to ${reuseMax} faster than MemoryPack's overwrite mode.` : ''}`;
+    ? `在同一次 BenchmarkDotNet 测试中，与 MemoryPack ${memoryPackVersion} 相比，Nino v4 序列化类和多态类型快 ${serializeRange}，反序列化快 ${deserializeRange}；非托管结构体数组两者都是整块拷贝，性能持平。${reuseMax ? `反序列化到已有对象时零分配，比 MemoryPack 的覆盖模式最高快 ${reuseMax}。` : ''}`
+    : `In the same BenchmarkDotNet run against MemoryPack ${memoryPackVersion}, Nino v4 serializes classes and polymorphic types ${serializeRange} faster and deserializes them ${deserializeRange} faster; arrays of unmanaged structs are on par, since both copy them as one block.${reuseMax ? ` Deserializing into existing objects allocates nothing and is up to ${reuseMax} faster than MemoryPack's overwrite mode.` : ''}`;
+}
+
+/** Speed against MessagePack and protobuf-net, and when to choose them instead */
+function othersSentence(zh: boolean) {
+  const [mp, pb] = otherRanges;
+  if (!mp || !pb) return '';
+  return zh
+    ? `在同一次 BenchmarkDotNet 测试中，Nino v4 序列化类和多态类型比 ${mp.label} ${mp.version} 快 ${mp.serialize}，比 ${pb.label} ${pb.version} 快 ${pb.serialize}；反序列化分别快 ${mp.deserialize} 和 ${pb.deserialize}。这两种格式不依赖你的 C# 类型，Java、Python、C++ 等程序也能读，数据要给这些语言用时选它们；.NET 程序之间，以及与 nino-gen 生成代码的 Go、Rust、TypeScript 程序之间，用 Nino 更快。`
+    : `In the same BenchmarkDotNet run, Nino v4 serializes classes and polymorphic types ${mp.serialize} faster than ${mp.label} ${mp.version} and ${pb.serialize} faster than ${pb.label} ${pb.version}, and deserializes them ${mp.deserialize} and ${pb.deserialize} faster. Both formats can be read without your C# types, so choose them when Java, Python or C++ programs must read the data; between .NET programs, and with Go, Rust or TypeScript through the code nino-gen generates, Nino is faster.`;
 }
 
 interface Fact {
@@ -201,6 +210,15 @@ const text: Record<
         answer: speedSentence(false),
         href: 'vs-memorypack',
       },
+      ...(othersSentence(false)
+        ? [
+            {
+              question: 'Is Nino faster than MessagePack and protobuf-net?',
+              answer: othersSentence(false),
+              href: 'vs-messagepack',
+            },
+          ]
+        : []),
       {
         question: 'What can I use Nino for?',
         answer:
@@ -214,6 +232,12 @@ const text: Record<
         href: 'platforms',
       },
       {
+        question: 'Can TypeScript, Go and Rust read and write Nino data?',
+        answer:
+          'Yes. nino-gen (the Nino.Codegen package after each build, or the Nino.Codegen.Tool dotnet tool) generates TypeScript, Go and Rust types and codecs from your C# [NinoType]s, and their runtimes (nino-serialization on npm and crates.io, and the Go module github.com/JasonXuDeveloper/Nino/runtimes/go/v4) write and read exactly the bytes .NET does, in both directions. Other languages, such as Java or Python, have no generator.',
+        href: 'advanced/codegen',
+      },
+      {
         question: 'Does Nino work in Unity with IL2CPP and HybridCLR?',
         answer:
           'Yes. Nino supports Unity 2022.3 and later on Mono and IL2CPP and every player platform. The generated code uses no reflection, and types in HybridCLR hot-update assemblies are found with no initialization call. Vector3, Quaternion and other unmanaged structs are copied as raw memory, AnimationCurve, Gradient and RectOffset are built in, and with com.unity.burst installed, Burst-compiled SIMD kernels move arrays of tuples and structs and Latin-1 strings. Install it from OpenUPM.',
@@ -224,6 +248,12 @@ const text: Record<
         answer:
           'No. A Roslyn source generator writes the serialization code for every [NinoType] at compile time, so there is no reflection and no runtime code generation, and the code works under IL2CPP and NativeAOT.',
         href: 'performance',
+      },
+      {
+        question: 'Is Nino safe for untrusted data?',
+        answer:
+          "Yes. Bytes from a network peer or a user's file cannot crash the process, read outside the input, allocate out of proportion to it or make Nino create a type you did not declare: every invalid input throws NinoDataException. NinoSettings limits nesting depth, collection lengths and hash collisions, and NinoSettings.Untrusted applies limits meant for data from outside.",
+        href: 'security',
       },
       {
         question: 'Can I change my types after data has been written?',
@@ -353,6 +383,15 @@ const text: Record<
         answer: speedSentence(true),
         href: 'vs-memorypack',
       },
+      ...(othersSentence(true)
+        ? [
+            {
+              question: 'Nino 比 MessagePack 和 protobuf-net 快吗？',
+              answer: othersSentence(true),
+              href: 'vs-messagepack',
+            },
+          ]
+        : []),
       {
         question: 'Nino 能用在哪些地方？',
         answer:
@@ -366,6 +405,12 @@ const text: Record<
         href: 'platforms',
       },
       {
+        question: 'TypeScript、Go 和 Rust 能读写 Nino 的数据吗？',
+        answer:
+          '能。nino-gen（每次构建后运行的 Nino.Codegen 包，或 dotnet 工具 Nino.Codegen.Tool）根据你的 C# [NinoType] 生成 TypeScript、Go 和 Rust 的类型与编解码代码；配套的运行时（npm 和 crates.io 上的 nino-serialization，以及 Go 模块 github.com/JasonXuDeveloper/Nino/runtimes/go/v4）读写的字节和 .NET 完全一致，双向互通。Java、Python 等其他语言没有代码生成器。',
+        href: 'advanced/codegen',
+      },
+      {
         question: 'Nino 能在 Unity 的 IL2CPP 和 HybridCLR 下使用吗？',
         answer:
           '能。Nino 支持 Unity 2022.3 及以上版本，Mono 和 IL2CPP 均可，覆盖所有 Player 平台。生成的代码不用反射，HybridCLR 热更新程序集里的类型无需初始化调用就能识别。Vector3、Quaternion 等非托管结构体按原始内存拷贝，AnimationCurve、Gradient 和 RectOffset 内置支持；安装 com.unity.burst 后，元组数组、结构体数组和 Latin-1 字符串交给 Burst 编译的 SIMD 内核搬运。从 OpenUPM 安装。',
@@ -376,6 +421,12 @@ const text: Record<
         answer:
           '不使用。Roslyn 源生成器在编译期为每个 [NinoType] 生成序列化代码，没有反射，也没有运行时代码生成，在 IL2CPP 和 NativeAOT 下都能正常工作。',
         href: 'performance',
+      },
+      {
+        question: 'Nino 能安全读取不可信的数据吗？',
+        answer:
+          '能。网络对端发来的字节、用户的文件，都不会让进程崩溃、读到输入之外的内存、分配与输入不成比例的内存，也不会让 Nino 创建你没声明的类型：任何无效输入都只抛出 NinoDataException。NinoSettings 可以限制嵌套深度、集合长度和哈希碰撞次数，外部来的数据直接用 NinoSettings.Untrusted 的上限。',
+        href: 'security',
       },
       {
         question: '数据写入之后还能修改类型吗？',

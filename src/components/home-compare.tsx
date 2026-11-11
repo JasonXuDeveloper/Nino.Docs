@@ -127,17 +127,34 @@ function Bar({
 
 type Measured = { label: string; value: number; text: string };
 
-/** Nino's bar over one or two others, on the scale of the slowest */
-function Pair({ a, b, c }: { a: Measured; b: Measured; c?: Measured }) {
-  const max = Math.max(b.value, c?.value ?? 0);
+/** Nino's bar over the others', on the scale of the slowest */
+function Pair({
+  a,
+  b,
+  more = [],
+}: {
+  a: Measured;
+  b: Measured;
+  more?: Measured[];
+}) {
+  const max = Math.max(b.value, ...more.map((m) => m.value));
   return (
     <div className="flex flex-col gap-1.5">
       <Bar nino {...a} max={max} />
       <Bar {...b} max={max} />
-      {c && <Bar {...c} max={max} />}
+      {more.map((m) => (
+        <Bar key={m.label} {...m} max={max} />
+      ))}
     </div>
   );
 }
+
+/** A case's MessagePack and protobuf-net times, where the report has them */
+const otherTimes = (row: RuntimeCase): Measured[] =>
+  otherLibs.flatMap((lib) => {
+    const v = row.others[lib.key];
+    return v ? [{ label: lib.label, value: v.time.ns, text: v.time.text }] : [];
+  });
 
 /** A caption over a pair of bars when a row has two measures (time, allocated) */
 function Measure({
@@ -355,7 +372,9 @@ function otherRows(zh: boolean): Row[] {
         : `vs ${mp.label}; ${formatRatio(desPb.ratio)} faster than ${pb.label}`,
       ratio: formatRatio(desMp.ratio),
       unit: faster,
-      body: <Pair a={nino(des)} b={other(mp, desMp)} c={other(pb, desPb)} />,
+      body: (
+        <Pair a={nino(des)} b={other(mp, desMp)} more={[other(pb, desPb)]} />
+      ),
     },
   ];
 }
@@ -440,8 +459,18 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
           <div className="flex flex-col gap-4 lg:pb-4">
             <p className="max-w-md text-base leading-snug text-pretty sm:text-lg">
               {zh
-                ? `${action('序列化', polySer, zh)}，Nino v4 用时 ${polySer.v4.text}，MemoryPack ${polySer.memorypack.text}。`
-                : `${action('Serializing a', polySer, zh)}: ${polySer.v4.text} with Nino v4, ${polySer.memorypack.text} with MemoryPack.`}
+                ? `${action('序列化', polySer, zh)}，Nino v4 用时 ${polySer.v4.text}，MemoryPack ${[polySer.memorypack.text, ...otherTimes(polySer).map((m) => `${m.label} ${m.text}`)].join('，')}。`
+                : `${action('Serializing a', polySer, zh)}: ${polySer.v4.text} with Nino v4, ${(() => {
+                    const all = [
+                      `${polySer.memorypack.text} with MemoryPack`,
+                      ...otherTimes(polySer).map(
+                        (m) => `${m.text} with ${m.label}`,
+                      ),
+                    ];
+                    return all.length > 1
+                      ? `${all.slice(0, -1).join(', ')} and ${all.at(-1)}`
+                      : all[0];
+                  })()}.`}
             </p>
             <Pair
               a={{
@@ -454,6 +483,7 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
                 value: polySer.memorypack.ns,
                 text: polySer.memorypack.text,
               }}
+              more={otherTimes(polySer)}
             />
           </div>
         </div>
