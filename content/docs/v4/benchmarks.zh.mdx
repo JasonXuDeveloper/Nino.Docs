@@ -64,10 +64,26 @@ icon: ChartColumn
 
 ### 真实负载 [#workloads]
 
-照着真实应用的数据造的负载（[`WorkloadTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Workloads/WorkloadTest.cs)，类型在 [`Workloads/`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark/Workloads)），每个库都写一遍、读一遍。本站和 Nino README 的头条数字都出自这里。其中两个是常见序列化基准自带的数据：jvm-serializers 的 `MediaContent`，和一页 Stack Exchange API 数据（Jil、MessagePack-CSharp、MemoryPack 的基准用的都是这套模型）。四个是服务端会发的：结果为接口、带泛型实现的 RPC 调用，上个版本写进缓存的用户资料（Nino 用键控格式、MemoryPack 用版本容忍格式来读），两层事件继承外加泛型信封的事件流，以及 1,000 条日志。六个是游戏会发的：组件是接口、读进客户端已有对象的状态同步快照，8 名玩家的帧同步输入帧，MMO 的 AOI 增量，城池、军队和动作共享对象的 SLG 地图区域与卡牌战斗回放，以及上个版本的放置游戏存档，读进游戏手里已有的存档对象。某个库缺的功能就用它常见的绕法：MessagePack 和 protobuf 对每个引用各写一份共享对象的副本（System.Text.Json 用它的 `Preserve` 引用），不能读进已有对象的库就新建一个。有两个库只在这里测：
+照着真实应用的数据造的负载（[`WorkloadTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Workloads/WorkloadTest.cs)，类型在 [`Workloads/`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark/Workloads)），每个库都写一遍、读一遍。本站和 Nino README 的头条数字都出自这里。其中两个是常见序列化基准自带的数据：jvm-serializers 的 `MediaContent`，和一页 Stack Exchange API 数据（Jil、MessagePack-CSharp、MemoryPack 的基准用的都是这套模型）。四个是服务端会发的：结果为接口、带泛型实现的 RPC 调用，上个版本写进缓存的用户资料（Nino 用键控格式、MemoryPack 用版本容忍格式来读），两层事件继承外加泛型信封的事件流，以及 1,000 条日志。六个是游戏会发的：组件是接口、读进客户端已有对象的状态同步快照，8 名玩家的帧同步输入帧，MMO 的 AOI 增量，城池、军队和动作共享对象的 SLG 地图区域与卡牌战斗回放，以及上个版本的放置游戏存档，读进游戏手里已有的存档对象。某个库缺的功能就用它常见的绕法（见[各库怎么处理难点](#workarounds)）。有两个库只在这里测：
 
 - **Google.Protobuf 3.36.2** 用它自己的消息类型，由 `protoc` 从 [`workloads.proto`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Workloads/workloads.proto) 生成：schema 就是同一套模型的 protobuf-net 契约生成的，数据也是从 protobuf-net 写出的字节解析而来，两者写出的 protobuf 消息一样，大小也一样。写用 `WriteTo`，写进复用的 `ArrayBufferWriter<byte>`；读用 `Parser.ParseFrom(ReadOnlySpan<byte>)`。
 - **System.Text.Json**（.NET 10）用源生成器（`JsonSerializerContext`），通过复用的 `Utf8JsonWriter` 把 UTF-8 写进 `ArrayBufferWriter<byte>`，读的也是 UTF-8 字节。
+
+#### 各库怎么处理难点 [#workarounds]
+
+这些负载用到的功能，不是每个库都有。各库都按自己用户的常规写法来写，缺的功能用常见的绕法补上，保证处理的数据一样：
+
+| 库 | 基类或接口的子类型 | 被多处引用的同一个对象 | 读进已有对象 |
+| --- | --- | --- | --- |
+| Nino | 基类标 `[NinoType]` | 只写一次 | 原地读入 |
+| MemoryPack | 每个子类型一个 `[MemoryPackUnion]` | 只写一次 | 覆盖写入 |
+| MessagePack | 每个子类型一个 `[Union]` | **绕法：** 每个引用一份副本 | **绕法：** 新建对象 |
+| protobuf-net、Google.Protobuf | 每个子类型一个 `[ProtoInclude]`（`oneof`） | **绕法：** 每个引用一份副本 | **绕法：** 新建对象 |
+| System.Text.Json | 每个子类型一个 `[JsonDerivedType]` | `$id`、`$ref`（`Preserve`） | **绕法：** 新建对象 |
+
+上个版本写的数据各库都能读，不需要绕法：Nino 用键控或版本容错格式，MemoryPack 用版本容错格式，其他库靠整数键、字段编号或属性名。Nino 的生成器会自己找到子类型，泛型子类型和其他程序集里的也能找到；其他库都要在基类上逐个列出，protobuf 还要每层继承嵌套一层消息，System.Text.Json 每个值都要写上子类型名。原地读入时，Nino 会保留没变的字符串、复用列表；protobuf-net 读进已有对象是合并而不是覆盖，所以也只能新建。
+
+绕法本身有代价：共享对象每个引用都写一遍、读一遍；每次读都新建一整棵对象图，Nino 能复用的内存它们都得重新分配。这些代价也算进了测出来的数字，因为应用实际就要付这些代价。同样的模型在 Nino 里只需要标 `[NinoType]`：不用逐个列出子类型，也不用维护副本。
 
 <WorkloadTables lang="zh" />
 
