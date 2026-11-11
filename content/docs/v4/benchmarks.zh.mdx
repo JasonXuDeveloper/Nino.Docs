@@ -43,7 +43,7 @@ icon: ChartColumn
 | 测试框架 | BenchmarkDotNet 0.15.8，每个用例跑 3 个进程，每个进程预热 5 次、测量 15 次，取三个进程的平均（只跑一个进程时，一个 12 ns 的用例最多偏差 13%）；各基准测试类在每种架构的十四台 runner 上并行跑，同一个用例的所有序列化库都在同一台 runner 上 |
 | 项目 | [`benchmarks/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)（运行时），[`benchmarks/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.GeneratorBenchmark)（构建时间） |
 
-- **序列化**测试写进一个缓冲区写入器，它只创建一次，每次调用前重置（Nino 用 `NinoArrayBufferWriter`，其他库用 `ArrayBufferWriter<byte>`），所以测的是序列化本身，不是数组分配。每个库用的都是它能直接写入的写入器：换成其他 `IBufferWriter<byte>`，Nino 会先写进池化的缓冲区再整体复制过去，比这些表格多一次复制。
+- **序列化**测试写进一个缓冲区写入器，它只创建一次，每次调用前重置（Nino 用 `NinoArrayBufferWriter`，其他库用 `ArrayBufferWriter<byte>`），所以测的是序列化本身，不是数组分配。每个库用的都是它能直接写入的写入器：换成其他 `IBufferWriter<byte>`，原始值和固定大小的值 Nino 照样直接写入，其他值先写进池化的缓冲区再整体复制过去，比这些表格多一次复制。
 - **反序列化**测试读的是各个库启动时写好的字节，每次调用都创建新对象。
 - **先验证**：跑基准测试之前，`--verify`（[`Verify.cs`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Verify.cs)）把每个用例跑一遍，检查每个序列化用例写出的正是载荷的字节，各个库读回的值也逐层比较、完全相同。测试数据用固定种子，每次跑序列化的都是同样的值。
 - **1 ns 以下**（大约三个时钟周期）的耗时分不出快慢：读一个 40 字节的结构体，扣掉 BenchmarkDotNet 的空方法开销后，两个库测出来都在 0.05 到 0.8 ns 之间晃。两边都低于 1 ns 记为持平；Nino 低于 1 ns、对方测得出时，记为更快（快到测不出），不给倍数。相差 5% 以内也记为持平。

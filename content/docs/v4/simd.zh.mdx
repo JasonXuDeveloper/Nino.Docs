@@ -51,8 +51,8 @@ Unity 加载 `Nino.Core` 的 netstandard 版本。安装 `com.unity.burst` 1.8 �
 
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |
-| 支持 AVX2 的 x64，Burst AVX2 目标 | 256 个值及以上、每个值最多 16 字节的块的 `Permute`：每个 32 字节向量放两个或更多值，一个 `vpshufb` 掩码，各通道用 `vpermd` 拼接或分成两个 16 字节存储；其余部分、更宽的值和字符串走下面的 SSSE3 路径 | [Unity 基准测试](/zh/docs/v4/benchmarks-unity) |
-| 支持 SSSE3 的 x86 和 x64（x64 Player 中需要 SSE4 目标） | `Permute`：2 个及以上的元组、键值对和按块读写的 `[NinoType]` 结构体组成的数组和列表，每 16 字节一次字节重排（`pshufb`）读写，16 个及以上带填充的原始结构体在拷贝时清零填充；`Narrow` 和 `Widen`：16 个字符及以上的 Latin-1 字符串，每次 16 个字符；`NarrowAscii` 和 `WidenAscii`：16 个字符及以上的 `[NinoUtf8]` 字符串中直到第一个非 ASCII 字符为止的 ASCII 文本，其余部分交给 .NET 的 UTF-8 编码器和严格解码器 | [Unity 基准测试](/zh/docs/v4/benchmarks-unity) |
+| 支持 AVX2 的 x64，Burst AVX2 目标 | 256 个值及以上、每个值最多 16 字节的块的 `Permute`：每个 32 字节向量放两个或更多值，一个 `vpshufb` 掩码，各通道用 `vpermd` 拼接或分成两个 16 字节存储；`Interleave32` 和 `NormalizeBoolSlots` 每次 32 字节；其余部分、更宽的值和字符串走下面的 SSSE3 路径 | [Unity 基准测试](/zh/docs/v4/benchmarks-unity) |
+| 支持 SSSE3 的 x86 和 x64（x64 Player 中需要 SSE4 目标） | `Permute`：2 个及以上的元组、键值对和按块读写的 `[NinoType]` 结构体组成的数组和列表，每 16 字节一次字节重排（`pshufb`）读写，16 个及以上带填充的原始结构体在拷贝时清零填充；`Narrow` 和 `Widen`：16 个字符及以上的 Latin-1 字符串，每次 16 个字符；`NarrowAscii` 和 `WidenAscii`：16 个字符及以上的 `[NinoUtf8]` 字符串中直到第一个非 ASCII 字符为止的 ASCII 文本，其余部分交给 .NET 的 UTF-8 编码器和严格解码器；`Interleave32`：键和值都是四字节原始值的 `SortedList`，16 对及以上，用 SSE2 的 unpack 指令交错写出；`NormalizeBoolSlots`：`bool?` 的数组和列表，读取从 16 个值起、写入从 32 个起，每次检查并规整 16 字节 | [Unity 基准测试](/zh/docs/v4/benchmarks-unity) |
 | Arm64（Neon） | 同样的内核，用 `tbl`，字符串用 `uzp1`/`zip` | — |
 | 用 WebAssembly SIMD 构建的 WebGL（Unity 6 的 Target WebAssembly 2023，或 2022.3 上的 `-msimd128`） | 那里没有 Burst：同样的内核用 C 写成（`Nino.WebGL`），使用 `i8x16.swizzle` 和向量收窄、扩展，处理 16 个字符及以上的 Latin-1 字符串和 `[NinoUtf8]` 字符串中的 ASCII 文本，其余的从 32 个值起。参见 [WebGL](/zh/docs/v4/advanced/unity#webgl-kernels) | — |
 | Armv7、没有 SIMD 的 WebGL、不支持 SSSE3（或没有包含它的目标）的 x86 和 x64、没有 Burst 的 IL2CPP 和 Mono Player（安装 Burst 即可使用内核） | 无：Nino 的 netstandard 标量路径；字节一致 | [Unity 基准测试](/zh/docs/v4/benchmarks-unity)，“不用 Burst”一列 |
@@ -94,13 +94,15 @@ TypeScript 运行时用 `DataView` 和类型化数组读写。它的向量代码
 
 ## 注册自己的内核 [#registering-kernels]
 
-Unity 包注册的内核（[见上文](#unity)）走的是公共 API `NinoKernels`，netstandard 版本的任何宿主都能用：.NET Framework、Mono，以及 .NET Core 3.0 到 .NET 7。这些版本自己没有向量路径的地方，内核才有用：元组、`KeyValuePair` 和按块写的 `[NinoType]` 结构体组成的数组和列表，带填充的原始结构体数组，Latin-1 字符串，以及 `[NinoUtf8]` 字符串里的 ASCII 文本。.NET 8 及以上不用管它：这些版本走自己的向量路径，从不调用内核（在那里注册也没有任何效果）。
+Unity 包注册的内核（[见上文](#unity)）走的是公共 API `NinoKernels`，netstandard 版本的任何宿主都能用：.NET Framework、Mono，以及 .NET Core 3.0 到 .NET 7。这些版本自己没有向量路径的地方，内核才有用：元组、`KeyValuePair` 和按块写的 `[NinoType]` 结构体组成的数组和列表，带填充的原始结构体数组，键和值都是四字节原始值的 `SortedList`，`bool?` 的数组和列表，Latin-1 字符串，以及 `[NinoUtf8]` 字符串里的 ASCII 文本。.NET 8 及以上不用管它：这些版本走自己的向量路径，从不调用内核（在那里注册也没有任何效果）。
 
 每个内核都是原生的 `cdecl` 函数，以函数指针的形式传入；`NinoKernels.Register` 把这些指针复制到静态字段里，Nino 直接调用。留空（`null`）的指针，对应的工作仍走 Nino 自己的路径。
 
-| 内核 | 签名 | 要求（参照实现：`NinoKernels.PermuteScalar`、`NarrowScalar` 等） |
+| 内核 | 签名 | 要求（参照实现：`NinoKernels.PermuteScalar`、`Interleave32Scalar` 等） |
 | --- | --- | --- |
 | `Permute` | `void (byte* source, int sourceStride, byte* destination, int destinationStride, byte* table, int count)` | 处理 `count` 个值，源值在 `source` 处、间隔 `sourceStride` 字节，目标值在 `destination` 处、间隔 `destinationStride` 字节：目标的第 `j` 个字节取源值的第 `table[j]` 个字节，`table[j]` 为 `0xFF` 时写 `0`。目标的每个字节都要写。步长为 1 到 64；两段内存不重叠。 |
+| `Interleave32` | `void (int* first, int* second, byte* target, int count)` | 把 `count` 对 `first[i]`、`second[i]` 依次写到 `target + 8 * i`，每对 8 字节。键和值都是四字节原始值的 `SortedList` 就是这样按二进制格式写成键值对的。`count` 是 4 的倍数；`target` 可能不对齐，和两个源都不重叠。参照实现：`Interleave32Scalar`。 |
+| `NormalizeBoolSlots` | `int (byte* source, byte* destination, int count)` | 检查 `count` 个 `bool?` 槽位并从 `source` 拷到 `destination`（两段不重叠）。每个槽位两个字节：存在字节（0 或 1），然后是值；为 null 的槽位写成两个 0。返回开头完成了几个槽位；遇到有值且大于 1 的槽位就停下，返回它所在那一组的起点，这一组不写（错误交给 Nino 报告）。存在字节由 Nino 在调用前检查。参照实现：`NormalizeBoolSlotsScalar`。 |
 | `Narrow` | `int (ushort* source, byte* destination, int length)` | 把 `length` 个 UTF-16 字符各写成一个字节（Latin-1）；全都不超过 U+00FF 时返回 `1`，有字符超过时返回 `0`（这时写了多少都无所谓：Nino 会改用 UTF-16 写这个字符串）。 |
 | `Widen` | `void (byte* source, ushort* destination, int length)` | 把 `length` 个 Latin-1 字节扩展成 UTF-16 字符。 |
 | `NarrowAscii` | `int (ushort* source, byte* destination, int length)` | 把开头低于 U+0080 的字符各写成一个字节，返回这样的字符有几个（全是就返回 `length`）；之后的字节也可以写，但不超过 `length`。剩下的由 Nino 编码。 |
@@ -112,7 +114,7 @@ Unity 包注册的内核（[见上文](#unity)）走的是公共 API `NinoKernel
 
 - **字节一致。** 内核的输出必须和参照实现完全相同：二进制格式不取决于走了哪条路径，用内核写的数据，不用内核也能读，其他语言的运行时也能读。请拿随机输入，以及向量宽度附近的每个长度，和对应的 `...Scalar` 参照实现逐一比对。
 - **不假设对齐，不保存状态，不抛异常。** 指针可能是任意对齐。所有做序列化的线程都可能同时调用内核，所以内核里不能有可变状态。任何异常都不能从内核里抛出来。
-- **阈值。** 只有长度足够、调用划得来时，Nino 才会调用内核：`Permute` 至少 `MinBlocks` 个值（默认 16，最小 1；带填充的原始结构体的复制无论怎么设都从 16 个起），四个文本内核至少 `MinChars` 个字符（默认 32，最小 16）。Unity 的 Burst 内核用 2 和 16，WebGL 内核用 32 和 16：请在目标平台上实测，把阈值设在内核开始变快的长度。
+- **阈值。** 只有长度足够、调用划得来时，Nino 才会调用内核：`Permute` 至少 `MinBlocks` 个值（默认 16，最小 1；带填充的原始结构体的复制无论怎么设都从 16 个起），`Interleave32` 和 `NormalizeBoolSlots` 也看 `MinBlocks`，但各有下限（16 对；读取 16 个槽位，写入 32 个），四个文本内核至少 `MinChars` 个字符（默认 32，最小 16）。Unity 的 Burst 内核用 2 和 16，WebGL 内核用 32 和 16：请在目标平台上实测，把阈值设在内核开始变快的长度。
 
 一个最小的例子：用 C 写两个 Latin-1 内核，编译成 DLL，在 Windows 上加载（函数指针需要 C# 9 或更高版本）。
 
@@ -163,7 +165,7 @@ public static unsafe class NinoNativeKernels
             MinChars = 64, // 从这个长度起，你的内核实测更快
             Narrow = (delegate* unmanaged[Cdecl]<ushort*, byte*, int, int>)GetProcAddress(library, "nino_narrow"),
             Widen = (delegate* unmanaged[Cdecl]<byte*, ushort*, int, void>)GetProcAddress(library, "nino_widen"),
-            // Permute、NarrowAscii、WidenAscii 留空：走 Nino 自己的路径
+            // Permute、Interleave32、NormalizeBoolSlots、NarrowAscii、WidenAscii 留空：走 Nino 自己的路径
         });
         return true;
     }

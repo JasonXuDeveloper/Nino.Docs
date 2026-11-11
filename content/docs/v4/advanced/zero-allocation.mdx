@@ -12,13 +12,13 @@ A recipe book for hot paths that must not allocate: message loops, market data a
 | Call | Allocates |
 | --- | --- |
 | `NinoSerializer.Serialize(value)` | the returned `byte[]`, of exactly the data's size: written in place for a [fixed-size type](/en/docs/v4/performance#fixed-size-types) and for an array or list of fixed-size elements, otherwise copied out of a per-thread scratch buffer |
-| `NinoSerializer.Serialize(value, bufferWriter)` | nothing; a `NinoArrayBufferWriter` is written in place, any other `IBufferWriter<byte>` gets one copy from a per-thread scratch buffer |
+| `NinoSerializer.Serialize(value, bufferWriter)` | nothing; a `NinoArrayBufferWriter` is written in place; any other `IBufferWriter<byte>` too for raw values, arrays and lists of them and fixed-size types, and gets one copy from a per-thread scratch buffer for the rest ([which values](/en/docs/v4/advanced/high-performance#serialize-into-any-ibufferwriter)) |
 | `NinoSerializer.Serialize(value, ref writer)` | nothing |
 | `NinoSerializer.Serialize(value, stream)`, `SerializeAsync` | nothing: one `Write` from the per-thread scratch buffer (an async write that completes at once included) |
 | `NinoDeserializer.Deserialize<T>(span)` | the objects it returns: the class instances, collections and strings in the data; nothing for a struct made of unmanaged members |
 | `NinoDeserializer.Deserialize(span, ref value)` | what does not fit the existing graph (a new list element, an array of a different length) and each string whose text changed (an unchanged string is kept; non-ASCII `[NinoUtf8]` text is always read into a new string) |
-| `NinoDeserializer.Deserialize<T>(sequence)` | as the span call; a sequence of several segments is first copied once, to the stack up to 512 bytes, otherwise into a pooled array |
-| `NinoDeserializer.Deserialize<T>(stream)`, `DeserializeAsync` | as the span call; the stream's bytes go into a pooled array returned after the read (a `MemoryStream` whose buffer is exposed, an `UnmanagedMemoryStream` and a memory-mapped view are read in place) |
+| `NinoDeserializer.Deserialize<T>(sequence)` | as the span call; a sequence of several segments is first copied once, to the stack up to 1,024 bytes, otherwise into a pooled array |
+| `NinoDeserializer.Deserialize<T>(stream)`, `DeserializeAsync` | as the span call; the stream's bytes go into a pooled array returned after the read (a `MemoryStream` whose buffer is exposed, an `UnmanagedMemoryStream` and a memory-mapped view are read in place: [Streams](/en/docs/v4/advanced/streams#streams)) |
 | a `[NinoPooled]` class Nino has to create | nothing while its pool has instances |
 
 The buffer you serialize into grows on the first calls and is then reused, and a `NinoArrayBufferWriter` rents its array from `ArrayPool<byte>.Shared`. Nino keeps no per-call state on the heap.

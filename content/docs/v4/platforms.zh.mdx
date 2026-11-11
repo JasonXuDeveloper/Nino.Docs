@@ -100,7 +100,7 @@ Nino 直接读写 `List<T>`、`Stack<T>`、`Queue<T>`、`SortedList<TKey, TValue
 - **跑在 JIT 上的裁剪应用**保留了为这类类型构建格式化器的运行时路径；这条路径对裁剪器的要求都已标注。
 - **Native AOT 下的 CPU 特性**：在 x64 上，Native AOT 按 SSE2 编译，启动时再检测之后的几个指令集，其中有 SSSE3，所以在支持 SSSE3 的 CPU 上，Nino 会走 [SSSE3 路径](#simd)。AVX2 和 AVX-512 路径需要更高的基线，而提高基线也就要求运行的 CPU 必须支持：AVX2 用 `<IlcInstructionSet>x86-64-v3</IlcInstructionSet>`，AVX-512 用 `x86-64-v4`，或用 `native` 取构建机器的 CPU。在 Arm64 上，AdvSimd 属于 Native AOT 的基线，所有 Arm64 路径都会用上。
 
-生成器为 IL2CPP 写的也是同样的格式化器，所以 Nino 在 IL2CPP 上同样不需要反射。参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity#il2cpp)。
+生成器为 IL2CPP 写的也是同样的格式化器，所以在 IL2CPP 上读写成员同样不靠反射。只以运行时 `Type` 交给 Nino 的封闭泛型类型，在 IL2CPP 下也能用：Nino 像在 JIT 上一样构建它的格式化器，IL2CPP 用完全泛型共享（full generic sharing）运行这段代码。共享代码对任何类型实参都适用，但比专门为某个类型编译的代码慢（见 [Unity 的脚本限制说明](https://docs.unity3d.com/2022.3/Documentation/Manual/ScriptingRestrictions.html)）。不管哪个平台，都建议在生成器看得到的地方写出这个类型（上面列的几处），Nino 就会改用生成的格式化器。参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity#il2cpp)。
 
 ## 查看注册情况 [#checking-registration]
 

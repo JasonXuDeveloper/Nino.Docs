@@ -31,12 +31,12 @@ It opens the performance track; the pages after it go deeper, in this order: [De
 | Lever | Use it when | What it costs |
 | --- | --- | --- |
 | [A reused `NinoArrayBufferWriter`](#serialize-into-a-reused-buffer) | you serialize more than once | the array, held by its owner; one buffer per thread or connection |
-| [The caller's `IBufferWriter<byte>`](#serialize-into-any-ibufferwriter) | the transport hands you one (pipes, Kestrel) | one copy into it |
+| [The caller's `IBufferWriter<byte>`](#serialize-into-any-ibufferwriter) | the transport hands you one (pipes, Kestrel) | nothing for raw and fixed-size values; one copy into it for the rest |
 | [`Serialize(value)` into an exact-size `byte[]`](#exact-size-arrays) | an API needs a `byte[]` | one allocation per call |
 | [`Writer` and `Reader`](#several-values-back-to-back) | several values share one buffer | `Flush` and `ReleaseReferences` once per message |
 | [Deserializing from the memory you have](#deserialize-from-the-memory-you-have) | always | nothing |
 | [`Deserialize<T>(sequence)`](#deserialize-from-the-memory-you-have) | a pipe or gRPC hands you a `ReadOnlySequence<byte>` | nothing for one segment; one copy for several |
-| [`Serialize(value, stream)` and `Deserialize<T>(stream)`](#streams) | one value per file, HTTP body or blob | one `Write` from Nino's scratch buffer; reading rents a pooled array (none for a `MemoryStream` whose buffer is exposed, an `UnmanagedMemoryStream` or a memory-mapped view) |
+| [`Serialize(value, stream)` and `Deserialize<T>(stream)`](#streams) | one value per file, HTTP body or blob | one `Write` from Nino's scratch buffer; reading rents a pooled array (none for a `MemoryStream` whose buffer is exposed, an `UnmanagedMemoryStream` or a memory-mapped view, [Streams](/en/docs/v4/advanced/streams#streams)) |
 | [Reuse deserialization (`ref`)](#deserialize-into-existing-objects) | messages of the same shape, one at a time | you keep the instance, and it changes with every read |
 | [`[NinoPooled]`](#pool-what-you-create) and [pool sizes](/en/docs/v4/settings#pools) | instances created, kept or dropped at a high rate | `sealed partial` classes, a `ReturnToPool()` per instance you own, memory the pools hold |
 | [Unmanaged structs and their layout](/en/docs/v4/advanced/type-design#keep-bulk-data-raw) | bulk and hot data | the layout is part of the format |
@@ -110,15 +110,16 @@ Recipes built on this: [batches](/en/docs/v4/advanced/zero-allocation#batches) a
 
 ## Serialize into Any IBufferWriter
 
-Any `IBufferWriter<byte>` works as a destination: a `PipeWriter`, Kestrel's response body writer, an `ArrayBufferWriter<byte>`. Nino writes into a per-thread <Term id="scratch-buffer">scratch buffer</Term> and then copies the result into the writer once, so nothing is allocated per call:
+Any `IBufferWriter<byte>` works as a destination: a `PipeWriter`, Kestrel's response body writer, an `ArrayBufferWriter<byte>`. A value whose size Nino knows before writing it goes straight into the writer, through one `GetSpan` of that size; anything else is written into a per-thread <Term id="scratch-buffer">scratch buffer</Term> and copied into the writer once. Either way nothing is allocated per call:
 
 ```csharp
 NinoSerializer.Serialize(message, pipeWriter); // one copy into the pipe's memory
 await pipeWriter.FlushAsync();
 ```
 
-- **Cost:** one copy into the writer's memory; 0 B. A raw value (an unmanaged struct, a primitive) skips the scratch buffer and is written straight into the writer's span.
-- Only a `NinoArrayBufferWriter` is written in place. Use one when you need to patch bytes after writing (a length prefix, see [framing](/en/docs/v4/advanced/networking#frame-the-stream)).
+- **Written in place:** raw values (unmanaged structs, primitives), arrays and lists of them, and [fixed-size types](/en/docs/v4/performance#fixed-size-types). On .NET Standard 2.1 and later builds also `ArraySegment<T>` and array-backed `Memory<T>` and single-segment `ReadOnlySequence<T>` of raw values, and on .NET 8 and later multidimensional arrays of them.
+- **Cost:** at most one copy into the writer's memory; 0 B.
+- Only a `NinoArrayBufferWriter` is written in place whatever the value. Use one when you need to patch bytes after writing (a length prefix, see [framing](/en/docs/v4/advanced/networking#frame-the-stream)).
 - To serialize into memory you already own (a ring-buffer slot, a pre-allocated send buffer), wrap it in a small `IBufferWriter<byte>`: see [Write into Memory You Own](/en/docs/v4/advanced/zero-allocation#write-into-memory-you-own).
 
 ## When You Need a `byte[]` [#exact-size-arrays]

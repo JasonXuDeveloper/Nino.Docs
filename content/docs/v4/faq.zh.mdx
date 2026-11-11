@@ -24,7 +24,7 @@ Nino 是一个通用的高性能 C# / .NET 二进制序列化库。给类型加�
 
 读写数据不用反射：源生成器在编译期给每个类型生成一个格式化器，所以 IL2CPP、NativeAOT 和 HybridCLR 这些不能在运行时生成代码的环境里，Nino 照样能用。反射只用在这条路径之外，比如第一次用到某个程序集里的类型时找它生成的注册表，以及装箱 API 第一次按 `Type` 找格式化器。参见[性能原理](/zh/docs/v4/performance)。
 
-Nino.Core 的 net8.0 和 net10.0 版本还带了裁剪和 Native AOT 标注：用 `PublishTrimmed` 或 `PublishAot` 发布，Nino 不报任何警告。Native AOT 下，Nino 只用生成器写好的格式化器，所以要序列化的每个类型，都得出现在生成器看得到的代码里（当成员类型，或者当 `NinoSerializer`/`NinoDeserializer` 调用的类型实参或 `typeof` 参数）。只在运行时才出现的类型会报错，错误里写明是哪个类型，绝不会读写出错的数据。参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
+Nino.Core 的 net8.0 和 net10.0 版本还带了裁剪和 Native AOT 标注：用 `PublishTrimmed` 或 `PublishAot` 发布，Nino 不报任何警告。Native AOT 下，Nino 只用生成器写好的格式化器，所以要序列化的每个类型，都得出现在生成器看得到的代码里（当成员类型，或者当 `NinoSerializer`/`NinoDeserializer` 调用的类型实参或 `typeof` 参数）。只在运行时才出现的类型会报错，错误里写明是哪个类型，绝不会读写出错的数据。JIT 上，Nino 会在第一次用到这类类型时构建它的格式化器；IL2CPP 也能运行，只是走较慢的共享泛型代码。参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
 
 ## Nino 和 MemoryPack 相比有多快？ [#how-fast-is-nino-compared-with-memorypack]
 

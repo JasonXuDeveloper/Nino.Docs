@@ -108,7 +108,7 @@ const copy: Record<
       },
       {
         icon: Recycle,
-        label: 'Zero allocation',
+        label: 'Zero allocation on hot paths',
         text: 'Serialize into a reused buffer or straight to a Stream without garbage; deserialize into existing objects and pooled instances.',
       },
       {
@@ -208,7 +208,7 @@ const copy: Record<
       },
       {
         icon: Recycle,
-        label: '零分配',
+        label: '热路径零分配',
         text: '序列化到复用的缓冲区或直接写入 Stream，不产生垃圾；反序列化可以直接填充已有对象和池化实例。',
       },
       {

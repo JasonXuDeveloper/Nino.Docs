@@ -76,7 +76,7 @@ byte[] bytes = NinoSerializer.Serialize(order);
 
 `Serialize<T>(value)` allocates one `byte[]` for the result. For a <Term id="fixed-size">fixed-size type</Term>, and for an array or list whose elements are written as one block (unmanaged values, raw structs), that array is allocated at its final size and written in place ([Fixed-Size Types](/en/docs/v4/performance#fixed-size-types) says how); other values are written into a per-thread scratch buffer and copied out. To allocate nothing, serialize into a buffer you keep.
 
-`NinoArrayBufferWriter` is Nino's own `IBufferWriter<byte>`, backed by `ArrayPool<byte>.Shared` (or a pool you pass in), and Nino writes into it **in place**. Any other `IBufferWriter<byte>` (.NET's `ArrayBufferWriter<byte>`, a `PipeWriter`, a writer that wraps a `Stream`) costs one extra copy at the end.
+`NinoArrayBufferWriter` is Nino's own `IBufferWriter<byte>`, backed by `ArrayPool<byte>.Shared` (or a pool you pass in), and Nino writes into it **in place**. Any other `IBufferWriter<byte>` (.NET's `ArrayBufferWriter<byte>`, a `PipeWriter`, a writer that wraps a `Stream`) gets raw and fixed-size values in place too, and everything else with one extra copy at the end ([Serialize into Any IBufferWriter](/en/docs/v4/advanced/high-performance#serialize-into-any-ibufferwriter)).
 
 ```csharp
 var buffer = new NinoArrayBufferWriter();      // or new NinoArrayBufferWriter(initialCapacity)

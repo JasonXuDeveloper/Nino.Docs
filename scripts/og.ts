@@ -306,7 +306,7 @@ if (process.argv.includes('--default')) {
     eyebrow: 'Nino',
     title: 'High-performance binary serializer for C# and .NET',
     description:
-      'Source-generated, no reflection, zero GC on hot paths. For RPC, microservices, message queues, caching, storage and IPC, with Unity and Godot support.',
+      'Source-generated, no reflection over members, zero GC on hot paths. For RPC, microservices, message queues, caching, storage and IPC, with Unity and Godot support.',
   };
   const fonts = await loadFonts([card]);
   if (!fonts.en) throw new Error('No font for the default card');

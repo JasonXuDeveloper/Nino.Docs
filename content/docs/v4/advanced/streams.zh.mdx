@@ -37,7 +37,7 @@ using (var file = File.OpenRead(path))
 ```
 
 - **写出的字节。** 流里的内容和 `NinoSerializer.Serialize(checkpoint)` 返回的字节完全相同：不加长度，也不加头。Nino 先序列化到池化的<Term id="scratch-buffer" lang="zh">暂存缓冲区</Term>，再一次 `Write` 交给流，每次调用都不分配数组。
-- **读取。** 从流的当前位置读到结尾，读进从 `ArrayPool<byte>.Shared` 租来的数组，读完就还回去。缓冲区可以公开访问的 `MemoryStream`（`TryGetBuffer` 能成功：用 `new MemoryStream()` 写进去的，或者创建时传了 `publiclyVisible: true` 的）直接在原缓冲区上读，不拷贝，读完后流停在末尾，`UnmanagedMemoryStream` 和 `MemoryMappedViewStream`（内存映射文件）也一样；`new MemoryStream(bytes)` 不公开缓冲区，字节会先拷进租来的数组。手里已经有数组的话，直接交给 `Deserialize<T>(bytes)`，别再包一层流。之后就和读 span 一样，所有检查照做：[不可信模式](/zh/docs/v4/security#untrusted-mode)同样生效，包括拒绝值后面多出的字节；流提前结束会抛 `NinoDataException`。
+- **读取。** Nino 先把流从当前位置读到结尾，再开始解码；字节读进从 `ArrayPool<byte>.Shared` 租来的数组，读完就还回去。所以就算数据被拒绝，流也停在末尾。缓冲区可以公开访问的 `MemoryStream`（`TryGetBuffer` 能成功：用 `new MemoryStream()` 写进去的，或者创建时传了 `publiclyVisible: true` 的）直接在原缓冲区上读，不拷贝；类型恰好是 `UnmanagedMemoryStream` 或 `MemoryMappedViewStream`（内存映射文件）的流也一样。从它们派生的类可能改写读取的方式，字节照样拷进租来的数组；`new MemoryStream(bytes)` 不公开缓冲区，也要拷贝。手里已经有数组的话，直接交给 `Deserialize<T>(bytes)`，别再包一层流。之后就和读 span 一样，所有检查照做：[不可信模式](/zh/docs/v4/security#untrusted-mode)同样生效，包括拒绝值后面多出的字节；流提前结束会抛 `NinoDataException`。
 - **扩容。** 不能 seek 的流从 4 KiB 开始，数组满了才翻倍。能 seek 的流按 `Length` 定第一个数组的大小，但最多 1 MiB，因为长度只是流自己声称的。Nino 占用的内存最多比流实际送来的字节多一倍左右。
 - **调用方式。** 编译时知道类型的调用和 span 调用一样会被[拦截](/zh/docs/v4/performance#interceptors)，直接调用生成的格式化器。只有运行时才知道 `Type` 时，[装箱 API](/zh/docs/v4/basic#the-boxed-api) 也能读写流：`SerializeBoxed(value, stream, type)`、`DeserializeBoxed(stream, type)` 和 `DeserializeBoxed(stream, ref value, type)`。
 
@@ -62,7 +62,7 @@ Checkpoint read = await NinoDeserializer.DeserializeAsync<Checkpoint>(stream, ct
 
 ## 多段输入（`ReadOnlySequence`） [#readonlysequence-input]
 
-`PipeReader`、gRPC 的负载和 `HybridCache` 给的都是 `ReadOnlySequence<byte>`，直接交给 `NinoDeserializer` 就行：只有一段时直接在原内存上读，不拷贝；有多段时拷贝一次，512 字节以内拷到栈上，更大的拷进池化数组。`ref` 重载会填充你保留的实例。
+`PipeReader`、gRPC 的负载和 `HybridCache` 给的都是 `ReadOnlySequence<byte>`，直接交给 `NinoDeserializer` 就行：只有一段时直接在原内存上读，不拷贝；有多段时拷贝一次，1,024 字节以内拷到栈上，更大的拷进池化数组。`ref` 重载会填充你保留的实例。
 
 ```csharp
 Checkpoint read = NinoDeserializer.Deserialize<Checkpoint>(sequence); // [!code highlight]

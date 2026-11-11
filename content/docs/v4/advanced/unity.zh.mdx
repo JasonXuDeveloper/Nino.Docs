@@ -148,14 +148,16 @@ Unity 跑的是 `Nino.Core` 的 netstandard 构建，里面没有硬件内部函
 | 内核 | 加速什么 | 起用长度 |
 | --- | --- | --- |
 | Permute | 读写这几类元素的数组和列表：值元组、`KeyValuePair`、字节和内存布局不一样的 `[NinoType]` 结构体（有填充，或含元组、键值对成员）；以及复制带填充的原始结构体数组，复制时顺带把填充清零。每个值最多 64 字节。在支持 AVX2 的 x64 CPU 上，16 字节以内的值一个 32 字节向量能放两个或更多 | 2 个值（带填充的原始结构体：16 个；AVX2：256 个） |
+| Interleave32 | 写入键和值都是四字节原始值的 `SortedList`（如 `SortedList<int, float>`）：把键数组和值数组交错成键值对，一次 16 字节（AVX2 上 32 字节） | 16 对 |
+| NormalizeBoolSlots | 读写 `bool?` 的数组和列表：检查每个槽位的值，为 null 的槽位把值字节清零，一次 16 字节（AVX2 上 32 字节） | 读取 16 个值，写入 32 个 |
 | Narrow、Widen | 读写单字节（Latin-1）形式的字符串，ASCII 也算：一次 16 个字符 | 16 个字符 |
 | NarrowAscii、WidenAscii | 读写 [`[NinoUtf8]` 字符串](/zh/docs/v4/defining-types#string-encoding)：开头一段 ASCII 文本（到第一个非 ASCII 字符为止），一次 16 个字符；剩下的交给编码器（或严格的解码器），所以无效 UTF-8 的拒绝方式和没有 Burst 时完全一样 | 16 个字符 |
 
-更短的数组和字符串照旧走标量路径，因为调用内核的开销比它省下的还多：这些阈值就是在 Unity 2022.3 和 6000.3 的 IL2CPP Player 里实测内核开始变快的长度。`Nino.Core` 把每个内核的 Burst 函数指针存在静态字段里，直接调用，这是调用 Burst 代码最省的方式：长度和阈值比一次，然后调用，中间没有对象，也没有虚调用（运行时调用不了 Burst 函数指针时，一个内核也不注册）。没有填充的原始结构体数组（`Vector3[]`、`Color32[]`、你自己的非托管结构体）有没有 Burst 都是一次内存复制。
+更短的数组和字符串照旧走标量路径，因为调用内核的开销比它省下的还多：这些阈值就是在 Unity 2022.3 和 6000.3 的 IL2CPP Player 里实测内核开始变快的长度（Interleave32 和 NormalizeBoolSlots 的阈值是 `Nino.Core` 对所有宿主定的下限）。`Nino.Core` 把每个内核的 Burst 函数指针存在静态字段里，直接调用，这是调用 Burst 代码最省的方式：长度和阈值比一次，然后调用，中间没有对象，也没有虚调用（运行时调用不了 Burst 函数指针时，一个内核也不注册）。没有填充的原始结构体数组（`Vector3[]`、`Color32[]`、你自己的非托管结构体）有没有 Burst 都是一次内存复制。
 
 <UnityHighlights lang="zh" />
 
-**指令集。** 内核在 x86 和 x64 上用 AVX2（`vpshufb`）和 SSSE3（`pshufb`），在 Arm64 上用 Neon（`tbl`）；编辑器、Mono 和 IL2CPP Player 都能用，HybridCLR 热更新代码也能经由 AOT 的 `Nino.Core` 用上。内核跑不了的地方，Nino 一个都不注册，继续走标量路径：Armv7（32 位 Android）、WebGL（它有自己的内核，见[下文](#webgl-kernels)）、不支持 SSSE3 的 x86 和 x64 CPU、Burst 不运行的 Player，以及关了 Burst 编译（**Jobs > Burst > Enable Compilation**）的编辑器。
+**指令集。** 内核在 x86 和 x64 上用 AVX2（`vpshufb`）和 SSSE3（`pshufb`），在 Arm64 上用 Neon（`tbl`、`zip`）；编辑器、Mono 和 IL2CPP Player 都能用，HybridCLR 热更新代码也能经由 AOT 的 `Nino.Core` 用上。内核跑不了的地方，Nino 一个都不注册，继续走标量路径：Armv7（32 位 Android）、WebGL（它有自己的内核，见[下文](#webgl-kernels)）、不支持 SSSE3 的 x86 和 x64 CPU、Burst 不运行的 Player，以及关了 Burst 编译（**Jobs > Burst > Enable Compilation**）的编辑器。
 
 **x64 Player：勾上 SSE4 和 AVX2。** **Edit > Project Settings > Burst AOT Settings** 里列了几个 x64 CPU 目标，Burst 就把 Player 的代码编译几份，启动时挑 CPU 能跑的那份。AVX2 目标让支持 AVX2 的 CPU 用上 32 字节置换；SSE4 目标让支持 SSSE3、不支持 AVX2 的 CPU 用上 16 字节内核。SSE2 那份没有字节重排，所以没有 SSE4 目标时，这类 CPU 一个内核也用不上。默认列表随 Burst 版本而变（1.8.29 默认是 SSE2 和 AVX2），请确认列表里有 SSE4 和 AVX2；Nino 自己的测试工程就是这么配的（SSE2、SSE4 和 AVX2）。
 
@@ -174,7 +176,7 @@ NinoBurst.Register(NinoBurst.Ssse3); // 让支持 AVX2 的 CPU 只用 16 字节�
 
 ### WebGL [#webgl-kernels]
 
-Burst 编译不了 WebGL，所以 Unity 包为 WebGL 另备了一套同样的内核，用 C 和 WebAssembly SIMD 写成（`Nino.WebGL`，由 Unity 编译进 Player，什么都不用装）。Player 用 WebAssembly SIMD 构建时，它们在启动时注册；不带 SIMD 的 Player 继续走标量路径：
+Burst 编译不了 WebGL，所以 Unity 包为 WebGL 另备了一套同样的内核（Interleave32 和 NormalizeBoolSlots 除外），用 C 和 WebAssembly SIMD 写成（`Nino.WebGL`，由 Unity 编译进 Player，什么都不用装）。Player 用 WebAssembly SIMD 构建时，它们在启动时注册；不带 SIMD 的 Player 继续走标量路径：
 
 - **Unity 6**：打开 **Player Settings > Publishing Settings > Target WebAssembly 2023**（`PlayerSettings.WebGL.wasm2023`），整个 Player 就带 SIMD 构建。
 - **Unity 2022.3** 没有这个设置。在 **Player Settings > Other Settings > Additional IL2CPP Arguments** 里加上 `--compiler-flags=-msimd128`。这样构建的 Player 要求浏览器支持 WebAssembly SIMD：Chrome 91、Firefox 89、Safari 16.4 或更高版本；而 Unity 2022.3 本身支持到 Safari 15，所以玩家里还有人用更老的 Safari，就别开。
@@ -195,9 +197,9 @@ Unity 的结构体（`Vector3`、`Quaternion`、`Color32`、`Bounds` 等）是�
 
 ## IL2CPP [#il2cpp]
 
-- 生成的代码是普通 C#：序列化时不用反射，也不用 `System.Reflection.Emit`。
+- 生成的代码是普通 C#：直接读写成员，不对成员做反射，也不用 `System.Reflection.Emit`。
 - 每个生成的注册表都标了 `[RuntimeInitializeOnLoadMethod]`（编辑器里还有 `[InitializeOnLoadMethod]`），所以启动时就会运行，IL2CPP 链接器也不会把它裁掉。就算没有这一步，第一次用到时也会按需注册。
-- 代码里**写出了名字**的泛型 `[NinoType]` 实例化和内置泛型集合（成员类型、`NinoSerializer.Serialize<List<MyStruct>>` 调用），生成器都会注册，IL2CPP 会提前编译它们。
+- 代码里**写出了名字**的泛型 `[NinoType]` 实例化和内置泛型集合（成员类型、`NinoSerializer.Serialize<List<MyStruct>>` 调用），生成器都会注册，IL2CPP 会提前编译它们。只以运行时 `Type` 交给 Nino 的实例化也能用，但走的是 IL2CPP 较慢的共享泛型代码（见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)）：在代码里写出它，就能用上提前编译好的版本。
 - 只靠反射创建、又只会多态**读取**的实例化，要在启动时加一行：`NinoPolymorphic.TryRegister<Box<MyStruct>>()`。
 
 ## HybridCLR 热更新 [#hybridclr-hot-update]

@@ -51,8 +51,8 @@ Unity loads the netstandard build of `Nino.Core`. With `com.unity.burst` 1.8 or 
 
 | Hardware | Vector paths | Benchmark |
 | --- | --- | --- |
-| x64 with AVX2, Burst AVX2 target | `Permute` for blocks of 256 values or more of up to 16 bytes: two or more values per 32-byte vector, one `vpshufb` mask, lanes joined with `vpermd` or stored as two 16-byte halves; the rest, wider values and strings take the SSSE3 paths below | [Unity benchmark](/en/docs/v4/benchmarks-unity) |
-| x86 and x64 with SSSE3 (in x64 players, the SSE4 target) | `Permute`: arrays and lists of 2 or more tuples, pairs and blocked `[NinoType]` structs written and read with one byte shuffle (`pshufb`) per 16 bytes, and 16 or more raw structs with padding copied with it cleared; `Narrow` and `Widen`: Latin-1 strings of 16 chars or more, 16 chars at a time; `NarrowAscii` and `WidenAscii`: the ASCII text of `[NinoUtf8]` strings of 16 chars or more, up to the first other char, which .NET's UTF-8 encoder and strict decoder take from there | [Unity benchmark](/en/docs/v4/benchmarks-unity) |
+| x64 with AVX2, Burst AVX2 target | `Permute` for blocks of 256 values or more of up to 16 bytes: two or more values per 32-byte vector, one `vpshufb` mask, lanes joined with `vpermd` or stored as two 16-byte halves; `Interleave32` and `NormalizeBoolSlots` 32 bytes at a time; the rest, wider values and strings take the SSSE3 paths below | [Unity benchmark](/en/docs/v4/benchmarks-unity) |
+| x86 and x64 with SSSE3 (in x64 players, the SSE4 target) | `Permute`: arrays and lists of 2 or more tuples, pairs and blocked `[NinoType]` structs written and read with one byte shuffle (`pshufb`) per 16 bytes, and 16 or more raw structs with padding copied with it cleared; `Narrow` and `Widen`: Latin-1 strings of 16 chars or more, 16 chars at a time; `NarrowAscii` and `WidenAscii`: the ASCII text of `[NinoUtf8]` strings of 16 chars or more, up to the first other char, which .NET's UTF-8 encoder and strict decoder take from there; `Interleave32`: `SortedList`s whose keys and values are four-byte raw values, 16 pairs or more, interleaved with SSE2 unpacks; `NormalizeBoolSlots`: arrays and lists of `bool?`, from 16 values when reading and 32 when writing, checked and normalized 16 bytes at a time | [Unity benchmark](/en/docs/v4/benchmarks-unity) |
 | Arm64 (Neon) | the same kernels with `tbl`, and `uzp1`/`zip` for strings | — |
 | WebGL built with WebAssembly SIMD (Unity 6's Target WebAssembly 2023, or `-msimd128` on 2022.3) | no Burst there: the same kernels in C (`Nino.WebGL`) with `i8x16.swizzle` and vector narrowing and widening, for Latin-1 strings and the ASCII text of `[NinoUtf8]` strings of 16 chars or more and 32 values or more of the rest. See [WebGL](/en/docs/v4/advanced/unity#webgl-kernels) | — |
 | Armv7, WebGL without SIMD, x86 and x64 without SSSE3 (or without the target that has it), IL2CPP and Mono players without Burst (install Burst for the kernels) | none: Nino's scalar netstandard paths; the same bytes | [Unity benchmark](/en/docs/v4/benchmarks-unity), "Without Burst" |
@@ -94,13 +94,15 @@ The TypeScript runtime reads and writes with `DataView` and typed arrays. Its ve
 
 ## Registering Your Own Kernels [#registering-kernels]
 
-The kernels Unity's package registers ([above](#unity)) go through a public API, `NinoKernels`, which any host of the netstandard builds can use: .NET Framework, Mono, and .NET Core 3.0 to .NET 7. It helps where those builds have no vector path of their own: arrays and lists of tuples, `KeyValuePair`s and blocked `[NinoType]` structs, arrays of raw structs with padding, Latin-1 strings and the ASCII text of `[NinoUtf8]` strings. Skip it on .NET 8 and later: their builds use their own vector paths and never call the kernels (registering there does nothing).
+The kernels Unity's package registers ([above](#unity)) go through a public API, `NinoKernels`, which any host of the netstandard builds can use: .NET Framework, Mono, and .NET Core 3.0 to .NET 7. It helps where those builds have no vector path of their own: arrays and lists of tuples, `KeyValuePair`s and blocked `[NinoType]` structs, arrays of raw structs with padding, `SortedList`s of four-byte raw keys and values, arrays and lists of `bool?`, Latin-1 strings and the ASCII text of `[NinoUtf8]` strings. Skip it on .NET 8 and later: their builds use their own vector paths and never call the kernels (registering there does nothing).
 
 Each kernel is a native `cdecl` function you pass as a function pointer; `NinoKernels.Register` copies the pointers into static fields, and Nino calls them directly. A pointer left `null` keeps Nino's own path for that work.
 
-| Kernel | Signature | Must do (reference: `NinoKernels.PermuteScalar`, `NarrowScalar`, ...) |
+| Kernel | Signature | Must do (reference: `NinoKernels.PermuteScalar`, `Interleave32Scalar`, ...) |
 | --- | --- | --- |
 | `Permute` | `void (byte* source, int sourceStride, byte* destination, int destinationStride, byte* table, int count)` | For each of `count` values, `sourceStride` bytes apart at `source` and `destinationStride` bytes apart at `destination`: destination byte `j` = source byte `table[j]`, or `0` where `table[j]` is `0xFF`. Writes every destination byte. Strides are 1 to 64; the ranges do not overlap. |
+| `Interleave32` | `void (int* first, int* second, byte* target, int count)` | Writes the `count` pairs `first[i]`, `second[i]` as 8 bytes each at `target + 8 * i`: a `SortedList` whose keys and values are both four-byte raw values, as wire pairs. `count` is a multiple of 4; `target` may be unaligned and overlaps neither source. Reference: `Interleave32Scalar`. |
+| `NormalizeBoolSlots` | `int (byte* source, byte* destination, int count)` | Checks and copies `count` `bool?` slots of two bytes (a presence byte of 0 or 1, then the value) from `source` to `destination`, which do not overlap: a null slot becomes two zero bytes. Returns how many leading slots it completed; at a present value above 1 it stops and returns the start of that value's group, without writing the group (Nino then reports the error). Nino checks the presence bytes before the call. Reference: `NormalizeBoolSlotsScalar`. |
 | `Narrow` | `int (ushort* source, byte* destination, int length)` | Writes each of the `length` UTF-16 chars as one byte (Latin-1); returns `1` when all are at most U+00FF, `0` when one is above (having written any part of them: Nino then writes the string as UTF-16). |
 | `Widen` | `void (byte* source, ushort* destination, int length)` | Widens `length` Latin-1 bytes to UTF-16 chars. |
 | `NarrowAscii` | `int (ushort* source, byte* destination, int length)` | Writes the leading chars below U+0080 as a byte each and returns how many (`length` when all are); it may write bytes past those, up to `length`. Nino encodes the rest. |
@@ -112,7 +114,7 @@ The rules every kernel follows:
 
 - **The same bytes.** A kernel must produce exactly what its reference produces: the wire format does not depend on which path ran, and data written with kernels reads without them, and in every other runtime. Test each kernel against its `...Scalar` reference on random input and every length around your vector width.
 - **No alignment, no state, no exceptions.** Pointers have any alignment. Every thread that serializes may call them at the same time, so they keep no mutable state. Nothing may unwind out of them.
-- **Thresholds.** Nino calls a kernel only for runs long enough to pay for the call: `MinBlocks` values for `Permute` (default 16, at least 1; copies of raw structs with padding start at 16 whatever you set), `MinChars` chars for the four text kernels (default 32, at least 16). Unity's Burst kernels use 2 and 16, its WebGL kernels 32 and 16: measure on your target and set the lengths where your kernel starts to win.
+- **Thresholds.** Nino calls a kernel only for runs long enough to pay for the call: `MinBlocks` values for `Permute` (default 16, at least 1; copies of raw structs with padding start at 16 whatever you set), and for `Interleave32` and `NormalizeBoolSlots` with floors of their own (16 pairs; 16 slots when reading and 32 when writing), `MinChars` chars for the four text kernels (default 32, at least 16). Unity's Burst kernels use 2 and 16, its WebGL kernels 32 and 16: measure on your target and set the lengths where your kernel starts to win.
 
 A minimal example: the two Latin-1 kernels in C, built as a DLL and loaded on Windows (C# 9 or later for function pointers).
 
@@ -163,7 +165,7 @@ public static unsafe class NinoNativeKernels
             MinChars = 64, // the length from which your kernels measure faster
             Narrow = (delegate* unmanaged[Cdecl]<ushort*, byte*, int, int>)GetProcAddress(library, "nino_narrow"),
             Widen = (delegate* unmanaged[Cdecl]<byte*, ushort*, int, void>)GetProcAddress(library, "nino_widen"),
-            // Permute, NarrowAscii and WidenAscii left null: Nino's own paths
+            // Permute, Interleave32, NormalizeBoolSlots, NarrowAscii and WidenAscii left null: Nino's own paths
         });
         return true;
     }

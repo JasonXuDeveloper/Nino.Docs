@@ -144,7 +144,7 @@ const text: Record<
   en: {
     aboutTitle: 'What is Nino?',
     about: [
-      'Nino is a general-purpose, high-performance binary serializer for C# and .NET. A Roslyn source generator writes the serialization code at compile time, so there is no reflection, it runs under IL2CPP and NativeAOT, and serializing into a reused buffer allocates nothing.',
+      'Nino is a general-purpose, high-performance binary serializer for C# and .NET. A Roslyn source generator writes the serialization code at compile time, so no reflection reads or writes your members, it runs under IL2CPP and NativeAOT, and serializing into a reused buffer allocates nothing.',
       'Mark a class, struct, record or interface with [NinoType] and call NinoSerializer.Serialize and NinoDeserializer.Deserialize: no schema file, no registration. Values declared as a base class or interface come back as their runtime type, each type chooses whether it tolerates added members, uses keys or tracks shared references, and invalid input only ever throws NinoDataException. nino-gen generates TypeScript, Go and Rust code from the same types, so browsers, Node, Go and Rust programs read and write the same bytes as .NET.',
       'Nino is not the right choice when people need to read the data (use JSON) or when programs in Java, Python or C++ must read it (use Protocol Buffers or MessagePack).',
     ],
@@ -256,13 +256,13 @@ const text: Record<
       {
         question: 'Does Nino work in Unity with IL2CPP and HybridCLR?',
         answer:
-          'Yes. Nino supports Unity 2022.3 and later on Mono and IL2CPP and every player platform. The generated code uses no reflection, and types in HybridCLR hot-update assemblies are found with no initialization call. Vector3, Quaternion and other unmanaged structs are copied as raw memory, AnimationCurve, Gradient and RectOffset are built in, and with com.unity.burst installed, Burst-compiled SIMD kernels move arrays of tuples and structs and Latin-1 strings. Install it from OpenUPM.',
+          'Yes. Nino supports Unity 2022.3 and later on Mono and IL2CPP and every player platform. The generated code reads and writes members with no reflection, and types in HybridCLR hot-update assemblies are found with no initialization call. Vector3, Quaternion and other unmanaged structs are copied as raw memory, AnimationCurve, Gradient and RectOffset are built in, and with com.unity.burst installed, Burst-compiled SIMD kernels move arrays of tuples and structs and Latin-1 strings. Install it from OpenUPM.',
         href: 'advanced/unity',
       },
       {
         question: 'Does Nino use reflection?',
         answer:
-          'No. A Roslyn source generator writes the serialization code for every [NinoType] at compile time, so there is no reflection and no runtime code generation, and the code works under IL2CPP and NativeAOT.',
+          'Not to read or write your data. A Roslyn source generator writes the serialization code for every [NinoType] at compile time, so no reflection touches your members and there is no runtime code generation, and the code works under IL2CPP and NativeAOT.',
         href: 'performance',
       },
       {
@@ -289,7 +289,7 @@ const text: Record<
   zh: {
     aboutTitle: 'Nino 是什么？',
     about: [
-      'Nino 是通用的高性能 C# / .NET 二进制序列化库。Roslyn 源生成器在编译期生成序列化代码，没有反射，可在 IL2CPP 和 NativeAOT 下运行，序列化到复用的缓冲区时零分配。',
+      'Nino 是通用的高性能 C# / .NET 二进制序列化库。Roslyn 源生成器在编译期生成序列化代码，读写成员不靠反射，可在 IL2CPP 和 NativeAOT 下运行，序列化到复用的缓冲区时零分配。',
       '给类、结构体、记录或接口加上 [NinoType]，再调用 NinoSerializer.Serialize 和 NinoDeserializer.Deserialize 就行，不用写 schema，也不用注册。声明为基类或接口的值，读回来还是它的实际类型；每个类型可以单独选择版本容错、键控成员或引用追踪；无效输入只会抛出 NinoDataException。nino-gen 还能从同一批类型生成 TypeScript、Go 和 Rust 代码，浏览器、Node、Go 和 Rust 程序读写的字节与 .NET 完全一致。',
       '数据需要人来看时用 JSON；数据要给 Java、Python、C++ 等程序读时，用 Protocol Buffers 或 MessagePack。这两种情况 Nino 不合适。',
     ],
@@ -401,13 +401,13 @@ const text: Record<
       {
         question: 'Nino 能在 Unity 的 IL2CPP 和 HybridCLR 下使用吗？',
         answer:
-          '能。Nino 支持 Unity 2022.3 及以上版本，Mono 和 IL2CPP 均可，覆盖所有 Player 平台。生成的代码不用反射，HybridCLR 热更新程序集里的类型无需初始化调用就能识别。Vector3、Quaternion 等非托管结构体按原始内存拷贝，AnimationCurve、Gradient 和 RectOffset 内置支持；安装 com.unity.burst 后，元组数组、结构体数组和 Latin-1 字符串交给 Burst 编译的 SIMD 内核搬运。从 OpenUPM 安装。',
+          '能。Nino 支持 Unity 2022.3 及以上版本，Mono 和 IL2CPP 均可，覆盖所有 Player 平台。生成的代码读写成员不用反射，HybridCLR 热更新程序集里的类型无需初始化调用就能识别。Vector3、Quaternion 等非托管结构体按原始内存拷贝，AnimationCurve、Gradient 和 RectOffset 内置支持；安装 com.unity.burst 后，元组数组、结构体数组和 Latin-1 字符串交给 Burst 编译的 SIMD 内核搬运。从 OpenUPM 安装。',
         href: 'advanced/unity',
       },
       {
         question: 'Nino 使用反射吗？',
         answer:
-          '不使用。Roslyn 源生成器在编译期为每个 [NinoType] 生成序列化代码，没有反射，也没有运行时代码生成，在 IL2CPP 和 NativeAOT 下都能正常工作。',
+          '读写数据不用。Roslyn 源生成器在编译期为每个 [NinoType] 生成序列化代码，读写成员不靠反射，也没有运行时代码生成，在 IL2CPP 和 NativeAOT 下都能正常工作。',
         href: 'performance',
       },
       {

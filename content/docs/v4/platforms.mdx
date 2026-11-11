@@ -100,7 +100,7 @@ The `net8.0` and `net10.0` builds of `Nino.Core` are marked `IsTrimmable` and `I
 - **Trimmed apps on a JIT** keep the run-time path that builds formatters for such types; what it needs from the trimmer is annotated.
 - **CPU features under Native AOT**: on x64, Native AOT compiles for SSE2 and checks for a few later instruction sets at startup, among them SSSE3, so Nino takes its [SSSE3 paths](#simd) on CPUs that have it. Its AVX2 and AVX-512 paths need a higher baseline, which also makes the app require it: `<IlcInstructionSet>x86-64-v3</IlcInstructionSet>` for AVX2, `x86-64-v4` for AVX-512, or `native` for the CPU of the build machine. On Arm64, AdvSimd is part of Native AOT's baseline and every Arm64 path is taken.
 
-The generator writes the same formatters for IL2CPP, which is why Nino needs no reflection there either. See [Unity and HybridCLR](/en/docs/v4/advanced/unity#il2cpp).
+The generator writes the same formatters for IL2CPP, so no reflection reads or writes your members there either. A closed generic type that reaches Nino only as a run-time `Type` still works under IL2CPP: Nino builds its formatter as on a JIT, and IL2CPP runs it with full generic sharing, code shared by every type argument and slower than code compiled for one ([Unity's scripting restrictions](https://docs.unity3d.com/2022.3/Documentation/Manual/ScriptingRestrictions.html)). On every platform, name such a type where the generator sees it (the places listed above) and Nino uses its generated formatter instead. See [Unity and HybridCLR](/en/docs/v4/advanced/unity#il2cpp).
 
 ## Checking What Is Registered [#checking-registration]
 

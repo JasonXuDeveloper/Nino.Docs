@@ -31,12 +31,12 @@ icon: Gauge
 | 手段 | 适用场景 | 代价 |
 | --- | --- | --- |
 | [复用的 `NinoArrayBufferWriter`](#serialize-into-a-reused-buffer) | 不止序列化一次 | 数组由持有者一直占用；每个线程或连接一个缓冲区 |
-| [调用方的 `IBufferWriter<byte>`](#serialize-into-any-ibufferwriter) | 传输层直接给你一个（管道、Kestrel） | 向它拷贝一次 |
+| [调用方的 `IBufferWriter<byte>`](#serialize-into-any-ibufferwriter) | 传输层直接给你一个（管道、Kestrel） | 原始值和固定大小的值不拷贝；其余向它拷贝一次 |
 | [`Serialize(value)` 得到大小精确的 `byte[]`](#exact-size-arrays) | 某个 API 需要 `byte[]` | 每次调用分配一次 |
 | [`Writer` 与 `Reader`](#several-values-back-to-back) | 多个值共用一个缓冲区 | 每条消息调用一次 `Flush` 和 `ReleaseReferences` |
 | [直接从已有内存反序列化](#deserialize-from-the-memory-you-have) | 任何时候 | 无 |
 | [`Deserialize<T>(sequence)`](#deserialize-from-the-memory-you-have) | 管道或 gRPC 给的是 `ReadOnlySequence<byte>` | 只有一段时无；多段时拷贝一次 |
-| [`Serialize(value, stream)` 与 `Deserialize<T>(stream)`](#streams) | 一个文件、HTTP 请求体或 blob 只放一个值 | 从 Nino 的暂存缓冲区一次 `Write`；读取时租一个池化数组（缓冲区可公开访问的 `MemoryStream`、`UnmanagedMemoryStream` 和内存映射视图不用租） |
+| [`Serialize(value, stream)` 与 `Deserialize<T>(stream)`](#streams) | 一个文件、HTTP 请求体或 blob 只放一个值 | 从 Nino 的暂存缓冲区一次 `Write`；读取时租一个池化数组（缓冲区可公开访问的 `MemoryStream`、`UnmanagedMemoryStream` 和内存映射视图不用租，见[流](/zh/docs/v4/advanced/streams#streams)） |
 | [复用反序列化（`ref`）](#deserialize-into-existing-objects) | 结构相同的消息，逐条处理 | 实例由你持有，每次读取都会改变它 |
 | [`[NinoPooled]`](#pool-what-you-create) 与[池容量](/zh/docs/v4/settings#pools) | 高频创建、保留或丢弃的实例 | 类必须是 `sealed partial`，自己持有的实例要 `ReturnToPool()`，池占用内存 |
 | [非托管结构体及其布局](/zh/docs/v4/advanced/type-design#keep-bulk-data-raw) | 批量数据和热数据 | 布局是格式的一部分 |
@@ -110,15 +110,16 @@ reader.ReleaseReferences();
 
 ## 序列化到任意 IBufferWriter [#serialize-into-any-ibufferwriter]
 
-任何 `IBufferWriter<byte>` 都可以作为写入目标：`PipeWriter`、Kestrel 的响应体写入器、`ArrayBufferWriter<byte>`。Nino 先写入每个线程各自的<Term id="scratch-buffer" lang="zh">暂存缓冲区</Term>，再一次性拷贝到目标写入器，因此每次调用都不分配内存：
+任何 `IBufferWriter<byte>` 都可以作为写入目标：`PipeWriter`、Kestrel 的响应体写入器、`ArrayBufferWriter<byte>`。写之前就知道大小的值，Nino 按这个大小调一次 `GetSpan`，直接写进写入器；其他值先写进每个线程各自的<Term id="scratch-buffer" lang="zh">暂存缓冲区</Term>，再一次性拷到写入器。两种情况每次调用都不分配内存：
 
 ```csharp
 NinoSerializer.Serialize(message, pipeWriter); // 复制一次，写进管道的内存
 await pipeWriter.FlushAsync();
 ```
 
-- **开销：** 往写入器的内存拷贝一次；0 B。原始值（非托管结构体、基元类型）不经过暂存缓冲区，直接写进写入器的 span。
-- 只有 `NinoArrayBufferWriter` 是直接写入的。需要在写完之后回填字节时（例如长度前缀，参见[分帧](/zh/docs/v4/advanced/networking#frame-the-stream)），请使用它。
+- **直接写入的值：** 原始值（非托管结构体、基元类型）、由它们组成的数组和列表，以及[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。.NET Standard 2.1 及以上的版本还包括原始值的 `ArraySegment<T>`，以及背后是数组的 `Memory<T>` 和只有一段的 `ReadOnlySequence<T>`，.NET 8 及以上再加上原始值的多维数组。
+- **开销：** 最多往写入器的内存拷贝一次；0 B。
+- 只有 `NinoArrayBufferWriter` 不管写什么值都直接写入。需要在写完之后回填字节时（例如长度前缀，参见[分帧](/zh/docs/v4/advanced/networking#frame-the-stream)），请使用它。
 - 要序列化到你已有的内存里（环形缓冲区的槽位、预先分配的发送缓冲区），用一个很小的 `IBufferWriter<byte>` 包住它：见[写入你自己的内存](/zh/docs/v4/advanced/zero-allocation#write-into-memory-you-own)。
 
 ## 需要 `byte[]` 的时候 [#exact-size-arrays]
