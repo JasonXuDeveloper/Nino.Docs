@@ -50,6 +50,7 @@ import {
   type Versus,
   versusOf,
   workloadRange,
+  workloadsMeasured,
   x64,
 } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
@@ -581,7 +582,7 @@ function workloadColumns(ds: BenchDataset) {
  */
 export function WorkloadTables({ lang = 'en', markdown }: ArchProps) {
   const zh = lang === 'zh';
-  if (!hasWorkloads)
+  if (!workloadsMeasured)
     return (
       <p className="text-sm text-fd-muted-foreground">
         {zh

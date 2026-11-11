@@ -797,8 +797,8 @@ export const formatRatio = (value: number) => `${value.toFixed(2)}×`;
 /* Workloads and the headline                                          */
 /* ------------------------------------------------------------------ */
 
-/** True once the synced report (x64) has WorkloadTest: the headlines then come from it */
-export const hasWorkloads = x64.workloads.serialize.length > 0;
+/** True once the synced report (x64) has WorkloadTest's rows: the workload tables then show them */
+export const workloadsMeasured = x64.workloads.serialize.length > 0;
 
 /** Nino against one opponent in one case, by the same rule as the tables */
 export function versusOf(row: RuntimeCase, lib: Opponent): Versus | undefined {
@@ -837,6 +837,24 @@ export function formatWorkloadRange(
  * win of the main cases (MemoryPack) or of the classes and polymorphic types
  * (the others).
  */
+/**
+ * True when the headlines come from the workloads: the report has them, and
+ * Nino wins at least one workload against every library it measured, in both
+ * operations (so no headline reads "up to — faster"). Until then they come
+ * from the classes and polymorphic types.
+ */
+export const hasWorkloads =
+  workloadsMeasured &&
+  (['memorypack', ...otherLibs.map((lib) => lib.key)] as Opponent[])
+    .filter((lib) =>
+      x64.workloads.serialize.some((row) => versusOf(row, lib) !== undefined),
+    )
+    .every((lib) =>
+      (['serialize', 'deserialize'] as const).every((op) =>
+        Number.isFinite(workloadRange(op, lib).max),
+      ),
+    );
+
 export function headlineMax(
   op: 'serialize' | 'deserialize',
   lib: Opponent,

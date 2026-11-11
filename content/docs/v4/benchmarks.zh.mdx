@@ -36,7 +36,7 @@ icon: ChartColumn
 | --- | --- |
 | 机器 | 运行时：发布时跑基准测试的 GitHub 托管 `ubuntu-26.04` runner，具体 CPU 见[全部测量结果](#results)。构建时间：Intel Xeon 2.10 GHz，4 核，AVX-512 |
 | 运行时 | .NET 10，服务器 GC；运行时和 SDK 的具体版本见[全部测量结果](#results) |
-| 测试框架 | BenchmarkDotNet 0.15.8，每个用例跑 3 个进程，每个进程预热 5 次、测量 15 次，取三个进程的平均（只跑一个进程时，一个 12 ns 的用例最多偏差 13%）；各基准测试类在每种架构的十台 runner 上并行跑，同一个用例的所有序列化库都在同一台 runner 上 |
+| 测试框架 | BenchmarkDotNet 0.15.8，每个用例跑 3 个进程，每个进程预热 5 次、测量 15 次，取三个进程的平均（只跑一个进程时，一个 12 ns 的用例最多偏差 13%）；各基准测试类在每种架构的十四台 runner 上并行跑，同一个用例的所有序列化库都在同一台 runner 上 |
 | 项目 | [`benchmarks/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)（运行时），[`benchmarks/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.GeneratorBenchmark)（构建时间） |
 
 - **序列化**测试写进一个缓冲区写入器，它只创建一次，每次调用前重置（Nino 用 `NinoArrayBufferWriter`，其他库用 `ArrayBufferWriter<byte>`），所以测的是序列化本身，不是数组分配。每个库用的都是它能直接写入的写入器：换成其他 `IBufferWriter<byte>`，Nino 会先写进池化的缓冲区再整体复制过去，比这些表格多一次复制。
@@ -917,7 +917,7 @@ dotnet run -c Release --project benchmarks/Nino.GeneratorBenchmark -- 30 8
 ```
 
 - `benchmarks/run.sh` 会构建 `benchmarks/v3`（同一个 `SimpleTest`，引用 NuGet 上的 Nino 3.3.13），紧挨着 v4 之前跑一次，再逐个用例输出 **v4 对比 v3**。
-- 每次发布，CI 都按同样的流程跑，各基准测试类分到每种架构的十台 runner 上（v3 在 `SimpleTest` 那台 runner 上、紧挨着它之前跑），结果写进发布说明：Performance Report，以及 **v3 3.3.13 vs v4 (same machine)** 一节。本站的运行时数据取自带这些数据的最新 v4 版本。
+- 每次发布，CI 都按同样的流程跑，各基准测试类分到每种架构的十四台 runner 上（v3 在 `SimpleTest` 那台 runner 上、紧挨着它之前跑），结果写进发布说明：Performance Report，以及 **v3 3.3.13 vs v4 (same machine)** 一节。本站的运行时数据取自带这些数据的最新 v4 版本。
 - Go、Rust 和 TypeScript 的基准测试也在这个发布流程里跑；怎么跑见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#reproducing)。
 - `benchmarks/members` 把 `SimpleClass` 按成员一个个拆开，分别对比 v3 和 v4，找出某个用例的时间花在哪个成员上。见 [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks)。
 

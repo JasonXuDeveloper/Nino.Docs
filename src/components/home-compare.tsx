@@ -47,7 +47,10 @@ const best = (op: 'serialize' | 'deserialize') =>
     undefined,
   );
 
-const simple = find('serialize', 'SimpleClass');
+/** The case the panels time every library on: the first workload (the standard MediaContent), or SimpleClass */
+const simple = hasWorkloads
+  ? x64.workloads.serialize[0]
+  : find('serialize', 'SimpleClass');
 const polySer = best('serialize');
 const polyDes = best('deserialize');
 const leaves = bestReuse;
