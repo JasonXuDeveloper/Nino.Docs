@@ -23,10 +23,14 @@ icon: ChartColumn
 
 | 对比对象 | 原因 | 测量内容 |
 | --- | --- | --- |
-| [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | .NET 上用得最广的二进制序列化库里最快的一个，和 Nino 一样基于源生成器 | 运行时性能，在同一次 BenchmarkDotNet 运行里测：[真实负载](#workloads)、[序列化](#serialize-to-a-reused-buffer-writer)、[反序列化](#deserialize-new-instances)、[多态对象图](#polymorphism)、[复用实例](#pooling)、[引用追踪、版本容错和固定大小的类型](#more-cases) |
-| Nino v3 **3.3.13** | v3 API 的最后一个版本，也就是你要从它升级的版本 | 运行时性能，和 v4 在同一台机器上前后紧挨着测（运行时表格里的 **v4 对比 v3** 列），以及[构建时间](#build-time-and-generated-code) |
-| [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) **3.1.12** 和 [protobuf-net](https://github.com/protobuf-net/protobuf-net) **3.4.40** | .NET 里最常用的二进制格式，和 .NET 里最常用的 Protocol Buffers 库 | 运行时性能，在同一次 BenchmarkDotNet 运行里测，格式能写出相同数据的用例都测：运行时表格里各占一列，[全部测量结果](#results)里各有若干行（见 [MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)）。它们加入之前的发布报告里没有这些行，表格就只显示 Nino 和 MemoryPack |
-| [Google.Protobuf](https://github.com/protocolbuffers/protobuf/tree/main/csharp) **3.36.2** 和 [System.Text.Json](https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/overview)（.NET 10） | Google 官方的 Protocol Buffers 运行时，和 .NET 自带的 JSON 序列化库 | 运行时性能，只测[真实负载](#workloads)，在同一次 BenchmarkDotNet 运行里测。它们加入之前的发布报告里没有这些行 |
+| [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | .NET 上用得最广的二进制序列化库里最快的一个，和 Nino 一样基于源生成器 | [真实负载](#workloads)、[序列化](#serialize-to-a-reused-buffer-writer)、[反序列化](#deserialize-new-instances)、[多态对象图](#polymorphism)、[复用实例](#pooling)、[引用追踪、版本容错和固定大小的类型](#more-cases) |
+| [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) **3.1.12** | .NET 里最常用的二进制格式 | [真实负载](#workloads)，以及它的格式能写出的所有用例（[MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)） |
+| [protobuf-net](https://github.com/protobuf-net/protobuf-net) **3.4.40** | .NET 里最常用的 Protocol Buffers 库 | [真实负载](#workloads)，以及它的格式能写出的所有用例（[MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)） |
+| [Google.Protobuf](https://github.com/protocolbuffers/protobuf/tree/main/csharp) **3.36.2** | Google 官方的 Protocol Buffers 运行时 | [真实负载](#workloads)，用 protoc 生成的类型 |
+| [System.Text.Json](https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/overview)（.NET 10） | .NET 自带的 JSON 序列化库 | [真实负载](#workloads)，用它的源生成器 |
+| Nino v3 **3.3.13** | v3 API 的最后一个版本，也就是你要从它升级的版本 | 和 v4 在同一台机器上前后紧挨着测运行时性能（**v4 对比 v3** 列），以及[构建时间](#build-time-and-generated-code) |
+
+所有运行时数字都来自同一次 BenchmarkDotNet 运行。某个库加入基准测试之前的发布报告里没有它的数据，表格里就不显示它。
 
 绝对耗时因机器而异，看倍数。Go、Rust 和 TypeScript 里的 Nino 对比 Protocol Buffers、MessagePack 和各语言常用序列化库的结果，见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes)。比功能而不是比速度，见 [Nino 与 MemoryPack 对比](/zh/docs/v4/vs-memorypack)和 [v3 与 v4 对比](/zh/docs/v4/whats-new#features)。
 
