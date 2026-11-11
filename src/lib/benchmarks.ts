@@ -124,9 +124,25 @@ function ratioOf(slower: number, faster: number) {
 /** The .NET serializers besides Nino and MemoryPack, by their method prefix */
 export type OtherLib = 'messagepack' | 'protobuf';
 
-export const otherLibs: { key: OtherLib; prefix: string; label: string }[] = [
-  { key: 'messagepack', prefix: 'MessagePack', label: 'MessagePack' },
-  { key: 'protobuf', prefix: 'Protobuf', label: 'protobuf-net' },
+/** The versions Nino's Directory.Packages.props pins (the `benchmark` skill: update them with an upgrade) */
+export const otherLibs: {
+  key: OtherLib;
+  prefix: string;
+  label: string;
+  version: string;
+}[] = [
+  {
+    key: 'messagepack',
+    prefix: 'MessagePack',
+    label: 'MessagePack',
+    version: '3.1.12',
+  },
+  {
+    key: 'protobuf',
+    prefix: 'Protobuf',
+    label: 'protobuf-net',
+    version: '3.4.40',
+  },
 ];
 
 /** Nino against one other serializer in one case */

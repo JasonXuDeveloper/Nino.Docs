@@ -336,7 +336,7 @@ export default function HomePage({ params }: Route.ComponentProps) {
               </span>
             </h1>
 
-            <p className="mt-3 max-w-xl text-base leading-relaxed text-balance text-fd-muted-foreground md:text-lg">
+            <p className="mt-3 max-w-3xl text-base leading-relaxed text-balance text-fd-muted-foreground md:text-lg">
               {t.sub}
             </p>
 

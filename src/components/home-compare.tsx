@@ -8,6 +8,7 @@ import {
   formatBuildRatio,
   formatBytes,
   formatRatio,
+  otherLibs,
   type RuntimeCase,
   runtime,
 } from '@/lib/benchmarks';
@@ -20,8 +21,9 @@ import type { Locale } from '@/lib/i18n';
  * 1. One monumental figure: Nino's biggest serialize win over MemoryPack,
  *    beside the two measured times on a shared axis. Static: the number is
  *    the first thing read, so it never counts up from 0.
- * 2. Two panels on one grid (vs MemoryPack, vs Nino v3) whose rows line up
- *    across the panels (CSS subgrid on wide screens).
+ * 2. Three panels on one grid (vs MemoryPack, vs MessagePack and
+ *    protobuf-net, vs Nino v3) whose rows line up across the panels (CSS
+ *    subgrid on wide screens).
  *
  * Every value comes from src/lib/benchmarks.ts: runtime ratios from the raw
  * means through formatRatio (two decimals), build ratios as published. Bars
@@ -123,17 +125,16 @@ function Bar({
   );
 }
 
-function Pair({
-  a,
-  b,
-}: {
-  a: { label: string; value: number; text: string };
-  b: { label: string; value: number; text: string };
-}) {
+type Measured = { label: string; value: number; text: string };
+
+/** Nino's bar over one or two others, on the scale of the slowest */
+function Pair({ a, b, c }: { a: Measured; b: Measured; c?: Measured }) {
+  const max = Math.max(b.value, c?.value ?? 0);
   return (
     <div className="flex flex-col gap-1.5">
-      <Bar nino {...a} max={b.value} />
-      <Bar {...b} max={b.value} />
+      <Bar nino {...a} max={max} />
+      <Bar {...b} max={max} />
+      {c && <Bar {...c} max={max} />}
     </div>
   );
 }
@@ -167,51 +168,53 @@ function Panel({
   rows,
   link,
   href,
+  wide,
 }: {
   title: string;
   rows: Row[];
   link: string;
   href: string;
+  /** Spans both columns, its rows side by side */
+  wide?: boolean;
 }) {
+  const body = rows.map((row, i) => (
+    <div
+      key={`${row.label} ${row.note ?? ''}`}
+      className={cn(
+        'flex flex-col gap-3 px-5 py-5 sm:px-6',
+        i > 0 && (wide ? 'border-t lg:border-t-0 lg:border-l' : 'border-t'),
+      )}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <p className="flex flex-col">
+          <span className="text-sm font-medium">{row.label}</span>
+          {row.note && (
+            <span className="text-xs text-fd-muted-foreground">{row.note}</span>
+          )}
+        </p>
+        <p className="flex shrink-0 items-baseline gap-1.5 leading-none">
+          <span className="text-2xl font-semibold tracking-tight tabular-nums">
+            {row.ratio}
+          </span>
+          <span className="text-xs text-fd-muted-foreground">{row.unit}</span>
+        </p>
+      </div>
+      {row.body}
+    </div>
+  ));
   return (
     <section
       className={cn(
         'flex flex-col rounded-xl border',
-        'lg:row-span-5 lg:grid lg:grid-rows-subgrid lg:gap-0',
+        wide
+          ? 'lg:col-span-2'
+          : 'lg:row-span-5 lg:grid lg:grid-rows-subgrid lg:gap-0',
       )}
     >
       <h2 className="px-5 pt-5 pb-1 font-semibold tracking-tight sm:px-6">
         {title}
       </h2>
-      {rows.map((row, i) => (
-        <div
-          key={row.label}
-          className={cn(
-            'flex flex-col gap-3 px-5 py-5 sm:px-6',
-            i > 0 && 'border-t',
-          )}
-        >
-          <div className="flex items-start justify-between gap-4">
-            <p className="flex flex-col">
-              <span className="text-sm font-medium">{row.label}</span>
-              {row.note && (
-                <span className="text-xs text-fd-muted-foreground">
-                  {row.note}
-                </span>
-              )}
-            </p>
-            <p className="flex shrink-0 items-baseline gap-1.5 leading-none">
-              <span className="text-2xl font-semibold tracking-tight tabular-nums">
-                {row.ratio}
-              </span>
-              <span className="text-xs text-fd-muted-foreground">
-                {row.unit}
-              </span>
-            </p>
-          </div>
-          {row.body}
-        </div>
-      ))}
+      {wide ? <div className="lg:grid lg:grid-cols-3">{body}</div> : body}
       <div className="mt-auto border-t px-5 py-3.5 sm:px-6">
         <Link
           to={href}
@@ -294,6 +297,67 @@ function memorypackRows(zh: boolean): Row[] {
       ),
     });
   return rows;
+}
+
+/** Serialize SimpleClass against each library, then deserialize against both */
+function otherRows(zh: boolean): Row[] {
+  const des = find('deserialize', 'SimpleClass');
+  const [mp, pb] = otherLibs;
+  const serMp = simple?.others[mp.key];
+  const serPb = simple?.others[pb.key];
+  const desMp = des?.others[mp.key];
+  const desPb = des?.others[pb.key];
+  if (
+    !simple ||
+    !des ||
+    !serMp?.ratio ||
+    !serPb?.ratio ||
+    !desMp?.ratio ||
+    !desPb?.ratio
+  )
+    return [];
+  const nino = (row: RuntimeCase) => ({
+    label: 'Nino v4',
+    value: row.v4.ns,
+    text: row.v4.text,
+  });
+  const other = (
+    lib: (typeof otherLibs)[number],
+    v: { time: { ns: number; text: string } },
+  ) => ({
+    label: lib.label,
+    value: v.time.ns,
+    text: v.time.text,
+  });
+  const vs = (lib: (typeof otherLibs)[number]) =>
+    `${zh ? '对比' : 'vs'} ${lib.label} ${lib.version}`;
+  const faster = zh ? '更快' : 'faster';
+  const serialize = zh ? '序列化 SimpleClass' : 'Serialize SimpleClass';
+  return [
+    {
+      label: serialize,
+      note: vs(mp),
+      ratio: formatRatio(serMp.ratio),
+      unit: faster,
+      body: <Pair a={nino(simple)} b={other(mp, serMp)} />,
+    },
+    {
+      label: serialize,
+      note: vs(pb),
+      ratio: formatRatio(serPb.ratio),
+      unit: faster,
+      body: <Pair a={nino(simple)} b={other(pb, serPb)} />,
+    },
+    {
+      label: zh ? '反序列化 SimpleClass' : 'Deserialize SimpleClass',
+      note: zh
+        ? `对比 ${mp.label}；比 ${pb.label} 快 ${formatRatio(desPb.ratio)}`
+        : `vs ${mp.label}; ${formatRatio(desPb.ratio)} faster than ${pb.label}`,
+      ratio: formatRatio(desMp.ratio),
+      unit: faster,
+      body: <Pair a={nino(des)} b={other(mp, desMp)} c={other(pb, desPb)} />,
+    },
+  ];
 }
 
 function Before({ v3, v4, big }: { v3: string; v4: string; big?: boolean }) {
@@ -402,7 +466,20 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
           link={zh ? '全部基准测试' : 'All benchmarks'}
           href={`${docs}/benchmarks`}
         />
+        {otherRows(zh).length > 0 && (
+          <Panel
+            title={
+              zh
+                ? '对比 MessagePack、protobuf-net'
+                : 'vs MessagePack, protobuf-net'
+            }
+            rows={otherRows(zh)}
+            link={zh ? '对比 MessagePack' : 'Nino vs MessagePack'}
+            href={`${docs}/vs-messagepack`}
+          />
+        )}
         <Panel
+          wide
           title={zh ? '对比 Nino v3' : 'vs Nino v3'}
           rows={v3Rows(zh)}
           link={zh ? 'v4 相比 v3 的变化' : 'What changed since v3'}

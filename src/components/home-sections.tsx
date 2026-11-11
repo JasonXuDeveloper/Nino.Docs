@@ -22,28 +22,24 @@ import {
   bestReuse,
   formatClassRange,
   formatRatio,
+  otherLibs,
   reuseSpeedup,
 } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
 import { release } from '@/lib/release';
 
 const memoryPackVersion = '1.21.4';
-const messagePackVersion = '3.1.12';
-const protobufVersion = '3.4.40';
 const prerelease = release.prerelease ? ' --prerelease' : '';
 
 const serializeRange = formatClassRange('serialize');
 const deserializeRange = formatClassRange('deserialize');
 /** The same ranges against MessagePack and protobuf-net */
-const others = [
-  { label: 'MessagePack', version: messagePackVersion, lib: 'messagepack' },
-  { label: 'protobuf-net', version: protobufVersion, lib: 'protobuf' },
-] as const;
-const otherRanges = others
+
+const otherRanges = otherLibs
   .map((other) => ({
     ...other,
-    serialize: formatClassRange('serialize', other.lib),
-    deserialize: formatClassRange('deserialize', other.lib),
+    serialize: formatClassRange('serialize', other.key),
+    deserialize: formatClassRange('deserialize', other.key),
   }))
   .filter((other) => other.serialize && other.deserialize);
 const reuseMax = bestReuse ? formatRatio(reuseSpeedup(bestReuse)) : '';
