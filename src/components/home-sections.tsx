@@ -74,8 +74,6 @@ interface Card {
   install: string;
   commands: Fact[];
   speed: string;
-  speedNote: string;
-  library: string;
   serialize: string;
   deserialize: string;
 }
@@ -132,9 +130,7 @@ const text: Record<
         { label: 'Unity', value: 'openupm add com.jasonxudeveloper.nino' },
         { label: 'AI agents', value: 'npx skills add JasonXuDeveloper/Nino' },
       ],
-      speed: 'How much faster Nino v4 is',
-      speedNote: 'Classes and polymorphic types, same BenchmarkDotNet run',
-      library: 'Against',
+      speed: 'Nino v4 speedup on classes and polymorphic types',
       serialize: 'Serialize',
       deserialize: 'Deserialize',
     },
@@ -289,9 +285,7 @@ const text: Record<
         { label: 'Unity', value: 'openupm add com.jasonxudeveloper.nino' },
         { label: 'AI 助手', value: 'npx skills add JasonXuDeveloper/Nino' },
       ],
-      speed: 'Nino v4 快多少',
-      speedNote: '类和多态类型，同一次 BenchmarkDotNet 测试',
-      library: '对比',
+      speed: 'Nino v4 在类和多态类型上快多少',
       serialize: '序列化',
       deserialize: '反序列化',
     },
@@ -483,7 +477,7 @@ function FactsCard({ card }: { card: Card }) {
           <table className="mt-2 w-full text-left text-xs tabular-nums sm:text-sm">
             <thead className="text-xs text-fd-muted-foreground">
               <tr>
-                <th className="pb-1 font-normal">{card.library}</th>
+                <td />
                 <th className="pb-1 text-right font-normal">
                   {card.serialize}
                 </th>
@@ -511,9 +505,6 @@ function FactsCard({ card }: { card: Card }) {
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-xs text-fd-muted-foreground">
-            {card.speedNote}
-          </p>
         </div>
       )}
       <dl className="p-5">

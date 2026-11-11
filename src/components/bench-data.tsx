@@ -20,6 +20,7 @@ import {
   archLabels,
   arm64,
   type BenchDataset,
+  classRatioRange,
   datasets,
   formatBytes,
   formatClassRange,
@@ -1011,7 +1012,8 @@ export function UnityHighlights({
  * against MemoryPack), reuse.max (vs MemoryPack's overwrite), payload.v4 /
  * payload.memorypack (bytes for one SimpleClass),
  * messagepack.serialize / messagepack.deserialize / protobuf.serialize /
- * protobuf.deserialize (the range of wins on classes and polymorphic types), or
+ * protobuf.deserialize (the range of wins on classes and polymorphic types;
+ * with .max, its top), or
  * serialize:<case key> / deserialize:<case key> (ratio of one case).
  */
 export function BenchValue({ k }: { k: string }) {
@@ -1025,8 +1027,13 @@ export function benchValue(k: string): string {
   if (
     (op === 'messagepack' || op === 'protobuf') &&
     (which === 'serialize' || which === 'deserialize')
-  )
+  ) {
+    if (k.endsWith('.max')) {
+      const { max } = classRatioRange(which, undefined, op);
+      return Number.isFinite(max) ? formatRatio(max) : '—';
+    }
     return formatClassRange(which, op) || '—';
+  }
   if (op === 'payload') {
     const value = which === 'v4' ? payload.v4 : payload.memorypack;
     return value === null ? '—' : value.toLocaleString('en-US');
