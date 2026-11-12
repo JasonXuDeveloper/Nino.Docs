@@ -19,6 +19,7 @@ icon: RotateCcwClock
 - **序列化回调**：给 `[NinoType]` 类或结构体的方法标上 `[NinoOnSerializing]`、`[NinoOnSerialized]`、`[NinoOnDeserializing]` 或 `[NinoOnDeserialized]`，Nino 每次写、读这个类型的值时都会在前后调用它们，不管值在哪里：顶层、成员和集合里，以及基类或接口槽位里的子类型，基类的回调先执行。生成的代码直接调用这些方法，IL2CPP 和 Native AOT 不用额外配置，字节也不变。新规则 [NINO038](/zh/docs/v4/analyzers#nino038) 到 [NINO044](/zh/docs/v4/analyzers#nino044) 报告 Nino 调用不到的回调（签名不对、是 `private`、类型不是 `[NinoType]`、同一种回调标了两个方法、需要在值上执行却是 `static`、由成员创建的类型用了实例方法的 `[NinoOnDeserializing]`、标在按原始内存拷贝的结构体上），NINO039 和 NINO040 带代码修复。参见[回调](/zh/docs/v4/defining-types#callbacks)。
 - **netstandard 版本多了两个原生内核**：`NinoKernels.Interleave32` 把键和值都是四字节原始值的 `SortedList` 按二进制格式写成键值对，`NinoKernels.NormalizeBoolSlots` 在读写 `bool?` 的数组和列表时检查并规整槽位；注册的内核必须和参照实现 `Interleave32Scalar`、`NormalizeBoolSlotsScalar` 逐字节一致。Unity 包注册了这两个内核的 Burst 版本（AVX2、SSE2 和 Neon）。参见[注册自己的内核](/zh/docs/v4/simd#registering-kernels)和 [Burst 加速内核](/zh/docs/v4/advanced/unity#burst-kernels)。
 - **`nino-gen inspect`**：按程序集的布局读一条消息，列出每个成员的偏移、长度、编码和值：类型 ID 解析成类型名，键控条目带上键（不认识的键显示为跳过的字节），还有引用头和推迟的主体。`--json` 输出给工具用的结果树，`--hex` 和 `--offset` 可以读十六进制转储或大缓冲区里的一帧。数据有问题时，先显示已经读到的部分，再给出出错的偏移和没通过的检查。参见[查看一条消息](/zh/docs/v4/advanced/codegen#inspect)。
+- **Unity 包带签名**：OpenUPM 上的包用 Unity 的包签名签过，Unity 6.3 及以上不会再提示包未签名；用 Git URL 添加的包仍然没有签名。见 [Unity 安装](/zh/docs/v4/advanced/unity#setup)。
 - **.NET 11**：单元测试在 .NET 11 运行时上跑。目标框架为 `net11.0` 的项目用的是 `Nino.Core` 的 `net10.0` 版本，所有快路径都照常生效。见[支持的平台](/zh/docs/v4/platforms#supported-platforms)。
 
 ### 性能 [#performance-5]
