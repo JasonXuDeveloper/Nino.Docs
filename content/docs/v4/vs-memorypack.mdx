@@ -26,7 +26,7 @@ Nino reads untrusted data by design, and the fast paths keep these guarantees:
 - **No hash flooding.** A key that finds more than `NinoSettings.MaxHashCollisions` keys in its hash bucket throws, so crafted keys cannot make filling a dictionary or set quadratic; `NinoSettings.Untrusted` also hashes integer, `char`, `Guid` and `string` keys with a per-process secret.
 - **One exception.** Every invalid input throws a `NinoDataException` (an `InvalidOperationException`) whose message starts with `Nino:`, including values their own type rejects, so one `catch` at the boundary handles all of it; [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) answers it with 400.
 
-We checked these against fuzzed and hand-crafted payloads for every built-in type and every way of declaring one, and fixed what they found in 4.0.0-rc.7. What stays the application's job (the values themselves, the size of a message, versioning) is in [Untrusted Data](/en/docs/v4/security#what-stays-your-job). Nino.Codegen's TypeScript, Go and Rust readers and Nino.AspNetCore, which carry Nino data across that boundary, stay.
+We checked these against fuzzed and hand-crafted payloads for every built-in type and every way of declaring one, and fixed what they found. What stays the application's job (the values themselves, the size of a message, versioning) is in [Untrusted Data](/en/docs/v4/security#what-stays-your-job). Nino.Codegen's TypeScript, Go and Rust readers and Nino.AspNetCore, which carry Nino data across that boundary, stay.
 
 ## Performance
 
@@ -140,10 +140,10 @@ Nino's bytes are the same on every platform: [raw values](/en/docs/v4/wire-forma
 
 To put it plainly, MemoryPack does these things and Nino v4 does not:
 
-- **`Type` values.** MemoryPack serializes `System.Type`; Nino does not, on purpose: data that names the types to create is a well-known deserialization attack. Every other built-in type MemoryPack lists (`BigInteger`, `Uri`, `Lazy<T>`, `Memory<T>`, `ILookup<,>`, every immutable collection...) is [built into Nino too](/en/docs/v4/types#other-built-in-types) since 4.0.0-rc.5, and so are the Unity classes of `MemoryPack.Unity` (`AnimationCurve`, `Gradient`, `RectOffset`; see [Unity Classes](/en/docs/v4/advanced/unity#unity-classes)). *Workaround:* store a type id or name of your own and map it to the types you allow.
+- **`Type` values.** MemoryPack serializes `System.Type`; Nino does not, on purpose: data that names the types to create is a well-known deserialization attack. *Workaround:* store a type id or name of your own and map it to the types you allow.
 - **Dependency injection and options.** MemoryPack passes `MemoryPackSerializerOptions` (string encoding, an `IServiceProvider`) through every call. Nino has no per-call options: its settings are either process-wide (`NinoSettings`) or per-type attributes.
 
-Compression is not on this list: it takes a few lines on top of Nino's buffer and span APIs ([Compression](/en/docs/v4/advanced/streams#compression)). Streams, async I/O and serialization callbacks are built in.
+Everything else MemoryPack has a formatter for is built into Nino too: the other built-in types it lists (`BigInteger`, `Uri`, `Lazy<T>`, `Memory<T>`, `ILookup<,>`, every immutable collection...; see [Other Built-in Types](/en/docs/v4/types#other-built-in-types)) and the Unity classes of `MemoryPack.Unity` (`AnimationCurve`, `Gradient`, `RectOffset`; see [Unity Classes](/en/docs/v4/advanced/unity#unity-classes)). So are streams, async I/O and serialization callbacks. Compression takes a few lines on top of Nino's buffer and span APIs ([Compression](/en/docs/v4/advanced/streams#compression)).
 
 ## Where Nino Is Ahead
 

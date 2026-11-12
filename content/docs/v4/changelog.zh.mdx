@@ -22,7 +22,12 @@ icon: RotateCcwClock
 
 ### 性能 [#performance-5]
 
-- **写进任意 `IBufferWriter<byte>` 也能直接写入**：以前只有原始值直接写；现在原始值组成的数组和列表、[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)也按自身大小调一次 `GetSpan`，直接写进 `PipeWriter`、`ArrayBufferWriter<byte>` 等写入器，不再从暂存缓冲区拷贝（.NET Standard 2.1 及以上的版本还包括原始值的 `ArraySegment<T>`、背后是数组的 `Memory<T>` 和只有一段的 `ReadOnlySequence<T>`，.NET 8 及以上再加上原始值的多维数组）。其他值仍拷贝一次。参见[序列化到任意 IBufferWriter](/zh/docs/v4/advanced/high-performance#serialize-into-any-ibufferwriter)。
+- **直接写进任意 `IBufferWriter<byte>`**：以前只有原始值能直接写进外部的写入器，别的都要先写进 Nino 的暂存缓冲区再拷过去。现在原始值的数组、列表和[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)也是按大小调一次 `GetSpan`，直接写进 `PipeWriter`、`ArrayBufferWriter<byte>` 这类写入器。.NET Standard 2.1 及以上还包括原始值的 `ArraySegment<T>`、底层是数组的 `Memory<T>` 和只有一段的 `ReadOnlySequence<T>`，.NET 8 及以上再加上原始值的多维数组。其余的值照旧拷贝一次。详见[序列化到任意 IBufferWriter](/zh/docs/v4/advanced/high-performance#serialize-into-any-ibufferwriter)。
+- **原始键值的 `SortedList`**：键值对一次向量遍历写完（netstandard 版本用 `Interleave32` 内核）。和 MemoryPack 的对比见[基准测试](/zh/docs/v4/benchmarks)。
+- **接口类型的集合**：声明成 `IEnumerable<T>`、`ICollection<T>`、`IList<T>`、各种 `IReadOnly*` 接口或 `ReadOnlyCollection<T>` 的成员，以前都是一个个枚举着写。现在只要集合本身实现了 `ICollection<T>`：元素大小固定的，先拷进池化数组再整块写出；其他类型的元素有 16 个及以上时，也先一次性拷出来再写。`ILookup<TKey, TElement>` 的分组同样处理。写出的字节不变。
+- **`BitArray`**：位数据直接写进输出。
+- **多态集合**：基类或接口的数组、列表在循环里直接写各个子类型，嵌套深度每个元素只查一次，不再每个子类型查一次。
+- **.NET 9 和 11 上的 `ConcurrentStack<T>`**：原始元素的免分配写入以前只在 .NET 8 和 10 上生效，现在 .NET 8 及以上都直接读它的节点。
 
 ### 修复 [#fixes-7]
 

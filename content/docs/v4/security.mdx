@@ -39,7 +39,7 @@ catch (NinoDataException e)
 }
 ```
 
-`NinoDataException` derives from `InvalidOperationException`, which Nino threw for invalid data up to 4.0.0-rc.7, so a `catch (InvalidOperationException)` still catches it. Mistakes of the caller keep their own types: a null argument, a type with no formatter, deserializing into a read-only collection, a [setting changed too late](#limits). So does a failure while **serializing** (an object graph with an untracked cycle, or nested deeper than `MaxDepth`), which throws `InvalidOperationException`: that object is yours, not invalid data. [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) answers an invalid body with 400. To see where a message goes wrong, [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) prints what each byte is, and the offset and check that failed.
+`NinoDataException` derives from `InvalidOperationException`, which earlier Nino releases threw for invalid data, so a `catch (InvalidOperationException)` still catches it. Mistakes of the caller keep their own types: a null argument, a type with no formatter, deserializing into a read-only collection, a [setting changed too late](#limits). So does a failure while **serializing** (an object graph with an untracked cycle, or nested deeper than `MaxDepth`), which throws `InvalidOperationException`: that object is yours, not invalid data. [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) answers an invalid body with 400. To see where a message goes wrong, [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) prints what each byte is, and the offset and check that failed.
 
 ## What Is Rejected [#what-is-rejected]
 

@@ -26,7 +26,7 @@ Nino 生来就是为读不可信数据设计的，快速路径也守着这些保
 - **没有哈希洪泛。** 某个键在它的哈希桶里碰到超过 `NinoSettings.MaxHashCollisions` 个键就抛异常，所以构造出来的键没法让填充字典或 Set 的时间变成平方级；`NinoSettings.Untrusted` 还会用每个进程的密钥给整数、`char`、`Guid` 和 `string` 键算哈希。
 - **只有一种异常。** 所有无效输入，包括被类型自己拒绝的值，都抛 `NinoDataException`（一种 `InvalidOperationException`），消息以 `Nino:` 开头，在边界上一个 `catch` 就能全接住；[Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 会返回 400。
 
-我们用 fuzz 生成的和手工构造的数据，把每个内置类型、每种类型声明方式都验了一遍，发现的问题都已在 4.0.0-rc.7 修复。仍然要应用自己负责的事（值本身、消息大小、版本）见[不可信数据](/zh/docs/v4/security#what-stays-your-job)。在这条边界上传递 Nino 数据的 Nino.Codegen（TypeScript、Go 和 Rust 读取器）和 Nino.AspNetCore 都会继续保留。
+我们用 fuzz 生成的和手工构造的数据，把每个内置类型、每种类型声明方式都验了一遍，发现的问题都已修复。仍然要应用自己负责的事（值本身、消息大小、版本）见[不可信数据](/zh/docs/v4/security#what-stays-your-job)。在这条边界上传递 Nino 数据的 Nino.Codegen（TypeScript、Go 和 Rust 读取器）和 Nino.AspNetCore 都会继续保留。
 
 ## 性能 [#performance]
 
@@ -136,14 +136,14 @@ Nino 跨平台、跨运行时字节一致：[原始值](/zh/docs/v4/wire-format#
   { label: '默认字符串编码', cells: [<>所有字符都不超过 U+00FF 时每个字符一个字节，否则 UTF-16；可按成员使用 <code>[NinoUtf8]</code></>, 'UTF-8，可选 UTF-16'] },
 ]} />
 
-## MemoryPack 仍然领先的地方 [#where-memorypack-is-ahead]
+## MemoryPack 领先的地方 [#where-memorypack-is-ahead]
 
-直说吧，下面这些 MemoryPack 能做，Nino v4 做不了：
+下面这些 MemoryPack 能做，Nino v4 不做：
 
-- **`Type` 值。** MemoryPack 能序列化 `System.Type`；Nino 故意不支持：让数据指定要创建的类型，是出了名的反序列化攻击手法。MemoryPack 列出的其他内置类型（`BigInteger`、`Uri`、`Lazy<T>`、`Memory<T>`、`ILookup<,>`、所有不可变集合等），从 4.0.0-rc.5 起 [Nino 也都内置了](/zh/docs/v4/types#other-built-in-types)，`MemoryPack.Unity` 支持的 Unity 类（`AnimationCurve`、`Gradient`、`RectOffset`）也一样（见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)）。*变通方法：*自己保存类型 ID 或名称，再映射到你允许的类型。
-- **依赖注入与选项。** MemoryPack 每次调用都能传 `MemoryPackSerializerOptions`（字符串编码、`IServiceProvider`）。Nino 没有按调用传的选项：设置要么是进程级的（`NinoSettings`），要么是标在类型上的特性。
+- **`Type` 值。** MemoryPack 能序列化 `System.Type`，Nino 有意不支持：让数据决定要创建什么类型，是典型的反序列化攻击手法。*替代做法：*自己存类型 ID 或名字，再映射到你允许的类型上。
+- **依赖注入和选项。** MemoryPack 每次调用都可以传 `MemoryPackSerializerOptions`（字符串编码、`IServiceProvider`）。Nino 没有按次传的选项：配置要么是全局的（`NinoSettings`），要么用特性标在类型上。
 
-压缩不在这张单子上：在 Nino 的缓冲区和 span API 上写几行就有（[压缩](/zh/docs/v4/advanced/streams#compression)）。流、异步 I/O 和序列化回调都已内置。
+除此之外，MemoryPack 有格式化器的类型 Nino 都内置了：它列出的其他内置类型（`BigInteger`、`Uri`、`Lazy<T>`、`Memory<T>`、`ILookup<,>`、所有不可变集合等，见[其他内置类型](/zh/docs/v4/types#other-built-in-types)），还有 `MemoryPack.Unity` 支持的 Unity 类（`AnimationCurve`、`Gradient`、`RectOffset`，见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)）。流、异步 I/O 和序列化回调也都是内置的。压缩在 Nino 的缓冲区和 span API 上写几行就能加（[压缩](/zh/docs/v4/advanced/streams#compression)）。
 
 ## Nino 领先的地方 [#where-nino-is-ahead]
 

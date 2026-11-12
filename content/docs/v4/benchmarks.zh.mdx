@@ -140,13 +140,13 @@ Nino 把数据读入已有的对象图（[复用反序列化](/zh/docs/v4/poolin
 - **引用追踪**（[`ReferenceTest`](#referencetest)）：一张 200 个节点的对象图，有共享对象，也有环。Nino 用 `[NinoType(trackReferences: true)]`，MemoryPack 用 `GenerateType.CircularReference`。
 - **版本容错**（[`VersionTolerantTest`](#versiontoleranttest)）：把 `SimpleClass` 的成员放进一个以后还能加成员的类型，单个对象和 100 个的数组各测一次。Nino 用 `format: NinoFormat.VersionTolerant`（每个对象一个长度），MemoryPack 用 `GenerateType.VersionTolerant`（每个成员一个长度）。
 - **固定大小的类型**（[`FixedSizeTest`](#fixedsizetest)）：一个 40 字节的结构体、成员相同的密封类，以及 100 个这种类组成的数组，都用两个库返回 `byte[]` 的 API 测，所以每次调用都算上了分配结果数组的开销。反序列化这个结构体只是一次 40 字节的拷贝，两个库都只要一个时钟周期左右。
-- **泛型基类型**（[`GenericPolymorphicTest`](#genericpolymorphictest)，从 v4.0.0-rc.7 起测量）：8 种类型的 1,000 个子类型实例，顺序随机，分别经非泛型基类型和泛型基类型的封闭实例读写：`Box<int>`、`Box<(int, long)>`、`Box<(int, string)>`，以及装着一个密封类和一个有子类型的类的元组。MemoryPack 的 Union 特性不能加在泛型类型上，所以给每个封闭基类型注册一个 `DynamicUnionFormatter`。发布报告里有了这些用例，表里才会出现对应的行。
+- **泛型基类型**（[`GenericPolymorphicTest`](#genericpolymorphictest)）：8 种类型的 1,000 个子类型实例，顺序随机，分别经非泛型基类型和泛型基类型的封闭实例读写：`Box<int>`、`Box<(int, long)>`、`Box<(int, string)>`，以及装着一个密封类和一个有子类型的类的元组。MemoryPack 的 Union 特性不能加在泛型类型上，所以给每个封闭基类型注册一个 `DynamicUnionFormatter`。发布报告里有了这些用例，表里才会出现对应的行。
 
 <ExtraRuntimeTables lang="zh" />
 
 ### 常用类型、集合与 BCL 类型 [#common-types-and-collections]
 
-从 v4.0.0-rc.5 起又加测了三个测试类，凡是能写出相同数据的库都一起比：
+另外还有三个测试类，凡是能写出相同数据的库都一起比：
 
 - **常用类型**（[`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CommonTypesTest.cs)）：常见的类型形状，一棵 `TreeNode` 树（1,365 个节点）、`InventoryItem[1000]`（带填充的结构体）、`Waypoint[1000]`（含一个元组的固定大小结构体，写出 15 字节，内存里占 20 字节）和 `Dictionary<string, string>`（1,000 项）。v4.0.0-rc.9 及之前的报告里还有 `List<Player>`（100 个）、`List<Order>`（100 个）和 `List<Shape>`（1,000 个，声明为抽象基类），后来换成了[真实负载](#workloads)。
 - **集合**（[`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CollectionsTest.cs)）：基础类库里的集合，各 1,000 个元素：`List<(int, long)>`、`KeyValuePair<int, int>[]`、`HashSet<int>`、`Dictionary<int, int>`、`Queue<int>`、`LinkedList<int>`、`SortedSet<int>`、`SortedDictionary<int, int>`、`SortedList<int, int>` 和 `ConcurrentDictionary<int, int>`；另有 `SelfTree`，一个包含自身的 `List` 子类，6 层、每层 4 个。
@@ -170,13 +170,13 @@ Nino 把数据读入已有的对象图（[复用反序列化](/zh/docs/v4/poolin
 
 #### 分散的对象 [#scattered-objects]
 
-这组用例（[`ScatteredTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Graphs/ScatteredTest.cs)，从 v4.0.0-rc.8 起测）序列化一百万个对象的数组，数组里的顺序和它们在内存里的顺序不一样，就像程序运行久了、对象换过也排过序之后那样：一组是声明为抽象基类的形状，一组是带字符串的小类，都在分配之后打乱，每个元素都是一次缓存未命中。作为对照，还测了按分配顺序排列的同一批形状（只靠硬件预取），以及 8,192 个能留在缓存里的形状。打乱的小类还会读回到已有的数组里（Nino 和 MemoryPack）。这里 Nino 用的是默认设置，没有打开 [`NinoPrefetchLargeCollections`](/zh/docs/v4/advanced/type-design#large-collections)。MessagePack 和 protobuf-net 不能读进已有数组。
+这组用例（[`ScatteredTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Graphs/ScatteredTest.cs)）序列化一百万个对象的数组，数组里的顺序和它们在内存里的顺序不一样，就像程序运行久了、对象换过也排过序之后那样：一组是声明为抽象基类的形状，一组是带字符串的小类，都在分配之后打乱，每个元素都是一次缓存未命中。作为对照，还测了按分配顺序排列的同一批形状（只靠硬件预取），以及 8,192 个能留在缓存里的形状。打乱的小类还会读回到已有的数组里（Nino 和 MemoryPack）。这里 Nino 用的是默认设置，没有打开 [`NinoPrefetchLargeCollections`](/zh/docs/v4/advanced/type-design#large-collections)。MessagePack 和 protobuf-net 不能读进已有数组。
 
 <ExtraRuntimeTables set="scattered" lang="zh" />
 
 #### 不可信读取 [#untrusted-reads]
 
-这组用例（[`UntrustedTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Scenarios/UntrustedTest.cs)，从 v4.0.0-rc.8 起测，只测反序列化）打开 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode)，读一个由 1,000 个原始结构体组成的列表，结构体里有一个 `DateTime` 和一个 `bool`，每个值的这两个字段都要检查；对照的 MemoryPack 不检查，直接复制。
+这组用例（[`UntrustedTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Scenarios/UntrustedTest.cs)，只测反序列化）打开 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode)，读一个由 1,000 个原始结构体组成的列表，结构体里有一个 `DateTime` 和一个 `bool`，每个值的这两个字段都要检查；对照的 MemoryPack 不检查，直接复制。
 
 <ExtraRuntimeTables set="untrusted" lang="zh" />
 

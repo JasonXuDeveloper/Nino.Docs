@@ -23,6 +23,11 @@ What changed from one v4 release to the next, newest first. For everything v4 ch
 ### Performance [#performance-5]
 
 - **In place into any `IBufferWriter<byte>`**: besides raw values, Nino now writes arrays and lists of raw values and [fixed-size types](/en/docs/v4/performance#fixed-size-types) straight into a `PipeWriter`, `ArrayBufferWriter<byte>` or any other buffer writer, through one `GetSpan` of their size, instead of copying them from its scratch buffer (on .NET Standard 2.1 and later builds also `ArraySegment<T>`, array-backed `Memory<T>` and single-segment `ReadOnlySequence<T>` of raw values, on .NET 8 and later their multidimensional arrays). Other values are still copied once. See [Serialize into Any IBufferWriter](/en/docs/v4/advanced/high-performance#serialize-into-any-ibufferwriter).
+- **`SortedList` of raw keys and values**: its pairs are written in one vector pass (on the netstandard builds by the `Interleave32` kernel). The [benchmarks](/en/docs/v4/benchmarks) compare it with MemoryPack.
+- **Collections behind an interface**: a member typed `IEnumerable<T>`, `ICollection<T>`, `IList<T>`, an `IReadOnly*` interface or `ReadOnlyCollection<T>` was enumerated element by element. When the collection is an `ICollection<T>`, elements of a fixed size are now copied out into a pooled array and written as one block, and 16 or more elements of any other type are copied out before they are written; the groupings of an `ILookup<TKey, TElement>` follow the same rule. The bytes are the same.
+- **`BitArray`**: its bits are written straight into the output.
+- **Polymorphic collections**: an array or list of a base class or interface writes each subtype in the loop, with the nesting depth checked once per element instead of once per subtype.
+- **`ConcurrentStack<T>` on .NET 9 and 11**: its raw elements were written allocation-free on .NET 8 and 10 only; every .NET from 8 on now reads its nodes in place.
 
 ### Fixes [#fixes-7]
 

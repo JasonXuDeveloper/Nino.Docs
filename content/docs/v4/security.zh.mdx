@@ -39,7 +39,7 @@ catch (NinoDataException e)
 }
 ```
 
-`NinoDataException` 派生自 `InvalidOperationException`，也就是 Nino 在 4.0.0-rc.7 及以前遇到无效数据时抛的类型，所以 `catch (InvalidOperationException)` 照样能接住它。调用方自己的错误保留各自的异常类型：参数为 null、类型没有格式化器、反序列化到只读集合、[设置改得太晚](#limits)。**序列化**时的失败也一样（对象图有没追踪的环，或嵌套超过 `MaxDepth`），抛 `InvalidOperationException`：那是你的对象，不是无效数据。[Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 对无效请求体返回 400。想知道一条消息具体坏在哪个字节，用 [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect)：它打印每个字节是什么，以及没通过的那项检查和它的偏移。
+`NinoDataException` 派生自 `InvalidOperationException`，也就是早期版本的 Nino 遇到无效数据时抛的类型，所以 `catch (InvalidOperationException)` 照样能接住它。调用方自己的错误保留各自的异常类型：参数为 null、类型没有格式化器、反序列化到只读集合、[设置改得太晚](#limits)。**序列化**时的失败也一样（对象图有没追踪的环，或嵌套超过 `MaxDepth`），抛 `InvalidOperationException`：那是你的对象，不是无效数据。[Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 对无效请求体返回 400。想知道一条消息具体坏在哪个字节，用 [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect)：它打印每个字节是什么，以及没通过的那项检查和它的偏移。
 
 ## 拒绝哪些数据 [#what-is-rejected]
 

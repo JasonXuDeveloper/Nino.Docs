@@ -140,13 +140,13 @@ Four more benchmark classes compare features that change how a type is written, 
 - **Reference tracking** ([`ReferenceTest`](#referencetest)): a graph of 200 nodes with shared objects and cycles. Nino uses `[NinoType(trackReferences: true)]`, MemoryPack `GenerateType.CircularReference`.
 - **Version tolerance** ([`VersionTolerantTest`](#versiontoleranttest)): `SimpleClass`'s members in a type that can gain members later, alone and as an array of 100. Nino uses `format: NinoFormat.VersionTolerant` (one length per object), MemoryPack `GenerateType.VersionTolerant` (a length per member).
 - **Fixed-size types** ([`FixedSizeTest`](#fixedsizetest)): a 40-byte struct, the same members in a sealed class, and an array of 100 of the classes, through the `byte[]` APIs of both libraries, so allocating the result is part of every call. Deserializing the struct is a single 40-byte copy, about a clock cycle in both.
-- **Generic bases** ([`GenericPolymorphicTest`](#genericpolymorphictest), measured from v4.0.0-rc.7): 1,000 subtypes of eight types in random order, through a non-generic base and through closed instances of a generic base: `Box<int>`, `Box<(int, long)>`, `Box<(int, string)>`, and tuples holding a sealed class and a class with subtypes. MemoryPack's union attribute cannot be put on a generic type, so it gets a `DynamicUnionFormatter` registered for each closed base. Their rows appear once a release's report includes them.
+- **Generic bases** ([`GenericPolymorphicTest`](#genericpolymorphictest)): 1,000 subtypes of eight types in random order, through a non-generic base and through closed instances of a generic base: `Box<int>`, `Box<(int, long)>`, `Box<(int, string)>`, and tuples holding a sealed class and a class with subtypes. MemoryPack's union attribute cannot be put on a generic type, so it gets a `DynamicUnionFormatter` registered for each closed base. Their rows appear once a release's report includes them.
 
 <ExtraRuntimeTables lang="en" />
 
 ### Common Types, Collections and BCL Types [#common-types-and-collections]
 
-Three more classes, measured since v4.0.0-rc.5, each against every library that can write the same data:
+Three more classes, each against every library that can write the same data:
 
 - **Common types** ([`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CommonTypesTest.cs)): common type shapes, a `TreeNode` tree (1,365 nodes), `InventoryItem[1000]` (a padded struct), `Waypoint[1000]` (a fixed-size struct holding a tuple, 15 bytes on the wire and 20 in memory) and `Dictionary<string, string>` (1,000). Reports up to v4.0.0-rc.9 also have `List<Player>` (100), `List<Order>` (100) and `List<Shape>` (1,000 through an abstract base), which the [real-world workloads](#workloads) replaced.
 - **Collections** ([`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CollectionsTest.cs)): collections of the base class library, 1,000 elements each: `List<(int, long)>`, `KeyValuePair<int, int>[]`, `HashSet<int>`, `Dictionary<int, int>`, `Queue<int>`, `LinkedList<int>`, `SortedSet<int>`, `SortedDictionary<int, int>`, `SortedList<int, int>` and `ConcurrentDictionary<int, int>`, and `SelfTree`, a `List` subclass that holds itself, 6 levels of 4.
@@ -170,13 +170,13 @@ All three serialize to a reused buffer writer and deserialize into new instances
 
 #### Scattered objects [#scattered-objects]
 
-These benchmarks ([`ScatteredTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Graphs/ScatteredTest.cs), measured since v4.0.0-rc.8) serialize arrays of a million objects whose order in the array is not their order in memory, as in a program that replaced and reordered its objects over time: shapes through their abstract base and small classes with a string, shuffled after they were allocated, so every element is a cache miss; for comparison, the same shapes in allocation order (what the hardware prefetcher does alone) and 8,192 of them, which stay in the cache. The shuffled classes are also read into an existing array (Nino and MemoryPack). Nino runs with its defaults here, without [`NinoPrefetchLargeCollections`](/en/docs/v4/advanced/type-design#large-collections). MessagePack and protobuf-net cannot read into an existing array.
+These benchmarks ([`ScatteredTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Graphs/ScatteredTest.cs)) serialize arrays of a million objects whose order in the array is not their order in memory, as in a program that replaced and reordered its objects over time: shapes through their abstract base and small classes with a string, shuffled after they were allocated, so every element is a cache miss; for comparison, the same shapes in allocation order (what the hardware prefetcher does alone) and 8,192 of them, which stay in the cache. The shuffled classes are also read into an existing array (Nino and MemoryPack). Nino runs with its defaults here, without [`NinoPrefetchLargeCollections`](/en/docs/v4/advanced/type-design#large-collections). MessagePack and protobuf-net cannot read into an existing array.
 
 <ExtraRuntimeTables set="scattered" lang="en" />
 
 #### Untrusted reads [#untrusted-reads]
 
-These reads ([`UntrustedTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Scenarios/UntrustedTest.cs), measured since v4.0.0-rc.8, deserialize only) read a list of 1,000 raw structs with a `DateTime` and a `bool` with [`NinoSettings.Untrusted`](/en/docs/v4/security#untrusted-mode) on, which checks both fields of every value, against MemoryPack, which copies them unchecked.
+These reads ([`UntrustedTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Scenarios/UntrustedTest.cs), deserialize only) read a list of 1,000 raw structs with a `DateTime` and a `bool` with [`NinoSettings.Untrusted`](/en/docs/v4/security#untrusted-mode) on, which checks both fields of every value, against MemoryPack, which copies them unchecked.
 
 <ExtraRuntimeTables set="untrusted" lang="en" />
 
