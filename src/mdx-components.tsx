@@ -19,6 +19,7 @@ import { BenchChart } from '@/components/bench-chart';
 import {
   BenchSource,
   BenchValue,
+  BuildTables,
   ExtraRuntimeTables,
   IfWorkloads,
   LibraryTables,
@@ -108,6 +109,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     UnityChart,
     BenchSource,
     BenchValue,
+    BuildTables,
     BytePlayground,
     Bytes,
     ExtraRuntimeTables,

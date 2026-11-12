@@ -2,9 +2,11 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useReveal } from '@/components/showcase';
 import {
+  type BuildMeasure,
   bestReuse,
-  build,
   buildLarge,
+  buildRow,
+  buildSmall,
   formatBuildRatio,
   formatBytes,
   formatRatio,
@@ -411,32 +413,45 @@ function Before({ v3, v4, big }: { v3: string; v4: string; big?: boolean }) {
 }
 
 function v3Rows(zh: boolean): Row[] {
-  const { emit, source } = buildLarge;
   const types = (n: number) =>
     zh ? `${count(n)} 个类型，v3.3.13 → v4` : `${count(n)} types, v3.3.13 → v4`;
-  const generator = build.find((b) => b.en === 'Running the generator');
-  const rows: Row[] = [
-    {
+  const unit = (row: BuildMeasure) =>
+    row.better === 'smaller'
+      ? zh
+        ? '更小'
+        : 'smaller'
+      : zh
+        ? '更快'
+        : 'faster';
+  // Only rows where v4 is ahead: the panel shows how many times better.
+  const ahead = (row: BuildMeasure | undefined) =>
+    row?.verdict === 'better' ? row : undefined;
+  const emit = ahead(buildRow(buildLarge, 'emit'));
+  const source = ahead(buildRow(buildLarge, 'source'));
+  const generator = ahead(buildRow(buildSmall, 'generate'));
+  const rows: Row[] = [];
+  if (emit)
+    rows.push({
       label: zh ? '编译生成的代码' : 'Compile the generated code',
       note: types(buildLarge.types),
       ratio: formatBuildRatio(emit.ratio),
-      unit: zh ? '更快' : 'faster',
+      unit: unit(emit),
       body: <Before big v3={minutes(emit.v3n, zh)} v4={seconds(emit.v4, zh)} />,
-    },
-    {
+    });
+  if (source)
+    rows.push({
       label: zh ? '生成的源码' : 'Generated source',
       note: types(buildLarge.types),
       ratio: formatBuildRatio(source.ratio),
-      unit: zh ? '更小' : 'smaller',
+      unit: unit(source),
       body: <Before v3={source.v3} v4={source.v4} />,
-    },
-  ];
+    });
   if (generator)
     rows.push({
       label: zh ? '运行生成器' : 'Run the generator',
-      note: types(330),
+      note: types(buildSmall.types),
       ratio: formatBuildRatio(generator.ratio),
-      unit: zh ? '更快' : 'faster',
+      unit: unit(generator),
       body: (
         <Before v3={seconds(generator.v3, zh)} v4={seconds(generator.v4, zh)} />
       ),

@@ -217,41 +217,15 @@ Every row of the report, with the exact environment.
 
 ## Build Time and Generated Code [#build-time-and-generated-code]
 
-The test project is a synthetic assembly of `N` abstract root classes, each with a chain of 8 derived classes, a sealed leaf and a struct (`N × 11` types), with primitives, strings, `List<T>`, `Dictionary<int, string>`, references to other `[NinoType]`s and private fields. The harness runs the generator on the compilation (Roslyn 4.3 in-process), emits the assembly, and re-runs the generator after an edit. Each time is the median of the last three of five runs, except v3 at 1,100 types: the median of three runs, which took 7.6 to 7.8 minutes each. The baseline is v3 3.3.13, run on the same machine.
+The test project is a synthetic assembly of `N` abstract root classes, each with a chain of 8 derived classes, a sealed leaf and a struct (`N × 11` types), with primitives, strings, `List<T>`, `Dictionary<int, string>`, references to other `[NinoType]`s and private fields. The harness runs the generator on the compilation (Roslyn in process), emits the assembly, and re-runs the generator after adding a member and after adding a comment. The baseline is v3 3.3.13 from NuGet, run on the same machine; sizes are millions of chars (source) and bytes (IL). The line under the tables names the machine and how many runs each time is the median of.
 
 <BenchmarkChart chart="compile" lang="en" table={false} />
 
-<Tabs items={["330 types (N = 30)", "1,100 types (N = 100)"]}>
+<BuildTables lang="en" />
 
-<Tab value="330 types (N = 30)">
+The generator times at 330 types are tenths of a second and vary from run to run: read those rows as "several times faster", not as exact ratios.
 
-| | v3 (3.3.13) | v4 | v4 vs v3 |
-| --- | ---: | ---: | ---: |
-| Generated source | 18.7 MB (363,233 lines) | 1.31 MB (23,215 lines) | **14× smaller** |
-| Compiling the generated code (emit) | 42.9 s | 0.84 s | **51× faster** |
-| Running the generator | 1.01 s | 0.32 s | **3.1× faster** |
-| Re-generating after editing a member | 1.03 s | 0.12 s | **8.3× faster** |
-| Re-generating after editing a comment | 1.01 s | 0.13 s | **7.8× faster** |
-| IL of the generated code | 2.21 MB | 0.42 MB | **5.3× smaller** |
-
-The generator times here are tenths of a second and vary from session to session: read those rows as "several times faster", not as exact ratios.
-
-</Tab>
-<Tab value="1,100 types (N = 100)">
-
-| | v3 (3.3.13) | v4 | v4 vs v3 |
-| --- | ---: | ---: | ---: |
-| Generated source | 62.0 MB (1,204,143 lines) | 4.38 MB (77,535 lines) | **14× smaller** |
-| Compiling the generated code (emit) | 462 s | 2.1 s | **221× faster** |
-| Running the generator | 4.6 s | 0.42 s | **11× faster** |
-| Re-generating after editing a member | 3.5 s | 0.48 s | **7.4× faster** |
-| Re-generating after editing a comment | 4.0 s | 0.44 s | **9.1× faster** |
-| IL of the generated code | 7.3 MB | 1.50 MB | **4.9× smaller** |
-
-</Tab>
-</Tabs>
-
-v3's compile time grows much faster than the number of types: 3.3× the types took 11× the compile time. v4 grows roughly linearly, at about 4 KB of source and 2 to 3 ms of compile time per type.
+v3's compile time grows much faster than the number of types: <BenchValue k="build.types.growth" />× the types took <BenchValue k="build.v3.emit.growth" />× the compile time. v4 grows roughly linearly, at about <BenchValue k="build.v4.source.perType" /> KB of source and <BenchValue k="build.v4.emit.perType" /> ms of compile time per type.
 
 ## Benchmark Code [#benchmark-code]
 
@@ -958,6 +932,7 @@ dotnet run -c Release --project benchmarks/Nino.GeneratorBenchmark -- 30 8
 
 - `benchmarks/run.sh` builds `benchmarks/v3` (the same `SimpleTest` against Nino 3.3.13 from NuGet) and runs it directly before v4. It prints **v4 vs v3** for each case.
 - Every release runs the same protocol in CI, with the benchmark classes split over fourteen runners per architecture (v3 runs directly before `SimpleTest` on its runner), and publishes the result in the release notes: the Performance Report, and a **v3 3.3.13 vs v4 (same machine)** section. This site takes its runtime numbers from the newest v4 release that has them.
+- The same release workflow runs `benchmarks/Nino.GeneratorBenchmark` with v3 3.3.13's generator and the release's, one after the other at 330 and 1,100 types on one runner, and adds a **Build: v3 3.3.13 vs v4 (source generator)** section to the release notes; the build tables above come from it once a release has one.
 - The Go, Rust and TypeScript benchmarks run in the same release workflow; how to run them is in [Other-Language Benchmarks](/en/docs/v4/benchmarks-runtimes#reproducing).
 - `benchmarks/members` takes `SimpleClass` apart member by member, against v3 and v4, to find which member a case spends its time on. See the [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks).
 

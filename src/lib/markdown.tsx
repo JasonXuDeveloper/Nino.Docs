@@ -19,6 +19,7 @@ import {
 import {
   ArchTabs,
   BenchSource,
+  BuildTables,
   benchValue,
   ExtraRuntimeTables,
   LibraryTables,
@@ -440,6 +441,10 @@ function markdownComponents(lang: Locale, pageUrl: string) {
     UnityHighlights(props: ComponentProps<typeof UnityHighlights>) {
       asMarkdown();
       return UnityHighlights({ ...props, markdown: true });
+    },
+    BuildTables(props: ComponentProps<typeof BuildTables>) {
+      asMarkdown();
+      return BuildTables({ ...props, markdown: true });
     },
     ResultsTable(props: ComponentProps<typeof ResultsTable>) {
       asMarkdown();

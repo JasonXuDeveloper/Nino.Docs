@@ -9,6 +9,9 @@ import {
   arm64,
   type BenchDataset,
   build,
+  buildRatioText,
+  buildSmall,
+  buildSourceNote,
   FLOOR_NS,
   formatBytes,
   formatTime,
@@ -283,24 +286,21 @@ function v3Chart(
 }
 
 function compileChart(zh: boolean): BarChartProps {
+  const types = buildSmall?.types.toLocaleString('en-US') ?? '';
   return {
     title: zh
       ? '构建：v4 比 v3（3.3.13）好多少倍'
       : 'Build: how many times better v4 is than v3 (3.3.13)',
     subtitle: zh
-      ? '源生成器基准测试，330 个类型（N = 30）。越长越好。'
-      : 'Source generator benchmark, 330 types (N = 30). Longer is better.',
+      ? `源生成器基准测试，${types} 个类型（N = ${buildSmall?.roots}）。越长越好。`
+      : `Source generator benchmark, ${types} types (N = ${buildSmall?.roots}). Longer is better.`,
     series: [
       { key: 'ratio', label: 'v4 vs v3', color: 'var(--nino-chart-v4)' },
     ],
     rows: build.map((row) => ({
       label: zh ? row.zh : row.en,
       values: { ratio: row.ratio },
-      text: {
-        ratio: zh
-          ? `${row.better === 'smaller' ? '小' : '快'} ${row.ratio} 倍`
-          : `${row.ratio}× ${row.better}`,
-      },
+      text: { ratio: buildRatioText(row, zh) },
       detail: `v3 ${row.v3} → v4 ${row.v4}`,
     })),
     axisLabel: zh ? 'v4 对比 v3（倍）' : 'v4 vs v3 (×)',
@@ -314,11 +314,10 @@ function compileChart(zh: boolean): BarChartProps {
         zh ? row.zh : row.en,
         row.v3,
         row.v4,
-        zh
-          ? `${row.better === 'smaller' ? '小' : '快'} ${row.ratio} 倍`
-          : `${row.ratio}× ${row.better}`,
+        buildRatioText(row, zh),
       ]),
     },
+    footnotes: [buildSourceNote(zh)],
   };
 }
 
@@ -497,7 +496,11 @@ export default function BenchmarkCharts({
   const ids = Array.isArray(chart) ? chart : [chart];
   const [current, setCurrent] = useState<ChartId>(ids[0]);
   const props = chartProps(current, zh, arch);
-  if (props && !table) props.table = undefined;
+  if (props && !table) {
+    props.table = undefined;
+    // The build tables next to it (BuildTables) carry the source line.
+    if (current === 'compile') props.footnotes = undefined;
+  }
   const body = props ? (
     <BarChart key={current} {...props} />
   ) : (

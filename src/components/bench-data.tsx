@@ -9,7 +9,8 @@
  * workloads against every library, and IfWorkloads picks the prose that fits
  * the synced data (the headline comes from the workloads once it has them). RuntimesTables prints the Go, Rust and
  * TypeScript benchmarks of the same release, UnityTables and UnityHighlights
- * the Unity player's times without and with the Burst kernels.
+ * the Unity player's times without and with the Burst kernels, and BuildTables
+ * the source generator benchmark (v3 3.3.13 vs v4) at each workload size.
  *
  * Once the synced data has an Arm64 report, every table of Nino against
  * MemoryPack shows x64 and Arm64 in tabs (`ArchTabs`), each with the source line
@@ -22,6 +23,16 @@ import {
   archLabels,
   arm64,
   type BenchDataset,
+  type BuildMeasure,
+  type BuildSizeTable,
+  buildDecimals,
+  buildLarge,
+  buildRatioText,
+  buildRow,
+  buildSizes,
+  buildSmall,
+  buildSource,
+  buildSourceNote,
   classRatioRange,
   datasets,
   formatBytes,
@@ -1221,6 +1232,164 @@ export function UnityHighlights({
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Build time                                                          */
+/* ------------------------------------------------------------------ */
+
+const count = (n: number) => n.toLocaleString('en-US');
+
+/** "330 types (N = 30)" / "330 个类型（N = 30）" */
+function buildSizeLabel(size: BuildSizeTable, zh: boolean) {
+  return zh
+    ? `${count(size.types)} 个类型（N = ${size.roots}）`
+    : `${count(size.types)} types (N = ${size.roots})`;
+}
+
+/** "18.7 MB (363,233 lines)" / "18.7 MB（363,233 行）", or the time as published */
+function buildCell(text: string, lines: number | undefined, zh: boolean) {
+  if (lines === undefined) return text;
+  return zh
+    ? `${text}（${count(lines)} 行）`
+    : `${text} (${count(lines)} lines)`;
+}
+
+function buildRatioCell(row: BuildMeasure, zh: boolean) {
+  const text = buildRatioText(row, zh);
+  return row.verdict === 'better' ? <strong>{text}</strong> : text;
+}
+
+function buildTable(size: BuildSizeTable, zh: boolean) {
+  return (
+    <>
+      <div className="relative overflow-auto prose-no-margin my-6">
+        <table>
+          <thead>
+            <tr>
+              <th />
+              <th className="text-right">
+                {zh ? 'v3（3.3.13）' : 'v3 (3.3.13)'}
+              </th>
+              <th className="text-right">v4</th>
+              <th className="text-right">{zh ? 'v4 对比 v3' : 'v4 vs v3'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {size.rows.map((row) => (
+              <tr key={row.key}>
+                <td>{zh ? row.zh : row.en}</td>
+                <td className="text-right tabular-nums whitespace-nowrap">
+                  {buildCell(row.v3, row.v3Lines, zh)}
+                </td>
+                <td className="text-right tabular-nums whitespace-nowrap">
+                  {buildCell(row.v4, row.v4Lines, zh)}
+                </td>
+                <td className="text-right tabular-nums">
+                  {buildRatioCell(row, zh)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {size.measured && (
+        <p className="text-sm text-fd-muted-foreground">
+          {zh
+            ? `每项耗时：v3 取 ${size.measured.v3} 次、v4 取 ${size.measured.v4} 次运行的中位数，第一次运行不计。`
+            : `Each time is the median of ${size.measured.v3} runs for v3 and ${size.measured.v4} for v4, after a first run that is not counted.`}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** The release and runner the build numbers come from, or the local run's note */
+function buildSourceLine(zh: boolean) {
+  const text = buildSourceNote(zh);
+  return (
+    <p className="text-sm text-fd-muted-foreground">
+      {buildSource.url ? (
+        <a href={buildSource.url} target="_blank" rel="noopener noreferrer">
+          {text}
+        </a>
+      ) : (
+        text
+      )}
+    </p>
+  );
+}
+
+/**
+ * The source generator benchmark (src/data/bench-build.json, synced from the
+ * newest v4 release's build section): v3 3.3.13 against v4 at each workload
+ * size, in tabs (one after the other under labels in Markdown), then the
+ * source line.
+ */
+export function BuildTables({ lang = 'en', markdown }: ArchProps) {
+  const zh = lang === 'zh';
+  if (buildSizes.length === 0) return null;
+  const tables = markdown ? (
+    buildSizes.map((size) => (
+      <Fragment key={size.types}>
+        <p>
+          <strong>{buildSizeLabel(size, zh)}</strong>
+        </p>
+        {buildTable(size, zh)}
+      </Fragment>
+    ))
+  ) : (
+    <Tabs items={buildSizes.map((size) => buildSizeLabel(size, zh))}>
+      {buildSizes.map((size) => (
+        <Tab key={size.types} value={buildSizeLabel(size, zh)} forceMount>
+          {buildTable(size, zh)}
+        </Tab>
+      ))}
+    </Tabs>
+  );
+  return (
+    <>
+      {tables}
+      {buildSourceLine(zh)}
+    </>
+  );
+}
+
+/** Build-time values for prose (benchValue's build.* keys); '—' without both sizes */
+function buildValue(k: string): string {
+  const small = buildSmall;
+  const large = buildLarge;
+  if (!small || !large || small === large) return '—';
+  const emit = (size: BuildSizeTable) => buildRow(size, 'emit');
+  const source = (size: BuildSizeTable) => buildRow(size, 'source');
+  // A range "2–3" of whole numbers, or one number when both round alike
+  const range = (a: number, b: number) => {
+    const [lo, hi] = [Math.round(Math.min(a, b)), Math.round(Math.max(a, b))];
+    return lo === hi ? String(lo) : `${lo}–${hi}`;
+  };
+  switch (k) {
+    case 'build.types.growth':
+      return buildDecimals(large.types / small.types);
+    case 'build.v3.emit.growth': {
+      const [a, b] = [emit(small), emit(large)];
+      return a && b ? buildDecimals(b.v3n / a.v3n) : '—';
+    }
+    case 'build.v4.source.perType': {
+      // MB of source are millions of chars: KB per type
+      const [a, b] = [source(small), source(large)];
+      return a && b
+        ? range((a.v4n * 1e3) / small.types, (b.v4n * 1e3) / large.types)
+        : '—';
+    }
+    case 'build.v4.emit.perType': {
+      // seconds -> ms per type
+      const [a, b] = [emit(small), emit(large)];
+      return a && b
+        ? range((a.v4n * 1e3) / small.types, (b.v4n * 1e3) / large.types)
+        : '—';
+    }
+  }
+  throw new Error(`Unknown benchmark value: ${k}`);
+}
+
 /**
  * One number from the data (x64), for prose:
  * serialize.max / serialize.min / deserialize.max / deserialize.min (ratios
@@ -1232,13 +1401,19 @@ export function UnityHighlights({
  * workloads.<memorypack|messagepack|protobuf|googleprotobuf|json>.<serialize|deserialize>
  * (the range of wins over the workloads; with .max, its top), or
  * serialize:<case key> / deserialize:<case key> (ratio of one case against
- * MemoryPack; serialize:<case key>:messagepack or :protobuf against that library).
+ * MemoryPack; serialize:<case key>:messagepack or :protobuf against that library),
+ * or a build-time value from the source generator benchmark (no unit, the page
+ * writes it): build.types.growth (how many times the types of the larger
+ * workload), build.v3.emit.growth (how many times v3's emit time grew with
+ * them), build.v4.source.perType (KB of v4 source per type, "4" or "4–5") and
+ * build.v4.emit.perType (ms of v4 emit time per type, "2–3").
  */
 export function BenchValue({ k }: { k: string }) {
   return <>{benchValue(k)}</>;
 }
 
 export function benchValue(k: string): string {
+  if (k.startsWith('build.')) return buildValue(k);
   const [op, which] = k.split(/[.:]/) as [string, string];
   const workload = /^workloads\.(\w+)\.(serialize|deserialize)(\.max)?$/.exec(
     k,

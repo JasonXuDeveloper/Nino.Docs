@@ -38,10 +38,15 @@
  * the same release. Speedups are computed here from the two times, with the
  * same FLOOR_NS and on-par rules; the report's own Speedup column is not used.
  *
- * Build time (source generator, v3 3.3.13 vs v4): static, from
- * docs/v4-benchmarks.md in the Nino repository; it is not in the release report.
+ * Build time (source generator, v3 3.3.13 vs v4): src/data/bench-build.json
+ * (`buildSizes` below), synced from the build section of the same release
+ * (v3 3.3.13 and the release's generator one after the other on one runner, at
+ * 330 and 1,100 types); until a release has it, the committed file holds a
+ * local run (`origin: 'local'`, its `note` names the machine). Ratios are
+ * those the section publishes.
  */
 
+import benchBuild from '@/data/bench-build.json';
 import benchRuntimes from '@/data/bench-runtimes.json';
 import benchUnity from '@/data/bench-unity.json';
 import benchV3 from '@/data/bench-v3-runtime.json';
@@ -1257,88 +1262,208 @@ export const unity: UnityVersionTable[] = unityFile.versions.map((version) => ({
 /* Build time                                                          */
 /* ------------------------------------------------------------------ */
 
+/** The keys of the build rows, in the release section's order (scripts/sync-benchmarks.ts, buildRows) */
+type BuildKey = 'source' | 'emit' | 'generate' | 'member' | 'comment' | 'il';
+
+/** The shape of src/data/bench-build.json (scripts/sync-benchmarks.ts, BuildFile) */
+interface BuildRow {
+  key: BuildKey;
+  v3: BuildCell;
+  v4: BuildCell;
+  /** "14× smaller", "on par" or "—", as published */
+  ratio: string;
+}
+
+interface BuildCell {
+  text: string;
+  value: number;
+  unit: 'MB' | 's';
+  lines?: number;
+}
+
+interface BuildFile {
+  origin: 'release' | 'local' | 'fixture';
+  tag: string;
+  url: string;
+  publishedAt: string | null;
+  environment: string | null;
+  note: { en: string; zh: string } | null;
+  sizes: {
+    types: number;
+    roots: number;
+    measured: { v3: number; v4: number } | null;
+    rows: BuildRow[];
+  }[];
+}
+
 export interface BuildMeasure {
+  key: BuildKey;
   en: string;
   zh: string;
   /** Short label for stat cards */
   short: { en: string; zh: string };
+  /** As published: "18.7 MB", "42.9 s" (the line count is in `v3Lines`) */
   v3: string;
   v4: string;
-  /** v4 better than v3 by this factor, as published */
+  /** In the row's unit (MB or s) */
+  v3n: number;
+  v4n: number;
+  v3Lines?: number;
+  v4Lines?: number;
+  /**
+   * v4 better than v3 by this factor, as published ("14× smaller" -> 14); for
+   * "on par" 1, and for "—" (v4 not ahead) v3 / v4 from the published values
+   */
   ratio: number;
+  /** "better": `ratio` times smaller or faster; "par": within 5%; "none": v4 not ahead */
+  verdict: 'better' | 'par' | 'none';
   better: 'smaller' | 'faster';
 }
 
-/** v4 vs v3 3.3.13, source generator benchmark with 330 types (N = 30) */
-export const build: BuildMeasure[] = [
-  {
+/** One workload of the build benchmark: `types` types from `roots` root classes */
+export interface BuildSizeTable {
+  types: number;
+  roots: number;
+  /** How many runs each time is the median of; null for the local run (its note says) */
+  measured: { v3: number; v4: number } | null;
+  rows: BuildMeasure[];
+}
+
+/** Labels of the build rows (the release section's row labels are the English ones) */
+const buildLabels: Record<
+  BuildKey,
+  { en: string; zh: string; short: { en: string; zh: string } }
+> = {
+  source: {
     en: 'Generated source',
     zh: '生成的源码',
     short: { en: 'smaller generated source', zh: '生成的源码更小' },
-    v3: '18.7 MB',
-    v4: '1.31 MB',
-    ratio: 14,
-    better: 'smaller',
   },
-  {
+  emit: {
     en: 'Compiling the generated code (emit)',
     zh: '编译生成的代码（emit）',
     short: { en: 'faster to compile (emit)', zh: '编译（emit）更快' },
-    v3: '42.9 s',
-    v4: '0.84 s',
-    ratio: 51,
-    better: 'faster',
   },
-  {
+  generate: {
     en: 'Running the generator',
     zh: '运行生成器',
     short: { en: 'faster generator run', zh: '生成器运行更快' },
-    v3: '1.01 s',
-    v4: '0.32 s',
-    ratio: 3.1,
-    better: 'faster',
   },
-  {
+  member: {
     en: 'Re-generating after editing a member',
     zh: '修改成员后重新生成',
     short: {
       en: 'faster re-generation after editing a member',
       zh: '修改成员后重新生成更快',
     },
-    v3: '1.03 s',
-    v4: '0.12 s',
-    ratio: 8.3,
-    better: 'faster',
   },
-  {
+  comment: {
     en: 'Re-generating after editing a comment',
     zh: '修改注释后重新生成',
     short: {
       en: 'faster re-generation after editing a comment',
       zh: '修改注释后重新生成更快',
     },
-    v3: '1.01 s',
-    v4: '0.13 s',
-    ratio: 7.8,
-    better: 'faster',
   },
-  {
+  il: {
     en: 'IL of the generated code',
     zh: '生成代码的 IL',
     short: { en: 'smaller IL', zh: 'IL 更小' },
-    v3: '2.21 MB',
-    v4: '0.42 MB',
-    ratio: 5.3,
-    better: 'smaller',
   },
-];
-
-/** Build cost at 1,100 types (N = 100), v3.3.13 vs v4 (docs/v4-benchmarks.md) */
-export const buildLarge = {
-  types: 1100,
-  source: { v3: '62.0 MB', v4: '4.38 MB', v3n: 62, v4n: 4.38, ratio: 14 },
-  emit: { v3: '462 s', v4: '2.1 s', v3n: 462, v4n: 2.1, ratio: 221 },
 };
+
+const buildFile = benchBuild as unknown as BuildFile;
+
+/**
+ * Where the build numbers come from: a release's build section, or (origin
+ * 'local', empty tag and url) the local run the committed file holds until a
+ * release has one; `note` describes that run.
+ */
+export const buildSource: BenchSourceInfo & {
+  origin: BuildFile['origin'];
+  note: BuildFile['note'];
+} = {
+  origin: buildFile.origin,
+  tag: buildFile.tag,
+  url: buildFile.url,
+  publishedAt: buildFile.publishedAt,
+  environment: buildFile.environment,
+  note: buildFile.note,
+};
+
+/** "14× smaller" -> 14; "on par" -> 1; "—" -> v3 / v4 */
+function buildRatio(row: BuildRow): Pick<BuildMeasure, 'ratio' | 'verdict'> {
+  const published = /^([\d.]+)×/.exec(row.ratio.replace(/\*\*/g, '').trim());
+  if (published) return { ratio: Number(published[1]), verdict: 'better' };
+  if (/on par/i.test(row.ratio)) return { ratio: 1, verdict: 'par' };
+  return { ratio: row.v3.value / row.v4.value, verdict: 'none' };
+}
+
+/** The display text of a size cell without its line count: "18.7 MB" */
+const cellText = (text: string) => text.replace(/\s*\(.*\)$/, '');
+
+/** Every workload of the build benchmark (v4 vs v3 3.3.13), fewest types first */
+export const buildSizes: BuildSizeTable[] = buildFile.sizes.map((size) => ({
+  types: size.types,
+  roots: size.roots,
+  measured: size.measured,
+  rows: size.rows.map((row) => ({
+    key: row.key,
+    ...buildLabels[row.key],
+    v3: cellText(row.v3.text),
+    v4: cellText(row.v4.text),
+    v3n: row.v3.value,
+    v4n: row.v4.value,
+    v3Lines: row.v3.lines,
+    v4Lines: row.v4.lines,
+    ...buildRatio(row),
+    better: row.v3.unit === 's' ? 'faster' : 'smaller',
+  })),
+}));
+
+/** The smallest workload (330 types, N = 30): the rows of the compile chart */
+export const buildSmall = buildSizes[0];
+
+/** Its rows, v4 vs v3 3.3.13 */
+export const build: BuildMeasure[] = buildSmall?.rows ?? [];
+
+/** The largest workload (1,100 types, N = 100): the home page's build numbers */
+export const buildLarge = buildSizes[buildSizes.length - 1];
+
+/** One row of a workload, by key */
+export const buildRow = (size: BuildSizeTable | undefined, key: BuildKey) =>
+  size?.rows.find((row) => row.key === key);
+
+/**
+ * "14× smaller" / "小 14 倍", "on par" / "持平", or "—": the build ratio as the
+ * tables and charts print it
+ */
+export function buildRatioText(row: BuildMeasure, zh: boolean) {
+  if (row.verdict === 'par') return zh ? '持平' : 'on par';
+  if (row.verdict === 'none') return '—';
+  if (zh) return `${row.better === 'smaller' ? '小' : '快'} ${row.ratio} 倍`;
+  return `${row.ratio}× ${row.better}`;
+}
+
+/** As Nino's generator_report.py writes a ratio: one decimal below 10, whole from 10 */
+export const buildDecimals = (value: number) =>
+  value < 10 ? value.toFixed(1) : value.toFixed(0);
+
+/**
+ * The source line of the build tables and chart: the release, its date and
+ * runner, or the local run's note.
+ */
+export function buildSourceNote(zh: boolean): string {
+  if (buildSource.note) return zh ? buildSource.note.zh : buildSource.note.en;
+  const parts = [
+    `Nino ${buildSource.tag}`,
+    buildSource.publishedAt?.slice(0, 10),
+  ].filter(Boolean);
+  const env = buildSource.environment ?? '';
+  if (zh)
+    return `${parts.join('，')}。v3 3.3.13 和 v4 在同一台 GitHub runner 上先后运行${env ? `：${env}` : ''}。`;
+  return `${parts.join(', ')}. v3 3.3.13 and v4 ran one after the other on one GitHub runner${env ? `: ${env}` : ''}.`;
+}
 
 /* ------------------------------------------------------------------ */
 /* Headline numbers                                                    */

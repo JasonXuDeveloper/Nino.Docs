@@ -18,7 +18,11 @@
  * - the Unity section ("🎮 Unity benchmark (Burst, IL2CPP)": an IL2CPP player
  *   on GitHub's Linux x64 runner, each case timed without and with the Burst
  *   kernels, one "### Unity <version>" table per Unity version) into
- *   src/data/bench-unity.json, from the same release.
+ *   src/data/bench-unity.json, from the same release;
+ * - the build section ("🏗️ Build: v3 3.3.13 vs v4 (source generator)": Nino
+ *   v3 3.3.13's source generator against the release's on one x64 runner, at
+ *   330 and 1,100 types, written by Nino's benchmarks/reports/generator_report.py)
+ *   into src/data/bench-build.json, from the same release.
  *
  * The Performance Report and the Arm64 section have a row per method, and every
  * row is kept, whatever its method prefix (`MessagePack…`, `Protobuf…`,
@@ -29,7 +33,7 @@
  *
  *   bun scripts/sync-benchmarks.ts                       # newest v4.* release with a report
  *   bun scripts/sync-benchmarks.ts --fixture <file.md>   # parse a release body from a file
- *   bun scripts/sync-benchmarks.ts --fixture <file> --out <file.json> [--out-v3 <file.json>] [--out-arm64 <file.json>] [--out-runtimes <file.json>] [--out-unity <file.json>]
+ *   bun scripts/sync-benchmarks.ts --fixture <file> --out <file.json> [--out-v3 <file.json>] [--out-arm64 <file.json>] [--out-runtimes <file.json>] [--out-unity <file.json>] [--out-build <file.json>]
  *
  * Fixtures: scripts/fixtures/release-body.md (made-up numbers, the methods the
  * site requires), release-body-v3.md (with the v3 section),
@@ -43,7 +47,9 @@
  * a Unity section, with invented numbers: for parser tests only) and
  * release-body-workloads.md (release-body-unity.md plus WorkloadTest's rows
  * for every library in the x64 report and the Arm64 section, with invented
- * numbers: for parser tests only).
+ * numbers: for parser tests only) and release-body-build.md
+ * (release-body-workloads.md plus the build section, its numbers from Nino's
+ * benchmarks/reports/fixtures/generator: for parser tests only).
  *
  * Runs before every build. It never fails the build: on any error (network,
  * rate limit, no matching release, a table it cannot read) it prints a warning
@@ -53,7 +59,8 @@
  * release without any runtime section keeps src/data/bench-runtimes.json (a
  * language whose table it cannot read is left out, with a warning), and a
  * release without the Unity section (or with one it cannot read) keeps
- * src/data/bench-unity.json.
+ * src/data/bench-unity.json, and one without the build section (or with one
+ * it cannot read) keeps src/data/bench-build.json.
  * Set GITHUB_TOKEN to raise the API rate limit.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -78,6 +85,9 @@ const runtimesDataFile = fileURLToPath(
 
 const unityDataFile = fileURLToPath(
   new URL('../src/data/bench-unity.json', import.meta.url),
+);
+const buildDataFile = fileURLToPath(
+  new URL('../src/data/bench-build.json', import.meta.url),
 );
 
 /** Heading of the v3 section in the release body (report.yml's V3_HEADING) */
@@ -110,6 +120,25 @@ export type RuntimeLang = keyof typeof runtimeHeadings;
  * Unity version.
  */
 export const unityHeading = '## 🎮 Unity benchmark (Burst, IL2CPP)';
+
+/**
+ * Heading of the build section (Nino's benchmarks/reports/generator_report.py,
+ * HEADING): v3 3.3.13's source generator against the release's, one
+ * "### <types> types (N = <roots>)" table per workload.
+ */
+export const buildHeading = '## 🏗️ Build: v3 3.3.13 vs v4 (source generator)';
+
+/** The rows of each build table (generator_report.py's ROWS), in order: key and label */
+export const buildRows = [
+  ['source', 'Generated source'],
+  ['emit', 'Compiling the generated code (emit)'],
+  ['generate', 'Running the generator'],
+  ['member', 'Re-generating after editing a member'],
+  ['comment', 'Re-generating after editing a comment'],
+  ['il', 'IL of the generated code'],
+] as const;
+
+export type BuildKey = (typeof buildRows)[number][0];
 
 export interface BenchRow {
   method: string;
@@ -216,6 +245,53 @@ export interface UnityFile {
   /** The section's description of the run (Unity, player, CPU, Burst, kernels) */
   environment: string | null;
   versions: UnityVersion[];
+}
+
+/** One side (v3 or v4) of a build row */
+export interface BuildCell {
+  /** As published: "18.7 MB (363,233 lines)", "0.84 s" */
+  text: string;
+  /** In `unit`: 18.7, 0.84 */
+  value: number;
+  /** Millions of chars (source), of bytes (IL), or seconds */
+  unit: 'MB' | 's';
+  /** Lines of generated source (the source row only) */
+  lines?: number;
+}
+
+/** One row of a build table */
+export interface BuildRow {
+  key: BuildKey;
+  v3: BuildCell;
+  v4: BuildCell;
+  /** "14× smaller", "221× faster", "on par" or "—" (v4 not ahead), as published */
+  ratio: string;
+}
+
+/** One workload of the build section */
+export interface BuildSize {
+  types: number;
+  roots: number;
+  /** How many runs each time is the median of; null when the source does not say (a local run: see `note`) */
+  measured: { v3: number; v4: number } | null;
+  rows: BuildRow[];
+}
+
+/**
+ * src/data/bench-build.json. `origin: 'local'` (empty tag and url, a `note`
+ * naming the machine and the runs) is the committed file before any release
+ * had the build section.
+ */
+export interface BuildFile {
+  origin: 'release' | 'local' | 'fixture';
+  tag: string;
+  url: string;
+  publishedAt: string | null;
+  /** "<CPU>, <n> cores, <.NET runtime>, Roslyn <version>" */
+  environment: string | null;
+  /** Shown instead of the generated description (local runs only) */
+  note: { en: string; zh: string } | null;
+  sizes: BuildSize[];
 }
 
 interface Release {
@@ -630,6 +706,89 @@ export function parseUnitySection(body: string) {
   return { environment, versions };
 }
 
+/** "18.7 MB (363,233 lines)", "2.21 MB", "0.84 s", "1,234 s" -> a build cell; null if unreadable */
+export function parseBuildCell(text: string): BuildCell | null {
+  const value = clean(text);
+  const match = /^([\d,]*\.?\d+)\s*(MB|s)(?:\s*\(([\d,]+)\s+lines\))?$/.exec(
+    value,
+  );
+  if (!match) return null;
+  const cell: BuildCell = {
+    text: value,
+    value: number(match[1]),
+    unit: match[2] as BuildCell['unit'],
+  };
+  if (match[3]) cell.lines = number(match[3]);
+  return cell;
+}
+
+/**
+ * The build section: its Environment line, the measured runs its paragraph
+ * names ("v3: 3 at 330 types, 2 at 1,100 types; v4: ..."), and one table per
+ * "### <types> types (N = <roots>)" heading with the six rows of `buildRows`.
+ * Returns null when the body has none; throws when a table lacks a row, a cell
+ * cannot be read, or there is no Environment line or no table (generator_report.py's parse()).
+ */
+export function parseBuildSection(body: string) {
+  const start = body.indexOf(buildHeading);
+  if (start < 0) return null;
+  const section = sectionFrom(body, start);
+  const environment =
+    /^Environment:\s*(.+)$/m.exec(section)?.[1].trim() ?? null;
+
+  const runsOf = (side: 'v3' | 'v4') => {
+    const list = new RegExp(`\\b${side}: ([^;)]*)`).exec(section)?.[1] ?? '';
+    const runs = new Map<number, number>();
+    for (const m of list.matchAll(/(\d+) at ([\d,]+) types/g))
+      runs.set(number(m[2]), number(m[1]));
+    return runs;
+  };
+  const v3Runs = runsOf('v3');
+  const v4Runs = runsOf('v4');
+
+  const labels = new Map<string, BuildKey>(
+    buildRows.map(([key, label]) => [label, key]),
+  );
+  const sizes: BuildSize[] = [];
+  for (const part of section.split(/\n###\s+/).slice(1)) {
+    const head = /^([\d,]+) types \(N = (\d+)\)/.exec(part);
+    if (!head) continue;
+    const types = number(head[1]);
+    const byKey = new Map<BuildKey, BuildRow>();
+    for (const table of tables(part)) {
+      if (table.length < 3 || !isSeparator(table[1])) continue;
+      for (const row of table.slice(2)) {
+        const key = labels.get(row[0] ?? '');
+        if (!key || row.length !== 4) continue;
+        const v3 = parseBuildCell(row[1]);
+        const v4 = parseBuildCell(row[2]);
+        if (!v3 || !v4)
+          throw new Error(
+            `the build table of ${head[1]} types has a cell it cannot read in "${row[0]}": ${row[1]} | ${row[2]}`,
+          );
+        byKey.set(key, { key, v3, v4, ratio: row[3] });
+      }
+    }
+    const missing = buildRows.filter(([key]) => !byKey.has(key));
+    if (missing.length > 0)
+      throw new Error(
+        `the build table of ${head[1]} types lacks rows: ${missing.map(([, label]) => label).join(', ')}`,
+      );
+    const v3 = v3Runs.get(types);
+    const v4 = v4Runs.get(types);
+    sizes.push({
+      types,
+      roots: number(head[2]),
+      measured: v3 !== undefined && v4 !== undefined ? { v3, v4 } : null,
+      rows: buildRows.map(([key]) => byKey.get(key) as BuildRow),
+    });
+  }
+  if (!environment || sizes.length === 0)
+    throw new Error('the build section has no Environment line or no table');
+  sizes.sort((a, b) => a.types - b.types);
+  return { environment, sizes };
+}
+
 /**
  * Every method the site shows (src/lib/benchmarks.ts). A report without all of
  * them is not used: the site keeps one consistent run instead of mixing runs.
@@ -762,6 +921,11 @@ function unitySummary(file: UnityFile) {
     .map((v) => `Unity ${v.unity} (${v.rows.length} rows)`)
     .join(', ');
   return `${versions} from ${file.tag} (${file.origin})`;
+}
+
+function buildSummary(file: BuildFile) {
+  const sizes = file.sizes.map((size) => `${size.types} types`).join(', ');
+  return `${sizes} from ${file.tag || 'a local run'} (${file.origin})`;
 }
 
 function write(out: string, data: unknown) {
@@ -985,6 +1149,37 @@ function syncUnity(release: Release, out: string | undefined) {
   }
 }
 
+/**
+ * The build section of the release the .NET numbers came from; keeps the
+ * committed file when it has none or it cannot be read.
+ */
+function syncBuild(release: Release, out: string | undefined) {
+  const kept = () => {
+    const file = JSON.parse(readFileSync(buildDataFile, 'utf8')) as BuildFile;
+    return `keeping src/data/bench-build.json (${buildSummary(file)})`;
+  };
+  try {
+    const build = parseBuildSection(release.body ?? '');
+    if (!build) {
+      console.warn(
+        `[benchmarks] ${release.tag_name} has no "${buildHeading}" section; ${kept()}`,
+      );
+      return;
+    }
+    const file: BuildFile = { ...releaseOrigin(release), ...build, note: null };
+    write(out ?? buildDataFile, buildFile(file));
+    console.log(`[benchmarks] synced build: ${buildSummary(file)}`);
+  } catch (error) {
+    console.warn(`[benchmarks] warning: ${message(error)}; ${kept()}`);
+  }
+}
+
+/** Keys in the committed file's order */
+function buildFile(file: BuildFile): BuildFile {
+  const { origin, tag, url, publishedAt, environment, note, sizes } = file;
+  return { origin, tag, url, publishedAt, environment, note, sizes };
+}
+
 /** Fixture mode: every section the file has, written to --out* or printed */
 function fixture(path: string) {
   const body = readFileSync(path, 'utf8');
@@ -1033,6 +1228,12 @@ function fixture(path: string) {
     const file: UnityFile = { ...fixtureOrigin, ...unity };
     output('--out-unity', file, `Unity: ${unitySummary(file)}`);
   } else console.log('[benchmarks] fixture has no Unity section');
+
+  const build = parseBuildSection(body);
+  if (build) {
+    const file = buildFile({ ...fixtureOrigin, ...build, note: null });
+    output('--out-build', file, `build: ${buildSummary(file)}`);
+  } else console.log('[benchmarks] fixture has no build section');
 }
 
 async function main() {
@@ -1058,10 +1259,11 @@ async function main() {
     await syncArm64(release, argument('--out-arm64'));
     syncRuntimes(release, argument('--out-runtimes'));
     syncUnity(release, argument('--out-unity'));
+    syncBuild(release, argument('--out-build'));
   } catch (error) {
     const kept = JSON.parse(readFileSync(dataFile, 'utf8')) as BenchFile;
     console.warn(
-      `[benchmarks] warning: ${message(error)}; keeping src/data/bench-v4.json (${summary(kept)}), src/data/bench-v3-runtime.json, src/data/bench-v4-arm64.json, src/data/bench-runtimes.json and src/data/bench-unity.json`,
+      `[benchmarks] warning: ${message(error)}; keeping src/data/bench-v4.json (${summary(kept)}), src/data/bench-v3-runtime.json, src/data/bench-v4-arm64.json, src/data/bench-runtimes.json, src/data/bench-unity.json and src/data/bench-build.json`,
     );
   }
 }
