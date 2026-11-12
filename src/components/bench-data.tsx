@@ -1366,8 +1366,16 @@ function buildValue(k: string): string {
     return lo === hi ? String(lo) : `${lo}–${hi}`;
   };
   switch (k) {
+    case 'build.types.small':
+      return small.types.toLocaleString('en-US');
+    case 'build.types.large':
+      return large.types.toLocaleString('en-US');
     case 'build.types.growth':
       return buildDecimals(large.types / small.types);
+    case 'build.v4.emit.growth': {
+      const [a, b] = [emit(small), emit(large)];
+      return a && b ? buildDecimals(b.v4n / a.v4n) : '—';
+    }
     case 'build.v3.emit.growth': {
       const [a, b] = [emit(small), emit(large)];
       return a && b ? buildDecimals(b.v3n / a.v3n) : '—';
@@ -1403,9 +1411,10 @@ function buildValue(k: string): string {
  * serialize:<case key> / deserialize:<case key> (ratio of one case against
  * MemoryPack; serialize:<case key>:messagepack or :protobuf against that library),
  * or a build-time value from the source generator benchmark (no unit, the page
- * writes it): build.types.growth (how many times the types of the larger
- * workload), build.v3.emit.growth (how many times v3's emit time grew with
- * them), build.v4.source.perType (KB of v4 source per type, "4" or "4–5") and
+ * writes it): build.types.small and build.types.large (the two workloads'
+ * type counts), build.types.growth (how many times the types of the larger
+ * workload), build.v3.emit.growth and build.v4.emit.growth (how many times
+ * each version's emit time grew with them), build.v4.source.perType (KB of v4 source per type, "4" or "4–5") and
  * build.v4.emit.perType (ms of v4 emit time per type, "2–3").
  */
 export function BenchValue({ k }: { k: string }) {
