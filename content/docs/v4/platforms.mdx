@@ -11,7 +11,7 @@ Nino runs on .NET Standard 2.0 and later, Unity 2022.3+ (Mono and IL2CPP) and Go
 
 | Component | Targets |
 | --- | --- |
-| `Nino.Core` (runtime) | `netstandard2.0`, `netstandard2.1`, `net8.0`, `net10.0`; .NET 11 projects use the `net10.0` build, and the unit tests run on .NET 11 |
+| `Nino.Core` (runtime) | `netstandard2.0`, `netstandard2.1`, `net8.0`, `net10.0` |
 | `Nino.Generator` (generator, analyzer) | Roslyn 4.3 and later; builds for Roslyn 4.3, 4.8 and 4.12 in one package |
 | `Nino.Immutable` (immutable collections) | `netstandard2.0`, `net8.0` |
 | `Nino.AspNetCore` ([ASP.NET Core](/en/docs/v4/advanced/aspnetcore)) | `net8.0`, `net10.0` |
@@ -21,6 +21,8 @@ Nino runs on .NET Standard 2.0 and later, Unity 2022.3+ (Mono and IL2CPP) and Go
 | Godot | Godot 4 .NET projects (.NET 8 from Godot 4.4, .NET 6 before) |
 | Hot update | HybridCLR, with no initialization call |
 | Trimming and Native AOT | annotated in the `net8.0` and `net10.0` builds ([details](#trimming-and-native-aot)) |
+
+A .NET 11 project uses the `net10.0` build of each package (with its trimming and Native AOT annotations); the unit tests run on .NET 11 too.
 
 **Every target writes identical bytes.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` each use the best primitives available to them ([SIMD](#simd), `[UnsafeAccessor]` on .NET 8+), and the test suite checks the same golden payloads against each build. Data written by a .NET 10 server can be read by a Unity IL2CPP client on a 32-bit Android phone, and the other way round.
 
