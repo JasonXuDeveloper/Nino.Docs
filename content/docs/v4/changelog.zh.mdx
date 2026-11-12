@@ -24,10 +24,10 @@ icon: RotateCcwClock
 ### 性能 [#performance-5]
 
 - **直接写进任意 `IBufferWriter<byte>`**：以前只有原始值能直接写进外部的写入器，别的都要先写进 Nino 的暂存缓冲区再拷过去。现在原始值的数组、列表和[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)也是按大小调一次 `GetSpan`，直接写进 `PipeWriter`、`ArrayBufferWriter<byte>` 这类写入器。.NET Standard 2.1 及以上还包括原始值的 `ArraySegment<T>`、底层是数组的 `Memory<T>` 和只有一段的 `ReadOnlySequence<T>`，.NET 8 及以上再加上原始值的多维数组。其余的值照旧拷贝一次。详见[序列化到任意 IBufferWriter](/zh/docs/v4/advanced/high-performance#serialize-into-any-ibufferwriter)。
-- **原始键值的 `SortedList`**：键值对一次向量遍历写完（netstandard 版本用 `Interleave32` 内核）。和 MemoryPack 的对比见[基准测试](/zh/docs/v4/benchmarks)。
-- **接口类型的集合**：声明成 `IEnumerable<T>`、`ICollection<T>`、`IList<T>`、各种 `IReadOnly*` 接口或 `ReadOnlyCollection<T>` 的成员，以前都是一个个枚举着写。现在只要集合本身实现了 `ICollection<T>`：元素大小固定的，先拷进池化数组再整块写出；其他类型的元素有 16 个及以上时，也先一次性拷出来再写。`ILookup<TKey, TElement>` 的分组同样处理。写出的字节不变。
-- **`BitArray`**：位数据直接写进输出。
-- **多态集合**：基类或接口的数组、列表在循环里直接写各个子类型，嵌套深度每个元素只查一次，不再每个子类型查一次。
+- **原始键值的 `SortedList`**：键值对一次向量遍历写完（netstandard 版本用 `Interleave32` 内核）：1,000 对 `int` 序列化在 x64 上快 15.7-17.1 倍、Arm64 上快 12.3 倍，反序列化分别快 2.0-2.8 倍和 1.9 倍（GitHub 的 x64 runner：Intel Xeon 8370C、8573C，AMD EPYC 7763、9V45、9V74；Arm64：Neoverse-N2）。和 MemoryPack 的对比见[基准测试](/zh/docs/v4/benchmarks)。
+- **接口类型的集合**：声明成 `IEnumerable<T>`、`ICollection<T>`、`IList<T>`、各种 `IReadOnly*` 接口或 `ReadOnlyCollection<T>` 的成员，以前都是一个个枚举着写。现在只要集合本身实现了 `ICollection<T>`：元素大小固定的，先拷进池化数组再整块写出；其他类型的元素有 16 个及以上时，也先一次性拷出来再写。`ILookup<TKey, TElement>` 的分组同样处理。1,000 个值的 `ReadOnlyCollection<int>` 序列化在 x64 上快 16-23 倍、Arm64 上快 18.9 倍；1,000 个元素的 `ILookup<int, int>` 分别快 5.0-6.6 倍和 4.8 倍；经 `IReadOnlyList<string>` 写 1,000 个字符串，分别快 1.16-1.32 倍和 1.17 倍（GitHub 的 x64 runner：Intel Xeon 8370C、8573C，AMD EPYC 7763、9V45、9V74；Arm64：Neoverse-N2）。写出的字节不变。
+- **`BitArray`**：位数据直接写进输出，1,000 位的序列化在 x64 上快 2.0-2.2 倍、Arm64 上快 2.5 倍（GitHub 的 x64 runner：Intel Xeon 8370C、8573C，AMD EPYC 7763、9V45、9V74；Arm64：Neoverse-N2）。
+- **多态集合**：基类或接口的数组、列表在循环里直接写各个子类型，嵌套深度每个元素只查一次，不再每个子类型查一次：8 种类型、1,000 个子类型实例的数组，无论经非泛型基类还是封闭泛型基类，序列化在 x64 上快 1.13-1.49 倍、Arm64 上快 1.40-1.46 倍（GitHub 的 x64 runner：Intel Xeon 8370C、8573C，AMD EPYC 7763、9V45、9V74；Arm64：Neoverse-N2）。
 - **.NET 9 和 11 上的 `ConcurrentStack<T>`**：原始元素的免分配写入以前只在 .NET 8 和 10 上生效，现在 .NET 8 及以上都直接读它的节点。
 
 ### 修复 [#fixes-7]
