@@ -1,7 +1,7 @@
 ---
 title: Nino 与 MemoryPack 对比
 seoTitle: "Nino 与 MemoryPack 对比：C# 序列化的速度、不可信输入与功能 – Nino v4 文档"
-description: "Nino v4 对比 MemoryPack 1.21.4（我们所知最快的 C# 二进制序列化库）：同一次运行的基准测试、读取不可信数据、功能对照、各自强在哪里，以及从 [MemoryPackable] 换到 [NinoType]。"
+description: "Nino v4 对比 MemoryPack 1.22.0（我们所知最快的 C# 二进制序列化库）：同一次运行的基准测试、读取不可信数据、功能对照、各自强在哪里，以及从 [MemoryPackable] 换到 [NinoType]。"
 icon: Swords
 ---
 
@@ -12,7 +12,7 @@ icon: Swords
   }}
 />
 
-[MemoryPack](https://github.com/Cysharp/MemoryPack) 是一个出色的序列化库，也是我们给 Nino 定的对标。这一页对比 Nino v4 和 MemoryPack **1.21.4**：MemoryPack 的功能以它自己的 README 为准，Nino 的以 Nino 源码为准。哪一边核实不了的功能，就不列。想看其他语言也能读的格式，见 [Nino 与 MessagePack 对比](/zh/docs/v4/vs-messagepack)和 [Nino 与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net)。
+[MemoryPack](https://github.com/Cysharp/MemoryPack) 是一个出色的序列化库，也是我们给 Nino 定的对标。这一页对比 Nino v4 和 MemoryPack **1.22.0**：MemoryPack 的功能以它自己的 README 为准，Nino 的以 Nino 源码为准。哪一边核实不了的功能，就不列。想看其他语言也能读的格式，见 [Nino 与 MessagePack 对比](/zh/docs/v4/vs-messagepack)和 [Nino 与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net)。
 
 ## 不可信输入 [#untrusted-input]
 
@@ -76,20 +76,22 @@ Nino 生来就是为读不可信数据设计的，快速路径也守着这些保
 
 拷贝填充，代价不只是体积：
 
-- **填充是内存里原来的东西。** 相等的值可能序列化成不同的字节，残留的内存也跟着写出去。用 MemoryPack 1.21.4 测：两个值相等的 `InventoryItem[2]`，其中一个在原先装满 `0xCD` 的缓冲区里构造，序列化出来的字节就不一样，每个填充字节都是 `CD`；同样构造的 `List<(int, long)>`，每个元素后面都跟着 `CDCDCDCD`。Nino 给两者写的字节一样，填充为零。
+- **填充是内存里原来的东西。** 相等的值可能序列化成不同的字节，残留的内存也跟着写出去。用 MemoryPack 1.22.0 测：两个值相等的 `InventoryItem[2]`，其中一个在原先装满 `0xCD` 的缓冲区里构造，序列化出来的字节就不一样，每个填充字节都是 `CD`；同样构造的 `List<(int, long)>`，每个元素后面都跟着 `CDCDCDCD`。Nino 给两者写的字节一样，填充为零。
+- **可空值也一样。** MemoryPack 把 `T?` 也按内存原样写出（标志位、填充、值），一个 `int?` 就会带上 3 个字节的内存残留。1.22.0 为此加了 `SafeNullable<T>`，要你用它替换 `T?`；它没有填充，但只有 `T` 是基元类型或枚举时，字节才和 `T?` 兼容。Nino 不需要这种类型：`T?` 成员写成一个存在标志加值；raw 值的 `T?[]` 和 `List<T?>`（[固定步长](/zh/docs/v4/wire-format#collections)），以及 raw 结构体里的 `Nullable` 字段，填充写 0，没有值时值的部分也写 0。
 - **布局跟着平台走。** `(int, long)` 在 Windows 的 32 位 x86 .NET 上占 12 字节内存，在 x64 和 Arm32 上占 16 字节（.NET 10 在各目标上的布局，从 crossgen2 为它编译出的代码里读出），所以照搬内存的话，到了那里大小就变了。Mono 上元素的顺序也不一样：见[基准测试中发现的 MemoryPack 问题](#memorypack-bugs-found-while-benchmarking)。
 
 Nino 跨平台、跨运行时字节一致：[原始值](/zh/docs/v4/wire-format#raw-values)按 64 位布局写，填充清零；元组逐个元素写。
 
 ## 功能矩阵 [#feature-matrix]
 
-<Matrix columns={['Nino v4', 'MemoryPack 1.21.4']} rows={[
+<Matrix columns={['Nino v4', 'MemoryPack 1.22.0']} rows={[
   { group: '平台' },
   { label: '最低 .NET 目标', cells: [['yes', <><code>netstandard2.0</code></>], ['partial', <><code>netstandard2.1</code>（以及 <code>net7.0</code>+）</>]] },
   { label: 'Unity', cells: ['yes: 2022.3+，OpenUPM 包', 'yes: 2022.3.12f1+，NuGetForUnity 加 git 包'] },
   { label: 'IL2CPP / Native AOT', cells: ['yes: 源生成，序列化时无反射', 'yes: 源生成，无 IL.Emit'] },
   { label: '各运行时和 CPU 字节一致', cells: ['yes: 规范布局，在 32 位和旧版 Mono 上转换', 'partial: 非托管结构体按内存布局原样拷贝'] },
-  { label: '确定性输出（填充清零）', cells: ['yes', 'no: 填充原样拷贝'] },
+  { label: '确定性输出（填充清零）', cells: [['yes', <>填充写 0，<code>T?</code> 没有值时值的部分也写 0</>], ['partial', <>填充原样拷贝；<code>T?</code> 要换成 <code>SafeNullable&lt;T&gt;</code></>]] },
+  { label: <><code>DateTimeOffset</code> 跨运行时可读</>, cells: ['yes: UTC ticks 加偏移分钟数，各处字节相同', ['partial', <>按内存布局写，.NET 9 及更早、.NET 10、Unity 三者各不相同；要换成 <code>Net10DateTimeOffset</code> 或 <code>UnityDateTimeOffset</code>（MEMPACK043）</>]] },
   { group: '定义类型' },
   { label: <>需要 <code>partial</code></>, cells: [['partial', <>只有 <code>[NinoPooled]</code> 类，以及在 .NET 8 之前（泛型类型：.NET 9 之前）序列化非公开成员时需要</>], 'yes: 总是需要'] },
   { label: '私有成员', cells: [['yes', <><code>includeNonPublicMembers</code></>], ['yes', <><code>[MemoryPackInclude]</code></>]] },
@@ -116,7 +118,7 @@ Nino 跨平台、跨运行时字节一致：[原始值](/zh/docs/v4/wire-format#
   { label: '反序列化到已有实例', cells: ['yes: 按索引复用元素，按键合并字典', 'partial: 数组只在长度相同时复用；集合先清空再填'] },
   { label: '对象池', cells: [['yes', <><code>[NinoPooled]</code>、工厂方法、被丢弃实例的回收器</>], ['partial', <><code>MemoryPoolFormatter&lt;T&gt;</code> 从 <code>ArrayPool</code> 租用数组</>]] },
   { group: '工具' },
-  { label: '分析器', cells: ['yes: NINO001–NINO044，许多带代码修复', ['yes', <>35 条规则，<code>MEMPACK001</code>–<code>MEMPACK035</code></>]] },
+  { label: '分析器', cells: ['yes: NINO001–NINO044，许多带代码修复', ['yes', <>42 条规则，<code>MEMPACK001</code>、<code>MEMPACK003</code>–<code>MEMPACK043</code></>]] },
   { label: '编译期调用拦截', cells: ['yes: Roslyn 4.8+（.NET 8 SDK）', 'n/a: 未见文档说明'] },
   { label: '逐字节解读一条消息', cells: [['yes', <><a href="/zh/docs/v4/advanced/codegen#inspect"><code>nino-gen inspect</code></a>，按你程序集里的布局解读</>], 'n/a: 未见文档说明'] },
   { group: 'I/O 与集成' },
@@ -240,10 +242,10 @@ MemoryPack 写 1 字节的 Union 标签（超过 249 时 3 字节），Nino 写 
 
 ## 基准测试中发现的 MemoryPack 问题 [#memorypack-bugs-found-while-benchmarking]
 
-对比两个库都支持的所有内置类型时，我们在计时之前先让每个值在 MemoryPack 1.21.4 里写出再读回一次。两个类型没通过，所以基准测试里这两个只测 Nino；还有一个换个运行时就读错：
+对比两个库都支持的所有内置类型时，我们在计时之前先让每个值在 MemoryPack 里写出再读回一次。1.22.0 里有一个类型没通过，所以基准测试里它只测 Nino；另一个到 1.21.4 为止都有问题；还有一个换个运行时就读错：
 
-- **`BigInteger`。** 它的格式化器在 255 字节的栈缓冲区上写的是 `temp.Slice(written)`，本意是 `temp.Slice(0, written)`：写出去的是缓冲区没用到的尾巴，不是这个值。255 字节以内的 `BigInteger`（包括 `3^10`）读回来都变成了别的值，哪个运行时都一样；更大的值走另一条路径，能正确读回。
-- **.NET 10 上的 `BitArray`。** 它的格式化器把 `BitArray` 强转成 `{ int[] m_array; int m_length }`，那是 .NET 8 上的布局。.NET 10 的 `BitArray` 里存的是 `byte[] _array`，于是 MemoryPack 写出错的字节，读的时候还会破坏堆，把进程搞崩。
+- **`BigInteger`。** 它的格式化器在 255 字节的栈缓冲区上写的是 `temp.Slice(written)`，本意是 `temp.Slice(0, written)`：写出去的是缓冲区没用到的尾巴，不是这个值。255 字节以内的 `BigInteger`（包括 `3^10`）读回来都变成了别的值（1.22.0 里是 0），哪个运行时都一样；更大的值走另一条路径，能正确读回。
+- **.NET 10 上的 `BitArray`（1.21.4 及更早）。** 当时它的格式化器把 `BitArray` 强转成 `{ int[] m_array; int m_length }`，那是 .NET 8 上的布局。.NET 10 的 `BitArray` 里存的是 `byte[] _array`，于是 MemoryPack 写出错的字节，读的时候还会破坏堆，把进程搞崩。1.22.0 改成经公开 API 读写，基准测试里两个库都测。
 
 - **跨运行时的非托管元组。** MemoryPack 把非托管值（包括 `(int, long)`）按内存原样拷贝。`ValueTuple` 是 `LayoutKind.Auto`：CoreCLR 把 `long` 排在前面，Mono 按声明顺序排。所以在 .NET 上写的 `(1, 2L)`（`02000000 00000000 01000000 00000000`，最后 4 字节是填充），到 Mono 上读回来（Mono 6.8 实测）是 `(2, 1)`，Unity 也一样，它的 Mono 和 IL2CPP 后端都这样排元组；填充字节写出去的也是内存里残留的东西。基准测试里的 `(int, long)` 列表只在 .NET 上能正确读回。
 

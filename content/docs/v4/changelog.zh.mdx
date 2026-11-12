@@ -31,6 +31,7 @@ icon: RotateCcwClock
 - **检查过支持情况之后才注册的格式化器**：`NinoSerializer.IsSupported` 和 Nino.AspNetCore 的 MVC 格式化器对某个类型答过“不支持”之后，再为它注册格式化器，现在也能认出来；MVC 只在 Native AOT 下缓存“不支持”，因为那里之后不会再有新的注册。参见 [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)。
 - **预取不再执行你的 getter**：开启 [`NinoPrefetchLargeCollections`](/zh/docs/v4/advanced/type-design#large-collections) 后，预取集合里的对象只读字段，以及不会被重写替换掉的自动属性；以前虚自动属性被子类用自己的 getter 重写时，每个对象会多调用一次这个 getter。
 - **Go 和 TypeScript 限制一次读取预先分配的内存**：以前集合长度只和剩余字节数比，嵌套的集合可以一层层重复声称这些字节，1 MB 的恶意数据在 Go 里能分配约 1 GB（直接内存耗尽崩溃，不是返回错误），在 Node 里也会让进程中止。现在一次读取里所有集合共用一份预分配额度：每字节数据 16 字节，再加 16 KB，和 Rust 的读取一样，超出部分边读边扩容；nino-gen 生成的 TypeScript 读取代码也用它（需要重新生成）。Go 的 `ReadShape` 还会把多维数组的每个元素至少算作一个字节。参见 [Go](/zh/docs/v4/advanced/go#untrusted-data) 和 [TypeScript](/zh/docs/v4/advanced/typescript#untrusted-data)。
+- **没有值的 `Nullable` 写成 0**：raw 值的 `T?[]` 和 `List<T?>`，以及带 `Nullable` 字段的 raw 结构体，原先对每个 null 都按内存里的样子拷贝值的那几个字节。如果某个 `T?` 所在的内存从没被赋值过（未初始化或租来的数组、经 `Unsafe` 构造的结构体），旧字节就会写到线上，相等的值也可能序列化出不同的字节。现在这部分一律写 0，和[线格式](/zh/docs/v4/wire-format#raw-values)的规定一致；`byte?` 到 `long?`、`double?` 和 `DateTime?` 的清零放在向量拷贝里一起做。正常赋值的值，写出的字节和以前一样。
 - **Rust 能读某一维为 0 的多维数组**：.NET 写出的 `new int[1000, 0]` 这类多维数组，Rust 不再读失败；另一维为 0 时，超过 .NET 数组上限的维度也会被拒绝。
 
 </Release>

@@ -65,7 +65,7 @@ Nino 仓库的 [docs/spec/wire-format.md](https://github.com/JasonXuDeveloper/Ni
 
 ## 原始值 [#raw-values]
 
-非托管值（基元类型、枚举、不是 `[NinoType]` 的非托管结构体，或符合条件的 `[NinoType]` 结构体）按**规范布局**整块写出。规范布局就是 64 位 CoreCLR 给它的布局：每个字段按自然对齐（`decimal` 对齐到 8，`Int128` 对齐到 16），填充写零。所有运行时写出的字节都一样：自身布局不同时（32 位平台、Mono 和 IL2CPP、.NET Framework 上的部分结构体），Nino 逐字段转换。`Nullable<T>`、`ValueTuple`、`KeyValuePair` 和 `DateTimeOffset` 单独出现时从不按原始值写，而是逐项写。放在非托管结构体里时，它们属于结构体的那一整块，同样用规范布局：值元组的各项放在 64 位 CoreCLR 放的位置（较大的基元项在前，所以 `(int, long)` 先 `long` 后 `int`）；`KeyValuePair` 先键后值；`DateTimeOffset` 按 .NET 10 的存法（先是 `int` 型的偏移分钟数，UTC 时间从第 8 字节开始）；`nint`/`nuint` 占 8 字节。SIMD 向量（`Vector64<T>` 到 `Vector512<T>`）按 x64 的方式对齐；`Vector<T>` 的宽度由 CPU 决定（16、32 或 64 字节），[不能序列化](/zh/docs/v4/struct-layouts#vector-t)。各运行时的差异见[结构体布局](/zh/docs/v4/struct-layouts)。
+非托管值（基元类型、枚举、不是 `[NinoType]` 的非托管结构体，或符合条件的 `[NinoType]` 结构体）按**规范布局**整块写出。规范布局就是 64 位 CoreCLR 给它的布局：每个字段按自然对齐（`decimal` 对齐到 8，`Int128` 对齐到 16），填充写零；`Nullable` 字段没有值时，值的部分也写零。所有运行时写出的字节都一样：自身布局不同时（32 位平台、Mono 和 IL2CPP、.NET Framework 上的部分结构体），Nino 逐字段转换。`Nullable<T>`、`ValueTuple`、`KeyValuePair` 和 `DateTimeOffset` 单独出现时从不按原始值写，而是逐项写。放在非托管结构体里时，它们属于结构体的那一整块，同样用规范布局：值元组的各项放在 64 位 CoreCLR 放的位置（较大的基元项在前，所以 `(int, long)` 先 `long` 后 `int`）；`KeyValuePair` 先键后值；`DateTimeOffset` 按 .NET 10 的存法（先是 `int` 型的偏移分钟数，UTC 时间从第 8 字节开始）；`nint`/`nuint` 占 8 字节。SIMD 向量（`Vector64<T>` 到 `Vector512<T>`）按 x64 的方式对齐；`Vector<T>` 的宽度由 CPU 决定（16、32 或 64 字节），[不能序列化](/zh/docs/v4/struct-layouts#vector-t)。各运行时的差异见[结构体布局](/zh/docs/v4/struct-layouts)。
 
 <Callout type="warn" title="原始字节按原样复制">
 

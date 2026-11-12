@@ -1,7 +1,7 @@
 ---
 title: Nino vs MemoryPack
 seoTitle: "Nino vs MemoryPack: Speed, Untrusted Input and Features in C# – Nino v4 Docs"
-description: "Nino v4 compared with MemoryPack 1.21.4, the fastest C# binary serializer we know: benchmarks from the same run, reading untrusted data, a feature matrix, where each is ahead, and switching from [MemoryPackable] to [NinoType]."
+description: "Nino v4 compared with MemoryPack 1.22.0, the fastest C# binary serializer we know: benchmarks from the same run, reading untrusted data, a feature matrix, where each is ahead, and switching from [MemoryPackable] to [NinoType]."
 icon: Swords
 ---
 
@@ -12,7 +12,7 @@ icon: Swords
   }}
 />
 
-[MemoryPack](https://github.com/Cysharp/MemoryPack) is an excellent serializer and the one we measure Nino against. This page compares Nino v4 with MemoryPack **1.21.4**, using MemoryPack's own README for its features and Nino's source for Nino's. Where we could not verify a feature on either side, it is left out. For the formats other languages read, see [Nino vs MessagePack](/en/docs/v4/vs-messagepack) and [Nino vs protobuf-net](/en/docs/v4/vs-protobuf-net).
+[MemoryPack](https://github.com/Cysharp/MemoryPack) is an excellent serializer and the one we measure Nino against. This page compares Nino v4 with MemoryPack **1.22.0**, using MemoryPack's own README for its features and Nino's source for Nino's. Where we could not verify a feature on either side, it is left out. For the formats other languages read, see [Nino vs MessagePack](/en/docs/v4/vs-messagepack) and [Nino vs protobuf-net](/en/docs/v4/vs-protobuf-net).
 
 ## Untrusted Input [#untrusted-input]
 
@@ -76,20 +76,22 @@ Two cases of the [common types and collections](/en/docs/v4/benchmarks#common-ty
 
 Copying the padding costs more than size:
 
-- **The padding is whatever the memory held.** Equal values can serialize to different bytes, and stale memory goes out with them. In a test with MemoryPack 1.21.4, two `InventoryItem[2]` with equal values, one of them built in a buffer that had held `0xCD` bytes, serialized to different bytes, with `CD` in each padding byte; a `List<(int, long)>` built the same way carried `CDCDCDCD` after every item. Nino wrote the same bytes for both, padding zero.
+- **The padding is whatever the memory held.** Equal values can serialize to different bytes, and stale memory goes out with them. In a test with MemoryPack 1.22.0, two `InventoryItem[2]` with equal values, one of them built in a buffer that had held `0xCD` bytes, serialized to different bytes, with `CD` in each padding byte; a `List<(int, long)>` built the same way carried `CDCDCDCD` after every item. Nino wrote the same bytes for both, padding zero.
+- **Nullable values carry it too.** MemoryPack writes a `T?` as its memory (the flag, padding, the value), so an `int?` carries 3 bytes of whatever was there. Its 1.22.0 adds `SafeNullable<T>`, a type without padding to use instead of `T?`, compatible with `T?`'s bytes only for primitives and enums. Nino needs no such type: a `T?` member is a presence byte and the value, and a `T?[]` or `List<T?>` of raw values (the [fixed stride](/en/docs/v4/wire-format#collections)) and a `Nullable` field inside a raw struct are written with their padding, and the value of each one without a value, as zeros.
 - **The layout is the platform's.** `(int, long)` is 12 bytes in memory on 32-bit x86 .NET for Windows, and 16 on x64 and Arm32 (.NET 10's layout for each target, read from the code crossgen2 compiles for it), so a copy of its memory has another size there. On Mono the items are also in another order: see [MemoryPack Bugs Found While Benchmarking](#memorypack-bugs-found-while-benchmarking).
 
 Nino's bytes are the same on every platform: [raw values](/en/docs/v4/wire-format#raw-values) in the 64-bit layout with zeroed padding, tuples item by item.
 
 ## Feature Matrix
 
-<Matrix columns={['Nino v4', 'MemoryPack 1.21.4']} rows={[
+<Matrix columns={['Nino v4', 'MemoryPack 1.22.0']} rows={[
   { group: 'Platforms' },
   { label: 'Minimum .NET target', cells: [['yes', <><code>netstandard2.0</code></>], ['partial', <><code>netstandard2.1</code> (and <code>net7.0</code>+)</>]] },
   { label: 'Unity', cells: ['yes: 2022.3+, OpenUPM package', 'yes: 2022.3.12f1+, NuGetForUnity plus a git package'] },
   { label: 'IL2CPP / Native AOT', cells: ['yes: source generated, no reflection when serializing', 'yes: source generated, no IL.Emit'] },
   { label: 'Same bytes on every runtime and CPU', cells: ['yes: canonical layout, converted on 32-bit and old Mono', 'partial: unmanaged structs are copied as laid out in memory'] },
-  { label: 'Deterministic output (padding zeroed)', cells: ['yes', 'no: padding is copied as is'] },
+  { label: 'Deterministic output (padding zeroed)', cells: [['yes', <>padding, and the value of a <code>T?</code> without one, written as zeros</>], ['partial', <>padding copied as is; <code>SafeNullable&lt;T&gt;</code> in place of <code>T?</code></>]] },
+  { label: <><code>DateTimeOffset</code> readable across runtimes</>, cells: ['yes: UTC ticks and offset minutes, the same bytes everywhere', ['partial', <>its memory layout, different on .NET 9 and earlier, .NET 10 and Unity; <code>Net10DateTimeOffset</code> or <code>UnityDateTimeOffset</code> in its place (MEMPACK043)</>]] },
   { group: 'Defining types' },
   { label: <><code>partial</code> required</>, cells: [['partial', <>only for <code>[NinoPooled]</code> classes, and for non-public members before .NET 8 (generic types: before .NET 9)</>], 'yes: always'] },
   { label: 'Private members', cells: [['yes', <><code>includeNonPublicMembers</code></>], ['yes', <><code>[MemoryPackInclude]</code></>]] },
@@ -116,7 +118,7 @@ Nino's bytes are the same on every platform: [raw values](/en/docs/v4/wire-forma
   { label: 'Deserialize into an existing instance', cells: ['yes: reuses elements by index, merges dictionaries', 'partial: arrays reused only at the same length; collections cleared and refilled'] },
   { label: 'Object pools', cells: [['yes', <><code>[NinoPooled]</code>, factories, recycler for dropped instances</>], ['partial', <><code>MemoryPoolFormatter&lt;T&gt;</code> rents arrays from <code>ArrayPool</code></>]] },
   { group: 'Tooling' },
-  { label: 'Analyzer', cells: ['yes: NINO001–NINO044, many with code fixes', ['yes', <>35 rules, <code>MEMPACK001</code>–<code>MEMPACK035</code></>]] },
+  { label: 'Analyzer', cells: ['yes: NINO001–NINO044, many with code fixes', ['yes', <>42 rules, <code>MEMPACK001</code>, <code>MEMPACK003</code>–<code>MEMPACK043</code></>]] },
   { label: 'Compile-time call interception', cells: ['yes: Roslyn 4.8+ (.NET 8 SDK)', 'n/a: not documented'] },
   { label: 'Decode a payload byte by byte', cells: [['yes', <><a href="/en/docs/v4/advanced/codegen#inspect"><code>nino-gen inspect</code></a>, with your assembly's layouts</>], 'n/a: not documented'] },
   { group: 'I/O and integrations' },
@@ -240,10 +242,10 @@ The cost is 3 more bytes per polymorphic value. See [Polymorphism](/en/docs/v4/p
 
 ## MemoryPack Bugs Found While Benchmarking
 
-Comparing every built-in type both libraries share, we round-tripped each value through MemoryPack 1.21.4 before timing it. Two types fail, so the benchmarks time them for Nino only, and a third reads back wrong on another runtime:
+Comparing every built-in type both libraries share, we round-tripped each value through MemoryPack before timing it. One type fails in 1.22.0, so the benchmarks time it for Nino only; a second failed up to 1.21.4, and a third reads back wrong on another runtime:
 
-- **`BigInteger`.** Its formatter writes `temp.Slice(written)` of a 255-byte stack buffer where `temp.Slice(0, written)` is meant: the unused end of the buffer instead of the value. Any `BigInteger` of up to 255 bytes, `3^10` included, reads back as another value, on every runtime; larger values take another path and round-trip.
-- **`BitArray` on .NET 10.** Its formatter reinterprets a `BitArray` as `{ int[] m_array; int m_length }`, its layout on .NET 8. .NET 10's `BitArray` holds a `byte[] _array` instead, so MemoryPack writes the wrong bytes and reading one corrupts the heap and crashes the process.
+- **`BigInteger`.** Its formatter writes `temp.Slice(written)` of a 255-byte stack buffer where `temp.Slice(0, written)` is meant: the unused end of the buffer instead of the value. Any `BigInteger` of up to 255 bytes, `3^10` included, reads back as another value (0 in 1.22.0), on every runtime; larger values take another path and round-trip.
+- **`BitArray` on .NET 10, up to 1.21.4.** Its formatter reinterpreted a `BitArray` as `{ int[] m_array; int m_length }`, its layout on .NET 8. .NET 10's `BitArray` holds a `byte[] _array` instead, so MemoryPack wrote the wrong bytes and reading one corrupted the heap and crashed the process. 1.22.0 writes it through its public API, and the benchmarks time both libraries.
 
 - **Tuples of unmanaged items between runtimes.** MemoryPack copies an unmanaged value, `(int, long)` included, as its memory. `ValueTuple` is `LayoutKind.Auto`: CoreCLR puts the `long` first, Mono lays the items out in order. So `(1, 2L)` written on .NET (`02000000 00000000 01000000 00000000`, the last four bytes padding) reads back as `(2, 1)` on Mono (measured with Mono 6.8), and so in Unity, whose Mono and IL2CPP backends both lay tuples out that way; padding bytes go out as whatever was in memory. The benchmark's list of `(int, long)` round-trips on .NET alone.
 

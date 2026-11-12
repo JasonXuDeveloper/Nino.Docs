@@ -32,7 +32,7 @@ import {
 import type { Locale } from '@/lib/i18n';
 import { release } from '@/lib/release';
 
-const memoryPackVersion = '1.21.4';
+const memoryPackVersion = '1.22.0';
 const prerelease = release.prerelease ? ' --prerelease' : '';
 
 /**

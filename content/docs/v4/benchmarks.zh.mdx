@@ -1,7 +1,7 @@
 ---
 title: .NET 基准测试
 seoTitle: "基准测试：Nino 对比 MemoryPack、MessagePack、protobuf-net 与 v3 – Nino v4 文档"
-description: "Nino v4 对比 v3（3.3.13）、MemoryPack 1.21.4、MessagePack 3.1.12、protobuf-net 3.4.40、Google.Protobuf 3.36.2 和 System.Text.Json 的构建时间与运行时基准测试，涵盖真实负载和单个类型，附复现步骤。"
+description: "Nino v4 对比 v3（3.3.13）、MemoryPack 1.22.0、MessagePack 3.1.12、protobuf-net 3.4.40、Google.Protobuf 3.36.2 和 System.Text.Json 的构建时间与运行时基准测试，涵盖真实负载和单个类型，附复现步骤。"
 icon: ChartColumn
 ---
 
@@ -23,7 +23,7 @@ icon: ChartColumn
 
 | 对比对象 | 原因 | 测量内容 |
 | --- | --- | --- |
-| [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.21.4** | .NET 上用得最广的二进制序列化库里最快的一个，和 Nino 一样基于源生成器 | [真实负载](#workloads)、[序列化](#serialize-to-a-reused-buffer-writer)、[反序列化](#deserialize-new-instances)、[多态对象图](#polymorphism)、[复用实例](#pooling)、[引用追踪、版本容错和固定大小的类型](#more-cases) |
+| [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.22.0** | .NET 上用得最广的二进制序列化库里最快的一个，和 Nino 一样基于源生成器 | [真实负载](#workloads)、[序列化](#serialize-to-a-reused-buffer-writer)、[反序列化](#deserialize-new-instances)、[多态对象图](#polymorphism)、[复用实例](#pooling)、[引用追踪、版本容错和固定大小的类型](#more-cases) |
 | [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) **3.1.12** | .NET 里最常用的二进制格式 | [真实负载](#workloads)，以及它的格式能写出的所有用例（[MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)） |
 | [protobuf-net](https://github.com/protobuf-net/protobuf-net) **3.4.40** | .NET 里最常用的 Protocol Buffers 库 | [真实负载](#workloads)，以及它的格式能写出的所有用例（[MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)） |
 | [Google.Protobuf](https://github.com/protocolbuffers/protobuf/tree/main/csharp) **3.36.2** | Google 官方的 Protocol Buffers 运行时 | [真实负载](#workloads)，用 protoc 生成的类型 |
@@ -150,7 +150,7 @@ Nino 把数据读入已有的对象图（[复用反序列化](/zh/docs/v4/poolin
 
 - **常用类型**（[`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CommonTypesTest.cs)）：常见的类型形状，一棵 `TreeNode` 树（1,365 个节点）、`InventoryItem[1000]`（带填充的结构体）、`Waypoint[1000]`（含一个元组的固定大小结构体，写出 15 字节，内存里占 20 字节）和 `Dictionary<string, string>`（1,000 项）。v4.0.0-rc.9 及之前的报告里还有 `List<Player>`（100 个）、`List<Order>`（100 个）和 `List<Shape>`（1,000 个，声明为抽象基类），后来换成了[真实负载](#workloads)。
 - **集合**（[`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CollectionsTest.cs)）：基础类库里的集合，各 1,000 个元素：`List<(int, long)>`、`KeyValuePair<int, int>[]`、`HashSet<int>`、`Dictionary<int, int>`、`Queue<int>`、`LinkedList<int>`、`SortedSet<int>`、`SortedDictionary<int, int>`、`SortedList<int, int>` 和 `ConcurrentDictionary<int, int>`；另有 `SelfTree`，一个包含自身的 `List` 子类，6 层、每层 4 个。
-- **BCL 类型**（[`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/BclTypesTest.cs)）：两个库都有格式化器的其余基础类库类型：`BigInteger`（3^1000）、`Uri`、`Version`、`StringBuilder`（1,000 个字符）、`BitArray`（1,000 位）、`CultureInfo`、`TimeZoneInfo`、`Lazy<string>`，以及各 1,000 个元素的 `Memory<int>`、`ReadOnlySequence<int>`、`ReadOnlyCollection<int>`、`IReadOnlyList<string>`（藏在接口后面、要逐个写的字符串）、`ILookup<int, int>`、`BlockingCollection<int>` 和 `Nino.Immutable` 里的不可变集合（`ImmutableHashSet`、`ImmutableSortedSet`、`ImmutableQueue`、`ImmutableStack`、`ImmutableDictionary`、`ImmutableSortedDictionary`）。`TimeZoneInfo` 这一项测的主要是设计差异，不是速度：Nino 按 ID 写系统时区，读的时候直接取系统缓存的时区；MemoryPack 每次都写出并解析时区完整的序列化字符串。`BigInteger` 和 `BitArray` 只和 MessagePack 比：MemoryPack 1.21.4 写出去再读回来就不对了（见[基准测试中发现的 MemoryPack 问题](/zh/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)）。
+- **BCL 类型**（[`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/BclTypesTest.cs)）：两个库都有格式化器的其余基础类库类型：`BigInteger`（3^1000）、`Uri`、`Version`、`StringBuilder`（1,000 个字符）、`BitArray`（1,000 位）、`CultureInfo`、`TimeZoneInfo`、`Lazy<string>`，以及各 1,000 个元素的 `Memory<int>`、`ReadOnlySequence<int>`、`ReadOnlyCollection<int>`、`IReadOnlyList<string>`（藏在接口后面、要逐个写的字符串）、`ILookup<int, int>`、`BlockingCollection<int>` 和 `Nino.Immutable` 里的不可变集合（`ImmutableHashSet`、`ImmutableSortedSet`、`ImmutableQueue`、`ImmutableStack`、`ImmutableDictionary`、`ImmutableSortedDictionary`）。`TimeZoneInfo` 这一项测的主要是设计差异，不是速度：Nino 按 ID 写系统时区，读的时候直接取系统缓存的时区；MemoryPack 每次都写出并解析时区完整的序列化字符串。`BigInteger` 只和 MessagePack 比：MemoryPack 1.22.0 写出去再读回来就不对（见[基准测试中发现的 MemoryPack 问题](/zh/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)）。
 
 这三个类都序列化到复用的缓冲区写入器，反序列化成新实例。
 
