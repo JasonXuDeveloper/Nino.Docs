@@ -554,6 +554,7 @@ const moreCases: Record<
     { name: 'Memory<int>', code: true, key: 'Memory' },
     { name: 'ReadOnlySequence<int>', code: true, key: 'ReadOnlySequence' },
     { name: 'ReadOnlyCollection<int>', code: true, key: 'ReadOnlyCollection' },
+    { name: 'IReadOnlyList<string>', code: true, key: 'InterfaceStrings' },
     { name: 'ILookup<int, int>', code: true, key: 'Lookup' },
     { name: 'BlockingCollection<int>', code: true, key: 'BlockingCollection' },
     { name: 'ImmutableHashSet<int>', code: true, key: 'ImmutableHashSet' },
