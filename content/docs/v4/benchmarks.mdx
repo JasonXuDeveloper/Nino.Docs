@@ -227,7 +227,7 @@ The generator times at 330 types are tenths of a second and vary from run to run
 
 Going from <BenchValue k="build.types.small" /> to <BenchValue k="build.types.large" /> types (<BenchValue k="build.types.growth" />× as many), v3's compile time grows <BenchValue k="build.v3.emit.growth" />× and v4's <BenchValue k="build.v4.emit.growth" />×: each type costs v3 more the more types a project has, while v4 spends about the same on each, about <BenchValue k="build.v4.source.perType" /> KB of source and <BenchValue k="build.v4.emit.perType" /> ms of compile time.
 
-v4's generated source is more than its formatters: it also holds the interceptors and registrations, and an `[assembly: NinoTypeLayout]` line per type, the published layout that [nino-gen](/en/docs/v4/advanced/codegen) and the [layout baseline](/en/docs/v4/evolving-data#layout-baseline) read. A subtype's layout lists the members it inherits too, so in this test's 8-level chains these lines are a large share of the source and IL; they are strings in metadata, so they add little to the compile time.
+v4's generated source is more than its formatters: it also holds the interceptors and registrations, and an `[assembly: NinoTypeLayout]` line per type, the published layout that [nino-gen](/en/docs/v4/advanced/codegen) and the [layout baseline](/en/docs/v4/evolving-data#layout-baseline) read. A subtype's layout lists the members it inherits too, so that each layout reads alone; in this test's 8-level chains these lines are a large share of the source and IL. They are strings in metadata, not code, but the compiler still writes them out, so they take a share of the compile time too.
 
 ## Benchmark Code [#benchmark-code]
 
