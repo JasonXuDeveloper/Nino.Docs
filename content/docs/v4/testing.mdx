@@ -11,7 +11,7 @@ Every claim in these docs about portable bytes, hostile input and speed is check
 
 [CI - Build and Test](https://github.com/JasonXuDeveloper/Nino/actions/workflows/ci.yml) builds the solution and runs the unit tests:
 
-- on .NET 10 for x64 (Linux and Windows) and Arm64, and on .NET 8 for Arm64;
+- on .NET 10 for x64 (Linux and Windows) and Arm64, on .NET 8 for Arm64, and on .NET 11 for x64 (the `net10.0` build, which .NET 11 projects use);
 - with AVX-512 turned off, with AVX2 turned off, and with every SIMD instruction turned off, so each vector path is checked against the scalar path that writes the same bytes;
 - on the netstandard2.0 build compiled with Roslyn 4.8, and on the netstandard2.1 build without [interceptors](/en/docs/v4/performance#interceptors), the build Unity uses.
 
@@ -19,7 +19,7 @@ The paths that read and build a runtime's own collections through their fields a
 
 ## Unity [#unity]
 
-[Unity](https://github.com/JasonXuDeveloper/Nino/actions/workflows/unity.yml) runs the package's tests in the editor and in an IL2CPP player, on Unity 2022.3 (the oldest supported) and Unity 6 LTS, with Burst. A WebGL player runs in headless Chrome to check the WebAssembly SIMD kernels against the scalar code, byte for byte.
+[Unity](https://github.com/JasonXuDeveloper/Nino/actions/workflows/unity.yml) runs the package's tests in the editor and in an IL2CPP player, on Unity 2022.3 (the oldest supported, Burst 1.8) and Unity 6000.6 (Burst 2.0), with Burst; at startup the Burst kernels also test themselves against Nino's scalar code ([Startup Self-Test](/en/docs/v4/advanced/unity#self-test)). A WebGL player runs in headless Chrome to check the WebAssembly SIMD kernels against the scalar code, byte for byte.
 
 ## Hostile Input [#fuzzing]
 

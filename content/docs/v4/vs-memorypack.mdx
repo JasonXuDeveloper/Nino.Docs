@@ -26,7 +26,7 @@ Nino reads untrusted data by design, and the fast paths keep these guarantees:
 - **No hash flooding.** A key that finds more than `NinoSettings.MaxHashCollisions` keys in its hash bucket throws, so crafted keys cannot make filling a dictionary or set quadratic; `NinoSettings.Untrusted` also hashes integer, `char`, `Guid` and `string` keys with a per-process secret.
 - **One exception.** Every invalid input throws a `NinoDataException` (an `InvalidOperationException`) whose message starts with `Nino:`, including values their own type rejects, so one `catch` at the boundary handles all of it; [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) answers it with 400.
 
-We checked these against fuzzed and hand-crafted payloads for every built-in type and every way of declaring one, and fixed what they found. What stays the application's job (the values themselves, the size of a message, versioning) is in [Untrusted Data](/en/docs/v4/security#what-stays-your-job). Nino.Codegen's TypeScript, Go and Rust readers and Nino.AspNetCore, which carry Nino data across that boundary, stay.
+We checked these against fuzzed and hand-crafted payloads for every built-in type and every way of declaring one, and fixed what they found. What stays the application's job (the values themselves, the size of a message, versioning) is in [Untrusted Data](/en/docs/v4/security#what-stays-your-job). Unlike MemoryPack's cross-boundary features, Nino's carry on: Nino.Codegen's TypeScript, Go and Rust readers and Nino.AspNetCore read data from the other side of that boundary with the same checks.
 
 ## Performance
 
@@ -129,7 +129,7 @@ Nino's bytes are the same on every platform: [raw values](/en/docs/v4/wire-forma
   { label: <>Streaming collections (<code>IAsyncEnumerable&lt;T&gt;</code>)</>, cells: [['partial', <>one <a href="/en/docs/v4/advanced/streams#frames">frame</a> per element</>], ['yes', <><code>MemoryPack.Streaming</code></>]] },
   { label: 'Serialization callbacks', cells: [['yes', <><code>[NinoOnSerializing]</code>, <code>[NinoOnDeserialized]</code> and two more, called by generated code (<a href="/en/docs/v4/defining-types#callbacks">Callbacks</a>)</>], ['yes', <><code>[MemoryPackOnSerializing]</code> and three more</>]] },
   { label: 'Custom formatters', cells: [['yes', <>struct formatters, inlined; <code>[assembly: NinoFormatter]</code> binds generic types</>], ['yes', <><code>MemoryPackFormatter&lt;T&gt;</code>, provider registration</>]] },
-  { label: 'Compression', cells: [['yes', <><code>System.IO.Compression</code> over the output (<a href="/en/docs/v4/advanced/streams#compression">example</a>)</>], ['yes', <><code>BrotliCompressor</code>, <code>[BrotliFormatter]</code></>]] },
+  { label: 'Compression', cells: [['partial', <><code>System.IO.Compression</code> over the output (<a href="/en/docs/v4/advanced/streams#compression">example</a>)</>], ['yes', <><code>BrotliCompressor</code>, <code>[BrotliFormatter]</code></>]] },
   { label: 'Untrusted input', cells: [['yes', <>by design (<a href="/en/docs/v4/basic#invalid-data">Invalid Data</a>)</>], 'no: trusted data only, per its README'] },
   { label: 'TypeScript code generation', cells: [['yes', <><a href="/en/docs/v4/advanced/typescript">Nino.Codegen</a> (also Go and Rust), after each build from the layout metadata; structs, <code>decimal</code>, keyed and version-tolerant types included</>], ['partial', <><code>[GenerateTypeScript]</code>, classes only, from inside the source generator, to be removed in its next release (<a href="/en/docs/v4/advanced/typescript#compared-with-memorypack">comparison</a>)</>]] },
   { label: 'ASP.NET Core', cells: [['yes', <><a href="/en/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>: MVC formatters, Minimal API <code>NinoBody&lt;T&gt;</code> and <code>NinoResults</code></>], ['yes', <><code>MemoryPack.AspNetCoreMvcFormatter</code></>]] },
@@ -142,8 +142,9 @@ To put it plainly, MemoryPack does these things and Nino v4 does not:
 
 - **`Type` values.** MemoryPack serializes `System.Type`; Nino does not, on purpose: data that names the types to create is a well-known deserialization attack. *Workaround:* store a type id or name of your own and map it to the types you allow.
 - **Dependency injection and options.** MemoryPack passes `MemoryPackSerializerOptions` (string encoding, an `IServiceProvider`) through every call. Nino has no per-call options: its settings are either process-wide (`NinoSettings`) or per-type attributes.
+- **Compression built in.** MemoryPack has `BrotliCompressor` and `[BrotliFormatter]`; with Nino, you compress the output with `System.IO.Compression` in a few lines ([Compression](/en/docs/v4/advanced/streams#compression)).
 
-Everything else MemoryPack has a formatter for is built into Nino too: the other built-in types it lists (`BigInteger`, `Uri`, `Lazy<T>`, `Memory<T>`, `ILookup<,>`, every immutable collection...; see [Other Built-in Types](/en/docs/v4/types#other-built-in-types)) and the Unity classes of `MemoryPack.Unity` (`AnimationCurve`, `Gradient`, `RectOffset`; see [Unity Classes](/en/docs/v4/advanced/unity#unity-classes)). So are streams, async I/O and serialization callbacks. Compression takes a few lines on top of Nino's buffer and span APIs ([Compression](/en/docs/v4/advanced/streams#compression)).
+Everything else MemoryPack has a formatter for is built into Nino too: the other built-in types it lists (`BigInteger`, `Uri`, `Lazy<T>`, `Memory<T>`, `ILookup<,>`, every immutable collection...; see [Other Built-in Types](/en/docs/v4/types#other-built-in-types)) and the Unity classes of `MemoryPack.Unity` (`AnimationCurve`, `Gradient`, `RectOffset`; see [Unity Classes](/en/docs/v4/advanced/unity#unity-classes)). So are streams, async I/O and serialization callbacks. What Nino leaves out whatever you compare it with is on [Limitations](/en/docs/v4/limit).
 
 ## Where Nino Is Ahead
 
@@ -256,4 +257,5 @@ Nino writes a `BigInteger` as its two's-complement bytes, a `BitArray` through i
 <Cards>
   <Card title="Nino vs MessagePack" href="/en/docs/v4/vs-messagepack">The same comparison with MessagePack for C#.</Card>
   <Card title=".NET Benchmarks" href="/en/docs/v4/benchmarks">Every case, with MemoryPack, MessagePack and protobuf-net, and the code that measures it.</Card>
+  <Card title="Limitations" href="/en/docs/v4/limit">What to know before choosing Nino v4.</Card>
 </Cards>

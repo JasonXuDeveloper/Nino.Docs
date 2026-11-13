@@ -15,7 +15,7 @@ import { Cpu, Recycle, ScanSearch, ShieldCheck, Share2, Zap, Layers, KeyRound, B
   }}
 />
 
-Nino v4 rewrites the runtime and the source generator. It runs faster than v3 and MemoryPack, builds much faster, and adds keyed and version-tolerant types, reference tracking, object pools, analyzers and many more built-in types. This page covers all of v4 as released through **4.0.0-rc.5**, grouped by area, plus what **4.0.0-rc.6** to **4.0.0-rc.10** add, each marked with its release (*rc.6* to *rc.10*); the [Changelog](/en/docs/v4/changelog) lists what each release changed.
+Nino v4 rewrites the runtime and the source generator. It runs faster than v3 and MemoryPack, builds much faster, and adds keyed and version-tolerant types, reference tracking, object pools, analyzers and many more built-in types. This page covers all of v4 as it is today, grouped by area; the [Changelog](/en/docs/v4/changelog) lists what each release candidate changed.
 
 <Callout type="warn">
 
@@ -53,10 +53,10 @@ The v4 binary format is **not compatible** with v3 or the earlier v4 betas/previ
   <Card icon={<ScanSearch />} title="Analyzers NINO001–NINO044" href="/en/docs/v4/analyzers">
     Mistakes reported while you type, many with a one-click code fix.
   </Card>
-  <Card icon={<Server />} title="ASP.NET Core (rc.6)" href="/en/docs/v4/advanced/aspnetcore">
+  <Card icon={<Server />} title="ASP.NET Core" href="/en/docs/v4/advanced/aspnetcore">
     `Nino.AspNetCore`: MVC input and output formatters and Minimal API bodies and results for `application/x-nino`, without allocating per request.
   </Card>
-  <Card icon={<Globe />} title="TypeScript, Go and Rust (rc.6, rc.8)" href="/en/docs/v4/advanced/codegen">
+  <Card icon={<Globe />} title="TypeScript, Go and Rust" href="/en/docs/v4/advanced/codegen">
     `Nino.Codegen` generates types and codecs for your `[NinoType]`s after each build, reading and writing the same bytes as .NET.
   </Card>
 </Cards>
@@ -73,8 +73,8 @@ Every difference between v3 (3.3.13) and v4 in one table; the sections below exp
 | Keyed members (reorder / remove / insert) | no | `[NinoType(format: NinoFormat.Keyed)]` |
 | Shared references and cycles | no | `[NinoType(trackReferences: true)]` |
 | Deserialize into existing instances | no | `Deserialize(data, ref value)`, with recycling of dropped instances |
-| Streams and pipes | `IBufferWriter<byte>` for writing; reading from spans only | `Serialize(value, stream)`, `Deserialize<T>(stream)` and their async forms; `Deserialize<T>(ReadOnlySequence<byte>)` for a `PipeReader` (rc.10) |
-| Serialization callbacks | no | `[NinoOnSerializing]`, `[NinoOnSerialized]`, `[NinoOnDeserializing]`, `[NinoOnDeserialized]` (rc.10) |
+| Streams and pipes | `IBufferWriter<byte>` for writing; reading from spans only | `Serialize(value, stream)`, `Deserialize<T>(stream)` and their async forms; `Deserialize<T>(ReadOnlySequence<byte>)` for a `PipeReader` |
+| Serialization callbacks | no | `[NinoOnSerializing]`, `[NinoOnSerialized]`, `[NinoOnDeserializing]`, `[NinoOnDeserialized]` |
 | Object pooling | no | `[NinoPooled]`, `[NinoFactory]` factories, `NinoSettings.SetRecycler<T>` |
 | Subtypes of a `[NinoType]` | need their own `[NinoType]` | inherit it |
 | User collections (subclasses of `List<T>`, `Dictionary<,>`, ...) | dictionary subclasses need a public indexer | supported without attributes |
@@ -84,8 +84,8 @@ Every difference between v3 (3.3.13) and v4 in one table; the sections below exp
 | Fixed-size types | no | `Serialize(value)` writes straight into an array of the exact size; `NinoSerializer.GetFixedSize<T>()` |
 | Boxed / runtime-typed API | no | `SerializeBoxed(value, type)`, `DeserializeBoxed(data, type)`, for types known only at run time that share no common `[NinoType]` base |
 | Diagnostics | compile errors in generated code | 44 analyzer diagnostics (NINO001–NINO044), many with code fixes |
-| Checking a type change against stored data | no | a layout baseline: the analyzer reports a breaking change as you type, `nino-gen layouts --check` in CI (rc.10) |
-| Reading a message byte by byte | no | `nino-gen inspect` prints each member's offset, length and value (rc.10) |
+| Checking a type change against stored data | no | a layout baseline: the analyzer reports a breaking change as you type, `nino-gen layouts --check` in CI |
+| Reading a message byte by byte | no | `nino-gen inspect` prints each member's offset, length and value |
 | Incremental generator | no: scans the whole compilation and re-generates every type on every edit | one file per type, only edited types re-generated |
 | Interceptors | no | always on with Roslyn 4.8+ (the .NET 8 SDK and later) |
 | Hot update (HybridCLR) | supported | supported, no initialization call |
@@ -140,22 +140,22 @@ None of these change the bytes: every path writes what the plain path writes.
 
 ## Untrusted Data [#untrusted-data]
 
-Nino v4 is built to read data from sources you do not trust: messages from a network peer, files a user hands you, request bodies. Data crafted against a reader cannot crash the process, read past the end of the input, allocate out of proportion to its size or make Nino create a type you did not declare. For *rc.7*, fuzzed and hand-crafted payloads were run against every built-in type, and what they found is fixed (see the [Changelog](/en/docs/v4/changelog)).
+Nino v4 is built to read data from sources you do not trust: messages from a network peer, files a user hands you, request bodies. Data crafted against a reader cannot crash the process, read past the end of the input, allocate out of proportion to its size or make Nino create a type you did not declare. Fuzzed and hand-crafted payloads run against every built-in type on every change to a read path ([How Nino Is Tested](/en/docs/v4/testing#fuzzing)).
 
 - **No type names in the data**: a polymorphic value is a type id, which can only be one of the declared type's registered subtypes, and a back reference must point to an object already read, of the slot's type. `System.Type` is left out on purpose.
-- **Bounded allocation**: every length is checked against the bytes left before anything is allocated, and since *rc.7* a collection allocates ahead of its elements at most 16 times the bytes left in the input; a larger count is grown into as elements are actually read.
-- **Bounded stack**: objects nested more than 128 levels deep are deferred and read from a shallow level; since *rc.7* what cannot be deferred (structs that hold themselves, types built by their constructor) is limited to 512 levels (`NinoSettings.MaxDepth` since *rc.8*), with the stack checked on the way. See [Deep Object Graphs](/en/docs/v4/reference-tracking#deep-object-graphs).
-- **One exception** (*rc.7*): every invalid input throws one exception type whose message starts with `Nino:`, including a value its own type rejects (a malformed `Uri`, an unknown culture, a null dictionary key), with the original exception as `InnerException`. Since *rc.8* it is `NinoDataException`, an `InvalidOperationException`. One `catch` where the data comes in is enough.
-- **Strict bytes and limits** (*rc.8*): bytes Nino never writes (a `bool` or presence byte other than 0 or 1, a keyed member with bytes left, a malformed section of deferred bodies) are rejected; keys built to collide in a hash table throw (`NinoSettings.MaxHashCollisions`); `NinoSettings.MaxDepth` and `MaxCollectionLength` tighten the limits, and `NinoSettings.Untrusted` adds the checks that cost time on every read. See [Untrusted Data](/en/docs/v4/security).
-- **No stale memory** (*rc.7*): a failed read into an existing value never leaves an array of uninitialized memory in it.
+- **Bounded allocation**: every length is checked against the bytes left before anything is allocated, and a collection allocates ahead of its elements at most 16 times the bytes left in the input; a larger count is grown into as elements are actually read.
+- **Bounded stack**: objects nested more than 128 levels deep are deferred and read from a shallow level; what cannot be deferred (structs that hold themselves, types built by their constructor) is limited to 512 levels (`NinoSettings.MaxDepth`), with the stack checked on the way. See [Deep Object Graphs](/en/docs/v4/reference-tracking#deep-object-graphs).
+- **One exception**: every invalid input throws `NinoDataException`, an `InvalidOperationException` whose message starts with `Nino:`, including a value its own type rejects (a malformed `Uri`, an unknown culture, a null dictionary key), with the original exception as `InnerException`. One `catch` where the data comes in is enough.
+- **Strict bytes and limits**: bytes Nino never writes (a `bool` or presence byte other than 0 or 1, a keyed member with bytes left, a malformed section of deferred bodies) are rejected; keys built to collide in a hash table throw (`NinoSettings.MaxHashCollisions`); `NinoSettings.MaxDepth` and `MaxCollectionLength` tighten the limits, and `NinoSettings.Untrusted` adds the checks that cost time on every read. See [Untrusted Data](/en/docs/v4/security).
+- **No stale memory**: a failed read into an existing value never leaves an array of uninitialized memory in it.
 
 Values themselves are not validated (a negative health reads as it is written), and the bytes carry no schema, so check what your logic depends on and cap the size of a message before you buffer it. See [Untrusted Data](/en/docs/v4/security) for what Nino checks and what stays your code's job, and [Untrusted Input](/en/docs/v4/vs-memorypack#untrusted-input) for how this compares with MemoryPack, which recommends itself for trusted data only.
 
 ## Evolving Data and Object Graphs [#data-and-object-graphs]
 
 - **One option for the format**: `[NinoType(format: ...)]` takes a `NinoFormat`. `Positional` (the default) is the fastest; `VersionTolerant` lets you append members to the most derived type at any nesting depth, at 4 bytes per object, and old code skips the members it does not know; `Keyed` writes members by name hash, so they can be reordered, removed and inserted in any class of a hierarchy. v3's project-wide `WEAK_VERSION_TOLERANCE` is gone (error NINO032 and its code fix move a project off it). See [Evolving Your Data](/en/docs/v4/evolving-data).
-- **Layout metadata**: the generator records how each `[NinoType]` is written as an `[assembly: NinoTypeLayout]`, including the size and field offsets of every value copied as raw memory, so tools can compare layouts between builds and catch a change in the bytes before it ships. Since *rc.6* each member is described by the bytes it is written as (`seq(string)`, `map(K,V)`, `type(T)`...), with its key in keyed types. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata).
-- **Layout baseline** (*rc.10*): a `NinoLayouts.cs` records the layouts your saved and sent types have now; the analyzer then reports, as you type, a change that breaks old data or old builds (NINO034), loses data without an error (NINO035) or needs care (NINO036), with code fixes that undo or accept it, and `nino-gen layouts --check` runs the same rules in CI. See [Layout Baseline](/en/docs/v4/evolving-data#layout-baseline).
+- **Layout metadata**: the generator records how each `[NinoType]` is written as an `[assembly: NinoTypeLayout]`, including the size and field offsets of every value copied as raw memory, so tools can compare layouts between builds and catch a change in the bytes before it ships. Each member is described by the bytes it is written as (`seq(string)`, `map(K,V)`, `type(T)`...), with its key in keyed types. See [Layout Metadata](/en/docs/v4/evolving-data#layout-metadata).
+- **Layout baseline**: a `NinoLayouts.cs` records the layouts your saved and sent types have now; the analyzer then reports, as you type, a change that breaks old data or old builds (NINO034), loses data without an error (NINO035) or needs care (NINO036), with code fixes that undo or accept it, and `nino-gen layouts --check` runs the same rules in CI. See [Layout Baseline](/en/docs/v4/evolving-data#layout-baseline).
 - **Renamed types** keep their data with [`[NinoFormerName]`](/en/docs/v4/evolving-data#former-name), and so do renamed keyed members.
 - **Reference tracking**: `[NinoType(trackReferences: true)]` keeps shared references and cycles: an object reached twice is written once and read back as one instance, at 4 bytes per tracked object. See [Reference Tracking](/en/docs/v4/reference-tracking).
 - **Polymorphism without tags**: type ids are hashes of type names, any non-sealed class or interface can be a base, and subtypes in other assemblies (plugins, hot updates) are found on their own. See [Polymorphism](/en/docs/v4/polymorphism).
@@ -163,10 +163,10 @@ Values themselves are not validated (a negative health reads as it is written), 
 
 ## Defining Types [#defining-types]
 
-- **Private members** with `includeNonPublicMembers`: on .NET 8 and later they are reached through `[UnsafeAccessor]` without `partial` (generic types: .NET 9 and later, since rc.8). See [Private Members](/en/docs/v4/defining-types#private-members).
+- **Private members** with `includeNonPublicMembers`: on .NET 8 and later they are reached through `[UnsafeAccessor]` without `partial` (generic types: .NET 9 and later). See [Private Members](/en/docs/v4/defining-types#private-members).
 - **Constructors, records and `required` members**: Nino calls the constructor that fits, or the one marked `[NinoConstructor]`. See [Constructors](/en/docs/v4/constructors).
-- **Compact strings** (*rc.6*, *rc.8*): text whose chars are all at most U+00FF (ASCII, Latin-1) is written in one byte a char, other text as UTF-16, behind a header of one byte up to 63 chars ([Strings](/en/docs/v4/wire-format#strings)). [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) writes UTF-8 per member.
-- **Callbacks** (*rc.10*): methods marked `[NinoOnSerializing]`, `[NinoOnSerialized]`, `[NinoOnDeserializing]` or `[NinoOnDeserialized]` run before and after each value of the type is written or read, base classes first, called directly by generated code. They take the place of MemoryPack's `[MemoryPackOnSerializing]` and its three siblings ([Switching from MemoryPack](/en/docs/v4/vs-memorypack#switching-from-memorypack)). See [Callbacks](/en/docs/v4/defining-types#callbacks).
+- **Compact strings**: text whose chars are all at most U+00FF (ASCII, Latin-1) is written in one byte a char, other text as UTF-16, behind a header of one byte up to 63 chars ([Strings](/en/docs/v4/wire-format#strings)). [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) writes UTF-8 per member.
+- **Callbacks**: methods marked `[NinoOnSerializing]`, `[NinoOnSerialized]`, `[NinoOnDeserializing]` or `[NinoOnDeserialized]` run before and after each value of the type is written or read, base classes first, called directly by generated code. They take the place of MemoryPack's `[MemoryPackOnSerializing]` and its three siblings ([Switching from MemoryPack](/en/docs/v4/vs-memorypack#switching-from-memorypack)). See [Callbacks](/en/docs/v4/defining-types#callbacks).
 - **Subtypes inherit `[NinoType]`** from their base class or interface, and generic types work as members, elements and top-level values. See [Defining Types](/en/docs/v4/defining-types).
 
 ## Supported Types [#supported-types]
@@ -189,18 +189,17 @@ See [Reuse and Pooling](/en/docs/v4/pooling).
 ## API [#api]
 
 - **Two entry points**: `NinoSerializer.Serialize` to a `byte[]`, an `IBufferWriter<byte>` (a `PipeWriter`, for example) or a `Writer`, and `NinoDeserializer.Deserialize` from a `ReadOnlySpan<byte>` or a `Reader`. Every `Serialize` overload takes the value as `in T`, so a struct read from a field is written without a copy. See [Serialize and Deserialize](/en/docs/v4/basic).
-- **Streams and pipes** (*rc.10*): `NinoSerializer.Serialize(value, stream)` and `SerializeAsync`, and `NinoDeserializer.Deserialize<T>(stream)` and `DeserializeAsync<T>`, write and read one message with the bytes of the span calls, through pooled buffers; `Deserialize<T>(in ReadOnlySequence<byte>)` reads what a `PipeReader` or gRPC hands you, a single segment without a copy. Several messages on one stream still need frames. See [Streams and Compression](/en/docs/v4/advanced/streams).
+- **Streams and pipes**: `NinoSerializer.Serialize(value, stream)` and `SerializeAsync`, and `NinoDeserializer.Deserialize<T>(stream)` and `DeserializeAsync<T>`, write and read one message with the bytes of the span calls, through pooled buffers; `Deserialize<T>(in ReadOnlySequence<byte>)` reads what a `PipeReader` or gRPC hands you, a single segment without a copy. Several messages on one stream still need frames. See [Streams and Compression](/en/docs/v4/advanced/streams).
 - **`NinoArrayBufferWriter`**: a reusable buffer that makes serializing allocation-free, and with `new NinoArrayBufferWriter(initialCapacity, pool)` rents its arrays from your own `ArrayPool<byte>`. See [Reusing a Buffer](/en/docs/v4/basic#reusing-a-buffer).
 - **`Writer` and `Reader`** write several values into one buffer and read them back, and are the API of custom formatters. See [Writer and Reader](/en/docs/v4/custom-formatters#writer-and-reader).
 - **A boxed API for runtime types**: `SerializeBoxed(value, type)` and `DeserializeBoxed(data, type)` write exactly what `Serialize<T>` writes, for types known only as a `Type`. Types with a common `[NinoType]` base are faster through `Serialize<TBase>`. See [Runtime Types](/en/docs/v4/basic#runtime-types).
-- **`NinoSerializer.IsSupported(Type)`** (*rc.6*) tells whether Nino can serialize and deserialize a type, for code that has only a `Type`, such as the ASP.NET Core formatters. See [The Boxed API](/en/docs/v4/basic#the-boxed-api).
+- **`NinoSerializer.IsSupported(Type)`** tells whether Nino can serialize and deserialize a type, for code that has only a `Type`, such as the ASP.NET Core formatters. See [The Boxed API](/en/docs/v4/basic#the-boxed-api).
 - **No initialization**: generated registries register themselves and are found lazily; `NinoSettings`, `NinoPolymorphic.TryRegister<T>()` and `NinoRegistry.EnsureInitialized` are optional. See [At Startup](/en/docs/v4/start#at-startup).
 
 ## Web and ASP.NET Core [#web-and-aspnet-core]
 
-- **ASP.NET Core** (*rc.6*): the `Nino.AspNetCore` package adds MVC input and output formatters (`AddNinoFormatters()`) and Minimal API bodies (`NinoBody<T>`) and results (`NinoResults`) for `application/x-nino`, read and written straight from the request and response pipes. See [ASP.NET Core](/en/docs/v4/advanced/aspnetcore).
-- **TypeScript clients** (*rc.6*): the `Nino.TypeScript` package generates TypeScript classes, enums and codecs for your `[NinoType]`s after each build, with the `nino.ts` runtime, so browsers and Node read and write exactly the bytes .NET writes. See [TypeScript](/en/docs/v4/advanced/typescript); since rc.8 the package is Nino.Codegen.
-- **Go, Rust and nino-gen** (*rc.8*): Go and Rust runtimes in Nino's repository read and write the same bytes, and Nino.Codegen (after each build) or the `nino-gen` tool (Nino.Codegen.Tool, from a built assembly) writes your `[NinoType]`s as TypeScript, Go or Rust. See [TypeScript, Go and Rust](/en/docs/v4/advanced/codegen), [Go](/en/docs/v4/advanced/go) and [Rust](/en/docs/v4/advanced/rust).
+- **ASP.NET Core**: the `Nino.AspNetCore` package adds MVC input and output formatters (`AddNinoFormatters()`) and Minimal API bodies (`NinoBody<T>`) and results (`NinoResults`) for `application/x-nino`, read and written straight from the request and response pipes. See [ASP.NET Core](/en/docs/v4/advanced/aspnetcore).
+- **TypeScript, Go and Rust**: Nino.Codegen (after each build) or the `nino-gen` tool (Nino.Codegen.Tool, from a built assembly) writes your `[NinoType]`s as TypeScript classes, Go structs or Rust types with their codecs, and the `nino.ts`, Go and Rust runtimes read and write exactly the bytes .NET writes, in browsers and Node too. See [TypeScript, Go and Rust](/en/docs/v4/advanced/codegen), [Go](/en/docs/v4/advanced/go) and [Rust](/en/docs/v4/advanced/rust).
 - **.NET in the browser**: your types themselves can also run on .NET WebAssembly. See [Browser Clients](/en/docs/v4/advanced/browser).
 
 ## Platforms [#platforms]
@@ -208,7 +207,7 @@ See [Reuse and Pooling](/en/docs/v4/pooling).
 - **One format everywhere**: `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` write identical bytes, portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, x64 and Arm64. Nino defines its bytes instead of copying memory where runtimes disagree (`Nullable<T>`, tuples, `decimal`, 32-bit alignment) and zeroes padding, so equal values serialize to equal bytes. See [Platforms](/en/docs/v4/platforms).
 - **Trimming and Native AOT**: Nino.Core is annotated for both, so `PublishTrimmed` and `PublishAot` give no warnings from Nino. See [Trimming and Native AOT](/en/docs/v4/platforms#trimming-and-native-aot).
 - **Unity 2022.3+** from OpenUPM, with the generator and `Nino.UnityTypes.dll` in the package. See [Unity and HybridCLR](/en/docs/v4/advanced/unity).
-- **Code fixes in Unity** (*rc.7*): the Unity package includes the analyzer's code fixes, so Rider and Visual Studio offer the same quick fixes as in a .NET project. See [Analyzers](/en/docs/v4/analyzers).
+- **Code fixes in Unity**: the Unity package includes the analyzer's code fixes, so Rider and Visual Studio offer the same quick fixes as in a .NET project. See [Analyzers](/en/docs/v4/analyzers).
 - **HybridCLR hot update** without an initialization call, and **Godot 4** as a regular NuGet package. See [HybridCLR and Hot Update](/en/docs/v4/platforms#hybridclr-and-hot-update) and [Godot](/en/docs/v4/platforms#godot).
 - **Unloadable assemblies**: an assembly in a collectible `AssemblyLoadContext` unloads with it; Nino clears what it cached for it, on its own on .NET 8 and later, through `NinoRegistry.Remove` on .NET Core 3.0 to .NET 7. See [Unloading Assemblies](/en/docs/v4/platforms#unloading-assemblies).
 
@@ -217,7 +216,7 @@ See [Reuse and Pooling](/en/docs/v4/pooling).
 - **Truly incremental source generator**: one file per `[NinoType]`, equatable models, no whole-compilation scans. Editing a type re-generates only that type, and an edit that changes no model (a comment, a method body) re-generates nothing.
 - **Much less generated code**: collections, strings, nullables, tuples and the other built-in types are implemented once in `Nino.Core` as generic formatters; the generator only emits code for your `[NinoType]`s.
 - **44 analyzer rules** (NINO001–NINO044) report mistakes while you type, such as an unsupported member type, a missing `partial` or two `[NinoFormerName]`s on one type, many with a one-click code fix. See [Analyzers](/en/docs/v4/analyzers).
-- **`nino-gen inspect`** (*rc.10*): reads one message with your assembly's layouts and prints every member with its offset, length, encoding and value, or where and why malformed data stops. See [Inspecting a Message](/en/docs/v4/advanced/codegen#inspect).
+- **`nino-gen inspect`**: reads one message with your assembly's layouts and prints every member with its offset, length, encoding and value, or where and why malformed data stops. See [Inspecting a Message](/en/docs/v4/advanced/codegen#inspect).
 
 ## Removed [#removed]
 

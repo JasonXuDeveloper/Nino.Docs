@@ -152,7 +152,7 @@ int size = NinoSerializer.GetFixedSize<SensorReading>();  // 22
 有 `string`、数组或集合、类、`T?`、元组、`DateTimeOffset` 或 `nint` 成员，类型的大小就不固定。按原始内存写的结构体（见[原始内存](#raw-memory-for-unmanaged-data)）也是固定大小的，而且一直都是直接拷进大小正好的数组；这条路径把同样的待遇扩展到不能按原始内存写的结构体（有忽略的字段、套了别的结构体）和密封类。
 
 - **自动生效。** 在 Roslyn 4.8+ 上，[拦截器](#interceptors)把固定大小类型的 `Serialize(value)` 接到这条路径；没有拦截器时（Unity、泛型代码、旧编译器），常规调用做一次检查后也走这条路径，优化后的代码会把这次检查折叠成常量。
-- 只有返回 `byte[]` 的 `Serialize(value)` 走这条路径。序列化到 `IBufferWriter<byte>` 或 `Writer` 照旧。元素整块写入的数组和列表（非托管值、原始结构体、元组、`DateTimeOffset`）也直接写进大小正好的数组（见[内存分配](#allocation)）；其他固定大小类型的数组和列表走常规路径。
+- 返回 `byte[]` 的 `Serialize(value)` 走这条路径。序列化到任意 `IBufferWriter<byte>` 时，固定大小的值按它的大小 `GetSpan` 一次，直接写进去（[序列化到任意 IBufferWriter](/zh/docs/v4/advanced/high-performance#serialize-into-any-ibufferwriter)）；写进 `Writer` 时和其他值一样。元素整块写入的数组和列表（非托管值、原始结构体、元组、`DateTimeOffset`）也直接写进大小正好的数组（见[内存分配](#allocation)）；其他固定大小类型的数组和列表走常规路径。
 - 值为 `null` 的密封类只写一个存在字节；其他值都正好占 `GetFixedSize<T>()` 字节。
 - `NinoSerializer.GetFixedSize<T>()` 对固定大小的类型和原始值返回大小，对其他类型返回 `-1`。可以用它定缓冲区大小，或者在启动时检查消息的大小。
 
