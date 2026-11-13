@@ -12,7 +12,7 @@
  */
 import { lazy, Suspense, useState } from 'react';
 import { Segmented } from '@/components/showcase';
-import { formatTime } from '@/lib/benchmarks';
+import { formatTime, isOnPar, times } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
 
 export interface BenchmarkCase {
@@ -46,8 +46,8 @@ function split(name: string) {
 /** MemoryPack time / Nino time, as v4's charts badge it */
 function badge(nino: number, memorypack: number, zh: boolean) {
   const ratio = memorypack / nino;
-  const r = ratio.toFixed(2);
-  if (r === '1.00')
+  const r = times(ratio);
+  if (isOnPar(ratio))
     return { text: zh ? '持平' : 'on par', tone: 'par' as const };
   if (ratio > 1)
     return { text: zh ? `快 ${r} 倍` : `${r}× faster`, tone: 'win' as const };

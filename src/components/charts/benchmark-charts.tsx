@@ -22,6 +22,7 @@ import {
   reuseSpeedup,
   runtime,
   sourceNote,
+  times,
   V3_RUNTIME,
   v3SourceNote,
   x64,
@@ -33,7 +34,6 @@ import type { ChartId } from './ids';
 
 export type { ChartId };
 
-const ratioText = (value: number) => value.toFixed(2);
 const rel = (value: number) => (value === 0 ? '0' : value.toFixed(1));
 
 function caseLabel(row: { name: string; zh?: string }, zh: boolean) {
@@ -87,7 +87,7 @@ function seriesFor(zh: boolean) {
  * FLOOR_NS (lowerBound); `than` names the other side where the badges do
  */
 const boundBadge = (ns: number, zh: boolean, than?: string) => {
-  const r = ratioText(lowerBound(ns));
+  const r = times(lowerBound(ns));
   return {
     text: zh
       ? `${than ? `比 ${than} ` : ''}快 ${r} 倍以上`
@@ -100,7 +100,7 @@ function mpBadge(row: RuntimeCase, zh: boolean) {
   if (row.tooFast) return boundBadge(row.memorypack.ns, zh);
   if (row.ratio === undefined)
     return { text: zh ? '持平' : 'on par', tone: 'par' as const };
-  const r = ratioText(row.ratio);
+  const r = times(row.ratio);
   if (row.ratio >= 1)
     return { text: zh ? `快 ${r} 倍` : `${r}× faster`, tone: 'win' as const };
   // v4 not ahead: no badge, as in Nino's README and docs/v4-benchmarks.md (the times show it).
@@ -174,7 +174,7 @@ function reuseChart(zh: boolean, { ds, tabbed }: ChartData): BarChartProps {
     series: [s.ninoNew, s.mpNew, s.ninoReuse, s.mpOverwrite],
     rows: reuse.map((row) => {
       const base = row.memorypackNew.ns;
-      const speedup = reuseSpeedup(row).toFixed(2);
+      const speedup = times(reuseSpeedup(row));
       return {
         label: caseLabel(row, zh),
         values: {
@@ -238,7 +238,7 @@ function v3Badge(v3Ns: number, v4Ns: number, zh: boolean) {
   const vsV3 = v3Ns / v4Ns;
   if (isOnPar(vsV3))
     return { text: zh ? '与 v3 持平' : 'on par with v3', tone: 'par' as const };
-  const r = ratioText(vsV3);
+  const r = times(vsV3);
   if (vsV3 > 1)
     return {
       text: zh ? `比 v3 快 ${r} 倍` : `${r}× faster than v3`,

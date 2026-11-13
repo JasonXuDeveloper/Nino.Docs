@@ -31,7 +31,7 @@ import type { Locale } from '@/lib/i18n';
  *    subgrid on wide screens).
  *
  * Every value comes from src/lib/benchmarks.ts: runtime ratios from the raw
- * means through formatRatio (two decimals), build ratios as published. Bars
+ * means through formatRatio (times()), build ratios as published. Bars
  * are drawn to scale and grow in once when scrolled into view (not with
  * reduced motion); the prerendered HTML already has their final widths.
  */

@@ -43,6 +43,7 @@ import {
   formatWorkloadRange,
   hasWorkloads,
   isOnPar,
+  lowerBound,
   type MoreSet,
   type Opponent,
   type OtherLib,
@@ -58,6 +59,7 @@ import {
   runtimesSource,
   sourceNote,
   type TableCase,
+  times,
   type UnityCase,
   unity,
   unitySource,
@@ -209,14 +211,14 @@ function barsLegend(zh: boolean, nino: string, other: string) {
 /** Nino under FLOOR_NS against a measurable time `ns`: faster by more than ns / FLOOR_NS (formatBound) */
 function boundText(ns: number, zh: boolean) {
   const bound = formatBound(ns);
-  return zh ? `快 ${bound.slice(2, -1)} 倍以上` : `${bound} faster`;
+  return zh ? `快 ${times(lowerBound(ns))} 倍以上` : `${bound} faster`;
 }
 
 /** `boundNs`: the other time, when Nino ran under FLOOR_NS and it did not (tooFast) */
 function ratioCell(ratio: number | undefined, zh: boolean, boundNs?: number) {
   if (boundNs !== undefined) return <strong>{boundText(boundNs, zh)}</strong>;
   if (ratio === undefined) return zh ? '持平' : 'on par';
-  const r = ratio.toFixed(2);
+  const r = times(ratio);
   if (ratio > 1) return <strong>{zh ? `快 ${r} 倍` : `${r}× faster`}</strong>;
   // v4 not ahead: a dash, as in Nino's README and docs/v4-benchmarks.md (the times show it).
   return '—';
@@ -232,7 +234,7 @@ function versusNote(vs: Versus | undefined, zh: boolean) {
   let text: string | null = null;
   if (vs.tooFast) text = formatBound(vs.time.ns);
   else if (vs.ratio === undefined) text = zh ? '持平' : 'on par';
-  else if (vs.ratio > 1) text = `${vs.ratio.toFixed(2)}×`;
+  else if (vs.ratio > 1) text = formatRatio(vs.ratio);
   if (!text) return null;
   return <span className="text-fd-muted-foreground"> · {text}</span>;
 }
@@ -241,8 +243,8 @@ function versusLegend(zh: boolean, nino: string) {
   return (
     <p className="text-sm text-fd-muted-foreground">
       {zh
-        ? `时间后的 “· 2.00×” 表示这个用例里 ${nino} 比这个序列化器快多少倍；相差 5% 以内算持平；只有时间表示 ${nino} 在这个用例里没有领先。`
-        : `“· 2.00×” after a time: how many times faster ${nino} is than that serializer in that case; within 5% is on par; a time alone means ${nino} is not ahead there.`}
+        ? `时间后的 “· 2.1×” 表示这个用例里 ${nino} 比这个序列化器快多少倍；相差 5% 以内算持平；只有时间表示 ${nino} 在这个用例里没有领先。`
+        : `“· 2.1×” after a time: how many times faster ${nino} is than that serializer in that case; within 5% is on par; a time alone means ${nino} is not ahead there.`}
     </p>
   );
 }

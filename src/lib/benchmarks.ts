@@ -94,7 +94,7 @@ export const archLabels: Record<Arch, string> = { x64: 'x64', arm64: 'Arm64' };
  * alike, once BenchmarkDotNet subtracts its empty-method overhead. v4 under it against a measurable
  * time gets a lower bound instead of a ratio, which would only reflect noise:
  * v4 took less than the floor, so the other time is more than its time /
- * FLOOR_NS times as long ("> 1.40×", formatBound). Both under it is on par.
+ * FLOOR_NS times as long ("> 1.4×", formatBound). Both under it is on par.
  * Nino's benchmarks/reports/bdn.py holds the same floor and bound (charts.py,
  * readme.py and compare_v3.py use them).
  */
@@ -118,15 +118,27 @@ export function formatTime(ns: number) {
 export const formatBytes = (bytes: number) =>
   `${bytes.toLocaleString('en-US')} B`;
 
-/** A ratio within 5% of 1 (0.95–1.05 at two decimals) is on par: below the run-to-run noise */
+/** A ratio within 5% of 1 is on par: below the run-to-run noise (Nino's bdn.on_par) */
 export function isOnPar(ratio: number) {
   return Math.round(Math.abs(ratio - 1) * 100) <= 5;
 }
 
-/** Two decimals; undefined when on par */
+/** Unrounded (times() rounds once, where it is written); undefined when on par */
 function ratioOf(slower: number, faster: number) {
-  const ratio = Math.round((slower / faster) * 100) / 100;
+  const ratio = slower / faster;
   return isOnPar(ratio) ? undefined : ratio;
+}
+
+/**
+ * How every multiple the site shows is written, the owner's rule (rc.10) and
+ * Nino's bdn.times: one decimal below 10 ("1.4"), a whole number from 10
+ * ("77"), rounded half up from the unrounded ratio. toPrecision(12) drops the
+ * binary error first, so 1.15 rounds to 1.2 as Nino's Decimal does.
+ */
+export function times(value: number): string {
+  const tenths = Math.round(Number((value * 10).toPrecision(12)));
+  if (tenths < 100) return (tenths / 10).toFixed(1);
+  return String(Math.round(Number(value.toPrecision(12))));
 }
 
 /* ------------------------------------------------------------------ */
@@ -1037,8 +1049,7 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
     };
     if (v3Row) {
       result.v3 = { text: formatTime(v3Row.v3Ns), ns: v3Row.v3Ns };
-      if (v3Row.v4Ns >= FLOOR_NS)
-        result.vsV3 = Math.round((v3Row.v3Ns / v3Row.v4Ns) * 100) / 100;
+      if (v3Row.v4Ns >= FLOOR_NS) result.vsV3 = v3Row.v3Ns / v3Row.v4Ns;
       else if (v3Row.v3Ns >= FLOOR_NS) result.v3TooFast = true;
       else result.vsV3 = 1;
     }
@@ -1227,14 +1238,12 @@ export function formatClassRange(
   lib?: OtherLib,
 ) {
   const { min, max } = classRatioRange(op, x64, lib);
-  return Number.isFinite(min) ? `${min.toFixed(2)}–${formatRatio(max)}` : '';
+  return Number.isFinite(min) ? formatRange(min, max) : '';
 }
 
-/** How many times faster Nino reusing is than MemoryPack overwrite (two decimals, from the raw means) */
+/** How many times faster Nino reusing is than MemoryPack overwrite (unrounded, from the raw means) */
 export function reuseSpeedup(row: ReuseCase) {
-  return (
-    Math.round((row.memorypackOverwrite.ns / row.ninoReuse.ns) * 100) / 100
-  );
+  return row.memorypackOverwrite.ns / row.ninoReuse.ns;
 }
 
 /** The reuse case where Nino gains most over MemoryPack's overwrite mode (x64) */
@@ -1244,16 +1253,22 @@ export const bestReuse = x64.reuse.reduce<ReuseCase | undefined>(
 );
 
 /**
- * The one way to print a ratio. Runtime ratios (computed from the raw means)
- * always show two decimals ("4.33×"); build-time ratios are whole numbers or
- * as published ("221×", "3.1×").
+ * The one way to print a multiple: times() and "×" ("4.1×", "77×"). Build-time
+ * ratios are shown as published, which Nino writes by the same rule.
  */
-export const formatRatio = (value: number) => `${value.toFixed(2)}×`;
+export const formatRatio = (value: number) => `${times(value)}×`;
+
+/** A range of multiples, "1.1–1.4×"; one value when both ends round alike */
+export function formatRange(min: number, max: number) {
+  const low = times(min);
+  const high = times(max);
+  return low === high ? `${high}×` : `${low}–${high}×`;
+}
 
 /**
  * Nino v4 under FLOOR_NS against a measurable time `ns` (a comparison's
  * tooFast): v4 took less than FLOOR_NS, so the other is more than ns /
- * FLOOR_NS times as long, "> 1.40×", with formatRatio's two decimals. The only
+ * FLOOR_NS times as long, "> 1.4×", written as every multiple. The only
  * lower bound the site shows: both under the floor are on par.
  */
 export const lowerBound = (ns: number) => ns / FLOOR_NS;
@@ -1287,20 +1302,18 @@ export function workloadRange(
   return { min: Math.min(...wins), max: Math.max(...wins) };
 }
 
-/** "1.46–2.83×" (one win: "2.83×"), or '' without a win */
+/** "1.5–2.8×" (one value when both ends round alike), or '' without a win */
 export function formatWorkloadRange(
   op: 'serialize' | 'deserialize',
   lib: Opponent,
 ) {
   const { min, max } = workloadRange(op, lib);
   if (!Number.isFinite(max)) return '';
-  return min === max
-    ? formatRatio(max)
-    : `${min.toFixed(2)}–${formatRatio(max)}`;
+  return formatRange(min, max);
 }
 
 /**
- * The headline's "up to" against one library (two decimals, "4.33"), or null:
+ * The headline's "up to" against one library (times(), "4.3"), or null:
  * the best workload win once the report has workloads; until then the best
  * win of the main cases (MemoryPack) or of the classes and polymorphic types
  * (the others).
@@ -1332,7 +1345,7 @@ export function headlineMax(
     : lib === 'memorypack'
       ? ratioRange(op)
       : classRatioRange(op, x64, lib);
-  return Number.isFinite(max) ? max.toFixed(2) : null;
+  return Number.isFinite(max) ? times(max) : null;
 }
 export const formatBuildRatio = (value: number) => `${value}×`;
 
@@ -1522,7 +1535,7 @@ export interface UnityCase {
   without: Measure;
   with: Measure;
   /**
-   * Without Burst / with Burst, two decimals; undefined when on par (within
+   * Without Burst / with Burst, unrounded; undefined when on par (within
    * 5%) or tooFast; below 1 when the kernels were slower
    */
   speedup?: number;
@@ -1752,9 +1765,8 @@ export function buildRatioText(row: BuildMeasure, zh: boolean) {
   return `${row.ratio}× ${row.better}`;
 }
 
-/** As Nino's generator_report.py writes a ratio: one decimal below 10, whole from 10 */
-export const buildDecimals = (value: number) =>
-  value < 10 ? value.toFixed(1) : value.toFixed(0);
+/** As Nino's generator_report.py writes a ratio (times()) */
+export const buildDecimals = times;
 
 /**
  * The source line of the build tables and chart: the release, its date and
@@ -1776,5 +1788,5 @@ export function buildSourceNote(zh: boolean): string {
 /* Headline numbers                                                    */
 /* ------------------------------------------------------------------ */
 
-/** Best serialize win over MemoryPack, two decimals ("4.33"), from the raw means */
+/** Best serialize win over MemoryPack (times(), "4.3"), from the raw means */
 export const headlineSerialize = headlineMax('serialize', 'memorypack');
