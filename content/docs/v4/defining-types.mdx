@@ -367,10 +367,10 @@ With [`trackReferences`](/en/docs/v4/reference-tracking), an object written agai
 | `[NinoUtf8]` on an interface member | No effect: the implementing member's attributes count | [NINO033](/en/docs/v4/analyzers#nino033), whose code fix moves it |
 | Adding or removing `[NinoUtf8]` on a member whose data is stored or sent | Data written in the other encoding does not read back | nothing: it changes the format, like a new member type |
 | Ignoring every field of a struct | It would be written as zero bytes | [NINO023](/en/docs/v4/analyzers#nino023) |
-| A callback that takes parameters, returns a value, is `private`, or is `static` on anything but `[NinoOnDeserializing]` | It is never called | [NINO038](/en/docs/v4/analyzers#nino038), [NINO039](/en/docs/v4/analyzers#nino039) (with a code fix), [NINO042](/en/docs/v4/analyzers#nino042) |
-| Two methods marked with the same callback attribute in one type | Only one is called | [NINO041](/en/docs/v4/analyzers#nino041) |
-| An instance `[NinoOnDeserializing]` on a record or a type built from constructor parameters | There is no instance to call it on | [NINO043](/en/docs/v4/analyzers#nino043): make it static, or use `[NinoOnDeserialized]` |
-| A callback on a struct written as raw memory | It is never called | [NINO044](/en/docs/v4/analyzers#nino044) |
+| A callback that takes parameters, returns a value, is `private`, or is `static` on anything but `[NinoOnDeserializing]` | The build fails: Nino could never call it | [NINO038](/en/docs/v4/analyzers#nino038), [NINO039](/en/docs/v4/analyzers#nino039) (with a code fix), [NINO042](/en/docs/v4/analyzers#nino042) |
+| Two methods marked with the same callback attribute in one type | The build fails: Nino would call only one | [NINO041](/en/docs/v4/analyzers#nino041) |
+| An instance `[NinoOnDeserializing]` on a record or a type built from constructor parameters | The build fails: there is no instance to call it on | [NINO043](/en/docs/v4/analyzers#nino043): make it static, or use `[NinoOnDeserialized]` |
+| A callback on a struct written as raw memory | The build fails: a raw copy runs no code | [NINO044](/en/docs/v4/analyzers#nino044) |
 
 ## Next Steps [#next-steps]
 

@@ -367,10 +367,10 @@ public class Item
 | `[NinoUtf8]` 加在接口成员上 | 不起作用：只认实现成员上的特性 | [NINO033](/zh/docs/v4/analyzers#nino033)，代码修复会把它移过去 |
 | 数据已经存下或发出后，给成员加上或去掉 `[NinoUtf8]` | 按另一种编码写出的数据读不回来 | 无：这会改变格式，和换掉成员类型一样 |
 | 结构体的字段全被忽略 | 它会写成 0 字节 | [NINO023](/zh/docs/v4/analyzers#nino023) |
-| 回调带参数、有返回值、是 `private`，或者 `[NinoOnDeserializing]` 以外的回调是 `static` | Nino 永远不调用它 | [NINO038](/zh/docs/v4/analyzers#nino038)、[NINO039](/zh/docs/v4/analyzers#nino039)（带代码修复）、[NINO042](/zh/docs/v4/analyzers#nino042) |
-| 一个类型里两个方法标了同一种回调特性 | 只调用其中一个 | [NINO041](/zh/docs/v4/analyzers#nino041) |
-| 在记录或由构造函数参数创建的类型上，用实例方法的 `[NinoOnDeserializing]` | 没有实例可以调用 | [NINO043](/zh/docs/v4/analyzers#nino043)：改成静态方法，或者改用 `[NinoOnDeserialized]` |
-| 在按原始内存写的结构体上标回调 | Nino 永远不调用它 | [NINO044](/zh/docs/v4/analyzers#nino044) |
+| 回调带参数、有返回值、是 `private`，或者 `[NinoOnDeserializing]` 以外的回调是 `static` | 编译失败：Nino 根本调用不到它 | [NINO038](/zh/docs/v4/analyzers#nino038)、[NINO039](/zh/docs/v4/analyzers#nino039)（带代码修复）、[NINO042](/zh/docs/v4/analyzers#nino042) |
+| 一个类型里两个方法标了同一种回调特性 | 编译失败：Nino 只会调用其中一个 | [NINO041](/zh/docs/v4/analyzers#nino041) |
+| 在记录或由构造函数参数创建的类型上，用实例方法的 `[NinoOnDeserializing]` | 编译失败：这时还没有实例可调用 | [NINO043](/zh/docs/v4/analyzers#nino043)：改成静态方法，或者改用 `[NinoOnDeserialized]` |
+| 在按原始内存写的结构体上标回调 | 编译失败：整块拷贝不执行任何代码 | [NINO044](/zh/docs/v4/analyzers#nino044) |
 
 ## 下一步 [#next-steps]
 

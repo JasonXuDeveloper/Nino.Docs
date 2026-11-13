@@ -390,19 +390,38 @@ public sealed class Connection : IDisposable
     }
 
     // 接收后立即处理：每次都是同一个 StateUpdate。
-    public void ReceiveAndApply(Action<StateUpdate> apply)
+    // 数据报格式不对时丢掉它并返回 false：坏一个只丢一个，接收循环照常进行。
+    public bool ReceiveAndApply(Action<StateUpdate> apply)
     {
         int received = _socket.Receive(_receive);
-        NinoDeserializer.Deserialize(_receive.AsSpan(0, received), ref _latest); // [!code highlight]
+        try
+        {
+            NinoDeserializer.Deserialize(_receive.AsSpan(0, received), ref _latest); // [!code highlight]
+        }
+        catch (NinoDataException)
+        {
+            return false; // 下一个数据报照样读进 _latest
+        }
         apply(_latest);
+        return true;
     }
 
     // 接收后交给另一个线程：每条消息是独立的实例，从池中取出。
     // 消费者用完后调用 update.ReturnToPool()。
-    public void ReceiveInto(ConcurrentQueue<StateUpdate> inbox)
+    public bool ReceiveInto(ConcurrentQueue<StateUpdate> inbox)
     {
         int received = _socket.Receive(_receive);
-        inbox.Enqueue(NinoDeserializer.Deserialize<StateUpdate>(_receive.AsSpan(0, received))); // [!code highlight]
+        StateUpdate update;
+        try
+        {
+            update = NinoDeserializer.Deserialize<StateUpdate>(_receive.AsSpan(0, received)); // [!code highlight]
+        }
+        catch (NinoDataException)
+        {
+            return false; // 格式不对的数据报，丢掉
+        }
+        inbox.Enqueue(update);
+        return true;
     }
 
     public void Dispose() => _send.Dispose();   // 把发送缓冲区的数组还给它的池

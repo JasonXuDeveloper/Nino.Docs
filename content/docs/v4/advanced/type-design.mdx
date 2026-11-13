@@ -71,7 +71,7 @@ What Nino writes in front of a class value depends on the declared type of its s
 
 - **Bulk data in arrays and lists of raw elements.** A `T[]` or `List<T>` of unmanaged values or raw structs is one block copy, and so are arrays and lists of value tuples and `KeyValuePair`s of raw items (rearranged with [SIMD](/en/docs/v4/simd#dotnet) where the CPU allows). The full list is in [Raw Memory for Unmanaged Data](/en/docs/v4/performance#raw-memory-for-unmanaged-data).
 - **`List<T>` for counts that vary.** Reuse deserialization fills a list in place and keeps its capacity; an array is reused only when the new data has the same length. A dictionary is merged by key.
-- **Declare the type you want created.** A member declared as `IList<T>`, `IEnumerable<T>` or `IReadOnlyList<T>` is read back as a `List<T>`, `ISet<T>` as a `HashSet<T>`, `IDictionary<TKey, TValue>` as a `Dictionary<TKey, TValue>` ([Collection Types](/en/docs/v4/types#collection-types)). Nullable raw elements are one block only in an array or a `List<T?>`: declared as an interface, each element is written on its own.
+- **Declare the type you want created.** A member declared as `IList<T>`, `IEnumerable<T>` or `IReadOnlyList<T>` is read back as a `List<T>`, `ISet<T>` as a `HashSet<T>`, `IDictionary<TKey, TValue>` as a `Dictionary<TKey, TValue>` ([Collection Types](/en/docs/v4/types#collection-types)). Behind an interface, a list, an array or another `ICollection<T>` of raw elements is still written as one block, and only a sequence that is not a collection (a LINQ query, an iterator) is enumerated element by element. Nullable raw elements are the exception: they are one block only in an array or a `List<T?>`, and declared as an interface, each element is written on its own.
 - **Collections are values.** The same collection in two members is written twice; reference tracking covers `[NinoType]` classes, not collections.
 
 ## Strings [#strings]
@@ -106,11 +106,11 @@ With it set, these calls prefetch:
 
 - `NinoSerializer.Serialize(collection)`, with or without an `IBufferWriter<byte>`, and `NinoDeserializer.Deserialize(bytes, ref collection)` into an existing collection holding as many elements (its objects are reused, so the scattered ones are read into);
 - where `collection` is a `T[]` or `List<T>` of a non-generic `[NinoType]` class (an abstract base included) that is not [fixed-size](/en/docs/v4/performance#fixed-size-types), written or read directly (not as a member of another type) through a call the [interceptors](/en/docs/v4/advanced/high-performance#per-call-overhead) route (a project built with the .NET 8 SDK or later), running on .NET 8 or later on x64 or Arm64;
-- and only when the collection takes more than a quarter of the CPU's last-level cache and its first objects are not in allocation order. Every other collection is written and read as before.
+- and only when the collection takes more than a quarter of the CPU's last-level cache and its first objects are not in allocation order. Every other collection is written and read as without the property.
 
 The bytes are the same either way, and prefetching never runs your code: it reads only fields and auto-properties no override can replace. Set it when a hot path serializes such collections, and [measure](/en/docs/v4/advanced/high-performance#measure) it on your data: collections that fit in the cache, or whose objects are still in allocation order, gain nothing. Unity projects are unaffected: Unity compiles with the generator's Roslyn 4.3 build, which has no interceptors, so the property does nothing there.
 
-**Cost:** without the property (the default), nothing: the generated code is the same as before. With it, each top-level call of such a collection tests its length before its loop, which made calls on short collections a few percent slower in our benchmarks, so set it only in projects that handle such collections.
+**Cost:** without the property (the default), nothing: the generated code has no prefetch in it. With it, each top-level call of such a collection tests its length before its loop, which made calls on short collections a few percent slower in our benchmarks, so set it only in projects that handle such collections.
 
 ## Next Steps [#next-steps]
 

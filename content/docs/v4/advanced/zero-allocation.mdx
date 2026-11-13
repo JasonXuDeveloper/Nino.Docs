@@ -390,19 +390,38 @@ public sealed class Connection : IDisposable
     }
 
     // Receive and handle now: the same StateUpdate every time.
-    public void ReceiveAndApply(Action<StateUpdate> apply)
+    // False for a malformed datagram, which is dropped: it ends only itself, not the receive loop.
+    public bool ReceiveAndApply(Action<StateUpdate> apply)
     {
         int received = _socket.Receive(_receive);
-        NinoDeserializer.Deserialize(_receive.AsSpan(0, received), ref _latest); // [!code highlight]
+        try
+        {
+            NinoDeserializer.Deserialize(_receive.AsSpan(0, received), ref _latest); // [!code highlight]
+        }
+        catch (NinoDataException)
+        {
+            return false; // the next datagram is read into _latest again
+        }
         apply(_latest);
+        return true;
     }
 
     // Receive for another thread: each message is its own instance, from the pool.
     // The consumer calls update.ReturnToPool() when it is done with it.
-    public void ReceiveInto(ConcurrentQueue<StateUpdate> inbox)
+    public bool ReceiveInto(ConcurrentQueue<StateUpdate> inbox)
     {
         int received = _socket.Receive(_receive);
-        inbox.Enqueue(NinoDeserializer.Deserialize<StateUpdate>(_receive.AsSpan(0, received))); // [!code highlight]
+        StateUpdate update;
+        try
+        {
+            update = NinoDeserializer.Deserialize<StateUpdate>(_receive.AsSpan(0, received)); // [!code highlight]
+        }
+        catch (NinoDataException)
+        {
+            return false; // a malformed datagram: drop it
+        }
+        inbox.Enqueue(update);
+        return true;
     }
 
     public void Dispose() => _send.Dispose();   // returns the send buffer's array to its pool
