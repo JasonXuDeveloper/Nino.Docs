@@ -199,7 +199,7 @@ MessagePack 3（MessagePack-CSharp）和 protobuf-net 3 用同样的类型，读
 
 各种格式写的内容不一样，载荷大小就看得出来：MessagePack 把 `Guid` 写成 36 个字符的字符串，把 `DateTime` 写成 UTC 时间戳；protobuf-net 给类层次的每一层套一条消息，`DateTime` 也单独写成一条消息。
 
-可空值（[`NullableTest`](#nullabletest) 和可空集合）各库都按自己用户的惯用写法来测。MessagePack 和 System.Text.Json 原生就能写 null。MemoryPack 用 `SafeNullable<T>`：它直接写 `Nullable<T>` 时会把值的内存原样拷出去，填充字节没有初始化，同一个值可能写出不同的字节；`SafeNullable<T>` 没有填充，和 Nino 的字节一样确定。protobuf 的 repeated 字段里没有 null，所以 protobuf-net 给每个元素套一层带可选值的消息（`[NullWrappedValue]`），Google.Protobuf 读写同样的消息；可空字段则用 `google.protobuf` 的包装类型（`Int32Value` 等）、`Timestamp`，`Guid` 和 `decimal` 写成字符串。
+可空值（[`NullableTest`](#nullabletest) 和可空集合）各库都按自己用户的惯用写法来测。MessagePack 和 System.Text.Json 原生就能写 null。MemoryPack 用 `SafeNullable<T>`：它直接写 `Nullable<T>` 时会把值的内存原样拷出去，填充字节没有初始化，同一个值可能写出不同的字节；`SafeNullable<T>` 没有填充，和 Nino 的字节一样确定。protobuf 的 repeated 字段里没有 null，顶层也没有 null，所以 protobuf-net 给每个元素套一层带可选值的消息（`[NullWrappedValue]`），单个可空值写成只有一个可选字段的消息（为 null 时是空消息），Google.Protobuf 读写同样的消息；可空结构体在 repeated 字段里 protobuf-net 套不了包装，`SimpleStruct?[100]` 就写成这种单字段消息的数组，字节完全一样。可空字段则用 `google.protobuf` 的包装类型（`Int32Value` 等）、`Timestamp`，`Guid` 和 `decimal` 写成字符串。
 
 ### 尚未测量 [#not-measured-yet]
 
@@ -499,7 +499,7 @@ public PolymorphicClassBase NinoDeserializePolymorphicClass()
 
 ### NullableTest [#nullabletest]
 
-一个有 8 个常见类型可空成员的类，一半成员为 null；单个对象测一次，100 个的数组再测一次，数组里相邻对象为 null 的那一半正好错开。各库写的是同样的值：MemoryPack 用一份成员换成 `SafeNullable<T>` 的副本，protobuf 用 `google.protobuf` 的包装类型（见 [MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)）。
+可空字段：一个有 8 个常见类型可空成员的类，一半成员为 null；单个对象测一次，100 个的数组再测一次，数组里相邻对象为 null 的那一半正好错开（`NullableFields`、`NullableFieldsArray`）。单独的可空值：一个有值的 `SimpleStruct?`（`NullableStruct`），每 5 个有 1 个 null 的 `SimpleStruct?[100]`（`NullableStructs`），一个为 null 的 `SimpleClass` 引用（`NullableObject`；有值的情况就是 [`SimpleTest`](#simpletest) 里的 `SimpleClass`），以及每 5 个有 1 个 null 的 `SimpleClass[100]`（`NullableObjects`）。各库写的是同样的值：可空结构体在 MemoryPack 里用 `SafeNullable<T>`，protobuf 把 null 写成缺省的消息字段（见 [MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)）。
 
 ```csharp title="NullableBenchmarkData.cs" nocheck
 [NinoType]

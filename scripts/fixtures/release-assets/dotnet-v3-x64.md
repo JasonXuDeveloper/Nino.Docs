@@ -51,14 +51,30 @@ IterationCount=15  LaunchCount=1  WarmupCount=5
 | NinoSerializeVectors                |   4,111.7408 ns |   3,912.6667 ns |   4,218.2367 ns |   1.00 | 156.25KB |       - |       - |       - |         - |          NA |
 | MemoryPackSerializeVectors          |   4,135.7887 ns |   3,932.4142 ns |   4,354.1231 ns |   1.01 | 156.25KB |       - |       - |       - |         - |          NA |
 | MessagePackSerializeVectors         | 126,967.1170 ns | 120,760.4580 ns | 135,527.0576 ns |  30.89 | 205.08KB |       - |       - |       - |         - |          NA |
-| NinoSerializeNullableClass | 102.0000 ns | 96.9000 ns | 107.1000 ns | 1.70 | 52 B | - | - | - | - | NA |
-| MemoryPackSerializeNullableClass | 84.0000 ns | 79.8000 ns | 88.2000 ns | 1.40 | 52 B | - | - | - | - | NA |
-| NinoDeserializeNullableClass | 112.2000 ns | 106.5900 ns | 117.8100 ns | 1.70 | - | - | - | - | - | NA |
-| MemoryPackDeserializeNullableClass | 92.4000 ns | 87.7800 ns | 97.0200 ns | 1.40 | - | - | - | - | - | NA |
-| NinoSerializeNullableClasses | 8,840.0000 ns | 8,398.0000 ns | 9,282.0000 ns | 1.70 | 5,100 B | - | - | - | - | NA |
-| MemoryPackSerializeNullableClasses | 7,280.0000 ns | 6,916.0000 ns | 7,644.0000 ns | 1.40 | 5,100 B | - | - | - | - | NA |
-| NinoDeserializeNullableClasses | 9,724.0000 ns | 9,237.8000 ns | 10,210.2000 ns | 1.70 | - | - | - | - | - | NA |
-| MemoryPackDeserializeNullableClasses | 8,008.0000 ns | 7,607.6000 ns | 8,408.4000 ns | 1.40 | - | - | - | - | - | NA |
+| NinoSerializeNullableFields | 102.0000 ns | 96.9000 ns | 107.1000 ns | 1.70 | 52 B | - | - | - | - | NA |
+| MemoryPackSerializeNullableFields | 84.0000 ns | 79.8000 ns | 88.2000 ns | 1.40 | 52 B | - | - | - | - | NA |
+| NinoDeserializeNullableFields | 112.2000 ns | 106.5900 ns | 117.8100 ns | 1.70 | - | - | - | - | - | NA |
+| MemoryPackDeserializeNullableFields | 92.4000 ns | 87.7800 ns | 97.0200 ns | 1.40 | - | - | - | - | - | NA |
+| NinoSerializeNullableFieldsArray | 8,840.0000 ns | 8,398.0000 ns | 9,282.0000 ns | 1.70 | 5,100 B | - | - | - | - | NA |
+| MemoryPackSerializeNullableFieldsArray | 7,280.0000 ns | 6,916.0000 ns | 7,644.0000 ns | 1.40 | 5,100 B | - | - | - | - | NA |
+| NinoDeserializeNullableFieldsArray | 9,724.0000 ns | 9,237.8000 ns | 10,210.2000 ns | 1.70 | - | - | - | - | - | NA |
+| MemoryPackDeserializeNullableFieldsArray | 8,008.0000 ns | 7,607.6000 ns | 8,408.4000 ns | 1.40 | - | - | - | - | - | NA |
+| NinoSerializeNullableStruct | 13.6000 ns | 12.9200 ns | 14.2800 ns | 1.70 | 13 B | - | - | - | - | NA |
+| MemoryPackSerializeNullableStruct | 11.2000 ns | 10.6400 ns | 11.7600 ns | 1.40 | 13 B | - | - | - | - | NA |
+| NinoDeserializeNullableStruct | 14.9600 ns | 14.2120 ns | 15.7080 ns | 1.70 | - | - | - | - | - | NA |
+| MemoryPackDeserializeNullableStruct | 12.3200 ns | 11.7040 ns | 12.9360 ns | 1.40 | - | - | - | - | - | NA |
+| NinoSerializeNullableStructs | 1,020.0000 ns | 969.0000 ns | 1,071.0000 ns | 1.70 | 1,300 B | - | - | - | - | NA |
+| MemoryPackSerializeNullableStructs | 840.0000 ns | 798.0000 ns | 882.0000 ns | 1.40 | 1,300 B | - | - | - | - | NA |
+| NinoDeserializeNullableStructs | 1,122.0000 ns | 1,065.9000 ns | 1,178.1000 ns | 1.70 | - | - | - | - | - | NA |
+| MemoryPackDeserializeNullableStructs | 924.0000 ns | 877.8000 ns | 970.2000 ns | 1.40 | - | - | - | - | - | NA |
+| NinoSerializeNullableObject | 3.4000 ns | 3.2300 ns | 3.5700 ns | 1.70 | 1 B | - | - | - | - | NA |
+| MemoryPackSerializeNullableObject | 2.8000 ns | 2.6600 ns | 2.9400 ns | 1.40 | 1 B | - | - | - | - | NA |
+| NinoDeserializeNullableObject | 3.7400 ns | 3.5530 ns | 3.9270 ns | 1.70 | - | - | - | - | - | NA |
+| MemoryPackDeserializeNullableObject | 3.0800 ns | 2.9260 ns | 3.2340 ns | 1.40 | - | - | - | - | - | NA |
+| NinoSerializeNullableObjects | 68,000.0000 ns | 64,600.0000 ns | 71,400.0000 ns | 1.70 | 90,000 B | - | - | - | - | NA |
+| MemoryPackSerializeNullableObjects | 56,000.0000 ns | 53,200.0000 ns | 58,800.0000 ns | 1.40 | 90,000 B | - | - | - | - | NA |
+| NinoDeserializeNullableObjects | 74,800.0000 ns | 71,060.0000 ns | 78,540.0000 ns | 1.70 | - | - | - | - | - | NA |
+| MemoryPackDeserializeNullableObjects | 61,600.0000 ns | 58,520.0000 ns | 64,680.0000 ns | 1.40 | - | - | - | - | - | NA |
 | NinoSerializeNullableLongs | 1,530.0000 ns | 1,453.5000 ns | 1,606.5000 ns | 1.70 | 16,004 B | - | - | - | - | NA |
 | MemoryPackSerializeNullableLongs | 1,260.0000 ns | 1,197.0000 ns | 1,323.0000 ns | 1.40 | 16,004 B | - | - | - | - | NA |
 | NinoDeserializeNullableLongs | 1,683.0000 ns | 1,598.8500 ns | 1,767.1500 ns | 1.70 | - | - | - | - | - | NA |

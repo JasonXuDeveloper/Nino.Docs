@@ -266,12 +266,28 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
     {
       name: 'Class of 8 nullable fields, half null',
       zh: '8 个可空字段的类，一半为 null',
-      key: 'NullableClass',
+      key: 'NullableFields',
     },
     {
       name: '100 classes of nullable fields',
       zh: '100 个可空字段的类',
-      key: 'NullableClasses',
+      key: 'NullableFieldsArray',
+    },
+    { name: 'SimpleStruct?', code: true, key: 'NullableStruct' },
+    {
+      name: 'SimpleStruct?[100], every fifth null',
+      zh: 'SimpleStruct?[100]，每 5 个有 1 个 null',
+      key: 'NullableStructs',
+    },
+    {
+      name: 'Null SimpleClass reference',
+      zh: '为 null 的 SimpleClass 引用',
+      key: 'NullableObject',
+    },
+    {
+      name: 'SimpleClass[100], every fifth null',
+      zh: 'SimpleClass[100]，每 5 个有 1 个 null',
+      key: 'NullableObjects',
     },
     { name: 'long?[1000]', code: true, key: 'NullableLongs' },
     { name: 'List<int?> (1,000)', code: true, key: 'NullableInts' },
@@ -294,12 +310,28 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
     {
       name: 'Class of 8 nullable fields, half null',
       zh: '8 个可空字段的类，一半为 null',
-      key: 'NullableClass',
+      key: 'NullableFields',
     },
     {
       name: '100 classes of nullable fields',
       zh: '100 个可空字段的类',
-      key: 'NullableClasses',
+      key: 'NullableFieldsArray',
+    },
+    { name: 'SimpleStruct?', code: true, key: 'NullableStruct' },
+    {
+      name: 'SimpleStruct?[100], every fifth null',
+      zh: 'SimpleStruct?[100]，每 5 个有 1 个 null',
+      key: 'NullableStructs',
+    },
+    {
+      name: 'Null SimpleClass reference',
+      zh: '为 null 的 SimpleClass 引用',
+      key: 'NullableObject',
+    },
+    {
+      name: 'SimpleClass[100], every fifth null',
+      zh: 'SimpleClass[100]，每 5 个有 1 个 null',
+      key: 'NullableObjects',
     },
     { name: 'long?[1000]', code: true, key: 'NullableLongs' },
     { name: 'List<int?> (1,000)', code: true, key: 'NullableInts' },

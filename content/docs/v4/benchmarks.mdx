@@ -199,7 +199,7 @@ A case a library cannot express with the same data has no method for it, never o
 
 The formats differ in what they write, and the payload sizes show it: MessagePack writes a `Guid` as a 36-character string and a `DateTime` as a UTC timestamp, protobuf-net nests one message per level of a class hierarchy and writes a `DateTime` as a message of its own.
 
-Nullable values ([`NullableTest`](#nullabletest) and the nullable collections) go through the form each library's users write. MessagePack and System.Text.Json write null natively. MemoryPack writes `SafeNullable<T>`: its plain `Nullable<T>` copies the value's memory with the padding left uninitialized, so one value can give different bytes, while `SafeNullable<T>` has no padding, like Nino's bytes. Protobuf has no null in a repeated field, so protobuf-net wraps each element in a message with an optional value (`[NullWrappedValue]`), and Google.Protobuf reads the same messages; a nullable field is a `google.protobuf` wrapper (`Int32Value`, ...), a `Timestamp`, or a string for `Guid` and `decimal`.
+Nullable values ([`NullableTest`](#nullabletest) and the nullable collections) go through the form each library's users write. MessagePack and System.Text.Json write null natively. MemoryPack writes `SafeNullable<T>`: its plain `Nullable<T>` copies the value's memory with the padding left uninitialized, so one value can give different bytes, while `SafeNullable<T>` has no padding, like Nino's bytes. Protobuf has no null in a repeated field and none at the top level, so protobuf-net wraps each element in a message with an optional value (`[NullWrappedValue]`), a single nullable value is a message with one optional field (empty when null), and Google.Protobuf reads the same messages; protobuf-net cannot wrap a nullable struct in a repeated field, so `SimpleStruct?[100]` is written as an array of that one-field message, the same bytes. A nullable field is a `google.protobuf` wrapper (`Int32Value`, ...), a `Timestamp`, or a string for `Guid` and `decimal`.
 
 ### Not Measured Yet [#not-measured-yet]
 
@@ -499,7 +499,7 @@ public PolymorphicClassBase NinoDeserializePolymorphicClass()
 
 ### NullableTest [#nullabletest]
 
-A class of eight nullable members of common types, half of them null, alone and as an array of 100 whose objects alternate which half is null. Every library writes the same values; MemoryPack through a copy with `SafeNullable<T>` members, protobuf through `google.protobuf` wrappers (see [MessagePack and protobuf-net](#messagepack-and-protobuf-net)).
+Nullable fields: a class of eight nullable members of common types, half of them null, alone and as an array of 100 whose objects alternate which half is null (`NullableFields`, `NullableFieldsArray`). Nullable values on their own: one `SimpleStruct?` that holds a value (`NullableStruct`), `SimpleStruct?[100]` with every fifth element null (`NullableStructs`), one `SimpleClass` reference that is null (`NullableObject`; [`SimpleTest`](#simpletest)'s `SimpleClass` is the same reference with a value) and `SimpleClass[100]` with every fifth element null (`NullableObjects`). Every library writes the same values; MemoryPack the nullable structs through `SafeNullable<T>`, protobuf a null as an absent message field (see [MessagePack and protobuf-net](#messagepack-and-protobuf-net)).
 
 ```csharp title="NullableBenchmarkData.cs" nocheck
 [NinoType]
