@@ -256,7 +256,8 @@ Overview, FAQ and reference pages answer the questions their readers search for,
 Never type a benchmark number. Runtime numbers come from `src/data/bench-*.json` (synced from the release's
 Performance Report, AGENTS.md) through `BenchValue`, `RuntimeTable`, `ReuseTable`, `ExtraRuntimeTables`,
 `ResultsTable`, `WorkloadTables`, `BenchSource`, `BenchmarkChart`, `RuntimesTables`, `UnityTables`, `UnityHighlights` and `BuildTables` (build-time numbers from `src/data/bench-build.json`, with `BenchValue`'s `build.*` keys in prose). Within 5 % is
-on par and is written so; never call Nino "slower"; v3 means 3.3.13.
+on par and is written so; never call Nino "slower"; v3 means 3.3.13. A multiple has one decimal below 10 and is a
+whole number from 10 ("1.4×", "77×", the components' `times()`); prose that names one goes through `BenchValue`.
 
 ## Headings and links
 
