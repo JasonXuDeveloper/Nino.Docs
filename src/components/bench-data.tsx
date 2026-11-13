@@ -35,6 +35,7 @@ import {
   buildSourceNote,
   classRatioRange,
   datasets,
+  formatBound,
   formatBytes,
   formatClassRange,
   formatRatio,
@@ -205,14 +206,15 @@ function barsLegend(zh: boolean, nino: string, other: string) {
   );
 }
 
-function ratioCell(ratio: number | undefined, zh: boolean, tooFast?: boolean) {
-  if (tooFast)
-    return (
-      <>
-        <strong>{zh ? '更快' : 'faster'}</strong>
-        {zh ? '（快到测不出）' : ' (too fast to measure)'}
-      </>
-    );
+/** Nino under FLOOR_NS against a measurable time `ns`: faster by more than ns / FLOOR_NS (formatBound) */
+function boundText(ns: number, zh: boolean) {
+  const bound = formatBound(ns);
+  return zh ? `快 ${bound.slice(2, -1)} 倍以上` : `${bound} faster`;
+}
+
+/** `boundNs`: the other time, when Nino ran under FLOOR_NS and it did not (tooFast) */
+function ratioCell(ratio: number | undefined, zh: boolean, boundNs?: number) {
+  if (boundNs !== undefined) return <strong>{boundText(boundNs, zh)}</strong>;
   if (ratio === undefined) return zh ? '持平' : 'on par';
   const r = ratio.toFixed(2);
   if (ratio > 1) return <strong>{zh ? `快 ${r} 倍` : `${r}× faster`}</strong>;
@@ -228,7 +230,7 @@ function ratioCell(ratio: number | undefined, zh: boolean, tooFast?: boolean) {
 function versusNote(vs: Versus | undefined, zh: boolean) {
   if (!vs) return null;
   let text: string | null = null;
-  if (vs.tooFast) text = zh ? 'Nino 快到测不出' : 'Nino too fast to measure';
+  if (vs.tooFast) text = formatBound(vs.time.ns);
   else if (vs.ratio === undefined) text = zh ? '持平' : 'on par';
   else if (vs.ratio > 1) text = `${vs.ratio.toFixed(2)}×`;
   if (!text) return null;
@@ -353,7 +355,11 @@ function runtimeTable(
                 <td className="text-right tabular-nums">
                   {row.memorypack ? (
                     <>
-                      {ratioCell(row.ratio, zh, row.tooFast)}
+                      {ratioCell(
+                        row.ratio,
+                        zh,
+                        row.tooFast ? row.memorypack.ns : undefined,
+                      )}
                       {!markdown && (
                         <TimeBars
                           bars={[
@@ -377,8 +383,8 @@ function runtimeTable(
                 ))}
                 {withV3 && (
                   <td className="text-right tabular-nums">
-                    {row.v3TooFast
-                      ? ratioCell(undefined, zh, true)
+                    {row.v3TooFast && row.v3
+                      ? ratioCell(undefined, zh, row.v3.ns)
                       : row.vsV3 === undefined
                         ? '—'
                         : ratioCell(
@@ -554,7 +560,11 @@ function libraryTables(
                         {vs.time.text}
                       </td>
                       <td className="text-right tabular-nums">
-                        {ratioCell(vs.ratio, zh, vs.tooFast)}
+                        {ratioCell(
+                          vs.ratio,
+                          zh,
+                          vs.tooFast ? vs.time.ns : undefined,
+                        )}
                         {!markdown && (
                           <TimeBars
                             bars={[
@@ -1047,13 +1057,7 @@ function unityOperation(operation: string, zh: boolean) {
 
 /** Without Burst / with Burst, by the FLOOR_NS and on-par rules */
 function speedupCell(row: UnityCase, zh: boolean) {
-  if (row.tooFast)
-    return (
-      <>
-        <strong>{zh ? '更快' : 'faster'}</strong>
-        {zh ? '（快到测不出）' : ' (too fast to measure)'}
-      </>
-    );
+  if (row.tooFast) return <strong>{formatBound(row.without.ns)}</strong>;
   if (row.speedup === undefined) return zh ? '持平' : 'on par';
   const r = formatRatio(row.speedup);
   if (row.speedup > 1) return <strong>{r}</strong>;
@@ -1469,9 +1473,11 @@ export function benchValue(k: string): string {
     if (lib) {
       const vs = row.others[lib];
       if (!vs) return '—';
-      return vs.tooFast ? '—' : formatRatio(vs.ratio ?? 1);
+      return vs.tooFast ? formatBound(vs.time.ns) : formatRatio(vs.ratio ?? 1);
     }
-    return formatRatio(row.ratio ?? 1);
+    return row.tooFast && row.memorypack
+      ? formatBound(row.memorypack.ns)
+      : formatRatio(row.ratio ?? 1);
   }
   throw new Error(`Unknown benchmark value: ${k}`);
 }

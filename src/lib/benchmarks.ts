@@ -92,9 +92,11 @@ export const archLabels: Record<Arch, string> = { x64: 'x64', arm64: 'Arm64' };
  * Below about three clock cycles, times cannot be told apart: a 40-byte
  * struct read measured anywhere from 0.05 to 0.8 ns in Nino and MemoryPack
  * alike, once BenchmarkDotNet subtracts its empty-method overhead. v4 under it against a measurable
- * time is faster, too fast to measure: no ratio, which would only reflect the
- * floor. Both under it is on par. Nino's benchmarks/bdn.py holds the same
- * floor (readme.py, compare_v3.py and ab.py use it).
+ * time gets a lower bound instead of a ratio, which would only reflect noise:
+ * v4 took less than the floor, so the other time is more than its time /
+ * FLOOR_NS times as long ("> 1.40×", formatBound). Both under it is on par.
+ * Nino's benchmarks/reports/bdn.py holds the same floor and bound (charts.py,
+ * readme.py and compare_v3.py use them).
  */
 export const FLOOR_NS = 1;
 
@@ -179,7 +181,7 @@ export interface Versus {
   time: Measure;
   /** Other time / Nino time; undefined = on par (or tooFast); < 1 = the other is ahead */
   ratio?: number;
-  /** Nino under FLOOR_NS, the other above it: faster, too fast to measure */
+  /** Nino under FLOOR_NS, the other above it: faster by more than formatBound(time.ns) */
   tooFast?: boolean;
 }
 
@@ -204,11 +206,11 @@ export interface RuntimeCase {
   memorypack: Measure;
   /** MemoryPack time / v4 time; undefined = on par (or tooFast); < 1 = MemoryPack faster */
   ratio?: number;
-  /** v4 under FLOOR_NS, MemoryPack above it: faster, too fast to measure */
+  /** v4 under FLOOR_NS, MemoryPack above it: faster by more than formatBound(memorypack.ns) */
   tooFast?: boolean;
   /** v3 3.3.13 time / v4 time, both from V3_RUNTIME; undefined = not measured (or v3TooFast) */
   vsV3?: number;
-  /** v4 under FLOOR_NS in V3_RUNTIME, v3 above it: faster than v3, too fast to measure */
+  /** v4 under FLOOR_NS in V3_RUNTIME, v3 above it: faster than v3 by more than formatBound(v3.ns) */
   v3TooFast?: boolean;
   v3?: Measure;
   /** The other libraries, for the cases they can express */
@@ -1248,6 +1250,15 @@ export const bestReuse = x64.reuse.reduce<ReuseCase | undefined>(
  */
 export const formatRatio = (value: number) => `${value.toFixed(2)}×`;
 
+/**
+ * Nino v4 under FLOOR_NS against a measurable time `ns` (a comparison's
+ * tooFast): v4 took less than FLOOR_NS, so the other is more than ns /
+ * FLOOR_NS times as long, "> 1.40×", with formatRatio's two decimals. The only
+ * lower bound the site shows: both under the floor are on par.
+ */
+export const lowerBound = (ns: number) => ns / FLOOR_NS;
+export const formatBound = (ns: number) => `> ${formatRatio(lowerBound(ns))}`;
+
 /* ------------------------------------------------------------------ */
 /* Workloads and the headline                                          */
 /* ------------------------------------------------------------------ */
@@ -1515,7 +1526,7 @@ export interface UnityCase {
    * 5%) or tooFast; below 1 when the kernels were slower
    */
   speedup?: number;
-  /** With Burst under FLOOR_NS, without it above: faster, too fast to measure */
+  /** With Burst under FLOOR_NS, without it above: faster by more than formatBound(without.ns) */
   tooFast?: boolean;
 }
 

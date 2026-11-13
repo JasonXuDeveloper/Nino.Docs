@@ -540,7 +540,7 @@ export function parseV3Section(body: string) {
       const match = /^(Serialize|Deserialize)(\w+)$/.exec(row[name] ?? '');
       const v3Ns = parseTime(row[v3Col] ?? '');
       const v4Ns = parseTime(row[v4Col] ?? '');
-      // v4 may read 0.00 ns: too fast to measure (src/lib/benchmarks.ts, FLOOR_NS)
+      // v4 may read 0.00 ns: under the floor (src/lib/benchmarks.ts, FLOOR_NS)
       if (!match || v3Ns === null || v4Ns === null || v3Ns <= 0 || v4Ns < 0)
         continue;
       const key = `${match[1].toLowerCase()}:${match[2]}`;
@@ -577,7 +577,7 @@ export function parseV3Report(text: string, x64: BenchRow[]) {
     // A method without a verb reads into existing objects (PooledGraphTest's NinoLeavesInPlace): deserialize
     const match = /^Nino(Serialize|Deserialize)?(\w+)$/.exec(row.method);
     const v4Ns = v4.get(row.method);
-    // v4 may read 0.00 ns: too fast to measure (src/lib/benchmarks.ts, FLOOR_NS)
+    // v4 may read 0.00 ns: under the floor (src/lib/benchmarks.ts, FLOOR_NS)
     if (!match || v4Ns === undefined || row.meanNs <= 0 || v4Ns < 0) continue;
     rows[`${(match[1] ?? 'Deserialize').toLowerCase()}:${match[2]}`] = {
       v3Ns: row.meanNs,

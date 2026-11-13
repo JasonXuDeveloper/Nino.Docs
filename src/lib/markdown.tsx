@@ -43,6 +43,7 @@ import { type ChartId, isArchChart } from '@/components/charts/ids';
 import { glossary, glossaryHref } from '@/components/glossary';
 import {
   dotnetGroupsShown,
+  formatBound,
   formatRatio,
   hasV3,
   hasWorkloads,
@@ -442,8 +443,7 @@ function markdownComponents(lang: Locale, pageUrl: string) {
       asMarkdown();
       const ratio = (v: Versus | undefined) => {
         if (!v) return '—';
-        if (v.tooFast)
-          return `${v.time.text} (${zh ? 'Nino 快到测不出' : 'Nino too fast to measure'})`;
+        if (v.tooFast) return `${v.time.text} (${formatBound(v.time.ns)})`;
         if (v.ratio === undefined)
           return `${v.time.text} (${zh ? '持平' : 'on par'})`;
         return `${v.time.text} (${formatRatio(v.ratio)})`;

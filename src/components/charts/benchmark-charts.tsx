@@ -17,6 +17,7 @@ import {
   formatTime,
   gcNote,
   isOnPar,
+  lowerBound,
   type RuntimeCase,
   reuseSpeedup,
   runtime,
@@ -81,16 +82,22 @@ function seriesFor(zh: boolean) {
   } satisfies Record<string, ChartSeries>;
 }
 
-/** v4 under FLOOR_NS against a measurable time; `than` names the other side where the badges do */
-const tooFastBadge = (zh: boolean, than?: string) => ({
-  text: zh
-    ? `${than ? `比 ${than} ` : ''}更快（快到测不出）`
-    : `faster${than ? ` than ${than}` : ''} (too fast to measure)`,
-  tone: 'win' as const,
-});
+/**
+ * v4 under FLOOR_NS against a measurable time `ns`: faster by more than ns /
+ * FLOOR_NS (lowerBound); `than` names the other side where the badges do
+ */
+const boundBadge = (ns: number, zh: boolean, than?: string) => {
+  const r = ratioText(lowerBound(ns));
+  return {
+    text: zh
+      ? `${than ? `比 ${than} ` : ''}快 ${r} 倍以上`
+      : `> ${r}× faster${than ? ` than ${than}` : ''}`,
+    tone: 'win' as const,
+  };
+};
 
 function mpBadge(row: RuntimeCase, zh: boolean) {
-  if (row.tooFast) return tooFastBadge(zh);
+  if (row.tooFast) return boundBadge(row.memorypack.ns, zh);
   if (row.ratio === undefined)
     return { text: zh ? '持平' : 'on par', tone: 'par' as const };
   const r = ratioText(row.ratio);
@@ -227,7 +234,7 @@ function v3Badge(v3Ns: number, v4Ns: number, zh: boolean) {
   if (v4Ns < FLOOR_NS)
     return v3Ns < FLOOR_NS
       ? { text: zh ? '与 v3 持平' : 'on par with v3', tone: 'par' as const }
-      : tooFastBadge(zh, 'v3');
+      : boundBadge(v3Ns, zh, 'v3');
   const vsV3 = v3Ns / v4Ns;
   if (isOnPar(vsV3))
     return { text: zh ? '与 v3 持平' : 'on par with v3', tone: 'par' as const };

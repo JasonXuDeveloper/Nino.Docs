@@ -23,6 +23,7 @@ import {
   datasets,
   dotnetGroups,
   FLOOR_NS,
+  formatBound,
   formatRatio,
   formatTime,
   gcNote,
@@ -118,14 +119,23 @@ export function RuntimesChart({
       for (const column of table.columns) {
         const value = row.cells[column.key]?.value;
         if (value === undefined) continue;
-        const relative = value / nino;
+        // A time under FLOOR_NS: bars from the floor, and Nino under it
+        // against a measurable time is a lower bound (formatBound)
+        const floor = current === 'size' ? 0 : FLOOR_NS;
+        const relative = value / Math.max(nino, floor);
         values[column.key] = relative;
         const shown =
           current === 'size' ? formatSize(value) : formatTime(value);
+        const multiple =
+          nino >= floor
+            ? formatRatio(relative)
+            : value < floor
+              ? zh
+                ? '持平'
+                : 'on par'
+              : formatBound(value);
         text[column.key] =
-          column.key === ninoKey
-            ? shown
-            : `${shown} · ${formatRatio(relative)}`;
+          column.key === ninoKey ? shown : `${shown} · ${multiple}`;
       }
       return [{ label: row.case, code: true, values, text }];
     });
@@ -216,10 +226,7 @@ export function UnityChart({ lang = 'en' }: { lang?: Locale }) {
     .map((row) => {
       const share = row.with.ns / row.without.ns;
       const badge = row.tooFast
-        ? {
-            text: zh ? '更快（快到测不出）' : 'faster (too fast to measure)',
-            tone: 'win' as const,
-          }
+        ? boundBadge(row.without.ns, zh)
         : row.speedup === undefined
           ? { text: zh ? '持平' : 'on par', tone: 'par' as const }
           : row.speedup > 1
@@ -329,19 +336,24 @@ function opponentOf(row: TableCase, key: Exclude<Opponent, 'all'>) {
   return versusOf(row, key);
 }
 
+/** Nino under FLOOR_NS against a measurable time `ns`: faster by more than ns / FLOOR_NS (formatBound) */
+function boundBadge(ns: number, zh: boolean) {
+  const bound = formatBound(ns);
+  return {
+    text: zh ? `快 ${bound.slice(2)} 以上` : `${bound} faster`,
+    tone: 'win' as const,
+  };
+}
+
 function versusText(v: Versus, zh: boolean) {
-  if (v.tooFast) return zh ? 'Nino 快到测不出' : 'Nino too fast to measure';
+  if (v.tooFast) return formatBound(v.time.ns);
   if (v.ratio === undefined) return zh ? '持平' : 'on par';
   return formatRatio(v.ratio);
 }
 
-/** Nino ahead, on par or too fast: a badge; the other ahead: none (the times show it) */
+/** Nino ahead, on par or under the floor (a lower bound): a badge; the other ahead: none (the times show it) */
 function versusBadge(v: Versus, zh: boolean) {
-  if (v.tooFast)
-    return {
-      text: zh ? '更快（快到测不出）' : 'faster (too fast to measure)',
-      tone: 'win' as const,
-    };
+  if (v.tooFast) return boundBadge(v.time.ns, zh);
   if (v.ratio === undefined)
     return { text: zh ? '持平' : 'on par', tone: 'par' as const };
   if (v.ratio < 1) return undefined;

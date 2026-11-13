@@ -46,7 +46,7 @@ icon: ChartColumn
 - **序列化**测试写进一个缓冲区写入器，它只创建一次，每次调用前重置（Nino 用 `NinoArrayBufferWriter`，其他库用 `ArrayBufferWriter<byte>`），所以测的是序列化本身，不是数组分配。每个库用的都是它能直接写入的写入器：换成其他 `IBufferWriter<byte>`，原始值和固定大小的值 Nino 照样直接写入，其他值先写进池化的缓冲区再整体复制过去，比这些表格多一次复制。
 - **反序列化**测试读的是各个库启动时写好的字节，每次调用都创建新对象。
 - **先验证**：跑基准测试之前，`--verify`（[`Verify.cs`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Harness/Verify.cs)）把每个用例跑一遍，检查每个序列化用例写出的正是载荷的字节，各个库读回的值也逐层比较、完全相同。测试数据用固定种子，每次跑序列化的都是同样的值。
-- **1 ns 以下**（大约三个时钟周期）的耗时分不出快慢：读一个 40 字节的结构体，扣掉 BenchmarkDotNet 的空方法开销后，两个库测出来都在 0.05 到 0.8 ns 之间晃。两边都低于 1 ns 记为持平；Nino 低于 1 ns、对方测得出时，记为更快（快到测不出），不给倍数。相差 5% 以内也记为持平。
+- **1 ns 以下**（大约三个时钟周期）的耗时分不出快慢：读一个 40 字节的结构体，扣掉 BenchmarkDotNet 的空方法开销后，两个库测出来都在 0.05 到 0.8 ns 之间晃。两边都低于 1 ns 记为持平；Nino 低于 1 ns、对方测得出时，写成下限“> 1.40×”，即对方耗时除以 1 ns：Nino 用时不到 1 ns，这个倍数只会更大；直接相除只会得到噪声。区间统计不计入这类用例。相差 5% 以内也记为持平。
 - **复用**测试读入已有的对象：Nino 用 `ref` 和 `[NinoPooled]` 对象池，MemoryPack 用它的覆盖模式。
 - **MessagePack 与 protobuf-net** 用同样的类型，读写和 Nino、MemoryPack 一样的值，各自用文档推荐的最快 API；见 [MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)。
 - **v3** 跑的是同一套 `SimpleTest`、`PolymorphicTest`、[`NullableTest`](#nullabletest) 和可空集合，只是编译时引用 NuGet 上的 Nino 3.3.13，在同一台 runner 上、紧挨着 v4 的对应用例之前跑一次。两次都带 MemoryPack，它前后两次的耗时差就是机器本身的波动。每张 v3 图表下面都注明了数据出自哪次运行。
