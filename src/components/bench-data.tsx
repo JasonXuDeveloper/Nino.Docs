@@ -569,7 +569,7 @@ function groupTables(
       {versusLegend(zh, 'Nino v4')}
       {[...serialize, ...deserialize].some((row) => row.gcBound) && (
         <p className="text-sm text-fd-muted-foreground">
-          † {zh ? gcNote.zh : gcNote.en}
+          {zh ? gcNote.zh : gcNote.en}
         </p>
       )}
     </>
