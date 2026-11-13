@@ -128,7 +128,7 @@ MessagePack 3（MessagePack-CSharp）和 protobuf-net 3 用同样的类型，读
 
 <BenchGroup group="basic" lang="zh" />
 
-`SimpleStruct` 声明了 `[StructLayout(LayoutKind.Sequential, Pack = 4)]`，所以占 12 字节、没有填充，每个序列化库都整块拷贝它；不加 `Pack` 的话它占 16 字节，其中 4 字节是填充，Nino 写的时候会把填充清零（[结构体布局](/zh/docs/v4/performance#struct-layout)）。反序列化那个 40 字节的固定大小结构体只是一次拷贝，两个库都只要一个时钟周期左右，所以这几行都贴着 1 ns 的下限。`Vector4[10000]` 每次调用都在大对象堆上分配一个 160 KB 的数组，测的主要是第 2 代垃圾回收，而不是序列化库（标 †）；拷贝本身在两个库里都只是一次 `memcpy`。从 4.0.0-rc.6 起，如果文本的每个字符都不超过 U+00FF，Nino 每个字符只写一个字节（[字符串](/zh/docs/v4/wire-format#strings)），所以更早的版本上测到的载荷比现在大。
+`SimpleStruct` 声明了 `[StructLayout(LayoutKind.Sequential, Pack = 4)]`，所以占 12 字节、没有填充，每个序列化库都整块拷贝它；不加 `Pack` 的话它占 16 字节，其中 4 字节是填充，Nino 写的时候会把填充清零（[结构体布局](/zh/docs/v4/performance#struct-layout)）。反序列化那个 40 字节的固定大小结构体只是一次拷贝，两个库都只要一个时钟周期左右，所以这几行都贴着 1 ns 的下限。`Vector4[10000]` 每次调用都在大对象堆上分配一个 160 KB 的数组，测的主要是第 2 代垃圾回收，而不是序列化库（标 †）；拷贝本身在两个库里都只是一次 `memcpy`。
 
 ### 多态 [#polymorphism]
 
@@ -147,7 +147,7 @@ MessagePack 3（MessagePack-CSharp）和 protobuf-net 3 用同样的类型，读
 基础类库里的集合和类型，凡是能写出相同数据的库都一起比，序列化到复用的缓冲区写入器，反序列化成新实例：
 
 - **集合**（[`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CollectionsTest.cs)），各 1,000 个元素：`List<(int, long)>`、`KeyValuePair<int, int>[]`、`HashSet<int>`、`Dictionary<int, int>`、`Queue<int>`、`LinkedList<int>`、`SortedSet<int>`、`SortedDictionary<int, int>`、`SortedList<int, int>` 和 `ConcurrentDictionary<int, int>`；另有 `SelfTree`，一个包含自身的 `List` 子类，6 层、每层 4 个。
-- **常用类型**（[`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CommonTypesTest.cs)）：一棵 `TreeNode` 树（1,365 个节点）、`InventoryItem[1000]`（带填充的结构体）、`Waypoint[1000]`（含一个元组的固定大小结构体，写出 15 字节，内存里占 20 字节）和 `Dictionary<string, string>`（1,000 项）。v4.0.0-rc.9 及之前的报告里还有 `List<Player>`、`List<Order>` 和 `List<Shape>`，后来换成了[真实负载](#workloads)。
+- **常用类型**（[`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CommonTypesTest.cs)）：一棵 `TreeNode` 树（1,365 个节点）、`InventoryItem[1000]`（带填充的结构体）、`Waypoint[1000]`（含一个元组的固定大小结构体，写出 15 字节，内存里占 20 字节）和 `Dictionary<string, string>`（1,000 项）。
 - **BCL 类型**（[`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/BclTypesTest.cs)）：`BigInteger`（3^1000）、`Uri`、`Version`、`StringBuilder`（1,000 个字符）、`BitArray`（1,000 位）、`CultureInfo`、`TimeZoneInfo`、`Lazy<string>`，以及各 1,000 个元素的 `Memory<int>`、`ReadOnlySequence<int>`、`ReadOnlyCollection<int>`、`IReadOnlyList<string>`（藏在接口后面、要逐个写的字符串）、`ILookup<int, int>`、`BlockingCollection<int>` 和 `Nino.Immutable` 里的不可变集合。
 
 有几行测的主要是设计差异，不是速度。`TimeZoneInfo`：Nino 按 ID 写系统时区，读的时候直接取系统缓存的时区；MemoryPack 每次都写出并解析时区完整的序列化字符串。`InventoryItem` 和 `(int, long)` 在内存里有填充，MemoryPack 原样拷贝，Nino 写成零或干脆不写（[带填充的结构体和元组](/zh/docs/v4/vs-memorypack#padded-values)）。`BigInteger` 只和 MessagePack 比：MemoryPack 1.22.0 写出去再读回来就不对（[基准测试中发现的 MemoryPack 问题](/zh/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)）。
