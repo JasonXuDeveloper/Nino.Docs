@@ -242,6 +242,12 @@ interface CaseInfo {
   gcBound?: boolean;
 }
 
+/**
+ * The main cases (SimpleTest, PolymorphicTest, and the nullable values of
+ * NullableTest and CollectionsTest), which v3 3.3.13 ran too: the runtime
+ * tables, the "common" group of DotnetChart, and the headlines until the
+ * workloads take them over. A case shows only when the report has its rows.
+ */
 const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
   serialize: [
     { name: 'SimpleClass', code: true, key: 'SimpleClass' },
@@ -256,6 +262,20 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
     { name: 'SimpleStruct', code: true, key: 'SimpleStruct' },
     { name: 'SimpleStruct[100]', code: true, key: 'SimpleStructs' },
     { name: 'Vector4[10000]', code: true, key: 'Vectors' },
+    // NullableTest and CollectionsTest's nullable collections (every fifth null): reports since they joined
+    {
+      name: 'Class of 8 nullable fields, half null',
+      zh: '8 个可空字段的类，一半为 null',
+      key: 'NullableClass',
+    },
+    {
+      name: '100 classes of nullable fields',
+      zh: '100 个可空字段的类',
+      key: 'NullableClasses',
+    },
+    { name: 'long?[1000]', code: true, key: 'NullableLongs' },
+    { name: 'List<int?> (1,000)', code: true, key: 'NullableInts' },
+    { name: 'decimal?[1000]', code: true, key: 'NullableDecimals' },
   ],
   deserialize: [
     { name: 'SimpleClass', code: true, key: 'SimpleClass' },
@@ -270,6 +290,20 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
     { name: 'SimpleStruct', code: true, key: 'SimpleStruct' },
     { name: 'SimpleStruct[100]', code: true, key: 'SimpleStructs' },
     { name: 'Vector4[10000]', code: true, key: 'Vectors', gcBound: true },
+    // NullableTest and CollectionsTest's nullable collections (every fifth null): reports since they joined
+    {
+      name: 'Class of 8 nullable fields, half null',
+      zh: '8 个可空字段的类，一半为 null',
+      key: 'NullableClass',
+    },
+    {
+      name: '100 classes of nullable fields',
+      zh: '100 个可空字段的类',
+      key: 'NullableClasses',
+    },
+    { name: 'long?[1000]', code: true, key: 'NullableLongs' },
+    { name: 'List<int?> (1,000)', code: true, key: 'NullableInts' },
+    { name: 'decimal?[1000]', code: true, key: 'NullableDecimals' },
   ],
 };
 

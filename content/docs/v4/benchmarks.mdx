@@ -49,7 +49,7 @@ Absolute times depend on the machine; compare the ratios. For Nino in Go, Rust a
 - **Under 1 ns** (about three clock cycles), times cannot be told apart: reading a 40-byte struct measures anywhere from 0.05 to 0.8 ns in both libraries once BenchmarkDotNet subtracts its empty-method overhead. Two times under 1 ns are on par; Nino under it against a measurable time is faster, too fast to measure, with no ratio. Within 5% is on par too.
 - **Reuse** benchmarks deserialize into objects that already exist: Nino by `ref` and from `[NinoPooled]` pools, MemoryPack with its overwrite mode.
 - **MessagePack and protobuf-net** read and write the same values as Nino and MemoryPack, through the same types, each with the API its documentation recommends for speed; see [MessagePack and protobuf-net](#messagepack-and-protobuf-net).
-- **v3** runs the same `SimpleTest` built against Nino 3.3.13 from NuGet, directly before the v4 `SimpleTest` run on the same runner. MemoryPack runs in both, so the difference between its two times shows how much the machine itself varied. The note under each v3 chart names the run its numbers come from.
+- **v3** runs the same `SimpleTest`, `PolymorphicTest`, [`NullableTest`](#nullabletest) and nullable collections built against Nino 3.3.13 from NuGet, each directly before the same v4 cases on the same runner. MemoryPack runs in both, so the difference between its two times shows how much the machine itself varied. The note under each v3 chart names the run its numbers come from.
 - **Arm64**: the release benchmark run also runs the same benchmark classes, with the same settings, on GitHub's Arm64 runners (`ubuntu-26.04-arm`). Once a release's report includes them, the runtime tables and charts of Nino against MemoryPack get an **Arm64** tab next to **x64**, and the tab you pick switches every benchmark table and chart on the site. The runners differ, so compare Nino with MemoryPack within one architecture, not times across the two. Comparisons with v3 are x64 only.
 
 The code of every benchmark is in [Benchmark Code](#benchmark-code).
@@ -89,7 +89,7 @@ A workaround has a cost of its own: a shared object written once per reference i
 
 ### Serialize (to a Reused Buffer Writer) [#serialize-to-a-reused-buffer-writer]
 
-One value or array, written into a reused buffer writer. Data types: [`SimpleTest`](#simpletest) and [`PolymorphicTest`](#polymorphictest).
+One value or array, written into a reused buffer writer. Data types: [`SimpleTest`](#simpletest), [`PolymorphicTest`](#polymorphictest), [`NullableTest`](#nullabletest) and the nullable collections of `CollectionsTest`.
 
 <RuntimeTable op="serialize" lang="en" />
 
@@ -97,7 +97,7 @@ One value or array, written into a reused buffer writer. Data types: [`SimpleTes
 
 ### Deserialize (New Instances) [#deserialize-new-instances]
 
-The same values, read back into new objects on every call. Data types: [`SimpleTest`](#simpletest) and [`PolymorphicTest`](#polymorphictest).
+The same values, read back into new objects on every call. Data types: [`SimpleTest`](#simpletest), [`PolymorphicTest`](#polymorphictest), [`NullableTest`](#nullabletest) and the nullable collections of `CollectionsTest`.
 
 <RuntimeTable op="deserialize" lang="en" />
 
@@ -149,7 +149,7 @@ Four more benchmark classes compare features that change how a type is written, 
 Three more classes, each against every library that can write the same data:
 
 - **Common types** ([`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CommonTypesTest.cs)): common type shapes, a `TreeNode` tree (1,365 nodes), `InventoryItem[1000]` (a padded struct), `Waypoint[1000]` (a fixed-size struct holding a tuple, 15 bytes on the wire and 20 in memory) and `Dictionary<string, string>` (1,000). Reports up to v4.0.0-rc.9 also have `List<Player>` (100), `List<Order>` (100) and `List<Shape>` (1,000 through an abstract base), which the [real-world workloads](#workloads) replaced.
-- **Collections** ([`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CollectionsTest.cs)): collections of the base class library, 1,000 elements each: `List<(int, long)>`, `KeyValuePair<int, int>[]`, `HashSet<int>`, `Dictionary<int, int>`, `Queue<int>`, `LinkedList<int>`, `SortedSet<int>`, `SortedDictionary<int, int>`, `SortedList<int, int>` and `ConcurrentDictionary<int, int>`, and `SelfTree`, a `List` subclass that holds itself, 6 levels of 4.
+- **Collections** ([`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CollectionsTest.cs)): collections of the base class library, 1,000 elements each: `List<(int, long)>`, `KeyValuePair<int, int>[]`, `HashSet<int>`, `Dictionary<int, int>`, `Queue<int>`, `LinkedList<int>`, `SortedSet<int>`, `SortedDictionary<int, int>`, `SortedList<int, int>` and `ConcurrentDictionary<int, int>`, and `SelfTree`, a `List` subclass that holds itself, 6 levels of 4. Its `long?[]`, `List<int?>` and `decimal?[]` (1,000 each, every fifth null) are in the [serialize](#serialize-to-a-reused-buffer-writer) and [deserialize](#deserialize-new-instances) tables, with v3.
 - **BCL types** ([`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/BclTypesTest.cs)): the other base class library types both libraries have formatters for: `BigInteger` (3^1000), `Uri`, `Version`, `StringBuilder` (1,000 chars), `BitArray` (1,000 bits), `CultureInfo`, `TimeZoneInfo`, `Lazy<string>`, and with 1,000 elements `Memory<int>`, `ReadOnlySequence<int>`, `ReadOnlyCollection<int>`, `IReadOnlyList<string>` (strings behind an interface, written one by one), `ILookup<int, int>`, `BlockingCollection<int>` and the immutable collections of `Nino.Immutable` (`ImmutableHashSet`, `ImmutableSortedSet`, `ImmutableQueue`, `ImmutableStack`, `ImmutableDictionary`, `ImmutableSortedDictionary`). The `TimeZoneInfo` case measures a design difference more than speed: Nino writes a system time zone by its id and reads it back from the system's cached zones, MemoryPack writes and parses the zone's whole serialized string on every call. `BigInteger` is compared with MessagePack only: MemoryPack 1.22.0 does not round-trip it (see [MemoryPack Bugs Found While Benchmarking](/en/docs/v4/vs-memorypack#memorypack-bugs-found-while-benchmarking)).
 
 All three serialize to a reused buffer writer and deserialize into new instances.
@@ -198,6 +198,8 @@ A case a library cannot express with the same data has no method for it, never o
 | `BclTypesTest` | `CultureInfo`, `TimeZoneInfo`, `BlockingCollection<T>`: it throws on them | everything but `Uri` and the immutable collections: protobuf-net has no serializer for the others |
 
 The formats differ in what they write, and the payload sizes show it: MessagePack writes a `Guid` as a 36-character string and a `DateTime` as a UTC timestamp, protobuf-net nests one message per level of a class hierarchy and writes a `DateTime` as a message of its own.
+
+Nullable values ([`NullableTest`](#nullabletest) and the nullable collections) go through the form each library's users write. MessagePack and System.Text.Json write null natively. MemoryPack writes `SafeNullable<T>`: its plain `Nullable<T>` copies the value's memory with the padding left uninitialized, so one value can give different bytes, while `SafeNullable<T>` has no padding, like Nino's bytes. Protobuf has no null in a repeated field, so protobuf-net wraps each element in a message with an optional value (`[NullWrappedValue]`), and Google.Protobuf reads the same messages; a nullable field is a `google.protobuf` wrapper (`Int32Value`, ...), a `Timestamp`, or a string for `Guid` and `decimal`.
 
 ### Not Measured Yet [#not-measured-yet]
 
@@ -493,6 +495,32 @@ public PolymorphicClassBase NinoDeserializePolymorphicClass()
 
 // MemoryPack and MessagePack: the same shape as in SimpleTest.
 // PolymorphicFooArray and PolymorphicClassArray have the same methods.
+```
+
+### NullableTest [#nullabletest]
+
+A class of eight nullable members of common types, half of them null, alone and as an array of 100 whose objects alternate which half is null. Every library writes the same values; MemoryPack through a copy with `SafeNullable<T>` members, protobuf through `google.protobuf` wrappers (see [MessagePack and protobuf-net](#messagepack-and-protobuf-net)).
+
+```csharp title="NullableBenchmarkData.cs" nocheck
+[NinoType]
+[MessagePackObject]
+[ProtoContract]
+[CompatibilityLevel(CompatibilityLevel.Level300)]
+public sealed partial class NullableFields
+{
+    [Key(0)] [ProtoMember(1), NullWrappedValue] public int? Count;
+    [Key(1)] [ProtoMember(2), NullWrappedValue] public long? Total;
+    [Key(2)] [ProtoMember(3), NullWrappedValue] public double? Score;
+    [Key(3)] [ProtoMember(4), NullWrappedValue] public bool? Enabled;
+    [Key(4)] [ProtoMember(5)] public DateTime? UpdatedAt;
+    [Key(5)] [ProtoMember(6)] public Guid? OwnerId;
+    [Key(6)] [ProtoMember(7)] public decimal? Price;
+    [Key(7)] [ProtoMember(8)] public NullablePriority? Priority;
+}
+
+// MemoryPack: the same members as SafeNullable<int>, SafeNullable<long>, ...
+[MemoryPackable]
+public sealed partial class NullableFieldsMemoryPack { /* ... */ }
 ```
 
 ### PooledTest [#pooledtest]
@@ -932,8 +960,8 @@ dotnet run -c Release --project benchmarks/Nino.Benchmark -- --filter '*Referenc
 dotnet run -c Release --project benchmarks/Nino.GeneratorBenchmark -- 30 8
 ```
 
-- `benchmarks/run.sh` builds `benchmarks/v3` (the same `SimpleTest` against Nino 3.3.13 from NuGet) and runs it directly before v4. It prints **v4 vs v3** for each case.
-- Every release runs the same protocol in CI, with the benchmark classes split over fourteen runners per architecture (v3 runs directly before `SimpleTest` on its runner), and publishes the result in the release notes: the Performance Report, and a **v3 3.3.13 vs v4 (same machine)** section. This site takes its runtime numbers from the newest v4 release that has them.
+- `benchmarks/run.sh` builds the v3 benchmark (the same `SimpleTest`, `PolymorphicTest`, `NullableTest` and nullable collections against Nino 3.3.13 from NuGet) and runs it directly before v4. It prints **v4 vs v3** for each case.
+- Every release runs the same protocol in CI, with the benchmark classes split over fifteen runners per architecture (v3 runs directly before the same v4 cases on their runners), and publishes the result in the release notes: the Performance Report, and a **v3 3.3.13 vs v4 (same machine)** section. This site takes its runtime numbers from the newest v4 release that has them.
 - The same release workflow runs `benchmarks/Nino.GeneratorBenchmark` with v3 3.3.13's generator and the release's, one after the other at 330 and 1,100 types on one runner, and adds a **Build: v3 3.3.13 vs v4 (source generator)** section to the release notes; the build tables above come from it once a release has one.
 - The Go, Rust and TypeScript benchmarks run in the same release workflow; how to run them is in [Other-Language Benchmarks](/en/docs/v4/benchmarks-runtimes#reproducing).
 - `benchmarks/members` takes `SimpleClass` apart member by member, against v3 and v4, to find which member a case spends its time on. See the [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks).

@@ -46,7 +46,9 @@
  * Fixtures: scripts/fixtures/release-assets/ (a manifest and its assets, as
  * Nino's release_body.py publish wrote them in a dry run from
  * release-body-build.md's data plus Google.Protobuf and System.Text.Json rows
- * in SimpleTest and PolymorphicTest, numbers invented: for reader tests only).
+ * in SimpleTest and PolymorphicTest, and every library's and v3's rows of
+ * NullableTest and CollectionsTest's nullable collections, numbers invented:
+ * for reader tests only).
  * Bodies of releases without the manifest: scripts/fixtures/release-body.md
  * (made-up numbers, the methods the site requires), release-body-v3.md (with
  * the v3 section), release-body-new.md (a sample of the ReferenceTest,
