@@ -81,8 +81,8 @@ public class OrdersController : ControllerBase
 - **内容协商。** 格式化器添加在已有格式化器之后，所以对接受任意格式的客户端，默认仍是 JSON。`Content-Type: application/x-nino` 的请求用 Nino 读取；发送 `Accept: application/x-nino` 的客户端，或在 `[FormatFilter]` 下把 `format` 设为 `nino` 的 URL，会得到 Nino 响应。JSON 客户端拿到的是 `System.Text.Json` 的输出，它默认只写公共属性：只有公共字段的类型（这份文档里的大多数 `[NinoType]` 都是这样）会输出 `{}`。如果 JSON 客户端也读这些类型，打开 `IncludeFields`：MVC 用 `AddControllers().AddJsonOptions(o => o.JsonSerializerOptions.IncludeFields = true)`，Minimal API 用 `builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.IncludeFields = true)`。
 - **只处理 Nino 支持的类型。** 只有 `NinoSerializer.IsSupported(type)` 为 true 时（true 按类型缓存；false 只在 Native AOT 下缓存，之后才注册的格式化器照样认得出），格式化器才会接手这个类型，其他类型都留给别的格式化器。
 - **格式化器类。** `AddNinoFormatters()` 添加的是 `NinoInputFormatter` 和 `NinoOutputFormatter`，并把格式名 `nino` 映射到 `application/x-nino`。想让接受任意格式的客户端默认拿到 Nino，就不调用 `AddNinoFormatters()`，自己把这两个格式化器插到 `MvcOptions.InputFormatters` 和 `MvcOptions.OutputFormatters` 的最前面（`options.OutputFormatters.Insert(0, new NinoOutputFormatter())`）；用到 `[FormatFilter]` 时，再用 `options.FormatterMappings.SetMediaTypeMappingForFormat(NinoMediaTypes.Format, NinoMediaTypes.Application)` 映射格式名。
-- **按声明的类型写出。** 结果按 action 声明的类型序列化，与用这个类型作 `T` 调用 `Serialize<T>` 相同：`ActionResult<Shape>` 会写出所返回 `Circle` 的类型 ID，按 `Shape` 读取的客户端拿回的仍是 `Circle`。参见[多态](/zh/docs/v4/polymorphism)。
-- **无效数据返回 400。** Nino 读不了的请求体（被截断、损坏，或是为其他类型写出的）记为模型状态错误，`[ApiController]` 以 400 响应。只有无效数据（`NinoDataException`）才这样处理：服务器端读取时的失败（例如返回 null 的 `[NinoFactory]`）按服务器错误抛出。
+- **按声明的类型写出。** 结果按 action 声明的类型序列化，与用这个类型作 `T` 调用 `Serialize<T>` 相同：`ActionResult<Shape>` 返回一个 `Circle` 时，写出的是 `Circle` 的类型 ID，按 `Shape` 读取的客户端拿回的仍是 `Circle`。参见[多态](/zh/docs/v4/polymorphism)。
+- **无效数据返回 400。** Nino 读不了的请求体（截断了、损坏了，或者是按别的类型写的）记为模型状态错误，`[ApiController]` 返回 400。只有无效数据（`NinoDataException`）这样处理：服务端读取时自己出的错（比如 `[NinoFactory]` 返回了 null）照常作为服务器错误抛出。
 
 ## Minimal API [#minimal-apis]
 
@@ -154,12 +154,12 @@ Order saved = await NinoDeserializer.DeserializeAsync<Order>(await response.Cont
 
 浏览器或 Node 客户端可以使用 [Nino.Codegen](/zh/docs/v4/advanced/typescript#with-aspnet-core) 从同一组类型生成的编解码器，或者在 [.NET WebAssembly](/zh/docs/v4/advanced/browser) 上直接运行 C# 类型。
 
-## 请求体与响应的读写方式 [#performance]
+## 请求体和响应怎么读写 [#performance]
 
 - **请求**从请求的 `PipeReader` 读取。有 `Content-Length` 时，读取方一次等到整个请求体到齐，而不是每来一个分段就唤醒一次。整个落在一个分段里的请求体，直接在这个分段上反序列化；只有跨多个分段的请求体才会复制一次，复制到从 `ArrayPool<byte>.Shared` 租来的缓冲区，读完即归还。
 - **响应**直接序列化进响应的 `PipeWriter`，没有中间的 `byte[]`。
-- **自身不做分配。** 内容类型直接在请求头的字符上检查，不解析成对象；已经到达管道的请求体（常见情况：小请求体随请求头一起到达）不经过 async 方法直接读取，尚未完整到达的才由 async 方法等待，其状态机取自对象池；立即完成的刷新返回缓存的 Task。Nino 的测试测得：在值本身反序列化不分配的情况下，读取请求体和写出响应分配的字节数都是零。
-- **请求体先完整缓冲再读取。** Nino 反序列化的是完整的值，所以请求体会留在管道中直到全部到达；与其他请求体一样，它受 ASP.NET Core 请求体大小限制（Kestrel 的 `MaxRequestBodySize`）约束。
+- **自身不做分配。** 内容类型直接在请求头的字符上检查，不解析成对象；已经到达管道的请求体（最常见：小请求体和请求头一起到达）不经过 async 方法，直接读取；还没完整到达的，才由 async 方法等待，这个方法的状态机来自对象池；立即完成的刷新返回缓存的 Task。Nino 的测试测得：在值本身反序列化不分配的情况下，读取请求体和写出响应分配的字节数都是零。
+- **请求体先完整缓冲再读取。** Nino 反序列化的是完整的值，请求体会一直留在管道里，直到全部到达；它和其他请求体一样，受 ASP.NET Core 请求体大小上限（Kestrel 的 `MaxRequestBodySize`）的限制。
 
 ## 下一步 [#next-steps]
 

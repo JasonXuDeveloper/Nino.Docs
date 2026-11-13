@@ -38,7 +38,7 @@ openupm add com.jasonxudeveloper.nino
 
 OpenUPM 把每个候选版本 rc.N 编号为 preview.(200 + N)，见 [OpenUPM 版本号](/zh/docs/v4/start#openupm-versions)。
 
-OpenUPM 上的包带有签名。Unity 6.3 及以上的 Package Manager 窗口会显示为已签名（"Signed (limited)"，即签名方是一个你不在其中的组织），不再提示包未签名。签好的 `.tgz` 也附在这个包版本的 [GitHub Release](https://github.com/JasonXuDeveloper/Nino/releases) 上，可以用 **Install package from tarball** 安装。用 Git URL 添加的包没有签名。
+OpenUPM 上的包带有签名。Unity 6.3 及以上的 Package Manager 窗口会显示为已签名（"Signed (limited)"，即签名方是你不在其中的组织），不再提示包未签名。签好的 `.tgz` 也附在这个包版本的 [GitHub Release](https://github.com/JasonXuDeveloper/Nino/releases) 上，可以用 **Install package from tarball** 安装。用 Git URL 添加的包没有签名。
 
 包里有 `Nino.Core.dll`、源生成器 `Nino.Generator.dll`（带 `RoslynAnalyzer` 标签，Unity 编译脚本时会运行它）、它的代码修复 `Nino.Generator.CodeFixes.dll`（给 Rider 和 Visual Studio 用）、`Nino.UnityTypes.dll`（下文 [Unity 的类](#unity-classes)的格式化器），以及 Nino.Core 依赖的 `System.Buffers`、`System.Memory` 和 `System.Runtime.CompilerServices.Unsafe` 程序集。
 
@@ -145,7 +145,7 @@ Unity 客户端和 .NET 服务端交换 Nino 数据，两边必须编译同一�
 Unity 跑的是 `Nino.Core` 的 netstandard 构建，里面没有硬件内部函数（hardware intrinsics）：单靠它自己，元组、带填充的结构体和 Latin-1 文本只能一个字段、一个字（word）地搬，`[NinoUtf8]` 字符串用 .NET 的 UTF-8 编码器转码。没有 Burst 的 IL2CPP 和 Mono Player 只能走这些标量路径，所以**要速度，就装 Burst**：装上之后 Nino 改用 SIMD 搬这些数据，代码一行都不用改：
 
 1. 打开 **Window > Package Manager**，选 **Unity Registry**，安装 **Burst**（`com.unity.burst`）1.8 或更高版本；Unity 6000.6 编辑器自带的 Burst 2.0 也能用。用了 Entities 或 Collections 的项目已经有 Burst，这两个包都依赖它。
-2. 没有了。项目里一有 Burst，Nino 包里的 `Nino.Burst` 程序集就会参与编译（没有 Burst 就跳过），并在启动时（第一个场景加载之前）和编辑器里每次域重载（domain reload）之后注册内核。
+2. 这就够了。项目里一有 Burst，Nino 包里的 `Nino.Burst` 程序集就会参与编译（没有 Burst 就跳过），并在启动时（第一个场景加载之前）和编辑器里每次域重载（domain reload）之后注册内核。
 
 | 内核 | 加速什么 | 起用长度 |
 | --- | --- | --- |
@@ -182,7 +182,7 @@ NinoBurst.Register(NinoBurst.Ssse3); // 让支持 AVX2 的 CPU 只用 16 字节�
 
 抛异常或写出的字节不一样的内核不用：这部分工作走 Nino 自己的路径，通过自检的内核照常注册。Console 里会出现一条警告，写明是哪个内核、Burst 版本（`1.8.x` 或 `2.x`）、Unity 版本和 CPU，并请你到 [Nino 的 issue 页](https://github.com/JasonXuDeveloper/Nino/issues)反馈。不管用不用内核，数据都一样。一个内核都没通过时，什么都不注册，`Register` 返回 `false`。
 
-在编辑器里，内核抛的异常能被捕获，这个内核就不用了。在 Player 里，Burst 会把抛异常变成直接中止进程，谁也拦不住，所以 Player 里的自检只能查出写错的字节；为了不让内核抛异常，Nino 的 CI 在包支持的每个 Burst 版本（1.8 和 2.0）上，都在 IL2CPP Player 里跑遍所有内核。
+在编辑器里，内核抛的异常能捕获到，这个内核就不用了。在 Player 里，Burst 会把抛异常变成直接中止进程，谁也拦不住，所以 Player 里的自检只能查出写错的字节；为了不让内核抛异常，Nino 的 CI 在包支持的每个 Burst 版本（1.8 和 2.0）上，都在 IL2CPP Player 里跑遍所有内核。
 
 ### WebGL [#webgl-kernels]
 
@@ -234,7 +234,7 @@ Assembly hotUpdate = Assembly.Load(dllBytes); // HybridCLR
 
 | 步骤 | 什么时候需要 | 什么时候不需要 |
 | --- | --- | --- |
-| `NinoSettings`（`PoolMaxRetained`、`SetPoolMaxRetained<T>`、`SetRecycler<T>`） | 想要不同于默认值的池大小（共享 256、每个线程 64），或者想让自己的对象池接收被丢弃的实例。**最先**设置：读取这些值时不做同步。 | 默认值够用。 |
+| `NinoSettings`（`PoolMaxRetained`、`SetPoolMaxRetained<T>`、`SetRecycler<T>`） | 想要不同于默认值的池大小（共享 256、每个线程 64），或者想把 Nino 丢弃的实例交给你自己的对象池。**最先**设置：读取这些值时不做同步。 | 默认值够用。 |
 | HybridCLR 补充元数据 | 热更新代码实例化了 AOT 程序集里定义的泛型。按 HybridCLR 的规则来，Nino 没有额外要求。 | 没有热更新。 |
 | 用 `Assembly.Load` 加载热更新 DLL | 读取含有其中类型的数据之前。 | |
 | `NinoRegistry.EnsureInitialized(assembly)` 或 `EnsureAllInitialized()` | 想把一次性的注册表加载放到加载界面，而不是留给第一次用到这个程序集的调用。 | 永远可以不调：注册表第一次用到时自动加载。 |
@@ -288,7 +288,7 @@ var asset = Resources.Load<TextAsset>("Config/items");
 ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
 ```
 
-和存档、网络消息一样，在表类型所在的程序集定义里提交一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)（`NinoLayouts.cs`）：改出以前导出的文件（或还在旧版本上的玩家）读不了的改动时，分析器会在 Unity 控制台和 IDE 里报出来。在 Rider 或 Visual Studio 里用重构创建它，或者对编译好的程序集（Unity 把它写在 `Library/ScriptAssemblies` 里）运行 [`nino-gen layouts`](/zh/docs/v4/advanced/codegen#command-line)；batch mode 的 CI 构建跑同一条命令，加上 `--check`。
+和存档、网络消息一样，在表类型所在的程序集定义里提交一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)（`NinoLayouts.cs`）：如果某个改动会让以前导出的文件（或还在旧版本上的玩家）读不出来，分析器会在 Unity 控制台和 IDE 里报出来。在 Rider 或 Visual Studio 里用重构创建它，或者对编译好的程序集（Unity 把它写在 `Library/ScriptAssemblies` 里）运行 [`nino-gen layouts`](/zh/docs/v4/advanced/codegen#command-line)；batch mode 的 CI 构建跑同一条命令，加上 `--check`。
 
 ## 降低帧耗时的技巧 [#frame-time-tips]
 
@@ -302,7 +302,7 @@ ItemTable items = NinoDeserializer.Deserialize<ItemTable>(asset.bytes);
 
 </Callout>
 
-## 常见问题 [#troubleshooting]
+## 故障排查 [#troubleshooting]
 
 <Accordions type="single">
 <Accordion title="类型没有序列化 / 源生成器没有运行">

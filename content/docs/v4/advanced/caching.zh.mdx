@@ -14,7 +14,7 @@ using System;
 using System.Collections.Generic;
 using Nino.Core;
 
-[NinoType(format: NinoFormat.VersionTolerant)] // 缓存的数据会活过一次部署，见下文
+[NinoType(format: NinoFormat.VersionTolerant)] // 缓存的数据会跨部署保留，见下文
 public sealed class UserProfile
 {
     public long Id;
@@ -41,7 +41,7 @@ public sealed class RedisProfileCache
 
     public RedisProfileCache(IConnectionMultiplexer redis) => _db = redis.GetDatabase();
 
-    private static RedisKey Key(long id) => $"profile:v1:{id}"; // 键里带着schema 版本
+    private static RedisKey Key(long id) => $"profile:v1:{id}"; // 键里带着 schema 版本
 
     public void Set(UserProfile profile, TimeSpan ttl)
     {
@@ -138,7 +138,7 @@ public sealed class NinoHybridSerializer<T> : IHybridCacheSerializer<T>
 序列只有一段时，`Deserialize` 直接在原内存上读；有多段时先拷贝一次到池化缓冲区（[多段输入](/zh/docs/v4/advanced/streams#readonlysequence-input)）。
 
 - 每种要缓存的类型用 `AddSerializer` 注册一个序列化器（见[注册](#registration)）。
-- `HybridCache` 给的缓冲区写入器不是 `NinoArrayBufferWriter`，所以 Nino 先序列化到当前线程的暂存缓冲区，再一次性复制过去。每次调用都不分配内存。
+- `HybridCache` 给的缓冲区写入器不是 `NinoArrayBufferWriter`，所以 Nino 先序列化到当前线程的暂存缓冲区，再一次性拷贝过去。每次调用都不分配内存。
 - 序列化器读不出的值，`HybridCache` 不会当作未命中：`NinoDataException` 会直接从 `GetOrCreateAsync` 抛出来。捕获它，调用 `cache.RemoveAsync(key)`，再取一次，这次就会从数据源重新加载。
 - 泛型序列化器里的调用[拦截器](/zh/docs/v4/performance#interceptors)接管不了，因为 `T` 在那里是类型参数；这些调用走常规路径，每次多花几纳秒。
 
@@ -191,7 +191,7 @@ var app = builder.Build();
 app.MapGet("/profiles/{id}", (long id, HybridCache cache, CancellationToken ct) =>
     cache.GetOrCreateAsync($"profile:v1:{id}", id, static (profileId, token) => LoadProfileAsync(profileId, token), // 带 state 的重载：每个请求都不必分配闭包
         cancellationToken: ct));
-// HybridCache 在 IDistributedCache 的同一个键下存自己的封装格式：直接读的条目用另一个键（由 SetNinoAsync 写入）
+// HybridCache 在同一个 IDistributedCache 里、按自己的键存它的封装格式：原始条目只按 SetNinoAsync 写的键去读
 app.MapGet("/profiles/{id}/stored", (long id, IDistributedCache cache, CancellationToken ct) =>
     cache.GetNinoAsync<UserProfile>($"profile-blob:v1:{id}", ct));
 app.Run();
@@ -255,13 +255,13 @@ public sealed class BlobCache<TKey, TValue>
 | --- | --- | --- |
 | 容错类型 | [`format: NinoFormat.VersionTolerant`](/zh/docs/v4/evolving-data#version-tolerance)（追加成员）或 [`format: NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)（任意修改） | 条目需要在部署后继续可用。 |
 | 带版本的键 | 在键里加上 schema 版本（`profile:v2:42`），类型变化时递增 | 类型的改动超出上面两个选项能应付的范围，或者重新填充缓存的代价很低。 |
-| 失败即未命中 | 捕获无效数据抛出的 `NinoDataException`，删除该条目，再从数据源加载 | 一律加上，给前两种做法兜底。 |
+| 失败即未命中 | 捕获无效数据抛出的 `NinoDataException`，删掉这个条目，再从数据源加载 | 一律加上，给前两种做法兜底。 |
 
-兜底替代不了前两种做法：另一个类型写的字节，只要布局兼容，就可能不报错地读出来。用容错类型时，给缓存类型所在的程序集提交一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)：改出线上部署写的条目读不了的改动时，分析器在你敲代码时就会在改动的成员上报出来（NINO034、NINO035），CI 里 `nino-gen layouts --check` 也会失败。
+兜底替代不了前两种做法：另一个类型写的字节，只要布局兼容，就可能不报错地读出来。用容错类型时，给缓存类型所在的程序集提交一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)：如果某个改动会让当前部署写下的条目读不出来，分析器在你敲代码时就会在改动的成员上报出来（NINO034、NINO035），CI 里 `nino-gen layouts --check` 也会失败。
 
 [按位置](/zh/docs/v4/evolving-data#positional)的类型（不带参数的 `[NinoType]`）最小、最快，但成员的任何改动都会让旧条目无法读取。缓存的值要用它，就得配上带版本的键。
 
-Nino 读取时检查每个长度和边界，条目被截断或损坏时会抛异常，不会越界读取。不过字节里不带 schema，见[无效数据](/zh/docs/v4/basic#invalid-data)。
+Nino 读取时检查每个长度和边界，条目截断了或损坏了会抛异常，不会越界读取。不过字节里不带 schema，见[无效数据](/zh/docs/v4/basic#invalid-data)。
 
 ## 检查清单 [#checklist]
 

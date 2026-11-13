@@ -172,40 +172,40 @@ impl NinoWrite for Cell { nino::raw_write!(); } // 写一个先清零的块，�
 
 ## 泛型类型 [#generics]
 
-泛型 `[NinoType]` 生成泛型类型，编解码器由类型参数的编解码器组合而成。各语言支持哪些泛型，以及下面的 `Box<T>`、`Shelf<T>` 和 `Animal`，见[泛型类型](/zh/docs/v4/advanced/codegen#generics)。在 Rust 中：
+泛型 `[NinoType]` 生成泛型类型，编解码器由类型实参的编解码器组合而成。各语言支持哪些泛型，以及下面的 `Box<T>`、`Shelf<T>` 和 `Animal`，见[泛型类型](/zh/docs/v4/advanced/codegen#generics)。在 Rust 中：
 
 | | Rust |
 | --- | --- |
-| `Box<T>` | `struct BoxType<T>`（`Box` 已被占用） |
+| `Box<T>` | `struct BoxType<T>`（`Box` 这个名字已有他用） |
 | 它的编解码器 | 只要 `T` 实现了 `NinoRead` 和 `NinoWrite`，`BoxType<T>` 也就实现了 |
 | 作为成员的 `Box<int>` | `Option<Box<BoxType<i32>>>` |
 | 成员 `Shelf<int>` ([按类型 ID 写出](/zh/docs/v4/advanced/codegen#generic-types-behind-a-type-id)) | `Option<ShelfInt32Ref>`，每个允许的类型一个装箱变体的枚举 |
 | 泛型 `OpenHolder<T>` 中的 `Open<T>` | 在自身的类型参数后面多一个类型参数（`OpenHolder<T, S0>`），用法是 `OpenHolder<i64, OpenInt64Ref>`；只有槽位用到的类型参数放在 `_params: PhantomData` 字段里 |
 | `Animal` 槽位中的 `Box<int>` ([槽位中的封闭泛型类型](/zh/docs/v4/advanced/codegen#closed-generic-types-in-slots)) | 变体 `AnimalRef::BoxInt32(Box<BoxType<i32>>)`，`AnyObject` 里也有一个 |
 
-Rust 在编译时实例化泛型，所以用别的类型参数包含自身的泛型类型（`Nest<T>` 里有 `Nest<List<T>>`）直接跳过，包含它的类型也一起跳过，并报警告 NINOGEN002。
+Rust 在编译时实例化泛型，所以用别的类型实参包含自己的泛型类型（`Nest<T>` 里有 `Nest<List<T>>`）直接跳过，包含它的类型也一起跳过，并报警告 NINOGEN002。
 
 ## 引用追踪 [#reference-tracking]
 
-声明了 [`[NinoType(trackReferences: true)]`](/zh/docs/v4/reference-tracking) 的类（比如 `Node`）是 `Option<nino::Shared<Node>>`：一个对象，可以有任意多处持有（克隆得到的还是同一个对象），按标识判断相等；用 `Shared::empty` 和 `fill` 构建循环。引用头和对它的检查与其他语言一样（[引用追踪](/zh/docs/v4/advanced/codegen#reference-tracking)）。
+声明了 [`[NinoType(trackReferences: true)]`](/zh/docs/v4/reference-tracking) 的类（比如 `Node`）是 `Option<nino::Shared<Node>>`：一个对象，可以有任意多处持有（克隆得到的还是同一个对象），按标识判断相等；用 `Shared::empty` 和 `fill` 构建循环。引用头和相关检查各语言都一样（[引用追踪](/zh/docs/v4/advanced/codegen#reference-tracking)）。
 
-在 Rust 中，一次读取创建的对象（包括循环）都归这次读取所有，并像 .NET 的垃圾回收器那样一起释放：时机是最后一个持有它们的 `Shared`（返回的值、它的任何克隆、存在所有追踪对象之外的 `Shared`）被 drop 时，或者读取失败时。丢掉读到的值后还想留下图的一部分，就克隆要留下的 `Shared`。手工构建的图（`Shared::new`、`Shared::empty` 和 `fill`）像 `Rc` 一样做引用计数，这样构建的循环不会释放。手写多态的追踪槽位的读取代码时，对槽位允许的每个类型，用 `r.shared_from::<T>(&r.back_ref(header)?)` 取回回引用。
+在 Rust 中，一次读取创建的对象（包括循环）都归这次读取所有，并像 .NET 的垃圾回收器那样一起释放：时机是最后一个持有它们的 `Shared`（返回的值、它的任何克隆、存在所有追踪对象之外的 `Shared`）drop 掉时，或者读取失败时。丢掉读到的值后还想留下图的一部分，就克隆要留下的 `Shared`。手工构建的图（`Shared::new`、`Shared::empty` 和 `fill`）像 `Rc` 一样做引用计数，这样构建的循环不会释放。手写多态的追踪槽位的读取代码时，对槽位允许的每个类型，用 `r.shared_from::<T>(&r.back_ref(header)?)` 取回回引用。
 
 ## 不可信数据 [#untrusted-data]
 
 生成的读取代码、derive 和 crate 自带的读取代码都把输入当作不可信数据，做[每种语言都做的检查](/zh/docs/v4/advanced/codegen#untrusted-data)。在 Rust 中：
 
 - 从不 panic：要么返回完整的值，要么返回 `Error`（`ErrorKind` 说明哪项检查没过；超过 512 层是 `ErrorKind::TooDeep`）。
-- 推迟的主体放进堆上的工作列表。集合预先分配的内存从每次读取的一份预算里扣（每个输入字节 16 字节，另加 4 KiB）。
+- 推迟的主体放进堆上的工作列表。集合预先分配的内存从每次读取的一份额度里扣（每个输入字节 16 字节，另加 4 KiB）。
 - 比 .NET 更严格（有的是相对没开[不可信模式](/zh/docs/v4/security#untrusted-mode)的 .NET，有的是任何模式下都更严）：还会拒绝超出范围的日期和时间、无效的 `decimal`、原始结构体里非零的填充、`BitArray` 里非零的未用位，以及不是最简形式的 `BigInteger`。
 
 这边读不了 .NET 写的字节，或者 .NET 不认这边写的字节时，把字节交给 [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect)：它会列出每个字节属于哪个成员，以及出错的偏移和没通过的检查。
 
-## Rust 不支持的类型 [#not-supported]
+## Rust 不支持的内容 [#not-supported]
 
-由 Nino.Core 以外的格式化器写出的成员（自定义格式化器、`Nino.Immutable`、Unity 的类）在每种语言里都会跳过，Rust 也一样（[不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated)）。除了[所有语言都不生成的类型](/zh/docs/v4/advanced/codegen#not-generated)，Rust 还会跳过下面这些类型以及包含它们的类型，并报警告 NINOGEN002：
+由 Nino.Core 以外的格式化器写出的成员（自定义格式化器、`Nino.Immutable`、Unity 的类）在每种语言里都会跳过，Rust 也一样（[不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated)）。除了[所有语言都不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated)，Rust 还会跳过下面这些类型以及包含它们的类型，并报警告 NINOGEN002：
 
-- 用别的类型参数包含自身的泛型类型（[泛型类型](#generics)）；
+- 用别的类型实参包含自己的泛型类型（[泛型类型](#generics)）；
 - 键或元素在 Rust 里无法求哈希的映射和 Set（`f32`、`f64` 以及包含它们的类型）；
 - 带填充的原始元组。
 

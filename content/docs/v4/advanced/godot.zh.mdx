@@ -1,7 +1,7 @@
 ---
 title: Godot
 seoTitle: "Godot 4 C# 序列化：存档与联网 – Nino v4 文档"
-description: "在 Godot 4 .NET 项目中配置 Nino：Godot 的数学结构体按原始内存拷贝，存档存 ID 而不存节点并写到 user:// 下，消息走 Godot 的多人联机 API，以及在编辑器里重新构建。"
+description: "在 Godot 4 .NET 项目中配置 Nino：Godot 的数学结构体按原始内存拷贝，存 ID 而不存节点，存档写到 user:// 下，消息走 Godot 的多人联机 API，在编辑器里重新构建。"
 icon: Joystick
 ---
 
@@ -26,7 +26,7 @@ dotnet add package Nino --prerelease
 </Step>
 <Step>
 
-### 标记你的类型 [#mark-your-types]
+### 标记类型 [#mark-your-types]
 
 ```csharp title="PlayerState.cs"
 using Godot;
@@ -38,7 +38,7 @@ public sealed class PlayerState
     public string Name;
     public Vector3 Position;      // Godot 的结构体是非托管类型：按原始内存写入
     public Quaternion Rotation;
-    public Color[] Palette;       // 一次块拷贝
+    public Color[] Palette;       // 一次整块拷贝
 }
 ```
 
@@ -152,7 +152,7 @@ public static class SaveFile
 
 - 在数据前加一个文件头，写上魔数和格式版本号，以后的版本才知道自己读的是什么：参见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)。
 - 先写到临时文件，写完整了再替换存档，保存途中崩溃也不会毁掉上一份存档：参见[安全写入](/zh/docs/v4/advanced/persistence#write-safely)。
-- 给存档类型提交一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)：改出已有存档读不了的改动时，分析器在你敲代码时就会在改动的成员上报出来。
+- 给存档类型提交一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)：如果某个改动会让已有存档读不出来，分析器在你敲代码时就会在改动的成员上报出来。
 - 不随版本变化的数据（比如从你的工具导出的关卡数据）可以继续用按位置格式，更小也更快。
 
 ## 联网 [#networking]
@@ -176,7 +176,7 @@ public struct EntityState         // 非托管：按原始内存拷贝
 public sealed class WorldState
 {
     public long Tick;
-    public List<EntityState> Entities;   // 一次块拷贝
+    public List<EntityState> Entities;   // 一次整块拷贝
 }
 
 public partial class StateSync : Node
@@ -272,10 +272,10 @@ public static class UnloadCleanup
 - 如果导出时做了裁剪或用 Native AOT 编译，你序列化的每个类型都必须出现在生成器看得到的代码里：作为成员类型，或者作为 `NinoSerializer`/`NinoDeserializer` 调用的类型参数或 `typeof` 参数。参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
 - 双精度版本写出的 Godot 结构体和单精度版本不一样：参见 [Godot 的结构体](#godot-structs)。
 
-## 帧时间优化 [#frame-time-tips]
+## 降低帧耗时的技巧 [#frame-time-tips]
 
 - **网络或回放数据不再引起 GC 尖峰：** 用 `ref` 把每个 tick 读入上一个 tick 的对象，大批创建的类（投射物、事件）标上 `[NinoPooled]`。参见[零分配模式](/zh/docs/v4/advanced/zero-allocation)。
-- 字节写往 span（文件、你自己管理的套接字）时，**每个发送方复用一个 `NinoArrayBufferWriter`**，不要每帧分配一个 `byte[]`。Godot 自己的 API 要的是 `byte[]`：这时 `Serialize(value)` 分配一个大小正好等于数据的数组。
+- 字节写往 span（文件、你自己管理的 socket）时，**每个发送方复用一个 `NinoArrayBufferWriter`**，不要每帧分配一个 `byte[]`。Godot 自己的 API 要的是 `byte[]`：这时 `Serialize(value)` 分配一个大小正好等于数据的数组。
 - **批量数据保持非托管：** `Vector3`、`Color` 或你自己的非托管 `[NinoType]` 结构体组成的数组，只需一次内存拷贝。
 
 ## 故障排查 [#troubleshooting]

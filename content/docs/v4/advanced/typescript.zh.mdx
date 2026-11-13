@@ -119,7 +119,7 @@ line.unitPrice = 9.5;
 order.lines = [line];
 
 const bytes = serialize(OrderCodec, order);  // 与 .NET 中 NinoSerializer.Serialize(order) 写出的相同 // [!code highlight]
-const copy = deserialize(OrderCodec, bytes); // 又是一个 Order
+const copy = deserialize(OrderCodec, bytes); // 读回一个 Order
 ```
 
 ## 配合 ASP.NET Core 服务端 [#with-aspnet-core]
@@ -153,13 +153,13 @@ WebSocket 的用法相同：发送 `serialize` 的结果，设置 `binaryType = 
 
 ## API [#api]
 
-- **`serialize(codec, value)`** 返回一个 `Uint8Array`，内容与 .NET 中 `NinoSerializer.Serialize<T>` 写出的相同。结果不做复制：每个结果都紧接在上一个结果之后写进一个共享的 64 KB 缓冲区，返回的是它上面的一个视图，之后的调用不会覆盖它（剩余空间不多，或某个结果超出缓冲区时，会换用新的缓冲区）。直接把这个 `Uint8Array` 交给 `fetch`、`WebSocket.send`、`Blob` 或流，它们会按 `byteOffset` 和 `length` 读取；不要使用它的 `.buffer`，其中还有其他结果。保留一个结果，就会让它所在的整个缓冲区一直存活：需要独占缓冲区的数组时，调用 `bytes.slice()`。
+- **`serialize(codec, value)`** 返回一个 `Uint8Array`，内容与 .NET 中 `NinoSerializer.Serialize<T>` 写出的相同。不做任何复制：每个结果都紧接在上一个结果之后写进一个共享的 64 KB 缓冲区，返回的是它上面的一个视图，之后的调用不会覆盖它（剩余空间不多，或某个结果超出缓冲区时，会换用新的缓冲区）。直接把这个 `Uint8Array` 交给 `fetch`、`WebSocket.send`、`Blob` 或流，它们会按 `byteOffset` 和 `length` 读取；不要使用它的 `.buffer`，其中还有其他结果。保留一个结果，就会让它所在的整个缓冲区一直存活：需要独占缓冲区的数组时，调用 `bytes.slice()`。
 - **`serializeInto(codec, value, target)`** 写进你自己的内存，相当于 .NET 中用复用的 `NinoArrayBufferWriter` 调用 `NinoSerializer.Serialize(value, bufferWriter)`，返回值的字节数。写进 `NinoWriter` 时追加在已有内容之后，按需扩容；`writer.reset()` 清空它并保留缓冲区，缓冲区足够大之后写入不再分配内存（不产生新的 `ArrayBuffer`，Node 24 大约每新增 64 MB 的 `ArrayBuffer` 就触发一次完整垃圾回收），`writer.written()` 在写入器下次写入之前都是这些字节的视图。写进 `Uint8Array` 时，值放得下就从数组开头写入；返回的字节数大于数组长度表示什么都没写。Go 有 `nino.Append` 和复用的 `Writer`，Rust 有 `serialize_into`。
 - **`deserialize(codec, bytes)`** 从一个 `Uint8Array`（Node 的 `Buffer` 也可以）中读取一个值。值后面多出的字节不读，和 .NET 默认一样；**`deserializeExact(codec, bytes)`** 遇到这些字节会抛 `NinoError`，和 .NET 的不可信模式一样（Go 是 `DeserializeExact`，Rust 是 `deserialize_exact`）。
 - **`deserializeInto(codec, bytes, value)`** 读进你已有的值，相当于 `NinoDeserializer.Deserialize(data, ref value)`，返回读到的值（除非数据是 null 或另一个类，否则就是 `value` 本身）。嵌套对象原地读取，数组保留存储并把每个元素读进同一下标的旧元素，映射和 Set 先清空再填充，按类型 ID 写出的成员只有在数据中是它自己的类时才读进它；追踪引用的对象和类型化数组总是新建。抛出异常时，`value` 保留出错前读到的内容，其余保持原样。Go 有 `nino.DeserializeInto` 配合生成的 `ReadXInto`，Rust 有 `deserialize_into`。
 - 每个类型 `X` 都有 **`XCodec`**：读写这个值时，带上 .NET 按声明类型写的头。结构体没有头（`NinoCodec<X>`），密封类有存在字节（`NinoCodec<X | null>`），非密封类和接口有类型 ID，所以 `AnimalCodec` 能读写 `Animal` 的任何生成子类型，与 `Serialize<Animal>` 一样。
 - **`NinoWriter` 和 `NinoReader`** 把多个值写进一个缓冲区并按顺序读回，相当于 .NET 中的 `Writer` 和 `Reader`：先 `codec.write(writer, value)`，再 `writer.toBytes()`；读取时 `codec.read(new NinoReader(bytes))`。
-- 数据不是所读类型的有效值时（数据被截断、长度超出末尾、未知的类型 ID，以及[不可信数据](#untrusted-data)中的其他检查），以及值无法写出时，抛出 **`NinoError`**。
+- 数据不是所读类型的有效值时（数据截断、长度超出末尾、未知的类型 ID，以及[不可信数据](#untrusted-data)中的其他检查），以及值无法写出时，抛出 **`NinoError`**。
 
 <Callout type="warn" title="多态的值要用 new 创建">
 
@@ -169,14 +169,14 @@ WebSocket 的用法相同：发送 `serialize` 的结果，设置 `binaryType = 
 
 ## 浏览器中的文本 [#text-in-browsers]
 
-读写大量值时，大部分工作是字符串。在 Node（以及 Bun 和带 Node `Buffer` 的 Deno）中，运行时用 `Buffer` 原生的 Latin-1 和 UTF-16 方法搬运字符。在浏览器和 Deno 中，`nino.ts` 用嵌入其中的一个小型 WebAssembly 模块（约 1.3 KB）处理 JavaScript 较慢的文本，最多 4096 个字符：读取超过 24 个字符的 UTF-16 文本和 33 到 128 个字符的 Latin-1 文本，写入超过 64 个字符的文本（超过 1024 个字符的 ASCII 交给 `TextEncoder`）。它通过 JS String Builtins 读取和创建 JavaScript 字符串，并在 SIMD 寄存器中一次搬运 8 或 16 个字符，只使用一页永不增长的内存；其他情况都走 JavaScript 路径，两者写出的字节相同。
+读写大量值时，大部分工作是字符串。在 Node（以及 Bun 和带 Node `Buffer` 的 Deno）中，运行时用 `Buffer` 原生的 Latin-1 和 UTF-16 方法搬运字符。在浏览器和 Deno 中，`nino.ts` 内嵌了一个小 WebAssembly 模块（约 1.3 KB），专门处理 JavaScript 处理得慢的文本，最多 4096 个字符：读取超过 24 个字符的 UTF-16 文本和 33 到 128 个字符的 Latin-1 文本，写入超过 64 个字符的文本（超过 1024 个字符的 ASCII 交给 `TextEncoder`）。它通过 JS String Builtins 读取和创建 JavaScript 字符串，并在 SIMD 寄存器中一次搬运 8 或 16 个字符，只使用一页永不增长的内存；其他情况都走 JavaScript 路径，两者写出的字节相同。
 
 模块在第一次需要时编译。没有 WebAssembly SIMD、GC 或 JS String Builtins 的引擎（Chromium 130 之前、Firefox 134 之前、Node 20 及更早版本），或者内容安全策略不允许编译 WebAssembly（`'wasm-unsafe-eval'`）的页面，会继续使用 JavaScript 路径，不报错；浏览器仍可能把被阻止的编译报告为 CSP 违规。
 
 ```ts
 import { useWasm } from './nino';
 
-useWasm();      // 文本经过该模块时返回 true
+useWasm();      // 文本走这个模块时返回 true
 useWasm(false); // 只用 JavaScript 路径
 useWasm(true);  // 重新打开（在引擎允许的地方）
 ```
@@ -201,14 +201,14 @@ useWasm(true);  // 重新打开（在引擎允许的地方）
 | `ValueTuple`、`KeyValuePair` | `[A, B, ...]` | TypeScript 元组，最多 7 项 |
 | `Tuple<...>` | `[A, ...] \| null` | |
 | `T?`、`Lazy<T>` | `T \| null` | |
-| 枚举 | `as const` 对象，以及由其取值组成的类型 | `[Flags]` 枚举是 `number`（64 位的是 `bigint`）；64 位枚举的取值是 `bigint` |
+| 枚举 | `as const` 对象，以及由它的取值组成的类型 | `[Flags]` 枚举是 `number`（64 位的是 `bigint`）；64 位枚举的取值是 `bigint` |
 | `[NinoType]` 类 | 类 | `extends` 生成的基类，`implements` 生成的接口；抽象类仍是抽象类 |
 | `[NinoType]` 接口 | 接口 | |
 | 结构体（`[NinoType]` 或按原始内存复制的） | 类 | 原始结构体按各字段的偏移逐个读写，填充字节置零 |
 | 原始结构体里的指针和函数指针 | `bigint` | |
 | 原始结构体里的 `Int128`、`UInt128` | 由两半（`bigint`）组成的类 | |
 | `object` | `unknown` | 任何生成的 `[NinoType]`，按类型 ID |
-| 键控与版本容错类型 | 同上 | 按其[格式](/zh/docs/v4/evolving-data)读写，包括旧键 |
+| 键控与版本容错类型 | 同上 | 按各自的[格式](/zh/docs/v4/evolving-data)读写，包括旧键 |
 
 在 TypeScript 里构造这些值，直接用上表的类型：`decimal` 是它的文本（`"19.99"`；小数点后最多 28 位，系数小于 2^96），`Guid` 是 `D`、`N` 或 `B` 格式的文本，`DateTime` 是 `Date`（`new Date(Date.UTC(2026, 9, 31, 12))`），`TimeSpan` 是以 100 ns 为单位的 tick 数，类型为 `bigint`（90 秒是 `90n * 10_000_000n`）。不是合法 `decimal` 或 `Guid` 的文本，写入时抛出 `NinoError`。
 
@@ -238,13 +238,13 @@ mesh.indices = Int32Array.of(0, 1, 2);
 ```
 
 - 超过 64 字节的数组整块复制；更短的逐个元素读写，因为 V8 把它们放在自己的堆上。
-- 读出的 65 字节到 8 KB 的数组是一个共享的 64 KB 缓冲区上的视图：转移其 `.buffer` 之前先 `slice()`。
+- 读出的 65 字节到 8 KB 的数组是一个共享的 64 KB 缓冲区上的视图：要转移它的 `.buffer`，先 `slice()`。
 - 在 Node 和 Chromium 中序列化都更快，在 Node 中反序列化大的数字数组也更快。但每个类型化数组都需要自己的底层存储，在很多读取场景里，创建它们的开销比复制省下的还多：Chromium 反序列化几 KB 的数字数组比读成 `number[]` 慢 2 到 3.3 倍（Arm64 上约 2 倍，x64 上最多 3.3 倍），数组和其他成员混合的数据最多慢 1.4 倍，每个对象只带一个短数组的小对象列表在两种引擎中都慢 5% 到 25%。所以它不是默认值：在序列化为主、或在 Node 中读取大数组的场景再打开。
 - `byte` 序列无论如何都是 `Uint8Array`。`bool`、`char`、`decimal`、`TimeSpan` 和枚举的序列仍是数组，Set 仍是 `Set`。
 
 ## 泛型类型 [#generics]
 
-泛型 `[NinoType]` 生成为泛型类型，其编解码器由类型参数的编解码器组合而成。每种语言都支持哪些泛型，以及下面的 `Box<T>`、`Shelf<T>` 和 `Animal`，见[泛型类型](/zh/docs/v4/advanced/codegen#generics)。在 TypeScript 中：
+泛型 `[NinoType]` 生成泛型类型，它的编解码器由类型实参的编解码器组合而成。每种语言都支持哪些泛型，以及下面的 `Box<T>`、`Shelf<T>` 和 `Animal`，见[泛型类型](/zh/docs/v4/advanced/codegen#generics)。在 TypeScript 中：
 
 | | TypeScript |
 | --- | --- |
@@ -257,14 +257,14 @@ mesh.indices = Int32Array.of(0, 1, 2);
 
 ## 引用追踪 [#reference-tracking]
 
-声明了 [`[NinoType(trackReferences: true)]`](/zh/docs/v4/reference-tracking) 的类（比如 `Node`）是 `Node \| null`：读取时对同一个对象的每个引用返回同一个对象，写入时按对象标识编号。引用头和对它的检查与每种语言相同（[引用追踪](/zh/docs/v4/advanced/codegen#reference-tracking)）。
+声明了 [`[NinoType(trackReferences: true)]`](/zh/docs/v4/reference-tracking) 的类（比如 `Node`）是 `Node \| null`：读取时对同一个对象的每个引用返回同一个对象，写入时按对象标识编号。引用头和相关的检查，各语言都一样（[引用追踪](/zh/docs/v4/advanced/codegen#reference-tracking)）。
 
 ## 不可信数据 [#untrusted-data]
 
 生成的读取代码按不可信输入处理数据，做[每种语言都做的检查](/zh/docs/v4/advanced/codegen#untrusted-data)。在 TypeScript 中：
 
 - 所有失败都是 `NinoError`。
-- 一次读取里，数组在读元素之前预先分配的内存，以及下面键防护用的表，都来自同一份额度（每字节输入 16 字节，再加 16 KB）；超出部分数组边读边扩容，所以声称元素比数据多的嵌套集合，不能每层都按剩余字节数分配。
+- 一次读取里，数组在读元素之前预先分配的内存，以及下面键防护用的表，都来自同一份额度（每字节输入 16 字节，再加 16 KB）；额度用完后，数组改为边读边扩容，所以声称元素比数据多的嵌套集合，不能每层都按剩余字节数分配。
 - 映射读入 `Map`，从不读入普通对象，所以 `__proto__` 这样的键只是数据。
 - `[NinoUtf8]` 字符串必须是给定字符数的严格 UTF-8。
 - V8 对数字、`bigint` 以及数组下标形式的字符串（`"0"` 到 `"4294967294"`，按其数值求哈希）求哈希时不带种子，数据就能专门挑选落进同一个桶的键。超过 128 个数字、`bigint` 或字符串键的映射或 Set 会让每个键经过 `NinoKeyGuard`（字符串只对数组下标形式的求哈希）：某个键在所在的桶里会碰到 100 个以上的键时，抛出 `NinoError`，和 .NET 的 [`MaxHashCollisions`](/zh/docs/v4/security#hash-flooding) 一样。这个防护只对 V8（Node、Chromium、Deno）精确，对 JavaScriptCore 和 SpiderMonkey 不精确，它们对键的哈希方式不同。Go 和 Rust 用随机种子求键的哈希。
@@ -286,7 +286,7 @@ mesh.indices = Int32Array.of(0, 1, 2);
 
 ## 与 MemoryPack 的 TypeScript 对比 [#compared-with-memorypack]
 
-[MemoryPack](https://github.com/Cysharp/MemoryPack) 也能为标记了 `[GenerateTypeScript]` 的类生成 TypeScript。它在 Roslyn 源生成器内部完成这件事，在编译 C# 的同时把 `.ts` 文件写到磁盘。两者的差异都源于这一选择：
+[MemoryPack](https://github.com/Cysharp/MemoryPack) 也能为标记了 `[GenerateTypeScript]` 的类生成 TypeScript。它在 Roslyn 源生成器内部完成这件事，在编译 C# 的同时把 `.ts` 文件写到磁盘。下面这些差别都由此而来：
 
 | | Nino.Codegen | MemoryPack `[GenerateTypeScript]` |
 | --- | --- | --- |
@@ -303,13 +303,13 @@ mesh.indices = Int32Array.of(0, 1, 2);
 | 导入扩展名 | 空、`.js`、`.ts`、`.mjs` 或 `.mts` | 默认 `.js`（[#170](https://github.com/Cysharp/MemoryPack/issues/170)） |
 | 其他语言 | Go 和 Rust | ❌ |
 
-Roslyn 不支持源生成器输出 C# 以外的文件（[dotnet/roslyn#49935](https://github.com/dotnet/roslyn/issues/49935)），分析器规则 RS1035 也禁止在生成器中读写文件；MemoryPack 没有启用包含这条规则的扩展分析器规则。它的 TypeScript 读写代码与 C# 格式化器分开编写，两者可能不一致：在 [#309](https://github.com/Cysharp/MemoryPack/issues/309) 中，TypeScript 写 `float?` 或 `double?` 的存在字节时宽度不对，C# 读出的是 `null`；在 [#166](https://github.com/Cysharp/MemoryPack/issues/166) 中，空字符串曾被写错。用户还报告过生成的代码无法通过严格的 `tsconfig`（[#426](https://github.com/Cysharp/MemoryPack/issues/426)）、导入了没有 `.ts` 文件的基类型（[#174](https://github.com/Cysharp/MemoryPack/issues/174)），以及换行符混用（[#311](https://github.com/Cysharp/MemoryPack/issues/311)）。
+Roslyn 不支持源生成器输出 C# 以外的文件（[dotnet/roslyn#49935](https://github.com/dotnet/roslyn/issues/49935)），分析器规则 RS1035 也禁止在生成器中读写文件；MemoryPack 没有启用包含这条规则的扩展分析器规则。它的 TypeScript 读写代码与 C# 格式化器分开编写，两者可能不一致：在 [#309](https://github.com/Cysharp/MemoryPack/issues/309) 中，TypeScript 写 `float?` 或 `double?` 的存在字节时宽度不对，C# 读出的是 `null`；在 [#166](https://github.com/Cysharp/MemoryPack/issues/166) 中，空字符串曾经写错。用户还报告过生成的代码无法通过严格的 `tsconfig`（[#426](https://github.com/Cysharp/MemoryPack/issues/426)）、导入了没有 `.ts` 文件的基类型（[#174](https://github.com/Cysharp/MemoryPack/issues/174)），以及换行符混用（[#311](https://github.com/Cysharp/MemoryPack/issues/311)）。
 
 Nino.Codegen 在构建之后运行，依据的正是 C# 格式化器所依据的布局，测试中还在 .NET 与 Node 之间逐字节往返并运行 `tsc --strict`，所以避开了这些问题。其他方案（Protocol Buffers、MessagePack）见[什么时候不适合](/zh/docs/v4#when-not-to-use-it)。
 
 ## 从 Nino.TypeScript 迁移 [#from-ninotypescript]
 
-Nino.TypeScript（`nino-ts`，4.0 的候选版本直到 rc.7）由 Nino.Codegen 取代：替换包引用，并声明它的属性所描述的那一项。
+Nino.TypeScript（`nino-ts`，4.0 的候选版本直到 rc.7）由 Nino.Codegen 取代：换掉包引用，再按原来那些属性的设置声明对应的项。
 
 | Nino.TypeScript | Nino.Codegen |
 | --- | --- |

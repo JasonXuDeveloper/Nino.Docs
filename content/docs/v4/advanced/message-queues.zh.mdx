@@ -1,7 +1,7 @@
 ---
 title: 消息队列
 seoTitle: "C# 消息队列序列化：Kafka 与事件流 – Nino v4 文档"
-description: "在 Kafka 等消息中间件上用 Nino 做消息负载：多态事件类型、序列化器、批量发送、遥测与行情数据流，以及比一次部署活得更久的主题。"
+description: "在 Kafka 等消息中间件上用 Nino 做消息负载：多态事件类型、序列化器、批量发送、遥测与行情数据流，以及跨部署长期保留的主题。"
 icon: MessagesSquare
 ---
 
@@ -285,7 +285,7 @@ public static class EventBatch
 ```
 
 - 每个事件保留自己的类型，同一批里可以混着 `OrderPlaced` 和 `OrderShipped`。
-- 数量超出负载能装下的范围时，`ReadLength(minElementSize: 4)` 直接拒绝，数量损坏的批次在进循环之前就抛异常。被截断的批次则会读到第一个读不出的事件才抛，此前的事件已经交给 `handle` 处理过了；如果一个批次必须要么全处理、要么全不处理，就先把事件收进列表，等 `Read` 返回后再处理。
+- 数量超出负载能装下的范围时，`ReadLength(minElementSize: 4)` 直接拒绝，数量损坏的批次在进循环之前就抛异常。截断的批次则会读到第一个读不出的事件才抛，此前的事件已经交给 `handle` 处理过了；如果一个批次必须要么全处理、要么全不处理，就先把事件收进列表，等 `Read` 返回后再处理。
 - 写入器和读取器最后都调用 `ReleaseReferences`，和 `NinoSerializer` 一样；见[连续写入多个值](/zh/docs/v4/advanced/high-performance#several-values-back-to-back)。
 
 在 `[NinoType]` 类里放一个 `List<OrderEvent>` 成员效果一样，还能顺带放批次级的字段（生产者 ID、序号）。
@@ -332,7 +332,7 @@ public sealed class SampleConsumer
 - 读入同一个 `SampleBatch` 时，对象本身、列表的底层数组和 `Host` 字符串都会复用（字符串内容不变就原样保留）：同一台主机源源不断发来的批次不分配内存，只有换了主机的批次才会把主机名读成新字符串。
 - 要按位置查找的记录（一个文件里一整天的 tick），见[固定大小的记录](/zh/docs/v4/advanced/zero-allocation#fixed-size-records)。
 
-## 比部署活得更久的主题 [#topics-that-outlive-a-deployment]
+## 跨部署保留的主题 [#topics-that-outlive-a-deployment]
 
 今天写的消息可能下个月才有人消费，读它的代码在写的时候还不存在；消费者也可能从头重放整个主题。
 
@@ -340,7 +340,7 @@ public sealed class SampleConsumer
 - `NinoFormat.VersionTolerant` 的继承体系里，只往具体的事件类（`OrderPlaced` 等）追加成员，别加到 `OrderEvent` 上：基类追加一个成员，每个子类的成员都会往后挪。基类确实要加成员，就改用 `NinoFormat.Keyed`。见[向基类追加成员](/zh/docs/v4/evolving-data#appending-to-a-base-class)。
 - 消费者收到不认识的事件**类型**就读不了：反序列化抛 `NinoDataException`（未知的类型 ID）。先部署消费者，再部署发新事件类型的生产者；或者把新类型放到新主题上。
 - 同一次部署内就消费完的消息（几秒内清空的任务队列），用[按位置](/zh/docs/v4/evolving-data#positional)的类型（不带参数的 `[NinoType]`）就行。成员一改，它们的字节就变。
-- 给事件所在的程序集提交一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)：改出主题里已有的消息或还没更新的消费者读不了的改动时，分析器在你敲代码时就会在改动的成员上报出来（NINO034、NINO035），CI 里 `nino-gen layouts --check` 也会失败。
+- 给事件所在的程序集提交一份[布局基线](/zh/docs/v4/evolving-data#layout-baseline)：如果某个改动会让主题里已有的消息、或者还没更新的消费者读不出来，分析器在你敲代码时就会在改动的成员上报出来（NINO034、NINO035），CI 里 `nino-gen layouts --check` 也会失败。
 
 文件里的追加日志（在本地存储上做事件溯源）见[追加日志](/zh/docs/v4/advanced/persistence#append-only-logs)。
 
