@@ -187,7 +187,7 @@ Overview, FAQ and reference pages answer the questions their readers search for,
     filters, severity pills (tints 5 error, 4 warning; info untinted) and a wrench for a code fix; each row's id is its anchor
     (`#nino007`, highlighted when targeted), the old category anchors stay. A rule added to Nino is a row in the JSON,
     nowhere else. Use it only there.
-  - **Ratio bars** in `RuntimeTable`, `ExtraRuntimeTables` and `ReuseTable` (`TimeBars` in
+  - **Ratio bars** in `LibraryTables` (`TimeBars` in
     `src/components/bench-data.tsx`): two thin bars per row, Nino in the accent and the other library grey, scaled to
     the larger time, so the shorter is the faster and the gap is the ratio; drawn from the same `Measure`s as the
     numbers, never typed, with a legend line under the table; the Markdown copy keeps only the numbers.
@@ -254,8 +254,8 @@ Overview, FAQ and reference pages answer the questions their readers search for,
 ## Numbers
 
 Never type a benchmark number. Runtime numbers come from `src/data/bench-*.json` (synced from the release's
-Performance Report, AGENTS.md) through `BenchValue`, `RuntimeTable`, `ReuseTable`, `ExtraRuntimeTables`,
-`ResultsTable`, `WorkloadTables`, `BenchSource`, `BenchmarkChart`, `RuntimesTables`, `UnityTables`, `UnityHighlights` and `BuildTables` (build-time numbers from `src/data/bench-build.json`, with `BenchValue`'s `build.*` keys in prose). Within 5 % is
+Performance Report, AGENTS.md) through `BenchValue`, `BenchGroup` (a group's chart and its
+numbers), `LibraryTables`, `BenchSource`, `BenchmarkChart`, `RuntimesTables`, `UnityTables`, `UnityHighlights` and `BuildTables` (build-time numbers from `src/data/bench-build.json`, with `BenchValue`'s `build.*` keys in prose). Within 5 % is
 on par and is written so; never call Nino "slower"; v3 means 3.3.13. A multiple has one decimal below 10 and is a
 whole number from 10 ("1.4×", "77×", the components' `times()`); prose that names one goes through `BenchValue`.
 
