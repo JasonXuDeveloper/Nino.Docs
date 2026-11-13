@@ -251,7 +251,7 @@ public sealed class Level
 ```
 
 - `[NinoRaw]` binds `T` only to types Nino copies as raw bytes: `Grid<byte>` and `Grid<Vector2>` use this formatter, while a `Grid<string>` member has no formatter (NINO007). The runtime applies the same rule to types it meets only at run time, in Unity's IL2CPP players too: IL2CPP keeps no attributes on type parameters, so your assembly's generated registry registers `[NinoRaw]`, `[NinoCreated]` and `unmanaged` for the formatters it registers.
-- `Writer.Write<T>(ReadOnlySpan<T>)` and `Reader.ReadUnmanagedRaw<T>(Span<T>)` copy the elements as one block, and convert them field by field on a runtime whose layout differs from the canonical one.
+- `Writer.Write<T>(ReadOnlySpan<T>)` and `Reader.ReadUnmanagedRaw<T>(Span<T>)` copy the elements as one block, and convert them field by field on a runtime whose layout differs from the canonical one. The block copy is Nino's own, with vector instructions wherever the CPU has them (and the padding of raw structs cleared with them), so the formatter needs no SIMD code of its own: [SIMD](/en/docs/v4/simd#dotnet).
 - `ReadLength` throws when the bytes left cannot hold that many cells, so corrupt data cannot make the formatter allocate a huge grid.
 
 ## Built-in Formatters [#built-in-formatters]
