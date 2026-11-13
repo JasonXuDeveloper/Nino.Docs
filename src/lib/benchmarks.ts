@@ -240,12 +240,19 @@ interface CaseInfo {
   code?: boolean;
   key: string;
   gcBound?: boolean;
+  /**
+   * The method after the library prefix, where it is not `<Verb><key>`
+   * (PooledTest, PooledGraphTest): per prefix ("Nino", "MemoryPack", a
+   * library's `prefix`), else `method`; null = that library has no such case.
+   */
+  method?: string | null;
+  methods?: Partial<Record<string, string | null>>;
 }
 
 /**
  * The main cases (SimpleTest, PolymorphicTest, and the nullable values of
  * NullableTest and CollectionsTest), which v3 3.3.13 ran too: the runtime
- * tables, the "common" group of DotnetChart, and the headlines until the
+ * tables, the basic, polymorphism and nullable groups of dotnetGroups, and the headlines until the
  * workloads take them over. A case shows only when the report has its rows.
  */
 const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
@@ -450,6 +457,9 @@ function environmentLabel(environment: string) {
 }
 
 /** Where the v3 comparison comes from: one or two sentences for the v3 charts */
+/** True once the site has v3 3.3.13 numbers (x64) */
+export const hasV3 = Object.keys(V3_RUNTIME.rows).length > 0;
+
 export function v3SourceNote(zh: boolean): string | null {
   if (Object.keys(V3_RUNTIME.rows).length === 0) return null;
   if (V3_RUNTIME.note) return V3_RUNTIME.note;
@@ -682,6 +692,196 @@ const moreCases: Record<
 };
 
 /* ------------------------------------------------------------------ */
+/* The chart groups of every .NET case                                 */
+/* ------------------------------------------------------------------ */
+
+const caseByKey = (list: CaseInfo[], keys: string[]) =>
+  keys.flatMap((key) => list.filter((info) => info.key === key));
+const caseKeys = (...keys: string[]) =>
+  bothOps([
+    ...caseByKey(cases.serialize, keys),
+    ...caseByKey(extraCases.serialize, keys),
+  ]);
+
+/** Reading new objects and reading into existing ones (PooledTest, PooledGraphTest): deserialize only */
+const reuseGroupCases: CaseInfo[] = [
+  {
+    name: 'Pooled class, new objects',
+    zh: '池化类，新对象',
+    key: 'DeserializeNew',
+    method: 'DeserializeNew',
+  },
+  {
+    name: 'Pooled class, into existing objects',
+    zh: '池化类，读进已有对象',
+    key: 'DeserializePooled',
+    method: null,
+    methods: { Nino: 'DeserializePooled', MemoryPack: 'DeserializeOverwrite' },
+  },
+  {
+    name: 'Pooled node, new objects',
+    zh: '池化节点，新对象',
+    key: 'NodeNew',
+    method: 'NodeNew',
+  },
+  {
+    name: 'Pooled node, into existing objects',
+    zh: '池化节点，读进已有对象',
+    key: 'NodePooled',
+    method: null,
+    methods: { Nino: 'NodePooled', MemoryPack: 'NodeOverwrite' },
+  },
+  {
+    name: 'Pooled leaves, new objects',
+    zh: '池化叶子，新对象',
+    key: 'LeavesNew',
+    method: 'LeavesNew',
+  },
+  {
+    name: 'Pooled leaves, in place',
+    zh: '池化叶子，原地复用',
+    key: 'LeavesInPlace',
+    method: null,
+    methods: { Nino: 'LeavesInPlace', MemoryPack: 'LeavesOverwrite' },
+  },
+  {
+    name: 'Pooled leaves, pooled elements',
+    zh: '池化叶子，池化元素',
+    key: 'LeavesPooledElements',
+    method: null,
+    methods: { Nino: 'LeavesPooledElements', MemoryPack: 'LeavesOverwrite' },
+  },
+  {
+    name: 'Plain list, new objects',
+    zh: '普通列表，新对象',
+    key: 'PlainNew',
+    method: 'PlainNew',
+  },
+];
+
+/** ExternalBufferTest: the caller's buffer writer and a segmented sequence */
+const externalCases = bothOps([
+  {
+    name: 'int[1000] into an external writer',
+    zh: 'int[1000]，写进外部 writer',
+    key: 'ExternalInts',
+  },
+  {
+    name: 'Memory<int> (1,000) into an external writer',
+    zh: 'Memory<int>（1,000），写进外部 writer',
+    key: 'ExternalMemory',
+  },
+  {
+    name: 'SimpleClass[100] into an external writer',
+    zh: 'SimpleClass[100]，写进外部 writer',
+    key: 'ExternalClasses',
+  },
+  {
+    name: 'int[1000] from 3 segments',
+    zh: 'int[1000]，从 3 段数据读',
+    key: 'SegmentedInts',
+  },
+]);
+
+const join = (...sets: Record<'serialize' | 'deserialize', CaseInfo[]>[]) => ({
+  serialize: sets.flatMap((set) => set.serialize),
+  deserialize: sets.flatMap((set) => set.deserialize),
+});
+
+export type DotnetGroupId =
+  | 'workloads'
+  | 'basic'
+  | 'polymorphism'
+  | 'nullable'
+  | 'collections'
+  | 'reuse'
+  | 'tracking'
+  | 'others';
+
+/**
+ * Every .NET case in eight groups (the owner's, 2026-11-13; Nino's README and
+ * release notes chart the same groups, readme.py's GROUPS): the one place
+ * the site's grouped charts and their Markdown tables read. A case shows only
+ * when the report has its rows; a group with none shows nothing.
+ */
+export const dotnetGroups: {
+  id: DotnetGroupId;
+  name: string;
+  zh: string;
+  cases: Record<'serialize' | 'deserialize', CaseInfo[]>;
+}[] = [
+  {
+    id: 'workloads',
+    name: 'Real workloads',
+    zh: '真实场景',
+    cases: bothOps(workloadCases),
+  },
+  {
+    id: 'basic',
+    name: 'Basic types and structs',
+    zh: '基础类型与结构体',
+    cases: caseKeys(
+      'SimpleClass',
+      'SimpleClasses',
+      'SimpleStruct',
+      'SimpleStructs',
+      'Vectors',
+      'FixedStruct',
+      'FixedClass',
+      'FixedClasses',
+    ),
+  },
+  {
+    id: 'polymorphism',
+    name: 'Polymorphism',
+    zh: '多态',
+    cases: caseKeys(
+      'PolymorphicClass',
+      'PolymorphicClassArray',
+      'PolymorphicFooArray',
+      'NonGenericBase',
+      'GenericIntBase',
+      'GenericUnmanagedTupleBase',
+      'GenericManagedTupleBase',
+      'GenericSealedClassTupleBase',
+      'GenericOpenClassTupleBase',
+    ),
+  },
+  {
+    id: 'nullable',
+    name: 'Nullable values',
+    zh: '可空值',
+    cases: bothOps(
+      cases.serialize.filter((info) => info.key.startsWith('Nullable')),
+    ),
+  },
+  {
+    id: 'collections',
+    name: 'Collections and common types',
+    zh: '集合与常用类型',
+    cases: join(moreCases.collections, moreCases.common, moreCases.bcl),
+  },
+  {
+    id: 'reuse',
+    name: 'Reuse and pooling',
+    zh: '复用与对象池',
+    cases: { serialize: [], deserialize: reuseGroupCases },
+  },
+  {
+    id: 'tracking',
+    name: 'Reference tracking and version tolerance',
+    zh: '引用追踪与版本容错',
+    cases: caseKeys('Graph', 'TolerantClass', 'TolerantClasses'),
+  },
+  {
+    id: 'others',
+    name: 'Others',
+    zh: '其他',
+    cases: join(moreCases.scattered, moreCases.untrusted, externalCases),
+  },
+];
+
+/* ------------------------------------------------------------------ */
 /* Deserializing into existing objects                                 */
 /* ------------------------------------------------------------------ */
 
@@ -760,6 +960,11 @@ export interface BenchDataset {
   more: Record<MoreSet, Record<'serialize' | 'deserialize', TableCase[]>>;
   /** WorkloadTest (workloadCases); empty until a report has it */
   workloads: Record<'serialize' | 'deserialize', RuntimeCase[]>;
+  /** Every case of each of dotnetGroups that the report has, MemoryPack or not */
+  groups: Record<
+    DotnetGroupId,
+    Record<'serialize' | 'deserialize', TableCase[]>
+  >;
   reuse: ReuseCase[];
   /** True when every serialize case allocated 0 B in both libraries */
   serializeAllocatesNothing: boolean;
@@ -782,9 +987,19 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
 
   function buildCase(op: 'serialize' | 'deserialize', info: CaseInfo) {
     const verb = op === 'serialize' ? 'Serialize' : 'Deserialize';
-    const nino = rows.get(`Nino${verb}${info.key}`);
-    const v4 = measure(`Nino${verb}${info.key}`);
-    const memorypack = measure(`MemoryPack${verb}${info.key}`);
+    // A library's method of the case, or '' (no row) when it has none
+    const of = (prefix: string) => {
+      const suffix =
+        info.methods?.[prefix] !== undefined
+          ? info.methods[prefix]
+          : info.method !== undefined
+            ? info.method
+            : `${verb}${info.key}`;
+      return suffix === null ? '' : `${prefix}${suffix}`;
+    };
+    const nino = rows.get(of('Nino'));
+    const v4 = measure(of('Nino'));
+    const memorypack = measure(of('MemoryPack'));
     if (!v4 || !nino) return [];
     const v3Row = v3[`${op}:${info.key}`];
     const { ratio, tooFast } = memorypack
@@ -798,13 +1013,13 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
         : undefined;
     };
     const caseBytes: RuntimeCase['bytes'] = {
-      v4: sizes(`Nino${verb}${info.key}`),
-      memorypack: sizes(`MemoryPack${verb}${info.key}`),
+      v4: sizes(of('Nino')),
+      memorypack: sizes(of('MemoryPack')),
     };
     for (const lib of otherLibs) {
-      const time = measure(`${lib.prefix}${verb}${info.key}`);
+      const time = measure(of(lib.prefix));
       if (time) others[lib.key] = versus(v4, time);
-      caseBytes[lib.key] = sizes(`${lib.prefix}${verb}${info.key}`);
+      caseBytes[lib.key] = sizes(of(lib.prefix));
     }
     // A case no other library was measured in compares nothing
     if (!memorypack && Object.keys(others).length === 0) return [];
@@ -888,6 +1103,9 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
       Object.entries(moreCases).map(([set, list]) => [set, buildAll(list)]),
     ) as BenchDataset['more'],
     workloads: build({ serialize: workloadCases, deserialize: workloadCases }),
+    groups: Object.fromEntries(
+      dotnetGroups.map((group) => [group.id, buildAll(group.cases)]),
+    ) as BenchDataset['groups'],
     reuse,
     serializeAllocatesNothing: cases.serialize.every((info) =>
       ['Nino', 'MemoryPack'].every(
@@ -925,6 +1143,16 @@ export const arm64: BenchDataset | null =
 
 /** The datasets to show, x64 first (one entry until Arm64 data exists) */
 export const datasets: BenchDataset[] = arm64 ? [x64, arm64] : [x64];
+
+/** The groups of dotnetGroups that a dataset has cases of (the charts and their Markdown tables) */
+export const dotnetGroupsShown = dotnetGroups.filter((group) =>
+  datasets.some(
+    (ds) =>
+      ds.groups[group.id].serialize.length +
+        ds.groups[group.id].deserialize.length >
+      0,
+  ),
+);
 
 // x64, for the headlines and the pages that show one architecture
 export const benchSource: BenchSourceInfo = x64.source;

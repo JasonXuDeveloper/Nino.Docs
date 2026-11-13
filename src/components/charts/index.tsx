@@ -5,9 +5,14 @@
  * Charts of Nino against MemoryPack show x64 and Arm64 in the site-wide
  * architecture tabs once Arm64 data exists (see ArchTabs in bench-data.tsx).
  */
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 import { lazy, Suspense } from 'react';
 import { ArchTabs } from '@/components/bench-data';
-import type { RuntimeLang } from '@/lib/benchmarks';
+import {
+  type DotnetGroupId,
+  dotnetGroupsShown,
+  type RuntimeLang,
+} from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
 import type { BenchmarkChartProps } from './benchmark-charts';
 import { isArchChart } from './ids';
@@ -87,11 +92,38 @@ export function UnityChart(props: { lang?: Locale }) {
   );
 }
 
-/** .NET: Nino v4 against MemoryPack, MessagePack, protobuf-net and v3, per architecture */
-export function DotnetChart(props: { lang?: Locale }) {
+/** .NET: one group of cases, Nino v4 against every library and v3, per architecture and operation */
+export function DotnetChart(props: { lang?: Locale; group: DotnetGroupId }) {
   return (
     <Suspense fallback={<Fallback />}>
       <Explorers.DotnetChart {...props} />
     </Suspense>
+  );
+}
+
+/**
+ * Every .NET case: a DotnetChart per group of dotnetGroups that the report
+ * has cases of (dotnetGroupsShown), each in an accordion open by default (`#charts-<group>` links
+ * to it).
+ */
+export function DotnetGroupCharts({ lang = 'en' }: { lang?: Locale }) {
+  const shown = dotnetGroupsShown;
+  return (
+    <Accordions
+      type="multiple"
+      defaultValue={shown.map((group) => group.id)}
+      className="my-6"
+    >
+      {shown.map((group) => (
+        <Accordion
+          key={group.id}
+          id={`charts-${group.id}`}
+          value={group.id}
+          title={lang === 'zh' ? group.zh : group.name}
+        >
+          <DotnetChart lang={lang} group={group.id} />
+        </Accordion>
+      ))}
+    </Accordions>
   );
 }

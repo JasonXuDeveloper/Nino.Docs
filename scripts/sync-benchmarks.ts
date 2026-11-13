@@ -574,11 +574,12 @@ export function parseV3Report(text: string, x64: BenchRow[]) {
   const v4 = new Map(x64.map((row) => [row.method, row.meanNs]));
   const rows: V3RuntimeFile['rows'] = {};
   for (const row of v3.rows) {
-    const match = /^Nino(Serialize|Deserialize)(\w+)$/.exec(row.method);
+    // A method without a verb reads into existing objects (PooledGraphTest's NinoLeavesInPlace): deserialize
+    const match = /^Nino(Serialize|Deserialize)?(\w+)$/.exec(row.method);
     const v4Ns = v4.get(row.method);
     // v4 may read 0.00 ns: too fast to measure (src/lib/benchmarks.ts, FLOOR_NS)
     if (!match || v4Ns === undefined || row.meanNs <= 0 || v4Ns < 0) continue;
-    rows[`${match[1].toLowerCase()}:${match[2]}`] = {
+    rows[`${(match[1] ?? 'Deserialize').toLowerCase()}:${match[2]}`] = {
       v3Ns: row.meanNs,
       v4Ns,
     };

@@ -8,9 +8,9 @@
  * - UnityChart: per case, the time with Burst as a share of the time without
  *   it (100 %), with the speedup beside the case.
  *
- * - DotnetChart: per .NET case, MemoryPack, the other libraries (otherLibs)
- *   and v3 as multiples of Nino v4's time, per architecture; the workloads
- *   first once the report has them.
+ * - DotnetChart: one group of dotnetGroups, each case's MemoryPack, other
+ *   libraries (otherLibs) and v3 as multiples of Nino v4's time, per
+ *   architecture and operation.
  *
  * The default selection is prerendered; the rest is drawn after a click.
  */
@@ -19,17 +19,21 @@ import { Segmented } from '@/components/showcase';
 import {
   type Arch,
   archLabels,
+  type DotnetGroupId,
   datasets,
+  dotnetGroups,
   FLOOR_NS,
   formatRatio,
   formatTime,
   gcNote,
+  hasV3,
+  isOnPar,
   type Opponent as Library,
   otherLibs,
-  type RuntimeCase,
   type RuntimeLang,
   runtimes,
   sourceNote,
+  type TableCase,
   unity,
   type Versus,
   v3SourceNote,
@@ -289,7 +293,6 @@ export function UnityChart({ lang = 'en' }: { lang?: Locale }) {
 }
 
 type Opponent = 'all' | Library | 'v3';
-type CaseGroup = 'workloads' | 'common' | 'more';
 
 /** Every opponent in legend order: v3 (the upgrade), MemoryPack, the other libraries */
 const opponentKeys: Exclude<Opponent, 'all'>[] = [
@@ -312,12 +315,14 @@ const opponentColor = (key: Exclude<Opponent, 'all'>) =>
   otherColors[Math.min(opponentKeys.indexOf(key), otherColors.length - 1)];
 
 /** One opponent's time in a case, by the same rule as the tables */
-function opponentOf(row: RuntimeCase, key: Exclude<Opponent, 'all'>) {
+function opponentOf(row: TableCase, key: Exclude<Opponent, 'all'>) {
   if (key === 'v3')
     return row.v3
       ? ({
           time: row.v3,
-          ratio: row.vsV3,
+          // within 5% is on par, as every other comparison (versus())
+          ratio:
+            row.vsV3 !== undefined && isOnPar(row.vsV3) ? undefined : row.vsV3,
           tooFast: row.v3TooFast,
         } satisfies Versus)
       : undefined;
@@ -346,26 +351,36 @@ function versusBadge(v: Versus, zh: boolean) {
   };
 }
 
-export function DotnetChart({ lang = 'en' }: { lang?: Locale }) {
+type Op = 'serialize' | 'deserialize';
+
+/**
+ * One group of dotnetGroups (src/lib/benchmarks.ts): each case's time of
+ * every library and v3 as a multiple of Nino v4's, per architecture and
+ * operation. v3 3.3.13 (x64 only) shows "n/a" in a case it has no port of.
+ */
+export function DotnetChart({
+  lang = 'en',
+  group,
+}: {
+  lang?: Locale;
+  group: DotnetGroupId;
+}) {
   const zh = lang === 'zh';
   const t = (names: { en: string; zh: string }) => (zh ? names.zh : names.en);
   const [arch, setArch] = useState<Arch>('x64');
-  const [op, setOp] = useState<'serialize' | 'deserialize'>('serialize');
-  const [pickedGroup, setGroup] = useState<CaseGroup>('workloads');
+  const [pickedOp, setOp] = useState<Op>('serialize');
   const [pickedOpponent, setOpponent] = useState<Opponent>('all');
   const ds = datasets.find((d) => d.arch === arch) ?? datasets[0];
-  const sets: Record<CaseGroup, RuntimeCase[]> = {
-    workloads: ds.workloads[op],
-    common: ds.runtime[op],
-    more: ds.extraRuntime[op],
-  };
-  const groups = (Object.keys(sets) as CaseGroup[]).filter(
-    (g) => sets[g].length > 0,
+  const sets = ds.groups[group];
+  const ops = (['serialize', 'deserialize'] as Op[]).filter(
+    (o) => sets[o].length > 0,
   );
-  const group = groups.includes(pickedGroup) ? pickedGroup : groups[0];
-  const cases = sets[group] ?? [];
+  const op = ops.includes(pickedOp) ? pickedOp : ops[0];
+  const cases = op ? sets[op] : [];
+  // v3 ran on x64 only: there it is a series wherever the site has v3 numbers, n/a in the cases without
+  const v3Shown = ds.arch === 'x64' && hasV3;
   const keys = opponentKeys.filter((key) =>
-    cases.some((row) => opponentOf(row, key)),
+    key === 'v3' ? v3Shown : cases.some((row) => opponentOf(row, key)),
   );
   const opponent: Opponent =
     pickedOpponent !== 'all' && keys.includes(pickedOpponent)
@@ -386,9 +401,14 @@ export function DotnetChart({ lang = 'en' }: { lang?: Locale }) {
     const text: Record<string, string> = { v4: row.v4.text };
     for (const key of shown) {
       const v = opponentOf(row, key);
-      if (!v) continue;
-      values[key] = v.time.ns / base;
-      text[key] = `${v.time.text} · ${versusText(v, zh)}`;
+      if (v) {
+        values[key] = v.time.ns / base;
+        text[key] = `${v.time.text} · ${versusText(v, zh)}`;
+      } else if (key === 'v3') {
+        // no bar, a label: 3.3.13 has no port of this case
+        values[key] = 0;
+        text[key] = 'n/a';
+      }
     }
     const single = opponent === 'all' ? undefined : opponentOf(row, opponent);
     if (opponent !== 'all' && !single) return [];
@@ -403,6 +423,7 @@ export function DotnetChart({ lang = 'en' }: { lang?: Locale }) {
       },
     ];
   });
+  if (!op) return null;
   const largest = Math.max(
     1,
     ...rows.flatMap((r) => Object.values(r.values).map((v) => v ?? 0)),
@@ -414,6 +435,7 @@ export function DotnetChart({ lang = 'en' }: { lang?: Locale }) {
   ].filter((note): note is string => Boolean(note));
   const opName =
     op === 'serialize' ? t(measureNames.serialize) : t(deserializeNew);
+  const groupName = dotnetGroups.find((g) => g.id === group);
   return (
     <div className="not-prose my-6">
       <div className="-mb-6 flex flex-wrap gap-x-3">
@@ -427,22 +449,17 @@ export function DotnetChart({ lang = 'en' }: { lang?: Locale }) {
             onChange={setArch}
           />
         )}
-        <Segmented
-          options={[
-            { value: 'serialize' as const, label: t(measureNames.serialize) },
-            { value: 'deserialize' as const, label: t(deserializeNew) },
-          ]}
-          value={op}
-          onChange={setOp}
-        />
-        {groups.length > 1 && (
+        {ops.length > 1 && (
           <Segmented
-            options={groups.map((g) => ({
-              value: g,
-              label: t(groupLabels[g]),
+            options={ops.map((o) => ({
+              value: o,
+              label:
+                o === 'serialize'
+                  ? t(measureNames.serialize)
+                  : t(deserializeNew),
             }))}
-            value={group}
-            onChange={setGroup}
+            value={op}
+            onChange={setOp}
           />
         )}
         <Segmented
@@ -457,13 +474,13 @@ export function DotnetChart({ lang = 'en' }: { lang?: Locale }) {
       <BarChart
         title={
           zh
-            ? `${opName}：Nino v4 对比${opponent === 'all' ? '其他序列化库' : ` ${t(opponentNames[opponent])}`}`
-            : `${opName}: Nino v4 vs ${opponent === 'all' ? 'other serializers' : t(opponentNames[opponent])}`
+            ? `${groupName?.zh}，${opName}：Nino v4 对比${opponent === 'all' ? '其他序列化库' : ` ${t(opponentNames[opponent])}`}`
+            : `${groupName?.name}, ${opName.toLowerCase()}: Nino v4 vs ${opponent === 'all' ? 'other serializers' : t(opponentNames[opponent])}`
         }
         subtitle={
           zh
-            ? `每个库的耗时是 Nino v4 的几倍，越短越快；标签是实测耗时和倍数，超过 ${RELATIVE_CAP}× 的条在边缘截断。条缺失表示这个库表达不了该用例。`
-            : `Each serializer's time as a multiple of Nino v4's, shorter is faster; labels give the measured time and the multiple, and bars past ${RELATIVE_CAP}× stop at the edge. A missing bar is a case that library cannot express.`
+            ? `每个库的耗时是 Nino v4 的几倍，越短越快；标签是实测耗时和倍数，超过 ${RELATIVE_CAP}× 的条在边缘截断。条缺失表示这个库表达不了该用例，v3 标 n/a 表示 3.3.13 没有这个用例。`
+            : `Each serializer's time as a multiple of Nino v4's, shorter is faster; labels give the measured time and the multiple, and bars past ${RELATIVE_CAP}× stop at the edge. A missing bar is a case that library cannot express; v3 n/a, a case 3.3.13 has no port of.`
         }
         series={series}
         rows={rows}
@@ -483,15 +500,6 @@ export function DotnetChart({ lang = 'en' }: { lang?: Locale }) {
 const deserializeNew = {
   en: 'Deserialize (new instances)',
   zh: '反序列化（新实例）',
-};
-
-const groupLabels: Record<CaseGroup, { en: string; zh: string }> = {
-  workloads: { en: 'Workloads', zh: '真实负载' },
-  common: { en: 'Common cases', zh: '常规用例' },
-  more: {
-    en: 'Tracking, tolerance, fixed size, generics',
-    zh: '引用追踪、版本容错、固定大小、泛型',
-  },
 };
 
 export default { RuntimesChart, UnityChart, DotnetChart };

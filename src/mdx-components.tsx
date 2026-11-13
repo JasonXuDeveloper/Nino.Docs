@@ -35,7 +35,7 @@ import { BytePlayground } from '@/components/byte-playground';
 import { Bytes, Matrix } from '@/components/bytes';
 import {
   BenchmarkChart,
-  DotnetChart,
+  DotnetGroupCharts,
   RuntimesChart,
   UnityChart,
 } from '@/components/charts';
@@ -104,7 +104,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     Accordions,
     BenchChart,
     BenchmarkChart,
-    DotnetChart,
+    DotnetGroupCharts,
     RuntimesChart,
     UnityChart,
     BenchSource,

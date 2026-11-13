@@ -41,7 +41,16 @@ import {
 import { chartProps } from '@/components/charts/benchmark-charts';
 import { type ChartId, isArchChart } from '@/components/charts/ids';
 import { glossary, glossaryHref } from '@/components/glossary';
-import { hasWorkloads } from '@/lib/benchmarks';
+import {
+  dotnetGroupsShown,
+  formatRatio,
+  hasV3,
+  hasWorkloads,
+  isOnPar,
+  otherLibs,
+  type Versus,
+  versusOf,
+} from '@/lib/benchmarks';
 import { getMDXComponents } from '@/mdx-components';
 import type { Locale } from './i18n';
 import { siteUrl } from './site';
@@ -427,8 +436,80 @@ function markdownComponents(lang: Locale, pageUrl: string) {
     UnityChart() {
       return null;
     },
-    DotnetChart() {
-      return null;
+    // The grouped .NET charts: a table per group, each case's time per
+    // library with its multiple of Nino v4's (v3 n/a where 3.3.13 has no port)
+    DotnetGroupCharts() {
+      asMarkdown();
+      const ratio = (v: Versus | undefined) => {
+        if (!v) return '—';
+        if (v.tooFast)
+          return `${v.time.text} (${zh ? 'Nino 快到测不出' : 'Nino too fast to measure'})`;
+        if (v.ratio === undefined)
+          return `${v.time.text} (${zh ? '持平' : 'on par'})`;
+        return `${v.time.text} (${formatRatio(v.ratio)})`;
+      };
+      return (
+        <>
+          {md`\n${zh ? '每个库的耗时，括号里是它是 Nino v4 耗时的几倍；— 表示这个库表达不了该用例，v3 的 n/a 表示 3.3.13 没有这个用例。' : "Each library's time, in parentheses as a multiple of Nino v4's; — is a case the library cannot express, v3's n/a a case 3.3.13 has no port of."}\n\n`}
+          {dotnetGroupsShown.map((group) => (
+            <div key={group.id}>
+              {md`\n**${zh ? group.zh : group.name}**\n\n`}
+              {ArchTabs({
+                markdown: true,
+                render: (ds) => {
+                  const v3 = ds.arch === 'x64' && hasV3;
+                  const libs = otherLibs.filter((lib) =>
+                    ds.libraries.includes(lib.key),
+                  );
+                  const rows = (['serialize', 'deserialize'] as const).flatMap(
+                    (op) =>
+                      ds.groups[group.id][op].map((row) => [
+                        zh && row.zh ? row.zh : row.name,
+                        op === 'serialize'
+                          ? zh
+                            ? '序列化'
+                            : 'Serialize'
+                          : zh
+                            ? '反序列化'
+                            : 'Deserialize',
+                        row.v4.text,
+                        ...(v3
+                          ? [
+                              row.v3
+                                ? ratio({
+                                    time: row.v3,
+                                    ratio:
+                                      row.vsV3 !== undefined &&
+                                      isOnPar(row.vsV3)
+                                        ? undefined
+                                        : row.vsV3,
+                                    tooFast: row.v3TooFast,
+                                  })
+                                : 'n/a',
+                            ]
+                          : []),
+                        ratio(versusOf(row, 'memorypack')),
+                        ...libs.map((lib) => ratio(row.others[lib.key])),
+                      ]),
+                  );
+                  if (rows.length === 0) return null;
+                  return table(
+                    [
+                      zh ? '用例' : 'Case',
+                      zh ? '操作' : 'Operation',
+                      'Nino v4',
+                      ...(v3 ? ['Nino v3'] : []),
+                      'MemoryPack',
+                      ...libs.map((lib) => lib.label),
+                    ],
+                    rows,
+                  );
+                },
+              })}
+            </div>
+          ))}
+        </>
+      );
     },
     RuntimesTables(props: ComponentProps<typeof RuntimesTables>) {
       asMarkdown();
