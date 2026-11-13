@@ -4,7 +4,7 @@
  * (src/data/byte-examples.json) must appear, in order, in a dump of Nino's
  * specification (docs/spec/wire-format.md: Appendix A's dumps of a real run,
  * and every other hex run in it) or in a file of the conformance corpus
- * (conformance/corpus/valid/*.bin, written by Nino itself). A row found in
+ * (tests/conformance/corpus/valid/*.bin, written by Nino itself). A row found in
  * neither fails: a figure the spec has no dump for gets one there first.
  *
  *   bun run check:bytes          # Nino from $NINO_DIR, else ../Nino
@@ -15,7 +15,12 @@ import { join, relative, resolve } from 'node:path';
 const root = resolve(import.meta.dirname, '..');
 const nino = resolve(process.env.NINO_DIR ?? join(root, '..', 'Nino'));
 const specPath = join(nino, 'docs', 'spec', 'wire-format.md');
-const corpusDir = join(nino, 'conformance', 'corpus', 'valid');
+// tests/conformance since rc.10; conformance/ at the root before.
+const corpusDir =
+  [
+    join(nino, 'tests', 'conformance', 'corpus', 'valid'),
+    join(nino, 'conformance', 'corpus', 'valid'),
+  ].find(existsSync) ?? '';
 if (!existsSync(specPath)) {
   console.error(`No Nino checkout at ${nino} (set NINO_DIR).`);
   process.exit(1);

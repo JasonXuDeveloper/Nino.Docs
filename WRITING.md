@@ -207,7 +207,7 @@ Overview, FAQ and reference pages answer the questions their readers search for,
     memory; `bun run check:bytes` (below) checks every row. Add an example only when the spec has its dump.
 - **Every byte figure is checked**: `bun run check:bytes` (`scripts/check-bytes.ts`, `NINO_DIR` like
   `check:csharp`) finds each `<Bytes>` row of the v4 pages and each playground row in a hex dump of Nino's
-  `docs/spec/wire-format.md` or in a file of `conformance/corpus/valid`, and fails on any row it cannot find. Run it
+  `docs/spec/wire-format.md` or in a file of `tests/conformance/corpus/valid`, and fails on any row it cannot find. Run it
   after any change to a figure and after a wire-format change in Nino.
 - **Layout is fixed in the component, checked at 390px, 1024px and 1280px**: at 1024 and up every table and matrix
   fits the column; a table with more columns than fit is restructured (transposed, or reduced to the cells that
