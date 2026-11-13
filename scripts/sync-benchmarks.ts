@@ -1,50 +1,62 @@
 /**
- * Syncs the runtime benchmarks that Nino's report workflow appends to each
- * GitHub release:
+ * Syncs the benchmarks of Nino's newest v4 release into src/data. Nino's
+ * report workflow attaches every result to the release as an asset and lists
+ * them in benchmarks-manifest.json (Nino's
+ * benchmarks/reports/release_assets.py); the body only charts them. From
+ * the assets (`assetNames`):
  *
- * - the "Performance Report" (v4 and MemoryPack) into src/data/bench-v4.json;
- * - the "v3 3.3.13 vs v4 (same machine)" section (Nino 3.3.13 run before and
- *   after the v4 run on the same runner) into src/data/bench-v3-runtime.json,
- *   from the same release;
- * - the "Arm64 benchmark" section (the same benchmark classes on GitHub's
- *   ubuntu-24.04-arm runners, a table in the Performance Report's format) into
- *   src/data/bench-v4-arm64.json, from the same release. When the body is too
- *   long for it (GitHub's limit), report.yml attaches the section to the release
- *   as arm64-benchmark.md instead, and it is read from there;
- * - the sections of the runtimes outside .NET ("🐹 Go runtime benchmark",
- *   "🦀 Rust runtime benchmark", "🌐 TypeScript runtime benchmark", written by
- *   Nino's benchmarks/runtimes_report.py after every other section) into
- *   src/data/bench-runtimes.json, from the same release;
- * - the Unity section ("🎮 Unity benchmark (Burst, IL2CPP)": an IL2CPP player
- *   on GitHub's Linux x64 runner, each case timed without and with the Burst
- *   kernels, one "### Unity <version>" table per Unity version) into
- *   src/data/bench-unity.json, from the same release;
- * - the build section ("🏗️ Build: v3 3.3.13 vs v4 (source generator)": Nino
- *   v3 3.3.13's source generator against the release's on one x64 runner, at
- *   330 and 1,100 types, written by Nino's benchmarks/reports/generator_report.py)
- *   into src/data/bench-build.json, from the same release.
+ * - dotnet-x64.md, the merged BenchmarkDotNet report of every class (v4,
+ *   MemoryPack and the other libraries), into src/data/bench-v4.json;
+ * - dotnet-v3-x64.md, Nino 3.3.13's SimpleTest and PolymorphicTest run
+ *   directly before v4 on the same runners, against dotnet-x64.md's v4 times,
+ *   into src/data/bench-v3-runtime.json;
+ * - dotnet-arm64.md, the same classes on GitHub's Arm64 runners, into
+ *   src/data/bench-v4-arm64.json;
+ * - runtime-go-x64.md, runtime-rust-x64.md and runtime-typescript-x64.md, the
+ *   sections of the runtimes outside .NET ("🐹 Go runtime benchmark", ...,
+ *   written by Nino's benchmarks/reports/runtimes_report.py), into
+ *   src/data/bench-runtimes.json;
+ * - unity-x64.md, the Unity section ("🎮 Unity benchmark (Burst, IL2CPP)": an
+ *   IL2CPP player on GitHub's Linux x64 runner, each case timed without and
+ *   with the Burst kernels, one "### Unity <version>" table per Unity
+ *   version), into src/data/bench-unity.json;
+ * - build-x64.md, the build section ("🏗️ Build: v3 3.3.13 vs v4 (source
+ *   generator)": Nino v3 3.3.13's source generator against the release's on
+ *   one x64 runner, at 330 and 1,100 types, written by Nino's
+ *   benchmarks/reports/generator_report.py), into src/data/bench-build.json.
  *
- * The Performance Report and the Arm64 section have a row per method, and every
- * row is kept, whatever its method prefix (`MessagePack…`, `Protobuf…`,
- * `GoogleProtobuf…`, `Json…`) or benchmark class (WorkloadTest's workloads
- * among them). `requiredMethods` never asks for the other libraries or the
- * workloads: releases before they joined the benchmark lack them, and the site
- * then leaves them out.
+ * A release without the manifest (v4.0.0-rc.9 and older) had these as
+ * sections of its body, which are parsed instead: the "Performance Report",
+ * the "v3 3.3.13 vs v4 (same machine)" section (compare_v3.py's tables), the
+ * "Arm64 benchmark" section (or its copy attached as arm64-benchmark.md when
+ * the body had no room for it), and the runtime, Unity and build sections.
+ *
+ * The x64 and Arm64 reports have a row per method, and every row is kept,
+ * whatever its method prefix (`MessagePack…`, `Protobuf…`, `GoogleProtobuf…`,
+ * `Json…`) or benchmark class (WorkloadTest's workloads, SimpleTest and
+ * PolymorphicTest among them). `requiredMethods` never asks for the other
+ * libraries or the workloads: releases before they joined the benchmark lack
+ * them, and the site then leaves them out.
  *
  *   bun scripts/sync-benchmarks.ts                       # newest v4.* release with a report
  *   bun scripts/sync-benchmarks.ts --fixture <file.md>   # parse a release body from a file
- *   bun scripts/sync-benchmarks.ts --fixture <file> --out <file.json> [--out-v3 <file.json>] [--out-arm64 <file.json>] [--out-runtimes <file.json>] [--out-unity <file.json>] [--out-build <file.json>]
+ *   bun scripts/sync-benchmarks.ts --fixture <dir>       # read a manifest and its assets from a directory
+ *   bun scripts/sync-benchmarks.ts --fixture <file|dir> --out <file.json> [--out-v3 <file.json>] [--out-arm64 <file.json>] [--out-runtimes <file.json>] [--out-unity <file.json>] [--out-build <file.json>]
  *
- * Fixtures: scripts/fixtures/release-body.md (made-up numbers, the methods the
- * site requires), release-body-v3.md (with the v3 section),
- * release-body-new.md (a sample of the ReferenceTest, VersionTolerantTest and
- * FixedSizeTest rows; its numbers are noise, only its format matters) and
- * release-body-arm64.md (release-body-new.md plus an Arm64 section whose
- * numbers are a copy of its x64 ones: for parser tests only) and
- * release-body-libraries.md (release-body-arm64.md plus MessagePack and
- * protobuf-net rows and the three runtime sections, with invented numbers: for
- * parser tests only) and release-body-unity.md (release-body-libraries.md plus
- * a Unity section, with invented numbers: for parser tests only) and
+ * Fixtures: scripts/fixtures/release-assets/ (a manifest and its assets, as
+ * Nino's release_body.py publish wrote them in a dry run from
+ * release-body-build.md's data plus Google.Protobuf and System.Text.Json rows
+ * in SimpleTest and PolymorphicTest, numbers invented: for reader tests only).
+ * Bodies of releases without the manifest: scripts/fixtures/release-body.md
+ * (made-up numbers, the methods the site requires), release-body-v3.md (with
+ * the v3 section), release-body-new.md (a sample of the ReferenceTest,
+ * VersionTolerantTest and FixedSizeTest rows; its numbers are noise, only its
+ * format matters) and release-body-arm64.md (release-body-new.md plus an
+ * Arm64 section whose numbers are a copy of its x64 ones: for parser tests
+ * only) and release-body-libraries.md (release-body-arm64.md plus MessagePack
+ * and protobuf-net rows and the three runtime sections, with invented numbers:
+ * for parser tests only) and release-body-unity.md (release-body-libraries.md
+ * plus a Unity section, with invented numbers: for parser tests only) and
  * release-body-workloads.md (release-body-unity.md plus WorkloadTest's rows
  * for every library in the x64 report and the Arm64 section, with invented
  * numbers: for parser tests only) and release-body-build.md
@@ -52,19 +64,19 @@
  * benchmarks/reports/fixtures/generator: for parser tests only).
  *
  * Runs before every build. It never fails the build: on any error (network,
- * rate limit, no matching release, a table it cannot read) it prints a warning
- * and leaves the committed JSON as it is. A release without the v3 or the
- * Arm64 section (or whose Arm64 table lacks a method the site shows) keeps the
- * committed src/data/bench-v3-runtime.json or src/data/bench-v4-arm64.json; a
- * release without any runtime section keeps src/data/bench-runtimes.json (a
- * language whose table it cannot read is left out, with a warning), and a
- * release without the Unity section (or with one it cannot read) keeps
- * src/data/bench-unity.json, and one without the build section (or with one
- * it cannot read) keeps src/data/bench-build.json.
+ * rate limit, no matching release, an asset or table it cannot read) it prints
+ * a warning and leaves the committed JSON as it is. A release without the v3
+ * or the Arm64 results (or whose Arm64 report lacks a method the site shows)
+ * keeps the committed src/data/bench-v3-runtime.json or
+ * src/data/bench-v4-arm64.json; a release without any runtime section keeps
+ * src/data/bench-runtimes.json (a language whose table it cannot read is left
+ * out, with a warning), and a release without the Unity section (or with one
+ * it cannot read) keeps src/data/bench-unity.json, and one without the build
+ * section (or with one it cannot read) keeps src/data/bench-build.json.
  * Set GITHUB_TOKEN to raise the API rate limit.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = 'JasonXuDeveloper/Nino';
@@ -99,8 +111,38 @@ export const v3Heading = 'v3 3.3.13 vs v4 (same machine)';
  */
 export const arm64Heading = '## 📊 Arm64 benchmark';
 
-/** The release asset that holds the Arm64 section (report.yml's ARM64_ASSET) */
+/** The release asset that held the Arm64 section of a body with no room for it (releases before the manifest) */
 export const arm64Asset = 'arm64-benchmark.md';
+
+/** The manifest of a release's benchmark assets (Nino's benchmarks/reports/release_assets.py, MANIFEST) */
+export const manifestAsset = 'benchmarks-manifest.json';
+
+/** The assets the site reads (release_assets.py, NAMES): fixed names, the same for every release */
+export const assetNames = {
+  x64: 'dotnet-x64.md',
+  arm64: 'dotnet-arm64.md',
+  v3: 'dotnet-v3-x64.md',
+  runtime: (lang: RuntimeLang) => `runtime-${lang}-x64.md`,
+  unity: 'unity-x64.md',
+  build: 'build-x64.md',
+} as const;
+
+/** One asset of the manifest; release_body.py adds the chart fields, which the site does not read */
+export interface ManifestEntry {
+  name: string;
+  kind: string;
+  arch?: string;
+  lang?: string;
+  format?: string;
+  environment?: string | null;
+}
+
+/** benchmarks-manifest.json */
+export interface Manifest {
+  schema: number;
+  tag: string;
+  assets: ManifestEntry[];
+}
 
 /**
  * Headings of the runtimes outside .NET (Nino's benchmarks/runtimes_report.py,
@@ -519,6 +561,33 @@ export function parseV3Section(body: string) {
   return { rows, runs, environment: environmentOf(section, false) };
 }
 
+/**
+ * The v3 results of a release with the manifest: dotnet-v3-x64.md (v3
+ * 3.3.13's report, one run directly before v4) against the v4 times of the
+ * same methods in dotnet-x64.md, as parseV3Section reads them from a body.
+ * Throws when the report has no usable table or no SerializeSimpleClass row.
+ */
+export function parseV3Report(text: string, x64: BenchRow[]) {
+  const v3 = parseBenchSection(text, 'the v3 report');
+  const v4 = new Map(x64.map((row) => [row.method, row.meanNs]));
+  const rows: V3RuntimeFile['rows'] = {};
+  for (const row of v3.rows) {
+    const match = /^Nino(Serialize|Deserialize)(\w+)$/.exec(row.method);
+    const v4Ns = v4.get(row.method);
+    // v4 may read 0.00 ns: too fast to measure (src/lib/benchmarks.ts, FLOOR_NS)
+    if (!match || v4Ns === undefined || row.meanNs <= 0 || v4Ns < 0) continue;
+    rows[`${match[1].toLowerCase()}:${match[2]}`] = {
+      v3Ns: row.meanNs,
+      v4Ns,
+    };
+  }
+  if (!rows['serialize:SimpleClass'])
+    throw new Error(
+      'the v3 report has no SerializeSimpleClass row in both runs',
+    );
+  return { rows, runs: 1, environment: v3.environment };
+}
+
 /** "28.5 KiB", "640 B" (runtimes_report.py's sizes) -> bytes */
 function parseRuntimeSize(text: string): number | null {
   const match = /^([\d,]*\.?\d+)\s*(B|KiB|MiB)$/.exec(clean(text));
@@ -855,7 +924,7 @@ export function missingMethods(rows: BenchRow[]) {
 /* GitHub                                                              */
 /* ------------------------------------------------------------------ */
 
-async function latestRelease(): Promise<Release> {
+const apiHeaders = () => {
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
     'User-Agent': 'nino-docs-benchmark-sync',
@@ -863,30 +932,198 @@ async function latestRelease(): Promise<Release> {
   };
   if (process.env.GITHUB_TOKEN)
     headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  return headers;
+};
 
+/** An asset's text (its browser_download_url: no API call) */
+async function download(url: string, name: string) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  if (!response.ok)
+    throw new Error(`${name}: ${response.status} ${response.statusText}`);
+  return response.text();
+}
+
+/** A release's manifest; null when it has none */
+async function releaseManifest(release: Release) {
+  const asset = release.assets?.find((a) => a.name === manifestAsset);
+  if (!asset) return null;
+  return JSON.parse(
+    await download(asset.browser_download_url, manifestAsset),
+  ) as Manifest;
+}
+
+/** The text of every asset the site reads that the manifest lists, or the error that kept one from it */
+async function releaseAssets(release: Release, manifest: Manifest) {
+  const wanted = new Set<string>([
+    assetNames.x64,
+    assetNames.arm64,
+    assetNames.v3,
+    assetNames.unity,
+    assetNames.build,
+    ...(Object.keys(runtimeHeadings) as RuntimeLang[]).map(assetNames.runtime),
+  ]);
+  const names = manifest.assets
+    .map((entry) => entry.name)
+    .filter((name) => wanted.has(name));
+  const results = await Promise.allSettled(
+    names.map((name) => {
+      const asset = release.assets?.find((a) => a.name === name);
+      if (!asset)
+        return Promise.reject(
+          new Error(`${name}: listed in the manifest, not attached`),
+        );
+      return download(asset.browser_download_url, name);
+    }),
+  );
+  const files = new Map<string, string | Error>();
+  names.forEach((name, i) => {
+    const result = results[i];
+    files.set(
+      name,
+      result.status === 'fulfilled'
+        ? result.value
+        : new Error(message(result.reason)),
+    );
+  });
+  return files;
+}
+
+type BenchSection = ReturnType<typeof parseBenchSection>;
+type V3Section = NonNullable<ReturnType<typeof parseV3Section>>;
+
+/**
+ * What one release (or fixture) holds, each part parsed on demand: null when
+ * it has none, a throw when it cannot be read. From the assets of a release
+ * with the manifest, or from the body of one without.
+ */
+interface Sources {
+  /** Where the results came from, for the messages */
+  from: string;
+  x64(): BenchSection;
+  v3(): V3Section | null;
+  arm64(): BenchSection | null;
+  runtimes(tag: string): RuntimeSection[];
+  unity(): ReturnType<typeof parseUnitySection>;
+  build(): ReturnType<typeof parseBuildSection>;
+}
+
+/** The sections of a body from before the manifest (arm64Text: arm64-benchmark.md, when it was attached) */
+function bodySources(body: string, arm64Text?: string): Sources {
+  return {
+    from: 'the release body',
+    x64: () => parseReport(body),
+    v3: () => parseV3Section(body),
+    arm64: () => parseArm64Section(arm64Text ?? body),
+    runtimes: (tag) => parseRuntimeSections(body, tag),
+    unity: () => parseUnitySection(body),
+    build: () => parseBuildSection(body),
+  };
+}
+
+/** The assets of a release with the manifest: name -> text, or the error that kept it; absent = not listed */
+function assetSources(files: Map<string, string | Error>): Sources {
+  const text = (name: string) => {
+    const file = files.get(name);
+    if (file instanceof Error) throw file;
+    return file ?? null;
+  };
+  const x64 = () => {
+    const report = text(assetNames.x64);
+    if (report === null) throw new Error(`no ${assetNames.x64}`);
+    return parseBenchSection(report, assetNames.x64);
+  };
+  return {
+    from: manifestAsset,
+    x64,
+    v3: () => {
+      const report = text(assetNames.v3);
+      return report === null ? null : parseV3Report(report, x64().rows);
+    },
+    arm64: () => {
+      const report = text(assetNames.arm64);
+      return report === null
+        ? null
+        : parseBenchSection(report, assetNames.arm64);
+    },
+    runtimes: (tag) => {
+      const sections: RuntimeSection[] = [];
+      for (const lang of Object.keys(runtimeHeadings) as RuntimeLang[]) {
+        try {
+          const section = text(assetNames.runtime(lang));
+          const parsed = section && parseRuntimeSection(section, lang, tag);
+          if (parsed) sections.push(parsed);
+        } catch (error) {
+          console.warn(`[benchmarks] warning: ${message(error)}; left out`);
+        }
+      }
+      return sections;
+    },
+    unity: () => {
+      const section = text(assetNames.unity);
+      return section === null ? null : parseUnitySection(section);
+    },
+    build: () => {
+      const section = text(assetNames.build);
+      return section === null ? null : parseBuildSection(section);
+    },
+  };
+}
+
+/**
+ * The newest v4.* release with .NET results: a manifest that lists
+ * dotnet-x64.md, or (before the manifest) a body with a "Performance
+ * Report"; and what it holds.
+ */
+async function latestRelease(): Promise<{
+  release: Release;
+  sources: Sources;
+}> {
   const response = await fetch(
     `https://api.github.com/repos/${repo}/releases?per_page=50`,
-    { headers, signal: AbortSignal.timeout(15_000) },
+    { headers: apiHeaders(), signal: AbortSignal.timeout(15_000) },
   );
   if (!response.ok)
     throw new Error(`GitHub API ${response.status} ${response.statusText}`);
   const releases = (await response.json()) as Release[];
 
-  const match = releases
+  const candidates = releases
     .filter(
       (release) =>
         !release.draft &&
         release.tag_name.startsWith('v4.') &&
-        release.body?.includes('Performance Report'),
+        (release.assets?.some((a) => a.name === manifestAsset) ||
+          release.body?.includes('Performance Report')),
     )
     .sort((a, b) =>
       (b.published_at ?? b.created_at).localeCompare(
         a.published_at ?? a.created_at,
       ),
-    )[0];
-  if (!match)
-    throw new Error('no v4.* release with a "Performance Report" yet');
-  return match;
+    );
+  for (const release of candidates) {
+    // A manifest that cannot be read throws: the committed files stay.
+    const manifest = await releaseManifest(release);
+    if (manifest) {
+      if (!manifest.assets.some((entry) => entry.name === assetNames.x64)) {
+        console.warn(
+          `[benchmarks] ${release.tag_name}'s ${manifestAsset} lists no ${assetNames.x64}; trying an older release`,
+        );
+        continue;
+      }
+      return {
+        release,
+        sources: assetSources(await releaseAssets(release, manifest)),
+      };
+    }
+    if (!release.body?.includes('Performance Report')) continue;
+    const asset = release.assets?.find((a) => a.name === arm64Asset);
+    const arm64Text = asset
+      ? await download(asset.browser_download_url, arm64Asset)
+      : undefined;
+    return { release, sources: bodySources(release.body, arm64Text) };
+  }
+  throw new Error(
+    `no v4.* release with ${manifestAsset} or a "Performance Report" yet`,
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -1017,10 +1254,7 @@ const fixtureOrigin: Origin = {
   publishedAt: null,
 };
 
-function v3File(
-  origin: Origin,
-  v3: NonNullable<ReturnType<typeof parseV3Section>>,
-): V3RuntimeFile {
+function v3File(origin: Origin, v3: V3Section): V3RuntimeFile {
   return {
     ...origin,
     environment: v3.environment,
@@ -1030,17 +1264,17 @@ function v3File(
   };
 }
 
-/** The v3 section of the release the v4 numbers came from; keeps the committed file when it has none */
-function syncV3(release: Release, out: string | undefined) {
+/** The v3 results of the release the v4 numbers came from; keeps the committed file when it has none */
+function syncV3(release: Release, sources: Sources, out: string | undefined) {
   const kept = () => {
     const file = JSON.parse(readFileSync(v3DataFile, 'utf8')) as V3RuntimeFile;
     return `keeping src/data/bench-v3-runtime.json (${v3Summary(file)})`;
   };
   try {
-    const v3 = parseV3Section(release.body ?? '');
+    const v3 = sources.v3();
     if (!v3) {
       console.warn(
-        `[benchmarks] ${release.tag_name} has no "${v3Heading}" section; ${kept()}`,
+        `[benchmarks] ${release.tag_name} has no v3 results in ${sources.from}; ${kept()}`,
       );
       return;
     }
@@ -1053,39 +1287,29 @@ function syncV3(release: Release, out: string | undefined) {
 }
 
 /**
- * The Arm64 section of the release the x64 numbers came from, under the same
+ * The Arm64 results of the release the x64 numbers came from, under the same
  * rule (every method the site shows); keeps the committed file otherwise.
  */
-async function syncArm64(release: Release, out: string | undefined) {
+function syncArm64(
+  release: Release,
+  sources: Sources,
+  out: string | undefined,
+) {
   const kept = () => {
     const file = JSON.parse(readFileSync(arm64DataFile, 'utf8')) as BenchFile;
     return `keeping src/data/bench-v4-arm64.json (${summary(file)})`;
   };
   try {
-    const asset = release.assets?.find((a) => a.name === arm64Asset);
-    let text = release.body ?? '';
-    if (asset) {
-      const response = await fetch(asset.browser_download_url, {
-        signal: AbortSignal.timeout(15_000),
-      });
-      if (!response.ok)
-        throw new Error(
-          `${arm64Asset}: ${response.status} ${response.statusText}`,
-        );
-      text = await response.text();
-    }
-    const arm64 = parseArm64Section(text);
+    const arm64 = sources.arm64();
     if (!arm64) {
       console.warn(
-        `[benchmarks] ${release.tag_name} has no "${arm64Heading}" section; ${kept()}`,
+        `[benchmarks] ${release.tag_name} has no Arm64 results in ${sources.from}; ${kept()}`,
       );
       return;
     }
     const missing = missingMethods(arm64.rows);
     if (missing.length > 0)
-      throw new Error(
-        `${release.tag_name}'s Arm64 section ${lacking(missing)}`,
-      );
+      throw new Error(`${release.tag_name}'s Arm64 report ${lacking(missing)}`);
     const file = benchFile(releaseOrigin(release), arm64);
     write(out ?? arm64DataFile, file);
     console.log(`[benchmarks] synced Arm64: ${summary(file)}`);
@@ -1098,7 +1322,11 @@ async function syncArm64(release: Release, out: string | undefined) {
  * The runtime sections of the release the .NET numbers came from; keeps the
  * committed file when it has none.
  */
-function syncRuntimes(release: Release, out: string | undefined) {
+function syncRuntimes(
+  release: Release,
+  sources: Sources,
+  out: string | undefined,
+) {
   const kept = () => {
     const file = JSON.parse(
       readFileSync(runtimesDataFile, 'utf8'),
@@ -1106,13 +1334,10 @@ function syncRuntimes(release: Release, out: string | undefined) {
     return `keeping src/data/bench-runtimes.json (${runtimesSummary(file)})`;
   };
   try {
-    const languages = parseRuntimeSections(
-      release.body ?? '',
-      release.tag_name,
-    );
+    const languages = sources.runtimes(release.tag_name);
     if (languages.length === 0) {
       console.warn(
-        `[benchmarks] ${release.tag_name} has no runtime section; ${kept()}`,
+        `[benchmarks] ${release.tag_name} has no runtime section in ${sources.from}; ${kept()}`,
       );
       return;
     }
@@ -1128,16 +1353,20 @@ function syncRuntimes(release: Release, out: string | undefined) {
  * The Unity section of the release the .NET numbers came from; keeps the
  * committed file when it has none or it cannot be read.
  */
-function syncUnity(release: Release, out: string | undefined) {
+function syncUnity(
+  release: Release,
+  sources: Sources,
+  out: string | undefined,
+) {
   const kept = () => {
     const file = JSON.parse(readFileSync(unityDataFile, 'utf8')) as UnityFile;
     return `keeping src/data/bench-unity.json (${unitySummary(file)})`;
   };
   try {
-    const unity = parseUnitySection(release.body ?? '');
+    const unity = sources.unity();
     if (!unity) {
       console.warn(
-        `[benchmarks] ${release.tag_name} has no "${unityHeading}" section; ${kept()}`,
+        `[benchmarks] ${release.tag_name} has no "${unityHeading}" section in ${sources.from}; ${kept()}`,
       );
       return;
     }
@@ -1153,16 +1382,20 @@ function syncUnity(release: Release, out: string | undefined) {
  * The build section of the release the .NET numbers came from; keeps the
  * committed file when it has none or it cannot be read.
  */
-function syncBuild(release: Release, out: string | undefined) {
+function syncBuild(
+  release: Release,
+  sources: Sources,
+  out: string | undefined,
+) {
   const kept = () => {
     const file = JSON.parse(readFileSync(buildDataFile, 'utf8')) as BuildFile;
     return `keeping src/data/bench-build.json (${buildSummary(file)})`;
   };
   try {
-    const build = parseBuildSection(release.body ?? '');
+    const build = sources.build();
     if (!build) {
       console.warn(
-        `[benchmarks] ${release.tag_name} has no "${buildHeading}" section; ${kept()}`,
+        `[benchmarks] ${release.tag_name} has no "${buildHeading}" section in ${sources.from}; ${kept()}`,
       );
       return;
     }
@@ -1180,9 +1413,32 @@ function buildFile(file: BuildFile): BuildFile {
   return { origin, tag, url, publishedAt, environment, note, sizes };
 }
 
-/** Fixture mode: every section the file has, written to --out* or printed */
+/**
+ * A fixture: a release body (a file), or a manifest and its assets (a
+ * directory, read as a release's assets are).
+ */
+function fixtureSources(path: string): Sources {
+  if (!statSync(path).isDirectory())
+    return bodySources(readFileSync(path, 'utf8'));
+  const manifest = JSON.parse(
+    readFileSync(join(path, manifestAsset), 'utf8'),
+  ) as Manifest;
+  const files = new Map<string, string | Error>();
+  for (const { name } of manifest.assets) {
+    const file = join(path, name);
+    files.set(
+      name,
+      existsSync(file)
+        ? readFileSync(file, 'utf8')
+        : new Error(`${name}: listed in the manifest, not in ${path}`),
+    );
+  }
+  return assetSources(files);
+}
+
+/** Fixture mode: every part the fixture has, written to --out* or printed */
 function fixture(path: string) {
-  const body = readFileSync(path, 'utf8');
+  const sources = fixtureSources(path);
   const output = (flag: string, data: unknown, text: string) => {
     const out = argument(flag);
     if (out) {
@@ -1200,36 +1456,36 @@ function fixture(path: string) {
       );
   };
 
-  const x64 = benchFile(fixtureOrigin, parseReport(body));
+  const x64 = benchFile(fixtureOrigin, sources.x64());
   warnMissing('fixture', x64.rows);
   output('--out', x64, summary(x64));
 
-  const v3 = parseV3Section(body);
+  const v3 = sources.v3();
   if (v3) {
     const file = v3File(fixtureOrigin, v3);
     output('--out-v3', file, v3Summary(file));
-  } else console.log('[benchmarks] fixture has no v3 section');
+  } else console.log('[benchmarks] fixture has no v3 results');
 
-  const arm64 = parseArm64Section(body);
+  const arm64 = sources.arm64();
   if (arm64) {
     const file = benchFile(fixtureOrigin, arm64);
-    warnMissing("fixture's Arm64 section", file.rows);
+    warnMissing("fixture's Arm64 report", file.rows);
     output('--out-arm64', file, `Arm64: ${summary(file)}`);
-  } else console.log('[benchmarks] fixture has no Arm64 section');
+  } else console.log('[benchmarks] fixture has no Arm64 results');
 
-  const languages = parseRuntimeSections(body, fixtureOrigin.tag);
+  const languages = sources.runtimes(fixtureOrigin.tag);
   if (languages.length > 0) {
     const file: RuntimesFile = { ...fixtureOrigin, languages };
     output('--out-runtimes', file, `runtimes: ${runtimesSummary(file)}`);
   } else console.log('[benchmarks] fixture has no runtime section');
 
-  const unity = parseUnitySection(body);
+  const unity = sources.unity();
   if (unity) {
     const file: UnityFile = { ...fixtureOrigin, ...unity };
     output('--out-unity', file, `Unity: ${unitySummary(file)}`);
   } else console.log('[benchmarks] fixture has no Unity section');
 
-  const build = parseBuildSection(body);
+  const build = sources.build();
   if (build) {
     const file = buildFile({ ...fixtureOrigin, ...build, note: null });
     output('--out-build', file, `build: ${buildSummary(file)}`);
@@ -1244,22 +1500,19 @@ async function main() {
   }
 
   try {
-    const release = await latestRelease();
-    const file = benchFile(
-      releaseOrigin(release),
-      parseReport(release.body ?? ''),
-    );
+    const { release, sources } = await latestRelease();
+    const file = benchFile(releaseOrigin(release), sources.x64());
     const missing = missingMethods(file.rows);
     if (missing.length > 0)
       throw new Error(`${release.tag_name}'s report ${lacking(missing)}`);
     write(argument('--out') ?? dataFile, file);
-    console.log(`[benchmarks] synced ${summary(file)}`);
+    console.log(`[benchmarks] synced ${summary(file)} from ${sources.from}`);
     // Only from the release the v4 numbers came from, so the site never mixes releases.
-    syncV3(release, argument('--out-v3'));
-    await syncArm64(release, argument('--out-arm64'));
-    syncRuntimes(release, argument('--out-runtimes'));
-    syncUnity(release, argument('--out-unity'));
-    syncBuild(release, argument('--out-build'));
+    syncV3(release, sources, argument('--out-v3'));
+    syncArm64(release, sources, argument('--out-arm64'));
+    syncRuntimes(release, sources, argument('--out-runtimes'));
+    syncUnity(release, sources, argument('--out-unity'));
+    syncBuild(release, sources, argument('--out-build'));
   } catch (error) {
     const kept = JSON.parse(readFileSync(dataFile, 'utf8')) as BenchFile;
     console.warn(
