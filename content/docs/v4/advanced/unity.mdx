@@ -38,7 +38,7 @@ openupm add com.jasonxudeveloper.nino
 
 OpenUPM numbers each release candidate rc.N as preview.(200 + N); see [OpenUPM versions](/en/docs/v4/start#openupm-versions).
 
-From 4.0.0-rc.10 the package OpenUPM serves is signed, so Unity 6.3 and later shows it as signed in the Package Manager window ("Signed (limited)": signed by an organization you are not a member of) instead of warning that it is unsigned. A package added by Git URL is not signed.
+The package OpenUPM serves is signed, so Unity 6.3 and later shows it as signed in the Package Manager window ("Signed (limited)": signed by an organization you are not a member of) instead of warning that it is unsigned. The same signed `.tgz` is attached to the package version's [GitHub release](https://github.com/JasonXuDeveloper/Nino/releases), for **Install package from tarball**. A package added by Git URL is not signed.
 
 The package contains `Nino.Core.dll`, the source generator `Nino.Generator.dll` (labelled `RoslynAnalyzer`, so Unity runs it on your scripts), its code fixes `Nino.Generator.CodeFixes.dll` (for Rider and Visual Studio), `Nino.UnityTypes.dll` (formatters for the [Unity classes](#unity-classes) below), and the `System.Buffers`, `System.Memory` and `System.Runtime.CompilerServices.Unsafe` assemblies Nino.Core needs.
 
@@ -144,7 +144,7 @@ Build the shared project and copy **only** `Game.Shared.dll` into `Assets/Plugin
 
 Unity runs the netstandard build of `Nino.Core`, which has no hardware intrinsics: on its own it moves tuples, padded structs and Latin-1 text a field or a word at a time and transcodes `[NinoUtf8]` strings with .NET's UTF-8 encoder. IL2CPP and Mono players without Burst stay on those scalar paths, so **install Burst for speed**: Nino then moves them with SIMD instead, with no change to your code:
 
-1. Open **Window > Package Manager**, select **Unity Registry** and install **Burst** (`com.unity.burst`) 1.8 or later. Projects that use Entities or Collections have it already, as both depend on it.
+1. Open **Window > Package Manager**, select **Unity Registry** and install **Burst** (`com.unity.burst`) 1.8 or later; Burst 2.0, which Unity 6000.6 ships with its editor, works too. Projects that use Entities or Collections have it already, as both depend on it.
 2. That is all. The Nino package's `Nino.Burst` assembly compiles as soon as Burst is in the project (it is skipped without it) and registers its kernels at startup, before the first scene loads, and in the editor after every domain reload.
 
 | Kernel | What it speeds up | From |
@@ -163,7 +163,7 @@ Shorter arrays and strings stay on the scalar paths, where the call to a kernel 
 
 **x64 players: enable SSE4 and AVX2.** Burst compiles a player's code once for each x64 CPU target in **Edit > Project Settings > Burst AOT Settings** and picks the variant the CPU runs at startup. The AVX2 target gives AVX2 CPUs the 32-byte permute; the SSE4 target gives CPUs with SSSE3 but no AVX2 the 16-byte kernels. The SSE2 variant has no byte shuffle, so without an SSE4 target such a CPU gets no kernels at all. The default list depends on the Burst version (1.8.29's is SSE2 and AVX2), so check that it includes SSE4 and AVX2, as Nino's own test project does (SSE2, SSE4 and AVX2).
 
-**Same bytes.** Each kernel writes exactly the bytes of the scalar path it replaces, so players with and without Burst, .NET servers and the [Go, Rust and TypeScript runtimes](/en/docs/v4/advanced/codegen) all read each other's data. Nino's CI checks every kernel against its scalar reference byte for byte, in the editor and in IL2CPP players, on Unity 2022.3 and 6000.3. The [Unity benchmark](/en/docs/v4/benchmarks-unity) times an IL2CPP player with and without the kernels for every release.
+**Same bytes.** Each kernel writes exactly the bytes of the scalar path it replaces, so players with and without Burst, .NET servers and the [Go, Rust and TypeScript runtimes](/en/docs/v4/advanced/codegen) all read each other's data. Nino's CI checks every kernel against its scalar reference byte for byte, in the editor and in IL2CPP players, on Unity 2022.3 (Burst 1.8) and 6000.6 (Burst 2.0), and every kernel checks itself again at startup ([below](#self-test)). The [Unity benchmark](/en/docs/v4/benchmarks-unity) times an IL2CPP player with and without the kernels for every release.
 
 To check or switch them at run time, use the `Nino.Burst.NinoBurst` class (code in an assembly definition of yours needs a reference to the `Nino.Burst` assembly definition to call it):
 
@@ -172,9 +172,17 @@ using Nino.Burst;
 
 Debug.Log($"Nino Burst kernels: {NinoBurst.Registered}, {NinoBurst.IsaName}"); // e.g. "True, AVX2"
 NinoBurst.Unregister(); // back to the scalar paths, e.g. to compare frame times
-NinoBurst.Register();   // false where Burst is off or the CPU has none of the instruction sets
+NinoBurst.Register();   // false where Burst is off, the CPU has none of the instruction sets or no kernel passes its self-test
 NinoBurst.Register(NinoBurst.Ssse3); // keep an AVX2 CPU on the 16-byte kernels (the same bytes)
 ```
+
+### Startup Self-Test [#self-test]
+
+Burst versions compile the same kernel code differently, so before `NinoBurst.Register` hands the kernels to `Nino.Core`, it calls each one through the function pointer `Nino.Core` will call, on inputs that take every branch (lengths around 16 and 32, the AVX2 permute from 256 values, a char that stops a text kernel at the start, inside and at the end of a vector), and compares what it writes, and the bytes just past it, with `Nino.Core`'s scalar code. This runs once per domain, a few hundred short calls.
+
+A kernel that throws or writes other bytes is left out: Nino takes its own path for that work, and the kernels that passed stay registered. A warning in the Console names the kernel, the Burst version (`1.8.x` or `2.x`), the Unity version and the CPU, and asks you to report it on [Nino's issue tracker](https://github.com/JasonXuDeveloper/Nino/issues); the data is the same either way. When no kernel passes, none is registered and `Register` returns `false`.
+
+In the editor, a kernel that throws is caught and left out. In a player, Burst turns a throw into an abort of the process, which nothing can catch, so there the self-test catches wrong bytes only; Nino's CI runs every kernel in IL2CPP players on each Burst version the package supports, 1.8 and 2.0, to keep throws out.
 
 ### WebGL [#webgl-kernels]
 
@@ -305,6 +313,11 @@ Check that the assembly references `Nino.Core.dll` (Auto Referenced, or listed u
 <Accordion title="error NINO002: Type must be partial">
 
 The type serializes private members, or is `[NinoPooled]`, and Unity has no `[UnsafeAccessor]`. Make the type and every type containing it `partial` (the code fix does this in Rider and Visual Studio).
+
+</Accordion>
+<Accordion title="A warning says a Burst kernel failed its self-test">
+
+The kernel writes other bytes or throws on your Burst version, so Nino left it out and does that work on its own path: your data is unaffected, that work is only slower. Please report the warning's text at [Nino's issue tracker](https://github.com/JasonXuDeveloper/Nino/issues); it names the kernel, the Burst and Unity versions and the CPU. See [Startup Self-Test](#self-test).
 
 </Accordion>
 <Accordion title="Data from an older build cannot be read">
