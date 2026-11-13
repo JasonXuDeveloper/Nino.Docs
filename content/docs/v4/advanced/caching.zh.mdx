@@ -64,7 +64,15 @@ public sealed class RedisProfileCache
         using Lease<byte> lease = _db.StringGetLease(Key(id));      // 池化的字节，每次读取不分配 byte[]
         if (lease == null)
             return null;
-        return NinoDeserializer.Deserialize<UserProfile>(lease.Span);
+        try
+        {
+            return NinoDeserializer.Deserialize<UserProfile>(lease.Span);
+        }
+        catch (NinoDataException)
+        {
+            _db.KeyDelete(Key(id)); // 读不出来（schema 不同或数据损坏）：按未命中处理
+            return null;
+        }
     }
 }
 ```
@@ -91,7 +99,17 @@ public static class DistributedCacheExtensions
         CancellationToken ct = default)
     {
         byte[] bytes = await cache.GetAsync(key, ct);
-        return bytes == null ? default : NinoDeserializer.Deserialize<T>(bytes);
+        if (bytes == null)
+            return default;
+        try
+        {
+            return NinoDeserializer.Deserialize<T>(bytes);
+        }
+        catch (NinoDataException)
+        {
+            await cache.RemoveAsync(key, ct); // 读不出来（schema 不同或数据损坏）：按未命中处理
+            return default;
+        }
     }
 }
 ```
@@ -121,6 +139,7 @@ public sealed class NinoHybridSerializer<T> : IHybridCacheSerializer<T>
 
 - 每种要缓存的类型用 `AddSerializer` 注册一个序列化器（见[注册](#registration)）。
 - `HybridCache` 给的缓冲区写入器不是 `NinoArrayBufferWriter`，所以 Nino 先序列化到当前线程的暂存缓冲区，再一次性复制过去。每次调用都不分配内存。
+- 序列化器读不出的值，`HybridCache` 不会当作未命中：`NinoDataException` 会直接从 `GetOrCreateAsync` 抛出来。捕获它，调用 `cache.RemoveAsync(key)`，再取一次，这次就会从数据源重新加载。
 - 泛型序列化器里的调用[拦截器](/zh/docs/v4/performance#interceptors)接管不了，因为 `T` 在那里是类型参数；这些调用走常规路径，每次多花几纳秒。
 
 <Callout title="rc.9 及更早的版本">

@@ -348,7 +348,6 @@ public static class MessageTransports
                 throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely);
             buffer.Advance(result.Count);
         } while (!result.EndOfMessage);
-
     }
 
     public static async Task ReceiveLoopAsync<T>(WebSocket socket, NinoArrayBufferWriter buffer, Action<T> handle,
@@ -358,7 +357,15 @@ public static class MessageTransports
         while (true)
         {
             await ReceiveAsync(socket, buffer, ct);         // only fills the buffer
-            NinoDeserializer.Deserialize(buffer.WrittenSpan, ref message);
+            try
+            {
+                NinoDeserializer.Deserialize(buffer.WrittenSpan, ref message);
+            }
+            catch (NinoDataException)
+            {
+                message = null; // a malformed message ends only itself: drop it and go on
+                continue;
+            }
             handle(message);
         }
     }
@@ -393,7 +400,7 @@ public static class MessageTransports
 }
 ```
 
-- A WebSocket message can arrive in several `ReceiveAsync` parts; the loop collects them into the buffer, which grows as needed and is then reused. `MaxMessageSize` stops an untrusted peer from making it grow without bound.
+- A WebSocket message can arrive in several `ReceiveAsync` parts; the loop collects them into the buffer, which grows as needed and is then reused. `MaxMessageSize` stops an untrusted peer from making it grow without bound. A message that is not a valid `T` is dropped and the loop goes on, as in the UDP loop: each message carries its own bounds, so the next one still reads.
 - Neither `SendAsync` nor `ReceiveAsync` allocates a task when the socket completes synchronously: both return a `ValueTask`, and `SendAsync` is not `async` at all. `ReceiveAsync` only fills the buffer; `ReceiveLoopAsync` deserializes synchronously after it, so every message is read by `ref` into one instance (an `async` method cannot take a `ref` parameter).
 - A UDP datagram carries at most 65,507 bytes of payload over IPv4 (65,527 over IPv6). Keep messages well below the path MTU (about 1,200 bytes is a common budget) to avoid IP fragmentation, and add your own sequence numbers if order or loss matters.
 - Pass the destination as a `SocketAddress`, made once with `remoteEndPoint.Serialize()`: `SendTo` with an `EndPoint` converts it into a new `SocketAddress` on every call. The `SocketAddress` overload needs .NET 8 or later.

@@ -97,7 +97,7 @@ half := nino.HalfOf(1.5)                                           // Half
 version := &nino.Version{Major: 4, Minor: 0, Build: -1, Revision: -1} // 4.0
 ```
 
-时间超出 .NET 的范围时，`DateTimeOf` 和 `DateTimeOffsetOf` 返回 false；偏移不是整分钟或超过 ±14 小时，`DateTimeOffsetOf` 也返回 false。转回 Go 类型：`DateTime.Time()`、`TimeSpan.Duration()`、`DateTimeOffset.Time()`、`Decimal.String()`（或 `Coefficient()` 和 `Scale()`）、`Guid.String()`、`Int128.Big()`、`Half.Float32()`。`DateOnly` 和 `TimeOnly` 分别是天数和 tick 数（`nino.DateOnly(自 0001-01-01 起的天数)`）。在[原始结构体](/zh/docs/v4/advanced/codegen#raw-struct-fields)里，`nint` 是 `int64`，`nuint`、指针和函数指针是 `uint64`，`DateTimeOffset` 是结构体 `{ DateTime, OffsetMinutes }`，原始类型 `T` 的 `T?` 是 `*T`。全部类型见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go)。
+时间超出 .NET 的范围时，`DateTimeOf` 和 `DateTimeOffsetOf` 返回 false；偏移不是整分钟或超过 ±14 小时，`DateTimeOffsetOf` 也返回 false。转回 Go 类型：`DateTime.Time()`、`TimeSpan.Duration()`（超出 `time.Duration` 的范围时第二个返回值为 false）、`DateTimeOffset.Time()`、`Decimal.String()`（或 `Coefficient()` 和 `Scale()`）、`Guid.String()`、`Int128.Big()`、`Half.Float32()`。`DateOnly` 和 `TimeOnly` 分别是天数和 tick 数（`nino.DateOnly(自 0001-01-01 起的天数)`）。在[原始结构体](/zh/docs/v4/advanced/codegen#raw-struct-fields)里，`nint` 是 `int64`，`nuint`、指针和函数指针是 `uint64`，`DateTimeOffset` 是结构体 `{ DateTime, OffsetMinutes }`，原始类型 `T` 的 `T?` 是 `*T`。全部类型见运行时的 [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go)。
 
 夏令时切换时有一小时会重复。.NET 为这一小时里的本地时间写出的 `DateTime`（最高两位是 kind 3）能读出来并原样写回，它的 `Kind()` 返回 3。
 
@@ -135,7 +135,7 @@ Go 在编译期实例化泛型。泛型类型如果以别的类型实参包含�
 
 ## Go 不支持的内容 [#not-supported]
 
-除了[所有语言都不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated)，Go 还跳过下面这些类型和包含它们的类型，并报警告 NINOGEN002：
+由 Nino.Core 以外的格式化器写出的成员（自定义格式化器、`Nino.Immutable`、Unity 的类）在每种语言里都会跳过，Go 也一样（[不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated)）。除了[所有语言都不会生成的内容](/zh/docs/v4/advanced/codegen#not-generated)，Go 还跳过下面这些类型和包含它们的类型，并报警告 NINOGEN002：
 
 - 以别的类型实参包含自己的泛型类型（[泛型类型](#generics)）；
 - 槽位里同一定义、类型实参对应同一个 Go 类型的封闭泛型类型，除第一个以外的（[泛型类型](#generics)）。

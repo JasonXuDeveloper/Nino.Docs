@@ -273,7 +273,7 @@ public static class EventBatch
 ```
 
 - 每个事件保留自己的类型，同一批里可以混着 `OrderPlaced` 和 `OrderShipped`。
-- 数量超出负载能装下的范围时，`ReadLength(minElementSize: 4)` 直接拒绝，损坏的批次在进循环之前就抛异常。
+- 数量超出负载能装下的范围时，`ReadLength(minElementSize: 4)` 直接拒绝，数量损坏的批次在进循环之前就抛异常。被截断的批次则会读到第一个读不出的事件才抛，此前的事件已经交给 `handle` 处理过了；如果一个批次必须要么全处理、要么全不处理，就先把事件收进列表，等 `Read` 返回后再处理。
 - 写入器和读取器最后都调用 `ReleaseReferences`，和 `NinoSerializer` 一样；见[连续写入多个值](/zh/docs/v4/advanced/high-performance#several-values-back-to-back)。
 
 在 `[NinoType]` 类里放一个 `List<OrderEvent>` 成员效果一样，还能顺带放批次级的字段（生产者 ID、序号）。

@@ -64,7 +64,15 @@ public sealed class RedisProfileCache
         using Lease<byte> lease = _db.StringGetLease(Key(id));      // pooled bytes, no byte[] per read
         if (lease == null)
             return null;
-        return NinoDeserializer.Deserialize<UserProfile>(lease.Span);
+        try
+        {
+            return NinoDeserializer.Deserialize<UserProfile>(lease.Span);
+        }
+        catch (NinoDataException)
+        {
+            _db.KeyDelete(Key(id)); // unreadable (another schema, corrupt): a miss
+            return null;
+        }
     }
 }
 ```
@@ -91,7 +99,17 @@ public static class DistributedCacheExtensions
         CancellationToken ct = default)
     {
         byte[] bytes = await cache.GetAsync(key, ct);
-        return bytes == null ? default : NinoDeserializer.Deserialize<T>(bytes);
+        if (bytes == null)
+            return default;
+        try
+        {
+            return NinoDeserializer.Deserialize<T>(bytes);
+        }
+        catch (NinoDataException)
+        {
+            await cache.RemoveAsync(key, ct); // unreadable (another schema, corrupt): a miss
+            return default;
+        }
     }
 }
 ```
@@ -121,6 +139,7 @@ public sealed class NinoHybridSerializer<T> : IHybridCacheSerializer<T>
 
 - Register one serializer per cached type, with `AddSerializer` (see [Register Them](#registration)).
 - `HybridCache`'s buffer writer is not a `NinoArrayBufferWriter`, so Nino serializes into its per-thread scratch buffer and copies the result in once. Nothing is allocated per call.
+- `HybridCache` does not treat a value its serializer cannot read as a miss: the `NinoDataException` comes out of `GetOrCreateAsync`. Catch it, call `cache.RemoveAsync(key)` and ask again, which loads the value from its source.
 - Calls inside the generic serializer are not [intercepted](/en/docs/v4/performance#interceptors), because `T` is a type parameter there; they take the regular path, a few nanoseconds more per call.
 
 <Callout title="On rc.9 and earlier">

@@ -273,7 +273,7 @@ public static class EventBatch
 ```
 
 - Each event keeps its own type, so one batch can mix `OrderPlaced` and `OrderShipped`.
-- `ReadLength(minElementSize: 4)` rejects a count that the payload cannot hold, so a corrupt batch throws before the loop starts.
+- `ReadLength(minElementSize: 4)` rejects a count that the payload cannot hold, so a corrupt count throws before the loop starts. A batch cut short throws at the first event it cannot read, after `handle` has run for the ones before it: collect the events into a list and act on them after `Read` returns if a batch must be all or nothing.
 - End the writer and the reader with `ReleaseReferences`, as `NinoSerializer` does; see [Several Values Back to Back](/en/docs/v4/advanced/high-performance#several-values-back-to-back).
 
 A `List<OrderEvent>` member in a `[NinoType]` class does the same and adds a place for batch-level fields (a producer id, a sequence number).

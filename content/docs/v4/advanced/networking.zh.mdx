@@ -348,7 +348,6 @@ public static class MessageTransports
                 throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely);
             buffer.Advance(result.Count);
         } while (!result.EndOfMessage);
-
     }
 
     public static async Task ReceiveLoopAsync<T>(WebSocket socket, NinoArrayBufferWriter buffer, Action<T> handle,
@@ -358,7 +357,15 @@ public static class MessageTransports
         while (true)
         {
             await ReceiveAsync(socket, buffer, ct);         // 只收字节，不反序列化
-            NinoDeserializer.Deserialize(buffer.WrittenSpan, ref message);
+            try
+            {
+                NinoDeserializer.Deserialize(buffer.WrittenSpan, ref message);
+            }
+            catch (NinoDataException)
+            {
+                message = null; // 格式不对的消息只影响它自己：丢掉，接着收
+                continue;
+            }
             handle(message);
         }
     }
@@ -393,7 +400,7 @@ public static class MessageTransports
 }
 ```
 
-- 一条 WebSocket 消息可能分几次 `ReceiveAsync` 才收完；循环把它们收集到缓冲区里，缓冲区按需增长，之后一直复用。`MaxMessageSize` 防止不可信的对端让缓冲区无限增长。
+- 一条 WebSocket 消息可能分几次 `ReceiveAsync` 才收完；循环把它们收集到缓冲区里，缓冲区按需增长，之后一直复用。`MaxMessageSize` 防止不可信的对端让缓冲区无限增长。读不出合法 `T` 的消息直接丢掉，循环照常往下收，和 UDP 循环一样：每条消息自带边界，坏一条不影响下一条。
 - 套接字同步完成时，`SendAsync` 和 `ReceiveAsync` 都不会分配任务对象：它们都返回 `ValueTask`，而 `SendAsync` 本身根本不是 `async` 方法。`ReceiveAsync` 只负责收字节，反序列化留在 `ReceiveLoopAsync` 里同步进行，这样每条消息都能用 `ref` 读进同一个实例（`async` 方法不能带 `ref` 参数）。
 - 一个 UDP 数据报的负载在 IPv4 上最多 65,507 字节（IPv6 上 65,527 字节）。消息要远小于路径 MTU（常见的预算是 1,200 字节左右），以免 IP 分片；如果在意顺序或丢包，请自己加序号。
 - 用 `SocketAddress` 指定目标地址，用 `remoteEndPoint.Serialize()` 生成一次即可：传 `EndPoint` 的 `SendTo` 每次调用都会把它转换成一个新的 `SocketAddress`。`SocketAddress` 重载需要 .NET 8 或更高版本。

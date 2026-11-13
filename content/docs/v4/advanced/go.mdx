@@ -97,7 +97,7 @@ half := nino.HalfOf(1.5)                                           // Half
 version := &nino.Version{Major: 4, Minor: 0, Build: -1, Revision: -1} // 4.0
 ```
 
-`DateTimeOf` and `DateTimeOffsetOf` return false for a time outside .NET's range, and `DateTimeOffsetOf` also for an offset that is not whole minutes or is past ±14 hours. Back to Go types: `DateTime.Time()`, `TimeSpan.Duration()`, `DateTimeOffset.Time()`, `Decimal.String()` (or `Coefficient()` and `Scale()`), `Guid.String()`, `Int128.Big()`, `Half.Float32()`. `DateOnly` and `TimeOnly` are a day number and ticks (`nino.DateOnly(days since 0001-01-01)`). Inside a [raw struct](/en/docs/v4/advanced/codegen#raw-struct-fields), `nint` is an `int64`, `nuint`, pointers and function pointers a `uint64`, a `DateTimeOffset` a struct `{ DateTime, OffsetMinutes }` and a `T?` of a raw `T` a `*T`. The runtime's [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go) lists every type.
+`DateTimeOf` and `DateTimeOffsetOf` return false for a time outside .NET's range, and `DateTimeOffsetOf` also for an offset that is not whole minutes or is past ±14 hours. Back to Go types: `DateTime.Time()`, `TimeSpan.Duration()` (with false when the span is out of `time.Duration`'s range), `DateTimeOffset.Time()`, `Decimal.String()` (or `Coefficient()` and `Scale()`), `Guid.String()`, `Int128.Big()`, `Half.Float32()`. `DateOnly` and `TimeOnly` are a day number and ticks (`nino.DateOnly(days since 0001-01-01)`). Inside a [raw struct](/en/docs/v4/advanced/codegen#raw-struct-fields), `nint` is an `int64`, `nuint`, pointers and function pointers a `uint64`, a `DateTimeOffset` a struct `{ DateTime, OffsetMinutes }` and a `T?` of a raw `T` a `*T`. The runtime's [README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go) lists every type.
 
 A `DateTime` that .NET wrote for a local time in the repeated hour of a daylight saving change (kind 3 in its top two bits) is read and written back unchanged: its `Kind()` returns 3.
 
@@ -135,7 +135,7 @@ When bytes from .NET do not read here, or .NET rejects what this side wrote, run
 
 ## What Go Leaves Out [#not-supported]
 
-Besides what [no language gets](/en/docs/v4/advanced/codegen#not-generated), Go leaves out, with warning NINOGEN002 and with the types that hold them:
+Members written by a formatter outside Nino.Core (a custom formatter, `Nino.Immutable`, Unity's classes) are left out in every language, Go included ([What Is Not Generated](/en/docs/v4/advanced/codegen#not-generated)). Besides what [no language gets](/en/docs/v4/advanced/codegen#not-generated), Go leaves out, with warning NINOGEN002 and with the types that hold them:
 
 - generic types that hold themselves with other arguments ([Generic Types](#generics));
 - in slots, closed generic types of one definition whose arguments are the same Go type, after the first ([Generic Types](#generics)).
