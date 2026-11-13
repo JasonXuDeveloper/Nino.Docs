@@ -7,7 +7,7 @@
  */
 import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 import { lazy, Suspense } from 'react';
-import { ArchTabs } from '@/components/bench-data';
+import { ArchTabs, GroupTables } from '@/components/bench-data';
 import {
   type DotnetGroupId,
   dotnetGroupsShown,
@@ -102,28 +102,31 @@ export function DotnetChart(props: { lang?: Locale; group: DotnetGroupId }) {
 }
 
 /**
- * Every .NET case: a DotnetChart per group of dotnetGroups that the report
- * has cases of (dotnetGroupsShown), each in an accordion open by default (`#charts-<group>` links
- * to it).
+ * One group of dotnetGroups on the benchmarks page: its interactive chart,
+ * then its numbers (GroupTables: every library's time, payload and
+ * allocations, per architecture) in an accordion that starts closed
+ * (`#numbers-<group>` opens it). Every group looks the same.
  */
-export function DotnetGroupCharts({ lang = 'en' }: { lang?: Locale }) {
-  const shown = dotnetGroupsShown;
+export function BenchGroup({
+  group,
+  lang = 'en',
+}: {
+  group: DotnetGroupId;
+  lang?: Locale;
+}) {
+  if (!dotnetGroupsShown.some((shown) => shown.id === group)) return null;
   return (
-    <Accordions
-      type="multiple"
-      defaultValue={shown.map((group) => group.id)}
-      className="my-6"
-    >
-      {shown.map((group) => (
+    <>
+      <DotnetChart lang={lang} group={group} />
+      <Accordions type="single" collapsible className="my-6">
         <Accordion
-          key={group.id}
-          id={`charts-${group.id}`}
-          value={group.id}
-          title={lang === 'zh' ? group.zh : group.name}
+          id={`numbers-${group}`}
+          value={group}
+          title={lang === 'zh' ? '数据' : 'Numbers'}
         >
-          <DotnetChart lang={lang} group={group.id} />
+          <GroupTables group={group} lang={lang} />
         </Accordion>
-      ))}
-    </Accordions>
+      </Accordions>
+    </>
   );
 }

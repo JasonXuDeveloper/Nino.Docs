@@ -591,7 +591,7 @@ const bothOps = (list: CaseInfo[]) => ({ serialize: list, deserialize: list });
  * The benchmark classes of common types, collections, BCL types, scattered
  * objects and untrusted reads (CommonTypesTest, CollectionsTest, BclTypesTest,
  * ScatteredTest, UntrustedTest), against every library that can express each
- * case. Only the Benchmarks page shows them (`<MoreRuntimeTables set=...>`).
+ * case. They join their groups in `dotnetGroups`.
  */
 export type MoreSet =
   | 'common'
@@ -1288,6 +1288,17 @@ export function versusOf(row: TableCase, lib: Opponent): Versus | undefined {
       ? { time: row.memorypack, ratio: row.ratio, tooFast: row.tooFast }
       : undefined;
   return row.others[lib];
+}
+
+/** Nino v4 against v3 3.3.13 in one case (x64), by the same rule; undefined where 3.3.13 has no port */
+export function v3VersusOf(row: TableCase): Versus | undefined {
+  if (!row.v3) return undefined;
+  return {
+    time: row.v3,
+    // within 5% is on par, as every other comparison (versus())
+    ratio: row.vsV3 !== undefined && isOnPar(row.vsV3) ? undefined : row.vsV3,
+    tooFast: row.v3TooFast,
+  };
 }
 
 /** Fastest / slowest win over the workloads against one library (on par and losses left out) */

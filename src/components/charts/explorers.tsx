@@ -28,7 +28,6 @@ import {
   formatTime,
   gcNote,
   hasV3,
-  isOnPar,
   type Opponent as Library,
   otherLibs,
   type RuntimeLang,
@@ -38,6 +37,7 @@ import {
   unity,
   type Versus,
   v3SourceNote,
+  v3VersusOf,
   versusOf,
 } from '@/lib/benchmarks';
 import type { Locale } from '@/lib/i18n';
@@ -323,16 +323,7 @@ const opponentColor = (key: Exclude<Opponent, 'all'>) =>
 
 /** One opponent's time in a case, by the same rule as the tables */
 function opponentOf(row: TableCase, key: Exclude<Opponent, 'all'>) {
-  if (key === 'v3')
-    return row.v3
-      ? ({
-          time: row.v3,
-          // within 5% is on par, as every other comparison (versus())
-          ratio:
-            row.vsV3 !== undefined && isOnPar(row.vsV3) ? undefined : row.vsV3,
-          tooFast: row.v3TooFast,
-        } satisfies Versus)
-      : undefined;
+  if (key === 'v3') return v3VersusOf(row);
   return versusOf(row, key);
 }
 

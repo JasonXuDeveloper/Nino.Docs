@@ -13,13 +13,11 @@ import {
   buildSmall,
   buildSourceNote,
   FLOOR_NS,
-  formatBytes,
   formatTime,
   gcNote,
   isOnPar,
   lowerBound,
   type RuntimeCase,
-  reuseSpeedup,
   runtime,
   sourceNote,
   times,
@@ -40,44 +38,14 @@ function caseLabel(row: { name: string; zh?: string }, zh: boolean) {
   return zh && row.zh ? row.zh : row.name;
 }
 
-function seriesFor(zh: boolean) {
+function seriesFor() {
   return {
     v4: { key: 'v4', label: 'Nino v4', color: 'var(--nino-chart-v4)' },
     mp: { key: 'mp', label: 'MemoryPack', color: 'var(--nino-chart-other)' },
-    msgpack: {
-      key: 'msgpack',
-      label: 'MessagePack',
-      color: 'var(--nino-chart-other-strong)',
-    },
-    protobuf: {
-      key: 'protobuf',
-      label: 'protobuf-net',
-      color: 'var(--nino-chart-faint)',
-    },
     v3: {
       key: 'v3',
       label: 'Nino v3 (3.3.13)',
       color: 'var(--nino-chart-faint)',
-    },
-    ninoNew: {
-      key: 'ninoNew',
-      label: zh ? 'Nino 新建' : 'Nino, new',
-      color: 'var(--nino-chart-v4-soft)',
-    },
-    mpNew: {
-      key: 'mpNew',
-      label: zh ? 'MemoryPack 新建' : 'MemoryPack, new',
-      color: 'var(--nino-chart-faint)',
-    },
-    ninoReuse: {
-      key: 'ninoReuse',
-      label: zh ? 'Nino 复用（池化）' : 'Nino reusing (pooled)',
-      color: 'var(--nino-chart-v4)',
-    },
-    mpOverwrite: {
-      key: 'mpOverwrite',
-      label: zh ? 'MemoryPack 覆盖' : 'MemoryPack overwrite',
-      color: 'var(--nino-chart-other-strong)',
     },
   } satisfies Record<string, ChartSeries>;
 }
@@ -119,7 +87,7 @@ function memoryPackChart(
   zh: boolean,
   { ds, tabbed }: ChartData,
 ): BarChartProps {
-  const s = seriesFor(zh);
+  const s = seriesFor();
   const rows = ds.runtime[op];
   const hasGc = rows.some((row) => row.gcBound);
   return {
@@ -161,75 +129,6 @@ function memoryPackChart(
   };
 }
 
-function reuseChart(zh: boolean, { ds, tabbed }: ChartData): BarChartProps {
-  const s = seriesFor(zh);
-  const reuse = ds.reuse;
-  return {
-    title: zh
-      ? '反序列化到已有对象：Nino 复用对比 MemoryPack 覆盖模式'
-      : 'Deserialize into existing objects: Nino reusing vs MemoryPack overwrite',
-    subtitle: zh
-      ? 'Nino 用 ref 反序列化到已有对象图，新实例取自 [NinoPooled] 对象池；MemoryPack 使用覆盖模式。条形为相对 MemoryPack 新建实例的耗时，数字为实测耗时与每次调用分配的内存。'
-      : 'Nino deserializes by ref into the existing graph and takes new instances from [NinoPooled] pools; MemoryPack uses its overwrite mode. Bars show time relative to MemoryPack with new instances; labels are measured times and bytes allocated per call.',
-    series: [s.ninoNew, s.mpNew, s.ninoReuse, s.mpOverwrite],
-    rows: reuse.map((row) => {
-      const base = row.memorypackNew.ns;
-      const speedup = times(reuseSpeedup(row));
-      return {
-        label: caseLabel(row, zh),
-        values: {
-          ninoNew: row.ninoNew.ns / base,
-          mpNew: 1,
-          ninoReuse: row.ninoReuse.ns / base,
-          mpOverwrite: row.memorypackOverwrite.ns / base,
-        },
-        text: {
-          ninoNew: row.ninoNew.text,
-          mpNew: row.memorypackNew.text,
-          ninoReuse: `${row.ninoReuse.text} · ${formatBytes(row.ninoReuseBytes)}`,
-          mpOverwrite: `${row.memorypackOverwrite.text} · ${formatBytes(row.memorypackOverwriteBytes)}`,
-        },
-        badge: {
-          text: zh
-            ? `比覆盖模式快 ${speedup} 倍`
-            : `${speedup}× faster than overwrite`,
-          tone: 'win' as const,
-        },
-      };
-    }),
-    axisLabel: zh
-      ? '相对耗时（MemoryPack 新建 = 1.0）'
-      : 'Relative time (MemoryPack, new instances = 1.0)',
-    tickFormat: rel,
-    footnotes: [sourceNote(zh, ds, tabbed)],
-    table: {
-      caption: zh ? '数据表' : 'Data table',
-      head: zh
-        ? [
-            '用例',
-            'Nino 新建',
-            'Nino 复用',
-            'MemoryPack 新建',
-            'MemoryPack 覆盖',
-          ]
-        : [
-            'Case',
-            'Nino new',
-            'Nino reusing',
-            'MemoryPack new',
-            'MemoryPack overwrite',
-          ],
-      rows: reuse.map((row) => [
-        caseLabel(row, zh),
-        row.ninoNew.text,
-        `${row.ninoReuse.text} (${formatBytes(row.ninoReuseBytes)})`,
-        row.memorypackNew.text,
-        `${row.memorypackOverwrite.text} (${formatBytes(row.memorypackOverwriteBytes)})`,
-      ]),
-    },
-  };
-}
-
 function v3Badge(v3Ns: number, v4Ns: number, zh: boolean) {
   if (v4Ns < FLOOR_NS)
     return v3Ns < FLOOR_NS
@@ -252,7 +151,7 @@ function v3Chart(
   op: 'serialize' | 'deserialize',
   zh: boolean,
 ): BarChartProps | null {
-  const s = seriesFor(zh);
+  const s = seriesFor();
   const entries = runtime[op].flatMap((row) => {
     const measured = V3_RUNTIME.rows[`${op}:${row.key}`];
     return measured ? [{ row, ...measured }] : [];
@@ -328,106 +227,6 @@ function compileChart(zh: boolean): BarChartProps {
   };
 }
 
-function allocationChart(
-  zh: boolean,
-  { ds, tabbed }: ChartData,
-): BarChartProps {
-  const s = seriesFor(zh);
-  const reuse = ds.reuse;
-  return {
-    title: zh
-      ? '每次调用分配的内存：反序列化到已有对象'
-      : 'Bytes allocated per call: deserializing into existing objects',
-    subtitle: zh
-      ? '越短越好。0 B 表示该调用不产生任何 GC 压力。'
-      : 'Shorter is better. 0 B means the call creates no GC pressure at all.',
-    series: [s.ninoReuse, s.mpOverwrite],
-    rows: reuse.map((row) => ({
-      label: caseLabel(row, zh),
-      values: {
-        ninoReuse: row.ninoReuseBytes,
-        mpOverwrite: row.memorypackOverwriteBytes,
-      },
-      text: {
-        ninoReuse: formatBytes(row.ninoReuseBytes),
-        mpOverwrite: formatBytes(row.memorypackOverwriteBytes),
-      },
-    })),
-    axisLabel: zh ? '每次调用分配的字节数' : 'Bytes allocated per call',
-    tickFormat: (value) => (value >= 1000 ? `${value / 1000}K` : String(value)),
-    footnotes: [
-      ...(ds.serializeAllocatesNothing
-        ? [
-            zh
-              ? '序列化：两个库在所有用例中都是每次调用 0 B。'
-              : 'Serialize: 0 B per call in both libraries, in every case.',
-          ]
-        : []),
-      sourceNote(zh, ds, tabbed),
-    ],
-    table: {
-      caption: zh ? '数据表' : 'Data table',
-      head: zh
-        ? ['用例', 'Nino 复用', 'MemoryPack 覆盖']
-        : ['Case', 'Nino reusing', 'MemoryPack overwrite'],
-      rows: reuse.map((row) => [
-        caseLabel(row, zh),
-        formatBytes(row.ninoReuseBytes),
-        formatBytes(row.memorypackOverwriteBytes),
-      ]),
-    },
-  };
-}
-
-function payloadChart(
-  zh: boolean,
-  { ds, tabbed }: ChartData,
-): BarChartProps | null {
-  const s = seriesFor(zh);
-  const payload = ds.payload;
-  const v4 = payload.v4;
-  const mp = payload.memorypack;
-  if (v4 === null || mp === null) return null;
-  // MessagePack and protobuf-net once the report has their SimpleClass rows:
-  // four bars of bytes stay readable (the time charts keep MemoryPack only)
-  const sizes = [
-    { series: s.v4, bytes: v4 },
-    { series: s.mp, bytes: mp },
-    { series: s.msgpack, bytes: payload.messagepack },
-    { series: s.protobuf, bytes: payload.protobuf },
-  ].filter(
-    (entry): entry is { series: ChartSeries; bytes: number } =>
-      entry.bytes !== null,
-  );
-  return {
-    title: zh ? '载荷大小' : 'Payload size',
-    subtitle: zh
-      ? '序列化一个 SimpleClass 写出的字节数。'
-      : 'Bytes written for one SimpleClass.',
-    series: sizes.map((entry) => entry.series),
-    rows: [
-      {
-        label: payload.name,
-        code: true,
-        values: Object.fromEntries(
-          sizes.map((entry) => [entry.series.key, entry.bytes]),
-        ),
-        text: Object.fromEntries(
-          sizes.map((entry) => [entry.series.key, formatBytes(entry.bytes)]),
-        ),
-      },
-    ],
-    axisLabel: zh ? '字节' : 'Bytes',
-    tickFormat: (value) => value.toLocaleString('en-US'),
-    footnotes: tabbed ? [sourceNote(zh, ds, true)] : undefined,
-    table: {
-      caption: zh ? '数据表' : 'Data table',
-      head: [zh ? '用例' : 'Case', ...sizes.map((entry) => entry.series.label)],
-      rows: [[payload.name, ...sizes.map((entry) => formatBytes(entry.bytes))]],
-    },
-  };
-}
-
 /**
  * `arch` picks the run of the Nino-vs-MemoryPack charts (x64 by default);
  * given, the footnote names the machine, as in an architecture tab. The v3 and
@@ -446,30 +245,21 @@ export function chartProps(
     case 'serialize':
     case 'deserialize':
       return memoryPackChart(id, zh, data);
-    case 'reuse':
-      return reuseChart(zh, data);
     case 'v3-serialize':
       return v3Chart('serialize', zh);
     case 'v3-deserialize':
       return v3Chart('deserialize', zh);
     case 'compile':
       return compileChart(zh);
-    case 'allocation':
-      return allocationChart(zh, data);
-    case 'payload':
-      return payloadChart(zh, data);
   }
 }
 
 const tabLabels: Record<ChartId, { en: string; zh: string }> = {
   serialize: { en: 'Serialize', zh: '序列化' },
   deserialize: { en: 'Deserialize', zh: '反序列化' },
-  reuse: { en: 'Reusing objects', zh: '复用对象' },
   'v3-serialize': { en: 'Serialize', zh: '序列化' },
   'v3-deserialize': { en: 'Deserialize', zh: '反序列化' },
   compile: { en: 'Compile time', zh: '编译时间' },
-  allocation: { en: 'Allocations', zh: '内存分配' },
-  payload: { en: 'Payload size', zh: '载荷大小' },
 };
 
 /** Shown in place of a chart whose numbers have not been measured yet */
