@@ -711,11 +711,14 @@ const moreCases: Record<
 
 const caseByKey = (list: CaseInfo[], keys: string[]) =>
   keys.flatMap((key) => list.filter((info) => info.key === key));
-const caseKeys = (...keys: string[]) =>
-  bothOps([
-    ...caseByKey(cases.serialize, keys),
-    ...caseByKey(extraCases.serialize, keys),
-  ]);
+const caseKeys = (...keys: string[]) => {
+  const of = (op: 'serialize' | 'deserialize') => [
+    ...caseByKey(cases[op], keys),
+    ...caseByKey(extraCases[op], keys),
+  ];
+  // per operation: a case's marks differ by it (Vector4[10000] is GC-bound reading only)
+  return { serialize: of('serialize'), deserialize: of('deserialize') };
+};
 
 /** Reading new objects and reading into existing ones (PooledTest, PooledGraphTest): deserialize only */
 const reuseGroupCases: CaseInfo[] = [
