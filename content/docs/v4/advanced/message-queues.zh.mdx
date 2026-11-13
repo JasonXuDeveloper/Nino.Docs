@@ -199,13 +199,24 @@ public static class OrderSubscriber
         await channel.QueueBindAsync("orders", exchange: "orders", routingKey: "");
 
         var consumer = new AsyncEventingBasicConsumer(channel);
-        consumer.ReceivedAsync += (_, delivery) =>
+        consumer.ReceivedAsync += async (_, delivery) =>
         {
-            // 消息体的内存只在处理函数内有效：在这里反序列化
-            handle(NinoDeserializer.Deserialize<OrderEvent>(delivery.Body.Span)); // [!code highlight]
-            return Task.CompletedTask;
+            OrderEvent evt;
+            try
+            {
+                // 消息体的内存只在处理函数内有效：在这里反序列化
+                evt = NinoDeserializer.Deserialize<OrderEvent>(delivery.Body.Span); // [!code highlight]
+            }
+            catch (NinoDataException e) // 一条坏消息只影响它自己
+            {
+                Console.Error.WriteLine($"Dropped an unreadable order event: {e.Message}");
+                await channel.BasicRejectAsync(delivery.DeliveryTag, requeue: false); // 不重新入队：这条消息不会再投递回来（队列配了死信交换机就进死信）
+                return;
+            }
+            handle(evt);
+            await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false);
         };
-        await channel.BasicConsumeAsync("orders", autoAck: true, consumer);
+        await channel.BasicConsumeAsync("orders", autoAck: false, consumer);
     }
 }
 ```
@@ -228,6 +239,7 @@ await publisher.PublishAsync(new OrderShipped
 Console.ReadLine(); // 一直消费，直到按下回车
 ```
 
+- 订阅方在 `handle` 返回后才确认每条消息（`autoAck: false`）。消息体读不出合法的 `OrderEvent`（别的生产者的格式、损坏的消息）时，记一条日志，拒绝且不重新入队：既不会让消费者停下来，也不会反复投递回来。想留下这类消息，就给队列配一个死信交换机。
 - 发布调用完成后（`await` 之后）才能重置缓冲区，因为客户端可能还在读它。多个线程共用的发布者，要么每个线程一个缓冲区，要么加锁。
 - Azure Service Bus 也一样：`new ServiceBusMessage(buffer.WrittenMemory)` 直接包住这段内存，不拷贝；收到的消息用 `NinoDeserializer.Deserialize<OrderEvent>(message.Body.ToMemory().Span)` 读。
 - 只收 `byte[]` 消息体的客户端，就传 `NinoSerializer.Serialize(evt)`：和 Kafka 一样，一个数组，大小正好是负载的长度。

@@ -211,8 +211,19 @@ public partial class StateBroadcast : Node
     private WorldState _latest;
 
     public override void _Ready() =>
-        ((SceneMultiplayer)Multiplayer).PeerPacket += (id, packet) =>
-            NinoDeserializer.Deserialize(packet, ref _latest); // the byte[] is Godot's
+        ((SceneMultiplayer)Multiplayer).PeerPacket += OnPeerPacket;
+
+    private void OnPeerPacket(long id, byte[] packet) // the byte[] is Godot's
+    {
+        try
+        {
+            NinoDeserializer.Deserialize(packet, ref _latest);
+        }
+        catch (NinoDataException)
+        {
+            _latest = null; // any peer can send a packet: drop a malformed one and go on
+        }
+    }
 
     public void Broadcast(WorldState state)
     {

@@ -199,13 +199,24 @@ public static class OrderSubscriber
         await channel.QueueBindAsync("orders", exchange: "orders", routingKey: "");
 
         var consumer = new AsyncEventingBasicConsumer(channel);
-        consumer.ReceivedAsync += (_, delivery) =>
+        consumer.ReceivedAsync += async (_, delivery) =>
         {
-            // the body's memory is only valid inside the handler: deserialize here
-            handle(NinoDeserializer.Deserialize<OrderEvent>(delivery.Body.Span)); // [!code highlight]
-            return Task.CompletedTask;
+            OrderEvent evt;
+            try
+            {
+                // the body's memory is only valid inside the handler: deserialize here
+                evt = NinoDeserializer.Deserialize<OrderEvent>(delivery.Body.Span); // [!code highlight]
+            }
+            catch (NinoDataException e) // one bad message ends only itself
+            {
+                Console.Error.WriteLine($"Dropped an unreadable order event: {e.Message}");
+                await channel.BasicRejectAsync(delivery.DeliveryTag, requeue: false); // not requeued, so it never comes back (it goes to the queue's dead-letter exchange, if any)
+                return;
+            }
+            handle(evt);
+            await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false);
         };
-        await channel.BasicConsumeAsync("orders", autoAck: true, consumer);
+        await channel.BasicConsumeAsync("orders", autoAck: false, consumer);
     }
 }
 ```
@@ -228,6 +239,7 @@ await publisher.PublishAsync(new OrderShipped
 Console.ReadLine(); // keep consuming until Enter
 ```
 
+- The subscriber acknowledges each message after `handle` returns (`autoAck: false`). A body that is not a valid `OrderEvent` (another producer's format, a corrupt message) is logged and rejected without requeue, so it neither stops the consumer nor comes back forever; give the queue a dead-letter exchange to keep such messages.
 - Reset the buffer only after the publish call has completed (after the `await`), since the client may still be reading it. A publisher used from several threads needs a buffer per thread or a lock.
 - Azure Service Bus works the same way: `new ServiceBusMessage(buffer.WrittenMemory)` wraps the memory without copying it, and a received message is read with `NinoDeserializer.Deserialize<OrderEvent>(message.Body.ToMemory().Span)`.
 - A client that only accepts a `byte[]` body gets `NinoSerializer.Serialize(evt)`: one array of exactly the payload's size, as with Kafka.
