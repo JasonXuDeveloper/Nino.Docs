@@ -135,6 +135,8 @@ function ratioOf(slower: number, faster: number) {
 export type OtherLib = 'messagepack' | 'protobuf' | 'googleprotobuf' | 'json';
 
 /** The versions Nino's Directory.Packages.props pins (the `benchmark` skill: update them with an upgrade) */
+// In the order the owner chose for every chart and table: the binary serializers closest to Nino first, then both
+// Protobuf libraries, then JSON (Nino's README chart, benchmarks/reports/readme.py, uses the same order).
 export const otherLibs: {
   key: OtherLib;
   prefix: string;
@@ -147,18 +149,18 @@ export const otherLibs: {
     label: 'MessagePack',
     version: '3.1.12',
   },
-  {
-    key: 'protobuf',
-    prefix: 'Protobuf',
-    label: 'protobuf-net',
-    version: '3.4.40',
-  },
   // WorkloadTest only, on its own protoc-generated messages (the same values and field numbers as protobuf-net's)
   {
     key: 'googleprotobuf',
     prefix: 'GoogleProtobuf',
     label: 'Google.Protobuf',
     version: '3.36.2',
+  },
+  {
+    key: 'protobuf',
+    prefix: 'Protobuf',
+    label: 'protobuf-net',
+    version: '3.4.40',
   },
   // WorkloadTest only, source-generated, UTF-8; the version is the runtime's
   {

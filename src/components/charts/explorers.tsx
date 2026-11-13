@@ -291,11 +291,11 @@ export function UnityChart({ lang = 'en' }: { lang?: Locale }) {
 type Opponent = 'all' | Library | 'v3';
 type CaseGroup = 'workloads' | 'common' | 'more';
 
-/** Every opponent in legend order: MemoryPack, the other libraries, v3 */
+/** Every opponent in legend order: v3 (the upgrade), MemoryPack, the other libraries */
 const opponentKeys: Exclude<Opponent, 'all'>[] = [
+  'v3',
   'memorypack',
   ...otherLibs.map((lib) => lib.key),
-  'v3',
 ];
 
 const opponentNames: Record<Opponent, { en: string; zh: string }> = {
