@@ -134,7 +134,7 @@ Build the shared project and copy **only** `Game.Shared.dll` into `Assets/Plugin
 | Mistake | What happens | Caught by |
 | --- | --- | --- |
 | Two copies of the types, edited separately | Members drift apart, and one side reads the other's data wrong or throws | `NinoDataException` at best; keep one source |
-| A non-public serialized member on a type that is not `partial` | The `netstandard2.1` and Unity builds cannot reach it | NINO002 |
+| A non-public serialized member on a type that is not `partial` | The build fails: the `netstandard2.1` and Unity builds cannot reach the member | NINO002 |
 | Syntax newer than C# 9 in shared source (`required`, file-scoped `namespace X;`) | The .NET build compiles, Unity's does not | `<LangVersion>9.0</LangVersion>` in the shared project |
 | `Nino.Core.dll` copied into `Assets` beside the package's | Unity reports duplicate assemblies | Unity's compiler |
 | A prebuilt DLL built with another Nino version than the Unity package | Its generated code calls APIs that version may not have | A `MissingMethodException` or `TypeLoadException` at runtime |

@@ -134,7 +134,7 @@ Unity 客户端和 .NET 服务端交换 Nino 数据，两边必须编译同一�
 | 错误做法 | 后果 | 由谁发现 |
 | --- | --- | --- |
 | 类型有两份，各改各的 | 成员慢慢对不上，一边读另一边的数据时读错或抛异常 | 运气好是 `NinoDataException`；只留一份源码 |
-| 有非公开的序列化成员，类型却没有 `partial` | `netstandard2.1` 和 Unity 的构建访问不到它 | NINO002 |
+| 有非公开的序列化成员，类型却没有 `partial` | 构建失败：`netstandard2.1` 和 Unity 的构建访问不到这个成员 | NINO002 |
 | 共享源码里用了 C# 9 以后的语法（`required`、文件范围的 `namespace X;`） | .NET 构建能编译，Unity 编译不过 | 共享项目里的 `<LangVersion>9.0</LangVersion>` |
 | 把 `Nino.Core.dll` 复制进 `Assets`，和包里那份并存 | Unity 报程序集重复 | Unity 的编译器 |
 | 预编译 DLL 用的 Nino 版本和 Unity 包不同 | 生成的代码调用了那个版本可能没有的 API | 运行时的 `MissingMethodException` 或 `TypeLoadException` |
