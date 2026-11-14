@@ -1,11 +1,18 @@
 ---
 title: Nino vs MessagePack
 seoTitle: "Nino vs MessagePack for C#: Format, Untrusted Input, Speed and Features – Nino v4 Docs"
-description: "Nino v4 compared with MessagePack for C# 3.1.12: the two formats, reading untrusted data, benchmarks from the same run, a feature matrix, when to choose which, and switching from [MessagePackObject] to [NinoType]."
+description: "Nino v4 compared with MessagePack for C# 3.1.12: the two formats, speed per benchmark group, reading untrusted data, a feature matrix, where MessagePack is ahead, and switching from [MessagePackObject] to [NinoType]."
 icon: Swords
 ---
 
-[MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) (MessagePack-CSharp) is one of the most widely used binary serializers in .NET. It writes [MessagePack](https://msgpack.org), a format that libraries in many languages read. This page compares Nino v4 with MessagePack for C# **3.1.12**, the version Nino's benchmark runs, using MessagePack's README and source for its features and Nino's source for Nino's; behavior marked "tested" was checked with 3.1.12 in a test program. A MessagePack 4.0 preview has been announced; this page describes 3.x. Where we could not verify a feature, it is left out.
+<AnchorRedirect
+  map={{
+    'where-nino-is-ahead': '/en/docs/v4/vs-messagepack#feature-matrix',
+    'when-to-choose-which': '/en/docs/v4/compare#which-to-choose',
+  }}
+/>
+
+[MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) (MessagePack-CSharp) is one of the most widely used binary serializers in .NET. It writes [MessagePack](https://msgpack.org), a format that libraries in many languages read. This page compares Nino v4 with MessagePack for C# **3.1.12**, the version Nino's benchmark runs, using MessagePack's README and source for its features and Nino's source for Nino's; behavior marked "tested" was checked with 3.1.12 in a test program. A MessagePack 4.0 preview has been announced; this page describes 3.x. Where we could not verify a feature, it is left out. How both compare with MemoryPack, protobuf and System.Text.Json is on [Choosing a Serializer](/en/docs/v4/compare).
 
 ## Two Formats [#formats]
 
@@ -19,8 +26,14 @@ The deepest difference is what the bytes are. MessagePack is a self-describing f
 | Integers | at their full width (an `int` is 4 bytes) | in the fewest bytes that hold the value (0 to 127 in one byte) |
 | Strings | one byte a char when every char is at most U+00FF, else UTF-16; UTF-8 with [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) | UTF-8 |
 | `Guid`, `DateTime` | 16 bytes; ticks and kind | a 36-character string; a MessagePack timestamp, in UTC (native resolvers change both) |
-| Readers in other languages | Go, Rust and TypeScript, through code generated from your C# types | any MessagePack library; your code there maps arrays or maps to its own types |
-| Reading the bytes without your code | [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) prints every member with its offset and value, from your assembly's layouts | `MessagePackSerializer.ConvertToJson`, without the types |
+
+## Performance [#performance]
+
+Measured with BenchmarkDotNet in the same run as Nino, on the same values and the same types, MessagePack through the API its documentation recommends for speed with the formatters its source generator writes ([setup](/en/docs/v4/benchmarks#messagepack-and-protobuf-net)). <IfWorkloads>On the [real workloads](/en/docs/v4/benchmarks#workloads) where Nino leads, it serializes <BenchValue k="workloads.messagepack.serialize" /> faster and deserializes <BenchValue k="workloads.messagepack.deserialize" /> faster.</IfWorkloads><IfWorkloads not>In the classes and polymorphic types where Nino leads, it serializes <BenchValue k="messagepack.serialize" /> faster and deserializes <BenchValue k="messagepack.deserialize" /> faster.</IfWorkloads> Cases MessagePack cannot express with the same data (reference tracking, deserializing into existing objects, generic bases) are left out.
+
+<LibrarySummary lib="messagepack" lang="en" />
+
+Payload sizes differ by format, not by effort: MessagePack writes small integers in fewer bytes and a `Guid` as a string, Nino writes integers at their full width and a `Guid` as 16 bytes.
 
 ## Untrusted Input [#untrusted-input]
 
@@ -31,98 +44,70 @@ Nino reads untrusted data in its default mode; [`NinoSettings.Untrusted`](/en/do
 <Matrix columns={['Nino v4', 'MessagePack 3.1.12']} rows={[
   { label: 'Safe for untrusted data without an option', cells: [['yes', <>every read checks lengths, depth, types and hash buckets (<a href="/en/docs/v4/security#guarantees">Guarantees</a>)</>], ['partial', <><code>MessagePackSecurity.UntrustedData</code>, per call or as the default options</>]] },
   { label: 'The data cannot name a type to create', cells: ['yes: type ids of the declared type\'s registered subtypes only', ['partial', <>with the standard resolvers; the Typeless API and <code>TypelessFormatter</code> read assembly-qualified type names</>]] },
-  { label: 'A count larger than the data is rejected before allocating', cells: ['yes', 'yes: tested'] },
+  { label: 'Memory in proportion to the input', cells: ['yes: counts checked against the bytes left; a collection allocates ahead of its elements at most 16 times the bytes left', 'yes: a count larger than the data is rejected before allocating (tested)'] },
   { label: 'Nesting limit', cells: [['yes', <><code>NinoSettings.MaxDepth</code>, 512, with the thread's stack checked</>], ['yes', <><code>MaximumObjectGraphDepth</code>, 500, in both modes</>]] },
   { label: 'Hash flooding of dictionaries and sets', cells: [['yes', <><code>MaxHashCollisions</code> per bucket; seeded hashing with <code>Untrusted</code></>], 'partial: collision-resistant hashing with UntrustedData only'] },
-  { label: 'Compressed input bounded', cells: ['n/a: no built-in compression', 'yes: 64 MB of decompressed LZ4 with UntrustedData'] },
   { label: 'One exception type for invalid data', cells: [['yes', <><code>NinoDataException</code></>], ['yes', <><code>MessagePackSerializationException</code>: tested</>]] },
+  { label: 'Compressed input bounded', cells: ['n/a: no built-in compression', 'yes: 64 MB of decompressed LZ4 with UntrustedData'] },
 ]} />
 
 What stays the application's job either way (the values themselves, the size of a message, authenticating the sender) is in [Untrusted Data](/en/docs/v4/security#what-stays-your-job).
 
-## Performance
-
-Measured with BenchmarkDotNet in the same run as Nino, on the same values and the same types. MessagePack uses the API its documentation recommends for speed (`IBufferWriter<byte>` in, `ReadOnlyMemory<byte>` out) with the formatters its source generator writes; see [MessagePack and protobuf-net](/en/docs/v4/benchmarks#messagepack-and-protobuf-net) for the setup. Cases MessagePack cannot express with the same data (reference tracking, deserializing into existing objects, generic bases) have no row.
-
-<LibraryTables lib="messagepack" lang="en" />
-
-Payload sizes differ by format, not by effort: MessagePack writes small integers in fewer bytes and a `Guid` as a string, Nino writes integers at their full width and a `Guid` as 16 bytes. Every case, MemoryPack included: [.NET Benchmarks](/en/docs/v4/benchmarks#runtime).
-
-## Feature Matrix
+## Feature Matrix [#feature-matrix]
 
 <Matrix columns={['Nino v4', 'MessagePack 3.1.12']} rows={[
   { group: 'Platforms' },
   { label: 'Minimum .NET target', cells: [['yes', <><code>netstandard2.0</code></>], ['yes', <><code>netstandard2.0</code>, with paths for .NET 8+ and .NET Framework</>]] },
   { label: 'Unity', cells: ['yes: 2022.3+, one OpenUPM package', 'yes: 2022.3.12f1+, NuGetForUnity plus a git package'] },
   { label: 'IL2CPP / Native AOT', cells: ['yes: source generated, no reflection when serializing', 'yes: source generated; a type without generated code falls back to Reflection.Emit, which IL2CPP and Native AOT do not have'] },
-  { label: 'Readers in other languages', cells: [['partial', <>Go, Rust and TypeScript, generated by <a href="/en/docs/v4/advanced/codegen">nino-gen</a></>], 'yes: any MessagePack library'] },
+  { label: 'Same bytes on every runtime and CPU', cells: ['yes: one layout on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, padding zeroed', 'yes: values are written field by field'] },
+  { label: 'Readers in other languages', cells: [['partial', <>Go, Rust and TypeScript, generated by <a href="/en/docs/v4/advanced/codegen">nino-gen</a> from your C# types</>], 'yes: any MessagePack library; your code there maps arrays or maps to its own types'] },
   { group: 'Defining types' },
-  { label: 'Attributes on every member', cells: ['yes: none needed; public members in declaration order', ['partial', <><code>[Key]</code> on each member, or string keys for all with <code>keyAsPropertyName: true</code></>]] },
-  { label: 'Types without attributes', cells: ['no: [NinoType] on each type or its base', ['yes', <><code>ContractlessStandardResolver</code>, members by name</>]] },
+  { label: 'No attribute on each member', cells: ['yes: public members in declaration order', ['partial', <><code>[Key]</code> on each member, or string keys for all with <code>keyAsPropertyName: true</code></>]] },
+  { label: 'Types without an attribute', cells: ['no: [NinoType] on each type or its base', ['yes', <><code>ContractlessStandardResolver</code>, members by name</>]] },
   { label: 'Private members', cells: [['yes', <><code>includeNonPublicMembers</code></>], ['yes', <><code>AllowPrivate = true</code></>]] },
-  { label: <>Constructors, records, <code>init</code></>, cells: ['yes', ['yes', <><code>[SerializationConstructor]</code></>]] },
+  { label: <>Constructors, records, <code>init</code> and <code>required</code></>, cells: ['yes', ['yes', <><code>[SerializationConstructor]</code></>]] },
   { group: 'Polymorphism' },
-  { label: 'Abstract classes and interfaces', cells: ['yes', ['yes', <><code>[Union(key, typeof(T))]</code> per subtype</>]] },
+  { label: 'Abstract classes and interfaces', cells: ['yes', 'yes'] },
   { label: 'Non-abstract base classes', cells: ['yes', 'no: [Union] on a concrete class writes a subtype as the base, its own members dropped, with no warning (tested)'] },
   { label: <>Generic bases (<code>Box&lt;T&gt;</code>)</>, cells: ['yes: automatic, for any type argument', 'partial: the base lists one set of subtypes, the same for every type argument'] },
-  { label: 'Subtypes in other assemblies, hot-update DLLs', cells: ['yes: found automatically, no tags', 'partial: each subtype listed on the base'] },
+  { label: 'No list of subtypes on the base', cells: ['yes: ids are hashes of the type names', ['partial', <>a <code>[Union(key, typeof(T))]</code> per subtype</>]] },
+  { label: 'Subtypes in other assemblies, hot-update DLLs', cells: ['yes: found automatically, no init call', 'partial: each subtype listed on the base'] },
   { group: 'Evolving data' },
   { label: 'Add members; old code reads new data', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>, <code>NinoFormat.Keyed</code></>], 'yes: tested with integer keys'] },
   { label: 'Remove members', cells: [['yes', <><code>NinoFormat.Keyed</code></>], 'partial: keep the key unused; gaps in integer keys are written as nil placeholders'] },
-  { label: 'Reorder or rename members', cells: [['yes', <><code>NinoFormat.Keyed</code>, renames with <code>[NinoFormerName]</code></>], 'yes: integer keys fix the order; renames only with integer keys'] },
+  { label: 'Reorder or rename members', cells: [['yes', <><code>NinoFormat.Keyed</code>, renames with <code>[NinoFormerName]</code>; positional types rename freely</>], 'yes: integer keys fix the order; renames only with integer keys'] },
   { label: 'Breaking changes reported while you type', cells: [['yes', <>a <a href="/en/docs/v4/evolving-data#layout-baseline">layout baseline</a> in the project: NINO034–NINO037, with code fixes</>], 'n/a: not documented'] },
   { group: 'Object graphs and allocation' },
   { label: 'Shared and circular references', cells: [['yes', <><code>trackReferences</code></>], 'no: a shared object is written once per reference; a cycle cannot be written (tested: the stack overflowed)'] },
   { label: 'Deserialize into an existing instance', cells: ['yes: fills objects, lists and dictionaries in place', 'no: new instances only'] },
-  { label: 'Object pools', cells: [['yes', <><code>[NinoPooled]</code>, factories, recycler</>], 'partial: its own buffers come from pools'] },
+  { label: 'Object pools', cells: [['yes', <><code>[NinoPooled]</code>, factories, recycler for dropped instances</>], 'partial: its own buffers come from pools'] },
   { group: 'I/O and integrations' },
   { label: <><code>IBufferWriter&lt;byte&gt;</code>, spans, <code>ReadOnlySequence&lt;byte&gt;</code></>, cells: [['yes', <>all three built in (<a href="/en/docs/v4/advanced/streams#readonlysequence-input">Multi-Segment Input</a>)</>], 'yes'] },
   { label: <><code>Stream</code> and async I/O</>, cells: [['yes', <>built in (<a href="/en/docs/v4/advanced/streams#streams">Streams</a>); several messages on one stream as <a href="/en/docs/v4/advanced/streams#frames">frames</a></>], ['yes', <><code>SerializeAsync</code>, <code>MessagePackStreamReader</code></>]] },
-  { label: 'Untyped reading', cells: [['no', <>every read names a type; <code>nino-gen inspect</code> decodes a payload for debugging</>], ['yes', <><code>Deserialize&lt;dynamic&gt;</code>, <code>ConvertToJson</code></>]] },
   { label: 'Serialization callbacks', cells: [['yes', <><code>[NinoOnSerializing]</code>, <code>[NinoOnDeserialized]</code> and two more, called by generated code (<a href="/en/docs/v4/defining-types#callbacks">Callbacks</a>)</>], ['yes', <><code>IMessagePackSerializationCallbackReceiver</code></>]] },
   { label: 'Custom formatters', cells: [['yes', <>struct formatters, inlined (<a href="/en/docs/v4/custom-formatters">Custom Formatters</a>)</>], ['yes', <><code>IMessagePackFormatter&lt;T&gt;</code>, resolvers, <code>[MessagePackFormatter]</code></>]] },
   { label: 'Compression', cells: [['partial', <><code>System.IO.Compression</code> over the output (<a href="/en/docs/v4/advanced/streams#compression">example</a>)</>], ['yes', <>LZ4, <code>MessagePackCompression.Lz4BlockArray</code></>]] },
   { label: <><code>System.Type</code> values</>, cells: ['no: on purpose, data never names a type', 'yes: as an assembly-qualified name'] },
+  { label: 'Options per call', cells: [['no', <>process-wide <code>NinoSettings</code> and attributes on the types</>], ['yes', <><code>MessagePackSerializerOptions</code>: resolver, security mode, compression</>]] },
   { label: 'ASP.NET Core', cells: [['yes', <><a href="/en/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>: MVC formatters and Minimal API bodies</>], ['yes', <><code>MessagePack.AspNetCoreMvcFormatter</code></>]] },
-  { label: 'Same bytes on every runtime and CPU', cells: ['yes: one layout on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit', 'yes: values are written field by field'] },
+  { group: 'Tooling' },
+  { label: 'Read a payload without your code', cells: [['partial', <><a href="/en/docs/v4/advanced/codegen#inspect"><code>nino-gen inspect</code></a> decodes it member by member with your assembly's layouts; every read in code names a type</>], ['yes', <><code>ConvertToJson</code>, <code>Deserialize&lt;dynamic&gt;</code>, without the types</>]] },
 ]} />
 
-## Where MessagePack Is Ahead
+## Where MessagePack Is Ahead [#where-messagepack-is-ahead]
 
-- **Any language reads the data.** MessagePack is a standard format with libraries in many languages, and its data can be read without your types: as JSON with `ConvertToJson`, or as `Deserialize<dynamic>`. Nino's data is read through your C# types, or through Go, Rust and TypeScript code generated from them; to look into a payload, [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) decodes it with the layouts of the assembly that wrote it.
-- **No attributes needed.** `ContractlessStandardResolver` writes any public type by member name, much like a JSON serializer. Nino needs `[NinoType]` on each type or its base.
+MessagePack does these things and Nino v4 does not:
+
+- **Any language reads the data.** MessagePack is a standard format with libraries in many languages, and its data can be read without your types: as JSON with `ConvertToJson`, or as `Deserialize<dynamic>`. Nino's data is read through your C# types, or through the Go, Rust and TypeScript code generated from them.
+- **No attributes needed.** `ContractlessStandardResolver` writes any public type by member name, much like a JSON serializer.
 - **Smaller integers.** Small numbers take fewer bytes than their full width.
-- **Compression built in.** LZ4 is an option of each call; with Nino, you compress the output with `System.IO.Compression` ([example](/en/docs/v4/advanced/streams#compression)).
-- **Per-call options.** `MessagePackSerializerOptions` picks the resolver, the security mode and the compression per call. Nino's settings are process-wide (`NinoSettings`) or attributes on the types.
-- **`Type` values and typeless data**, for trusted data. Nino does neither, on purpose.
+- **`System.Type` values and typeless data**, for trusted data.
+- **Options per call**: `MessagePackSerializerOptions` picks the resolver, the security mode and the compression per call.
+- **Compression built in**: LZ4 is an option of each call.
 - **Frameworks built on it**: MagicOnion (code-first gRPC) and StreamJsonRpc.
 
-## Where Nino Is Ahead
-
-- **Untrusted input by default**: no option to remember and no type names in the data ([Untrusted Input](#untrusted-input)).
-- **Polymorphism without bookkeeping**: any non-sealed class can be a base, generic bases included, with no keys to list and keep stable; subtypes in other assemblies and hot-update DLLs are found automatically. MessagePack's `[Union]` works on interfaces and abstract classes only, and each subtype is listed on the base with its key.
-- **Object graphs**: shared and circular references with [`trackReferences`](/en/docs/v4/reference-tracking).
-- **Zero-allocation reuse**: [reuse deserialization](/en/docs/v4/pooling) fills existing objects, lists and dictionaries, and `[NinoPooled]` pools supply new instances; MessagePack creates new instances on every read.
-- **Fewer attributes**: public members are written in declaration order with no `[Key]` on each; [`NinoFormat.Keyed`](/en/docs/v4/evolving-data#keyed-members) writes them by name, hashed, so members can be removed, reordered and inserted.
-- **Unmanaged structs and arrays as one block**, the same bytes on every runtime ([Portable by Design](/en/docs/v4/platforms#portable-by-design)).
-- **Unity in one package** from OpenUPM, HybridCLR without init calls.
-
-## When to Choose Which
-
-<Cards>
-  <Card title="Choose Nino when">
-    Your programs are .NET, Unity or Godot, plus TypeScript, Go or Rust through generated code; the data can come from a peer or a file you do not control; you need polymorphism without key tables, shared references, data that evolves, or zero GC through reuse and pooling.
-  </Card>
-  <Card title="Choose MessagePack when">
-    Programs in other languages read the data with their own MessagePack libraries; you want to read data without its types (JSON dumps, `dynamic`); you serialize types you cannot annotate; or you use MagicOnion.
-  </Card>
-</Cards>
-
-<Callout type="idea">
-
-Both are MIT licensed, source generated and AOT safe. If you are unsure, benchmark your own types: the [benchmark project](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark) runs Nino and MessagePack side by side.
-
-</Callout>
+The workaround for what Nino leaves out is on [Limitations](/en/docs/v4/compare#limitations). Which to choose for which job: [Which to Choose](/en/docs/v4/compare#which-to-choose).
 
 ## Switching from MessagePack [#switching-from-messagepack]
 
@@ -145,7 +130,7 @@ Both are MIT licensed, source generated and AOT safe. If you are unsure, benchma
 | `MessagePackSecurity.UntrustedData` | nothing per call; `NinoSettings.Untrusted = true` once at startup for the extra checks ([Untrusted Mode](/en/docs/v4/security#untrusted-mode)) |
 | `MessagePackCompression.Lz4BlockArray` | a compression stream over the output ([Compression](/en/docs/v4/advanced/streams#compression)) |
 
-The two libraries write different bytes, so stored data has to be converted. Both can be installed in one project: keep both attributes on your types while you convert, read each stored value with MessagePack and write it again with Nino, then remove MessagePack. Mark the converted data with a [file header](/en/docs/v4/advanced/persistence#add-a-file-header) so that a later build knows which reader it needs. Messages between processes need no conversion: upgrade both ends together. Data that programs in other languages read stays MessagePack, or moves to code generated by [nino-gen](/en/docs/v4/advanced/codegen) if those programs are TypeScript, Go or Rust.
+The two libraries write different bytes, so stored data has to be converted; both can be installed in one project while you do ([Switching to Nino](/en/docs/v4/compare#switching) has the steps). Keep both attributes on your types, read each stored value with MessagePack and write it again with Nino:
 
 ```csharp title="Messages.cs"
 using MessagePack;
@@ -179,19 +164,10 @@ byte[] bytes = NinoSerializer.Serialize(message);                    // written 
 IMessage back = NinoDeserializer.Deserialize<IMessage>(bytes);       // a Chat
 ```
 
-## Next Steps
+## Next Steps [#next-steps]
 
 <Cards>
-  <Card title="Nino vs protobuf-net" href="/en/docs/v4/vs-protobuf-net">
-    The same comparison with Protocol Buffers in .NET.
-  </Card>
-  <Card title=".NET Benchmarks" href="/en/docs/v4/benchmarks">
-    Every case, with MemoryPack, MessagePack and protobuf-net, and the code that measures it.
-  </Card>
-  <Card title="Evolving Your Data" href="/en/docs/v4/evolving-data">
-    Positional, version-tolerant and keyed types, and which changes each survives.
-  </Card>
-  <Card title="Untrusted Data" href="/en/docs/v4/security">
-    What every read checks, the limits and Untrusted mode.
-  </Card>
+  <Card title="Nino vs protobuf-net" href="/en/docs/v4/vs-protobuf-net">The same comparison with Protocol Buffers in .NET.</Card>
+  <Card title=".NET Benchmarks" href="/en/docs/v4/benchmarks">Every case against MessagePack and the other libraries, and the code that measures it.</Card>
+  <Card title="Choosing a Serializer" href="/en/docs/v4/compare">MemoryPack, protobuf and System.Text.Json beside both, Nino's limitations and switching.</Card>
 </Cards>

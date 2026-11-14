@@ -22,7 +22,7 @@ import {
   BuildTables,
   benchValue,
   GroupTables,
-  LibraryTables,
+  LibrarySummary,
   RuntimesTables,
   UnityHighlights,
   UnityTables,
@@ -389,9 +389,9 @@ function markdownComponents(lang: Locale, pageUrl: string) {
       asMarkdown();
       return BenchSource({ ...props, markdown: true });
     },
-    LibraryTables(props: ComponentProps<typeof LibraryTables>) {
+    LibrarySummary(props: ComponentProps<typeof LibrarySummary>) {
       asMarkdown();
-      return LibraryTables({ ...props, markdown: true });
+      return LibrarySummary({ ...props, markdown: true });
     },
     // The prose that fits the synced data (see IfWorkloads in bench-data.tsx)
     IfWorkloads({ children, not }: Children & { not?: boolean }) {

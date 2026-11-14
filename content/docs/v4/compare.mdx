@@ -1,0 +1,120 @@
+---
+title: Choosing a Serializer
+seoTitle: "Nino vs MemoryPack, MessagePack, protobuf and System.Text.Json: Choosing a C# Serializer – Nino v4 Docs"
+description: "How Nino v4 compares with MemoryPack, MessagePack, protobuf and System.Text.Json: one feature table, how much faster Nino is than each, which serializer fits which job, Nino's limitations, and switching to Nino."
+icon: Scale
+---
+
+<AnchorRedirect
+  map={{
+    'current-limitations': '/en/docs/v4/compare#limitations',
+    'resolved-limitations': '/en/docs/v4/whats-new#features',
+  }}
+/>
+
+Which serializer fits your data: how Nino v4 differs from the libraries .NET developers usually choose from, how much faster it is than each, what it does not do, and how to switch. Each library with a page of its own is compared in depth there: [MemoryPack](/en/docs/v4/vs-memorypack), [MessagePack](/en/docs/v4/vs-messagepack) and [protobuf-net](/en/docs/v4/vs-protobuf-net).
+
+## At a Glance [#at-a-glance]
+
+| | Nino v4 | MemoryPack | MessagePack | protobuf | System.Text.Json |
+| --- | --- | --- | --- | --- | --- |
+| Format | binary, no per-value tags | binary, memory layout | MessagePack, self-describing | Protocol Buffers, field numbers | JSON text |
+| Untrusted input | **safe by default**, one exception type | "trusted data only" | opt-in `UntrustedData` | depth limit | depth limit |
+| Polymorphism | **automatic**, any base or interface | `[MemoryPackUnion]` tags | `[Union]` keys | `[ProtoInclude]` numbers, `oneof` | `[JsonDerivedType]` per subtype |
+| Shared and circular references | `trackReferences` | circular references | no | no | `ReferenceHandler.Preserve` |
+| Read into existing objects | **in place, 0 B** | clears collections, new elements | no | merges, no overwrite | members only (`Populate`) |
+| Other languages | Go, Rust, TypeScript, generated from your C# | TypeScript | any MessagePack library | every protobuf library | every language |
+
+protobuf covers protobuf-net and Google.Protobuf. Each comparison page has the full feature matrix, the formats side by side and what each library does better.
+
+## Speed [#speed]
+
+Measured with BenchmarkDotNet in one run, every library on the same data with the API its documentation recommends for speed ([How It Is Measured](/en/docs/v4/benchmarks#setup)).
+
+<IfWorkloads>
+
+| Nino v4 against | Serialize | Deserialize |
+| --- | --- | --- |
+| MemoryPack | **<BenchValue k="workloads.memorypack.serialize" /> faster** | **<BenchValue k="workloads.memorypack.deserialize" /> faster** |
+| MessagePack | **<BenchValue k="workloads.messagepack.serialize" /> faster** | **<BenchValue k="workloads.messagepack.deserialize" /> faster** |
+| protobuf-net | **<BenchValue k="workloads.protobuf.serialize" /> faster** | **<BenchValue k="workloads.protobuf.deserialize" /> faster** |
+| Google.Protobuf | **<BenchValue k="workloads.googleprotobuf.serialize" /> faster** | **<BenchValue k="workloads.googleprotobuf.deserialize" /> faster** |
+| System.Text.Json | **<BenchValue k="workloads.json.serialize" /> faster** | **<BenchValue k="workloads.json.deserialize" /> faster** |
+
+The ranges cover the [real workloads](/en/docs/v4/benchmarks#workloads) where Nino leads: payloads shaped like the messages, caches and saves of real services and games.
+
+</IfWorkloads>
+
+<IfWorkloads not>
+
+| Nino v4 against | Serialize | Deserialize |
+| --- | --- | --- |
+| MemoryPack | **<BenchValue k="serialize.min" />–<BenchValue k="serialize.max" /> faster** | **<BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" /> faster** |
+| MessagePack | **<BenchValue k="messagepack.serialize" /> faster** | **<BenchValue k="messagepack.deserialize" /> faster** |
+| protobuf-net | **<BenchValue k="protobuf.serialize" /> faster** | **<BenchValue k="protobuf.deserialize" /> faster** |
+
+The ranges cover the [basic](/en/docs/v4/benchmarks#basic-types) and [polymorphic](/en/docs/v4/benchmarks#polymorphism) cases where Nino leads.
+
+</IfWorkloads>
+
+Each comparison page breaks this down by group of cases, and [.NET Benchmarks](/en/docs/v4/benchmarks#runtime) has every case with its time. To measure your own types, the [benchmark project](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark) runs every library side by side.
+
+## Which to Choose [#which-to-choose]
+
+| You need | Choose | Why |
+| --- | --- | --- |
+| Data from network peers, user files or any source you do not control | Nino | It reads untrusted data in its default mode, with no option to remember ([Untrusted Data](/en/docs/v4/security)) |
+| Speed and no garbage on .NET servers, Unity or Godot | Nino | See [Speed](#speed); [reuse and pooling](/en/docs/v4/pooling) read into the objects you already have |
+| Class hierarchies, shared references or data that changes between versions | Nino | Subtypes need no tags, `trackReferences` keeps shared objects, keyed and version-tolerant types survive member changes ([Evolving Your Data](/en/docs/v4/evolving-data)) |
+| The same bytes in .NET, Unity, TypeScript, Go and Rust | Nino | One layout on every runtime and CPU; [nino-gen](/en/docs/v4/advanced/codegen) generates the TypeScript, Go and Rust |
+| Programs in Java, Python, C++ or another language read the data with their own library | MessagePack or Protocol Buffers | Standard formats with libraries in many languages ([vs MessagePack](/en/docs/v4/vs-messagepack#where-messagepack-is-ahead), [vs protobuf-net](/en/docs/v4/vs-protobuf-net#where-protobuf-net-is-ahead)) |
+| A `.proto` contract or gRPC with peers outside .NET | protobuf-net or Google.Protobuf | The contract is the schema file ([vs protobuf-net](/en/docs/v4/vs-protobuf-net#where-protobuf-net-is-ahead)) |
+| People read or edit the data | System.Text.Json (or YAML, TOML) | Text; Nino's bytes describe nothing without your types |
+| Types you cannot annotate, written by member name | MessagePack (contractless) or System.Text.Json | Nino needs `[NinoType]` on each type or its base |
+| `System.Type` values or options per call, for trusted data | MemoryPack or MessagePack | Nino leaves both out ([Limitations](#limitations)) |
+| Reading data that Nino v3 wrote | Nino v3, then convert | v4 cannot read it ([Converting v3 Data](/en/docs/v4/migration#converting-v3-data)) |
+
+## Limitations [#limitations]
+
+What to know before choosing Nino v4, and where to go instead:
+
+- **Source generator required.** Nino needs its source generator (Roslyn 4.3 or later) and C# 9 or later in the project that declares `[NinoType]`s.
+- **Not compatible with v3 data.** v4 cannot read data written by v3 or by the v4 betas and previews. See [Migrating from v3](/en/docs/v4/migration#converting-v3-data).
+- **Positional by default.** A bare `[NinoType]` is the fastest format but does not survive member changes. For data you store or exchange across versions, choose `NinoFormat.VersionTolerant` or `NinoFormat.Keyed` before writing any: see [Evolving Your Data](/en/docs/v4/evolving-data).
+- **The bytes describe nothing.** They carry no type tags or member names: only your C# types, or the code [nino-gen](/en/docs/v4/advanced/codegen) generates from them, can read them. To look into a payload while debugging, [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) decodes it with your assembly's layouts.
+- **Settings are process-wide.** There are no per-call options: the members of [`NinoSettings`](/en/docs/v4/settings) apply to every call, and the limits are frozen at first use; attributes configure each type.
+- **Some types have no built-in formatter.** `System.Type` is left out on purpose (data that names the types to create is a deserialization attack): store a type id or name of your own and map it to the types you allow. Delegates, non-generic collections and engine classes other than Unity's `AnimationCurve`, `Gradient` and `RectOffset` have none either. See [Supported Types](/en/docs/v4/types#not-supported); a [custom formatter](/en/docs/v4/custom-formatters) can add any of them.
+- **No built-in compression, and one value per stream call.** Compress the output with `System.IO.Compression` ([Compression](/en/docs/v4/advanced/streams#compression)). `NinoDeserializer.Deserialize<T>(stream)` reads to the end of the stream, so several messages on one stream go as [frames](/en/docs/v4/advanced/streams#frames) your code writes.
+- **Generated TypeScript, Go and Rust cover most types, not all.** [Nino.Codegen](/en/docs/v4/advanced/codegen#not-generated) leaves out, with a build warning, each type a language cannot express and the types that hold it: in every language, closed generic types in slots that nothing names; in TypeScript, members such as multi-dimensional arrays, `DateTimeOffset` or custom formatters; in Rust, maps and sets keyed by floats. Each language's list: [TypeScript](/en/docs/v4/advanced/typescript#not-supported), [Go](/en/docs/v4/advanced/go#not-supported), [Rust](/en/docs/v4/advanced/rust#not-supported). A browser client that needs them can run the C# types in a [.NET WebAssembly module](/en/docs/v4/advanced/browser#jsexport).
+
+The limitations of v3 that v4 removed are rows of the v3-versus-v4 table in [What's New in v4](/en/docs/v4/whats-new#features).
+
+### Platform Notes [#platform-notes]
+
+Nino defines its bytes instead of copying memory, so data is portable between CoreCLR, Mono and IL2CPP, 64-bit and 32-bit. How `Nullable<T>`, `ValueTuple`, `decimal`, `DateTimeOffset`, 32-bit alignment and padding are handled is described in [Platforms](/en/docs/v4/platforms#portable-by-design). Bytes are little-endian; on a big-endian host, which no current .NET or Unity platform is, Nino throws instead of writing them.
+
+## Switching to Nino [#switching]
+
+Every library here writes other bytes than Nino, so data you have stored has to be converted. Messages between processes need no conversion: upgrade both ends together.
+
+1. Install Nino next to the library you use and put `[NinoType]` on your types, keeping the old attributes while you convert. Each comparison page has a table that maps the library's attributes and calls to Nino's.
+2. Read each stored value with the old library and write it again with Nino.
+3. Mark the converted data with a [file header](/en/docs/v4/advanced/persistence#add-a-file-header), so that a later build knows which reader it needs.
+4. Remove the old library.
+
+Data that programs in other languages read stays in its format, or moves to code generated by [nino-gen](/en/docs/v4/advanced/codegen) if those programs are TypeScript, Go or Rust.
+
+| From | Attributes, calls and an example |
+| --- | --- |
+| MemoryPack | [Switching from MemoryPack](/en/docs/v4/vs-memorypack#switching-from-memorypack) |
+| MessagePack | [Switching from MessagePack](/en/docs/v4/vs-messagepack#switching-from-messagepack) |
+| protobuf-net | [Switching from protobuf-net](/en/docs/v4/vs-protobuf-net#switching-from-protobuf-net) |
+| Nino v3 | [Migrating from v3](/en/docs/v4/migration) |
+
+## Next Steps [#next-steps]
+
+<Cards>
+  <Card title="Nino vs MemoryPack" href="/en/docs/v4/vs-memorypack">The fastest .NET serializer besides Nino, compared feature by feature.</Card>
+  <Card title=".NET Benchmarks" href="/en/docs/v4/benchmarks">Every case against every library, and the code that measures it.</Card>
+  <Card title="Quick Start" href="/en/docs/v4/start">Install Nino and serialize your first type.</Card>
+</Cards>

@@ -1,7 +1,7 @@
 ---
 title: Nino 与 MemoryPack 对比
 seoTitle: "Nino 与 MemoryPack 对比：C# 序列化的速度、不可信输入与功能 – Nino v4 文档"
-description: "Nino v4 对比 MemoryPack 1.22.0（我们所知最快的 C# 二进制序列化库）：同一次运行的基准测试、读取不可信数据、功能对照、各自强在哪里，以及从 [MemoryPackable] 换到 [NinoType]。"
+description: "Nino v4 对比 MemoryPack 1.22.0（除 Nino 之外最快的 C# 二进制序列化库）：两种格式、各用例组的速度、读取不可信数据、功能矩阵、MemoryPack 强在哪里，以及从 [MemoryPackable] 换到 [NinoType]。"
 icon: Swords
 ---
 
@@ -9,64 +9,31 @@ icon: Swords
   map={{
     'deserialize-into-existing-objects': '/zh/docs/v4/benchmarks#pooling',
     'allocations-and-payload-size': '/zh/docs/v4/benchmarks#basic-types',
+    summary: '/zh/docs/v4/vs-memorypack#performance',
+    'type-ids-and-union-tags': '/zh/docs/v4/vs-memorypack#formats',
+    'where-nino-is-ahead': '/zh/docs/v4/vs-memorypack#feature-matrix',
+    'when-to-choose-which': '/zh/docs/v4/compare#which-to-choose',
   }}
 />
 
-[MemoryPack](https://github.com/Cysharp/MemoryPack) 是一个出色的序列化库，也是我们给 Nino 定的对标。这一页对比 Nino v4 和 MemoryPack **1.22.0**：MemoryPack 的功能以它自己的 README 为准，Nino 的以 Nino 源码为准。哪一边核实不了的功能，就不列。想看其他语言也能读的格式，见 [Nino 与 MessagePack 对比](/zh/docs/v4/vs-messagepack)和 [Nino 与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net)。
+[MemoryPack](https://github.com/Cysharp/MemoryPack) 是一个出色的序列化库，也是我们给 Nino 定的对标。这一页对比 Nino v4 和 MemoryPack **1.22.0**：MemoryPack 的功能以它自己的 README 为准，Nino 的以 Nino 源码为准。哪一边核实不了的功能，就不列。两者和 MessagePack、protobuf、System.Text.Json 比起来怎样，见[序列化库选型](/zh/docs/v4/compare)。
 
-## 不可信输入 [#untrusted-input]
+## 两种格式 [#formats]
 
-MemoryPack 的 README 现在开头就是一段警告：它是“仅用于可信数据的高性能序列化格式”（“a high-performance serialization format for trusted data only”），“在输入可能来自不可信方的场景，例如公开的网络端点或用户提供的文件，我们不再推荐使用 MemoryPack”；面向跨边界通信的功能，包括 TypeScript 代码生成器，“将在下一个 MemoryPack 版本中移除”（[MemoryPack README](https://github.com/Cysharp/MemoryPack#readme)）。
+两者写的都是值不带标签的二进制，都靠你的 C# 类型来读。区别在字节从哪来：MemoryPack 把非托管值按内存原样拷贝，Nino 则规定好每一个字节，所以跨平台、跨运行时字节一致。
 
-Nino 生来就是为读不可信数据设计的，快速路径也守着这些保证：
+| | Nino v4 | MemoryPack |
+| --- | --- | --- |
+| 非托管结构体 | 按 64 位布局写[原始值](/zh/docs/v4/wire-format#raw-values)，填充清零 | 照搬内存，填充也在内，布局是写入那个平台的 |
+| `(int, long)` 这样的元组 | 按声明顺序逐项写，12 字节 | 照搬内存：x64 上 16 字节，32 位 x86 上 12 字节，Mono 上元素顺序还不一样 |
+| `T?` | 一个存在字节加值 | 照搬内存（标志位、填充、值）；`SafeNullable<T>` 没有填充 |
+| 子类型 | 4 字节类型 ID，即类型名的哈希 | 1 字节 Union 标签（超过 249 时 3 字节），列在基类型上 |
+| 字符串 | 所有字符都不超过 U+00FF 时每字符一个字节，否则 UTF-16；加 [`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 用 UTF-8 | UTF-8，可选 UTF-16 |
+| `DateTimeOffset` | UTC ticks 加偏移分钟数 | 按内存布局写，.NET 9 及更早、.NET 10、Unity 三者各不相同；要换成 `Net10DateTimeOffset` 或 `UnityDateTimeOffset`（MEMPACK043） |
 
-- **数据里没有类型名。** 值只能是声明类型已注册的子类型之一，由类型 ID 选出；回引用必须指向已经读过、类型和槽位相符的对象。`System.Type` 不能序列化，所以数据永远没法指定要创建什么类型。
-- **分配之前先查长度。** 每个元素个数都要和剩余字节比一次，一个集合在读到元素之前，最多预先分配输入剩余字节数的 16 倍：几个字节谎称不出几 GB。
-- **栈的用量有上限。** 嵌套很深的数据推迟到较浅的层级再读，或者到 `NinoSettings.MaxDepth`（默认 512 层）就停，途中还检查剩余栈空间：抛异常，而不是栈溢出把进程搞崩。
-- **没有哈希洪泛。** 某个键在它的哈希桶里碰到超过 `NinoSettings.MaxHashCollisions` 个键就抛异常，所以构造出来的键没法让填充字典或 Set 的时间变成平方级；`NinoSettings.Untrusted` 还会用每个进程的密钥给整数、`char`、`Guid` 和 `string` 键算哈希。
-- **只有一种异常。** 所有无效输入，包括被类型自己拒绝的值，都抛 `NinoDataException`（一种 `InvalidOperationException`），消息以 `Nino:` 开头，在边界上一个 `catch` 就能全接住；[Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 会返回 400。
+类型 ID 比 Union 标签每个多态值多 3 字节，换来的是子类型不用标签：ID 由类型本身决定（类型名的 FNV-1a 哈希），所以子类型可以放在任何程序集里（插件、HybridCLR 热更新、继承你基类的库），增删子类型时 ID 也不会重新编号。MemoryPack 要在基类上用 `[MemoryPackUnion(tag, type)]` 列出所有子类型，或者用 Union 格式化器手动注册，标签还得自己保证不变。见[多态](/zh/docs/v4/polymorphism)。
 
-我们用 fuzz 生成的和手工构造的数据，把每个内置类型、每种类型声明方式都验了一遍，发现的问题都已修复。仍然要应用自己负责的事（值本身、消息大小、版本）见[不可信数据](/zh/docs/v4/security#what-stays-your-job)。MemoryPack 要删掉跨边界的功能，Nino 的这些功能则会一直保留：Nino.Codegen 生成的 TypeScript、Go 和 Rust 读取器，以及 Nino.AspNetCore，读取边界另一侧传来的数据时做的是同样的检查。
-
-## 性能 [#performance]
-
-用 BenchmarkDotNet 测，两个库在同一次运行里。柱条是相对 MemoryPack（1.0）的耗时，越短越快。悬停或聚焦某一行可以看具体数值。
-
-<BenchmarkChart chart={['serialize', 'deserialize']} lang="zh" />
-
-### 汇总 [#summary]
-
-<IfWorkloads>
-
-| | Nino v4 对比 MemoryPack |
-| --- | --- |
-| 序列化 | 在 Nino 领先的[真实负载](/zh/docs/v4/benchmarks#workloads)上**快 <BenchValue k="workloads.memorypack.serialize" />**（各负载见表格） |
-| 反序列化 | 在 Nino 领先的真实负载上**快 <BenchValue k="workloads.memorypack.deserialize" />** |
-| 反序列化到已有 / 池化实例 | 分配 **0 B**，最高比 MemoryPack 的覆盖模式**快 <BenchValue k="reuse.max" />** |
-| 序列化时的内存分配 | 两者都是 0 B |
-| 数据大小 | `SimpleClass` 差不多：Nino 是 <BenchValue k="payload.v4" /> 字节，MemoryPack 是 <BenchValue k="payload.memorypack" /> 字节。字符串看文本：ASCII 两边都是每个字符一个字节；ASCII 以外的 Latin-1 文本和中日韩文本 Nino 更小（每个字符一个和两个字节，UTF-8 是两个和三个）；以 ASCII 为主、夹着少量更宽字符的文本 UTF-8 更小，Nino 用 `[NinoUtf8]` 就能写成 UTF-8 |
-
-</IfWorkloads>
-
-<IfWorkloads not>
-
-| | Nino v4 对比 MemoryPack |
-| --- | --- |
-| 序列化 | Nino 领先的用例中**快 <BenchValue k="serialize.min" />–<BenchValue k="serialize.max" />**；差距最小的是非托管结构体数组，两者都是整块拷贝（各用例见图表） |
-| 反序列化 | Nino 领先的用例中**快 <BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" />**；非托管结构体数组两者至少持平，都是整块拷贝（见下文） |
-| 反序列化到已有 / 池化实例 | 分配 **0 B**，最高比 MemoryPack 的覆盖模式**快 <BenchValue k="reuse.max" />** |
-| 序列化时的内存分配 | 两者都是 0 B |
-| 数据大小 | `SimpleClass` 差不多：Nino 是 <BenchValue k="payload.v4" /> 字节，MemoryPack 是 <BenchValue k="payload.memorypack" /> 字节。字符串看文本：ASCII 两边都是每个字符一个字节；ASCII 以外的 Latin-1 文本和中日韩文本 Nino 更小（每个字符一个和两个字节，UTF-8 是两个和三个）；以 ASCII 为主、夹着少量更宽字符的文本 UTF-8 更小，Nino 用 `[NinoUtf8]` 就能写成 UTF-8 |
-
-</IfWorkloads>
-
-<Callout type="info" title="非托管结构体数组">
-
-两个库都整块拷贝这类数组，所以至少持平。带填充的结构体例外：Nino 拷贝时把填充清零，MemoryPack 则照搬内存里填充位置上的东西，残留的字节也一起，布局还随平台而变；见[带填充的结构体和元组](#padded-values)。反序列化 `Vector4[10000]` 这一项测的主要是结果数组的垃圾回收，每次运行都有波动；见[反序列化（新实例）](/zh/docs/v4/benchmarks#basic-types)。
-
-</Callout>
-
-每个用例的具体数字、多态和池化测试，以及基准测试代码，见 [.NET 基准测试](/zh/docs/v4/benchmarks#runtime)。
+字符串的大小看文本：ASCII 两边都是每个字符一个字节；ASCII 以外的 Latin-1 文本和中日韩文本 Nino 更小（每个字符一个和两个字节，UTF-8 是两个和三个）；以 ASCII 为主、夹着少量更宽字符的文本 UTF-8 更小。
 
 ### 带填充的结构体和元组 [#padded-values]
 
@@ -75,103 +42,94 @@ Nino 生来就是为读不可信数据设计的，快速路径也守着这些保
 拷贝填充，代价不只是体积：
 
 - **填充是内存里原来的东西。** 相等的值可能序列化成不同的字节，残留的内存也跟着写出去。用 MemoryPack 1.22.0 测：两个值相等的 `InventoryItem[2]`，其中一个在原先装满 `0xCD` 的缓冲区里构造，序列化出来的字节就不一样，每个填充字节都是 `CD`；同样构造的 `List<(int, long)>`，每个元素后面都跟着 `CDCDCDCD`。Nino 给两者写的字节一样，填充为零。
-- **可空值也一样。** MemoryPack 把 `T?` 也按内存原样写出（标志位、填充、值），一个 `int?` 就会带上 3 个字节的内存残留。1.22.0 为此加了 `SafeNullable<T>`，要你用它替换 `T?`；它没有填充，但只有 `T` 是基元类型或枚举时，字节才和 `T?` 兼容。Nino 不需要这种类型：`T?` 成员写成一个存在标志加值；raw 值的 `T?[]` 和 `List<T?>`（[固定步长](/zh/docs/v4/wire-format#collections)），以及 raw 结构体里的 `Nullable` 字段，填充写 0，没有值时值的部分也写 0。
+- **可空值也一样。** MemoryPack 把 `T?` 也按内存原样写出（标志位、填充、值），一个 `int?` 就会带上 3 个字节的内存残留。1.22.0 为此加了 `SafeNullable<T>`，要你用它替换 `T?`；它没有填充，但只有 `T` 是基元类型或枚举时，字节才和 `T?` 兼容。Nino 不需要这种类型：`T?` 成员写成一个存在字节加值；raw 值的 `T?[]` 和 `List<T?>`（[固定步长](/zh/docs/v4/wire-format#collections)），以及 raw 结构体里的 `Nullable` 字段，填充写 0，没有值时值的部分也写 0。
 - **布局跟着平台走。** `(int, long)` 在 Windows 的 32 位 x86 .NET 上占 12 字节内存，在 x64 和 Arm32 上占 16 字节（.NET 10 在各目标上的布局，从 crossgen2 为它编译出的代码里读出），所以照搬内存的话，到了那里大小就变了。Mono 上元素的顺序也不一样：见[基准测试中发现的 MemoryPack 问题](#memorypack-bugs-found-while-benchmarking)。
 
 Nino 跨平台、跨运行时字节一致：[原始值](/zh/docs/v4/wire-format#raw-values)按 64 位布局写，填充清零；元组逐个元素写。
+
+## 性能 [#performance]
+
+用 BenchmarkDotNet 测，两个库在同一次运行里读写同样的数据（[测试方法](/zh/docs/v4/benchmarks#setup)）。<IfWorkloads>在 Nino 领先的[真实负载](/zh/docs/v4/benchmarks#workloads)上，序列化快 <BenchValue k="workloads.memorypack.serialize" />，反序列化快 <BenchValue k="workloads.memorypack.deserialize" />。</IfWorkloads><IfWorkloads not>在 Nino 领先的用例里，序列化快 <BenchValue k="serialize.min" />–<BenchValue k="serialize.max" />，反序列化快 <BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" />。</IfWorkloads>读进已有实例和池化实例时分配 0 B，最高比 MemoryPack 的覆盖模式快 <BenchValue k="reuse.max" />；两个库序列化时都不分配内存。
+
+<LibrarySummary lib="memorypack" lang="zh" />
+
+非托管结构体数组两边都是整块拷贝，所以这些用例持平；带填充的除外（见上文），Nino 拷贝时要把填充清零。反序列化 `Vector4[10000]` 这一项测的主要是结果数组的垃圾回收（[基础类型与结构体](/zh/docs/v4/benchmarks#basic-types)）。
+
+## 不可信输入 [#untrusted-input]
+
+MemoryPack 的 README 现在开头就是一段警告：它是“仅用于可信数据的高性能序列化格式”（“a high-performance serialization format for trusted data only”），“在输入可能来自不可信方的场景，例如公开的网络端点或用户提供的文件，我们不再推荐使用 MemoryPack”；面向跨边界通信的功能，包括 TypeScript 代码生成器，“将在下一个 MemoryPack 版本中移除”（[MemoryPack README](https://github.com/Cysharp/MemoryPack#readme)）。
+
+Nino 的默认模式就能读不可信数据，快速路径也一样；我们用 fuzz 生成的和手工构造的数据，把每个内置类型、每种类型声明方式都验过。[`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 再加上那些每次读取都要多花时间的检查。每条保证具体指什么，见[不可信数据](/zh/docs/v4/security#guarantees)。
+
+<Matrix columns={['Nino v4', 'MemoryPack 1.22.0']} rows={[
+  { label: '不设任何选项就能安全读取不可信数据', cells: [['yes', <>每次读取都检查长度、深度、类型和哈希桶（<a href="/zh/docs/v4/security#guarantees">保证</a>）</>], 'no: 按其 README，仅用于可信数据'] },
+  { label: '数据无法指定要创建的类型', cells: ['yes: 只接受声明类型已注册子类型的类型 ID', 'partial: Union 标签只能选列出的子类型；System.Type 值按类型名读出'] },
+  { label: '内存与输入成比例', cells: ['yes: 元素个数先和剩余字节比；集合在读到元素之前最多预先分配剩余字节数的 16 倍', 'n/a: 未见文档说明'] },
+  { label: '嵌套深度上限', cells: [['yes', <><code>NinoSettings.MaxDepth</code>，512，途中还检查线程的栈</>], 'n/a: 未见文档说明'] },
+  { label: '字典和集合的哈希洪泛', cells: [['yes', <>每个桶受 <code>MaxHashCollisions</code> 限制；<code>Untrusted</code> 下用带种子的哈希</>], 'n/a: 未见文档说明'] },
+  { label: '无效数据只抛一种异常', cells: [['yes', <><code>NinoDataException</code></>], 'n/a: 未见文档说明'] },
+]} />
+
+无论用哪个库，应用都要自己负责的部分（值本身、消息大小、验证发送方），见[不可信数据](/zh/docs/v4/security#what-stays-your-job)。Nino 在 .NET 之外的读取器也做同样的检查：[nino-gen](/zh/docs/v4/advanced/codegen) 生成的 TypeScript、Go 和 Rust，以及遇到无效数据返回 400 的 [Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore)。
 
 ## 功能矩阵 [#feature-matrix]
 
 <Matrix columns={['Nino v4', 'MemoryPack 1.22.0']} rows={[
   { group: '平台' },
   { label: '最低 .NET 目标', cells: [['yes', <><code>netstandard2.0</code></>], ['partial', <><code>netstandard2.1</code>（以及 <code>net7.0</code>+）</>]] },
-  { label: 'Unity', cells: ['yes: 2022.3+，OpenUPM 包', 'yes: 2022.3.12f1+，NuGetForUnity 加 git 包'] },
+  { label: 'Unity', cells: ['yes: 2022.3+，一个 OpenUPM 包', 'yes: 2022.3.12f1+，NuGetForUnity 加 git 包'] },
   { label: 'IL2CPP / Native AOT', cells: ['yes: 源生成，序列化时无反射', 'yes: 源生成，无 IL.Emit'] },
-  { label: '各运行时和 CPU 字节一致', cells: ['yes: 规范布局，在 32 位和旧版 Mono 上转换', 'partial: 非托管结构体按内存布局原样拷贝'] },
-  { label: '确定性输出（填充清零）', cells: [['yes', <>填充写 0，<code>T?</code> 没有值时值的部分也写 0</>], ['partial', <>填充原样拷贝；<code>T?</code> 要换成 <code>SafeNullable&lt;T&gt;</code></>]] },
-  { label: <><code>DateTimeOffset</code> 跨运行时可读</>, cells: ['yes: UTC ticks 加偏移分钟数，各处字节相同', ['partial', <>按内存布局写，.NET 9 及更早、.NET 10、Unity 三者各不相同；要换成 <code>Net10DateTimeOffset</code> 或 <code>UnityDateTimeOffset</code>（MEMPACK043）</>]] },
+  { label: '所有运行时和 CPU 上字节一致', cells: ['yes: CoreCLR、Mono 和 IL2CPP，64 位和 32 位都是同一种布局，填充清零', 'partial: 非托管值按内存布局原样拷贝（见两种格式）'] },
+  { label: '其他语言的读取器', cells: [['partial', <>Go、Rust 和 TypeScript，每次构建后由 <a href="/zh/docs/v4/advanced/codegen">nino-gen</a> 按布局生成；支持结构体、<code>decimal</code>、键控和版本容错类型</>], ['partial', <>TypeScript：<code>[GenerateTypeScript]</code>，只支持类，将在下个版本移除（<a href="/zh/docs/v4/advanced/typescript#compared-with-memorypack">对比</a>）</>]] },
   { group: '定义类型' },
-  { label: <>需要 <code>partial</code></>, cells: [['partial', <>只有 <code>[NinoPooled]</code> 类，以及在 .NET 8 之前（泛型类型：.NET 9 之前）序列化非公开成员时需要</>], 'yes: 总是需要'] },
+  { label: '不用给每个成员加特性', cells: ['yes: 按声明顺序写出公共成员', 'yes: 按声明顺序写成员'] },
+  { label: '不加特性的类型', cells: ['no: 每个类型或其基类型要有 [NinoType]', 'no: 每个类型要有 [MemoryPackable]'] },
+  { label: <>不需要 <code>partial</code></>, cells: [['partial', <>只有 <code>[NinoPooled]</code> 类，以及在 .NET 8 之前（泛型类型：.NET 9 之前）序列化非公开成员时需要</>], 'no: 总是需要'] },
   { label: '私有成员', cells: [['yes', <><code>includeNonPublicMembers</code></>], ['yes', <><code>[MemoryPackInclude]</code></>]] },
-  { label: <>构造函数、记录、<code>required</code> 成员</>, cells: ['yes', 'yes'] },
+  { label: <>构造函数、记录、<code>init</code> 和 <code>required</code></>, cells: ['yes', 'yes'] },
   { label: '自定义集合类型', cells: [['yes', <>自动（<code>List&lt;T&gt;</code>、<code>Dictionary&lt;,&gt;</code> 子类、<code>ICollection&lt;T&gt;</code>……）</>], ['partial', <>每个类型需要 <code>[MemoryPackable(GenerateType.Collection)]</code></>]] },
   { group: '多态' },
-  { label: '抽象类与接口', cells: ['yes', ['yes', <><code>[MemoryPackUnion]</code></>]] },
+  { label: '抽象类和接口', cells: ['yes', 'yes'] },
   { label: '非抽象基类', cells: ['yes', 'no: Union 只能用于接口和抽象类'] },
-  { label: <>泛型基类（<code>Box&lt;T&gt;</code>、<code>IRepository&lt;T&gt;</code>）</>, cells: ['yes: 自动，任何类型实参都行，和非泛型基类用同样的生成分派', ['no', <>泛型类型上的 <code>[MemoryPackUnion]</code> 无法编译（MEMPACK013、MEMPACK014）；要给每个封闭类型手动注册 <code>DynamicUnionFormatter&lt;T&gt;</code>，并指定标签</>]] },
-  { label: '子类型 ID', cells: ['yes: 自动（类型名哈希），4 字节', 'partial: 每个子类型显式指定标签，1 字节（超过 249 时 3 字节）'] },
-  { label: '其他程序集中的子类型', cells: ['yes: 自动', ['partial', <><code>[MemoryPackUnionFormatter]</code>；在 Unity 里要在启动时手动注册</>]] },
-  { label: '热更新程序集（HybridCLR）', cells: ['yes: 按需查找，无需初始化调用', 'n/a: 未见文档说明'] },
+  { label: <>泛型基类型（<code>Box&lt;T&gt;</code>）</>, cells: ['yes: 自动支持任意类型实参', ['no', <>泛型类型上的 <code>[MemoryPackUnion]</code> 无法编译（MEMPACK013、MEMPACK014）；要给每个封闭类型手动注册 <code>DynamicUnionFormatter&lt;T&gt;</code>，并指定标签</>]] },
+  { label: '不用在基类型上列出子类型', cells: ['yes: ID 是类型名的哈希', ['partial', <>每个子类型一个 <code>[MemoryPackUnion(tag, typeof(T))]</code></>]] },
+  { label: '其他程序集、热更新 DLL 中的子类型', cells: ['yes: 自动发现，无需初始化调用', ['partial', <><code>[MemoryPackUnionFormatter]</code>；在 Unity 里要在启动时手动注册；HybridCLR 未见文档说明</>]] },
   { group: '数据演进' },
-  { label: '追加成员', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>（最末端的派生类型）、<code>NinoFormat.Keyed</code>（任意类）</>], 'yes: 默认模式（只有新代码能读旧数据）'] },
-  { label: '旧代码读取新数据', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>、<code>NinoFormat.Keyed</code></>], ['yes', <><code>GenerateType.VersionTolerant</code></>]] },
+  { label: '增加成员；旧代码读新数据', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>、<code>NinoFormat.Keyed</code></>], ['yes', <><code>GenerateType.VersionTolerant</code>；默认模式只有新代码能读旧数据</>]] },
   { label: '删除成员', cells: [['yes', <><code>NinoFormat.Keyed</code></>], ['yes', <>带显式顺序的 <code>VersionTolerant</code></>]] },
-  { label: '重新排序或插入成员', cells: [['yes', <><code>NinoFormat.Keyed</code></>], ['partial', <><code>VersionTolerant</code>：声明可以挪动，写入顺序由 <code>[MemoryPackOrder]</code> 编号固定</>]] },
-  { label: '重命名成员', cells: [['yes', <>按位置、<code>NinoFormat.VersionTolerant</code>；<code>NinoFormat.Keyed</code> 配合 <code>[NinoFormerName]</code></>], 'yes'] },
+  { label: '调整顺序或重命名成员', cells: [['yes', <><code>NinoFormat.Keyed</code>，用 <code>[NinoFormerName]</code> 重命名；按位置的类型随便改名</>], ['partial', <><code>VersionTolerant</code>：声明可以挪动，写入顺序由 <code>[MemoryPackOrder]</code> 编号固定；可以随便改名</>]] },
   { label: '重命名或移动类型', cells: [['yes', <><code>[NinoFormerName]</code></>], 'yes: Union 标签与名称无关'] },
   { label: '写代码时就报出破坏数据的改动', cells: [['yes', <>项目里放一份<a href="/zh/docs/v4/evolving-data#layout-baseline">布局基线</a>：NINO034–NINO037，带代码修复</>], 'n/a: 未见文档说明'] },
-  { group: '对象图' },
-  { label: '共享引用与循环引用', cells: [['yes', <><code>trackReferences</code>，任何能原地填充的构造方式都行</>], ['partial', <><code>GenerateType.CircularReference</code>，仅限无参构造函数</>]] },
-  { group: '内存分配' },
-  { label: '反序列化到已有实例', cells: ['yes: 按索引复用元素，按键合并字典', 'partial: 数组只在长度相同时复用；集合先清空再填'] },
-  { label: '对象池', cells: [['yes', <><code>[NinoPooled]</code>、工厂方法、被丢弃实例的回收器</>], ['partial', <><code>MemoryPoolFormatter&lt;T&gt;</code> 从 <code>ArrayPool</code> 租用数组</>]] },
-  { group: '工具' },
-  { label: '分析器', cells: ['yes: NINO001–NINO044，许多带代码修复', ['yes', <>42 条规则，<code>MEMPACK001</code>、<code>MEMPACK003</code>–<code>MEMPACK043</code></>]] },
-  { label: '编译期调用拦截', cells: ['yes: Roslyn 4.8+（.NET 8 SDK）', 'n/a: 未见文档说明'] },
-  { label: '逐字节解读一条消息', cells: [['yes', <><a href="/zh/docs/v4/advanced/codegen#inspect"><code>nino-gen inspect</code></a>，按你程序集里的布局解读</>], 'n/a: 未见文档说明'] },
+  { group: '对象图与分配' },
+  { label: '共享引用和循环引用', cells: [['yes', <><code>trackReferences</code>，任何能原地填充的构造方式都行</>], ['partial', <><code>GenerateType.CircularReference</code>，仅限无参构造函数</>]] },
+  { label: '读入已有实例', cells: ['yes: 填充已有的对象、列表和字典', 'partial: 数组只在长度相同时复用；集合先清空再填'] },
+  { label: '对象池', cells: [['yes', <><code>[NinoPooled]</code>、工厂、被丢弃实例的回收器</>], ['partial', <><code>MemoryPoolFormatter&lt;T&gt;</code> 从 <code>ArrayPool</code> 租用数组</>]] },
   { group: 'I/O 与集成' },
-  { label: <><code>IBufferWriter&lt;byte&gt;</code> / <code>PipeWriter</code></>, cells: ['yes', 'yes'] },
-  { label: <>反序列化 <code>ReadOnlySpan&lt;byte&gt;</code></>, cells: ['yes', 'yes'] },
-  { label: <>反序列化 <code>ReadOnlySequence&lt;byte&gt;</code></>, cells: [['yes', <><code>Deserialize&lt;T&gt;(sequence)</code>（<a href="/zh/docs/v4/advanced/streams#readonlysequence-input">多段输入</a>）</>], 'yes'] },
-  { label: <><code>Stream</code> 与异步 I/O</>, cells: [['yes', <>内置：<code>Serialize(value, stream)</code>、<code>SerializeAsync</code>、<code>Deserialize&lt;T&gt;(stream)</code>、<code>DeserializeAsync</code>（<a href="/zh/docs/v4/advanced/streams#streams">流</a>）</>], ['yes', <><code>SerializeAsync</code> / <code>DeserializeAsync</code></>]] },
+  { label: <><code>IBufferWriter&lt;byte&gt;</code>、span、<code>ReadOnlySequence&lt;byte&gt;</code></>, cells: [['yes', <>三者都内置（<a href="/zh/docs/v4/advanced/streams#readonlysequence-input">多段输入</a>）</>], 'yes'] },
+  { label: <><code>Stream</code> 与异步 I/O</>, cells: [['yes', <>内置（<a href="/zh/docs/v4/advanced/streams#streams">流</a>）；一个流上传多条消息用<a href="/zh/docs/v4/advanced/streams#frames">帧</a></>], ['yes', <><code>SerializeAsync</code> / <code>DeserializeAsync</code></>]] },
   { label: <>流式集合（<code>IAsyncEnumerable&lt;T&gt;</code>）</>, cells: [['partial', <>每个元素写一<a href="/zh/docs/v4/advanced/streams#frames">帧</a></>], ['yes', <><code>MemoryPack.Streaming</code></>]] },
   { label: '序列化回调', cells: [['yes', <><code>[NinoOnSerializing]</code>、<code>[NinoOnDeserialized]</code> 等四个特性，由生成的代码直接调用（<a href="/zh/docs/v4/defining-types#callbacks">回调</a>）</>], ['yes', <><code>[MemoryPackOnSerializing]</code> 等四个</>]] },
-  { label: '自定义格式化器', cells: [['yes', <>结构体格式化器，可内联；<code>[assembly: NinoFormatter]</code> 绑定泛型类型</>], ['yes', <><code>MemoryPackFormatter&lt;T&gt;</code>，通过 Provider 注册</>]] },
-  { label: '压缩', cells: [['partial', <>用 <code>System.IO.Compression</code> 压缩输出（<a href="/zh/docs/v4/advanced/streams#compression">示例</a>）</>], ['yes', <><code>BrotliCompressor</code>、<code>[BrotliFormatter]</code></>]] },
-  { label: '不可信输入', cells: [['yes', <>本来就为此设计（<a href="/zh/docs/v4/basic#invalid-data">无效数据</a>）</>], 'no: 按其 README，仅用于可信数据'] },
-  { label: 'TypeScript 代码生成', cells: [['yes', <><a href="/zh/docs/v4/advanced/typescript">Nino.Codegen</a>（也支持 Go 和 Rust），每次构建后基于布局元数据生成；支持结构体、<code>decimal</code>、键控和版本容错类型</>], ['partial', <><code>[GenerateTypeScript]</code>，只支持类，在源生成器内部生成，将在下个版本移除（<a href="/zh/docs/v4/advanced/typescript#compared-with-memorypack">对比</a>）</>]] },
-  { label: 'ASP.NET Core', cells: [['yes', <><a href="/zh/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>：MVC 格式化器，Minimal API 的 <code>NinoBody&lt;T&gt;</code> 和 <code>NinoResults</code></>], ['yes', <><code>MemoryPack.AspNetCoreMvcFormatter</code></>]] },
-  { label: '默认字符串编码', cells: [<>所有字符都不超过 U+00FF 时每个字符一个字节，否则 UTF-16；可按成员使用 <code>[NinoUtf8]</code></>, 'UTF-8，可选 UTF-16'] },
+  { label: '自定义格式化器', cells: [['yes', <>结构体格式化器，可内联（<a href="/zh/docs/v4/custom-formatters">自定义格式化器</a>）</>], ['yes', <><code>MemoryPackFormatter&lt;T&gt;</code>，通过 Provider 注册</>]] },
+  { label: '内置的 BCL 和 Unity 类型', cells: [['yes', <>MemoryPack 和 <code>MemoryPack.Unity</code> 有格式化器的类型都内置了（<a href="/zh/docs/v4/types#other-built-in-types">其他内置类型</a>、<a href="/zh/docs/v4/advanced/unity#unity-classes">Unity 的类</a>），<code>System.Type</code> 除外</>], 'yes'] },
+  { label: '压缩', cells: [['partial', <>在输出外面套 <code>System.IO.Compression</code>（<a href="/zh/docs/v4/advanced/streams#compression">示例</a>）</>], ['yes', <><code>BrotliCompressor</code>、<code>[BrotliFormatter]</code></>]] },
+  { label: <><code>System.Type</code> 值</>, cells: ['no: 有意不支持，数据永远不会指定类型', 'yes'] },
+  { label: '按调用传选项', cells: [['no', <>进程级的 <code>NinoSettings</code>，加上类型上的特性</>], ['yes', <><code>MemoryPackSerializerOptions</code>：字符串编码、<code>IServiceProvider</code></>]] },
+  { label: 'ASP.NET Core', cells: [['yes', <><a href="/zh/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>：MVC 格式化器和 Minimal API 请求体</>], ['yes', <><code>MemoryPack.AspNetCoreMvcFormatter</code></>]] },
+  { group: '工具' },
+  { label: '分析器', cells: ['yes: NINO001–NINO044，许多带代码修复', ['yes', <>42 条规则，<code>MEMPACK001</code>、<code>MEMPACK003</code>–<code>MEMPACK043</code></>]] },
+  { label: '不借助你的代码查看一条消息', cells: [['partial', <><a href="/zh/docs/v4/advanced/codegen#inspect"><code>nino-gen inspect</code></a> 按你程序集里的布局逐个成员解读</>], 'n/a: 未见文档说明'] },
 ]} />
 
 ## MemoryPack 领先的地方 [#where-memorypack-is-ahead]
 
 下面这些 MemoryPack 能做，Nino v4 不做：
 
-- **`Type` 值。** MemoryPack 能序列化 `System.Type`，Nino 有意不支持：让数据决定要创建什么类型，是典型的反序列化攻击手法。*替代做法：*自己存类型 ID 或名字，再映射到你允许的类型上。
-- **依赖注入和选项。** MemoryPack 每次调用都可以传 `MemoryPackSerializerOptions`（字符串编码、`IServiceProvider`）。Nino 没有按次传的选项：配置要么是全局的（`NinoSettings`），要么用特性标在类型上。
-- **内置压缩。** MemoryPack 自带 `BrotliCompressor` 和 `[BrotliFormatter]`；用 Nino 时，自己用 `System.IO.Compression` 压缩输出，几行代码就够（[压缩](/zh/docs/v4/advanced/streams#compression)）。
+- **`System.Type` 值**：Nino 有意不支持，让数据决定要创建什么类型，是典型的反序列化攻击手法。
+- **按调用传选项**：`MemoryPackSerializerOptions` 每次调用都能带上字符串编码和 `IServiceProvider`。Nino 的配置要么是进程级的，要么是类型上的特性。
+- **内置压缩**：`BrotliCompressor` 和 `[BrotliFormatter]`。用 Nino 时，自己用 `System.IO.Compression` 压缩输出，几行代码就够。
+- **流式集合**：`MemoryPack.Streaming` 能写 `IAsyncEnumerable<T>`；用 Nino 时，每个元素写一帧。
 
-除此之外，MemoryPack 有格式化器的类型 Nino 都内置了：它列出的其他内置类型（`BigInteger`、`Uri`、`Lazy<T>`、`Memory<T>`、`ILookup<,>`、所有不可变集合等，见[其他内置类型](/zh/docs/v4/types#other-built-in-types)），还有 `MemoryPack.Unity` 支持的 Unity 类（`AnimationCurve`、`Gradient`、`RectOffset`，见 [Unity 的类](/zh/docs/v4/advanced/unity#unity-classes)）。流、异步 I/O 和序列化回调也都是内置的。不管和谁比，Nino 都不做的事见[局限性](/zh/docs/v4/limit)。
-
-## Nino 领先的地方 [#where-nino-is-ahead]
-
-- **不可信输入**：Nino 本来就是为读网络对端和用户文件的数据设计的（见[不可信输入](#untrusted-input)）；MemoryPack 现在只用于可信数据。
-- **速度**：<IfWorkloads>真实负载上序列化最高快 <BenchValue k="workloads.memorypack.serialize.max" />，反序列化最高快 <BenchValue k="workloads.memorypack.deserialize.max" /></IfWorkloads><IfWorkloads not>序列化最高快 <BenchValue k="serialize.max" />，反序列化类和多态对象图最高快 <BenchValue k="deserialize.max" /></IfWorkloads>，数据见上文。
-- **零分配复用**：复用反序列化直接填充嵌套的对象、列表和字典；有 `[NinoPooled]` 对象池；每个被丢弃的实例都能交给回收器。
-- **数据能演进**：键控成员在继承体系的任何一个类里都能调整顺序、删除、插入，不用维护顺序编号；键控类型和版本容错类型，旧代码都能读新数据；有了[布局基线](/zh/docs/v4/evolving-data#layout-baseline)，改出会读坏旧数据的改动时，写代码的当下就会报出来（NINO034）。
-- **多态不用记账**：没有标签，任何非密封类都能当基类，泛型基类（`Box<T>`、`IRepository<T>`）也行，别的程序集和热更新 DLL 里的子类型也能自动找到。MemoryPack 的 Union 特性不能加在泛型类型上：每个封闭类型都要手动注册 Union 格式化器（见[泛型基类型基准测试](/zh/docs/v4/benchmarks#polymorphism)）。
-- **可移植、确定的字节**：CoreCLR、Mono、IL2CPP，64 位和 32 位，字节都一样，填充清零。
-- **覆盖面更广**：支持 `netstandard2.0`，Unity 有 OpenUPM 包，HybridCLR 不用初始化调用。
-- **构建时间**：每个类型一个生成文件，源生成器是真正的增量生成。
-- **基于布局生成 TypeScript**：[Nino.Codegen](/zh/docs/v4/advanced/codegen) 在构建之后运行，读的正是生成 C# 格式化器所用的那份布局，所以结构体、`char`、`decimal`、64 位枚举、键控和版本容错类型都支持，运行时也随包更新。MemoryPack 在源生成器里面写 TypeScript，只支持类，而且下个版本就要移除；见[对比](/zh/docs/v4/advanced/typescript#compared-with-memorypack)。
-
-## 如何选择 [#when-to-choose-which]
-
-<Cards>
-  <Card title="这些情况选 Nino">
-    数据可能来自网络对端、用户文件或其他你管不了的来源；在 .NET 服务器、Unity 或 Godot 上高频序列化消息、缓存值、存储的记录或应用状态；需要不用维护标签表的多态（包括泛型基类）、能演进的数据、共享引用，或者靠对象池做到零 GC；或者需要 Unity、IL2CPP 和服务器之间字节完全一致。
-  </Card>
-  <Card title="这些情况选 MemoryPack">
-    需要按调用传的选项（`IServiceProvider`、每次调用不同的字符串编码），或者要序列化 `System.Type` 值。
-  </Card>
-</Cards>
-
-<Callout type="idea">
-
-两者都是 MIT 许可证，都基于源生成，都能放心用于 AOT。拿不定主意，就用你自己的类型测一测：[基准测试项目](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)会把 Nino 和 MemoryPack 放在一起运行。
-
-</Callout>
+每一项的替代做法，以及不管和谁比 Nino 都不做的事，见[局限](/zh/docs/v4/compare#limitations)。什么场景选哪个：[怎么选](/zh/docs/v4/compare#which-to-choose)。
 
 ## 从 MemoryPack 迁移 [#switching-from-memorypack]
 
@@ -195,7 +153,7 @@ MemoryPack 代码里的大部分写法都能一一对应：
 | `SerializeAsync(stream, value)`、`DeserializeAsync<T>(stream)` | `NinoSerializer.SerializeAsync(value, stream)`、`NinoDeserializer.DeserializeAsync<T>(stream)`：值在前；同步版本是 `Serialize(value, stream)` 和 `Deserialize<T>(stream)`（[流](/zh/docs/v4/advanced/streams#streams)） |
 | UTF-8 字符串 | 所有字符都不超过 U+00FF 时每字符一个字节，否则 UTF-16；按成员用 `[NinoUtf8]`（[字符串编码](/zh/docs/v4/defining-types#string-encoding)） |
 
-两个库写的字节不一样，所以已经存下的数据要转换。两个库能装在同一个项目里：转换期间类型上同时留着两种特性，用 MemoryPack 读出每个存下的值，再用 Nino 写回去，最后移除 MemoryPack。给转换后的数据加上[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)，以后的版本就知道该用哪个读取器。进程之间的消息不用转换：两端一起升级就行。
+两个库写的字节不一样，所以已经存下的数据要转换；转换期间两个库可以装在同一个项目里（步骤见[换成 Nino](/zh/docs/v4/compare#switching)）。类型上同时留着两种特性，用 MemoryPack 读出每个存下的值，再用 Nino 写回去：
 
 ```csharp title="Messages.cs"
 using MemoryPack;
@@ -230,15 +188,6 @@ byte[] bytes = NinoSerializer.Serialize(message);                   // 用 Nino 
 IMessage back = NinoDeserializer.Deserialize<IMessage>(bytes);      // 一个 Chat
 ```
 
-## 类型 ID 与 Union 标签 [#type-ids-and-union-tags]
-
-MemoryPack 写 1 字节的 Union 标签（超过 249 时 3 字节），Nino 写 4 字节的类型 ID。这是有意的取舍：
-
-- Nino 的 ID 由类型本身决定（类型名的 FNV-1a 哈希），所以子类型不用标签。子类型可以放在任何程序集里（插件、HybridCLR 热更新、继承你基类的库），增删子类型时 ID 也不会重新编号。
-- MemoryPack 要在基类上用 `[MemoryPackUnion(tag, type)]` 列出所有子类型，或者用 Union 格式化器手动注册，标签还得自己保证不变。
-
-代价是每个多态值多 3 字节。见[多态](/zh/docs/v4/polymorphism)。
-
 ## 基准测试中发现的 MemoryPack 问题 [#memorypack-bugs-found-while-benchmarking]
 
 对比两个库都支持的所有内置类型时，我们在计时之前先让每个值在 MemoryPack 里写出再读回一次。1.22.0 里有一个类型没通过，所以基准测试里它只测 Nino；另一个到 1.21.4 为止都有问题；还有一个换个运行时就读错：
@@ -253,7 +202,7 @@ Nino 把 `BigInteger` 写成二进制补码字节，`BitArray` 经公开 API 读
 ## 下一步 [#next-steps]
 
 <Cards>
+  <Card title=".NET 基准测试" href="/zh/docs/v4/benchmarks">每个用例对比 MemoryPack 和其他库，以及测量它们的代码。</Card>
+  <Card title="序列化库选型" href="/zh/docs/v4/compare">再把 MessagePack、protobuf 和 System.Text.Json 放进来比，还有 Nino 的局限和迁移步骤。</Card>
   <Card title="Nino 与 MessagePack 对比" href="/zh/docs/v4/vs-messagepack">同样的对比，对手换成 MessagePack for C#。</Card>
-  <Card title=".NET 基准测试" href="/zh/docs/v4/benchmarks">全部用例，包括 MemoryPack、MessagePack 和 protobuf-net，以及测量它们的代码。</Card>
-  <Card title="局限性" href="/zh/docs/v4/limit">选 Nino v4 之前要知道的事。</Card>
 </Cards>

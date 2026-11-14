@@ -233,7 +233,7 @@ const text: Record<
             {
               question: 'Is Nino faster than MessagePack and protobuf-net?',
               answer: othersSentence(false),
-              href: 'vs-messagepack',
+              href: 'compare#speed',
             },
           ]
         : []),
@@ -379,7 +379,7 @@ const text: Record<
             {
               question: 'Nino 比 MessagePack 和 protobuf-net 快吗？',
               answer: othersSentence(true),
-              href: 'vs-messagepack',
+              href: 'compare#speed',
             },
           ]
         : []),

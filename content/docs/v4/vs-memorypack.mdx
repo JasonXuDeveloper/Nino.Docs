@@ -1,7 +1,7 @@
 ---
 title: Nino vs MemoryPack
 seoTitle: "Nino vs MemoryPack: Speed, Untrusted Input and Features in C# – Nino v4 Docs"
-description: "Nino v4 compared with MemoryPack 1.22.0, the fastest C# binary serializer we know: benchmarks from the same run, reading untrusted data, a feature matrix, where each is ahead, and switching from [MemoryPackable] to [NinoType]."
+description: "Nino v4 compared with MemoryPack 1.22.0, the fastest C# binary serializer besides Nino: the two formats, speed per benchmark group, reading untrusted data, a feature matrix, where MemoryPack is ahead, and switching from [MemoryPackable] to [NinoType]."
 icon: Swords
 ---
 
@@ -9,64 +9,31 @@ icon: Swords
   map={{
     'deserialize-into-existing-objects': '/en/docs/v4/benchmarks#pooling',
     'allocations-and-payload-size': '/en/docs/v4/benchmarks#basic-types',
+    summary: '/en/docs/v4/vs-memorypack#performance',
+    'type-ids-and-union-tags': '/en/docs/v4/vs-memorypack#formats',
+    'where-nino-is-ahead': '/en/docs/v4/vs-memorypack#feature-matrix',
+    'when-to-choose-which': '/en/docs/v4/compare#which-to-choose',
   }}
 />
 
-[MemoryPack](https://github.com/Cysharp/MemoryPack) is an excellent serializer and the one we measure Nino against. This page compares Nino v4 with MemoryPack **1.22.0**, using MemoryPack's own README for its features and Nino's source for Nino's. Where we could not verify a feature on either side, it is left out. For the formats other languages read, see [Nino vs MessagePack](/en/docs/v4/vs-messagepack) and [Nino vs protobuf-net](/en/docs/v4/vs-protobuf-net).
+[MemoryPack](https://github.com/Cysharp/MemoryPack) is an excellent serializer and the one we measure Nino against. This page compares Nino v4 with MemoryPack **1.22.0**, using MemoryPack's own README for its features and Nino's source for Nino's. Where we could not verify a feature on either side, it is left out. How both compare with MessagePack, protobuf and System.Text.Json is on [Choosing a Serializer](/en/docs/v4/compare).
 
-## Untrusted Input [#untrusted-input]
+## Two Formats [#formats]
 
-MemoryPack's README now opens with a warning: it is "a high-performance serialization format for trusted data only", "we no longer recommend using MemoryPack where the input can come from an untrusted party, such as public network endpoints or user-supplied files", and its features for cross-boundary communication, the TypeScript code generator among them, "will be removed in the next MemoryPack release" ([MemoryPack README](https://github.com/Cysharp/MemoryPack#readme)).
+Both write binary without per-value tags, read through your C# types. The difference is where the bytes come from: MemoryPack copies an unmanaged value as it lies in memory, while Nino defines every byte, so the data is the same on every runtime and CPU.
 
-Nino reads untrusted data by design, and the fast paths keep these guarantees:
+| | Nino v4 | MemoryPack |
+| --- | --- | --- |
+| An unmanaged struct | its [raw value](/en/docs/v4/wire-format#raw-values) in the 64-bit layout, padding zeroed | its memory, padding included, in the layout of the platform that wrote it |
+| A tuple such as `(int, long)` | its items in declaration order, 12 bytes | its memory: 16 bytes on x64, 12 on 32-bit x86, items in another order on Mono |
+| A `T?` | a presence byte and the value | its memory (the flag, padding, the value); `SafeNullable<T>` has no padding |
+| A subtype | a 4-byte type id, a hash of the type's name | a 1-byte union tag (3 bytes above 249) listed on the base |
+| Strings | one byte a char when every char is at most U+00FF, else UTF-16; UTF-8 with [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) | UTF-8, option for UTF-16 |
+| `DateTimeOffset` | UTC ticks and offset minutes | its memory layout, which differs on .NET 9 and earlier, .NET 10 and Unity; `Net10DateTimeOffset` or `UnityDateTimeOffset` in its place (MEMPACK043) |
 
-- **No type names in the data.** A value is one of the declared type's registered subtypes, chosen by a type id, and a back reference must point to an object already read, of the slot's type. `System.Type` is not serializable, so data can never name a type to create.
-- **Lengths checked before allocating.** Every count is checked against the bytes left, and a collection allocates ahead of its elements at most 16 times the bytes left in the input: a few bytes cannot claim gigabytes.
-- **A bounded stack.** Deeply nested data is read from a shallow level or stops at `NinoSettings.MaxDepth` (512 levels by default), with the stack checked on the way: it throws instead of overflowing the stack, which would end the process.
-- **No hash flooding.** A key that finds more than `NinoSettings.MaxHashCollisions` keys in its hash bucket throws, so crafted keys cannot make filling a dictionary or set quadratic; `NinoSettings.Untrusted` also hashes integer, `char`, `Guid` and `string` keys with a per-process secret.
-- **One exception.** Every invalid input throws a `NinoDataException` (an `InvalidOperationException`) whose message starts with `Nino:`, including values their own type rejects, so one `catch` at the boundary handles all of it; [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) answers it with 400.
+The type id costs 3 bytes more per polymorphic value than a union tag, and buys subtypes without tags: Nino derives the id from the type itself (an FNV-1a hash of its name), so subtypes can live in any assembly (a plugin, a HybridCLR hot update, a library that extends your base class) and ids never renumber when subtypes are added or removed. MemoryPack lists every subtype on the base with `[MemoryPackUnion(tag, type)]`, or registers them by hand with a union formatter, and you keep the tags stable yourself. See [Polymorphism](/en/docs/v4/polymorphism).
 
-We checked these against fuzzed and hand-crafted payloads for every built-in type and every way of declaring one, and fixed what they found. What stays the application's job (the values themselves, the size of a message, versioning) is in [Untrusted Data](/en/docs/v4/security#what-stays-your-job). Unlike MemoryPack's cross-boundary features, Nino's carry on: Nino.Codegen's TypeScript, Go and Rust readers and Nino.AspNetCore read data from the other side of that boundary with the same checks.
-
-## Performance
-
-Measured with BenchmarkDotNet, both libraries in the same run. Bars show time relative to MemoryPack (1.0); shorter is faster. Hover or focus a row for the numbers.
-
-<BenchmarkChart chart={['serialize', 'deserialize']} lang="en" />
-
-### Summary
-
-<IfWorkloads>
-
-| | Nino v4 vs MemoryPack |
-| --- | --- |
-| Serialize | **<BenchValue k="workloads.memorypack.serialize" /> faster** on the [real-world workloads](/en/docs/v4/benchmarks#workloads) where Nino leads (see the table for each) |
-| Deserialize | **<BenchValue k="workloads.memorypack.deserialize" /> faster** on the real-world workloads where Nino leads |
-| Deserialize into existing / pooled instances | **0 B** allocated, up to **<BenchValue k="reuse.max" /> faster** than MemoryPack's overwrite mode |
-| Allocations when serializing | 0 B for both |
-| Payload size | About the same for `SimpleClass`: <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack. Strings depend on the text: ASCII takes one byte a char in both; other Latin-1 text and CJK text are smaller in Nino (one byte and two bytes a char, against two and three in UTF-8); mostly-ASCII text with a few wider chars is smaller in UTF-8, which Nino writes with `[NinoUtf8]` |
-
-</IfWorkloads>
-
-<IfWorkloads not>
-
-| | Nino v4 vs MemoryPack |
-| --- | --- |
-| Serialize | **<BenchValue k="serialize.min" />–<BenchValue k="serialize.max" /> faster** where Nino leads; the gap is smallest on arrays of unmanaged structs, which both copy as one block (see the chart for each case) |
-| Deserialize | **<BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" /> faster** where Nino leads; at least on par on arrays of unmanaged structs, which both copy as one block (see below) |
-| Deserialize into existing / pooled instances | **0 B** allocated, up to **<BenchValue k="reuse.max" /> faster** than MemoryPack's overwrite mode |
-| Allocations when serializing | 0 B for both |
-| Payload size | About the same for `SimpleClass`: <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack. Strings depend on the text: ASCII takes one byte a char in both; other Latin-1 text and CJK text are smaller in Nino (one byte and two bytes a char, against two and three in UTF-8); mostly-ASCII text with a few wider chars is smaller in UTF-8, which Nino writes with `[NinoUtf8]` |
-
-</IfWorkloads>
-
-<Callout type="info" title="Arrays of unmanaged structs">
-
-Both libraries copy these as one block, so they are at least on par. Structs with padding are the exception: Nino sets the padding to zero as it copies, while MemoryPack copies whatever the memory holds there, stale bytes included, in a layout that depends on the platform; see [Padded Structs and Tuples](#padded-values). The `Vector4[10000]` deserialize case mostly measures garbage collection of the result array and varies between runs; see [Deserialize (New Instances)](/en/docs/v4/benchmarks#basic-types).
-
-</Callout>
-
-Every case with its numbers, the polymorphic and pooled runs, and the benchmark code: [.NET Benchmarks](/en/docs/v4/benchmarks#runtime).
+Strings depend on the text: ASCII takes one byte a char in both; other Latin-1 text and CJK text are smaller in Nino (one and two bytes a char, against two and three in UTF-8); mostly-ASCII text with a few wider chars is smaller in UTF-8.
 
 ### Padded Structs and Tuples [#padded-values]
 
@@ -80,98 +47,89 @@ Copying the padding costs more than size:
 
 Nino's bytes are the same on every platform: [raw values](/en/docs/v4/wire-format#raw-values) in the 64-bit layout with zeroed padding, tuples item by item.
 
-## Feature Matrix
+## Performance [#performance]
+
+Measured with BenchmarkDotNet, both libraries in the same run on the same data ([How It Is Measured](/en/docs/v4/benchmarks#setup)). <IfWorkloads>On the [real workloads](/en/docs/v4/benchmarks#workloads) where Nino leads, it serializes <BenchValue k="workloads.memorypack.serialize" /> faster and deserializes <BenchValue k="workloads.memorypack.deserialize" /> faster.</IfWorkloads><IfWorkloads not>In the cases where Nino leads, it serializes <BenchValue k="serialize.min" />–<BenchValue k="serialize.max" /> faster and deserializes <BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" /> faster.</IfWorkloads> Reading into existing and pooled instances allocates 0 B and is up to <BenchValue k="reuse.max" /> faster than MemoryPack's overwrite mode; neither library allocates when serializing.
+
+<LibrarySummary lib="memorypack" lang="en" />
+
+Arrays of unmanaged structs are copied as one block by both, so those cases are on par, except the padded ones (above), where Nino zeroes the padding as it copies. The `Vector4[10000]` deserialize case mostly measures garbage collection of the result array ([Basic Types and Structs](/en/docs/v4/benchmarks#basic-types)).
+
+## Untrusted Input [#untrusted-input]
+
+MemoryPack's README now opens with a warning: it is "a high-performance serialization format for trusted data only", "we no longer recommend using MemoryPack where the input can come from an untrusted party, such as public network endpoints or user-supplied files", and its features for cross-boundary communication, the TypeScript code generator among them, "will be removed in the next MemoryPack release" ([MemoryPack README](https://github.com/Cysharp/MemoryPack#readme)).
+
+Nino reads untrusted data in its default mode, fast paths included, checked against fuzzed and hand-crafted payloads for every built-in type and every way of declaring one; [`NinoSettings.Untrusted`](/en/docs/v4/security#untrusted-mode) adds the checks that cost time on every read. What each guarantee means is on [Untrusted Data](/en/docs/v4/security#guarantees).
+
+<Matrix columns={['Nino v4', 'MemoryPack 1.22.0']} rows={[
+  { label: 'Safe for untrusted data without an option', cells: [['yes', <>every read checks lengths, depth, types and hash buckets (<a href="/en/docs/v4/security#guarantees">Guarantees</a>)</>], 'no: trusted data only, per its README'] },
+  { label: 'The data cannot name a type to create', cells: ['yes: type ids of the declared type\'s registered subtypes only', 'partial: union tags pick a listed subtype; System.Type values are read from type names'] },
+  { label: 'Memory in proportion to the input', cells: ['yes: counts checked against the bytes left; a collection allocates ahead of its elements at most 16 times the bytes left', 'n/a: not documented'] },
+  { label: 'Nesting limit', cells: [['yes', <><code>NinoSettings.MaxDepth</code>, 512, with the thread's stack checked</>], 'n/a: not documented'] },
+  { label: 'Hash flooding of dictionaries and sets', cells: [['yes', <><code>MaxHashCollisions</code> per bucket; seeded hashing with <code>Untrusted</code></>], 'n/a: not documented'] },
+  { label: 'One exception type for invalid data', cells: [['yes', <><code>NinoDataException</code></>], 'n/a: not documented'] },
+]} />
+
+What stays the application's job either way (the values themselves, the size of a message, authenticating the sender) is in [Untrusted Data](/en/docs/v4/security#what-stays-your-job). Nino's readers outside .NET keep the same checks: the TypeScript, Go and Rust that [nino-gen](/en/docs/v4/advanced/codegen) generates, and [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore), which answers invalid data with 400.
+
+## Feature Matrix [#feature-matrix]
 
 <Matrix columns={['Nino v4', 'MemoryPack 1.22.0']} rows={[
   { group: 'Platforms' },
   { label: 'Minimum .NET target', cells: [['yes', <><code>netstandard2.0</code></>], ['partial', <><code>netstandard2.1</code> (and <code>net7.0</code>+)</>]] },
-  { label: 'Unity', cells: ['yes: 2022.3+, OpenUPM package', 'yes: 2022.3.12f1+, NuGetForUnity plus a git package'] },
+  { label: 'Unity', cells: ['yes: 2022.3+, one OpenUPM package', 'yes: 2022.3.12f1+, NuGetForUnity plus a git package'] },
   { label: 'IL2CPP / Native AOT', cells: ['yes: source generated, no reflection when serializing', 'yes: source generated, no IL.Emit'] },
-  { label: 'Same bytes on every runtime and CPU', cells: ['yes: canonical layout, converted on 32-bit and old Mono', 'partial: unmanaged structs are copied as laid out in memory'] },
-  { label: 'Deterministic output (padding zeroed)', cells: [['yes', <>padding, and the value of a <code>T?</code> without one, written as zeros</>], ['partial', <>padding copied as is; <code>SafeNullable&lt;T&gt;</code> in place of <code>T?</code></>]] },
-  { label: <><code>DateTimeOffset</code> readable across runtimes</>, cells: ['yes: UTC ticks and offset minutes, the same bytes everywhere', ['partial', <>its memory layout, different on .NET 9 and earlier, .NET 10 and Unity; <code>Net10DateTimeOffset</code> or <code>UnityDateTimeOffset</code> in its place (MEMPACK043)</>]] },
+  { label: 'Same bytes on every runtime and CPU', cells: ['yes: one layout on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, padding zeroed', 'partial: unmanaged values are copied as laid out in memory (see Two Formats)'] },
+  { label: 'Readers in other languages', cells: [['partial', <>Go, Rust and TypeScript, generated by <a href="/en/docs/v4/advanced/codegen">nino-gen</a> after each build from the layouts; structs, <code>decimal</code>, keyed and version-tolerant types included</>], ['partial', <>TypeScript: <code>[GenerateTypeScript]</code>, classes only, to be removed in its next release (<a href="/en/docs/v4/advanced/typescript#compared-with-memorypack">comparison</a>)</>]] },
   { group: 'Defining types' },
-  { label: <><code>partial</code> required</>, cells: [['partial', <>only for <code>[NinoPooled]</code> classes, and for non-public members before .NET 8 (generic types: before .NET 9)</>], 'yes: always'] },
+  { label: 'No attribute on each member', cells: ['yes: public members in declaration order', 'yes: members in declaration order'] },
+  { label: 'Types without an attribute', cells: ['no: [NinoType] on each type or its base', 'no: [MemoryPackable] on each type'] },
+  { label: <><code>partial</code> not required</>, cells: [['partial', <>needed only for <code>[NinoPooled]</code> classes, and for non-public members before .NET 8 (generic types: before .NET 9)</>], 'no: always required'] },
   { label: 'Private members', cells: [['yes', <><code>includeNonPublicMembers</code></>], ['yes', <><code>[MemoryPackInclude]</code></>]] },
-  { label: <>Constructors, records, <code>required</code> members</>, cells: ['yes', 'yes'] },
+  { label: <>Constructors, records, <code>init</code> and <code>required</code></>, cells: ['yes', 'yes'] },
   { label: 'User collection types', cells: [['yes', <>automatic (<code>List&lt;T&gt;</code>, <code>Dictionary&lt;,&gt;</code> subclasses, <code>ICollection&lt;T&gt;</code>...)</>], ['partial', <><code>[MemoryPackable(GenerateType.Collection)]</code> per type</>]] },
   { group: 'Polymorphism' },
-  { label: 'Abstract classes and interfaces', cells: ['yes', ['yes', <><code>[MemoryPackUnion]</code></>]] },
+  { label: 'Abstract classes and interfaces', cells: ['yes', 'yes'] },
   { label: 'Non-abstract base classes', cells: ['yes', 'no: unions only on interfaces and abstract classes'] },
-  { label: <>Generic bases (<code>Box&lt;T&gt;</code>, <code>IRepository&lt;T&gt;</code>)</>, cells: ['yes: automatic, for any type argument, with the same generated dispatch as a non-generic base', ['no', <><code>[MemoryPackUnion]</code> on a generic type does not build (MEMPACK013, MEMPACK014); a <code>DynamicUnionFormatter&lt;T&gt;</code> registered by hand for each closed type, with its tags</>]] },
-  { label: 'Subtype ids', cells: ['yes: automatic (hash of the type name), 4 bytes', 'partial: explicit tag per subtype, 1 byte (3 above 249)'] },
-  { label: 'Subtypes in other assemblies', cells: ['yes: automatic', ['partial', <><code>[MemoryPackUnionFormatter]</code>; in Unity, registered manually at startup</>]] },
-  { label: 'Hot-update assemblies (HybridCLR)', cells: ['yes: found lazily, no init call', 'n/a: not documented'] },
+  { label: <>Generic bases (<code>Box&lt;T&gt;</code>)</>, cells: ['yes: automatic, for any type argument', ['no', <><code>[MemoryPackUnion]</code> on a generic type does not build (MEMPACK013, MEMPACK014); a <code>DynamicUnionFormatter&lt;T&gt;</code> registered by hand for each closed type, with its tags</>]] },
+  { label: 'No list of subtypes on the base', cells: ['yes: ids are hashes of the type names', ['partial', <>a <code>[MemoryPackUnion(tag, typeof(T))]</code> per subtype</>]] },
+  { label: 'Subtypes in other assemblies, hot-update DLLs', cells: ['yes: found automatically, no init call', ['partial', <><code>[MemoryPackUnionFormatter]</code>; in Unity, registered manually at startup; HybridCLR not documented</>]] },
   { group: 'Evolving data' },
-  { label: 'Append members', cells: [['yes', <><code>NinoFormat.VersionTolerant</code> (most derived type), <code>NinoFormat.Keyed</code> (any class)</>], 'yes: default mode (new code reads old data only)'] },
-  { label: 'Old code reads new data', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>, <code>NinoFormat.Keyed</code></>], ['yes', <><code>GenerateType.VersionTolerant</code></>]] },
+  { label: 'Add members; old code reads new data', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>, <code>NinoFormat.Keyed</code></>], ['yes', <><code>GenerateType.VersionTolerant</code>; the default mode lets only new code read old data</>]] },
   { label: 'Remove members', cells: [['yes', <><code>NinoFormat.Keyed</code></>], ['yes', <><code>VersionTolerant</code> with explicit orders</>]] },
-  { label: 'Reorder or insert members', cells: [['yes', <><code>NinoFormat.Keyed</code></>], ['partial', <><code>VersionTolerant</code>: declarations can move, the <code>[MemoryPackOrder]</code> numbers fix the wire order</>]] },
-  { label: 'Rename members', cells: [['yes', <>positional, <code>NinoFormat.VersionTolerant</code>; <code>NinoFormat.Keyed</code> with <code>[NinoFormerName]</code></>], 'yes'] },
+  { label: 'Reorder or rename members', cells: [['yes', <><code>NinoFormat.Keyed</code>, renames with <code>[NinoFormerName]</code>; positional types rename freely</>], ['partial', <><code>VersionTolerant</code>: declarations can move, the <code>[MemoryPackOrder]</code> numbers fix the wire order; renames freely</>]] },
   { label: 'Rename or move types', cells: [['yes', <><code>[NinoFormerName]</code></>], 'yes: union tags do not depend on names'] },
   { label: 'Breaking changes reported while you type', cells: [['yes', <>a <a href="/en/docs/v4/evolving-data#layout-baseline">layout baseline</a> in the project: NINO034–NINO037, with code fixes</>], 'n/a: not documented'] },
-  { group: 'Object graphs' },
+  { group: 'Object graphs and allocation' },
   { label: 'Shared and circular references', cells: [['yes', <><code>trackReferences</code>, any constructor that can fill in place</>], ['partial', <><code>GenerateType.CircularReference</code>, parameterless constructors only</>]] },
-  { group: 'Allocation' },
-  { label: 'Deserialize into an existing instance', cells: ['yes: reuses elements by index, merges dictionaries', 'partial: arrays reused only at the same length; collections cleared and refilled'] },
+  { label: 'Deserialize into an existing instance', cells: ['yes: fills objects, lists and dictionaries in place', 'partial: arrays reused only at the same length; collections cleared and refilled'] },
   { label: 'Object pools', cells: [['yes', <><code>[NinoPooled]</code>, factories, recycler for dropped instances</>], ['partial', <><code>MemoryPoolFormatter&lt;T&gt;</code> rents arrays from <code>ArrayPool</code></>]] },
-  { group: 'Tooling' },
-  { label: 'Analyzer', cells: ['yes: NINO001–NINO044, many with code fixes', ['yes', <>42 rules, <code>MEMPACK001</code>, <code>MEMPACK003</code>–<code>MEMPACK043</code></>]] },
-  { label: 'Compile-time call interception', cells: ['yes: Roslyn 4.8+ (.NET 8 SDK)', 'n/a: not documented'] },
-  { label: 'Decode a payload byte by byte', cells: [['yes', <><a href="/en/docs/v4/advanced/codegen#inspect"><code>nino-gen inspect</code></a>, with your assembly's layouts</>], 'n/a: not documented'] },
   { group: 'I/O and integrations' },
-  { label: <><code>IBufferWriter&lt;byte&gt;</code> / <code>PipeWriter</code></>, cells: ['yes', 'yes'] },
-  { label: <>Deserialize <code>ReadOnlySpan&lt;byte&gt;</code></>, cells: ['yes', 'yes'] },
-  { label: <>Deserialize <code>ReadOnlySequence&lt;byte&gt;</code></>, cells: [['yes', <><code>Deserialize&lt;T&gt;(sequence)</code> (<a href="/en/docs/v4/advanced/streams#readonlysequence-input">Multi-Segment Input</a>)</>], 'yes'] },
-  { label: <><code>Stream</code> and async I/O</>, cells: [['yes', <>built in: <code>Serialize(value, stream)</code>, <code>SerializeAsync</code>, <code>Deserialize&lt;T&gt;(stream)</code>, <code>DeserializeAsync</code> (<a href="/en/docs/v4/advanced/streams#streams">Streams</a>)</>], ['yes', <><code>SerializeAsync</code> / <code>DeserializeAsync</code></>]] },
+  { label: <><code>IBufferWriter&lt;byte&gt;</code>, spans, <code>ReadOnlySequence&lt;byte&gt;</code></>, cells: [['yes', <>all three built in (<a href="/en/docs/v4/advanced/streams#readonlysequence-input">Multi-Segment Input</a>)</>], 'yes'] },
+  { label: <><code>Stream</code> and async I/O</>, cells: [['yes', <>built in (<a href="/en/docs/v4/advanced/streams#streams">Streams</a>); several messages on one stream as <a href="/en/docs/v4/advanced/streams#frames">frames</a></>], ['yes', <><code>SerializeAsync</code> / <code>DeserializeAsync</code></>]] },
   { label: <>Streaming collections (<code>IAsyncEnumerable&lt;T&gt;</code>)</>, cells: [['partial', <>one <a href="/en/docs/v4/advanced/streams#frames">frame</a> per element</>], ['yes', <><code>MemoryPack.Streaming</code></>]] },
   { label: 'Serialization callbacks', cells: [['yes', <><code>[NinoOnSerializing]</code>, <code>[NinoOnDeserialized]</code> and two more, called by generated code (<a href="/en/docs/v4/defining-types#callbacks">Callbacks</a>)</>], ['yes', <><code>[MemoryPackOnSerializing]</code> and three more</>]] },
-  { label: 'Custom formatters', cells: [['yes', <>struct formatters, inlined; <code>[assembly: NinoFormatter]</code> binds generic types</>], ['yes', <><code>MemoryPackFormatter&lt;T&gt;</code>, provider registration</>]] },
+  { label: 'Custom formatters', cells: [['yes', <>struct formatters, inlined (<a href="/en/docs/v4/custom-formatters">Custom Formatters</a>)</>], ['yes', <><code>MemoryPackFormatter&lt;T&gt;</code>, provider registration</>]] },
+  { label: 'Built-in BCL and Unity types', cells: [['yes', <>every type MemoryPack and <code>MemoryPack.Unity</code> have a formatter for (<a href="/en/docs/v4/types#other-built-in-types">Other Built-in Types</a>, <a href="/en/docs/v4/advanced/unity#unity-classes">Unity Classes</a>), except <code>System.Type</code></>], 'yes'] },
   { label: 'Compression', cells: [['partial', <><code>System.IO.Compression</code> over the output (<a href="/en/docs/v4/advanced/streams#compression">example</a>)</>], ['yes', <><code>BrotliCompressor</code>, <code>[BrotliFormatter]</code></>]] },
-  { label: 'Untrusted input', cells: [['yes', <>by design (<a href="/en/docs/v4/basic#invalid-data">Invalid Data</a>)</>], 'no: trusted data only, per its README'] },
-  { label: 'TypeScript code generation', cells: [['yes', <><a href="/en/docs/v4/advanced/typescript">Nino.Codegen</a> (also Go and Rust), after each build from the layout metadata; structs, <code>decimal</code>, keyed and version-tolerant types included</>], ['partial', <><code>[GenerateTypeScript]</code>, classes only, from inside the source generator, to be removed in its next release (<a href="/en/docs/v4/advanced/typescript#compared-with-memorypack">comparison</a>)</>]] },
-  { label: 'ASP.NET Core', cells: [['yes', <><a href="/en/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>: MVC formatters, Minimal API <code>NinoBody&lt;T&gt;</code> and <code>NinoResults</code></>], ['yes', <><code>MemoryPack.AspNetCoreMvcFormatter</code></>]] },
-  { label: 'Default string encoding', cells: [<>one byte a char when every char is at most U+00FF, else UTF-16; <code>[NinoUtf8]</code> per member</>, 'UTF-8, option for UTF-16'] },
+  { label: <><code>System.Type</code> values</>, cells: ['no: on purpose, data never names a type', 'yes'] },
+  { label: 'Options per call', cells: [['no', <>process-wide <code>NinoSettings</code> and attributes on the types</>], ['yes', <><code>MemoryPackSerializerOptions</code>: string encoding, an <code>IServiceProvider</code></>]] },
+  { label: 'ASP.NET Core', cells: [['yes', <><a href="/en/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>: MVC formatters and Minimal API bodies</>], ['yes', <><code>MemoryPack.AspNetCoreMvcFormatter</code></>]] },
+  { group: 'Tooling' },
+  { label: 'Analyzer', cells: ['yes: NINO001–NINO044, many with code fixes', ['yes', <>42 rules, <code>MEMPACK001</code>, <code>MEMPACK003</code>–<code>MEMPACK043</code></>]] },
+  { label: 'Read a payload without your code', cells: [['partial', <><a href="/en/docs/v4/advanced/codegen#inspect"><code>nino-gen inspect</code></a> decodes it member by member with your assembly's layouts</>], 'n/a: not documented'] },
 ]} />
 
-## Where MemoryPack Is Ahead
+## Where MemoryPack Is Ahead [#where-memorypack-is-ahead]
 
-To put it plainly, MemoryPack does these things and Nino v4 does not:
+MemoryPack does these things and Nino v4 does not:
 
-- **`Type` values.** MemoryPack serializes `System.Type`; Nino does not, on purpose: data that names the types to create is a well-known deserialization attack. *Workaround:* store a type id or name of your own and map it to the types you allow.
-- **Dependency injection and options.** MemoryPack passes `MemoryPackSerializerOptions` (string encoding, an `IServiceProvider`) through every call. Nino has no per-call options: its settings are either process-wide (`NinoSettings`) or per-type attributes.
-- **Compression built in.** MemoryPack has `BrotliCompressor` and `[BrotliFormatter]`; with Nino, you compress the output with `System.IO.Compression` in a few lines ([Compression](/en/docs/v4/advanced/streams#compression)).
+- **`System.Type` values**, which Nino leaves out on purpose: data that names the types to create is a well-known deserialization attack.
+- **Options per call**: `MemoryPackSerializerOptions` passes the string encoding and an `IServiceProvider` through every call. Nino's settings are process-wide or attributes on the types.
+- **Compression built in**: `BrotliCompressor` and `[BrotliFormatter]`. With Nino, you compress the output with `System.IO.Compression` in a few lines.
+- **Streaming collections**: `MemoryPack.Streaming` writes an `IAsyncEnumerable<T>`; with Nino, each element is a frame.
 
-Everything else MemoryPack has a formatter for is built into Nino too: the other built-in types it lists (`BigInteger`, `Uri`, `Lazy<T>`, `Memory<T>`, `ILookup<,>`, every immutable collection...; see [Other Built-in Types](/en/docs/v4/types#other-built-in-types)) and the Unity classes of `MemoryPack.Unity` (`AnimationCurve`, `Gradient`, `RectOffset`; see [Unity Classes](/en/docs/v4/advanced/unity#unity-classes)). So are streams, async I/O and serialization callbacks. What Nino leaves out whatever you compare it with is on [Limitations](/en/docs/v4/limit).
-
-## Where Nino Is Ahead
-
-- **Untrusted input**: Nino is built to read data from network peers and user files (see [Untrusted Input](#untrusted-input)); MemoryPack is now for trusted data only.
-- **Speed**: <IfWorkloads>on real-world workloads, up to <BenchValue k="workloads.memorypack.serialize.max" /> faster serialization and up to <BenchValue k="workloads.memorypack.deserialize.max" /> faster deserialization</IfWorkloads><IfWorkloads not>up to <BenchValue k="serialize.max" /> faster serialization and up to <BenchValue k="deserialize.max" /> faster deserialization of classes and polymorphic graphs</IfWorkloads>, with the numbers above.
-- **Zero-allocation reuse**: reuse deserialization that fills nested objects, lists and dictionaries in place, `[NinoPooled]` pools, and a recycler for every dropped instance.
-- **Data that changes**: keyed members can be reordered, removed and inserted in any class of a hierarchy, with no order numbers to maintain; old code reads new data in both keyed and version-tolerant types; and a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) reports, as you type, a change that would break the data you already wrote (NINO034).
-- **Polymorphism without bookkeeping**: no tags, any non-sealed class can be a base, generic bases (`Box<T>`, `IRepository<T>`) included, and subtypes in other assemblies and hot-update DLLs are found automatically. MemoryPack's union attribute cannot be put on a generic type: each closed type needs a union formatter registered by hand (see the [generic base benchmark](/en/docs/v4/benchmarks#polymorphism)).
-- **Portable, deterministic bytes**: identical on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, with padding zeroed.
-- **Wider reach**: `netstandard2.0`, OpenUPM for Unity, HybridCLR without init calls.
-- **Build time**: one generated file per type and a truly incremental generator.
-- **TypeScript from the layouts**: [Nino.Codegen](/en/docs/v4/advanced/codegen) runs after the build and reads the same layouts the C# formatters are generated from, so structs, `char`, `decimal`, 64-bit enums, keyed and version-tolerant types are covered and the runtime is updated with the package. MemoryPack writes its TypeScript from inside the source generator, for classes only, and will remove it in its next release; see the [comparison](/en/docs/v4/advanced/typescript#compared-with-memorypack).
-
-## When to Choose Which
-
-<Cards>
-  <Card title="Choose Nino when">
-    Your data can come from a network peer, a user's file or any other source you do not control; you serialize messages, cached values, stored records or application state at a high rate, on .NET servers, Unity or Godot; you need polymorphism without tag tables (generic bases included), data that evolves, shared references, or zero GC through pooling; or you need identical bytes across Unity, IL2CPP and servers.
-  </Card>
-  <Card title="Choose MemoryPack when">
-    You need per-call options (an `IServiceProvider`, the string encoding per call) or `System.Type` values.
-  </Card>
-</Cards>
-
-<Callout type="idea">
-
-Both are MIT licensed, source generated and AOT safe. If you are unsure, benchmark your own types: the [benchmark project](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark) runs Nino and MemoryPack side by side.
-
-</Callout>
+The workaround for each, and what Nino leaves out whatever you compare it with, is on [Limitations](/en/docs/v4/compare#limitations). Which to choose for which job: [Which to Choose](/en/docs/v4/compare#which-to-choose).
 
 ## Switching from MemoryPack [#switching-from-memorypack]
 
@@ -195,7 +153,7 @@ Most of a MemoryPack codebase maps one to one:
 | `SerializeAsync(stream, value)`, `DeserializeAsync<T>(stream)` | `NinoSerializer.SerializeAsync(value, stream)`, `NinoDeserializer.DeserializeAsync<T>(stream)`: the value comes first; `Serialize(value, stream)` and `Deserialize<T>(stream)` are their synchronous forms ([Streams](/en/docs/v4/advanced/streams#streams)) |
 | UTF-8 strings | one byte a char up to U+00FF, else UTF-16; `[NinoUtf8]` per member ([String Encoding](/en/docs/v4/defining-types#string-encoding)) |
 
-The two libraries write different bytes, so stored data has to be converted. Both can be installed in one project: keep both attributes on your types while you convert, read each stored value with MemoryPack and write it again with Nino, then remove MemoryPack. Mark the converted data with a [file header](/en/docs/v4/advanced/persistence#add-a-file-header) so that a later build knows which reader it needs. Messages between processes need no conversion: upgrade both ends together.
+The two libraries write different bytes, so stored data has to be converted; both can be installed in one project while you do ([Switching to Nino](/en/docs/v4/compare#switching) has the steps). Keep both attributes on your types, read each stored value with MemoryPack and write it again with Nino:
 
 ```csharp title="Messages.cs"
 using MemoryPack;
@@ -230,16 +188,7 @@ byte[] bytes = NinoSerializer.Serialize(message);                   // written a
 IMessage back = NinoDeserializer.Deserialize<IMessage>(bytes);      // a Chat
 ```
 
-## Type Ids and Union Tags
-
-MemoryPack writes a 1-byte union tag (3 bytes above 249) where Nino writes a 4-byte type id. This is a deliberate trade-off:
-
-- Nino derives the id from the type itself (an FNV-1a hash of its name), so subtypes need no tags. They can live in any assembly (a plugin, a HybridCLR hot update, a library that extends your base class), and ids never renumber when subtypes are added or removed.
-- MemoryPack lists every subtype on the base with `[MemoryPackUnion(tag, type)]`, or registers them by hand with a union formatter, and you have to keep the tags stable yourself.
-
-The cost is 3 more bytes per polymorphic value. See [Polymorphism](/en/docs/v4/polymorphism).
-
-## MemoryPack Bugs Found While Benchmarking
+## MemoryPack Bugs Found While Benchmarking [#memorypack-bugs-found-while-benchmarking]
 
 Comparing every built-in type both libraries share, we round-tripped each value through MemoryPack before timing it. One type fails in 1.22.0, so the benchmarks time it for Nino only; a second failed up to 1.21.4, and a third reads back wrong on another runtime:
 
@@ -253,7 +202,7 @@ Nino writes a `BigInteger` as its two's-complement bytes, a `BitArray` through i
 ## Next Steps [#next-steps]
 
 <Cards>
+  <Card title=".NET Benchmarks" href="/en/docs/v4/benchmarks">Every case against MemoryPack and the other libraries, and the code that measures it.</Card>
+  <Card title="Choosing a Serializer" href="/en/docs/v4/compare">MessagePack, protobuf and System.Text.Json beside both, Nino's limitations and switching.</Card>
   <Card title="Nino vs MessagePack" href="/en/docs/v4/vs-messagepack">The same comparison with MessagePack for C#.</Card>
-  <Card title=".NET Benchmarks" href="/en/docs/v4/benchmarks">Every case, with MemoryPack, MessagePack and protobuf-net, and the code that measures it.</Card>
-  <Card title="Limitations" href="/en/docs/v4/limit">What to know before choosing Nino v4.</Card>
 </Cards>

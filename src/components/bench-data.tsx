@@ -4,8 +4,8 @@
  *
  * The .NET tables compare Nino with MemoryPack, and with the other libraries
  * (`otherLibs`) in a column each once the synced release measured them ("—"
- * for a case a library cannot express); LibraryTables compares Nino with one of
- * them alone, for its comparison page; GroupTables prints one group of
+ * for a case a library cannot express); LibrarySummary sums up Nino against
+ * one library per group, for that library's comparison page; GroupTables prints one group of
  * dotnetGroups (time per operation, payload, allocations) under that group's
  * chart on the benchmarks page (BenchGroup), and IfWorkloads picks the prose that fits
  * the synced data (the headline comes from the workloads once it has them). RuntimesTables prints the Go, Rust and
@@ -36,14 +36,15 @@ import {
   classRatioRange,
   type DotnetGroupId,
   datasets,
+  dotnetGroups,
   formatBound,
   formatBytes,
   formatClassRange,
+  formatRange,
   formatRatio,
   formatWorkloadRange,
   gcNote,
   hasWorkloads,
-  lowerBound,
   type Opponent,
   type OtherLib,
   otherLibs,
@@ -57,7 +58,6 @@ import {
   runtimesSource,
   sourceNote,
   type TableCase,
-  times,
   type UnityCase,
   unity,
   unitySource,
@@ -138,81 +138,6 @@ function sourceLine(ds: BenchDataset, zh: boolean, tabbed: boolean) {
   );
 }
 
-function caseName(row: TableCase, zh: boolean) {
-  const name = zh && row.zh ? row.zh : row.name;
-  return row.code ? <code>{name}</code> : name;
-}
-
-/**
- * Two thin bars under a ratio: each time against the larger of the two, so
- * the shorter bar is the faster library and the gap is the ratio itself. Only
- * on the page: the Markdown copy keeps the numbers (the bars carry no others).
- */
-function TimeBars({
-  bars,
-}: {
-  bars: { label: string; time: { ns: number; text: string }; nino?: boolean }[];
-}) {
-  const max = Math.max(...bars.map((bar) => bar.time.ns));
-  if (!(max > 0)) return null;
-  return (
-    <span
-      className="mt-1 ml-auto flex w-24 flex-col gap-0.5"
-      role="img"
-      aria-label={bars.map((bar) => `${bar.label} ${bar.time.text}`).join(', ')}
-    >
-      {bars.map((bar) => (
-        <span
-          key={bar.label}
-          title={`${bar.label}: ${bar.time.text}`}
-          className={
-            bar.nino
-              ? 'block h-1.5 rounded-full bg-fd-primary'
-              : 'block h-1.5 rounded-full bg-fd-muted-foreground/40'
-          }
-          style={{ width: `${Math.max(2, (bar.time.ns / max) * 100)}%` }}
-        />
-      ))}
-    </span>
-  );
-}
-
-function barsLegend(zh: boolean, nino: string, other: string) {
-  return (
-    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fd-muted-foreground">
-      <span className="inline-flex items-center gap-1.5">
-        <span className="inline-block h-1.5 w-5 rounded-full bg-fd-primary" />
-        {nino}
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="inline-block h-1.5 w-5 rounded-full bg-fd-muted-foreground/40" />
-        {other}
-      </span>
-      <span>
-        {zh
-          ? '条形是每行的时间，越短越快。'
-          : 'Bars: the time of each row, shorter is faster.'}
-      </span>
-    </p>
-  );
-}
-
-/** Nino under FLOOR_NS against a measurable time `ns`: faster by more than ns / FLOOR_NS (formatBound) */
-function boundText(ns: number, zh: boolean) {
-  const bound = formatBound(ns);
-  return zh ? `快 ${times(lowerBound(ns))} 倍以上` : `${bound} faster`;
-}
-
-/** `boundNs`: the other time, when Nino ran under FLOOR_NS and it did not (tooFast) */
-function ratioCell(ratio: number | undefined, zh: boolean, boundNs?: number) {
-  if (boundNs !== undefined) return <strong>{boundText(boundNs, zh)}</strong>;
-  if (ratio === undefined) return zh ? '持平' : 'on par';
-  const r = times(ratio);
-  if (ratio > 1) return <strong>{zh ? `快 ${r} 倍` : `${r}× faster`}</strong>;
-  // v4 not ahead: a dash, as in Nino's README and docs/v4-benchmarks.md (the times show it).
-  return '—';
-}
-
 /**
  * After a time of another serializer: how many times faster Nino is, as in the
  * ratio columns ("on par" within 5%, nothing when Nino is not ahead: the times
@@ -247,22 +172,39 @@ export function BenchSource({ lang = 'en', markdown }: ArchProps) {
   });
 }
 
+/** The section of the benchmarks page that holds each group (its heading's id) */
+const groupAnchors: Record<DotnetGroupId, string> = {
+  workloads: 'workloads',
+  basic: 'basic-types',
+  polymorphism: 'polymorphism',
+  nullable: 'nullable-values',
+  collections: 'common-types-and-collections',
+  reuse: 'pooling',
+  tracking: 'reference-tracking-and-version-tolerance',
+  others: 'others',
+};
+
 /**
- * Nino against one other .NET serializer (MessagePack or protobuf-net): a
- * serialize and a deserialize table of every case the synced report measured
- * for that library (the workloads, the main cases, then reference tracking,
- * version tolerance and fixed-size types), and the size of one SimpleClass. A note stands in for
- * them until a release report includes the library. For the comparison pages.
+ * Nino against one library (MemoryPack, MessagePack, protobuf-net, ...) per
+ * group of dotnetGroups, for that library's comparison page: in each
+ * operation, the range of Nino's leads (the same FLOOR_NS and on-par rules as
+ * every table: a lower bound counts as a lead and stays out of the range) and
+ * in how many of the cases the library ran Nino is ahead or on par. Each group
+ * links to its section of the benchmarks page, which has every case; then the
+ * size of one SimpleClass. A note stands in until a release report includes
+ * the library.
  */
-export function LibraryTables({
+export function LibrarySummary({
   lib,
   lang = 'en',
   markdown,
-}: ArchProps & { lib: OtherLib }) {
+}: ArchProps & { lib: Opponent }) {
   const zh = lang === 'zh';
-  const label = otherLibs.find((other) => other.key === lib)?.label ?? lib;
-  // Not measured on any architecture yet: one note, outside the tabs.
-  if (!datasets.some((ds) => libraryRows(ds, lib).length > 0))
+  const label =
+    lib === 'memorypack'
+      ? 'MemoryPack'
+      : (otherLibs.find((other) => other.key === lib)?.label ?? lib);
+  if (!datasets.some((ds) => summaryRows(ds, lib).length > 0))
     return (
       <p className="text-sm text-fd-muted-foreground">
         {zh
@@ -270,119 +212,97 @@ export function LibraryTables({
           : `${label} is in Nino's benchmark project, reading and writing the same data as Nino, but the published report does not include it yet. Its results appear here once a release report does.`}
       </p>
     );
+  const page = `${markdown ? siteUrl : ''}/${zh ? 'zh' : 'en'}/docs/v4/benchmarks`;
   return ArchTabs({
     markdown,
-    render: (ds, tabbed) => (
-      <>
-        {libraryTables(ds, lib, label, zh, markdown)}
-        {tabbed && sourceLine(ds, zh, true)}
-      </>
-    ),
-  });
-}
-
-/** The cases of one report that `lib` was measured in, by operation */
-function libraryRows(ds: BenchDataset, lib: OtherLib) {
-  if (!ds.libraries.includes(lib)) return [];
-  return (['serialize', 'deserialize'] as const).flatMap((op) => {
-    const rows = [
-      ...ds.workloads[op],
-      ...ds.runtime[op],
-      ...ds.extraRuntime[op],
-      ...Object.values(ds.more).flatMap((set) => set[op]),
-    ].filter((row) => row.others[lib]);
-    return rows.length > 0 ? [{ op, rows }] : [];
-  });
-}
-
-function libraryTables(
-  ds: BenchDataset,
-  lib: OtherLib,
-  label: string,
-  zh: boolean,
-  markdown?: boolean,
-) {
-  const tables = libraryRows(ds, lib);
-  if (tables.length === 0)
-    return (
-      <p className="text-sm text-fd-muted-foreground">
-        {zh
-          ? `这次运行没有测量 ${label}。`
-          : `${label} was not measured in this run.`}
-      </p>
-    );
-  const ninoBytes = ds.payload.v4;
-  const otherBytes = ds.payload[lib];
-  return (
-    <>
-      {tables.map(({ op, rows }) => (
-        <Fragment key={op}>
-          <p>
-            <strong>
-              {op === 'serialize'
-                ? zh
-                  ? '序列化'
-                  : 'Serialize'
-                : zh
-                  ? '反序列化'
-                  : 'Deserialize'}
-            </strong>
-          </p>
+    render: (ds, tabbed) => {
+      const rows = summaryRows(ds, lib);
+      const ninoBytes = ds.payload.v4;
+      const otherBytes = ds.payload[lib];
+      return (
+        <>
           <div className="relative overflow-auto prose-no-margin my-6">
             <table>
               <thead>
                 <tr>
-                  <th>{zh ? '用例' : 'Case'}</th>
-                  <th className="text-right">Nino v4</th>
-                  <th className="text-right">{label}</th>
-                  <th className="text-right">
-                    {zh ? `Nino 对比 ${label}` : `Nino vs ${label}`}
-                  </th>
+                  <th>{zh ? '用例组' : 'Group'}</th>
+                  <th>{zh ? '序列化' : 'Serialize'}</th>
+                  <th>{zh ? '反序列化' : 'Deserialize'}</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
-                  const vs = row.others[lib] as Versus;
-                  return (
-                    <tr key={row.key}>
-                      <td>{caseName(row, zh)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">
-                        {row.v4.text}
-                      </td>
-                      <td className="text-right tabular-nums whitespace-nowrap">
-                        {vs.time.text}
-                      </td>
-                      <td className="text-right tabular-nums">
-                        {ratioCell(
-                          vs.ratio,
-                          zh,
-                          vs.tooFast ? vs.time.ns : undefined,
-                        )}
-                        {!markdown && (
-                          <TimeBars
-                            bars={[
-                              { label: 'Nino v4', time: row.v4, nino: true },
-                              { label, time: vs.time },
-                            ]}
-                          />
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {rows.map(({ group, serialize, deserialize }) => (
+                  <tr key={group.id}>
+                    <td>
+                      <a href={`${page}#${groupAnchors[group.id]}`}>
+                        {zh ? group.zh : group.name}
+                      </a>
+                    </td>
+                    <td>{summaryCell(serialize, lib, zh)}</td>
+                    <td>{summaryCell(deserialize, lib, zh)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-        </Fragment>
-      ))}
-      {!markdown && barsLegend(zh, 'Nino v4', label)}
-      {ninoBytes !== null && otherBytes !== null && (
-        <p className="text-sm text-fd-muted-foreground">
-          {zh
-            ? `一个 SimpleClass 序列化后：Nino ${formatBytes(ninoBytes)}，${label} ${formatBytes(otherBytes)}。`
-            : `One serialized SimpleClass: ${formatBytes(ninoBytes)} in Nino, ${formatBytes(otherBytes)} in ${label}.`}
-        </p>
+          <p className="text-sm text-fd-muted-foreground">
+            {zh
+              ? `每格写的是：Nino 领先的用例快多少倍，以及在 ${label} 跑过的用例里 Nino 领先几项、持平几项（相差 5% 以内算持平）。“—”表示这组没有 ${label} 能跑的这类用例。点用例组可以看每个用例的时间。`
+              : `Each cell: how many times faster Nino is in the cases it leads, and in how many of the cases ${label} ran it leads or is on par (within 5%); “—”: the group has no case of that operation that ${label} can write. Every case's time is behind the group's link.`}
+            {ninoBytes !== null && otherBytes !== null
+              ? zh
+                ? ` 一个 SimpleClass 序列化后：Nino ${formatBytes(ninoBytes)}，${label} ${formatBytes(otherBytes)}。`
+                : ` One serialized SimpleClass: ${formatBytes(ninoBytes)} in Nino, ${formatBytes(otherBytes)} in ${label}.`
+              : null}
+          </p>
+          {tabbed && sourceLine(ds, zh, true)}
+        </>
+      );
+    },
+  });
+}
+
+/** The groups of one report that `lib` ran at least one case of */
+function summaryRows(ds: BenchDataset, lib: Opponent) {
+  return dotnetGroups.flatMap((group) => {
+    const of = (op: Op) =>
+      ds.groups[group.id][op].filter((row) => versusOf(row, lib));
+    const serialize = of('serialize');
+    const deserialize = of('deserialize');
+    return serialize.length + deserialize.length > 0
+      ? [{ group, serialize, deserialize }]
+      : [];
+  });
+}
+
+/** "1.5–5.4× faster", then "ahead in 11 of 12, on par in 1"; "—" without a case */
+function summaryCell(rows: TableCase[], lib: Opponent, zh: boolean) {
+  const all = rows
+    .map((row) => versusOf(row, lib))
+    .filter((vs): vs is Versus => vs !== undefined);
+  if (all.length === 0) return '—';
+  const ahead = all.filter(
+    (vs) => vs.tooFast || (vs.ratio !== undefined && vs.ratio > 1),
+  );
+  const onPar = all.filter((vs) => !vs.tooFast && vs.ratio === undefined);
+  const ratios = ahead
+    .map((vs) => vs.ratio)
+    .filter((ratio): ratio is number => ratio !== undefined);
+  const range =
+    ratios.length > 0
+      ? formatRange(Math.min(...ratios), Math.max(...ratios))
+      : null;
+  const counts = zh
+    ? `${all.length} 项中领先 ${ahead.length} 项${onPar.length > 0 ? `，持平 ${onPar.length} 项` : ''}`
+    : `ahead in ${ahead.length} of ${all.length}${onPar.length > 0 ? `, on par in ${onPar.length}` : ''}`;
+  return (
+    <>
+      {range && (
+        <strong className="block whitespace-nowrap">
+          {zh ? `快 ${range}` : `${range} faster`}
+        </strong>
       )}
+      <span className="block text-fd-muted-foreground">{counts}</span>
     </>
   );
 }

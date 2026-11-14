@@ -1,0 +1,120 @@
+---
+title: 序列化库选型
+seoTitle: "Nino 与 MemoryPack、MessagePack、protobuf、System.Text.Json 对比：C# 序列化库怎么选 – Nino v4 文档"
+description: "Nino v4 和 MemoryPack、MessagePack、protobuf、System.Text.Json 放在一起比：一张功能对照表、比每个库快多少、什么场景该用哪个、Nino 的局限，以及怎么换成 Nino。"
+icon: Scale
+---
+
+<AnchorRedirect
+  map={{
+    'current-limitations': '/zh/docs/v4/compare#limitations',
+    'resolved-limitations': '/zh/docs/v4/whats-new#features',
+  }}
+/>
+
+你的数据该用哪个序列化库：Nino v4 和 .NET 开发者常用的几个库有什么不同、比每个快多少、它不做什么，以及怎么换过来。有专门对比页的库，细节都在各自的页面里：[MemoryPack](/zh/docs/v4/vs-memorypack)、[MessagePack](/zh/docs/v4/vs-messagepack) 和 [protobuf-net](/zh/docs/v4/vs-protobuf-net)。
+
+## 一览 [#at-a-glance]
+
+| | Nino v4 | MemoryPack | MessagePack | protobuf | System.Text.Json |
+| --- | --- | --- | --- | --- | --- |
+| 格式 | 二进制，值不带标签 | 二进制，内存布局 | MessagePack，自描述 | Protocol Buffers，字段编号 | JSON 文本 |
+| 不可信输入 | **默认安全**，只有一种异常 | "仅用于可信数据" | 需开启 `UntrustedData` | 深度上限 | 深度上限 |
+| 多态 | **自动**，任何基类或接口 | `[MemoryPackUnion]` 标签 | `[Union]` 键 | `[ProtoInclude]` 编号、`oneof` | 每个子类一个 `[JsonDerivedType]` |
+| 共享与循环引用 | `trackReferences` | 循环引用 | 不支持 | 不支持 | `ReferenceHandler.Preserve` |
+| 反序列化到已有对象 | **原地复用，0 B** | 清空集合，重建元素 | 不支持 | 合并，不能覆盖 | 仅成员（`Populate`） |
+| 其他语言 | Go、Rust、TypeScript，从 C# 类型生成 | TypeScript | 任何 MessagePack 库 | 任何 protobuf 库 | 任何语言 |
+
+protobuf 一列指 protobuf-net 和 Google.Protobuf。完整的功能矩阵、两种格式的逐项对照，以及对方强在哪里，在各个库的对比页里。
+
+## 速度 [#speed]
+
+用 BenchmarkDotNet 在同一次运行里测，每个库读写同样的数据，用的都是它的文档为速度推荐的 API（[测试方法](/zh/docs/v4/benchmarks#setup)）。
+
+<IfWorkloads>
+
+| Nino v4 对比 | 序列化 | 反序列化 |
+| --- | --- | --- |
+| MemoryPack | **快 <BenchValue k="workloads.memorypack.serialize" />** | **快 <BenchValue k="workloads.memorypack.deserialize" />** |
+| MessagePack | **快 <BenchValue k="workloads.messagepack.serialize" />** | **快 <BenchValue k="workloads.messagepack.deserialize" />** |
+| protobuf-net | **快 <BenchValue k="workloads.protobuf.serialize" />** | **快 <BenchValue k="workloads.protobuf.deserialize" />** |
+| Google.Protobuf | **快 <BenchValue k="workloads.googleprotobuf.serialize" />** | **快 <BenchValue k="workloads.googleprotobuf.deserialize" />** |
+| System.Text.Json | **快 <BenchValue k="workloads.json.serialize" />** | **快 <BenchValue k="workloads.json.deserialize" />** |
+
+范围取自 Nino 领先的那些[真实负载](/zh/docs/v4/benchmarks#workloads)：照着真实服务和游戏里的消息、缓存和存档造的数据。
+
+</IfWorkloads>
+
+<IfWorkloads not>
+
+| Nino v4 对比 | 序列化 | 反序列化 |
+| --- | --- | --- |
+| MemoryPack | **快 <BenchValue k="serialize.min" />–<BenchValue k="serialize.max" />** | **快 <BenchValue k="deserialize.min" />–<BenchValue k="deserialize.max" />** |
+| MessagePack | **快 <BenchValue k="messagepack.serialize" />** | **快 <BenchValue k="messagepack.deserialize" />** |
+| protobuf-net | **快 <BenchValue k="protobuf.serialize" />** | **快 <BenchValue k="protobuf.deserialize" />** |
+
+范围取自 Nino 领先的那些[基础](/zh/docs/v4/benchmarks#basic-types)和[多态](/zh/docs/v4/benchmarks#polymorphism)用例。
+
+</IfWorkloads>
+
+各个对比页按用例组拆开了这些数字，每个用例的耗时在 [.NET 基准测试](/zh/docs/v4/benchmarks#runtime)里。想测你自己的类型，[基准测试项目](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)会把所有库放在一起跑。
+
+## 怎么选 [#which-to-choose]
+
+| 你需要 | 选 | 原因 |
+| --- | --- | --- |
+| 数据来自网络对端、用户文件，或者其他你管不了的来源 | Nino | 默认模式就能读不可信数据，没有要记得打开的选项（[不可信数据](/zh/docs/v4/security)） |
+| 在 .NET 服务器、Unity 或 Godot 上要速度，还不想产生垃圾 | Nino | 见[速度](#speed)；[复用与对象池](/zh/docs/v4/pooling)直接读进你手上已有的对象 |
+| 类继承体系、共享引用，或者数据要跨版本演进 | Nino | 子类型不用标签，`trackReferences` 保留共享对象，键控和版本容错类型改了成员也能读（[数据演进](/zh/docs/v4/evolving-data)） |
+| .NET、Unity、TypeScript、Go 和 Rust 之间字节一致 | Nino | 跨平台、跨运行时字节一致；TypeScript、Go 和 Rust 的代码由 [nino-gen](/zh/docs/v4/advanced/codegen) 生成 |
+| Java、Python、C++ 等语言的程序要用自己的库读数据 | MessagePack 或 Protocol Buffers | 标准格式，许多语言都有库（[与 MessagePack 对比](/zh/docs/v4/vs-messagepack#where-messagepack-is-ahead)、[与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net#where-protobuf-net-is-ahead)） |
+| 用 `.proto` 契约，或者和 .NET 之外的对端走 gRPC | protobuf-net 或 Google.Protobuf | 契约就是 schema 文件（[与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net#where-protobuf-net-is-ahead)） |
+| 数据要给人看或手改 | System.Text.Json（或 YAML、TOML） | 文本格式；Nino 的字节离开你的类型就读不懂 |
+| 类型没法加特性，要按成员名写 | MessagePack（contractless）或 System.Text.Json | Nino 要求每个类型或其基类型上有 `[NinoType]` |
+| 读可信数据时要 `System.Type` 值，或者按调用传选项 | MemoryPack 或 MessagePack | Nino 两样都不做（[局限](#limitations)） |
+| 读 Nino v3 写的数据 | 先用 Nino v3 读，再转换 | v4 读不了（[转换 v3 数据](/zh/docs/v4/migration#converting-v3-data)） |
+
+## 局限 [#limitations]
+
+选 Nino v4 之前要知道的事，以及遇到时该怎么办：
+
+- **离不开源生成器。** Nino 依赖自己的源生成器（Roslyn 4.3 及以上），声明 `[NinoType]` 的项目需要 C# 9 及以上。
+- **不兼容 v3 数据。** v4 读不了 v3 以及 v4 测试版、预览版写出的数据。参见[从 v3 迁移](/zh/docs/v4/migration#converting-v3-data)。
+- **默认按位置存储。** 不带参数的 `[NinoType]` 最快，但成员一改，旧数据就读不了。要保存或跨版本交换的数据，请在写入之前选好 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`：参见[数据演进](/zh/docs/v4/evolving-data)。
+- **字节本身不带描述。** 数据里没有类型标记，也没有成员名：只有你的 C# 类型，或者 [nino-gen](/zh/docs/v4/advanced/codegen) 从这些类型生成的代码才读得懂。调试时想看看一条消息里有什么，可以用 [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect)，它按你程序集里的布局来解读。
+- **设置是进程级的。** 没有按调用传的选项：[`NinoSettings`](/zh/docs/v4/settings) 的成员对每次调用都生效，各项限制在第一次使用时就固定下来；每个类型怎么写，由它的特性决定。
+- **部分类型没有内置格式化器。** `System.Type` 故意不支持（让数据决定要创建哪个类型，正是反序列化攻击的手法）：自己存一个类型 ID 或名字，再映射到你允许的类型上。委托、非泛型集合，以及 Unity 的 `AnimationCurve`、`Gradient`、`RectOffset` 之外的引擎类也没有。参见[支持的类型](/zh/docs/v4/types#not-supported)；用[自定义格式化器](/zh/docs/v4/custom-formatters)可以支持其中任何一种。
+- **不自带压缩，一次流调用只读一个值。** 压缩请在输出外面套 `System.IO.Compression`（[压缩](/zh/docs/v4/advanced/streams#compression)）。`NinoDeserializer.Deserialize<T>(stream)` 会一直读到流结束，所以一个流上要传多条消息，得由你的代码按[帧](/zh/docs/v4/advanced/streams#frames)来写。
+- **生成的 TypeScript、Go 和 Rust 覆盖大多数类型，但不是全部。** 某种语言表达不了的类型，[Nino.Codegen](/zh/docs/v4/advanced/codegen#not-generated) 会连同包含它的类型一起跳过，并给出构建警告：所有语言都跳过槽位里没有任何地方点名的封闭泛型类型；TypeScript 还会跳过多维数组、`DateTimeOffset`、自定义格式化器等成员；Rust 跳过以浮点数为键的字典和 Set。各语言的完整清单：[TypeScript](/zh/docs/v4/advanced/typescript#not-supported)、[Go](/zh/docs/v4/advanced/go#not-supported)、[Rust](/zh/docs/v4/advanced/rust#not-supported)。浏览器客户端如果需要这些类型，可以把 C# 类型放进 [.NET WebAssembly 模块](/zh/docs/v4/advanced/browser#jsexport)里直接运行。
+
+v3 的哪些局限在 v4 里已经解决，见 [v4 新特性](/zh/docs/v4/whats-new#features)里的 v3 与 v4 对比表。
+
+### 平台说明 [#platform-notes]
+
+Nino 自己定义字节格式，而不是直接拷贝内存，所以数据可以在 CoreCLR、Mono、IL2CPP 之间，以及 64 位和 32 位平台之间通用。`Nullable<T>`、`ValueTuple`、`decimal`、`DateTimeOffset`、32 位对齐和填充字节怎么处理，参见[平台](/zh/docs/v4/platforms#portable-by-design)。字节序为小端；在大端主机上 Nino 直接抛异常，不会写出字节（目前 .NET 和 Unity 支持的平台都是小端）。
+
+## 换成 Nino [#switching]
+
+这里每个库写出的字节都和 Nino 不同，所以已经存下的数据要转换。进程之间的消息不用转换：两端一起升级就行。
+
+1. 在原来的库旁边装上 Nino，给类型加上 `[NinoType]`，转换期间旧特性先留着。每个对比页都有一张表，列出那个库的特性和调用在 Nino 里怎么写。
+2. 用旧库读出每个存下的值，再用 Nino 写回去。
+3. 给转换后的数据加上[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)，以后的版本就知道该用哪个读取器。
+4. 移除旧库。
+
+其他语言的程序要读的数据，继续用原来的格式；如果那些程序是 TypeScript、Go 或 Rust，也可以改用 [nino-gen](/zh/docs/v4/advanced/codegen) 生成的代码。
+
+| 从 | 特性、调用和示例 |
+| --- | --- |
+| MemoryPack | [从 MemoryPack 迁移](/zh/docs/v4/vs-memorypack#switching-from-memorypack) |
+| MessagePack | [从 MessagePack 迁移](/zh/docs/v4/vs-messagepack#switching-from-messagepack) |
+| protobuf-net | [从 protobuf-net 迁移](/zh/docs/v4/vs-protobuf-net#switching-from-protobuf-net) |
+| Nino v3 | [从 v3 迁移](/zh/docs/v4/migration) |
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="Nino 与 MemoryPack 对比" href="/zh/docs/v4/vs-memorypack">除 Nino 之外最快的 .NET 序列化库，逐项对比。</Card>
+  <Card title=".NET 基准测试" href="/zh/docs/v4/benchmarks">每个用例对比每个库，以及测量它们的代码。</Card>
+  <Card title="快速开始" href="/zh/docs/v4/start">安装 Nino，序列化你的第一个类型。</Card>
+</Cards>

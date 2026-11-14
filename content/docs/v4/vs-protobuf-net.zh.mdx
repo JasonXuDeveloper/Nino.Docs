@@ -1,11 +1,18 @@
 ---
 title: Nino 与 protobuf-net 对比
-seoTitle: "Nino 与 protobuf-net 对比：在 .NET 中选 Protocol Buffers 还是 Nino – Nino v4 文档"
-description: "Nino v4 与 protobuf-net 3.4.40 对比：Protocol Buffers 与 Nino 的格式、读取不可信数据、同一轮基准测试的结果、功能矩阵、如何选择，以及从 [ProtoContract] 迁移到 [NinoType]。"
+seoTitle: "Nino 与 protobuf-net 对比：.NET 里用 Protocol Buffers 还是 Nino – Nino v4 文档"
+description: "Nino v4 对比 protobuf-net 3.4.40：Protocol Buffers 与 Nino 的格式、各用例组的速度、读取不可信数据、功能矩阵、protobuf-net 强在哪里，以及从 [ProtoContract] 换到 [NinoType]。"
 icon: Swords
 ---
 
-[protobuf-net](https://github.com/protobuf-net/protobuf-net) 用它 README 的话说，是“一个基于契约的 .NET 序列化库，碰巧写出的是 protocol buffers 序列化格式”（"a contract based serializer for .NET code, that happens to write data in the protocol buffers serialization format"）：你给 C# 类型加上特性，它读写所有 protobuf 实现都认识的 [Protocol Buffers](https://protobuf.dev) 二进制格式。本页对比 Nino v4 和 protobuf-net **3.4.40**，也就是 Nino 基准测试所用的版本：protobuf-net 的功能以它的 README、[docs.protobuf-net.dev](https://docs.protobuf-net.dev/) 上的文档和发布说明为准，Nino 的功能以 Nino 源码为准；标注“实测”的行为，是用 3.4.40 写测试程序验证过的。无法核实的功能，一律不列出。
+<AnchorRedirect
+  map={{
+    'where-nino-is-ahead': '/zh/docs/v4/vs-protobuf-net#feature-matrix',
+    'when-to-choose-which': '/zh/docs/v4/compare#which-to-choose',
+  }}
+/>
+
+[protobuf-net](https://github.com/protobuf-net/protobuf-net) 用它 README 的话说，是“一个基于契约的 .NET 序列化库，碰巧写出的是 protocol buffers 序列化格式”（"a contract based serializer for .NET code, that happens to write data in the protocol buffers serialization format"）：你给 C# 类型加上特性，它读写所有 protobuf 实现都认识的 [Protocol Buffers](https://protobuf.dev) 二进制格式。本页对比 Nino v4 和 protobuf-net **3.4.40**，也就是 Nino 基准测试所用的版本：protobuf-net 的功能以它的 README、[docs.protobuf-net.dev](https://docs.protobuf-net.dev/) 上的文档和发布说明为准，Nino 的功能以 Nino 源码为准；标注“实测”的行为，是用 3.4.40 写测试程序验证过的。无法核实的功能，一律不列出。两者和 MemoryPack、MessagePack、System.Text.Json 比起来怎样，见[序列化库选型](/zh/docs/v4/compare)。
 
 ## 两种格式 [#formats]
 
@@ -18,7 +25,14 @@ Protocol Buffers 有自己的 schema 语言（`.proto`），许多语言都有�
 | 整数 | 按完整宽度写（`int` 占 4 字节） | 默认是 varint（小的值只占 1 字节）；`DataFormat.FixedSize` 按完整宽度写 |
 | null 与空 | null 集合、空集合和 null 元素都按原样读回 | 格式里没有 null：空集合读回来是 null，null 根对象读回来是成员全为默认值的对象（实测） |
 | schema | 你的 C# 类型 | 你的 C# 类型，或者由 `protogen` 转成 C# 的 `.proto` 文件 |
-| 其他语言的读取器 | Go、Rust 和 TypeScript，用从你的 C# 类型生成的代码读 | 任何 Protocol Buffers 实现，依据 `.proto` schema |
+
+## 性能 [#performance]
+
+用 BenchmarkDotNet 测量，与 Nino 在同一轮测试中运行，数据和类型都相同；protobuf-net 写入复用的 `MemoryStream`（它最快的写入方式），从 `ReadOnlySpan<byte>` 读取，用的是默认的运行时模型（[测试设置](/zh/docs/v4/benchmarks#messagepack-and-protobuf-net)）。<IfWorkloads>在 Nino 领先的[真实负载](/zh/docs/v4/benchmarks#workloads)上，序列化快 <BenchValue k="workloads.protobuf.serialize" />，反序列化快 <BenchValue k="workloads.protobuf.deserialize" />；Google 官方的运行时 Google.Protobuf 在这些负载上写出相同的消息，Nino 比它序列化快 <BenchValue k="workloads.googleprotobuf.serialize" />，反序列化快 <BenchValue k="workloads.googleprotobuf.deserialize" />。</IfWorkloads><IfWorkloads not>在 Nino 领先的类和多态类型上，序列化快 <BenchValue k="protobuf.serialize" />，反序列化快 <BenchValue k="protobuf.deserialize" />。</IfWorkloads>protobuf-net 无法用相同数据表达的用例（引用追踪、读入已有实例）不计在内。
+
+<LibrarySummary lib="protobuf" lang="zh" />
+
+载荷大小的差别来自格式本身：protobuf 把小整数写成 1 字节的 varint，类继承层次每一层嵌套一条消息；Nino 按完整宽度写整数，子类型在成员前面写一个类型 ID。
 
 ## 不可信输入 [#untrusted-input]
 
@@ -27,97 +41,68 @@ protobuf-net 没有专门读不可信数据的模式；它的文档讲了应该�
 Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 再加上那些每次读取都要多花时间的检查。
 
 <Matrix columns={['Nino v4', 'protobuf-net 3.4.40']} rows={[
+  { label: '不设任何选项就能安全读取不可信数据', cells: [['yes', <>每次读取都检查长度、深度、类型和哈希桶（<a href="/zh/docs/v4/security#guarantees">保证</a>）</>], 'partial: 没有专门的模式；按它的文档，输入大小要你自己限制'] },
   { label: '数据无法指定要创建的类型', cells: ['yes: 只接受声明类型已注册子类型的类型 ID', 'yes: 第 3 版没有实现动态类型'] },
+  { label: '内存与输入成比例', cells: ['yes: 元素个数先和剩余字节比；集合在读到元素之前最多预先分配剩余字节数的 16 倍', 'yes: 按它的文档，packed 整数最多约为载荷的 24 倍'] },
   { label: '嵌套深度上限', cells: [['yes', <><code>NinoSettings.MaxDepth</code>，512，途中还检查线程的栈</>], ['yes', <><code>TypeModel.MaxDepth</code>，512</>]] },
-  { label: '内存与输入成比例', cells: ['yes: 集合在读到元素之前最多预先分配剩余字节数的 16 倍', 'yes: 按它的文档，packed 整数最多约为载荷的 24 倍'] },
-  { label: '字典和集合的哈希洪泛', cells: [['yes', <>每个桶受 <code>MaxHashCollisions</code> 限制；<code>Untrusted</code> 下用带种子的哈希</>], 'n/a: 文档未说明'] },
-  { label: '无效数据只抛一种异常', cells: [['yes', <><code>NinoDataException</code></>], 'n/a: 文档未说明'] },
+  { label: '字典和集合的哈希洪泛', cells: [['yes', <>每个桶受 <code>MaxHashCollisions</code> 限制；<code>Untrusted</code> 下用带种子的哈希</>], 'n/a: 未见文档说明'] },
+  { label: '无效数据只抛一种异常', cells: [['yes', <><code>NinoDataException</code></>], 'n/a: 未见文档说明'] },
 ]} />
 
 无论用哪个库，应用都要自己负责的部分（值本身、消息大小、验证发送方），见[不可信数据](/zh/docs/v4/security#what-stays-your-job)。
-
-## 性能 [#performance]
-
-用 BenchmarkDotNet 测量，与 Nino 在同一轮测试中运行，数据和类型都相同。protobuf-net 写入复用的 `MemoryStream`（它最快的写入方式），从 `ReadOnlySpan<byte>` 读取，用的是默认的运行时模型，它在每个类型第一次使用时编译出序列化代码；测试设置见 [MessagePack 与 protobuf-net](/zh/docs/v4/benchmarks#messagepack-and-protobuf-net)。protobuf-net 无法用相同数据表达的用例（引用追踪、读入已有实例）没有对应的行。
-
-<LibraryTables lib="protobuf" lang="zh" />
-
-<IfWorkloads>Google 官方的运行时 Google.Protobuf 也测了这些负载，用的是从 `.proto` 文件生成的消息类型，写出的 protobuf 消息相同，耗时见[真实负载](/zh/docs/v4/benchmarks#workloads)。</IfWorkloads>
-
-载荷大小的差别来自格式本身：protobuf 把小整数写成 1 字节的 varint，类继承层次每一层嵌套一条消息；Nino 按完整宽度写整数，子类型在成员前面写一个类型 ID。包括 MemoryPack 在内的全部用例见 [.NET 基准测试](/zh/docs/v4/benchmarks#runtime)。
 
 ## 功能矩阵 [#feature-matrix]
 
 <Matrix columns={['Nino v4', 'protobuf-net 3.4.40']} rows={[
   { group: '平台' },
   { label: '最低 .NET 目标', cells: [['yes', <><code>netstandard2.0</code></>], ['yes', <><code>netstandard2.0</code>、.NET Framework 4.6.2+</>]] },
-  { label: 'Unity', cells: ['yes: 2022.3+，一个 OpenUPM 包', 'n/a: 文档未说明'] },
+  { label: 'Unity', cells: ['yes: 2022.3+，一个 OpenUPM 包', 'n/a: 未见文档说明'] },
   { label: 'IL2CPP / Native AOT', cells: ['yes: 源生成，序列化时无反射', ['partial', <>从 3.3 起有编译期模型，仍是预览版（<code>[Experimental]</code>，需要 C# 12）；默认模型在运行时生成 IL</>]] },
-  { label: '其他语言的读取器', cells: [['partial', <>Go、Rust 和 TypeScript，由 <a href="/zh/docs/v4/advanced/codegen">nino-gen</a> 生成</>], 'yes: 任何 Protocol Buffers 实现'] },
+  { label: '所有运行时和 CPU 上字节一致', cells: ['yes: CoreCLR、Mono 和 IL2CPP，64 位和 32 位都是同一种布局，填充清零', 'yes: 值按字段逐个写出'] },
+  { label: '其他语言的读取器', cells: [['partial', <>Go、Rust 和 TypeScript，由 <a href="/zh/docs/v4/advanced/codegen">nino-gen</a> 从你的 C# 类型生成</>], 'yes: 任何 Protocol Buffers 实现，依据 .proto schema'] },
   { group: '定义类型' },
-  { label: '不用给每个成员加特性', cells: ['yes: 不需要；按声明顺序写出公共成员', ['partial', <>每个成员加 <code>[ProtoMember(n)]</code></>]] },
+  { label: '不用给每个成员加特性', cells: ['yes: 按声明顺序写出公共成员', ['partial', <>每个成员加 <code>[ProtoMember(n)]</code></>]] },
+  { label: '不加特性的类型', cells: ['no: 每个类型或其基类型要有 [NinoType]', ['yes', <>在代码里用 <code>RuntimeTypeModel</code> 配置</>]] },
   { label: '私有成员', cells: [['yes', <><code>includeNonPublicMembers</code></>], 'yes: 实测'] },
-  { label: '不加特性也能配置', cells: ['no: 每个类型或其基类型要有 [NinoType]', ['yes', <><code>RuntimeTypeModel</code></>]] },
   { label: '从 schema 文件生成类型', cells: ['no: C# 类型就是 schema', ['yes', <><code>.proto</code> 文件和 <code>protogen</code></>]] },
   { group: '多态' },
-  { label: '抽象基类和非抽象基类', cells: ['yes', ['yes', <>每个子类型一个 <code>[ProtoInclude(n, typeof(T))]</code></>]] },
-  { label: '接口', cells: ['yes', 'partial: 支持；它的分析器建议改用抽象基类（PBN0023）'] },
+  { label: '抽象类和接口', cells: ['yes', 'partial: 支持接口；它的分析器建议改用抽象基类（PBN0023）'] },
+  { label: '非抽象基类', cells: ['yes', 'yes'] },
   { label: <>泛型基类型（<code>Box&lt;T&gt;</code>）</>, cells: ['yes: 自动支持任意类型实参', ['partial', <>每个封闭类型的子类型都要手动加到 <code>RuntimeTypeModel</code></>]] },
-  { label: '其他程序集、热更新 DLL 中的子类型', cells: ['yes: 自动发现，不需要编号', 'partial: 每个子类型都要列在它的基类型上'] },
+  { label: '不用在基类型上列出子类型', cells: ['yes: ID 是类型名的哈希', ['partial', <>每个子类型一个 <code>[ProtoInclude(n, typeof(T))]</code></>]] },
+  { label: '其他程序集、热更新 DLL 中的子类型', cells: ['yes: 自动发现，无需初始化调用', 'partial: 每个子类型都要列在它的基类型上'] },
   { group: '数据演进' },
   { label: '增加成员；旧代码读新数据', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>、<code>NinoFormat.Keyed</code></>], 'yes: 所有类型都可以；不认识的字段直接跳过（实测）'] },
-  { label: '删除、调整顺序或重命名成员', cells: [['yes', <><code>NinoFormat.Keyed</code>，用 <code>[NinoFormerName]</code> 重命名</>], 'yes: 字段号固定数据，名字不写进数据'] },
+  { label: '删除成员', cells: [['yes', <><code>NinoFormat.Keyed</code></>], 'yes: 字段号固定数据'] },
+  { label: '调整顺序或重命名成员', cells: [['yes', <><code>NinoFormat.Keyed</code>，用 <code>[NinoFormerName]</code> 重命名；按位置的类型随便改名</>], 'yes: 字段号固定数据，名字不写进数据'] },
   { label: '写代码时就报出破坏数据的改动', cells: [['yes', <>项目里放一份<a href="/zh/docs/v4/evolving-data#layout-baseline">布局基线</a>：NINO034–NINO037，带代码修复</>], 'n/a: 未见文档说明'] },
   { group: '对象图与分配' },
   { label: '共享引用和循环引用', cells: [['yes', <><code>trackReferences</code></>], 'no: 第 3 版没有实现；遇到循环会抛异常（实测）'] },
-  { label: '区分 null 集合与空集合', cells: ['yes', 'no: 空集合读回来是 null'] },
   { label: '读入已有实例', cells: ['yes: 填充已有的对象、列表和字典', ['partial', <><code>Serializer.Merge</code> 是合并：列表会被追加（实测）</>]] },
-  { label: '对象池', cells: [['yes', <><code>[NinoPooled]</code>、工厂、回收器</>], 'n/a: 文档未说明'] },
+  { label: '对象池', cells: [['yes', <><code>[NinoPooled]</code>、工厂、被丢弃实例的回收器</>], 'n/a: 未见文档说明'] },
   { group: 'I/O 与集成' },
   { label: <><code>IBufferWriter&lt;byte&gt;</code> 和 span</>, cells: ['yes', 'yes'] },
-  { label: <><code>Stream</code></>, cells: [['yes', <>内置，同步异步都有（<a href="/zh/docs/v4/advanced/streams#streams">流</a>）</>], 'yes: 它的主要 API'] },
+  { label: <><code>Stream</code> 与异步 I/O</>, cells: [['yes', <>内置（<a href="/zh/docs/v4/advanced/streams#streams">流</a>）；一个流上传多条消息用<a href="/zh/docs/v4/advanced/streams#frames">帧</a></>], ['yes', <>它的主要 API；多条消息用 <code>SerializeWithLengthPrefix</code></>]] },
   { label: '序列化回调', cells: [['yes', <><code>[NinoOnSerializing]</code>、<code>[NinoOnDeserialized]</code> 等四个特性，由生成的代码直接调用（<a href="/zh/docs/v4/defining-types#callbacks">回调</a>）</>], ['yes', <><code>[ProtoBeforeSerialization]</code>、<code>[ProtoAfterDeserialization]</code> 等</>]] },
-  { label: '无法加特性的类型', cells: [['yes', <><a href="/zh/docs/v4/custom-formatters">自定义格式化器</a></>], ['yes', <>代理类型（<code>SetSurrogate</code>）</>]] },
-  { label: '内置的 BCL 类型', cells: [['yes', <><code>BigInteger</code>、<code>Version</code>、<code>DateTimeOffset</code> 等<a href="/zh/docs/v4/types#other-built-in-types">更多类型</a></>], 'partial: 没有 BigInteger、Version、StringBuilder、BitArray、DateTimeOffset 等类型的序列化器'] },
+  { label: '自定义格式化器', cells: [['yes', <>结构体格式化器，可内联（<a href="/zh/docs/v4/custom-formatters">自定义格式化器</a>）</>], ['yes', <>代理类型（<code>SetSurrogate</code>）</>]] },
+  { label: '内置的 BCL 类型', cells: [['yes', <><code>BigInteger</code>、<code>Version</code>、<code>DateTimeOffset</code>、不可变集合、并发集合等<a href="/zh/docs/v4/types#other-built-in-types">更多类型</a></>], 'partial: 没有 BigInteger、Version、StringBuilder、BitArray、DateTimeOffset 等类型的序列化器'] },
   { label: 'gRPC', cells: ['n/a: 是序列化库，不是 RPC 框架', ['yes', <>protobuf-net.Grpc，代码优先</>]] },
-  { label: 'ASP.NET Core 请求体', cells: [['yes', <><a href="/zh/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>：MVC 格式化器和 Minimal API 请求体</>], 'n/a: 文档未说明'] },
+  { label: 'ASP.NET Core', cells: [['yes', <><a href="/zh/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>：MVC 格式化器和 Minimal API 请求体</>], 'n/a: 未见文档说明'] },
+  { group: '工具' },
+  { label: '不借助你的代码查看一条消息', cells: [['partial', <><a href="/zh/docs/v4/advanced/codegen#inspect"><code>nino-gen inspect</code></a> 按你程序集里的布局逐个成员解读</>], ['yes', <><a href="https://protobuf-net.dev/">protobuf-net.dev</a> 在浏览器里不借助 schema 解码原始载荷</>]] },
 ]} />
 
-## protobuf-net 的优势 [#where-protobuf-net-is-ahead]
+## protobuf-net 领先的地方 [#where-protobuf-net-is-ahead]
+
+下面这些 protobuf-net 能做，Nino v4 不做：
 
 - **Protocol Buffers。** 一种有 schema 语言、在许多语言中都有实现的标准格式：Java、Go、Python 或 C++ 写的服务可以依据共享的 `.proto` 文件读你的消息，protobuf-net 也可以用 `protogen` 从 `.proto` 生成 C#。Nino 的数据要通过你的 C# 类型读，或者通过从这些类型生成的 Go、Rust 和 TypeScript 代码读。
 - **gRPC。** protobuf-net.Grpc 可以用 C# 接口提供和调用 gRPC 服务，其他语言的 gRPC 对端也能与之通信。
-- **每个类型都能承受修改。** 字段号随数据一起写出，所以成员可以增加、删除、调整顺序和重命名，读取方会跳过不认识的字段。在 Nino 里这是按类型选择的（[`NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)）；默认的按位置格式在成员改变后就读不了旧数据。
+- **每个类型都能承受修改。** 字段号随数据一起写出，所以任何类型的成员都可以增加、删除、调整顺序和重命名。在 Nino 里这是按类型选的（[`NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members)）；默认的按位置格式在成员改变后就读不了旧数据。
 - **小整数更小。** varint 让小的数字只占 1 字节。
-- **查看字节的工具。** [protobuf-net.dev](https://protobuf-net.dev/) 可以在浏览器里不借助 schema 解码原始载荷。Nino 的 [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect) 也能解码，它不靠 schema，靠的是你程序集里的布局。
+- **不加特性也能配置**：在代码里用 `RuntimeTypeModel`。
 
-## Nino 的优势 [#where-nino-is-ahead]
-
-- **默认就能读不可信输入**，深度、内存和哈希洪泛都有写明的上限，只抛一种异常（[不可信输入](#untrusted-input)）。
-- **多态无需登记**：子类型自动继承 `[NinoType]`，不用在基类型上列出编号并保持不变，泛型基类型也一样；其他程序集和热更新 DLL 中的子类型，Nino 会自动找到。
-- **对象图**：用 [`trackReferences`](/zh/docs/v4/reference-tracking) 保留共享引用和循环引用。
-- **null 还是 null，空还是空**，集合和其中的元素都是如此。
-- **零分配复用**：[复用反序列化](/zh/docs/v4/pooling)直接替换已有对象、列表和字典的内容，新实例来自 `[NinoPooled]` 对象池。
-- **特性更少**：公共成员按声明顺序写出，不用给每个成员编号。
-- **AOT 不靠预览版**：编译期为每个 `[NinoType]` 生成格式化器，IL2CPP 和 Native AOT 都一样；Unity 只需 OpenUPM 上的一个包，HybridCLR 无需初始化调用。
-- **内置更多基础类库类型**：`BigInteger`、`Version`、`DateTimeOffset`、不可变集合、并发集合等都[已内置](/zh/docs/v4/types#other-built-in-types)。
-
-## 如何选择 [#when-to-choose-which]
-
-<Cards>
-  <Card title="适合选 Nino 的情况">
-    你的程序是 .NET、Unity 或 Godot，再加上通过生成代码使用的 TypeScript、Go 或 Rust；数据可能来自你无法控制的对端或文件；需要不用编号的多态、共享引用、区分 null 与空，或借助复用和对象池做到零 GC。
-  </Card>
-  <Card title="适合选 protobuf-net 的情况">
-    契约是一份与其他语言程序共享的 `.proto` 文件；要和 .NET 之外的对端调用或提供 gRPC 服务；或者每个类型都必须能承受修改，又不想为它选择格式。
-  </Card>
-</Cards>
-
-<Callout type="idea">
-
-两者都开源，在 .NET 里都不需要 schema 文件。拿不定主意时，就用你自己的类型测一测：[基准测试项目](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark)会把 Nino 和 protobuf-net 放在一起运行。
-
-</Callout>
+Nino 不做的事有什么替代做法，见[局限](/zh/docs/v4/compare#limitations)。什么场景选哪个：[怎么选](/zh/docs/v4/compare#which-to-choose)。
 
 ## 从 protobuf-net 迁移 [#switching-from-protobuf-net]
 
@@ -137,7 +122,7 @@ Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/do
 | `SerializeWithLengthPrefix`、`DeserializeItems` | 在流上读写[帧](/zh/docs/v4/advanced/streams#frames) |
 | `TypeModel.MaxDepth` | `NinoSettings.MaxDepth`（[限制](/zh/docs/v4/security#limits)） |
 
-两个库写出的字节不同，所以已经存下的数据需要转换。两个库可以装在同一个项目里：转换期间给类型同时保留两种特性，用 protobuf-net 读出每个存下的值，再用 Nino 写回，最后移除 protobuf-net。给转换后的数据加上[文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)，以后的版本就知道该用哪个读取器。进程之间的消息不需要转换：两端同时升级即可。其他语言的程序依据 `.proto` schema 读的消息继续用 Protocol Buffers；如果那些程序是 TypeScript、Go 或 Rust，也可以改用 [nino-gen](/zh/docs/v4/advanced/codegen) 生成的代码。
+两个库写出的字节不同，所以已经存下的数据需要转换；转换期间两个库可以装在同一个项目里（步骤见[换成 Nino](/zh/docs/v4/compare#switching)）。类型上同时保留两种特性，用 protobuf-net 读出每个存下的值，再用 Nino 写回：
 
 ```csharp title="Messages.cs"
 using Nino.Core;
@@ -178,16 +163,7 @@ Message back = NinoDeserializer.Deserialize<Message>(bytes); // 一个 Chat
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="Nino 与 MessagePack 对比" href="/zh/docs/v4/vs-messagepack">
-    同样的对比，对象换成 MessagePack for C#。
-  </Card>
-  <Card title=".NET 基准测试" href="/zh/docs/v4/benchmarks">
-    全部用例，包括 MemoryPack、MessagePack 和 protobuf-net，以及测量它们的代码。
-  </Card>
-  <Card title="在其他语言中使用" href="/zh/docs/v4/advanced/codegen">
-    用从你的类型生成的代码，在 .NET 之外与 Nino 互通。
-  </Card>
-  <Card title="不可信数据" href="/zh/docs/v4/security">
-    每次读取检查什么、各项限制和不可信模式。
-  </Card>
+  <Card title=".NET 基准测试" href="/zh/docs/v4/benchmarks">每个用例对比 protobuf-net 和其他库，以及测量它们的代码。</Card>
+  <Card title="序列化库选型" href="/zh/docs/v4/compare">再把 MemoryPack、MessagePack 和 System.Text.Json 放进来比，还有 Nino 的局限和迁移步骤。</Card>
+  <Card title="在其他语言中使用" href="/zh/docs/v4/advanced/codegen">用从你的类型生成的代码，在 .NET 之外与 Nino 互通。</Card>
 </Cards>
