@@ -9,6 +9,20 @@ What changed from one v4 release to the next, newest first. For everything v4 ch
 
 <Release>
 
+## 4.0.0-rc.11
+
+### New [#new-9]
+
+- **`NinoNullable<T>`**: a nullable value for collections written often. Nino writes it exactly as `T?` (either reads the other's data), but its memory has no padding and no stale bytes, so an array or `List<>` of it whose `T` is a primitive, an enum, `DateTime` or `TimeSpan` is written and read as one block copy, where `T?[]` clears each element on the way. It converts implicitly from `T` and `T?` and to `T?`. See [Nullable Values in Hot Collections](/en/docs/v4/performance#nino-nullable) ([#275](https://github.com/JasonXuDeveloper/Nino/issues/275)).
+
+### Performance [#performance-6]
+
+- **Nullable values**: a `T?` of an unmanaged `T` (`int?`, `long?`, `DateTime?`, a raw struct) is read and written in one reservation without splitting the value, a body with nullable raw members keeps its writer in registers, and a null top-level class is read and written without a reader or writer. On GitHub's runners (AMD EPYC 7763 and 9V74, Intel Xeon 8370C, Neoverse-N2) a class of eight nullable members serializes 1.7-3.3× faster than in rc.10 and deserializes 1.04-1.25× faster, 100 of them deserialize 1.13-1.30× faster, a `SimpleStruct?` serializes 1.14-4.3× faster and a null class reference 1.3-1.7× faster ([#275](https://github.com/JasonXuDeveloper/Nino/issues/275)).
+
+</Release>
+
+<Release>
+
 ## 4.0.0-rc.10
 
 ### New [#new-8]

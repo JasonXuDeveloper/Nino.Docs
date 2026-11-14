@@ -114,6 +114,34 @@ public partial struct PackedSample // 12 字节，没有填充
 
 </Callout>
 
+### 高频集合里的可空值 [#nino-nullable]
+
+非托管值的 `T?[]` 或 `List<T?>` 按固定步长写出，但 `Nullable<T>` 的填充字节和空值的值字节都是内存里原来的内容，Nino 写的时候得逐个元素清零。如果这类集合写得很频繁，可以改用 `NinoNullable<T>` 声明：它写出的字节和 `T?` 完全一样（两边能互相读对方的数据，发布的布局也相同），而它的内存里没有填充、也没有残留字节，所以只要 `T` 的大小等于它的对齐（`long`、`int`、`double`、枚举、`DateTime`、`TimeSpan`），整个数组或列表就是**一次块拷贝**。其他的 `T`（`decimal`、`Guid`、原始结构体）和 `T?` 一样逐个元素转换。
+
+```csharp title="Readings.cs"
+using System.Collections.Generic;
+using Nino.Core;
+
+[NinoType]
+public partial class Readings
+{
+    public NinoNullable<long>[] Totals;     // 字节与 long?[] 相同 // [!code highlight]
+    public List<NinoNullable<int>> Counts;  // 字节与 List<int?> 相同
+}
+
+public static class ReadingsExample
+{
+    public static void Fill(Readings readings)
+    {
+        readings.Totals = new NinoNullable<long>[] { 12, default, 7 }; // default 表示没有值
+        long? first = readings.Totals[0];                             // 可以双向转换
+        long total = readings.Totals[0].GetValueOrDefault();
+    }
+}
+```
+
+它有 `HasValue`、`Value`、`GetValueOrDefault` 和 `ToNullable()`，可以从 `T`、`T?` 隐式转换过来，也能隐式转成 `T?`。它占 `T` 的两倍大小，而 `T?` 占 `T` 的大小加上它的对齐：8 字节的基元类型两者一样，`decimal`、`Guid` 会更大。单个 `T?` 成员本来就够快，它适合用在集合上。和 `T?` 一样，它的存在标志字节在任何模式下都会检查。[基准测试](/zh/docs/v4/benchmarks#nullable-values)把它和 `T?`、MemoryPack 的 `SafeNullable<T>` 放在一起对比。
+
 ## 固定大小的类型 [#fixed-size-types]
 
 有些类型不管值是什么，写出的字节数都一样。对这类类型，`NinoSerializer.Serialize(value)` 按最终大小分配 `byte[]`，把值直接写进去：不用暂存缓冲区，不用 writer，没有扩容检查，最后也不用拷贝。字节和通用路径一样。

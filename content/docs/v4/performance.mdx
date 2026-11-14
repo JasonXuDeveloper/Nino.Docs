@@ -114,6 +114,34 @@ The raw layout is the canonical 64-bit layout. Where a runtime lays a struct out
 
 </Callout>
 
+### Nullable Values in Hot Collections [#nino-nullable]
+
+A `T?[]` or `List<T?>` of unmanaged values is written at a fixed stride, but Nino has to clear each element's padding and the bytes of every absent value on the way, since `Nullable<T>` leaves them as memory held them. When such a collection is written often, declare it with `NinoNullable<T>` instead: Nino writes exactly the bytes of `T?` (either reads the other's data, and the published layout is the same), and its memory has no padding and no stale bytes, so an array or list of it is **one block copy** wherever `T` is as large as its alignment (`long`, `int`, `double`, enums, `DateTime`, `TimeSpan`). Other `T` (`decimal`, `Guid`, a raw struct) are converted element by element, as `T?` is.
+
+```csharp title="Readings.cs"
+using System.Collections.Generic;
+using Nino.Core;
+
+[NinoType]
+public partial class Readings
+{
+    public NinoNullable<long>[] Totals;     // same bytes as long?[] // [!code highlight]
+    public List<NinoNullable<int>> Counts;  // same bytes as List<int?>
+}
+
+public static class ReadingsExample
+{
+    public static void Fill(Readings readings)
+    {
+        readings.Totals = new NinoNullable<long>[] { 12, default, 7 }; // default: no value
+        long? first = readings.Totals[0];                             // converts both ways
+        long total = readings.Totals[0].GetValueOrDefault();
+    }
+}
+```
+
+It has `HasValue`, `Value`, `GetValueOrDefault` and `ToNullable()`, and converts implicitly from `T` and `T?` and to `T?`. It takes twice `T`'s size, where `T?` takes `T`'s size plus its alignment: the same for 8-byte primitives, more for `decimal` or `Guid`. A single `T?` member is already as fast; use it for collections. Its presence byte is checked in every mode, as `T?`'s is. The [benchmarks](/en/docs/v4/benchmarks#nullable-values) time it beside `T?` and MemoryPack's `SafeNullable<T>`.
+
 ## Fixed-Size Types [#fixed-size-types]
 
 Some types take the same number of bytes whatever their values. For those, `NinoSerializer.Serialize(value)` allocates the `byte[]` at its final size and writes the value straight into it: no scratch buffer, no writer, no growth checks and no final copy. The bytes are the same as on the general path.

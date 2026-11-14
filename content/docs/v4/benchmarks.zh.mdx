@@ -141,6 +141,8 @@ MessagePack 3（MessagePack-CSharp）和 protobuf-net 3 用同样的类型，读
 
 可空的成员和元素（[`NullableTest`](#nullabletest) 和 `CollectionsTest` 里的可空集合）：一个有 8 个可空成员、一半为 null 的类，单个和 100 个的数组；一个 `SimpleStruct?` 和 `SimpleStruct?[100]`；一个为 null 的 `SimpleClass` 引用，和每 5 个有 1 个 null 的 `SimpleClass[100]`；以及 `long?[1000]`、`List<int?>` 和 `decimal?[1000]`，每 5 个值有 1 个 null。各库都按自己用户的惯用写法来写。MessagePack 和 System.Text.Json 原生就能写 null。MemoryPack 用 `SafeNullable<T>`：它直接写 `Nullable<T>` 时会把值的内存原样拷出去，填充字节没有初始化，同一个值可能写出不同的字节；`SafeNullable<T>` 没有填充，和 Nino 的字节一样确定。protobuf 的 repeated 字段里没有 null，顶层也没有 null，所以 protobuf-net 给每个元素套一层带可选值的消息（`[NullWrappedValue]`），单个可空值写成只有一个可选字段的消息（为 null 时是空消息），Google.Protobuf 读写同样的消息；可空结构体在 repeated 字段里 protobuf-net 套不了包装，`SimpleStruct?[100]` 就写成这种单字段消息的数组，字节完全一样。可空字段则用 `google.protobuf` 的包装类型（`Int32Value` 等）、`Timestamp`，`Guid` 和 `decimal` 写成字符串。
 
+可空结构体和可空集合还按用户可能选的其他写法各测了一组，单独成柱：**Nino (NinoNullable)** 是模型里用 [`NinoNullable<T>`](/zh/docs/v4/performance#nino-nullable) 代替 `T?`（字节相同）；**MemoryPack (converted)** 是在计时内把模型的 `T?` 转成 `SafeNullable<T>`、读完再转回来，也就是模型本来用 `T?` 时 MemoryPack 安全写法的真实成本；**MemoryPack (T?, unsafe)** 是直接把 `T?` 交给 MemoryPack，快，但字节里带着未初始化的填充。普通的 MemoryPack 柱子写的是事先转好的 `SafeNullable<T>`。Nino 的 `T?` 始终是安全的。
+
 <BenchGroup group="nullable" lang="zh" />
 
 ### 集合与常用类型 [#common-types-and-collections]

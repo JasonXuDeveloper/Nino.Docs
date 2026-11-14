@@ -9,6 +9,20 @@ icon: RotateCcwClock
 
 <Release lang="zh">
 
+## 4.0.0-rc.11
+
+### 新功能 [#new-9]
+
+- **`NinoNullable<T>`**：给高频写入的集合用的可空值。Nino 写出的字节和 `T?` 完全一样（两边能互相读对方的数据），但它的内存里没有填充、也没有残留字节，所以 `T` 是基元类型、枚举、`DateTime` 或 `TimeSpan` 时，它的数组和 `List<>` 整块拷贝读写，而 `T?[]` 要边拷边逐个元素清零。它能从 `T`、`T?` 隐式转换过来，也能隐式转成 `T?`。见[高频集合里的可空值](/zh/docs/v4/performance#nino-nullable)（[#275](https://github.com/JasonXuDeveloper/Nino/issues/275)）。
+
+### 性能 [#performance-6]
+
+- **可空值**：非托管 `T` 的 `T?`（`int?`、`long?`、`DateTime?`、原始结构体）一次预留就完成读写，不再把值拆开；带可空原始成员的类型体把写入器留在寄存器里；顶层为 null 的类读写时不再创建读取器和写入器。在 GitHub 的 runner 上（AMD EPYC 7763 和 9V74、Intel Xeon 8370C、Neoverse-N2），有 8 个可空成员的类序列化比 rc.10 快 1.7-3.3 倍，反序列化快 1.04-1.25 倍，100 个这样的对象反序列化快 1.13-1.30 倍，`SimpleStruct?` 序列化快 1.14-4.3 倍，null 类引用快 1.3-1.7 倍（[#275](https://github.com/JasonXuDeveloper/Nino/issues/275)）。
+
+</Release>
+
+<Release lang="zh">
+
 ## 4.0.0-rc.10
 
 ### 新功能 [#new-8]
