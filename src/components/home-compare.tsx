@@ -3,12 +3,11 @@ import { Link } from 'react-router';
 import { useReveal } from '@/components/showcase';
 import {
   type BuildMeasure,
-  bestReuse,
   buildLarge,
   buildRow,
   buildSmall,
   formatBuildRatio,
-  formatBytes,
+  formatRange,
   formatRatio,
   hasWorkloads,
   otherLibs,
@@ -22,22 +21,19 @@ import type { Locale } from '@/lib/i18n';
 /*
  * The home page's numbers, in two layers:
  *
- * 1. One monumental figure: Nino's biggest serialize win over MemoryPack
- *    (among the workloads once the report has them, as every headline),
- *    beside the two measured times on a shared axis. Static: the number is
- *    the first thing read, so it never counts up from 0.
- * 2. Three panels on one grid (vs MemoryPack, vs MessagePack and
- *    protobuf-net, vs Nino v3) whose rows line up across the panels (CSS
- *    subgrid on wide screens).
+ * 1. One monumental figure: the range of Nino's serialize win over every
+ *    other library in the case where it beats MemoryPack by the most (among
+ *    the workloads once the report has them, as every headline), beside the
+ *    measured times on a shared axis. Static: never counts up from 0.
+ * 2. Three panels on one grid (serialize and deserialize against every
+ *    library, each row a case with the range of multiples; vs Nino v3) whose
+ *    rows line up across the panels (CSS subgrid on wide screens).
  *
  * Every value comes from src/lib/benchmarks.ts: runtime ratios from the raw
  * means through formatRatio (times()), build ratios as published. Bars
  * are drawn to scale and grow in once when scrolled into view (not with
  * reduced motion); the prerendered HTML already has their final widths.
  */
-
-const find = (op: 'serialize' | 'deserialize', name: string) =>
-  runtime[op].find((r) => r.name === name);
 
 /** The headline's cases: the workloads once the report has them */
 const headlineCases = hasWorkloads ? x64.workloads : runtime;
@@ -49,13 +45,7 @@ const best = (op: 'serialize' | 'deserialize') =>
     undefined,
   );
 
-/** The case the panels time every library on: the first workload (the standard MediaContent), or SimpleClass */
-const simple = hasWorkloads
-  ? x64.workloads.serialize[0]
-  : find('serialize', 'SimpleClass');
 const polySer = best('serialize');
-const polyDes = best('deserialize');
-const leaves = bestReuse;
 const count = (n: number) => n.toLocaleString('en-US');
 
 /** Case name inside a sentence: "polymorphic class array", "SimpleClass", "多态类数组" */
@@ -172,22 +162,6 @@ const otherTimes = (row: RuntimeCase): Measured[] =>
     return v ? [{ label: lib.label, value: v.time.ns, text: v.time.text }] : [];
   });
 
-/** A caption over a pair of bars when a row has two measures (time, allocated) */
-function Measure({
-  caption,
-  children,
-}: {
-  caption: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-xs text-fd-muted-foreground">{caption}</span>
-      {children}
-    </div>
-  );
-}
-
 interface Row {
   label: string;
   note?: string;
@@ -264,131 +238,88 @@ function Panel({
 /* Rows                                                                */
 /* ------------------------------------------------------------------ */
 
-function memorypackRows(zh: boolean): Row[] {
-  const faster = zh ? '更快' : 'faster';
-  const rows: Row[] = [];
-  const timed = (row: RuntimeCase | undefined, verb: string) => {
-    if (!row?.ratio) return;
-    rows.push({
-      label: action(verb, row, zh),
-      ratio: formatRatio(row.ratio),
-      unit: faster,
-      body: (
-        <Pair
-          a={{ label: 'Nino v4', value: row.v4.ns, text: row.v4.text }}
-          b={{
-            label: 'MemoryPack',
-            value: row.memorypack.ns,
-            text: row.memorypack.text,
-          }}
-        />
-      ),
-    });
-  };
-  timed(simple !== polySer ? simple : undefined, zh ? '序列化' : 'Serialize');
-  timed(polyDes, zh ? '反序列化' : 'Deserialize');
-  if (leaves)
-    rows.push({
-      label: zh ? '反序列化到池化对象' : 'Deserialize into pooled objects',
-      note: zh ? '对比 MemoryPack 覆盖写入' : "vs MemoryPack's overwrite mode",
-      ratio: formatRatio(leaves.memorypackOverwrite.ns / leaves.ninoReuse.ns),
-      unit: faster,
-      body: (
-        <div className="flex flex-col gap-4">
-          <Measure caption={zh ? '耗时' : 'Time'}>
-            <Pair
-              a={{
-                label: 'Nino v4',
-                value: leaves.ninoReuse.ns,
-                text: leaves.ninoReuse.text,
-              }}
-              b={{
-                label: 'MemoryPack',
-                value: leaves.memorypackOverwrite.ns,
-                text: leaves.memorypackOverwrite.text,
-              }}
-            />
-          </Measure>
-          {leaves.ninoReuseBytes !== null &&
-            leaves.memorypackOverwriteBytes !== null && (
-              <Measure caption={zh ? '分配' : 'Allocated'}>
-                <Pair
-                  a={{
-                    label: 'Nino v4',
-                    value: leaves.ninoReuseBytes,
-                    text: formatBytes(leaves.ninoReuseBytes),
-                  }}
-                  b={{
-                    label: 'MemoryPack',
-                    value: leaves.memorypackOverwriteBytes,
-                    text: formatBytes(leaves.memorypackOverwriteBytes),
-                  }}
-                />
-              </Measure>
-            )}
-        </div>
-      ),
-    });
-  return rows;
+/** Every library a case timed besides Nino: MemoryPack, then the others in otherLibs' order */
+interface Opponent {
+  label: string;
+  ns: number;
+  text: string;
+  /** Its time / Nino's; undefined = on par (or Nino under the floor) */
+  ratio?: number;
 }
 
-/** Serialize SimpleClass against each library, then deserialize against both */
-/** The panels' polymorphic case: the RPC call whose result is an interface (workloads only) */
-const polymorphic = hasWorkloads
-  ? x64.workloads.serialize.find((r) => r.name.startsWith('RPC call'))
-  : undefined;
-
-/** The panels' deserialize case: the first workload's, or SimpleClass */
-const simpleDes = hasWorkloads
-  ? x64.workloads.deserialize[0]
-  : find('deserialize', 'SimpleClass');
-
-/**
- * One row per operation of the panels' case: Nino against every other library
- * the report timed on it; the multiple is the one against the fastest of them
- * (the closest race), whose name the note gives.
- */
-function otherRows(zh: boolean): Row[] {
-  const rows: Row[] = [];
-  const faster = zh ? '更快' : 'faster';
-  for (const [row, verb] of [
-    [simple, zh ? '序列化' : 'Serialize'],
-    [simpleDes, zh ? '反序列化' : 'Deserialize'],
-    // A polymorphic workload too: the others need a workaround for an interface result
-    [polymorphic, zh ? '序列化' : 'Serialize'],
-  ] as const) {
-    if (!row) continue;
-    const timed = otherLibs.flatMap((lib) => {
-      const v = row.others[lib.key];
-      return v?.ratio ? [{ lib, v, ratio: v.ratio }] : [];
-    });
-    if (timed.length === 0) continue;
-    const closest = timed.reduce((a, b) => (b.ratio < a.ratio ? b : a));
-    rows.push({
-      label: action(verb, row, zh),
-      note: zh
-        ? `对比其中最快的 ${closest.lib.label} ${closest.lib.version}`
-        : `vs the fastest of them, ${closest.lib.label} ${closest.lib.version}`,
-      ratio: formatRatio(closest.ratio),
-      unit: faster,
-      body: (
-        <Pair
-          a={{ label: 'Nino v4', value: row.v4.ns, text: row.v4.text }}
-          b={{
-            label: timed[0].lib.label,
-            value: timed[0].v.time.ns,
-            text: timed[0].v.time.text,
-          }}
-          more={timed.slice(1).map(({ lib, v }) => ({
-            label: lib.label,
-            value: v.time.ns,
-            text: v.time.text,
-          }))}
-        />
-      ),
-    });
+function opponents(row: RuntimeCase): Opponent[] {
+  const out: Opponent[] = [
+    {
+      label: 'MemoryPack',
+      ns: row.memorypack.ns,
+      text: row.memorypack.text,
+      ratio: row.ratio,
+    },
+  ];
+  for (const lib of otherLibs) {
+    const v = row.others[lib.key];
+    if (v)
+      out.push({
+        label: lib.label,
+        ns: v.time.ns,
+        text: v.time.text,
+        ratio: v.ratio,
+      });
   }
-  return rows;
+  return out;
+}
+
+/** "1.5–5.4×" across the opponents, "on par–5.4×" when one keeps up; undefined when none is behind */
+function range(row: RuntimeCase, zh: boolean): string | undefined {
+  const ratios = opponents(row).map((o) => o.ratio ?? 1);
+  const max = Math.max(...ratios);
+  if (max <= 1) return undefined;
+  const min = Math.min(...ratios);
+  if (min > 1 && formatRatio(min) !== '1.0×') return formatRange(min, max);
+  return `${zh ? '持平' : 'on par'}–${formatRatio(max)}`;
+}
+
+/** Nino's bar over every opponent's */
+function AllBars({ row }: { row: RuntimeCase }) {
+  const [first, ...rest] = opponents(row).map((o) => ({
+    label: o.label,
+    value: o.ns,
+    text: o.text,
+  }));
+  return (
+    <Pair
+      a={{ label: 'Nino v4', value: row.v4.ns, text: row.v4.text }}
+      b={first}
+      more={rest}
+    />
+  );
+}
+
+/** The panels' cases: three workloads per operation (standard, polymorphic, a larger one), or the first three cases */
+const panelKeys = {
+  serialize: ['MediaContent', 'RpcCall', 'EventStream'],
+  deserialize: ['MediaContent', 'RpcCall', 'IdleSave'],
+};
+
+function libraryRows(op: 'serialize' | 'deserialize', zh: boolean): Row[] {
+  const cases = hasWorkloads
+    ? panelKeys[op].flatMap((key) => {
+        const row = x64.workloads[op].find((r) => r.key === key);
+        return row ? [row] : [];
+      })
+    : runtime[op].slice(0, 3);
+  return cases.flatMap((row) => {
+    const ratio = range(row, zh);
+    if (!ratio) return [];
+    return [
+      {
+        label: caseName(row, zh),
+        ratio,
+        unit: zh ? '更快' : 'faster',
+        body: <AllBars row={row} />,
+      },
+    ];
+  });
 }
 
 function Before({ v3, v4, big }: { v3: string; v4: string; big?: boolean }) {
@@ -462,6 +393,8 @@ function v3Rows(zh: boolean): Row[] {
 export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
   const zh = lang === 'zh';
   const [ref, shown] = useReveal<HTMLDivElement>();
+  // The headline's range: its case against every other library
+  const heroRange = polySer ? range(polySer, zh) : undefined;
 
   return (
     <div
@@ -469,16 +402,16 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
       className="nino-chart flex flex-col gap-10"
       data-hidden={shown ? undefined : ''}
     >
-      {polySer?.ratio && (
+      {polySer && heroRange && (
         <div className="grid items-end gap-x-14 gap-y-5 lg:grid-cols-[auto_minmax(0,1fr)]">
           <div>
             <p className="text-sm text-fd-muted-foreground">
               {zh
-                ? '序列化速度，对比 MemoryPack'
-                : 'Serialize speed, vs MemoryPack'}
+                ? `序列化速度，对比其他 ${opponents(polySer).length} 个序列化库`
+                : `Serialize speed, vs the other ${opponents(polySer).length} serializers`}
             </p>
-            <span className="mt-2 block bg-linear-to-r/oklab from-nino-grad-from to-nino-grad-to bg-clip-text pb-2 text-[5.5rem] leading-none font-extrabold tracking-tighter text-transparent tabular-nums sm:text-9xl">
-              {formatRatio(polySer.ratio)}
+            <span className="mt-2 block bg-linear-to-r/oklab from-nino-grad-from to-nino-grad-to bg-clip-text pb-2 text-6xl leading-none font-extrabold tracking-tighter whitespace-nowrap text-transparent tabular-nums sm:text-8xl">
+              {heroRange}
             </span>
           </div>
           <div className="flex flex-col gap-4 lg:pb-4">
@@ -516,19 +449,17 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
 
       <div className="grid gap-6 lg:grid-cols-2 lg:gap-x-8">
         <Panel
-          title={zh ? '对比 MemoryPack' : 'vs MemoryPack'}
-          rows={memorypackRows(zh)}
+          title={zh ? '序列化，对比各个库' : 'Serialize, vs every library'}
+          rows={libraryRows('serialize', zh)}
           link={zh ? '全部基准测试' : 'All benchmarks'}
-          href={`${docs}/benchmarks`}
+          href={`${docs}/benchmarks#${hasWorkloads ? 'workloads' : 'basic-types'}`}
         />
-        {otherRows(zh).length > 0 && (
-          <Panel
-            title={zh ? '对比其他序列化库' : 'vs other serializers'}
-            rows={otherRows(zh)}
-            link={zh ? '各库的全部数据' : 'Every library, every case'}
-            href={`${docs}/benchmarks#${hasWorkloads ? 'workloads' : 'basic-types'}`}
-          />
-        )}
+        <Panel
+          title={zh ? '反序列化，对比各个库' : 'Deserialize, vs every library'}
+          rows={libraryRows('deserialize', zh)}
+          link={zh ? '各库怎么处理难点' : 'How each library copes'}
+          href={`${docs}/benchmarks#${hasWorkloads ? 'workarounds' : 'basic-types'}`}
+        />
         <Panel
           wide
           title={zh ? '对比 Nino v3' : 'vs Nino v3'}
