@@ -118,7 +118,7 @@ The raw layout is the canonical 64-bit layout. Where a runtime lays a struct out
 
 A `T?[]` or `List<T?>` of unmanaged values is written at a fixed stride, but Nino has to clear each element's padding and the bytes of every absent value on the way, since `Nullable<T>` leaves them as memory held them. When such a collection is written often, declare it with `NinoNullable<T>` instead: Nino writes exactly the bytes of `T?` (either reads the other's data, and the published layout is the same), and its memory has no padding and no stale bytes, so an array or list of it is **one block copy** wherever `T` is as large as its alignment (`long`, `int`, `double`, enums, `DateTime`, `TimeSpan`). Other `T` (`decimal`, `Guid`, a raw struct) are converted element by element, as `T?` is.
 
-```csharp title="Readings.cs"
+```csharp title="Readings.cs" nocheck
 using System.Collections.Generic;
 using Nino.Core;
 

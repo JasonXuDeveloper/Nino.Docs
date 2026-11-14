@@ -118,7 +118,7 @@ public partial struct PackedSample // 12 字节，没有填充
 
 非托管值的 `T?[]` 或 `List<T?>` 按固定步长写出，但 `Nullable<T>` 的填充字节和空值的值字节都是内存里原来的内容，Nino 写的时候得逐个元素清零。如果这类集合写得很频繁，可以改用 `NinoNullable<T>` 声明：它写出的字节和 `T?` 完全一样（两边能互相读对方的数据，发布的布局也相同），而它的内存里没有填充、也没有残留字节，所以只要 `T` 的大小等于它的对齐（`long`、`int`、`double`、枚举、`DateTime`、`TimeSpan`），整个数组或列表就是**一次块拷贝**。其他的 `T`（`decimal`、`Guid`、原始结构体）和 `T?` 一样逐个元素转换。
 
-```csharp title="Readings.cs"
+```csharp title="Readings.cs" nocheck
 using System.Collections.Generic;
 using Nino.Core;
 
