@@ -661,7 +661,7 @@ function ninoDir(): string {
       ? process.argv[arg + 1]
       : (process.env.NINO_DIR ?? join(root, '../Nino'));
   const resolved = resolve(dir);
-  if (!existsSync(join(resolved, 'build/UseNinoGenerator.props'))) {
+  if (!existsSync(join(resolved, 'tools/UseNinoGenerator.props'))) {
     console.error(
       `No Nino checkout at ${resolved}: pass --nino <dir> or set NINO_DIR.`,
     );
