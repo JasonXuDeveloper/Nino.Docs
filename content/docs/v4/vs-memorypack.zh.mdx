@@ -42,7 +42,7 @@ icon: Swords
 拷贝填充，代价不只是体积：
 
 - **填充是内存里原来的东西。** 相等的值可能序列化成不同的字节，残留的内存也跟着写出去。用 MemoryPack 1.22.0 测：两个值相等的 `InventoryItem[2]`，其中一个在原先装满 `0xCD` 的缓冲区里构造，序列化出来的字节就不一样，每个填充字节都是 `CD`；同样构造的 `List<(int, long)>`，每个元素后面都跟着 `CDCDCDCD`。Nino 给两者写的字节一样，填充为零。
-- **可空值也一样。** MemoryPack 把 `T?` 也按内存原样写出（标志位、填充、值），一个 `int?` 就会带上 3 个字节的内存残留。1.22.0 为此加了 `SafeNullable<T>`，要你用它替换 `T?`；它没有填充，但只有 `T` 是基元类型或枚举时，字节才和 `T?` 兼容。Nino 不需要这种类型：`T?` 成员写成一个存在字节加值；raw 值的 `T?[]` 和 `List<T?>`（[固定步长](/zh/docs/v4/wire-format#collections)），以及 raw 结构体里的 `Nullable` 字段，填充写 0，没有值时值的部分也写 0。
+- **可空值也一样。** MemoryPack 把 `T?` 也按内存原样写出（标志位、填充、值），一个 `int?` 就会带上 3 个字节的内存残留。1.22.0 为此加了 `SafeNullable<T>`，要你用它替换 `T?`；它没有填充，但只有 `T` 是基元类型或枚举时，字节才和 `T?` 兼容。Nino 不需要这种类型：`T?` 成员写成一个存在字节加值；raw 值的 `T?[]` 和 `List<T?>`（[固定步长](/zh/docs/v4/wire-format#collections)），以及 raw 结构体里的 `Nullable` 字段，填充写 0，没有值时值的部分也写 0。每种的字节见[可空值](/zh/docs/v4/nullable-values)，那里还有给读写频繁的数组和列表用的 `NinoNullable<T>`。
 - **布局跟着平台走。** `(int, long)` 在 Windows 的 32 位 x86 .NET 上占 12 字节内存，在 x64 和 Arm32 上占 16 字节（.NET 10 在各目标上的布局，从 crossgen2 为它编译出的代码里读出），所以照搬内存的话，到了那里大小就变了。Mono 上元素的顺序也不一样：见[基准测试中发现的 MemoryPack 问题](#memorypack-bugs-found-while-benchmarking)。
 
 Nino 跨平台、跨运行时字节一致：[原始值](/zh/docs/v4/wire-format#raw-values)按 64 位布局写，填充清零；元组逐个元素写。
@@ -151,6 +151,7 @@ MemoryPack 代码里的大部分写法都能一一对应：
 | `MemoryPackSerializer.Serialize(bufferWriter, value)` | `NinoSerializer.Serialize(value, bufferWriter)`：值在前 |
 | `MemoryPackSerializer.Deserialize<T>(bytes)`, `Deserialize(bytes, ref value)` | `NinoDeserializer.Deserialize<T>(bytes)`, `Deserialize(bytes, ref value)` |
 | `SerializeAsync(stream, value)`、`DeserializeAsync<T>(stream)` | `NinoSerializer.SerializeAsync(value, stream)`、`NinoDeserializer.DeserializeAsync<T>(stream)`：值在前；同步版本是 `Serialize(value, stream)` 和 `Deserialize<T>(stream)`（[流](/zh/docs/v4/advanced/streams#streams)） |
+| `SafeNullable<T>` | `T?`，在 Nino 里本来就安全；读写频繁的数组和列表用 `NinoNullable<T>`（[可空值](/zh/docs/v4/nullable-values#from-memorypack)） |
 | UTF-8 字符串 | 所有字符都不超过 U+00FF 时每字符一个字节，否则 UTF-16；按成员用 `[NinoUtf8]`（[字符串编码](/zh/docs/v4/defining-types#string-encoding)） |
 
 两个库写的字节不一样，所以已经存下的数据要转换；转换期间两个库可以装在同一个项目里（步骤见[换成 Nino](/zh/docs/v4/compare#switching)）。类型上同时留着两种特性，用 MemoryPack 读出每个存下的值，再用 Nino 写回去：

@@ -52,7 +52,7 @@ The raw layout is the canonical 64-bit layout. On runtimes that lay a struct out
 `string` is supported. By default it is written in one byte a char when every char is at most U+00FF, and as UTF-16 otherwise ([Strings](/en/docs/v4/wire-format#strings)); mark a member with [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) to write it as UTF-8. This also covers the strings inside a collection or tuple member (`List<string>`, `Dictionary<string, int>`).
 
 ### Other Built-in Types
-- `Nullable<T>` (`T?`) of any serializable `T`
+- `Nullable<T>` (`T?`) of any serializable `T`, and `NinoNullable<T>`, which writes the same bytes ([Nullable Values](/en/docs/v4/nullable-values))
 - `ValueTuple` and `Tuple` with 1 to 7 elements; as a member or element of your own types (generated code), or as the type argument of a generic `[NinoType]`, a `ValueTuple` of eight elements or more too
 - `KeyValuePair<TKey, TValue>`
 - `BigInteger` (its two's-complement bytes), `Version`, `Uri` (its original string, read back relative or absolute), `StringBuilder` (a `string` in its UTF-16 form; it reads either form), `BitArray`, `CultureInfo` (its name; on .NET 8 and later only a culture the runtime ships reads back, see [Untrusted Data](/en/docs/v4/security#guarantees)) and `TimeZoneInfo` (its id, plus its serialized form, adjustment rules included, for a custom zone; a system zone reads back as the reading machine's zone of that id)
@@ -85,7 +85,7 @@ A member declared as one of these types is read back as a concrete collection:
 | `IGrouping<TKey, TElement>` | a grouping over an array of its elements |
 | `BlockingCollection<T>` | a new, unbounded `BlockingCollection<T>` (over a `ConcurrentQueue<T>`) holding a snapshot of the elements |
 
-A member declared as a collection interface writes the same bytes as a `List<T>` of its elements for most element types (raw elements as one block). Nullable raw elements are the exception: an `int?[]` or `List<int?>` writes every element in a fixed stride (the presence byte, padding, then the value, 8 bytes for `int?`), while a member declared as `IList<int?>`, `ICollection<int?>` or `IEnumerable<int?>` writes each element as a single `int?` (1 byte for `null`, 5 bytes otherwise). Changing a member between the two kinds changes the format.
+A member declared as a collection interface writes the same bytes as a `List<T>` of its elements for most element types (raw elements as one block). Nullable raw elements are the exception: an `int?[]` or `List<int?>` writes every element in a fixed stride (the presence byte, padding, then the value, 8 bytes for `int?`), while a member declared as `IList<int?>`, `ICollection<int?>` or `IEnumerable<int?>` writes each element as a single `int?` (1 byte for `null`, 5 bytes otherwise). Changing a member between the two kinds changes the format. [Nullable Values](/en/docs/v4/nullable-values#collections) shows both.
 
 <Callout type="info">
 
@@ -170,6 +170,7 @@ Classes, structs, records and interfaces become serializable with `[NinoType]`. 
 ## Next Steps
 
 <Cards>
+  <Card title="Nullable Values" href="/en/docs/v4/nullable-values">What a `T?` and a null reference write, and `NinoNullable<T>`.</Card>
   <Card title="Custom Constructors" href="/en/docs/v4/constructors">How Nino creates instances: constructors, factories, records.</Card>
   <Card title="Custom Formatters" href="/en/docs/v4/custom-formatters">Teach Nino a type it does not support.</Card>
 </Cards>

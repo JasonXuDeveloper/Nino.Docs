@@ -5,7 +5,12 @@ description: "How Nino v4 gets its speed, and how to keep your types and calls o
 icon: Zap
 ---
 
-<AnchorRedirect map={{ buffers: '/en/docs/v4/advanced/zero-allocation#what-allocates' }} />
+<AnchorRedirect
+  map={{
+    buffers: '/en/docs/v4/advanced/zero-allocation#what-allocates',
+    'nino-nullable': '/en/docs/v4/nullable-values#nino-nullable',
+  }}
+/>
 
 Nino is fast with no tuning at all. This page explains what happens under the hood, so you can keep your types and calls on the fast paths. For measurements, see [Benchmarks: .NET Runtime](/en/docs/v4/benchmarks); for how to use these paths in your own code, see [High-Performance Serialization](/en/docs/v4/advanced/high-performance) and the recipes in [Zero-Allocation Patterns](/en/docs/v4/advanced/zero-allocation).
 
@@ -114,33 +119,7 @@ The raw layout is the canonical 64-bit layout. Where a runtime lays a struct out
 
 </Callout>
 
-### Nullable Values in Hot Collections [#nino-nullable]
-
-A `T?[]` or `List<T?>` of unmanaged values is written at a fixed stride, but Nino has to clear each element's padding and the bytes of every absent value on the way, since `Nullable<T>` leaves them as memory held them. When such a collection is written often, declare it with `NinoNullable<T>` instead: Nino writes exactly the bytes of `T?` (either reads the other's data, and the published layout is the same), and its memory has no padding and no stale bytes, so an array or list of it is **one block copy** wherever `T` is as large as its alignment (`long`, `int`, `double`, enums, `DateTime`, `TimeSpan`). Other `T` (`decimal`, `Guid`, a raw struct) are converted element by element, as `T?` is.
-
-```csharp title="Readings.cs"
-using System.Collections.Generic;
-using Nino.Core;
-
-[NinoType]
-public partial class Readings
-{
-    public NinoNullable<long>[] Totals;     // same bytes as long?[] // [!code highlight]
-    public List<NinoNullable<int>> Counts;  // same bytes as List<int?>
-}
-
-public static class ReadingsExample
-{
-    public static void Fill(Readings readings)
-    {
-        readings.Totals = new NinoNullable<long>[] { 12, default, 7 }; // default: no value
-        long? first = readings.Totals[0];                             // converts both ways
-        long total = readings.Totals[0].GetValueOrDefault();
-    }
-}
-```
-
-It has `HasValue`, `Value`, `GetValueOrDefault` and `ToNullable()`, and converts implicitly from `T` and `T?` and to `T?`. It takes twice `T`'s size, where `T?` takes `T`'s size plus its alignment: the same for 8-byte primitives, more for `decimal` or `Guid`. A single `T?` member is already as fast; use it for collections. Its presence byte is checked in every mode, as `T?`'s is. The [benchmarks](/en/docs/v4/benchmarks#nullable-values) time it beside `T?` and MemoryPack's `SafeNullable<T>`.
+A `T?[]` or `List<T?>` of unmanaged values is also one block, at a fixed stride, with each element's padding and absent value cleared on the way; declared with `NinoNullable<T>` it is a plain block copy for primitives, enums, `DateTime` and `TimeSpan`. Both, with their bytes: [Nullable Values](/en/docs/v4/nullable-values#nino-nullable).
 
 ## Fixed-Size Types [#fixed-size-types]
 

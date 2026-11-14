@@ -1,0 +1,258 @@
+---
+title: 可空值
+seoTitle: "可空值：T?、可空引用与 NinoNullable<T> – Nino v4 文档"
+description: "基元类型、枚举、结构体和类的可空值，单独出现或放在数组、列表里时 Nino 各写出什么字节，读取时检查什么；以及 NinoNullable<T>：字节与 T? 相同，数组和列表整块拷贝。"
+icon: CircleDashed
+---
+
+Nino 能写的值都可以为空：基元类型、枚举、结构体的 `T?`，以及任何引用。本页列出每一种写出的字节、Nino 对这些字节的保证，还有 `NinoNullable<T>`：数组和列表写得频繁时，用它直接替换 `T?`。
+
+## 哪些值可以为空 [#what-you-can-make-nullable]
+
+```csharp title="PlayerState.cs"
+using System;
+using System.Collections.Generic;
+using Nino.Core;
+
+public struct Position { public float X; public float Y; }    // 非托管
+public struct ItemStack { public byte Slot; public long Count; } // 非托管，有 7 字节填充
+
+[NinoType]
+public struct Badge { public string Name; public int Level; }  // 含引用
+
+[NinoType]
+public sealed class Guild { public string Name; }
+
+[NinoType]
+public sealed class PlayerState
+{
+    public int? Level;             // 基元类型
+    public DayOfWeek? ResetDay;    // 枚举
+    public Position? Checkpoint;   // 非托管结构体
+    public ItemStack? Held;        // 带填充的非托管结构体
+    public Badge? TopBadge;        // 含引用的结构体
+    public Guild Guild;            // 类：引用都可以为 null
+    public int?[] LapTimes;        // 原始 T：每个元素占固定步长
+    public List<Badge?> Earned;    // 其他 T：每个元素一个存在字节
+}
+```
+
+| 声明 | 有值 | 没有值 |
+| --- | --- | --- |
+| 基元类型或枚举的 `T?` | <Term id="presence-byte">存在字节</Term> `01`，然后是值（枚举按底层整数写） | `00` |
+| 非托管结构体的 `T?`，你自己的也算 | `01`，然后整块写出结构体，填充为零 | `00` |
+| 含引用的结构体的 `T?` | `01`，然后逐个成员写出 | `00` |
+| 类、字符串、集合 | [各自的头](#references) | 头里表示 null 的值 |
+| [原始](/zh/docs/v4/wire-format#raw-values) `T` 的 `T?[]`、`List<T?>` | [固定步长](#collections)：存在字节、填充、值 | 大小不变，全为零 |
+| 其他装 `T?` 的数组和集合 | 每个元素按单个 `T?` 写 | 每个元素一个 `00` |
+
+### 单个值 [#single-values]
+
+单个 `T?` 先写存在字节，有值才接着写值。两者之间没有填充；结构体自身的填充在它那一块里，写成零。
+
+<Bytes stacked rows={[
+  { title: <code>int? Level = 5</code>, fields: [{ hex: '01', kind: 'header', label: '存在字节' }, { hex: '05 00 00 00', kind: 'value', label: '5' }] },
+  { title: <code>int? Level = null</code>, fields: [{ hex: '00', kind: 'header', label: '存在字节：没有值' }] },
+  { title: <code>Position? Checkpoint = (1, 2)</code>, fields: [{ hex: '01', kind: 'header', label: '存在字节' }, { hex: '00 00 80 3F', kind: 'value', label: 'X = 1f' }, { hex: '00 00 00 40', kind: 'value', label: 'Y = 2f' }] },
+  { title: <><code>ItemStack? Held = {'{'} Slot = 1, Count = 2 {'}'}</code></>, fields: [{ hex: '01', kind: 'header', label: '存在字节' }, { hex: '01', kind: 'value', label: 'Slot' }, { hex: '00 00 00 00 00 00 00', kind: 'pad', label: '结构体的填充，为零' }, { hex: '02 00 00 00 00 00 00 00', kind: 'value', label: 'Count = 2' }] },
+  { title: <><code>Badge? TopBadge = {'{'} Name = "n", Level = 1 {'}'}</code></>, fields: [{ hex: '01', kind: 'header', label: '存在字节' }, { hex: '03 6E', kind: 'value', label: 'Name = "n"' }, { hex: '01 00 00 00', kind: 'value', label: 'Level = 1' }] },
+]} />
+
+只要是单独出现的 `T?` 都这样写：成员、顶层的值、字典的值、Set 的元素，还有声明为接口的集合里的元素。
+
+### 可空引用 [#references]
+
+引用都可以为 null，加不加可空标注都一样（`Guild` 和 `Guild?` 写出的字节相同）。null 用什么表示，看声明的类型：
+
+| 声明的类型 | null | 有值 |
+| --- | --- | --- |
+| 密封类 | `00` | `01`，然后是成员 |
+| 非密封类、抽象类、接口、`object` | `00 00 00 00` | 4 字节的[类型 ID](/zh/docs/v4/polymorphism)，然后是成员 |
+| `string` | `00` | [字符串头](/zh/docs/v4/wire-format#strings)，然后是字符 |
+| 数组或集合 | `FF FF FF FF`（数量 -1） | 数量，然后是元素 |
+
+类开了 [`trackReferences: true`](/zh/docs/v4/reference-tracking) 的话，头换成引用头。结构体不会是 null，所以没有头，只有 `T?` 才给它加一个。
+
+### 数组和列表 [#collections]
+
+`T` 是原始值（基元类型、枚举、非托管结构体）时，`T?[]` 和 `List<T?>` 按**固定步长**写：有没有值，每个元素占的字节数都一样，整个集合就是一整块。每个元素先是存在字节，接着用零补到 `T` 的对齐，然后是 `T`；没有值时 `T` 全为零。
+
+<Bytes stacked rows={[
+  { title: <><code>int?[] LapTimes = {'{'} 1, null {'}'}</code>：步长 8</>, fields: [{ hex: '02 00 00 00', kind: 'length', label: '数量 2' }, { hex: '01', kind: 'header', label: '存在' }, { hex: '00 00 00', kind: 'pad', label: '填充' }, { hex: '01 00 00 00', kind: 'value', label: '1' }, { hex: '00', kind: 'header', label: '存在' }, { hex: '00 00 00', kind: 'pad', label: '填充' }, { hex: '00 00 00 00', kind: 'pad', label: '没有值：全为零' }] },
+  { title: <>同样的值声明为 <code>IList&lt;int?&gt;</code>：每个元素一个 <code>int?</code></>, fields: [{ hex: '02 00 00 00', kind: 'length', label: '数量 2' }, { hex: '01', kind: 'header', label: '存在' }, { hex: '01 00 00 00', kind: 'value', label: '1' }, { hex: '00', kind: 'header', label: '存在' }] },
+]} />
+
+步长等于 `T` 的对齐加上它的大小：
+
+| `T` | 步长 |
+| --- | --- |
+| `byte`、`bool` | 2 |
+| `int`、`float`、底层为 `int` 的枚举 | 8 |
+| `long`、`double`、`DateTime`、`TimeSpan` | 16 |
+| `Guid` | 20 |
+| `decimal` | 24 |
+| `ItemStack`（一个 `byte` 加一个 `long`：16 字节，按 8 对齐） | 24 |
+
+其他装可空值的集合，每个元素都按单个 `T?` 写，也就是上图第二行：
+
+- 含引用的结构体的 `T?[]`、`List<T?>`（`List<Badge?>`）：每个元素一个存在字节，然后是成员；
+- 声明为接口的成员（`IList<int?>`、`IEnumerable<int?>`）、Set、队列、字典的值；
+- 类的数组和列表：每个元素带自己的[头](#references)。
+
+<Callout type="warn">
+
+同样的值，`int?[]` 和 `IList<int?>` 写出的字节不一样。已经存了数据的成员，在数组、`List<T?>` 和接口之间改声明，格式就变了（[集合类型](/zh/docs/v4/types#collection-types)）。
+
+</Callout>
+
+## 有哪些保证 [#guarantees]
+
+- **值相等，字节就相等。** `Nullable<T>` 在内存里的填充，还有没有值时值那个位置上留着的旧内容，都是内存里原来的东西。这两处 Nino 一律写零，单个值和固定步长都如此，哪怕内存从没清过零（`ArrayPool` 租来的数组、`GC.AllocateUninitializedArray`）。残留的数据出不了进程，字节可以直接比较、算哈希。
+- **存在字节只能是 0 或 1。** 读到别的值就抛 [`NinoDataException`](/zh/docs/v4/security#ninodataexception)：单个 `T?`、固定步长数组和列表里的每个元素、`NinoNullable<T>`、密封类前面的那个字节都查。`bool?` 的值字节不是 0 或 1 也一样。
+- **跨平台、跨运行时字节一致。** 有的运行时 `Nullable<T>` 的内存布局不同（32 位 x86、旧版 Mono），Nino 在那里逐个元素转换，写出的字节不变（[可移植的设计](/zh/docs/v4/platforms#portable-by-design)）。
+
+每次读取都要花时间的检查，由 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 补上：
+
+<Matrix corner="输入" columns={['默认', 'Untrusted']} rows={[
+  { label: <>存在字节不是 0 或 1：<code>T?</code>、<code>T?[]</code> 或 <code>List&lt;T?&gt;</code> 的元素、<code>NinoNullable&lt;T&gt;</code>、密封类</>, cells: ['yes', 'yes'] },
+  { label: <><strong>原始结构体里</strong>的 <code>T?</code> 字段，标志不是 0 或 1</>, cells: ['no: 原样拷贝，不检查', 'yes'] },
+  { label: <>存在字节后面的值超出类型的范围：<code>DateTime</code> 超过 <code>DateTime.MaxValue</code>、<code>decimal</code> 的 scale 大于 28</>, cells: ['no', 'yes'] },
+]} />
+
+默认模式下，整块读进来的 `NinoNullable<T>` 数组和列表，还会留着数据里填充和空值位置上的内容，再写时原样写出；`Untrusted` 下不会留。来源不可信的数据，务必打开 `Untrusted` 再读，完整的清单见[拒绝哪些数据](/zh/docs/v4/security#what-is-rejected)。
+
+## `NinoNullable<T>` [#nino-nullable]
+
+`NinoNullable<T>`（在 `Nino.Core` 里，`T` 为非托管类型）也是可空值，只是它在内存里的样子就是 Nino 要写的字节。有没有值，用一整个 `T` 来存，首字节为 1 表示有，所以没有填充；没有值时值的部分是零，所以没有残留字节。Nino 写它用的**正是 `T?` 的字节**，单个值和集合都一样：两边能互相读对方的数据，[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)也相同。
+
+<Callout type="idea" title="适合">
+
+读写频繁的数组和列表，元素是可空的基元类型、枚举、`DateTime` 或 `TimeSpan`：传感器读数、表格的一列、每帧的采样。这些 `T` 的大小等于对齐，整个集合**一次块拷贝**就写完；换成 `T?[]`，Nino 得边拷贝边把每个元素的填充和空值清零。
+
+</Callout>
+
+<Callout type="warn" title="不适合">
+
+单个成员（`T?` 一样快）、含引用的结构体（它只接受非托管的 `T`，这种用 `T?`），以及要为[其他语言](#other-languages)生成代码的类型。
+
+</Callout>
+
+```csharp title="Readings.cs"
+using System.Collections.Generic;
+using Nino.Core;
+
+[NinoType]
+public partial class Readings
+{
+    public NinoNullable<long>[] Totals;     // 字节与 long?[] 相同 // [!code highlight]
+    public List<NinoNullable<int>> Counts;  // 字节与 List<int?> 相同
+}
+
+public static class ReadingsExample
+{
+    public static void Fill(Readings readings)
+    {
+        readings.Totals = new NinoNullable<long>[] { 12, default, 7 }; // default 表示没有值
+        long? first = readings.Totals[0];                             // 可以双向转换
+        long total = readings.Totals[0].GetValueOrDefault();
+    }
+}
+```
+
+用一种声明写的数据，另一种声明照样能读，所以类型从一种声明改成另一种，存下的数据不用转换：
+
+```csharp
+long?[] laps = { 81_250, null, 79_900 };
+byte[] bytes = NinoSerializer.Serialize(laps);
+var same = NinoDeserializer.Deserialize<NinoNullable<long>[]>(bytes);
+```
+
+### 成员和转换 [#members]
+
+| 成员 | 作用 |
+| --- | --- |
+| `new NinoNullable<T>(value)`，从 `T` 隐式转换 | 有值 |
+| `default`，从为 null 的 `T?` 隐式转换 | 没有值 |
+| `HasValue` | 有没有值 |
+| `Value`，显式转换成 `T` | 取值；没有值时抛 `InvalidOperationException` |
+| `GetValueOrDefault()`、`GetValueOrDefault(defaultValue)` | 取值，没有就给 `default(T)` 或 `defaultValue` |
+| `ToNullable()`，隐式转换成 `T?` | 同一个值的 `T?` |
+| `Equals`、`==`、`!=`、`GetHashCode`、`ToString` | 与 `T?` 一致：两个都没有值算相等，没有值时 `ToString` 是 `""` |
+
+### 内存占用 [#size]
+
+它占 `T` 的两倍大小，`T?` 占 `T` 的大小加上对齐。能整块拷贝的那些类型，两者一样大；其余类型 `NinoNullable<T>` 更大，Nino 得逐个元素在内存和 `T?` 的字节之间转换（CPU 支持 AVX-512 VBMI 时一次转换一个向量的元素）。
+
+| `T` | `T?` | `NinoNullable<T>` | 写出后每个元素 |
+| --- | --- | --- | --- |
+| `byte` | 2 | 2 | 2 |
+| `int`、`float` | 8 | 8 | 8 |
+| `long`、`double`、`DateTime`、`TimeSpan` | 16 | 16 | 16 |
+| `Guid` | 20 | 32 | 20 |
+| `decimal` | 24 | 32 | 24 |
+| 三个 `float` 的结构体 | 16 | 24 | 16 |
+
+单位是字节，64 位 .NET。
+
+### 没有赋过值的内存 [#unassigned-memory]
+
+经构造函数、转换或 `default` 得到的 `NinoNullable<T>` 都是干净的，`new NinoNullable<T>[n]` 和你赋过值的元素都在此列。没有赋过值的内存则原样写出：`GC.AllocateUninitializedArray` 分配的数组，或者用 `Unsafe`、`MemoryMarshal` 拼出来的值。这样的内存，序列化之前要把每个元素都赋一遍。`T?[]` 没有这个要求。
+
+## 哪种写法在哪里快 [#which-form]
+
+| 数据 | 声明 | Nino 怎么做 |
+| --- | --- | --- |
+| 单个可空值或成员 | `T?` | 存在字节和值一次写完。换成 `NinoNullable<T>` 没有好处。 |
+| 可空基元类型、枚举、`DateTime`、`TimeSpan` 的数组或列表，读写频繁 | `NinoNullable<T>[]`、`List<NinoNullable<T>>` | 一次块拷贝。 |
+| 同上，但代码里要用 `T?` | `T?[]`、`List<T?>` | 一趟完成：拷贝元素，同时把填充和空值清零，CPU 支持时用 SIMD。 |
+| 可空 `decimal`、`Guid` 或你自己的非托管结构体的数组或列表 | `T?[]`、`List<T?>` | 这些类型两种写法都不是单纯的块拷贝，`T?` 占的内存更小。 |
+| 大部分是 null，更在意大小 | 接口，比如 `IList<T?>` | 每个 null 只占 1 字节，不占整个步长；元素逐个写。 |
+| 含引用的可空结构体 | `T?` | 一个存在字节，然后和结构体本身一样逐个成员写。 |
+
+[基准测试的可空值一组](/zh/docs/v4/benchmarks#nullable-values)里每种写法各有一根柱：Nino 的 `T?`、Nino 的 `NinoNullable<T>`，以及 MemoryPack 的三种写法。
+
+## 从 MemoryPack 迁移过来 [#from-memorypack]
+
+非托管 `T` 的 `T?`，MemoryPack 按内存原样写出，填充也带上，另外提供没有填充的 `SafeNullable<T>`（[带填充的结构体和元组](/zh/docs/v4/vs-memorypack#padded-values)）。Nino 的 `T?` 本来就安全，不必为了安全换类型：
+
+| MemoryPack | Nino |
+| --- | --- |
+| `T?` | `T?` |
+| `SafeNullable<T>` | `T?` |
+| 写得频繁的 `SafeNullable<T>[]`、`List<SafeNullable<T>>` | `NinoNullable<T>[]`、`List<NinoNullable<T>>` |
+| 含引用的结构体的 `T?` | `T?` |
+
+不管怎么对应，两个库写出的字节都不同，其余步骤见[从 MemoryPack 迁移](/zh/docs/v4/vs-memorypack#switching-from-memorypack)。
+
+## 其他语言 [#other-languages]
+
+`T?` 写出的内容，[nino-gen](/zh/docs/v4/advanced/codegen) 在每种语言里用各自的可选类型表示：
+
+| C# | TypeScript | Go | Rust |
+| --- | --- | --- | --- |
+| `T?` | `T \| null` | `*T` | `Option<T>` |
+| 固定步长的 `T?[]`、`List<T?>` | `(T \| null)[] \| null` | `[]*T` | `Option<nino::RawNullables<T>>` |
+| 其他装 `T?` 的序列 | `(T \| null)[] \| null` | `[]*T` | `Option<Vec<Option<T>>>` |
+| `NinoNullable<T>` | 不生成 | 不生成 | 不生成 |
+
+类型里有 `NinoNullable<T>` 成员，生成代码时整个类型会略过，并报警告 [NINOGEN002](/zh/docs/v4/advanced/codegen#diagnostics)。它的字节就是 `T?` 的字节，所以要给其他语言生成代码的类型，声明成 `T?` 即可。
+
+## 常见陷阱 [#pitfalls]
+
+| 错误 | 后果 | 由谁发现 |
+| --- | --- | --- |
+| 已存数据的成员，在 `T?[]`、`List<T?>` 和 `IList<T?>` 这类接口之间改声明 | 旧数据读不回来：两种声明写出的字节不同 | [布局基线](/zh/docs/v4/evolving-data#layout-baseline)（[NINO034](/zh/docs/v4/analyzers#nino034)） |
+| `NinoNullable<T>` 的 `T` 不是按原始字节写的类型（`DateTimeOffset`、值元组） | 这个成员直接跳过 | [NINO007](/zh/docs/v4/analyzers#nino007)：改用 `T?` |
+| 没有值的 `NinoNullable<T>` 上取 `Value`，或强制转换成 `T` | `InvalidOperationException` | 没有：先看 `HasValue`，或者用 `GetValueOrDefault()` |
+| 序列化没有赋过值的 `NinoNullable<T>` 内存 | 内存里原来的内容原样写出 | 没有：[每个元素都赋一遍](#unassigned-memory) |
+| 要生成 TypeScript、Go 或 Rust 代码的类型里用了 `NinoNullable<T>` 成员 | 整个类型略过 | NINOGEN002：改用 `T?` |
+| 没开 `Untrusted` 就读伪造的数据，里面有原始结构体里的 `T?` | 标志原样拷贝，不检查：对 JIT 来说是未定义行为 | 没有：打开 [`Untrusted`](/zh/docs/v4/security#untrusted-mode) |
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="自定义构造函数" href="/zh/docs/v4/constructors">Nino 怎样创建实例：构造函数、工厂方法、record。</Card>
+  <Card title="二进制格式" href="/zh/docs/v4/wire-format#collections">Nino 写出的每一个字节，固定步长也在其中。</Card>
+  <Card title="基准测试：.NET 运行速度" href="/zh/docs/v4/benchmarks#nullable-values">可空值一组：每种写法对比各个库。</Card>
+  <Card title="不可信数据" href="/zh/docs/v4/security">读取时拒绝什么，Untrusted 模式又多查什么。</Card>
+</Cards>

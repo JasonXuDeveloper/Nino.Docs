@@ -14,7 +14,7 @@ icon: RotateCcwClock
 ### 新功能 [#new-9]
 
 - **破坏性变更：去掉了 .NET Standard 2.0 版本，面向微软 .NET Framework 4.x 的项目从此用不了 Nino。** `Nino` 和 `Nino.Serialization`（`Nino.Core`）的目标框架现在是 `netstandard2.1`、`net8.0` 和 `net10.0`，`Nino.Immutable` 是 `netstandard2.1` 和 `net8.0`。实现了 .NET Standard 2.1 的运行时照常能用：.NET 8 及以上（有单独优化的版本）、.NET Core 3.0 到 .NET 7、Mono，还有 Unity，API Compatibility Level 选 .NET Standard 2.1 还是 .NET Framework 都行（Unity 包里一直是 `netstandard2.1` 版本）。微软的 .NET Framework 4.x（`net462` 到 `net481`）只实现了 .NET Standard 2.0，面向它的项目 NuGet 不再让引用这些包；目标框架是 `netstandard2.0` 的类库，改成 `netstandard2.1` 即可。写出的字节没有变化。`Stream` 的异步调用（`SerializeAsync`、`DeserializeAsync`、`SerializeBoxedAsync` 和 `DeserializeBoxedAsync`）原先 .NET Standard 2.0 版本里没有，现在每个版本都有。见[项目会用到哪个版本](/zh/docs/v4/platforms#which-build)。
-- **`NinoNullable<T>`**：给高频写入的集合用的可空值。Nino 写出的字节和 `T?` 完全一样（两边能互相读对方的数据），但它的内存里没有填充、也没有残留字节，所以 `T` 是基元类型、枚举、`DateTime` 或 `TimeSpan` 时，它的数组和 `List<>` 整块拷贝读写，而 `T?[]` 要边拷边逐个元素清零。它能从 `T`、`T?` 隐式转换过来，也能隐式转成 `T?`。见[高频集合里的可空值](/zh/docs/v4/performance#nino-nullable)（[#275](https://github.com/JasonXuDeveloper/Nino/issues/275)）。
+- **`NinoNullable<T>`**：给高频写入的集合用的可空值。Nino 写出的字节和 `T?` 完全一样（两边能互相读对方的数据），但它的内存里没有填充、也没有残留字节，所以 `T` 是基元类型、枚举、`DateTime` 或 `TimeSpan` 时，它的数组和 `List<>` 整块拷贝读写，而 `T?[]` 要边拷边逐个元素清零。它能从 `T`、`T?` 隐式转换过来，也能隐式转成 `T?`。见[可空值](/zh/docs/v4/nullable-values#nino-nullable)（[#275](https://github.com/JasonXuDeveloper/Nino/issues/275)）。
 
 ### 性能 [#performance-6]
 

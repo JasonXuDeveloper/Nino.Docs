@@ -57,7 +57,7 @@ Nino 支持所有[非托管类型](https://learn.microsoft.com/zh-cn/dotnet/csha
 支持 `string`。默认在所有字符都不超过 U+00FF 时每个字符写一个字节，否则以 UTF-16 写入（[字符串](/zh/docs/v4/wire-format#strings)）；给成员加上 [`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 则改为 UTF-8，集合或元组成员里的字符串（`List<string>`、`Dictionary<string, int>`）也一样。
 
 ### 其他内置类型 [#other-built-in-types]
-- 任意可序列化类型 `T` 的 `Nullable<T>`（`T?`）
+- 任意可序列化类型 `T` 的 `Nullable<T>`（`T?`），以及字节与它相同的 `NinoNullable<T>`（[可空值](/zh/docs/v4/nullable-values)）
 - 1 到 7 个元素的 `ValueTuple` 和 `Tuple`；作为自己类型的成员或元素（生成代码），或作为泛型 `[NinoType]` 的类型实参时，8 个及以上元素的 `ValueTuple` 也支持
 - `KeyValuePair<TKey, TValue>`
 - `BigInteger`（写二进制补码字节）、`Version`、`Uri`（写原始字符串，读回时保持相对或绝对）、`StringBuilder`（按 UTF-16 形式的 `string` 写出，两种形式都能读）、`BitArray`、`CultureInfo`（写名称；在 .NET 8 及以上只能读回运行时自带的区域性，见[不可信数据](/zh/docs/v4/security#guarantees)）和 `TimeZoneInfo`（写 ID；自定义时区还写它的序列化形式，包括调整规则；系统时区读回的是读取方机器上同一 ID 的时区）
@@ -90,7 +90,7 @@ Nino 支持所有[非托管类型](https://learn.microsoft.com/zh-cn/dotnet/csha
 | `IGrouping<TKey, TElement>` | 包装其元素数组的分组 |
 | `BlockingCollection<T>` | 一个新的、无容量上限的 `BlockingCollection<T>`（底层为 `ConcurrentQueue<T>`），包含元素的快照 |
 
-声明为集合接口的成员，对大多数元素类型来说，写出的字节与同样元素的 `List<T>` 相同（原始类型元素整块写入）。可空的原始类型元素是个例外：`int?[]` 或 `List<int?>` 的每个元素占固定的跨度（先是存在字节，然后是填充，再是值，`int?` 共 8 字节）；而声明为 `IList<int?>`、`ICollection<int?>` 或 `IEnumerable<int?>` 的成员把每个元素当作单独的 `int?` 写入（`null` 占 1 字节，否则占 5 字节）。成员在这两类声明之间切换，格式就会改变。
+声明为集合接口的成员，对大多数元素类型来说，写出的字节与同样元素的 `List<T>` 相同（原始类型元素整块写入）。可空的原始类型元素是个例外：`int?[]` 或 `List<int?>` 的每个元素占固定的跨度（先是存在字节，然后是填充，再是值，`int?` 共 8 字节）；而声明为 `IList<int?>`、`ICollection<int?>` 或 `IEnumerable<int?>` 的成员把每个元素当作单独的 `int?` 写入（`null` 占 1 字节，否则占 5 字节）。成员在这两类声明之间切换，格式就会改变。两种写法的字节见[可空值](/zh/docs/v4/nullable-values#collections)。
 
 <Callout type="info">
 
@@ -175,6 +175,7 @@ BCL 类（从 `BigInteger` 到 `Lazy<T>`）、`Memory<T>`、`ReadOnlyMemory<T>`�
 ## 下一步 [#next-steps]
 
 <Cards>
+  <Card title="可空值" href="/zh/docs/v4/nullable-values">`T?` 和 null 引用写出什么，以及 `NinoNullable<T>`。</Card>
   <Card title="自定义构造函数" href="/zh/docs/v4/constructors">Nino 怎样创建实例：构造函数、工厂方法、record。</Card>
   <Card title="自定义格式化器" href="/zh/docs/v4/custom-formatters">让 Nino 支持它不认识的类型。</Card>
 </Cards>

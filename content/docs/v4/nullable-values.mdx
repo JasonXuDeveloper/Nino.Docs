@@ -1,0 +1,258 @@
+---
+title: Nullable Values
+seoTitle: "Nullable Values: T?, Nullable References and NinoNullable<T> – Nino v4 Docs"
+description: "What Nino writes for a T? of a primitive, an enum, a struct or a class, alone and in arrays and lists, what a read checks, and NinoNullable<T>: the bytes of T? with arrays and lists copied as one block."
+icon: CircleDashed
+---
+
+Any value Nino can write can also be absent: a `T?` of a primitive, an enum or a struct, and every reference. This page shows the bytes of each, what Nino guarantees about them, and `NinoNullable<T>`, a drop-in for `T?` in arrays and lists that are written often.
+
+## What You Can Make Nullable [#what-you-can-make-nullable]
+
+```csharp title="PlayerState.cs"
+using System;
+using System.Collections.Generic;
+using Nino.Core;
+
+public struct Position { public float X; public float Y; }    // unmanaged
+public struct ItemStack { public byte Slot; public long Count; } // unmanaged, 7 bytes of padding
+
+[NinoType]
+public struct Badge { public string Name; public int Level; }  // holds a reference
+
+[NinoType]
+public sealed class Guild { public string Name; }
+
+[NinoType]
+public sealed class PlayerState
+{
+    public int? Level;             // a primitive
+    public DayOfWeek? ResetDay;    // an enum
+    public Position? Checkpoint;   // an unmanaged struct
+    public ItemStack? Held;        // an unmanaged struct with padding
+    public Badge? TopBadge;        // a struct that holds a reference
+    public Guild Guild;            // a class: every reference can be null
+    public int?[] LapTimes;        // raw T: each element at a fixed stride
+    public List<Badge?> Earned;    // any other T: a presence byte per element
+}
+```
+
+| Declared | With a value | Without one |
+| --- | --- | --- |
+| `T?` of a primitive or an enum | a <Term id="presence-byte">presence byte</Term> `01`, then the value (an enum as its underlying integer) | `00` |
+| `T?` of an unmanaged struct, yours included | `01`, then the struct as one block, its padding zero | `00` |
+| `T?` of a struct that holds references | `01`, then the struct member by member | `00` |
+| a class, a string, a collection | [its own header](#references) | its header's null |
+| `T?[]`, `List<T?>` of a [raw](/en/docs/v4/wire-format#raw-values) `T` | [a fixed stride](#collections): presence byte, padding, value | the same size, all zeros |
+| any other array or collection of `T?` | each element as a single `T?` | `00` per element |
+
+### Single Values [#single-values]
+
+A single `T?` is a presence byte, then the value only when there is one. Nothing is padded between the two; a struct's own padding is inside its block, written as zeros.
+
+<Bytes stacked rows={[
+  { title: <code>int? Level = 5</code>, fields: [{ hex: '01', kind: 'header', label: 'presence byte' }, { hex: '05 00 00 00', kind: 'value', label: '5' }] },
+  { title: <code>int? Level = null</code>, fields: [{ hex: '00', kind: 'header', label: 'presence byte: no value' }] },
+  { title: <code>Position? Checkpoint = (1, 2)</code>, fields: [{ hex: '01', kind: 'header', label: 'presence byte' }, { hex: '00 00 80 3F', kind: 'value', label: 'X = 1f' }, { hex: '00 00 00 40', kind: 'value', label: 'Y = 2f' }] },
+  { title: <><code>ItemStack? Held = {'{'} Slot = 1, Count = 2 {'}'}</code></>, fields: [{ hex: '01', kind: 'header', label: 'presence byte' }, { hex: '01', kind: 'value', label: 'Slot' }, { hex: '00 00 00 00 00 00 00', kind: 'pad', label: 'the struct\'s padding, zero' }, { hex: '02 00 00 00 00 00 00 00', kind: 'value', label: 'Count = 2' }] },
+  { title: <><code>Badge? TopBadge = {'{'} Name = "n", Level = 1 {'}'}</code></>, fields: [{ hex: '01', kind: 'header', label: 'presence byte' }, { hex: '03 6E', kind: 'value', label: 'Name = "n"' }, { hex: '01 00 00 00', kind: 'value', label: 'Level = 1' }] },
+]} />
+
+This holds wherever one `T?` stands alone: a member, a top-level value, a dictionary value, an element of a set or of a collection declared as an interface.
+
+### Nullable References [#references]
+
+Every reference can be null, whether or not it is annotated (`Guild` and `Guild?` write the same bytes). What marks null depends on the declared type:
+
+| Declared type | Null | A value |
+| --- | --- | --- |
+| a sealed class | `00` | `01`, then the members |
+| a class that is not sealed, an abstract class, an interface, `object` | `00 00 00 00` | the 4-byte [type id](/en/docs/v4/polymorphism), then the members |
+| `string` | `00` | [its header](/en/docs/v4/wire-format#strings), then the chars |
+| an array or a collection | `FF FF FF FF` (count -1) | the count, then the elements |
+
+A class with [`trackReferences: true`](/en/docs/v4/reference-tracking) has a reference header instead. A struct is never null, so it has no header: only `T?` gives it one.
+
+### Arrays and Lists [#collections]
+
+A `T?[]` or `List<T?>` whose `T` is raw (a primitive, an enum, an unmanaged struct) is written at a **fixed stride**: every element takes the same number of bytes, with or without a value, so the whole collection is one block. An element is the presence byte, zeros up to `T`'s alignment, then `T`, all zeros when there is no value.
+
+<Bytes stacked rows={[
+  { title: <><code>int?[] LapTimes = {'{'} 1, null {'}'}</code>: stride 8</>, fields: [{ hex: '02 00 00 00', kind: 'length', label: 'count 2' }, { hex: '01', kind: 'header', label: 'presence' }, { hex: '00 00 00', kind: 'pad', label: 'padding' }, { hex: '01 00 00 00', kind: 'value', label: '1' }, { hex: '00', kind: 'header', label: 'presence' }, { hex: '00 00 00', kind: 'pad', label: 'padding' }, { hex: '00 00 00 00', kind: 'pad', label: 'no value: zeros' }] },
+  { title: <>The same values declared <code>IList&lt;int?&gt;</code>: one <code>int?</code> each</>, fields: [{ hex: '02 00 00 00', kind: 'length', label: 'count 2' }, { hex: '01', kind: 'header', label: 'presence' }, { hex: '01 00 00 00', kind: 'value', label: '1' }, { hex: '00', kind: 'header', label: 'presence' }] },
+]} />
+
+The stride is `T`'s alignment plus its size:
+
+| `T` | Stride |
+| --- | --- |
+| `byte`, `bool` | 2 |
+| `int`, `float`, an `int` enum | 8 |
+| `long`, `double`, `DateTime`, `TimeSpan` | 16 |
+| `Guid` | 20 |
+| `decimal` | 24 |
+| `ItemStack` (a `byte` and a `long`: 16 bytes, aligned to 8) | 24 |
+
+Every other collection of nullable values writes each element as a single `T?`, the second row above:
+
+- a `T?[]` or `List<T?>` of a struct that holds references (`List<Badge?>`): a presence byte, then the members, per element;
+- a member declared as an interface (`IList<int?>`, `IEnumerable<int?>`), a set, a queue, the values of a dictionary;
+- an array or list of classes: each element has its own [header](#references).
+
+<Callout type="warn">
+
+An `int?[]` and an `IList<int?>` of the same values are different bytes. Changing a stored member between an array or `List<T?>` and an interface changes the format ([Collection Types](/en/docs/v4/types#collection-types)).
+
+</Callout>
+
+## What Is Guaranteed [#guarantees]
+
+- **Equal values give equal bytes.** A `Nullable<T>` in memory leaves its padding, and the value behind a cleared flag, as the memory held them. Nino writes zeros for both, in single values and at the fixed stride, also from memory that was never cleared (an `ArrayPool` array, `GC.AllocateUninitializedArray`). Nothing stale leaves the process, and bytes can be compared or hashed.
+- **A presence byte is 0 or 1.** A read that finds anything else throws [`NinoDataException`](/en/docs/v4/security#ninodataexception): in a single `T?`, in every element of a fixed-stride array or list, in a `NinoNullable<T>` and before a sealed class. So does a `bool?` whose value byte is not 0 or 1.
+- **The bytes are the same on every platform.** Where a runtime lays `Nullable<T>` out another way (32-bit x86, old Mono), Nino converts element by element into the same bytes ([Portable by Design](/en/docs/v4/platforms#portable-by-design)).
+
+[`NinoSettings.Untrusted`](/en/docs/v4/security#untrusted-mode) adds the checks that cost time on every read:
+
+<Matrix corner="Input" columns={['Default', 'Untrusted']} rows={[
+  { label: <>A presence byte other than 0 or 1: a <code>T?</code>, an element of <code>T?[]</code> or <code>List&lt;T?&gt;</code>, a <code>NinoNullable&lt;T&gt;</code>, a sealed class</>, cells: ['yes', 'yes'] },
+  { label: <>The flag of a <code>T?</code> field <strong>inside a raw struct</strong> other than 0 or 1</>, cells: ['no: copied unchecked', 'yes'] },
+  { label: <>A value behind the presence byte that its type never holds: a <code>DateTime</code> past <code>DateTime.MaxValue</code>, a <code>decimal</code> with a scale above 28</>, cells: ['no', 'yes'] },
+]} />
+
+In the default mode an array or list of `NinoNullable<T>` that is read as one block also keeps what the data held in its padding and behind absent values, and writes it back as it is; `Untrusted` never keeps it. Read data from a source you do not trust with `Untrusted` set: [What Is Rejected](/en/docs/v4/security#what-is-rejected) has the full list.
+
+## `NinoNullable<T>` [#nino-nullable]
+
+`NinoNullable<T>` (in `Nino.Core`, `T` unmanaged) is a nullable value whose memory is already what Nino writes. Its presence is stored as a whole `T`, 1 in its first byte, so there is no padding, and its value is zero when it has none, so there are no stale bytes. Nino writes it with **exactly the bytes of `T?`**, single or in a collection: either reads the other's data, and the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) is the same.
+
+<Callout type="idea" title="Use it for">
+
+Arrays and lists of nullable primitives, enums, `DateTime` or `TimeSpan` that are written or read often: sensor readings, columns of a table, per-tick samples. `T` is then as large as its alignment, and the collection is **one block copy**, where `T?[]` has to clear each element's padding and absent values on the way.
+
+</Callout>
+
+<Callout type="warn" title="Skip it for">
+
+A single member (a `T?` is as fast), a struct that holds references (it takes an unmanaged `T` only: use `T?`), and types you generate for [other languages](#other-languages).
+
+</Callout>
+
+```csharp title="Readings.cs"
+using System.Collections.Generic;
+using Nino.Core;
+
+[NinoType]
+public partial class Readings
+{
+    public NinoNullable<long>[] Totals;     // same bytes as long?[] // [!code highlight]
+    public List<NinoNullable<int>> Counts;  // same bytes as List<int?>
+}
+
+public static class ReadingsExample
+{
+    public static void Fill(Readings readings)
+    {
+        readings.Totals = new NinoNullable<long>[] { 12, default, 7 }; // default: no value
+        long? first = readings.Totals[0];                             // converts both ways
+        long total = readings.Totals[0].GetValueOrDefault();
+    }
+}
+```
+
+Data written with one declaration reads with the other, so a type can change between them without converting what is stored:
+
+```csharp
+long?[] laps = { 81_250, null, 79_900 };
+byte[] bytes = NinoSerializer.Serialize(laps);
+var same = NinoDeserializer.Deserialize<NinoNullable<long>[]>(bytes);
+```
+
+### Members and Conversions [#members]
+
+| Member | What it does |
+| --- | --- |
+| `new NinoNullable<T>(value)`, implicit from `T` | a value |
+| `default`, implicit from a `T?` that is null | no value |
+| `HasValue` | whether it has a value |
+| `Value`, explicit cast to `T` | the value; `InvalidOperationException` when there is none |
+| `GetValueOrDefault()`, `GetValueOrDefault(defaultValue)` | the value, or `default(T)` or `defaultValue` |
+| `ToNullable()`, implicit to `T?` | the same value as a `T?` |
+| `Equals`, `==`, `!=`, `GetHashCode`, `ToString` | as `T?`: two without a value are equal, `ToString` is `""` without one |
+
+### Size in Memory [#size]
+
+It takes twice `T`'s size, where `T?` takes `T`'s size plus its alignment. The two are the same for the types the block copy covers, and `NinoNullable<T>` is larger for the others, which Nino converts element by element between memory and the bytes of `T?` (a vector of elements at a time on a CPU with AVX-512 VBMI).
+
+| `T` | `T?` | `NinoNullable<T>` | On the wire, per element |
+| --- | --- | --- | --- |
+| `byte` | 2 | 2 | 2 |
+| `int`, `float` | 8 | 8 | 8 |
+| `long`, `double`, `DateTime`, `TimeSpan` | 16 | 16 | 16 |
+| `Guid` | 20 | 32 | 20 |
+| `decimal` | 24 | 32 | 24 |
+| a struct of three `float`s | 16 | 24 | 16 |
+
+Sizes in bytes, on 64-bit .NET.
+
+### Memory It Was Never Assigned In [#unassigned-memory]
+
+A `NinoNullable<T>` is clean when it comes from its constructor, a conversion or `default`, which covers `new NinoNullable<T>[n]` and everything you assign. Memory it was never assigned in is written as it is: an array from `GC.AllocateUninitializedArray`, or a value built through `Unsafe` or `MemoryMarshal`. Assign every element of such memory before you serialize it. A `T?[]` has no such condition.
+
+## Which Form Is Fast Where [#which-form]
+
+| You have | Declare | What Nino does |
+| --- | --- | --- |
+| One nullable value or member | `T?` | Writes the presence byte and the value at once. `NinoNullable<T>` gains nothing here. |
+| An array or list of nullable primitives, enums, `DateTime` or `TimeSpan`, written or read often | `NinoNullable<T>[]`, `List<NinoNullable<T>>` | One block copy. |
+| The same, in code that wants `T?` | `T?[]`, `List<T?>` | One pass that copies the elements and clears padding and absent values, with SIMD where the CPU allows. |
+| An array or list of nullable `decimal`, `Guid` or your own unmanaged struct | `T?[]`, `List<T?>` | Neither form is a plain block copy for these; `T?` is smaller in memory. |
+| Mostly nulls, where size matters more than speed | an interface, such as `IList<T?>` | One byte per null instead of the full stride, each element written on its own. |
+| A nullable struct that holds references | `T?` | Member by member, as the struct itself, after one presence byte. |
+
+The [nullable group of the benchmarks](/en/docs/v4/benchmarks#nullable-values) has a bar for each: Nino with `T?`, Nino with `NinoNullable<T>`, and MemoryPack's three forms.
+
+## Coming from MemoryPack [#from-memorypack]
+
+MemoryPack writes a `T?` of an unmanaged `T` as its memory, padding included, and offers `SafeNullable<T>` as the type without padding ([Padded Structs and Tuples](/en/docs/v4/vs-memorypack#padded-values)). Nino's `T?` is always safe, so nothing has to be replaced for safety:
+
+| MemoryPack | Nino |
+| --- | --- |
+| `T?` | `T?` |
+| `SafeNullable<T>` | `T?` |
+| `SafeNullable<T>[]`, `List<SafeNullable<T>>` written often | `NinoNullable<T>[]`, `List<NinoNullable<T>>` |
+| `T?` of a struct that holds references | `T?` |
+
+The bytes differ between the two libraries either way: [Switching from MemoryPack](/en/docs/v4/vs-memorypack#switching-from-memorypack) has the rest.
+
+## Other Languages [#other-languages]
+
+[nino-gen](/en/docs/v4/advanced/codegen) gives each language its own optional type for what `T?` writes:
+
+| C# | TypeScript | Go | Rust |
+| --- | --- | --- | --- |
+| `T?` | `T \| null` | `*T` | `Option<T>` |
+| `T?[]`, `List<T?>` at the fixed stride | `(T \| null)[] \| null` | `[]*T` | `Option<nino::RawNullables<T>>` |
+| any other sequence of `T?` | `(T \| null)[] \| null` | `[]*T` | `Option<Vec<Option<T>>>` |
+| `NinoNullable<T>` | not generated | not generated | not generated |
+
+A type with a `NinoNullable<T>` member is left out of the generated code, with warning [NINOGEN002](/en/docs/v4/advanced/codegen#diagnostics). Its bytes are those of `T?`, so declare `T?` in the types you generate for other languages.
+
+## Pitfalls [#pitfalls]
+
+| Mistake | What happens | Caught by |
+| --- | --- | --- |
+| Changing a stored member between `T?[]` or `List<T?>` and an interface such as `IList<T?>` | Old data does not read back: the two write different bytes | a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) ([NINO034](/en/docs/v4/analyzers#nino034)) |
+| `NinoNullable<T>` of a `T` that is not written as raw bytes (`DateTimeOffset`, a value tuple) | The member is skipped | [NINO007](/en/docs/v4/analyzers#nino007): declare `T?` |
+| `Value` or a cast to `T` on a `NinoNullable<T>` without a value | `InvalidOperationException` | nothing: check `HasValue`, or call `GetValueOrDefault()` |
+| Serializing `NinoNullable<T>` memory that was never assigned | Whatever the memory held is written | nothing: [assign every element](#unassigned-memory) |
+| A `NinoNullable<T>` member in a type generated for TypeScript, Go or Rust | The type is left out | NINOGEN002: declare `T?` |
+| Reading crafted data that holds a `T?` inside a raw struct without `Untrusted` | The flag is copied unchecked: undefined behavior to the JIT | nothing: set [`Untrusted`](/en/docs/v4/security#untrusted-mode) |
+
+## Next Steps [#next-steps]
+
+<Cards>
+  <Card title="Custom Constructors" href="/en/docs/v4/constructors">How Nino creates instances: constructors, factories, records.</Card>
+  <Card title="Wire Format" href="/en/docs/v4/wire-format#collections">Every byte Nino writes, the fixed stride included.</Card>
+  <Card title="Benchmarks: .NET Runtime" href="/en/docs/v4/benchmarks#nullable-values">The nullable group: each form against every library.</Card>
+  <Card title="Untrusted Data" href="/en/docs/v4/security">What a read rejects, and what Untrusted mode adds.</Card>
+</Cards>
