@@ -21,10 +21,10 @@ import type { Locale } from '@/lib/i18n';
 /*
  * The home page's numbers, in two layers:
  *
- * 1. One monumental figure: the range of Nino's serialize win over every
- *    other library in the case where it beats MemoryPack by the most (among
- *    the workloads once the report has them, as every headline), beside the
- *    measured times on a shared axis. Static: never counts up from 0.
+ * 1. A featured card: the case where Nino's serialize beats MemoryPack by the
+ *    most (among the workloads once the report has them, as every headline),
+ *    with two large figures (how many times faster than the closest and the
+ *    slowest library) beside the measured times. Static: never counts up from 0.
  * 2. Three panels on one grid (serialize and deserialize against every
  *    library, each row a case with the range of multiples; vs Nino v3) whose
  *    rows line up across the panels (CSS subgrid on wide screens).
@@ -55,14 +55,6 @@ function caseName(row: RuntimeCase, zh: boolean) {
   if (row.code || !/^[A-Z][a-z]/.test(row.name)) return row.name;
   return row.name.charAt(0).toLowerCase() + row.name.slice(1);
 }
-
-/** "a" or "an" before a case name: "an RPC request", "a log batch" */
-const article = (row: RuntimeCase) =>
-  /^([aeiou]|RPC\b)/i.test(caseName(row, false)) ? 'an' : 'a';
-
-/** "Serialize SimpleClass", "反序列化多态类数组", "序列化 SimpleClass" */
-const action = (verb: string, row: RuntimeCase, zh: boolean) =>
-  `${verb}${zh && !row.code ? '' : ' '}${caseName(row, zh)}`;
 
 /** 462 -> "7 min 42 s" / "7 分 42 秒" */
 function minutes(seconds: number, zh: boolean) {
@@ -138,18 +130,20 @@ function Pair({
   a,
   b,
   more = [],
+  thick,
 }: {
   a: Measured;
   b: Measured;
   more?: Measured[];
+  thick?: boolean;
 }) {
   const max = Math.max(b.value, ...more.map((m) => m.value));
   return (
-    <div className="flex flex-col gap-1.5">
-      <Bar nino {...a} max={max} />
-      <Bar {...b} max={max} />
+    <div className={cn('flex flex-col', thick ? 'gap-2.5' : 'gap-1.5')}>
+      <Bar nino thick={thick} {...a} max={max} />
+      <Bar thick={thick} {...b} max={max} />
       {more.map((m) => (
-        <Bar key={m.label} {...m} max={max} />
+        <Bar key={m.label} thick={thick} {...m} max={max} />
       ))}
     </div>
   );
@@ -279,6 +273,24 @@ function range(row: RuntimeCase, zh: boolean): string | undefined {
   return `${zh ? '持平' : 'on par'}–${formatRatio(max)}`;
 }
 
+/** The closest and the slowest opponent of a case; undefined when none is behind */
+function spread(
+  row: RuntimeCase,
+): { low: Opponent; high: Opponent } | undefined {
+  const all = [...opponents(row)].sort((a, b) => a.ns - b.ns);
+  const high = all.at(-1);
+  if (!high?.ratio || high.ratio <= 1) return undefined;
+  return { low: all[0], high };
+}
+
+/**
+ * The headline case's name for a serialize figure: the part before the comma, since
+ * the rest can describe the read ("State-sync snapshot, in place")
+ */
+function headlineName(row: RuntimeCase, zh: boolean) {
+  return caseName(row, zh).split(zh ? '，' : ', ')[0];
+}
+
 /** Nino's bar over every opponent's */
 function AllBars({ row }: { row: RuntimeCase }) {
   const [first, ...rest] = opponents(row).map((o) => ({
@@ -393,8 +405,8 @@ function v3Rows(zh: boolean): Row[] {
 export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
   const zh = lang === 'zh';
   const [ref, shown] = useReveal<HTMLDivElement>();
-  // The headline's range: its case against every other library
-  const heroRange = polySer ? range(polySer, zh) : undefined;
+  // The headline's closest and slowest opponents
+  const extremes = polySer ? spread(polySer) : undefined;
 
   return (
     <div
@@ -402,35 +414,46 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
       className="nino-chart flex flex-col gap-10"
       data-hidden={shown ? undefined : ''}
     >
-      {polySer && heroRange && (
-        <div className="grid items-end gap-x-14 gap-y-5 lg:grid-cols-[auto_minmax(0,1fr)]">
-          <div>
-            <p className="text-sm text-fd-muted-foreground">
+      {polySer && extremes && (
+        <section className="overflow-hidden rounded-2xl border bg-fd-card">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b px-5 py-4 sm:px-8">
+            <h2 className="font-semibold tracking-tight">
+              {zh ? '序列化速度' : 'Serialize speed'}
+              <span className="font-normal text-fd-muted-foreground">
+                {' · '}
+                {headlineName(polySer, zh)}
+              </span>
+            </h2>
+            <p className="text-xs text-fd-muted-foreground">
               {zh
-                ? `序列化速度，对比其他 ${opponents(polySer).length} 个序列化库`
-                : `Serialize speed, vs the other ${opponents(polySer).length} serializers`}
+                ? `对比其他 ${opponents(polySer).length} 个序列化库，同一台 runner`
+                : `vs the other ${opponents(polySer).length} serializers, one runner`}
             </p>
-            <span className="mt-2 block bg-linear-to-r/oklab from-nino-grad-from to-nino-grad-to bg-clip-text pb-2 text-6xl leading-none font-extrabold tracking-tighter whitespace-nowrap text-transparent tabular-nums sm:text-8xl">
-              {heroRange}
-            </span>
           </div>
-          <div className="flex flex-col gap-4 lg:pb-4">
-            <p className="max-w-md text-base leading-snug text-pretty sm:text-lg">
-              {zh
-                ? `${action('序列化', polySer, zh)}，Nino v4 用时 ${polySer.v4.text}，MemoryPack ${[polySer.memorypack.text, ...otherTimes(polySer).map((m) => `${m.label} ${m.text}`)].join('，')}。`
-                : `${action(`Serializing ${article(polySer)}`, polySer, zh)}: ${polySer.v4.text} with Nino v4, ${(() => {
-                    const all = [
-                      `${polySer.memorypack.text} with MemoryPack`,
-                      ...otherTimes(polySer).map(
-                        (m) => `${m.text} with ${m.label}`,
-                      ),
-                    ];
-                    return all.length > 1
-                      ? `${all.slice(0, -1).join(', ')} and ${all.at(-1)}`
-                      : all[0];
-                  })()}.`}
-            </p>
+          <div className="grid gap-8 px-5 py-6 sm:px-8 sm:py-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-12">
+            <div className="grid grid-cols-2 gap-6 self-center">
+              {[extremes.low, extremes.high].map((o, i) => (
+                <div key={o.label} className={cn(i > 0 && 'border-l pl-6')}>
+                  <p className="bg-linear-to-r/oklab from-nino-grad-from to-nino-grad-to bg-clip-text text-5xl leading-none font-extrabold tracking-tighter text-transparent tabular-nums sm:text-6xl">
+                    {o.ratio ? formatRatio(o.ratio) : zh ? '持平' : 'on par'}
+                  </p>
+                  <p className="mt-3 text-sm font-medium whitespace-nowrap">
+                    {o.label}
+                  </p>
+                  <p className="mt-0.5 text-xs text-fd-muted-foreground">
+                    {i === 0
+                      ? zh
+                        ? '最接近的对手，Nino 比它快'
+                        : 'The closest; Nino is this much faster'
+                      : zh
+                        ? '最慢的对手，Nino 比它快'
+                        : 'The slowest; Nino is this much faster'}
+                  </p>
+                </div>
+              ))}
+            </div>
             <Pair
+              thick
               a={{
                 label: 'Nino v4',
                 value: polySer.v4.ns,
@@ -444,7 +467,7 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
               more={otherTimes(polySer)}
             />
           </div>
-        </div>
+        </section>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2 lg:gap-x-8">
