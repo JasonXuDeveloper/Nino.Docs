@@ -7,7 +7,6 @@ import {
   buildRow,
   buildSmall,
   formatBuildRatio,
-  formatRange,
   formatRatio,
   hasWorkloads,
   otherLibs,
@@ -156,22 +155,44 @@ const otherTimes = (row: RuntimeCase): Measured[] =>
     return v ? [{ label: lib.label, value: v.time.ns, text: v.time.text }] : [];
   });
 
+/** A large figure and what it is against ("5.4×", "MemoryPack") */
+interface Figure {
+  value: string;
+  caption: string;
+}
+
 interface Row {
   label: string;
   note?: string;
-  ratio: string;
-  unit: string;
+  figures: Figure[];
   body: ReactNode;
+}
+
+/** The gradient multiple the home page writes its figures in */
+function Multiple({ value, big }: { value: string; big?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'bg-linear-to-r/oklab from-nino-grad-from to-nino-grad-to bg-clip-text leading-none font-extrabold tracking-tighter text-transparent tabular-nums',
+        big ? 'text-5xl sm:text-6xl' : 'text-3xl',
+      )}
+    >
+      {value}
+    </span>
+  );
 }
 
 function Panel({
   title,
+  subtitle,
   rows,
   link,
   href,
   wide,
 }: {
   title: string;
+  /** One line beside the title: what the figures compare */
+  subtitle: string;
   rows: Row[];
   link: string;
   href: string;
@@ -186,19 +207,21 @@ function Panel({
         i > 0 && (wide ? 'border-t lg:border-t-0 lg:border-l' : 'border-t'),
       )}
     >
-      <div className="flex items-start justify-between gap-4">
-        <p className="flex flex-col">
-          <span className="text-sm font-medium">{row.label}</span>
-          {row.note && (
-            <span className="text-xs text-fd-muted-foreground">{row.note}</span>
-          )}
-        </p>
-        <p className="flex shrink-0 items-baseline gap-1.5 leading-none">
-          <span className="bg-linear-to-r/oklab from-nino-grad-from to-nino-grad-to bg-clip-text text-2xl font-semibold tracking-tight text-transparent tabular-nums">
-            {row.ratio}
-          </span>
-          <span className="text-xs text-fd-muted-foreground">{row.unit}</span>
-        </p>
+      <p className="flex flex-col">
+        <span className="text-sm font-medium">{row.label}</span>
+        {row.note && (
+          <span className="text-xs text-fd-muted-foreground">{row.note}</span>
+        )}
+      </p>
+      <div className="flex gap-8">
+        {row.figures.map((f) => (
+          <p key={f.caption} className="flex flex-col gap-1.5">
+            <Multiple value={f.value} />
+            <span className="text-xs whitespace-nowrap text-fd-muted-foreground">
+              {f.caption}
+            </span>
+          </p>
+        ))}
       </div>
       {row.body}
     </div>
@@ -206,15 +229,16 @@ function Panel({
   return (
     <section
       className={cn(
-        'flex flex-col rounded-xl border',
+        'flex flex-col overflow-hidden rounded-2xl border bg-fd-card',
         wide
           ? 'lg:col-span-2'
           : 'lg:row-span-5 lg:grid lg:grid-rows-subgrid lg:gap-0',
       )}
     >
-      <h2 className="px-5 pt-5 pb-1 font-semibold tracking-tight sm:px-6">
-        {title}
-      </h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b px-5 py-4 sm:px-6">
+        <h2 className="font-semibold tracking-tight">{title}</h2>
+        <p className="text-xs text-fd-muted-foreground">{subtitle}</p>
+      </div>
       {wide ? <div className="lg:grid lg:grid-cols-3">{body}</div> : body}
       <div className="mt-auto border-t px-5 py-3.5 sm:px-6">
         <Link
@@ -261,16 +285,6 @@ function opponents(row: RuntimeCase): Opponent[] {
       });
   }
   return out;
-}
-
-/** "1.5–5.4×" across the opponents, "on par–5.4×" when one keeps up; undefined when none is behind */
-function range(row: RuntimeCase, zh: boolean): string | undefined {
-  const ratios = opponents(row).map((o) => o.ratio ?? 1);
-  const max = Math.max(...ratios);
-  if (max <= 1) return undefined;
-  const min = Math.min(...ratios);
-  if (min > 1 && formatRatio(min) !== '1.0×') return formatRange(min, max);
-  return `${zh ? '持平' : 'on par'}–${formatRatio(max)}`;
 }
 
 /** The closest and the slowest opponent of a case; undefined when none is behind */
@@ -321,13 +335,15 @@ function libraryRows(op: 'serialize' | 'deserialize', zh: boolean): Row[] {
       })
     : runtime[op].slice(0, 3);
   return cases.flatMap((row) => {
-    const ratio = range(row, zh);
-    if (!ratio) return [];
+    const ends = spread(row);
+    if (!ends) return [];
     return [
       {
         label: caseName(row, zh),
-        ratio,
-        unit: zh ? '更快' : 'faster',
+        figures: [ends.low, ends.high].map((o) => ({
+          value: o.ratio ? formatRatio(o.ratio) : zh ? '持平' : 'on par',
+          caption: o.label,
+        })),
         body: <AllBars row={row} />,
       },
     ];
@@ -353,7 +369,7 @@ function Before({ v3, v4, big }: { v3: string; v4: string; big?: boolean }) {
 
 function v3Rows(zh: boolean): Row[] {
   const types = (n: number) =>
-    zh ? `${count(n)} 个类型，v3.3.13 → v4` : `${count(n)} types, v3.3.13 → v4`;
+    zh ? `${count(n)} 个类型` : `${count(n)} types`;
   const unit = (row: BuildMeasure) =>
     row.better === 'smaller'
       ? zh
@@ -373,24 +389,25 @@ function v3Rows(zh: boolean): Row[] {
     rows.push({
       label: zh ? '编译生成的代码' : 'Compile the generated code',
       note: types(buildLarge.types),
-      ratio: formatBuildRatio(emit.ratio),
-      unit: unit(emit),
+      figures: [{ value: formatBuildRatio(emit.ratio), caption: unit(emit) }],
       body: <Before big v3={minutes(emit.v3n, zh)} v4={seconds(emit.v4, zh)} />,
     });
   if (source)
     rows.push({
       label: zh ? '生成的源码' : 'Generated source',
       note: types(buildLarge.types),
-      ratio: formatBuildRatio(source.ratio),
-      unit: unit(source),
+      figures: [
+        { value: formatBuildRatio(source.ratio), caption: unit(source) },
+      ],
       body: <Before v3={source.v3} v4={source.v4} />,
     });
   if (generator)
     rows.push({
       label: zh ? '运行生成器' : 'Run the generator',
       note: types(buildSmall.types),
-      ratio: formatBuildRatio(generator.ratio),
-      unit: unit(generator),
+      figures: [
+        { value: formatBuildRatio(generator.ratio), caption: unit(generator) },
+      ],
       body: (
         <Before v3={seconds(generator.v3, zh)} v4={seconds(generator.v4, zh)} />
       ),
@@ -407,6 +424,9 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
   const [ref, shown] = useReveal<HTMLDivElement>();
   // The headline's closest and slowest opponents
   const extremes = polySer ? spread(polySer) : undefined;
+  const libsSubtitle = zh
+    ? 'Nino 比最接近和最慢的库快几倍'
+    : 'How many times faster Nino is than the closest and the slowest';
 
   return (
     <div
@@ -434,9 +454,12 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
             <div className="grid grid-cols-2 gap-6 self-center">
               {[extremes.low, extremes.high].map((o, i) => (
                 <div key={o.label} className={cn(i > 0 && 'border-l pl-6')}>
-                  <p className="bg-linear-to-r/oklab from-nino-grad-from to-nino-grad-to bg-clip-text text-5xl leading-none font-extrabold tracking-tighter text-transparent tabular-nums sm:text-6xl">
-                    {o.ratio ? formatRatio(o.ratio) : zh ? '持平' : 'on par'}
-                  </p>
+                  <Multiple
+                    big
+                    value={
+                      o.ratio ? formatRatio(o.ratio) : zh ? '持平' : 'on par'
+                    }
+                  />
                   <p className="mt-3 text-sm font-medium whitespace-nowrap">
                     {o.label}
                   </p>
@@ -473,12 +496,14 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
       <div className="grid gap-6 lg:grid-cols-2 lg:gap-x-8">
         <Panel
           title={zh ? '序列化，对比各个库' : 'Serialize, vs every library'}
+          subtitle={libsSubtitle}
           rows={libraryRows('serialize', zh)}
           link={zh ? '全部基准测试' : 'All benchmarks'}
           href={`${docs}/benchmarks#${hasWorkloads ? 'workloads' : 'basic-types'}`}
         />
         <Panel
           title={zh ? '反序列化，对比各个库' : 'Deserialize, vs every library'}
+          subtitle={libsSubtitle}
           rows={libraryRows('deserialize', zh)}
           link={zh ? '各库怎么处理难点' : 'How each library copes'}
           href={`${docs}/benchmarks#${hasWorkloads ? 'workarounds' : 'basic-types'}`}
@@ -486,6 +511,11 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
         <Panel
           wide
           title={zh ? '对比 Nino v3' : 'vs Nino v3'}
+          subtitle={
+            zh
+              ? '源生成器基准测试，v3.3.13 → v4'
+              : 'Source generator benchmark, v3.3.13 → v4'
+          }
           rows={v3Rows(zh)}
           link={zh ? 'v4 相比 v3 的变化' : 'What changed since v3'}
           href={`${docs}/whats-new#features`}

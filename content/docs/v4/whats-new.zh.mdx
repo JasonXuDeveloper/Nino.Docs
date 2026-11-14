@@ -48,7 +48,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
     所有 API 都可以并发调用，不需要加锁；热路径从不写共享内存。
   </Card>
   <Card icon={<Cpu />} title="跨平台、跨运行时字节一致" href="/zh/docs/v4/platforms">
-    从 `netstandard2.0` 到 `net10.0`，CoreCLR、Mono 和 IL2CPP，64 位和 32 位，x64 和 Arm64；支持裁剪和 Native AOT。
+    .NET Standard 2.0 以及 .NET 8 起的每个版本，CoreCLR、Mono 和 IL2CPP，64 位和 32 位，x64 和 Arm64；支持裁剪和 Native AOT。
   </Card>
   <Card icon={<ScanSearch />} title="分析器 NINO001–NINO044" href="/zh/docs/v4/analyzers">
     写代码时就指出错误，不少还带一键代码修复。
@@ -202,7 +202,7 @@ Nino v4 本来就是为读取不可信来源的数据而设计的：网络对端
 
 ## 平台 [#platforms]
 
-- **跨平台、跨运行时字节一致**：`netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 写出的字节完全相同，数据在 CoreCLR、Mono 和 IL2CPP，64 位和 32 位，x64 和 Arm64 之间通用。各运行时内存布局不一致的地方（`Nullable<T>`、元组、`decimal`、32 位对齐），Nino 自己定义字节，不拷贝内存，还会清零填充字节，所以相等的值总是序列化成相同的字节。参见[平台](/zh/docs/v4/platforms)。
+- **跨平台、跨运行时字节一致**：各个版本写出的字节完全相同，数据在 CoreCLR、Mono 和 IL2CPP，64 位和 32 位，x64 和 Arm64 之间通用。各运行时内存布局不一致的地方（`Nullable<T>`、元组、`decimal`、32 位对齐），Nino 自己定义字节，不拷贝内存，还会清零填充字节，所以相等的值总是序列化成相同的字节。参见[平台](/zh/docs/v4/platforms)。
 - **裁剪与 Native AOT**：Nino.Core 带有这两方面的标注，用 `PublishTrimmed` 和 `PublishAot` 发布时，Nino 不产生警告。参见[裁剪与 Native AOT](/zh/docs/v4/platforms#trimming-and-native-aot)。
 - **Unity 2022.3+**：从 OpenUPM 安装，包内附带源生成器和 `Nino.UnityTypes.dll`。参见 [Unity 与 HybridCLR](/zh/docs/v4/advanced/unity)。
 - **Unity 中的代码修复**：Unity 包附带分析器的代码修复，Rider 和 Visual Studio 提供与 .NET 项目相同的快速修复。参见[分析器](/zh/docs/v4/analyzers)。

@@ -5,11 +5,11 @@ description: "Where Nino runs (.NET Standard 2.0 and later, Native AOT, Unity on
 icon: Cpu
 ---
 
-Nino runs on .NET Standard 2.0 and later, Unity 2022.3+ (Mono and IL2CPP) and Godot 4, and writes the same bytes on every runtime, CPU and pointer size. This page lists the supported targets and describes the binary format.
+Nino runs on .NET 8 and later, on anything that can use a .NET Standard 2.0 library, on Unity 2022.3+ (Mono and IL2CPP) and Godot 4, and writes the same bytes on every runtime, CPU and pointer size. This page lists the supported targets and describes the binary format.
 
 ## Supported Platforms
 
-| Component | Targets |
+| Component | Builds in the package |
 | --- | --- |
 | `Nino.Core` (runtime) | `netstandard2.0`, `netstandard2.1`, `net8.0`, `net10.0` |
 | `Nino.Generator` (generator, analyzer) | Roslyn 4.3 and later; builds for Roslyn 4.3, 4.8 and 4.12 in one package |
@@ -22,7 +22,9 @@ Nino runs on .NET Standard 2.0 and later, Unity 2022.3+ (Mono and IL2CPP) and Go
 | Hot update | HybridCLR, with no initialization call |
 | Trimming and Native AOT | annotated in the `net8.0` and `net10.0` builds ([details](#trimming-and-native-aot)) |
 
-A .NET 11 project uses the `net10.0` build of each package (with its trimming and Native AOT annotations); the unit tests run on .NET 11 too.
+### Which Build a Project Gets [#which-build]
+
+**Every .NET from .NET 8 on is supported, .NET 9 and .NET 11 included.** The packages carry builds tuned for .NET 8 and .NET 10, and NuGet gives a project the newest build that is not newer than its target framework: .NET 8 and .NET 9 get the `net8.0` build, .NET 10, .NET 11 and later the `net10.0` build, with its trimming and Native AOT annotations (`Nino.Immutable` has no `net10.0` build, so every .NET from 8 on gets its `net8.0` one). .NET Framework, .NET Core before 8, Unity and Mono get a `netstandard` build. The unit tests run on .NET 8, .NET 10 and .NET 11 ([Testing](/en/docs/v4/testing)).
 
 **Every target writes identical bytes.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` each use the best primitives available to them ([SIMD](#simd), `[UnsafeAccessor]` on .NET 8+), and the test suite checks the same golden payloads against each build. Data written by a .NET 10 server can be read by a Unity IL2CPP client on a 32-bit Android phone, and the other way round.
 
