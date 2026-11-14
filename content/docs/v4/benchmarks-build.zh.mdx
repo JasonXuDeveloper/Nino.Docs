@@ -1,0 +1,44 @@
+---
+title: 基准测试：构建时间
+seoTitle: "Nino 源生成器构建时间：v4 对比 v3 的编译速度与生成代码 – Nino v4 文档"
+description: "Nino v4 的源生成器和编译器在 330 和 1,100 个类型下比 v3 3.3.13 快多少、生成多少源码和 IL、改完类型后生成器重跑要多久，附复现步骤。"
+icon: Hammer
+---
+
+这一页测的是 Nino 在构建时的开销：生成器写出多少源码、编译器输出程序集要多久、改了类型之后生成器重跑有多快，v4 和 v3 3.3.13 对比。运行速度见[基准测试：.NET 运行速度](/zh/docs/v4/benchmarks)。
+
+## 测量方法 [#setup]
+
+测试项目是一个人工合成的程序集：`N` 个抽象根类，每个根类下面一条 8 层的派生链、一个密封叶子类和一个结构体（共 `N × 11` 个类型），成员有基元类型、字符串、`List<T>`、`Dictionary<int, string>`、对其他 `[NinoType]` 的引用和私有字段。测试工具（[`benchmarks/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.GeneratorBenchmark)）在进程内用 Roslyn 对这次编译运行源生成器，输出程序集，然后分别加一个成员、加一行注释，各再跑一遍生成器。基线是 NuGet 上的 v3 3.3.13，和本次发布的生成器在发布基准测试的同一台 GitHub 托管 runner 上先后跑；大小按百万字符（源码）和百万字节（IL）算。表格下方写明了机器，以及每项耗时取几次运行的中位数。
+
+## 结果 [#results]
+
+<BenchmarkChart chart="compile" lang="zh" table={false} />
+
+<BuildTables lang="zh" />
+
+330 个类型时，生成器的耗时只有零点几秒，每次测都有波动：这几行只说明“快好几倍”，别当成精确的倍数。
+
+类型从 <BenchValue k="build.types.small" /> 个加到 <BenchValue k="build.types.large" /> 个（<BenchValue k="build.types.growth" /> 倍），v3 的编译时间涨了 <BenchValue k="build.v3.emit.growth" /> 倍，v4 只涨了 <BenchValue k="build.v4.emit.growth" /> 倍。也就是说，项目里类型越多，v3 花在每个类型上的时间就越长；v4 每个类型的开销基本不变，大约 <BenchValue k="build.v4.source.perType" /> KB 源码、<BenchValue k="build.v4.emit.perType" /> ms 编译时间。
+
+## 生成的源码里有什么 [#generated-source]
+
+v4 生成的源码不只是格式化器，还有拦截器、注册代码，以及每个类型一行 `[assembly: NinoTypeLayout]`，也就是 [nino-gen](/zh/docs/v4/advanced/codegen) 和[布局基线](/zh/docs/v4/evolving-data#layout-baseline)要读的已发布布局。子类型的布局会把继承来的成员也列一遍，这样每个布局单独就能读懂；所以在这个测试 8 层深的继承链里，这些行占了源码和 IL 的很大一部分。它们只是元数据里的字符串，不是代码，但编译器照样要把它们写进程序集，编译时间里也有它们的一份。
+
+## 复现 [#reproducing]
+
+克隆 [Nino 仓库](https://github.com/JasonXuDeveloper/Nino)，装好 .NET 10 SDK，然后：
+
+```shell
+# N = 30 个根类型，每个根类型 8 个派生类（共 330 个类型）
+dotnet run -c Release --project benchmarks/Nino.GeneratorBenchmark -- 30 8
+```
+
+每次发布都会按 330 和 1,100 个类型各跑一遍，在发布说明里加一节 **Build: v3 3.3.13 vs v4 (source generator)**；上面的表格取自带这一节的最新版本。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="基准测试：.NET 运行速度" href="/zh/docs/v4/benchmarks">对比 v3、MemoryPack、MessagePack、protobuf-net、Google.Protobuf 和 System.Text.Json 的序列化与反序列化耗时。</Card>
+  <Card title="v4 新特性" href="/zh/docs/v4/whats-new">相对 v3 改了什么，这里的构建时间就是和 v3 比的。</Card>
+</Cards>

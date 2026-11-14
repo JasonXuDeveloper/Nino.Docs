@@ -10,8 +10,8 @@ import { Cpu, Recycle, ScanSearch, ShieldCheck, Share2, Zap, Layers, KeyRound, B
   map={{
     runtime: '/zh/docs/v4/whats-new#faster-than-v3',
     'build-time-and-generated-code': '/zh/docs/v4/whats-new#faster-to-build',
-    '330-types-n--30': '/zh/docs/v4/benchmarks#build-time-and-generated-code',
-    '1100-types-n--100': '/zh/docs/v4/benchmarks#build-time-and-generated-code',
+    '330-types-n--30': '/zh/docs/v4/benchmarks-build#results',
+    '1100-types-n--100': '/zh/docs/v4/benchmarks-build#results',
   }}
 />
 
@@ -122,7 +122,7 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 
 <BenchmarkChart chart="compile" lang="zh" />
 
-项目越大，差距越明显：见[构建时间与生成代码](/zh/docs/v4/benchmarks#build-time-and-generated-code)。
+项目越大，差距越明显：见[基准测试：构建时间](/zh/docs/v4/benchmarks-build)。
 
 ### 速度从哪里来 [#where-the-speed-comes-from]
 
@@ -132,7 +132,7 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 - **每种集合走它自己的内部结构**：`SortedSet<T>`、`SortedDictionary<TKey, TValue>`、`SortedList<TKey, TValue>`、`LinkedList<T>`、并发集合和不可变集合，都通过它们的字段、构造函数和批量方法读写，而不是逐个元素循环。这些字段在某些运行时（.NET Framework 和 Mono）上不一样，所以启动时会检查一次布局，对不上就改用公开 API。参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
 - **CPU 有 SIMD 就用**：AVX-512 上用 64 字节向量和掩码拷贝，AVX2 上用 32 字节向量，Arm64 上用查表指令，.NET 10 的 WebAssembly SIMD 上用字节重排。参见[SIMD](/zh/docs/v4/simd#dotnet)。
 - **固定大小的类型**直接写进大小正好的 `byte[]`；`NinoSerializer.GetFixedSize<T>()` 返回这个大小。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
-- **在 x64 和 Arm64 上测量**：每个版本都会在 x64 和 GitHub 的 Arm64 runner 上跑基准测试；见[.NET 基准测试](/zh/docs/v4/benchmarks)。
+- **在 x64 和 Arm64 上测量**：每个版本都会在 x64 和 GitHub 的 Arm64 runner 上跑基准测试；见[基准测试：.NET 运行速度](/zh/docs/v4/benchmarks)。
 
 这些优化都不改变字节：每条快速路径写出的内容都和普通路径一样。
 
@@ -253,6 +253,6 @@ packet.ReturnToPool();                                                 // 归还
   <Card title="快速开始" href="/zh/docs/v4/start" description="安装 Nino v4，序列化第一个类型。" />
   <Card title="从 v3 迁移" href="/zh/docs/v4/migration" description="逐步升级，附修改前后的代码。" />
   <Card title="设计文档" href="https://github.com/JasonXuDeveloper/Nino/blob/main/docs/v4-design.md" description="v4 的架构与二进制格式。" />
-  <Card title=".NET 基准测试" href="/zh/docs/v4/benchmarks" description="与 v3 和 MemoryPack 对比构建时间和运行性能的完整数据表。" />
+  <Card title="基准测试：.NET 运行速度" href="/zh/docs/v4/benchmarks" description="与 v3 和 MemoryPack 对比构建时间和运行性能的完整数据表。" />
   <Card title="Nino 与 MemoryPack 对比" href="/zh/docs/v4/vs-memorypack" description="如实对比功能和性能。" />
 </Cards>

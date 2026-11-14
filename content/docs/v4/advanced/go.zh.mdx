@@ -77,7 +77,7 @@ data, err = nino.MarshalAs[Animal](a) // 多态根，按类型 ID 写出
 
 在生成的代码里，C# 的 `string` 成员是 `*string`，null 读出来还是 null。Go 的 `string` 没有 null：凡是读成 `string` 的地方（`Reader.String`、带 `nino` 标签的结构体里的 `string` 字段、字典的键、结构体标签下 `map[string]struct{}` Set 的元素），null 字符串都读成 `""`，写回去也是 `""`，不再是 null。要区分 null 和空字符串，用 `*string`。在生成的代码里，`HashSet<string>` 是 `[]*string`，能保留 null 元素；字典的键是非 null 的 `string`，因为 .NET 从不写 null 键。
 
-Go 的字符串是 UTF-8，按默认编码（Latin-1 或 UTF-16）读写字符串都要转码，而 Protocol Buffers 和 MessagePack 直接复制 UTF-8 字节；[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#strings)里的字符串用例测的就是这部分开销，Rust 也一样。
+Go 的字符串是 UTF-8，按默认编码（Latin-1 或 UTF-16）读写字符串都要转码，而 Protocol Buffers 和 MessagePack 直接复制 UTF-8 字节；[基准测试：Go、Rust 与 TypeScript](/zh/docs/v4/benchmarks-runtimes#strings)里的字符串用例测的就是这部分开销，Rust 也一样。
 
 短字符串（UTF-8 不超过 128 字节）读进 reader 持有的一块内存：每块最多 2 KiB，也不会超过剩余数据能填满的大小，这样许多字符串只分配一次。留着一个字符串，它所在的整块内存就不会回收，和子串拖住原字符串一个道理；要独立的副本，用 `strings.Clone`。同理，生成代码读出的 `*string`（`StringPtr`、`Utf8Ptr`）指向 reader 持有的一块内存，每块最多 32 个。
 
@@ -144,7 +144,7 @@ Go 在编译期实例化泛型。泛型类型如果以别的类型实参包含�
 
 ## 性能 [#performance]
 
-每次发布都会用同一份数据测 Go 运行时（nino-gen 生成形式的编解码器和结构体标签两种），和 Protocol Buffers（`google.golang.org/protobuf`）、MessagePack（`vmihailenco/msgpack`）、`encoding/json`、`encoding/gob` 对比。测量方式见[其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#go)。
+每次发布都会用同一份数据测 Go 运行时（nino-gen 生成形式的编解码器和结构体标签两种），和 Protocol Buffers（`google.golang.org/protobuf`）、MessagePack（`vmihailenco/msgpack`）、`encoding/json`、`encoding/gob` 对比。测量方式见[基准测试：Go、Rust 与 TypeScript](/zh/docs/v4/benchmarks-runtimes#go)。
 
 <RuntimesChart lang="zh" only="go" />
 
@@ -155,5 +155,5 @@ Go 在编译期实例化泛型。泛型类型如果以别的类型实参包含�
 <Cards>
   <Card title="数据演进" href="/zh/docs/v4/evolving-data">已部署的服务升级前一直跑旧代码：选一种容得下改动的格式。</Card>
   <Card title="二进制格式" href="/zh/docs/v4/wire-format">每个运行时读写的字节。</Card>
-  <Card title="其他语言的基准测试" href="/zh/docs/v4/benchmarks-runtimes">Go、Rust 和 TypeScript 对比各自语言里的序列化库。</Card>
+  <Card title="基准测试：Go、Rust 与 TypeScript" href="/zh/docs/v4/benchmarks-runtimes">Go、Rust 和 TypeScript 对比各自语言里的序列化库。</Card>
 </Cards>

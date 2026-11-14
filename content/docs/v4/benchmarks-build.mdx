@@ -1,0 +1,44 @@
+---
+title: "Benchmarks: Build Time"
+seoTitle: "Nino Source Generator Build Time: v4 vs v3 Compile Speed and Generated Code – Nino v4 Docs"
+description: "How long Nino v4's source generator and compiler take against v3 3.3.13 at 330 and 1,100 types, how much source and IL they generate, and how fast the generator re-runs after an edit, with the setup to reproduce it."
+icon: Hammer
+---
+
+This page measures what Nino costs at build time: how much source the generator writes, how long the compiler takes to emit the assembly, and how fast the generator re-runs after you edit a type, for v4 against v3 3.3.13. Runtime speed is on [Benchmarks: .NET Runtime](/en/docs/v4/benchmarks).
+
+## How It Is Measured [#setup]
+
+The test project is a synthetic assembly of `N` abstract root classes, each with a chain of 8 derived classes, a sealed leaf and a struct (`N × 11` types), with primitives, strings, `List<T>`, `Dictionary<int, string>`, references to other `[NinoType]`s and private fields. The harness ([`benchmarks/Nino.GeneratorBenchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.GeneratorBenchmark)) runs the generator on the compilation (Roslyn in process), emits the assembly, and re-runs the generator after adding a member and after adding a comment. The baseline is v3 3.3.13 from NuGet, run one after the other with the release's generator on one GitHub-hosted runner of the release's benchmark run; sizes are millions of chars (source) and bytes (IL). The line under the tables names the machine and how many runs each time is the median of.
+
+## Results [#results]
+
+<BenchmarkChart chart="compile" lang="en" table={false} />
+
+<BuildTables lang="en" />
+
+The generator times at 330 types are tenths of a second and vary from run to run: read those rows as "several times faster", not as exact ratios.
+
+Going from <BenchValue k="build.types.small" /> to <BenchValue k="build.types.large" /> types (<BenchValue k="build.types.growth" />× as many), v3's compile time grows <BenchValue k="build.v3.emit.growth" />× and v4's <BenchValue k="build.v4.emit.growth" />×: each type costs v3 more the more types a project has, while v4 spends about the same on each, about <BenchValue k="build.v4.source.perType" /> KB of source and <BenchValue k="build.v4.emit.perType" /> ms of compile time.
+
+## What the Generated Source Holds [#generated-source]
+
+v4's generated source is more than its formatters: it also holds the interceptors and registrations, and an `[assembly: NinoTypeLayout]` line per type, the published layout that [nino-gen](/en/docs/v4/advanced/codegen) and the [layout baseline](/en/docs/v4/evolving-data#layout-baseline) read. A subtype's layout lists the members it inherits too, so that each layout reads alone; in this test's 8-level chains these lines are a large share of the source and IL. They are strings in metadata, not code, but the compiler still writes them out, so they take a share of the compile time too.
+
+## Reproducing [#reproducing]
+
+From a clone of the [Nino repository](https://github.com/JasonXuDeveloper/Nino), with the .NET 10 SDK:
+
+```shell
+# N = 30 roots, 8 derived classes per root (330 types)
+dotnet run -c Release --project benchmarks/Nino.GeneratorBenchmark -- 30 8
+```
+
+Every release runs it at 330 and 1,100 types and adds a **Build: v3 3.3.13 vs v4 (source generator)** section to the release notes; the tables above come from the newest release that has one.
+
+## Next Steps [#next-steps]
+
+<Cards>
+  <Card title="Benchmarks: .NET Runtime" href="/en/docs/v4/benchmarks">Serialize and deserialize times against v3, MemoryPack, MessagePack, protobuf-net, Google.Protobuf and System.Text.Json.</Card>
+  <Card title="What's New in v4" href="/en/docs/v4/whats-new">What changed from v3, the version these build times compare against.</Card>
+</Cards>

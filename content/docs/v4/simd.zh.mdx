@@ -26,10 +26,10 @@ Nino 在每个平台上写出的字节都一样。平台有向量指令时，各
 
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |
-| 支持 AVX-512 的 x64 | 129 字节到 32 KB 的块用 64 字节向量拷贝，存储对齐；内存中有填充的元组和键值对，先对齐目标地址，再用双源置换按整个 64 字节向量写出（16 个 `(int, long)` 写成三个向量），每个 4 字节字都是内存中完整的一个字时按字置换（AVX-512F，无需 VBMI），否则按字节置换（AVX-512 VBMI），读取时同样如此，内存中每个 64 字节向量都存储到对齐地址；其余这类值每次重排 64 字节（VBMI）；用 512 位掩码拷贝清零原始结构体的填充 | [.NET 基准测试](/zh/docs/v4/benchmarks)，x64 |
-| 支持 AVX2 的 x64 | 33 到 128 字节的块内联拷贝，用两个或四个相互重叠的 32 字节向量（支持 AVX-512 时也是如此）；256 字节到 16 KB 的块用 32 字节向量拷贝，存储对齐（.NET 偏好 256 位向量的 AVX-512 CPU 也是如此）；带填充的元组和键值对，写入和读取都按组处理：32 字节向量的每个 16 字节通道，从源数据中至多两个 16 字节窗口经通道内重排（`vpshufb`）得到，同一组的各向量共用加载，相距较远的通道用一次通道置换（`vperm2i128`）拼合，值允许时存储对齐到 32 字节边界；一组需要超过四个向量的值（如 `(byte, int)` 这样的 5 字节块）每组取一到四个向量能容纳的值（每个 32 字节向量六个 `(byte, int)`）；其余不超过 16 字节的，每个值用一次 SSSE3 16 字节重排；字符串每次 32 字节收窄为 Latin-1 或扩展回来 | [.NET 基准测试](/zh/docs/v4/benchmarks)，x64 |
-| 支持 SSSE3 的 x64 | 带填充的元组和键值对按组处理，每个 16 字节向量由两次重排（`pshufb`）按位或得到（一组需要超过四个向量的块，与 AVX2 一样分成较小的组：十二个 `(byte, int)` 用四个向量）；其余每个值一次 16 字节重排；33 到 64 字节的块内联拷贝，用四次 16 字节移动，更大的块用 `memmove`；字符串每次 16 字节收窄和扩展 | [.NET 基准测试](/zh/docs/v4/benchmarks) |
-| Arm64（AdvSimd） | 带填充的元组和键值对，写入和读取都用查表（`TBL`）按组处理，每次若干个 16 字节向量：一组的窗口落在 16 字节网格上时，每个窗口只加载一次，成对加载（`LDP`），每次查表取一个窗口或相邻的两个（四个 `(int, long)` 由两对加载、三次查表写出）；填充字节用成对的 16 字节加载和存储（`LDP`/`STP`）清零；其余每个值一次 16 字节重排（`TBL`），不超过 8 字节的值每次处理八个，每写出 16 字节只用一次查表，查表只用到这 16 字节的来源所在的那几段（64 字节按 16 字节分成四段，用其中一到四个寄存器），只存储这些值实际占用的字节；33 到 64 字节的块内联拷贝，用四次 16 字节移动；65 字节到 64 KB 的块从对齐的源地址开始，每次 64 字节，用成对的加载和存储（`LDP`/`STP`）拷贝，更大的块用 `memmove`；字符串每次 16 字节收窄和扩展 | [.NET 基准测试](/zh/docs/v4/benchmarks)，Arm64 标签页 |
+| 支持 AVX-512 的 x64 | 129 字节到 32 KB 的块用 64 字节向量拷贝，存储对齐；内存中有填充的元组和键值对，先对齐目标地址，再用双源置换按整个 64 字节向量写出（16 个 `(int, long)` 写成三个向量），每个 4 字节字都是内存中完整的一个字时按字置换（AVX-512F，无需 VBMI），否则按字节置换（AVX-512 VBMI），读取时同样如此，内存中每个 64 字节向量都存储到对齐地址；其余这类值每次重排 64 字节（VBMI）；用 512 位掩码拷贝清零原始结构体的填充 | [基准测试：.NET 运行速度](/zh/docs/v4/benchmarks)，x64 |
+| 支持 AVX2 的 x64 | 33 到 128 字节的块内联拷贝，用两个或四个相互重叠的 32 字节向量（支持 AVX-512 时也是如此）；256 字节到 16 KB 的块用 32 字节向量拷贝，存储对齐（.NET 偏好 256 位向量的 AVX-512 CPU 也是如此）；带填充的元组和键值对，写入和读取都按组处理：32 字节向量的每个 16 字节通道，从源数据中至多两个 16 字节窗口经通道内重排（`vpshufb`）得到，同一组的各向量共用加载，相距较远的通道用一次通道置换（`vperm2i128`）拼合，值允许时存储对齐到 32 字节边界；一组需要超过四个向量的值（如 `(byte, int)` 这样的 5 字节块）每组取一到四个向量能容纳的值（每个 32 字节向量六个 `(byte, int)`）；其余不超过 16 字节的，每个值用一次 SSSE3 16 字节重排；字符串每次 32 字节收窄为 Latin-1 或扩展回来 | [基准测试：.NET 运行速度](/zh/docs/v4/benchmarks)，x64 |
+| 支持 SSSE3 的 x64 | 带填充的元组和键值对按组处理，每个 16 字节向量由两次重排（`pshufb`）按位或得到（一组需要超过四个向量的块，与 AVX2 一样分成较小的组：十二个 `(byte, int)` 用四个向量）；其余每个值一次 16 字节重排；33 到 64 字节的块内联拷贝，用四次 16 字节移动，更大的块用 `memmove`；字符串每次 16 字节收窄和扩展 | [基准测试：.NET 运行速度](/zh/docs/v4/benchmarks) |
+| Arm64（AdvSimd） | 带填充的元组和键值对，写入和读取都用查表（`TBL`）按组处理，每次若干个 16 字节向量：一组的窗口落在 16 字节网格上时，每个窗口只加载一次，成对加载（`LDP`），每次查表取一个窗口或相邻的两个（四个 `(int, long)` 由两对加载、三次查表写出）；填充字节用成对的 16 字节加载和存储（`LDP`/`STP`）清零；其余每个值一次 16 字节重排（`TBL`），不超过 8 字节的值每次处理八个，每写出 16 字节只用一次查表，查表只用到这 16 字节的来源所在的那几段（64 字节按 16 字节分成四段，用其中一到四个寄存器），只存储这些值实际占用的字节；33 到 64 字节的块内联拷贝，用四次 16 字节移动；65 字节到 64 KB 的块从对齐的源地址开始，每次 64 字节，用成对的加载和存储（`LDP`/`STP`）拷贝，更大的块用 `memmove`；字符串每次 16 字节收窄和扩展 | [基准测试：.NET 运行速度](/zh/docs/v4/benchmarks)，Arm64 标签页 |
 | 支持 SIMD 的 WebAssembly（.NET 10） | 带填充的元组和键值对，写入和读取都按组处理，每个 16 字节向量用两次 swizzle（`i8x16.swizzle`），与 SSSE3 相同；其余每个值一次 16 字节重排（`PackedSimd`） | — |
 | Arm32，或关闭了硬件内部函数（`DOTNET_EnableHWIntrinsic=0`） | 无：需要重排的值逐个处理，超过 64 字节的块用 `memmove`；字节一致 | — |
 
@@ -51,11 +51,11 @@ Unity 加载 `Nino.Core` 的 netstandard 版本。安装 `com.unity.burst` 1.8 �
 
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |
-| 支持 AVX2 的 x64，Burst AVX2 目标 | 256 个值及以上、每个值最多 16 字节的块的 `Permute`：每个 32 字节向量放两个或更多值，一个 `vpshufb` 掩码，各通道用 `vpermd` 拼接或分成两个 16 字节存储；`Interleave32` 和 `NormalizeBoolSlots` 每次 32 字节；其余部分、更宽的值和字符串走下面的 SSSE3 路径 | [Unity 基准测试](/zh/docs/v4/benchmarks-unity) |
-| 支持 SSSE3 的 x86 和 x64（x64 Player 中需要 SSE4 目标） | `Permute`：2 个及以上的元组、键值对和按块读写的 `[NinoType]` 结构体组成的数组和列表，每 16 字节一次字节重排（`pshufb`）读写，16 个及以上带填充的原始结构体在拷贝时清零填充；`Narrow` 和 `Widen`：16 个字符及以上的 Latin-1 字符串，每次 16 个字符；`NarrowAscii` 和 `WidenAscii`：16 个字符及以上的 `[NinoUtf8]` 字符串中直到第一个非 ASCII 字符为止的 ASCII 文本，其余部分交给 .NET 的 UTF-8 编码器和严格解码器；`Interleave32`：键和值都是四字节原始值的 `SortedList`，16 对及以上，用 SSE2 的 unpack 指令交错写出；`NormalizeBoolSlots`：`bool?` 的数组和列表，读取从 16 个值起、写入从 32 个起，每次检查并规整 16 字节 | [Unity 基准测试](/zh/docs/v4/benchmarks-unity) |
+| 支持 AVX2 的 x64，Burst AVX2 目标 | 256 个值及以上、每个值最多 16 字节的块的 `Permute`：每个 32 字节向量放两个或更多值，一个 `vpshufb` 掩码，各通道用 `vpermd` 拼接或分成两个 16 字节存储；`Interleave32` 和 `NormalizeBoolSlots` 每次 32 字节；其余部分、更宽的值和字符串走下面的 SSSE3 路径 | [基准测试：Unity 与 Burst](/zh/docs/v4/benchmarks-unity) |
+| 支持 SSSE3 的 x86 和 x64（x64 Player 中需要 SSE4 目标） | `Permute`：2 个及以上的元组、键值对和按块读写的 `[NinoType]` 结构体组成的数组和列表，每 16 字节一次字节重排（`pshufb`）读写，16 个及以上带填充的原始结构体在拷贝时清零填充；`Narrow` 和 `Widen`：16 个字符及以上的 Latin-1 字符串，每次 16 个字符；`NarrowAscii` 和 `WidenAscii`：16 个字符及以上的 `[NinoUtf8]` 字符串中直到第一个非 ASCII 字符为止的 ASCII 文本，其余部分交给 .NET 的 UTF-8 编码器和严格解码器；`Interleave32`：键和值都是四字节原始值的 `SortedList`，16 对及以上，用 SSE2 的 unpack 指令交错写出；`NormalizeBoolSlots`：`bool?` 的数组和列表，读取从 16 个值起、写入从 32 个起，每次检查并规整 16 字节 | [基准测试：Unity 与 Burst](/zh/docs/v4/benchmarks-unity) |
 | Arm64（Neon） | 同样的内核，用 `tbl`，字符串用 `uzp1`/`zip` | — |
 | 用 WebAssembly SIMD 构建的 WebGL（Unity 6 的 Target WebAssembly 2023，或 2022.3 上的 `-msimd128`） | 那里没有 Burst：同样的内核用 C 写成（`Nino.WebGL`），使用 `i8x16.swizzle` 和向量收窄、扩展，处理 16 个字符及以上的 Latin-1 字符串和 `[NinoUtf8]` 字符串中的 ASCII 文本，其余的从 32 个值起。参见 [WebGL](/zh/docs/v4/advanced/unity#webgl-kernels) | — |
-| Armv7、没有 SIMD 的 WebGL、不支持 SSSE3（或没有包含它的目标）的 x86 和 x64、没有 Burst 的 IL2CPP 和 Mono Player（安装 Burst 即可使用内核） | 无：Nino 的 netstandard 标量路径；字节一致 | [Unity 基准测试](/zh/docs/v4/benchmarks-unity)，“不用 Burst”一列 |
+| Armv7、没有 SIMD 的 WebGL、不支持 SSSE3（或没有包含它的目标）的 x86 和 x64、没有 Burst 的 IL2CPP 和 Mono Player（安装 Burst 即可使用内核） | 无：Nino 的 netstandard 标量路径；字节一致 | [基准测试：Unity 与 Burst](/zh/docs/v4/benchmarks-unity)，“不用 Burst”一列 |
 
 ## Go [#go]
 
@@ -63,10 +63,10 @@ Go 运行时的向量代码是处理字符串的汇编，每个指令集一套�
 
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |
-| 支持 AVX-512（F、BW、VL、VBMI2）的 amd64 | 写入器每次 32 字节，使用掩码加载和压缩指令，不需要查找表；同时支持 VBMI 时，读取器用 AVX-512 把 Latin-1 和 UTF-16 转换为 UTF-8 | [其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#go)，字符串用例 |
-| 支持 AVX2（和 POPCNT）的 amd64 | 写入器每次 32 字节；读取器使用 SSSE3 内核 | [其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#go) |
+| 支持 AVX-512（F、BW、VL、VBMI2）的 amd64 | 写入器每次 32 字节，使用掩码加载和压缩指令，不需要查找表；同时支持 VBMI 时，读取器用 AVX-512 把 Latin-1 和 UTF-16 转换为 UTF-8 | [基准测试：Go、Rust 与 TypeScript](/zh/docs/v4/benchmarks-runtimes#go)，字符串用例 |
+| 支持 AVX2（和 POPCNT）的 amd64 | 写入器每次 32 字节；读取器使用 SSSE3 内核 | [基准测试：Go、Rust 与 TypeScript](/zh/docs/v4/benchmarks-runtimes#go) |
 | 支持 SSSE3 的 amd64 | 写入器和读取器每次 16 字节，使用 `PSHUFB` 和 `PALIGNR` | — |
-| arm64（NEON） | 写入器和读取器每次 16 字节；写入器把不需要向量的部分（块的 ASCII 判断、movemask）放在标量寄存器中做 | [其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#go)，Arm64 |
+| arm64（NEON） | 写入器和读取器每次 16 字节；写入器把不需要向量的部分（块的 ASCII 判断、movemask）放在标量寄存器中做 | [基准测试：Go、Rust 与 TypeScript](/zh/docs/v4/benchmarks-runtimes#go)，Arm64 |
 | 不支持 SSSE3 的 amd64、其他所有平台，或用 `-tags purego` 构建 | 无：按 8 字节字循环的 Go 代码（长串 ASCII 用 SSE2 或 NEON 每次 16 字节拷贝或扩展）；字节一致 | — |
 
 ## Rust [#rust]
@@ -75,11 +75,11 @@ Rust crate 的向量代码在 `src/simd.rs` 及其子模块 `simd/x86.rs`、`sim
 
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |
-| 支持 AVX-512（F、BW、VL、VBMI2；crate 用 Rust 1.89 或更高版本构建）的 x86_64 | 写入每步 64 字节，用掩码加载和存储，由 `vpcompressb`/`vpcompressw` 打包；读取 32 字节及以上的 Latin-1 和 24 个代码单元及以上的 UTF-16 时用 AVX-512 | [其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#rust)，字符串用例 |
-| 支持 AVX2（以及 BMI1、BMI2、LZCNT）的 x86_64 | 写入用 32 字节窗口 | [其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#rust) |
-| 支持 SSE4.1 的 x86_64 | 写入用 16 字节窗口；读取 24 个代码单元及以上的 UTF-16（Latin-1 用 SSSE3） | [其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#rust) |
-| 只有 SSSE3 或 SSE2 的 x86_64 | 64 字节以内的文本逐字符处理，更长的文本每块 16 字节（48 字节及以上文本中的双字节字符用 SSSE3） | [其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#rust) |
-| 小端 Arm64（NEON） | 写入 64 字节以上的文本用 32 字节窗口，连续的三字节字符（中日韩文字）每步 48 字节（`ld3`），更短的文本逐字符处理；读取 32 字节及以上的 Latin-1 和 24 个代码单元及以上的 UTF-16 | [其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#rust) |
+| 支持 AVX-512（F、BW、VL、VBMI2；crate 用 Rust 1.89 或更高版本构建）的 x86_64 | 写入每步 64 字节，用掩码加载和存储，由 `vpcompressb`/`vpcompressw` 打包；读取 32 字节及以上的 Latin-1 和 24 个代码单元及以上的 UTF-16 时用 AVX-512 | [基准测试：Go、Rust 与 TypeScript](/zh/docs/v4/benchmarks-runtimes#rust)，字符串用例 |
+| 支持 AVX2（以及 BMI1、BMI2、LZCNT）的 x86_64 | 写入用 32 字节窗口 | [基准测试：Go、Rust 与 TypeScript](/zh/docs/v4/benchmarks-runtimes#rust) |
+| 支持 SSE4.1 的 x86_64 | 写入用 16 字节窗口；读取 24 个代码单元及以上的 UTF-16（Latin-1 用 SSSE3） | [基准测试：Go、Rust 与 TypeScript](/zh/docs/v4/benchmarks-runtimes#rust) |
+| 只有 SSSE3 或 SSE2 的 x86_64 | 64 字节以内的文本逐字符处理，更长的文本每块 16 字节（48 字节及以上文本中的双字节字符用 SSSE3） | [基准测试：Go、Rust 与 TypeScript](/zh/docs/v4/benchmarks-runtimes#rust) |
+| 小端 Arm64（NEON） | 写入 64 字节以上的文本用 32 字节窗口，连续的三字节字符（中日韩文字）每步 48 字节（`ld3`），更短的文本逐字符处理；读取 32 字节及以上的 Latin-1 和 24 个代码单元及以上的 UTF-16 | [基准测试：Go、Rust 与 TypeScript](/zh/docs/v4/benchmarks-runtimes#rust) |
 | 32 位目标、WebAssembly、大端平台 | 无：每块两个 8 字节字；字节一致 | — |
 
 ## TypeScript [#typescript]
@@ -89,7 +89,7 @@ TypeScript 运行时用 `DataView` 和类型化数组读写。它的向量代码
 | 引擎 | 向量路径 | 基准测试 |
 | --- | --- | --- |
 | 支持 WebAssembly SIMD、GC 和 JS String Builtins 的浏览器和 Deno | 读取较长的 UTF-16 和 Latin-1 文本、写入超过 64 个字符的文本，在 SIMD 寄存器中每次 8 或 16 个字符（`useWasm(false)` 可关闭） | — |
-| Node、Bun、带 Node `Buffer` 的 Deno | 不用 Nino 自己的：`Buffer` 原生的 Latin-1 和 UTF-16 方法 | [其他语言的基准测试](/zh/docs/v4/benchmarks-runtimes#typescript) |
+| Node、Bun、带 Node `Buffer` 的 Deno | 不用 Nino 自己的：`Buffer` 原生的 Latin-1 和 UTF-16 方法 | [基准测试：Go、Rust 与 TypeScript](/zh/docs/v4/benchmarks-runtimes#typescript) |
 | 不支持它们的引擎，或阻止编译 WebAssembly 的内容安全策略 | 无：JavaScript 路径和引擎内置的解码器；字节一致 | — |
 
 ## 注册自己的内核 [#registering-kernels]
@@ -182,5 +182,5 @@ public static unsafe class NinoNativeKernels
 
 <Cards>
   <Card title="性能原理" href="/zh/docs/v4/performance">Nino 为什么快，以及怎样让你的代码留在快速路径上。</Card>
-  <Card title=".NET 基准测试" href="/zh/docs/v4/benchmarks">全部用例，包括 MemoryPack、MessagePack 和 protobuf-net，以及测量它们的代码。</Card>
+  <Card title="基准测试：.NET 运行速度" href="/zh/docs/v4/benchmarks">全部用例，包括 MemoryPack、MessagePack 和 protobuf-net，以及测量它们的代码。</Card>
 </Cards>

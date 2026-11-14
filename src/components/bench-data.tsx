@@ -815,12 +815,13 @@ export function UnityHighlights({
         {zh ? (
           <>
             不用 Burst 的时间除以使用 Burst 的时间（相差 5%
-            以内为持平）。两边的时间见 <a href={page}>Unity 基准测试</a>。
+            以内为持平）。两边的时间见
+            <a href={page}>基准测试：Unity 与 Burst</a>。
           </>
         ) : (
           <>
             Time without Burst divided by time with it (within 5% is on par).
-            For both times, see the <a href={page}>Unity benchmark</a>.
+            For both times, see <a href={page}>Benchmarks: Unity and Burst</a>.
           </>
         )}
       </p>
@@ -880,7 +881,7 @@ function buildTable(size: BuildSizeTable, zh: boolean) {
                 <td className="text-right tabular-nums whitespace-nowrap">
                   {buildCell(row.v4, row.v4Lines, zh)}
                 </td>
-                <td className="text-right tabular-nums">
+                <td className="text-right tabular-nums whitespace-nowrap">
                   {buildRatioCell(row, zh)}
                 </td>
               </tr>

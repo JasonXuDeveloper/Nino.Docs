@@ -136,6 +136,19 @@ shapes, a prose list of Nino's guarantees on one and matrices on two, a chart on
 repeating the benchmarks page on two, and "Where Nino is ahead", "When to choose" cards, a benchmark-it-yourself
 callout and the conversion steps three times each.
 
+**Benchmark pages** (the Benchmarks section, after Compare) are one per measurement, titled in parallel, the title
+also the sidebar label and the H1: `benchmarks` "Benchmarks: .NET Runtime" / "基准测试：.NET 运行速度" (the runtime
+groups, the benchmark code and how it is measured), `benchmarks-build` "Benchmarks: Build Time" / "基准测试：构建时间"
+(the source generator against v3: `BuildTables`, the compile chart, its project), `benchmarks-runtimes` "Benchmarks:
+Go, Rust and TypeScript" / "基准测试：Go、Rust 与 TypeScript" and `benchmarks-unity` "Benchmarks: Unity and Burst" /
+"基准测试：Unity 与 Burst"; each has a `seoTitle` that names Nino and what it measures. The shared method (runners,
+the on-par and 1 ns rules, verification first) is stated in full once, on `benchmarks#setup`; the other benchmark
+pages state only what differs and link there, and a guide that shows a page's tables (`RuntimesTables`,
+`UnityHighlights`) says in one sentence what is measured and links the page's section for how. A link or Card names
+the page by its title. Why: the owner (2026-11-14: "这几个也整理一下……现在有点重叠和耦合了似乎"); build time was
+a section of the .NET page, the runner count was stated twice and disagreed, and the TypeScript guide repeated
+the method of its benchmark page.
+
 Overview, FAQ and reference pages answer the questions their readers search for, one `##` per question.
 
 ## Visual forms

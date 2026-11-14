@@ -77,7 +77,7 @@ Strings in the default encoding are read into Go strings as WTF-8: UTF-8, except
 
 A C# `string` member is a `*string` in generated code, so null stays null. A Go `string` has no null: where one is read (`Reader.String`, a `string` field of a struct with `nino` tags, dictionary keys, and the elements of a `map[string]struct{}` set under struct tags), a null string reads as `""`, and `""` is written back, not null. Use `*string` to tell null from empty. In generated code, a `HashSet<string>` is a `[]*string`, which keeps a null element, and the keys of a dictionary are non-null `string`s, since .NET never writes a null key.
 
-Go strings are UTF-8, so writing and reading a string in the default encoding (Latin-1 or UTF-16) transcodes it, where Protocol Buffers and MessagePack copy the UTF-8 bytes as they are; the string cases of [Other-Language Benchmarks](/en/docs/v4/benchmarks-runtimes#strings) measure it, in Rust too.
+Go strings are UTF-8, so writing and reading a string in the default encoding (Latin-1 or UTF-16) transcodes it, where Protocol Buffers and MessagePack copy the UTF-8 bytes as they are; the string cases of [Benchmarks: Go, Rust and TypeScript](/en/docs/v4/benchmarks-runtimes#strings) measure it, in Rust too.
 
 Short strings (up to 128 bytes of UTF-8) are read into a block the reader keeps, up to 2 KiB and never more than the data left can fill: one allocation for many strings. A string you keep keeps its block alive, as a substring keeps its string; `strings.Clone` gives a copy of its own. Likewise the `*string`s generated code reads (`StringPtr`, `Utf8Ptr`) point into a block of up to 32 the reader keeps.
 
@@ -144,7 +144,7 @@ The [struct tags](#struct-tags) have limits of their own, listed there.
 
 ## Performance [#performance]
 
-Every release measures the Go runtime, with codecs in the shape nino-gen generates and with struct tags, against Protocol Buffers (`google.golang.org/protobuf`), MessagePack (`vmihailenco/msgpack`), `encoding/json` and `encoding/gob` on the same data. How it is measured: [Other-Language Benchmarks](/en/docs/v4/benchmarks-runtimes#go).
+Every release measures the Go runtime, with codecs in the shape nino-gen generates and with struct tags, against Protocol Buffers (`google.golang.org/protobuf`), MessagePack (`vmihailenco/msgpack`), `encoding/json` and `encoding/gob` on the same data. How it is measured: [Benchmarks: Go, Rust and TypeScript](/en/docs/v4/benchmarks-runtimes#go).
 
 <RuntimesChart lang="en" only="go" />
 
@@ -155,5 +155,5 @@ Every release measures the Go runtime, with codecs in the shape nino-gen generat
 <Cards>
   <Card title="Evolving Your Data" href="/en/docs/v4/evolving-data">Deployed services keep their old code until they update: choose a format that tolerates changes.</Card>
   <Card title="Wire Format" href="/en/docs/v4/wire-format">The bytes every runtime reads and writes.</Card>
-  <Card title="Other-Language Benchmarks" href="/en/docs/v4/benchmarks-runtimes">Go, Rust and TypeScript against each language's serializers.</Card>
+  <Card title="Benchmarks: Go, Rust and TypeScript" href="/en/docs/v4/benchmarks-runtimes">Go, Rust and TypeScript against each language's serializers.</Card>
 </Cards>
