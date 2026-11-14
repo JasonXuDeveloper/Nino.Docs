@@ -14,7 +14,8 @@ anything read twice):
    Deserialize → Defining Types.
 2. **The fact hunter** with one question ("how do I version a type", "is X supported on IL2CPP", "what does NINO007
    mean"): from search or the sidebar to the sentence that answers it.
-3. **The evaluator** comparing Nino with MemoryPack: home → Nino vs MemoryPack → the benchmarks → Limitations.
+3. **The evaluator** comparing Nino with MemoryPack: home → Nino vs MemoryPack → the benchmarks → Choosing a Serializer
+   (its Limitations).
 4. **The learner on a track** (round 130, the owner: a newcomer should learn Nino in one go, then its fast and its
    advanced use): Basics (Introduction → … → Best Practices), Performance (High-Performance Serialization → … →
    Build Configuration) and Advanced (Reference Tracking → … → Wire Format), each followed by Next Steps alone, with
@@ -32,8 +33,8 @@ first: **Get Started** (introduction, quick start, serialize and deserialize) an
 Ship** (evolving your data, untrusted data, best practices: the basics track ends here, ready to ship),
 **Performance** (high-performance serialization, reuse and pooling, zero-allocation patterns, build configuration),
 **Advanced Features** (reference tracking, custom formatters, streams and compression), then **Guides** (the
-collapsed `advanced/` folder "All Guides": use cases, engines and browsers, other languages), **Compare** (vs MemoryPack, vs
-MessagePack, vs protobuf-net, the three benchmark pages, limitations: after the tracks, the owner's choice in round
+collapsed `advanced/` folder "All Guides": use cases, engines and browsers, other languages), **Compare** (choosing a serializer, vs
+MemoryPack, vs MessagePack, vs protobuf-net, the three benchmark pages: after the tracks, the owner's choice in round
 130), **Reference** (settings, analyzers, platforms, glossary), **Under the Hood** (wire format, struct layouts, SIMD,
 performance internals) and **Project** (what's new, migration, format versions, changelog, FAQ). The introduction's
 "Start Here" maps the three tracks; each page's first Next Steps card is the next page of its track. A page never
@@ -44,9 +45,9 @@ relies on a feature taught later; it links forward instead of explaining twice.
 Check each item, in both languages, and fix what fails:
 
 - **One home per fact.** Grep the pages for the same fact or explanation (whats-new, changelog, migration and format
-  versions; vs-memorypack, vs-messagepack, vs-protobuf-net and benchmarks; performance internals, high-performance, zero-allocation and best
-  practices; platforms, struct layouts, wire format and limitations; defining types, supported types and
-  constructors; security and limitations; FAQ and the pages it answers from). The owner explains it; the others say
+  versions; compare, vs-memorypack, vs-messagepack, vs-protobuf-net and benchmarks; performance internals, high-performance, zero-allocation and best
+  practices; platforms, struct layouts, wire format and compare#limitations; defining types, supported types and
+  constructors; security and compare#limitations; FAQ and the pages it answers from). The owner explains it; the others say
   it in a sentence and link. A page that only repeats others is merged into its owner. Round 107: v3-vs-v4 was
   whats-new's charts plus a feature table (merged into whats-new#features); best practices carried a second copy
   of the zero-allocation recipes (moved to zero-allocation#message-loop); format versions repeated whats-new's
@@ -118,6 +119,23 @@ the new API exists, nor show a built-in call and a hand-written replacement for 
 still writes itself (frames, compression) says in its first sentence why no built-in call does it. The rule and its
 evidence are Nino's `audit-docs` skill, §2 item 1.
 
+**Comparison pages** (the Compare section) have one owner per fact. `compare` (Choosing a Serializer) holds what
+spans libraries: the one cross-library table (the rows of Nino's README, "Compared with other serializers", and the
+same cells), the speed against every library (`BenchValue` `workloads.<lib>.*`), the "You need | Choose | Why"
+table, Nino's limitations and the steps of switching to Nino. Each `vs-<library>` page has the same sections in the
+same order, with the same forms: lead (the version compared and the sources) → Two Formats [#formats] (a "Nino v4 |
+library" table of what the bytes are) → Performance [#performance] (one sentence with the headline `BenchValue`s,
+then `<LibrarySummary lib>`, then why the payload sizes differ) → Untrusted Input [#untrusted-input] (the library's
+own words, then a `<Matrix>` with the same six rows on every page) → Feature Matrix [#feature-matrix] (the same
+groups, row labels and Nino cells on every page, a row of its own only where only that library differs) → Where
+the library Is Ahead (bullets of what it does that Nino does not, linking `compare#limitations` for workarounds) →
+Switching from the library (the attribute and call table and the example; the steps are `compare#switching`) →
+Next Steps. A fact of one library (MemoryPack's padded values and bugs) stays on its page. Why: the owner
+(2026-11-14: "对比页面……有重叠内容，然后有多种不同的方式去表达同一个东西"); the three pages had three matrix
+shapes, a prose list of Nino's guarantees on one and matrices on two, a chart on one and per-case tables
+repeating the benchmarks page on two, and "Where Nino is ahead", "When to choose" cards, a benchmark-it-yourself
+callout and the conversion steps three times each.
+
 Overview, FAQ and reference pages answer the questions their readers search for, one `##` per question.
 
 ## Visual forms
@@ -187,10 +205,10 @@ Overview, FAQ and reference pages answer the questions their readers search for,
     filters, severity pills (tints 5 error, 4 warning; info untinted) and a wrench for a code fix; each row's id is its anchor
     (`#nino007`, highlighted when targeted), the old category anchors stay. A rule added to Nino is a row in the JSON,
     nowhere else. Use it only there.
-  - **Ratio bars** in `LibraryTables` (`TimeBars` in
-    `src/components/bench-data.tsx`): two thin bars per row, Nino in the accent and the other library grey, scaled to
-    the larger time, so the shorter is the faster and the gap is the ratio; drawn from the same `Measure`s as the
-    numbers, never typed, with a legend line under the table; the Markdown copy keeps only the numbers.
+  - **Ratio bars**: the per-case `LibraryTables` of the comparison pages, whose bars drew each time against the
+    other library's, gave way to `LibrarySummary` (one row per benchmark group, linking to it) when the Compare
+    section was restructured: the per-case times live once, on the benchmarks page, where each group's `DotnetChart`
+    draws every library as a multiple of Nino.
   - **`<Release date collapsed lang>`** around each `## version` of the changelog (`src/components/release.tsx`): a
     timeline step with the date and a badge per subsection (wire format tinted 5, new, performance, fixes) whose
     count is taken from the entries themselves; releases older than the two newest are `collapsed` (a link to one of
@@ -255,7 +273,7 @@ Overview, FAQ and reference pages answer the questions their readers search for,
 
 Never type a benchmark number. Runtime numbers come from `src/data/bench-*.json` (synced from the release's
 Performance Report, AGENTS.md) through `BenchValue`, `BenchGroup` (a group's chart and its
-numbers), `LibraryTables`, `BenchSource`, `BenchmarkChart`, `RuntimesTables`, `UnityTables`, `UnityHighlights` and `BuildTables` (build-time numbers from `src/data/bench-build.json`, with `BenchValue`'s `build.*` keys in prose). Within 5 % is
+numbers), `LibrarySummary` (one library against Nino per group, for its comparison page), `BenchSource`, `BenchmarkChart`, `RuntimesTables`, `UnityTables`, `UnityHighlights` and `BuildTables` (build-time numbers from `src/data/bench-build.json`, with `BenchValue`'s `build.*` keys in prose). Within 5 % is
 on par and is written so; never call Nino "slower"; v3 means 3.3.13. A multiple has one decimal below 10 and is a
 whole number from 10 ("1.4×", "77×", the components' `times()`); prose that names one goes through `BenchValue`.
 
