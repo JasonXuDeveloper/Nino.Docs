@@ -11,7 +11,8 @@
  *   it (100 %), with the speedup beside the case.
  *
  * - DotnetChart: one group of dotnetGroups, each case's MemoryPack, other
- *   libraries (otherLibs) and v3 as multiples of Nino v4's time, per
+ *   libraries (otherLibs), the nullable group's other forms of a nullable
+ *   value (nullableForms) and v3 as multiples of Nino v4's time, per
  *   architecture and operation.
  *
  * The default selection is prerendered; the rest is drawn after a click.
@@ -28,9 +29,14 @@ import {
   formatBound,
   formatRatio,
   formatTime,
+  formNote,
+  formVersusOf,
   gcNote,
+  hasForms,
   hasV3,
   type Opponent as Library,
+  type NullableForm,
+  nullableForms,
   otherLibs,
   type RuntimeLang,
   runtimes,
@@ -288,31 +294,57 @@ export function UnityChart({ lang = 'en' }: { lang?: Locale }) {
   );
 }
 
-type Opponent = 'all' | Library | 'v3';
+type Opponent = 'all' | Library | NullableForm | 'v3';
 
-/** Every opponent in legend order: v3 (the upgrade), MemoryPack, the other libraries */
+const formKeys = (prefix: string) =>
+  nullableForms
+    .filter((form) => form.prefix.startsWith(prefix))
+    .map((form) => form.key);
+
+/**
+ * Every opponent in legend order (Nino's readme.py, bars()): v3 (the
+ * upgrade), Nino's form, MemoryPack and its forms (nullableForms: the
+ * nullable group only, where the report has them), the other libraries
+ */
 const opponentKeys: Exclude<Opponent, 'all'>[] = [
   'v3',
+  ...formKeys('Nino'),
   'memorypack',
+  ...formKeys('MemoryPack'),
   ...otherLibs.map((lib) => lib.key),
 ];
+
+const isForm = (key: Exclude<Opponent, 'all'>): key is NullableForm =>
+  nullableForms.some((form) => form.key === key);
 
 const opponentNames: Record<Opponent, { en: string; zh: string }> = {
   all: { en: 'All', zh: '全部' },
   memorypack: { en: 'MemoryPack', zh: 'MemoryPack' },
   ...(Object.fromEntries(
-    otherLibs.map((lib) => [lib.key, { en: lib.label, zh: lib.label }]),
-  ) as Record<Exclude<Library, 'memorypack'>, { en: string; zh: string }>),
+    [...otherLibs, ...nullableForms].map((lib) => [
+      lib.key,
+      { en: lib.label, zh: lib.label },
+    ]),
+  ) as Record<
+    Exclude<Library, 'memorypack'> | NullableForm,
+    { en: string; zh: string }
+  >),
   v3: { en: 'Nino v3 (3.3.13)', zh: 'Nino v3（3.3.13）' },
 };
 
-/** Greys from dark to light, in opponentKeys order */
-const opponentColor = (key: Exclude<Opponent, 'all'>) =>
-  otherColors[Math.min(opponentKeys.indexOf(key), otherColors.length - 1)];
+/** Greys from dark to light, in opponentKeys order (a form counts only where the chart has it, in `keys`) */
+const opponentColor = (
+  key: Exclude<Opponent, 'all'>,
+  keys: Exclude<Opponent, 'all'>[],
+) => {
+  const order = opponentKeys.filter((k) => !isForm(k) || keys.includes(k));
+  return otherColors[Math.min(order.indexOf(key), otherColors.length - 1)];
+};
 
 /** One opponent's time in a case, by the same rule as the tables */
 function opponentOf(row: TableCase, key: Exclude<Opponent, 'all'>) {
   if (key === 'v3') return v3VersusOf(row);
+  if (isForm(key)) return formVersusOf(row, key);
   return versusOf(row, key);
 }
 
@@ -384,7 +416,7 @@ export function DotnetChart({
     ...shown.map((key) => ({
       key,
       label: t(opponentNames[key]),
-      color: opponentColor(key),
+      color: opponentColor(key, keys),
     })),
   ];
   const rows: ChartRow[] = cases.flatMap((row) => {
@@ -420,6 +452,7 @@ export function DotnetChart({
     sourceNote(zh, ds, datasets.length > 1),
     shown.includes('v3') ? v3SourceNote(zh) : null,
     rows.some((r) => r.mark) ? t(gcNote) : null,
+    shown.some((key) => isForm(key)) && hasForms(cases) ? t(formNote) : null,
   ].filter((note): note is string => Boolean(note));
   const opName =
     op === 'serialize' ? t(measureNames.serialize) : t(deserializeNew);

@@ -4,7 +4,9 @@
  *
  * The .NET tables compare Nino with MemoryPack, and with the other libraries
  * (`otherLibs`) in a column each once the synced release measured them ("—"
- * for a case a library cannot express); LibrarySummary sums up Nino against
+ * for a case a library cannot express), and the nullable group with the other
+ * forms of a nullable value (`nullableForms`) beside Nino and MemoryPack, with
+ * their footnote; LibrarySummary sums up Nino against
  * one library per group, for that library's comparison page; GroupTables prints one group of
  * dotnetGroups (time per operation, payload, allocations) under that group's
  * chart on the benchmarks page (BenchGroup), and IfWorkloads picks the prose that fits
@@ -43,8 +45,13 @@ import {
   formatRange,
   formatRatio,
   formatWorkloadRange,
+  formNote,
+  formVersusOf,
   gcNote,
+  hasForms,
   hasWorkloads,
+  type NullableForm,
+  nullableForms,
   type Opponent,
   type OtherLib,
   otherLibs,
@@ -328,16 +335,33 @@ function breakable(label: string, markdown?: boolean) {
     );
 }
 
-type GroupColumn = 'v4' | 'v3' | Opponent;
+type GroupColumn = 'v4' | 'v3' | Opponent | NullableForm;
 
-/** Nino v4, v3 where the group has v3 numbers (x64), MemoryPack, then each other library with a row */
+const isForm = (key: GroupColumn): key is NullableForm =>
+  nullableForms.some((form) => form.key === key);
+
+/**
+ * Nino v4, v3 where the group has v3 numbers (x64), Nino's form, MemoryPack
+ * and its forms (nullableForms, where the rows have them), then each other
+ * library with a row (Nino's readme.py, bars())
+ */
 function groupColumns(rows: TableCase[]) {
   const columns: { key: GroupColumn; label: string }[] = [
     { key: 'v4', label: 'Nino v4' },
   ];
   if (rows.some((row) => row.v3)) columns.push({ key: 'v3', label: 'Nino v3' });
+  const forms = (prefix: string) => {
+    for (const form of nullableForms)
+      if (
+        form.prefix.startsWith(prefix) &&
+        rows.some((row) => row.forms[form.key])
+      )
+        columns.push({ key: form.key, label: form.label });
+  };
+  forms('Nino');
   if (rows.some((row) => row.memorypack))
     columns.push({ key: 'memorypack', label: 'MemoryPack' });
+  forms('MemoryPack');
   for (const lib of otherLibs)
     if (rows.some((row) => row.others[lib.key]))
       columns.push({ key: lib.key, label: lib.label });
@@ -403,7 +427,12 @@ function groupTables(
   const time = (row: TableCase, key: GroupColumn) => {
     if (key === 'v4')
       return <span className="whitespace-nowrap">{row.v4.text}</span>;
-    const vs = key === 'v3' ? v3VersusOf(row) : versusOf(row, key);
+    const vs =
+      key === 'v3'
+        ? v3VersusOf(row)
+        : isForm(key)
+          ? formVersusOf(row, key)
+          : versusOf(row, key);
     if (!vs) return key === 'v3' ? 'n/a' : '—';
     const note = versusNote(vs, zh);
     // On the page the multiple goes on a line of its own, so the table fits the column
@@ -425,7 +454,8 @@ function groupTables(
     rows.some((row) =>
       byteColumns.some(
         (column) =>
-          (row.bytes[column.key as 'v4' | Opponent]?.[field] ?? null) !== null,
+          (row.bytes[column.key as Exclude<GroupColumn, 'v3'>]?.[field] ??
+            null) !== null,
       ),
     );
   // One row per case for the allocations: serialize above deserialize where a case has both
@@ -454,7 +484,7 @@ function groupTables(
           {label('Payload', '序列化后的大小')}
           {table(serialize, byteColumns, (row, key) => (
             <span className="whitespace-nowrap">
-              {size(row.bytes[key as 'v4' | Opponent]?.payload)}
+              {size(row.bytes[key as Exclude<GroupColumn, 'v3'>]?.payload)}
             </span>
           ))}
         </>
@@ -472,7 +502,7 @@ function groupTables(
               )
             : label('Allocated per call', '每次调用分配')}
           {table(allocRows, byteColumns, (row, key) => {
-            const lib = key as 'v4' | Opponent;
+            const lib = key as Exclude<GroupColumn, 'v3'>;
             const first = row.bytes[lib]?.allocated;
             if (!both) return size(first);
             const second = deserializeOf(row)?.bytes[lib]?.allocated;
@@ -490,6 +520,16 @@ function groupTables(
       {[...serialize, ...deserialize].some((row) => row.gcBound) && (
         <p className="text-sm text-fd-muted-foreground">
           {zh ? gcNote.zh : gcNote.en}
+        </p>
+      )}
+      {hasForms([...serialize, ...deserialize]) && (
+        <p className="text-sm text-fd-muted-foreground">
+          {(zh ? formNote.zh : formNote.en)
+            .split(/(SafeNullable<T>|NinoNullable<T>)/)
+            // The generic types as code: a bare <T> would read as a tag in the Markdown copy
+            .map((part, i) =>
+              i % 2 === 1 ? <code key={part}>{part}</code> : part,
+            )}
         </p>
       )}
     </>

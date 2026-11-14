@@ -188,6 +188,46 @@ export const otherLibs: {
 /** Every serializer Nino is compared with, MemoryPack first */
 export type Opponent = 'memorypack' | OtherLib;
 
+/** The other forms of a nullable value, by their method prefix (nullableForms) */
+export type NullableForm =
+  | 'ninonullable'
+  | 'memorypackconverted'
+  | 'memorypackunsafe';
+
+/**
+ * The other forms of a nullable value the nullable cases time (Nino's
+ * NullableTest.NullableForms.cs and CollectionsTest.NullableForms.cs, reports
+ * from rc.11): bars and columns of the nullable group only, never a library of
+ * a headline, a summary or `libraries` (Nino's readme.py, FORMS). Each shows
+ * once the synced report has its rows.
+ */
+export const nullableForms: {
+  key: NullableForm;
+  prefix: string;
+  label: string;
+}[] = [
+  // NinoNullable<T> in place of T?: the same bytes
+  { key: 'ninonullable', prefix: 'NinoNullable', label: 'Nino (NinoNullable)' },
+  // The model's T? converted to SafeNullable<T> and back inside the timed region
+  {
+    key: 'memorypackconverted',
+    prefix: 'MemoryPackConverted',
+    label: 'MemoryPack (converted)',
+  },
+  // T? as it is: MemoryPack copies its uninitialized padding (not safe)
+  {
+    key: 'memorypackunsafe',
+    prefix: 'MemoryPackUnsafe',
+    label: 'MemoryPack (T?, unsafe)',
+  },
+];
+
+/** The footnote of every chart and table with a bar or column of nullableForms (Nino's readme.py, FORM_NOTE) */
+export const formNote = {
+  en: "Nullable cases: MemoryPack writes SafeNullable<T> data the model already holds; MemoryPack (converted) converts the model's T? to it and back inside the timed region; MemoryPack (T?, unsafe) copies T? with its uninitialized padding (one value can give different bytes, with leftover memory in them). Nino (NinoNullable) is NinoNullable<T> in place of T?, the same bytes. Nino's T? is always safe.",
+  zh: '可空值：MemoryPack 写的是模型里已备好的 SafeNullable<T>；MemoryPack (converted) 在计时内把模型的 T? 转成它、读完再转回；MemoryPack (T?, unsafe) 直接拷贝 T?，连同未初始化的填充字节（同一个值可能写出不同的字节，还会带出进程里残留的内存）。Nino (NinoNullable) 是用 NinoNullable<T> 代替 T?，字节相同。Nino 的 T? 始终安全。',
+};
+
 /** Nino against one other serializer in one case */
 export interface Versus {
   time: Measure;
@@ -227,10 +267,12 @@ export interface RuntimeCase {
   v3?: Measure;
   /** The other libraries, for the cases they can express */
   others: Partial<Record<OtherLib, Versus>>;
-  /** Payload (serialize rows) and bytes allocated per call, per library */
+  /** nullableForms, in the nullable group's cases that have their rows (never a headline) */
+  forms: Partial<Record<NullableForm, Versus>>;
+  /** Payload (serialize rows) and bytes allocated per call, per library and form */
   bytes: Partial<
     Record<
-      'v4' | Opponent,
+      'v4' | Opponent | NullableForm,
       { payload: number | null; allocated: number | null }
     >
   >;
@@ -826,6 +868,8 @@ export const dotnetGroups: {
   name: string;
   zh: string;
   cases: Record<'serialize' | 'deserialize', CaseInfo[]>;
+  /** Its cases also time nullableForms (the nullable group only) */
+  forms?: boolean;
 }[] = [
   {
     id: 'workloads',
@@ -868,6 +912,7 @@ export const dotnetGroups: {
     id: 'nullable',
     name: 'Nullable values',
     zh: '可空值',
+    forms: true,
     cases: bothOps(
       cases.serialize.filter((info) => info.key.startsWith('Nullable')),
     ),
@@ -1002,7 +1047,11 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
   };
   const bytes = (method: string) => rows.get(method)?.allocatedBytes ?? null;
 
-  function buildCase(op: 'serialize' | 'deserialize', info: CaseInfo) {
+  function buildCase(
+    op: 'serialize' | 'deserialize',
+    info: CaseInfo,
+    withForms = false,
+  ) {
     const verb = op === 'serialize' ? 'Serialize' : 'Deserialize';
     // A library's method of the case, or '' (no row) when it has none
     const of = (prefix: string) => {
@@ -1038,6 +1087,12 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
       if (time) others[lib.key] = versus(v4, time);
       caseBytes[lib.key] = sizes(of(lib.prefix));
     }
+    const forms: RuntimeCase['forms'] = {};
+    for (const form of withForms ? nullableForms : []) {
+      const time = measure(of(form.prefix));
+      if (time) forms[form.key] = versus(v4, time);
+      caseBytes[form.key] = sizes(of(form.prefix));
+    }
     // A case no other library was measured in compares nothing
     if (!memorypack && Object.keys(others).length === 0) return [];
     const result: TableCase = {
@@ -1047,6 +1102,7 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
       ratio,
       tooFast,
       others,
+      forms,
       bytes: caseBytes,
       rerun: nino.rerun,
     };
@@ -1058,10 +1114,15 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
     }
     return [result];
   }
-  const buildAll = (set: Record<'serialize' | 'deserialize', CaseInfo[]>) => ({
-    serialize: set.serialize.flatMap((info) => buildCase('serialize', info)),
+  const buildAll = (
+    set: Record<'serialize' | 'deserialize', CaseInfo[]>,
+    withForms = false,
+  ) => ({
+    serialize: set.serialize.flatMap((info) =>
+      buildCase('serialize', info, withForms),
+    ),
     deserialize: set.deserialize.flatMap((info) =>
-      buildCase('deserialize', info),
+      buildCase('deserialize', info, withForms),
     ),
   });
   // The main, extra and workload tables, the charts and the headlines: cases MemoryPack ran
@@ -1120,7 +1181,10 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
     ) as BenchDataset['more'],
     workloads: build({ serialize: workloadCases, deserialize: workloadCases }),
     groups: Object.fromEntries(
-      dotnetGroups.map((group) => [group.id, buildAll(group.cases)]),
+      dotnetGroups.map((group) => [
+        group.id,
+        buildAll(group.cases, group.forms),
+      ]),
     ) as BenchDataset['groups'],
     reuse,
     serializeAllocatesNothing: cases.serialize.every((info) =>
@@ -1292,6 +1356,18 @@ export function versusOf(row: TableCase, lib: Opponent): Versus | undefined {
       : undefined;
   return row.others[lib];
 }
+
+/** Nino v4 against one of nullableForms in one case (the nullable group), by the same rule */
+export function formVersusOf(
+  row: TableCase,
+  form: NullableForm,
+): Versus | undefined {
+  return row.forms[form];
+}
+
+/** Whether any of these cases has a form's row: their chart or tables then carry formNote */
+export const hasForms = (rows: TableCase[]) =>
+  rows.some((row) => Object.keys(row.forms).length > 0);
 
 /** Nino v4 against v3 3.3.13 in one case (x64), by the same rule; undefined where 3.3.13 has no port */
 export function v3VersusOf(row: TableCase): Versus | undefined {

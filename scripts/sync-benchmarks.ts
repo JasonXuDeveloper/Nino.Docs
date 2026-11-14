@@ -34,9 +34,11 @@
  * The x64 and Arm64 reports have a row per method, and every row is kept,
  * whatever its method prefix (`MessagePack…`, `Protobuf…`, `GoogleProtobuf…`,
  * `Json…`) or benchmark class (WorkloadTest's workloads, SimpleTest and
- * PolymorphicTest among them). `requiredMethods` never asks for the other
- * libraries or the workloads: releases before they joined the benchmark lack
- * them, and the site then leaves them out.
+ * PolymorphicTest among them), the nullable cases' other forms of a nullable
+ * value among them (`NinoNullable…`, `MemoryPackConverted…`,
+ * `MemoryPackUnsafe…`, from rc.11). `requiredMethods` never asks for the
+ * other libraries, the forms or the workloads: releases before they joined
+ * the benchmark lack them, and the site then leaves them out.
  *
  *   bun scripts/sync-benchmarks.ts                       # newest v4.* release with a report
  *   bun scripts/sync-benchmarks.ts --fixture <file.md>   # parse a release body from a file
@@ -47,8 +49,10 @@
  * Nino's release_body.py publish wrote them in a dry run from
  * release-body-build.md's data plus Google.Protobuf and System.Text.Json rows
  * in SimpleTest and PolymorphicTest, and every library's and v3's rows of
- * NullableTest and CollectionsTest's nullable collections, numbers invented:
- * for reader tests only).
+ * NullableTest and CollectionsTest's nullable collections, with the other
+ * nullable forms' rows (`NinoNullable…`, `MemoryPackConverted…`,
+ * `MemoryPackUnsafe…`) in both reports, numbers invented: for reader tests
+ * only).
  * Bodies of releases without the manifest: scripts/fixtures/release-body.md
  * (made-up numbers, the methods the site requires), release-body-v3.md (with
  * the v3 section), release-body-new.md (a sample of the ReferenceTest,
@@ -574,6 +578,8 @@ export function parseV3Report(text: string, x64: BenchRow[]) {
   const v4 = new Map(x64.map((row) => [row.method, row.meanNs]));
   const rows: V3RuntimeFile['rows'] = {};
   for (const row of v3.rows) {
+    // Nino's own rows only: a NinoNullable… row is a form of a nullable value, not Nino's T? (and 3.3.13 has none)
+    if (row.method.startsWith('NinoNullable')) continue;
     // A method without a verb reads into existing objects (PooledGraphTest's NinoLeavesInPlace): deserialize
     const match = /^Nino(Serialize|Deserialize)?(\w+)$/.exec(row.method);
     const v4Ns = v4.get(row.method);
