@@ -1,27 +1,27 @@
 ---
-title: Browser Clients
-seoTitle: "Nino in the Browser: JavaScript and TypeScript Clients with .NET WebAssembly – Nino v4 Docs"
-description: "Use Nino from browser JavaScript or TypeScript: compile your [NinoType] types into a .NET browser-wasm module, call it through [JSExport], and exchange byte-identical data with a .NET server."
-icon: Globe
+title: .NET in the Browser
+seoTitle: "Nino in the Browser: Generated TypeScript, Blazor WebAssembly or a .NET Module – Nino v4 Docs"
+description: "Which way to use Nino in a browser: generated TypeScript for a TypeScript or JavaScript front end (the recommended way), Nino as in any .NET project in Blazor WebAssembly, or a .NET WebAssembly module called through [JSExport] for a front end that needs what the TypeScript leaves out."
+icon: AppWindow
 ---
 
-**Can I use Nino from JavaScript or TypeScript?** Yes, in two ways: with the TypeScript codecs that [Nino.Codegen](/en/docs/v4/advanced/typescript) generates from your types, or by running Nino itself in the browser, which this guide covers. Build the client-side serialization as a small .NET `browser-wasm` app that references Nino and your `[NinoType]` types, expose a few functions to JavaScript with `[JSExport]`, and call them from your JavaScript or TypeScript front end. This setup needs no generated TypeScript: the browser runs the same C# types and the same generated formatters as your server, so there is no second schema to keep in sync and the bytes are identical. Choose the [generated TypeScript](/en/docs/v4/advanced/typescript) instead when the browser should not download the .NET runtime ([When Something Else Fits Better](#when-something-else-fits-better)).
+<AnchorRedirect map={{ 'why-run-nino-in-the-browser': '/en/docs/v4/advanced/browser#jsexport', 'setup': '/en/docs/v4/advanced/browser#jsexport', 'when-something-else-fits-better': '/en/docs/v4/advanced/browser#which-way' }} />
 
-This guide builds that setup end to end: a shared order type, an export surface, a page that loads it, and requests over `fetch` and WebSocket to an ASP.NET Core server. Every snippet comes from a project that was built with the .NET 10 SDK and run in headless Chromium.
+A browser reads and writes Nino's bytes in one of two forms: **generated TypeScript**, the recommended way for every TypeScript or JavaScript front end, or **.NET itself** on WebAssembly, for apps that already are .NET (Blazor WebAssembly) and for the rare front end that needs a member the TypeScript leaves out. This page covers the two .NET forms; pick your way first.
 
-## Why Run Nino in the Browser
+## Which Way to Take [#which-way]
 
-- **One schema.** Your `[NinoType]` classes are the only definition of the format. There is no `.ts` mirror of each class and no `.proto` file to update when a member changes.
-- **The same bytes.** In the test project, an order serialized in the browser was byte for byte equal to the same order serialized by a .NET 10 console app, and the browser decoded bytes from the console app and from an ASP.NET Core endpoint. Nino defines its own little-endian format, and WebAssembly is little-endian, so nothing differs.
-- **Every feature comes along.** [Version tolerance and keyed members](/en/docs/v4/evolving-data), [polymorphism](/en/docs/v4/polymorphism), [reference tracking](/en/docs/v4/reference-tracking) and [reuse deserialization](/en/docs/v4/pooling) run inside the module exactly as on the server.
-- **JavaScript sees plain values.** The exports take and return `Uint8Array`, numbers, strings and arrays; your front-end code never deals with Nino's format.
+| Your browser code | Use | What it costs |
+| --- | --- | --- |
+| TypeScript or JavaScript (React, Vue, Angular, plain pages), or Node | **Generated TypeScript**, the recommended way: [TypeScript](/en/docs/v4/advanced/typescript) | no .NET runtime: plain TypeScript classes and codecs, and a runtime of one file |
+| A Blazor WebAssembly app, or other .NET code already running in the browser | **Nino as in any .NET project**: [Blazor WebAssembly](#blazor) | Nino.Core's own assembly: the app already loads .NET |
+| TypeScript or JavaScript that needs a member the TypeScript leaves out (`DateTimeOffset`, multi-dimensional arrays, custom formatters: [What TypeScript Leaves Out](/en/docs/v4/advanced/typescript#not-supported)) | **A .NET module called through `[JSExport]`**: [A .NET Module for JavaScript](#jsexport) | the browser downloads the .NET runtime ([Trade-Offs](#trade-offs)) |
 
-## Setup
+Data that people read, or a public API for teams outside .NET, may fit JSON better: [When Not to Use It](/en/docs/v4#when-not-to-use-it).
 
-<Steps>
-<Step>
+## Put the Types in a Shared Project [#put-the-types-in-a-shared-project]
 
-### Put the types in a shared project
+Both .NET forms start here.
 
 Declare the types once, in a class library (`net10.0` here) that both the server and the browser app reference, and add Nino to it (for a Unity client, target `netstandard2.1` instead: see [Sharing Types with a .NET Server](/en/docs/v4/advanced/unity#shared-types)):
 
@@ -53,9 +53,37 @@ public struct OrderLine
 }
 ```
 
-Clients that are already open keep running the old module until they reload, so choose a format that tolerates changes for anything they exchange with the server; see [Evolving Your Data](/en/docs/v4/evolving-data).
+Pages already open keep running the old code, a module or a Blazor app, until they reload, so choose a format that tolerates changes for anything they exchange with the server; see [Evolving Your Data](/en/docs/v4/evolving-data).
 
-</Step>
+<Callout type="info">
+
+Nino's [interceptors](/en/docs/v4/performance#interceptors) work in the browser with the usual rule: calls on `[NinoType]`s declared in another assembly, such as `Shop.Contracts` here, are not intercepted and go through the formatter cache, as on the server. Declare the types in the browser project itself (or link the same source file into it) if you want those calls intercepted.
+
+</Callout>
+
+## Blazor WebAssembly [#blazor]
+
+A Blazor WebAssembly app is .NET, so Nino works in it as on the server: reference the shared project from the Blazor project and call `NinoSerializer` and `NinoDeserializer` directly. There is no `[JSExport]` layer and no generated TypeScript.
+
+```shell
+dotnet add Shop.Client reference Shop.Contracts/Shop.Contracts.csproj
+```
+
+What differs from a server:
+
+| | In Blazor WebAssembly |
+| --- | --- |
+| HTTP | `HttpClient` goes through the browser's `fetch`; send and read bodies as any .NET client does ([Clients](/en/docs/v4/advanced/aspnetcore#clients)). Nino.AspNetCore stays on the server: it depends on ASP.NET Core. |
+| SIMD | the net10.0 build of Nino.Core uses WebAssembly SIMD where the runtime has it ([SIMD](/en/docs/v4/simd#dotnet)); every path writes the same bytes |
+| Publishing | trimmed, as Blazor publishes: Nino adds no trimming warnings and one assembly to `_framework` ([Trade-Offs](#trade-offs)) |
+
+## A .NET Module for JavaScript [#jsexport]
+
+When a TypeScript or JavaScript front end needs what the generated TypeScript leaves out, run the C# types themselves: a small .NET `browser-wasm` app that references Nino and the shared project, a few functions exposed with `[JSExport]`, called from your front end. The browser then runs the same types and generated formatters as the server, so every member type works and the bytes are the same; JavaScript sees only `Uint8Array`s, numbers, strings and arrays. The price is the .NET runtime's download and start ([Trade-Offs](#trade-offs)).
+
+Every snippet comes from a project built with the .NET 10 SDK and run in headless Chromium. In it, an order serialized in the browser was byte for byte equal to the same order serialized by a .NET 10 console app, and the browser decoded bytes from the console app and from an ASP.NET Core endpoint.
+
+<Steps>
 <Step>
 
 ### Create the browser project
@@ -168,12 +196,6 @@ What `[JSExport]` marshals, as used here:
 
 A `long` must say which of the two it maps to. A `Span<byte>` parameter marked `[JSMarshalAs<JSType.MemoryView>]` does not accept a `Uint8Array` from JavaScript (the call fails with `Expected MemoryViewType.Byte`), so take `byte[]`.
 
-<Callout type="info">
-
-Nino's [interceptors](/en/docs/v4/performance#interceptors) work with the WebAssembly SDK, with the usual rule: calls on `[NinoType]`s declared in another assembly, such as `Shop.Contracts` here, are not intercepted and go through the formatter cache, as on the server. Declare the types in the browser project itself (or link the same source file into it) if you want those calls intercepted.
-
-</Callout>
-
 </Step>
 <Step>
 
@@ -243,7 +265,7 @@ This describes a handful of functions, not your data model: the types themselves
 </Step>
 </Steps>
 
-## Sending and Receiving
+### Sending and Receiving [#sending-and-receiving]
 
 The bytes are an ordinary `Uint8Array`, so any browser API that carries binary data works.
 
@@ -283,9 +305,9 @@ socket.onmessage = (e) => {
 
 On the server side, read and write WebSocket messages as in [WebSocket and UDP](/en/docs/v4/advanced/networking#websocket-and-udp).
 
-## Trade-Offs
+## Trade-Offs [#trade-offs]
 
-**Download size.** The browser downloads the .NET runtime along with your code. For the project above, a trimmed Release publish with the .NET 10.0.404 SDK (runtime 10.0.15):
+**Download size.** The browser downloads the .NET runtime along with your code; a Blazor app pays this already, and Nino adds the `Nino.Core` row. For the module above, a trimmed Release publish with the .NET 10.0.404 SDK (runtime 10.0.15):
 
 | Files in `_framework` | Uncompressed | Brotli | Gzip |
 | --- | --- | --- | --- |
@@ -297,20 +319,14 @@ On the server side, read and write WebSocket messages as in [WebSocket and UDP](
 
 **Startup.** Nothing can be encoded or decoded until the runtime has downloaded and started. In the test (headless Chromium, served from localhost), the page went from navigation to its first decoded results in 0.4 to 0.7 s; over a real network the download dominates. Start the runtime as the page loads, not on the first message.
 
-**Crossing the boundary.** Each call copies its `byte[]` arguments and results between JavaScript and WebAssembly memory. Export a few coarse functions (encode a message, decode the fields a view needs) rather than a getter per member.
+**Crossing the boundary** (the module only). Each call copies its `byte[]` arguments and results between JavaScript and WebAssembly memory. Export a few coarse functions (encode a message, decode the fields a view needs) rather than a getter per member.
 
 **Trimming.** Nino.Core is marked trimmable and AOT-compatible, and the generated code carries the annotations the trimmer needs, so a trimmed publish gives no warnings from Nino. Still check your own types with a Release publish before shipping.
-
-### When Something Else Fits Better [#when-something-else-fits-better]
-
-- **Nino.Codegen** generates TypeScript classes and codecs from your `[NinoType]`s after each build, so the browser reads and writes the same bytes without downloading a .NET runtime. Use it when a small bundle and a fast start matter more than the members it leaves out (multi-dimensional arrays, `DateTimeOffset`, custom formatters; see [What TypeScript Leaves Out](/en/docs/v4/advanced/typescript#not-supported)).
-- **A JSON API** is simpler for public APIs, small payloads, or front ends owned by teams outside .NET. Keep Nino between your .NET services.
-- **Protocol Buffers or MessagePack** suit data whose schema is owned outside C#, by teams that write their types in another language. Nino's format is defined by your C# types; other languages get it through [nino-gen](/en/docs/v4/advanced/codegen) (TypeScript, Go and Rust).
-- **Blazor WebAssembly** apps already run .NET in the browser: reference Nino from the Blazor project and call it directly, with no `[JSExport]` layer.
 
 ## Next Steps [#next-steps]
 
 <Cards>
-  <Card title="TypeScript, Go and Rust" href="/en/docs/v4/advanced/codegen">Read and write Nino's bytes outside .NET with code generated from your types.</Card>
+  <Card title="Use in Other Languages" href="/en/docs/v4/advanced/codegen">nino-gen writes your types as TypeScript, Go or Rust: setup, options and what every language shares.</Card>
+  <Card title="TypeScript" href="/en/docs/v4/advanced/typescript">The recommended way for browsers and Node: generated classes and codecs, the API and typed arrays.</Card>
   <Card title="ASP.NET Core" href="/en/docs/v4/advanced/aspnetcore">Nino bodies in MVC and Minimal APIs, as application/x-nino.</Card>
 </Cards>

@@ -1,11 +1,11 @@
 ---
 title: 指南概览
 seoTitle: "进阶指南：在真实项目中使用 Nino – Nino v4 文档"
-description: "做什么系统该看哪篇指南、用哪个功能：网络与 gRPC、ASP.NET Core、消息队列、缓存、持久化、Unity、HybridCLR、Godot、浏览器客户端，以及用 nino-gen 生成的 TypeScript、Go 和 Rust。"
+description: "做什么系统该看哪篇指南、用哪个功能：网络与 gRPC、ASP.NET Core、消息队列、缓存、持久化、Unity、HybridCLR、Godot、浏览器中的 .NET，以及用 nino-gen 生成的 TypeScript、Go 和 Rust。"
 icon: Map
 ---
 
-import { DatabaseZap, Gamepad2, Globe, Joystick, Languages, MessagesSquare, Network, Save, Server } from 'lucide-react';
+import { AppWindow, Cog, DatabaseZap, Gamepad2, Globe, Joystick, Languages, MessagesSquare, Network, Save, Server } from 'lucide-react';
 
 <AnchorRedirect
   map={{
@@ -50,9 +50,9 @@ import { DatabaseZap, Gamepad2, Globe, Joystick, Languages, MessagesSquare, Netw
 | 服务协议、实时服务器（交易、协作、游戏）、WebSocket 或 UDP 连接 | [网络](/zh/docs/v4/advanced/networking) |
 | .NET 之间不用 `.proto` 文件的 gRPC 服务 | [gRPC](/zh/docs/v4/advanced/networking#grpc) |
 | 接收并返回 Nino 数据的 ASP.NET Core API（MVC 或 Minimal API） | [ASP.NET Core](/zh/docs/v4/advanced/aspnetcore) |
-| 与 Nino 服务端通信的网页或 Node 前端（JavaScript 或 TypeScript） | [TypeScript](/zh/docs/v4/advanced/typescript)；要直接运行 C# 类型，见[浏览器客户端](/zh/docs/v4/advanced/browser) |
+| 与 Nino 服务端通信的网页或 Node 前端（JavaScript 或 TypeScript） | [TypeScript](/zh/docs/v4/advanced/typescript)（推荐；[Blazor](/zh/docs/v4/advanced/browser#blazor) 应用和普通 .NET 应用一样用 Nino） |
 | 与 .NET 交换数据的 Go 或 Rust 服务 | [Go](/zh/docs/v4/advanced/go) 或 [Rust](/zh/docs/v4/advanced/rust) |
-| 一套类型生成几种语言的代码，或在构建、CI 里跑生成器 | [TypeScript、Go 与 Rust](/zh/docs/v4/advanced/codegen)（`<NinoCodegen>` 项、`nino-gen` 工具） |
+| 一套类型生成几种语言的代码，或在构建、CI 里跑生成器 | [在其他语言中使用](/zh/docs/v4/advanced/codegen)（`<NinoCodegen>` 项、`nino-gen` 工具） |
 | 读不出来的字节：别的语言发来的、抓包抓到的、日志或存档里的 | [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect) |
 | Kafka、RabbitMQ 等消息中间件上的生产者和消费者 | [消息队列](/zh/docs/v4/advanced/message-queues) |
 | 遥测、指标或行情数据流 | [遥测与行情数据流](/zh/docs/v4/advanced/message-queues#telemetry-and-tick-streams) |
@@ -91,9 +91,9 @@ import { DatabaseZap, Gamepad2, Globe, Joystick, Languages, MessagesSquare, Netw
   </Card>
 </Cards>
 
-## 引擎与语言 [#other-languages]
+## 引擎与浏览器 [#engines]
 
-Unity 和 Godot 各有自己的配置方式，浏览器也可以在 .NET WebAssembly 上直接运行你的 C# 类型。其他语言的客户端和服务按构建出的程序集里的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)读写，与 .NET 互通；它们共用的格式见[二进制格式](/zh/docs/v4/wire-format)。
+Unity 和 Godot 各有自己的配置方式。在浏览器里，TypeScript 或 JavaScript 前端用[生成的 TypeScript](/zh/docs/v4/advanced/typescript)；跑在浏览器里的 .NET（Blazor WebAssembly）则和普通 .NET 项目一样使用 Nino。
 
 <Cards>
   <Card icon={<Gamepad2 />} title="Unity 与 HybridCLR" href="/zh/docs/v4/advanced/unity">
@@ -102,11 +102,27 @@ Unity 和 Godot 各有自己的配置方式，浏览器也可以在 .NET WebAsse
   <Card icon={<Joystick />} title="Godot" href="/zh/docs/v4/advanced/godot">
     Godot 4 .NET 项目：Godot 的结构体、节点与资源、存档、多人联机消息、在编辑器中重新构建。
   </Card>
-  <Card icon={<Globe />} title="浏览器客户端" href="/zh/docs/v4/advanced/browser">
-    在浏览器中使用同一套 `[NinoType]` 类型：一个带 `[JSExport]` 函数的 .NET WebAssembly 模块，供 JavaScript 或 TypeScript 调用。
+  <Card icon={<AppWindow />} title="浏览器中的 .NET" href="/zh/docs/v4/advanced/browser">
+    浏览器里该走哪条路、Blazor WebAssembly 中的 Nino，以及前端需要 TypeScript 不支持的内容时用的、带 `[JSExport]` 函数的 .NET 模块。
   </Card>
-  <Card icon={<Languages />} title="TypeScript、Go 与 Rust" href="/zh/docs/v4/advanced/codegen">
-    Nino.Codegen 在每次构建后（或用 `nino-gen` 基于构建好的程序集）把你的 `[NinoType]` 写成 TypeScript、Go 或 Rust 类型和编解码器，与 .NET 互通。支持 Go 结构体标签和 Rust derive，读取器能安全处理不可信数据。
+</Cards>
+
+## 其他语言 [#other-languages]
+
+TypeScript、Go 和 Rust 写的客户端和服务，用 nino-gen 按构建出的程序集里的[布局元数据](/zh/docs/v4/evolving-data#layout-metadata)生成的代码读写，与 .NET 互通；它们共用的格式见[二进制格式](/zh/docs/v4/wire-format)。
+
+<Cards>
+  <Card icon={<Languages />} title="在其他语言中使用" href="/zh/docs/v4/advanced/codegen">
+    nino-gen 及其配置：每次构建后按 `<NinoCodegen>` 项生成，或用 `nino-gen` 工具；选项、查看消息，以及各语言共通的部分。
+  </Card>
+  <Card icon={<Globe />} title="TypeScript" href="/zh/docs/v4/advanced/typescript">
+    面向浏览器、Node、Bun 和 Deno 的类和编解码器：API、类型映射、类型化数组和浏览器中的文本处理。
+  </Card>
+  <Card icon={<Server />} title="Go" href="/zh/docs/v4/advanced/go">
+    生成的结构体和编解码器，或者给自己的结构体加 `nino` 标签。
+  </Card>
+  <Card icon={<Cog />} title="Rust" href="/zh/docs/v4/advanced/rust">
+    生成的类型和编解码器、derive 和手写实现。
   </Card>
 </Cards>
 

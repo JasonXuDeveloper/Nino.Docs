@@ -32,7 +32,7 @@ first: **Get Started** (introduction, quick start, serialize and deserialize) an
 Ship** (evolving your data, untrusted data, best practices: the basics track ends here, ready to ship),
 **Performance** (high-performance serialization, reuse and pooling, zero-allocation patterns, build configuration),
 **Advanced Features** (reference tracking, custom formatters, streams and compression), then **Guides** (the
-collapsed `advanced/` folder "All Guides": use cases, engines and languages), **Compare** (vs MemoryPack, vs
+collapsed `advanced/` folder "All Guides": use cases, engines and browsers, other languages), **Compare** (vs MemoryPack, vs
 MessagePack, vs protobuf-net, the three benchmark pages, limitations: after the tracks, the owner's choice in round
 130), **Reference** (settings, analyzers, platforms, glossary), **Under the Hood** (wire format, struct layouts, SIMD,
 performance internals) and **Project** (what's new, migration, format versions, changelog, FAQ). The introduction's

@@ -68,7 +68,7 @@ Nino.Core 的 net8.0 和 net10.0 版本还带了裁剪和 Native AOT 标注：�
 
 ## JavaScript 或 TypeScript 里能用 Nino 吗？ [#can-i-use-nino-from-javascript-or-typescript]
 
-可以。[Nino.Codegen](/zh/docs/v4/advanced/typescript) 每次构建后为你的 `[NinoType]` 生成 TypeScript 类、枚举和编解码器，再配上 `nino.ts` 运行时，浏览器和 Node 不用 .NET 运行时就能与 .NET 互通，字节完全一致。泛型类型、引用追踪和少数内置类型不在其列（[TypeScript 不支持的内容](/zh/docs/v4/advanced/typescript#not-supported)）。要用这些，就在浏览器里直接跑 C# 类型：做一个引用 Nino 的 .NET `browser-wasm` 应用，通过 `[JSExport]` 从 JavaScript 调用，代价是浏览器要下载 .NET 运行时。参见[浏览器客户端](/zh/docs/v4/advanced/browser)。
+可以。[Nino.Codegen](/zh/docs/v4/advanced/typescript) 每次构建后为你的 `[NinoType]` 生成 TypeScript 类、枚举和编解码器，再配上 `nino.ts` 运行时，浏览器和 Node 不用 .NET 运行时就能与 .NET 互通，字节完全一致。Web 前端推荐用这种方式。少数成员不支持，比如 `DateTimeOffset`、多维数组和自定义格式化器（[TypeScript 不支持的内容](/zh/docs/v4/advanced/typescript#not-supported)）。前端确实需要它们时，可以把 C# 类型放进一个 .NET WebAssembly 模块，通过 `[JSExport]` 调用，代价是浏览器要下载 .NET 运行时；Blazor WebAssembly 应用则和普通 .NET 项目一样使用 Nino。参见[浏览器中的 .NET](/zh/docs/v4/advanced/browser#which-way)。
 
 ## ASP.NET Core 能读写 Nino 请求体和响应吗？ [#can-aspnet-core-read-and-write-nino-bodies]
 
@@ -76,7 +76,7 @@ Nino.Core 的 net8.0 和 net10.0 版本还带了裁剪和 Native AOT 标注：�
 
 ## 什么时候不该用 Nino？ [#when-should-i-not-use-nino]
 
-数据要给人看或手改时（用 JSON、YAML 或 TOML）；或者要让 C#、TypeScript、JavaScript、Go、Rust 以外的语言读时：格式由你的 C# 类型决定，没有 schema 文件，也没有面向那些语言的生成器，这时用 Protocol Buffers、FlatBuffers 或 MessagePack（[Nino 与 MessagePack 对比](/zh/docs/v4/vs-messagepack)、[Nino 与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net)）。JavaScript、TypeScript、Go 和 Rust 程序通过[生成的代码](/zh/docs/v4/advanced/codegen)使用 Nino，浏览器还能在 [.NET WebAssembly](/zh/docs/v4/advanced/browser) 上直接跑 C# 类型。参见[局限性](/zh/docs/v4/limit)。
+数据要给人看或手改时（用 JSON、YAML 或 TOML）；或者要让 C#、TypeScript、JavaScript、Go、Rust 以外的语言读时：格式由你的 C# 类型决定，没有 schema 文件，也没有面向那些语言的生成器，这时用 Protocol Buffers、FlatBuffers 或 MessagePack（[Nino 与 MessagePack 对比](/zh/docs/v4/vs-messagepack)、[Nino 与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net)）。JavaScript、TypeScript、Go 和 Rust 程序通过[生成的代码](/zh/docs/v4/advanced/codegen)使用 Nino。参见[局限性](/zh/docs/v4/limit)。
 
 ## 为什么 Nino 提示某个类型没有格式化器？ [#no-formatter]
 

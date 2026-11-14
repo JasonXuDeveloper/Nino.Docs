@@ -1,11 +1,11 @@
 ---
 title: Guides Overview
 seoTitle: "Advanced Guides: Nino in Real Systems – Nino v4 Docs"
-description: "Which guide and which feature you need: networking and gRPC, ASP.NET Core, message queues, caching, persistence, Unity, HybridCLR, Godot, browser clients, and TypeScript, Go and Rust with nino-gen."
+description: "Which guide and which feature you need: networking and gRPC, ASP.NET Core, message queues, caching, persistence, Unity, HybridCLR, Godot, .NET in the browser, and TypeScript, Go and Rust with nino-gen."
 icon: Map
 ---
 
-import { DatabaseZap, Gamepad2, Globe, Joystick, Languages, MessagesSquare, Network, Save, Server } from 'lucide-react';
+import { AppWindow, Cog, DatabaseZap, Gamepad2, Globe, Joystick, Languages, MessagesSquare, Network, Save, Server } from 'lucide-react';
 
 <AnchorRedirect
   map={{
@@ -36,9 +36,9 @@ The feature pages explain what each option does. These guides put them together 
 | A service protocol, a real-time server (trading, collaboration, games), a WebSocket or UDP link | [Networking](/en/docs/v4/advanced/networking) |
 | gRPC services without `.proto` files, between .NET peers | [gRPC](/en/docs/v4/advanced/networking#grpc) |
 | An ASP.NET Core API (MVC or Minimal APIs) that takes and returns Nino bodies | [ASP.NET Core](/en/docs/v4/advanced/aspnetcore) |
-| A web or Node front end (JavaScript or TypeScript) that talks to a Nino server | [TypeScript](/en/docs/v4/advanced/typescript), or [Browser Clients](/en/docs/v4/advanced/browser) to run the C# types themselves |
+| A web or Node front end (JavaScript or TypeScript) that talks to a Nino server | [TypeScript](/en/docs/v4/advanced/typescript) (the recommended way; [Blazor](/en/docs/v4/advanced/browser#blazor) uses Nino as any .NET app) |
 | A Go or Rust service that exchanges data with .NET | [Go](/en/docs/v4/advanced/go) or [Rust](/en/docs/v4/advanced/rust) |
-| Code in several languages from one set of types, or the generator in a build or CI step | [TypeScript, Go and Rust](/en/docs/v4/advanced/codegen) (`<NinoCodegen>` items, the `nino-gen` tool) |
+| Code in several languages from one set of types, or the generator in a build or CI step | [Use in Other Languages](/en/docs/v4/advanced/codegen) (`<NinoCodegen>` items, the `nino-gen` tool) |
 | Bytes that will not read: from another language, a packet capture, a log or a save | [`nino-gen inspect`](/en/docs/v4/advanced/codegen#inspect) |
 | Producers and consumers on Kafka, RabbitMQ or another broker | [Message Queues](/en/docs/v4/advanced/message-queues) |
 | Telemetry, metrics or market-data feeds | [Telemetry and Tick Streams](/en/docs/v4/advanced/message-queues#telemetry-and-tick-streams) |
@@ -77,9 +77,9 @@ Speed has its own track in the sidebar, Performance: [High-Performance Serializa
   </Card>
 </Cards>
 
-## Engines and Languages [#other-languages]
+## Engines and Browsers [#engines]
 
-Unity and Godot take Nino with a setup of their own, and a browser can run your C# types on .NET WebAssembly. Clients and services in other languages read and write the same bytes as .NET, from the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) of your built assembly. The format they share is described in [Wire Format](/en/docs/v4/wire-format).
+Unity and Godot take Nino with a setup of their own. In a browser, a TypeScript or JavaScript front end uses the [generated TypeScript](/en/docs/v4/advanced/typescript); .NET running in the browser (Blazor WebAssembly) uses Nino as any .NET project does.
 
 <Cards>
   <Card icon={<Gamepad2 />} title="Unity and HybridCLR" href="/en/docs/v4/advanced/unity">
@@ -88,11 +88,27 @@ Unity and Godot take Nino with a setup of their own, and a browser can run your 
   <Card icon={<Joystick />} title="Godot" href="/en/docs/v4/advanced/godot">
     Godot 4 .NET projects: Godot's structs, nodes and resources, save games, multiplayer messages, rebuilding in the editor.
   </Card>
-  <Card icon={<Globe />} title="Browser Clients" href="/en/docs/v4/advanced/browser">
-    The same `[NinoType]` types in the browser: a .NET WebAssembly module with `[JSExport]` functions, called from JavaScript or TypeScript.
+  <Card icon={<AppWindow />} title=".NET in the Browser" href="/en/docs/v4/advanced/browser">
+    Which way to take in a browser, Nino in Blazor WebAssembly, and a .NET module with `[JSExport]` functions for a front end that needs what the TypeScript leaves out.
   </Card>
-  <Card icon={<Languages />} title="TypeScript, Go and Rust" href="/en/docs/v4/advanced/codegen">
-    Nino.Codegen writes your `[NinoType]`s as TypeScript, Go or Rust types and codecs after each build (or `nino-gen` from a built assembly), with the same bytes as .NET. Go struct tags, Rust derive, readers safe on untrusted data.
+</Cards>
+
+## Other Languages [#other-languages]
+
+Clients and services in TypeScript, Go and Rust read and write the same bytes as .NET, with code nino-gen writes from the [layout metadata](/en/docs/v4/evolving-data#layout-metadata) of your built assembly. The format they share is described in [Wire Format](/en/docs/v4/wire-format).
+
+<Cards>
+  <Card icon={<Languages />} title="Use in Other Languages" href="/en/docs/v4/advanced/codegen">
+    nino-gen and its setup: `<NinoCodegen>` items after each build or the `nino-gen` tool, options, inspecting a message, and what every language shares.
+  </Card>
+  <Card icon={<Globe />} title="TypeScript" href="/en/docs/v4/advanced/typescript">
+    Classes and codecs for browsers, Node, Bun and Deno: the API, type mapping, typed arrays and text in browsers.
+  </Card>
+  <Card icon={<Server />} title="Go" href="/en/docs/v4/advanced/go">
+    Generated structs and codecs, or your own structs with `nino` tags.
+  </Card>
+  <Card icon={<Cog />} title="Rust" href="/en/docs/v4/advanced/rust">
+    Generated types and codecs, the derive and hand-written impls.
   </Card>
 </Cards>
 

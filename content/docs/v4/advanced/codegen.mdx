@@ -1,13 +1,27 @@
 ---
-title: TypeScript, Go and Rust
-seoTitle: "Nino in TypeScript, Go and Rust: Codecs Generated from Your [NinoType]s – Nino v4 Docs"
-description: "Nino.Codegen writes your [NinoType]s as TypeScript, Go or Rust types with codecs after each build (or from a built assembly with the nino-gen tool), so browsers, Node, Go services and Rust programs read and write exactly the bytes Nino writes in .NET; nino-gen also checks layout baselines and shows what each byte of a message is."
+title: Use in Other Languages
+seoTitle: "Use Nino in TypeScript, Go and Rust: Code Generated from Your [NinoType]s – Nino v4 Docs"
+description: "Use your [NinoType]s in TypeScript, Go and Rust: Nino.Codegen writes them as types with codecs after each build (or the nino-gen tool from a built assembly), so browsers, Node, Go services and Rust programs read and write exactly the bytes Nino writes in .NET. Setup, options, the command line, inspecting a message and what every language shares."
 icon: Languages
 ---
 
 <AnchorRedirect map={{ 'example': '/en/docs/v4/advanced/typescript#example', 'with-aspnet-core': '/en/docs/v4/advanced/typescript#with-aspnet-core', 'api': '/en/docs/v4/advanced/typescript#api', 'text-in-browsers': '/en/docs/v4/advanced/typescript#text-in-browsers', 'type-mapping': '/en/docs/v4/advanced/typescript#type-mapping', 'typed-arrays': '/en/docs/v4/advanced/typescript#typed-arrays', 'not-supported': '/en/docs/v4/advanced/typescript#not-supported', 'performance': '/en/docs/v4/advanced/typescript#performance', 'compared-with-memorypack': '/en/docs/v4/advanced/typescript#compared-with-memorypack', 'from-ninotypescript': '/en/docs/v4/advanced/typescript#from-ninotypescript', 'typescript': '/en/docs/v4/advanced/typescript', 'compared-with-json': '/en/docs/v4/advanced/typescript#performance', 'go': '/en/docs/v4/advanced/go', 'go-generated-code': '/en/docs/v4/advanced/go#generated-code', 'struct-tags': '/en/docs/v4/advanced/go#struct-tags', 'go-strings': '/en/docs/v4/advanced/go#strings', 'go-values': '/en/docs/v4/advanced/go#values', 'rust': '/en/docs/v4/advanced/rust', 'rust-generated-code': '/en/docs/v4/advanced/rust#generated-code', 'rust-types': '/en/docs/v4/advanced/rust#types', 'rust-values': '/en/docs/v4/advanced/rust#values', 'rust-derive': '/en/docs/v4/advanced/rust#derive', 'rust-hand-written': '/en/docs/v4/advanced/rust#hand-written', 'rust-features': '/en/docs/v4/advanced/rust#features' }} />
 
-Nino writes your `[NinoType]`s as **TypeScript**, **Go** or **Rust**: one type per `[NinoType]`, with codecs that read and write exactly the bytes Nino writes in .NET. A browser, a Node server, a Go service or a Rust program then exchanges the same bytes as your .NET code, without a .NET runtime. The generator is **nino-gen**, and it comes in two packages with the same options and the same output:
+Your `[NinoType]`s can be used outside .NET, in **TypeScript**, **Go** and **Rust**. Nino writes each `[NinoType]` as a type of that language, with a codec that reads and writes exactly the bytes Nino writes in .NET, so a browser, a Node server, a Go service or a Rust program exchanges data with your .NET code without a .NET runtime. This page covers what every language shares (setup, options, the command line, the rules for types); each language's page covers its usage.
+
+## Languages [#languages]
+
+| Language | Use it for | Runtime | Needs |
+| --- | --- | --- | --- |
+| [TypeScript](/en/docs/v4/advanced/typescript) | browsers (the recommended way for a web front end: [.NET in the Browser](/en/docs/v4/advanced/browser#which-way)), Node, Bun and Deno | `nino.ts`, written next to the code, or the npm package `nino-serialization` ([`Runtime`](#options)) | TypeScript 5.7 or later, an ES2022 environment: a current browser, or Node 15 or later |
+| [Go](/en/docs/v4/advanced/go) | services and tools: generated structs, or your own with [`nino` tags](/en/docs/v4/advanced/go#struct-tags) | the module `github.com/JasonXuDeveloper/Nino/runtimes/go/v4` (package `nino`) | Go 1.22 or later, nothing outside the standard library |
+| [Rust](/en/docs/v4/advanced/rust) | services, clients and tools: generated types, or your own with the [derive](/en/docs/v4/advanced/rust#derive) | the crate `nino-serialization` (library `nino`), with its `indexmap` feature unless [`Maps="std"`](#options) | Rust 1.88 or later |
+
+Each runtime is published with every release under Nino's version ([runtimes/](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes)).
+
+## The Generator [#generator]
+
+The generator is **nino-gen**, and it comes in two packages with the same options and the same output:
 
 - **Nino.Codegen**, a build package: after each compile of the project that references it, it writes what the project's `<NinoCodegen>` items ask for ([In a Build](#setup)).
 - **Nino.Codegen.Tool**, the `nino-gen` .NET tool, for a built assembly from the command line, a script or a CI step. It also writes and checks a [layout baseline](/en/docs/v4/evolving-data#layout-baseline) and [shows what each byte of a message is](#inspect) ([From the Command Line](#command-line)).
@@ -19,14 +33,6 @@ Nino writes your `[NinoType]`s as **TypeScript**, **Go** or **Rust**: one type p
   <NinoCodegen Include="rust" Out="../client/src" Name="model.rs" Serde="true" />
 </ItemGroup>
 ```
-
-Each language has a page of its own, and a runtime next to the generated code that every release publishes with Nino's version ([runtimes/](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes)):
-
-| Language | Runtime | Needs |
-| --- | --- | --- |
-| [TypeScript](/en/docs/v4/advanced/typescript) | `nino.ts`, written next to the code, or the npm package `nino-serialization` ([`Runtime`](#options)) | TypeScript 5.7 or later, an ES2022 environment: a current browser, or Node 15 or later |
-| [Go](/en/docs/v4/advanced/go) | the module `github.com/JasonXuDeveloper/Nino/runtimes/go/v4` (package `nino`) | Go 1.22 or later, nothing outside the standard library |
-| [Rust](/en/docs/v4/advanced/rust) | the crate `nino-serialization` (library `nino`), with its `indexmap` feature unless [`Maps="std"`](#options) | Rust 1.88 or later |
 
 <Callout type="info" title="Requirements">
 

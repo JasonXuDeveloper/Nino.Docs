@@ -1,27 +1,27 @@
 ---
-title: 浏览器客户端
-seoTitle: "在浏览器中使用 Nino：通过 .NET WebAssembly 支持 JavaScript 与 TypeScript 客户端 – Nino v4 文档"
-description: "在浏览器的 JavaScript 或 TypeScript 中使用 Nino：把 [NinoType] 类型编译进 .NET browser-wasm 模块，通过 [JSExport] 调用，与 .NET 服务端交换数据，字节一致。"
-icon: Globe
+title: 浏览器中的 .NET
+seoTitle: "在浏览器中使用 Nino：生成的 TypeScript、Blazor WebAssembly 或 .NET 模块 – Nino v4 文档"
+description: "浏览器里用 Nino 该走哪条路：TypeScript 或 JavaScript 前端用生成的 TypeScript（推荐）；Blazor WebAssembly 里照常使用 Nino；前端需要 TypeScript 不支持的成员时，再用通过 [JSExport] 调用的 .NET WebAssembly 模块。"
+icon: AppWindow
 ---
 
-**能在 JavaScript 或 TypeScript 中使用 Nino 吗？** 可以，有两种方式：使用 [Nino.Codegen](/zh/docs/v4/advanced/typescript) 从你的类型生成的 TypeScript 编解码器，或者让 Nino 本身在浏览器里运行，也就是本指南介绍的做法。做法是：把客户端的序列化部分做成一个小型 .NET `browser-wasm` 应用，引用 Nino 和你的 `[NinoType]` 类型；用 `[JSExport]` 向 JavaScript 暴露几个函数，再从 JavaScript 或 TypeScript 前端调用。这种做法不用生成 TypeScript：浏览器跑的就是服务端那套 C# 类型和生成的格式化器，不用再同步第二份 schema，字节也完全一样。如果不想让浏览器下载 .NET 运行时，就改用[生成的 TypeScript](/zh/docs/v4/advanced/typescript)（见[什么时候换别的方案](#when-something-else-fits-better)）。
+<AnchorRedirect map={{ 'why-run-nino-in-the-browser': '/zh/docs/v4/advanced/browser#jsexport', 'setup': '/zh/docs/v4/advanced/browser#jsexport', 'when-something-else-fits-better': '/zh/docs/v4/advanced/browser#which-way' }} />
 
-本指南从头到尾搭一遍：一个共享的订单类型、一组导出函数、一个加载它们的页面，以及通过 `fetch` 和 WebSocket 与 ASP.NET Core 服务端的通信。所有代码片段都来自一个用 .NET 10 SDK 构建、并在无头 Chromium 中实际运行过的项目。
+浏览器读写 Nino 字节有两种形式：一是**生成的 TypeScript**，所有 TypeScript 或 JavaScript 前端都推荐用它；二是直接在 WebAssembly 上跑 **.NET**，适合本身就是 .NET 的应用（Blazor WebAssembly），以及少数需要 TypeScript 不支持的成员的前端。本页讲的是跑 .NET 的这两种场景，先对照下表选好路线。
 
-## 为什么在浏览器中运行 Nino [#why-run-nino-in-the-browser]
+## 选哪条路 [#which-way]
 
-- **只有一份 schema。** `[NinoType]` 类就是格式的唯一定义。不需要为每个类维护一份 `.ts` 镜像，成员变化时也没有 `.proto` 文件要更新。
-- **字节一致。** 在测试项目里，同一个订单，浏览器序列化出的字节与 .NET 10 控制台程序的逐字节相同，浏览器也能正确解码控制台程序和 ASP.NET Core 接口返回的字节。Nino 的格式是它自己定义的小端格式，WebAssembly 本身也是小端，两边不会有任何差别。
-- **所有功能都能用。** [版本容错与键控成员](/zh/docs/v4/evolving-data)、[多态](/zh/docs/v4/polymorphism)、[引用追踪](/zh/docs/v4/reference-tracking)和[复用反序列化](/zh/docs/v4/pooling)在模块里和在服务端上表现完全一样。
-- **JavaScript 只接触普通值。** 导出函数接收和返回 `Uint8Array`、数字、字符串和数组；前端代码完全不用管 Nino 的格式。
+| 浏览器端代码 | 用法 | 代价 |
+| --- | --- | --- |
+| TypeScript 或 JavaScript（React、Vue、Angular、普通页面），或 Node | **生成的 TypeScript**（推荐）：见 [TypeScript](/zh/docs/v4/advanced/typescript) | 不需要 .NET 运行时，只有普通的 TypeScript 类、编解码器和一个运行时文件 |
+| Blazor WebAssembly 应用，或其他已经跑在浏览器里的 .NET 代码 | **和普通 .NET 项目一样用 Nino**：见 [Blazor WebAssembly](#blazor) | 只多一个 Nino.Core 程序集，.NET 本来就已经加载 |
+| 需要 TypeScript 不支持的成员（`DateTimeOffset`、多维数组、自定义格式化器，见 [TypeScript 不支持的内容](/zh/docs/v4/advanced/typescript#not-supported)）的 TypeScript 或 JavaScript 前端 | **通过 `[JSExport]` 调用的 .NET 模块**：见[给 JavaScript 用的 .NET 模块](#jsexport) | 浏览器要下载 .NET 运行时（见[权衡](#trade-offs)） |
 
-## 配置 [#setup]
+数据要给人看，或者是给 .NET 以外团队用的公开 API，JSON 可能更合适，见[什么时候不适合](/zh/docs/v4#when-not-to-use-it)。
 
-<Steps>
-<Step>
+## 把类型放进共享项目 [#put-the-types-in-a-shared-project]
 
-### 把类型放进共享项目 [#put-the-types-in-a-shared-project]
+两种 .NET 用法都从这一步开始。
 
 类型只在一个类库里声明一次（这里是 `net10.0`），服务端和浏览器应用都引用它，类库里装上 Nino（如果是给 Unity 客户端用，目标框架改成 `netstandard2.1`，见[与 .NET 服务端共享类型](/zh/docs/v4/advanced/unity#shared-types)）：
 
@@ -53,9 +53,37 @@ public struct OrderLine
 }
 ```
 
-已经打开的页面在刷新之前会一直运行旧模块，所以和服务端交换的数据，要选能容忍变化的格式；参见[数据演进](/zh/docs/v4/evolving-data)。
+已经打开的页面在刷新之前会一直跑旧代码（模块或 Blazor 应用），所以和服务端交换的数据要选能容忍变化的格式，参见[数据演进](/zh/docs/v4/evolving-data)。
 
-</Step>
+<Callout type="info">
+
+Nino 的[拦截器](/zh/docs/v4/performance#interceptors)在浏览器里照样工作，规则和平时一样：`[NinoType]` 声明在其他程序集里（比如这里的 `Shop.Contracts`）时，对它们的调用不走拦截器，而是和服务端一样经过格式化器缓存。想让这些调用也走拦截器，就把类型声明在浏览器项目里（或把同一个源文件链接进来）。
+
+</Callout>
+
+## Blazor WebAssembly [#blazor]
+
+Blazor WebAssembly 应用本身就是 .NET，Nino 在里面的用法和服务端一样：Blazor 项目引用共享项目，直接调用 `NinoSerializer` 和 `NinoDeserializer`。不需要 `[JSExport]`，也不需要生成 TypeScript。
+
+```shell
+dotnet add Shop.Client reference Shop.Contracts/Shop.Contracts.csproj
+```
+
+和服务端不同的地方：
+
+| | Blazor WebAssembly 中 |
+| --- | --- |
+| HTTP | `HttpClient` 底层走浏览器的 `fetch`；请求体和响应体的读写和其他 .NET 客户端一样（见[客户端](/zh/docs/v4/advanced/aspnetcore#clients)）。Nino.AspNetCore 依赖 ASP.NET Core，只能留在服务端。 |
+| SIMD | Nino.Core 的 net10.0 版本在运行时支持时使用 WebAssembly SIMD（见 [SIMD](/zh/docs/v4/simd#dotnet)），各条路径写出的字节都一样 |
+| 发布 | 和 Blazor 平时一样裁剪发布：Nino 不会带来裁剪警告，`_framework` 里只多一个程序集（见[权衡](#trade-offs)） |
+
+## 给 JavaScript 用的 .NET 模块 [#jsexport]
+
+TypeScript 或 JavaScript 前端需要生成的 TypeScript 不支持的内容时，可以直接跑 C# 类型：做一个小型 .NET `browser-wasm` 应用，引用 Nino 和共享项目，用 `[JSExport]` 导出几个函数，再从前端调用。浏览器跑的就是服务端那套类型和生成的格式化器，所有成员类型都能用，字节也完全一样；JavaScript 这边只看到 `Uint8Array`、数字、字符串和数组。代价是要下载并启动 .NET 运行时（见[权衡](#trade-offs)）。
+
+下面的代码都来自一个用 .NET 10 SDK 构建、在无头 Chromium 中实际跑过的项目。在这个项目里，浏览器序列化出的订单和 .NET 10 控制台程序序列化的同一订单逐字节相同，浏览器也能解码控制台程序和 ASP.NET Core 接口发来的字节。
+
+<Steps>
 <Step>
 
 ### 创建浏览器项目 [#create-the-browser-project]
@@ -168,12 +196,6 @@ public static partial class OrderCodec
 
 `long` 必须写明映射成这两种里的哪一种。标了 `[JSMarshalAs<JSType.MemoryView>]` 的 `Span<byte>` 参数收不了 JavaScript 传来的 `Uint8Array`（调用失败，报 `Expected MemoryViewType.Byte`），所以参数用 `byte[]`。
 
-<Callout type="info">
-
-Nino 的[拦截器](/zh/docs/v4/performance#interceptors)可以在 WebAssembly SDK 下工作，规则和平时一样：`[NinoType]` 声明在其他程序集里（比如这里的 `Shop.Contracts`）时，对它们的调用不走拦截器，而是和服务端一样经过格式化器缓存。想让这些调用也走拦截器，就把类型声明在浏览器项目里（或把同一个源文件链接进来）。
-
-</Callout>
-
 </Step>
 <Step>
 
@@ -243,7 +265,7 @@ const codec: OrderCodec = exports.Shop.Browser.OrderCodec;
 </Step>
 </Steps>
 
-## 发送与接收 [#sending-and-receiving]
+### 发送与接收 [#sending-and-receiving]
 
 字节就是普通的 `Uint8Array`，任何能传二进制数据的浏览器 API 都能用。
 
@@ -285,7 +307,7 @@ socket.onmessage = (e) => {
 
 ## 权衡 [#trade-offs]
 
-**下载体积。** 浏览器除了你的代码，还要下载 .NET 运行时。上面的项目用 .NET 10.0.404 SDK（运行时 10.0.15）以 Release 模式裁剪发布后：
+**下载体积。** 浏览器除了你的代码，还要下载 .NET 运行时；Blazor 应用本来就要付这笔，Nino 只多出 `Nino.Core` 这一行。上面的模块用 .NET 10.0.404 SDK（运行时 10.0.15）以 Release 模式裁剪发布后：
 
 | `_framework` 中的文件 | 未压缩 | Brotli | Gzip |
 | --- | --- | --- | --- |
@@ -297,20 +319,14 @@ socket.onmessage = (e) => {
 
 **启动时间。** 运行时下载并启动完成之前，无法编码或解码任何数据。在测试中（无头 Chromium，从 localhost 加载），页面从开始导航到得到第一批解码结果用时 0.4 到 0.7 秒；在真实网络中，下载时间占大头。运行时要在页面加载时就启动，别等到第一条消息才启动。
 
-**跨越边界。** 每次调用都会在 JavaScript 内存和 WebAssembly 内存之间复制 `byte[]` 参数和返回值。导出少量粗粒度的函数（编码一条消息、解码视图需要的字段），而不是为每个成员导出一个 getter。
+**跨越边界**（仅限模块）。每次调用都会在 JavaScript 内存和 WebAssembly 内存之间复制 `byte[]` 参数和返回值。导出少量粗粒度的函数（编码一条消息、解码视图需要的字段），而不是为每个成员导出一个 getter。
 
 **裁剪。** Nino.Core 标记为可裁剪、兼容 AOT，生成的代码也带有裁剪器需要的标注，因此裁剪发布时 Nino 不会产生警告。上线前仍请用 Release 发布验证你自己的类型。
-
-### 什么时候换别的方案 [#when-something-else-fits-better]
-
-- **Nino.Codegen** 在每次构建后从 `[NinoType]` 生成 TypeScript 类和编解码器，浏览器不用下载 .NET 运行时，就能与 .NET 互通。如果小体积和快速启动比它不支持的成员（多维数组、`DateTimeOffset`、自定义格式化器；见 [TypeScript 不支持的内容](/zh/docs/v4/advanced/typescript#not-supported)）更重要，就用它。
-- **JSON API** 更适合公开 API、小负载，或由 .NET 以外的团队维护的前端。.NET 服务之间照样用 Nino。
-- **Protocol Buffers 或 MessagePack** 适合 schema 不归 C# 管的数据，比如类型由其他语言的团队定义和维护。Nino 的格式由你的 C# 类型定义，其他语言通过 [nino-gen](/zh/docs/v4/advanced/codegen) 拿到它（TypeScript、Go 和 Rust）。
-- **Blazor WebAssembly** 应用本来就在浏览器中运行 .NET：直接在 Blazor 项目中引用并调用 Nino 即可，不需要 `[JSExport]` 这一层。
 
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="TypeScript、Go 与 Rust" href="/zh/docs/v4/advanced/codegen">用从你的类型生成的代码，在 .NET 之外读写 Nino 的字节。</Card>
-  <Card title="ASP.NET Core" href="/zh/docs/v4/advanced/aspnetcore">在 MVC 和 Minimal API 中以 application/x-nino 收发 Nino 数据。</Card>
+  <Card title="在其他语言中使用" href="/zh/docs/v4/advanced/codegen">nino-gen 把你的类型写成 TypeScript、Go 或 Rust：配置、选项和各语言共通的部分。</Card>
+  <Card title="TypeScript" href="/zh/docs/v4/advanced/typescript">浏览器和 Node 的推荐用法：生成的类和编解码器、API 与类型化数组。</Card>
+  <Card title="ASP.NET Core" href="/zh/docs/v4/advanced/aspnetcore">在 MVC 和 Minimal API 中以 application/x-nino 收发 Nino 请求体。</Card>
 </Cards>

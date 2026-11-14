@@ -14,7 +14,7 @@ icon: TriangleAlert
 - **设置是进程级的。** 没有按调用传的选项：[`NinoSettings`](/zh/docs/v4/settings) 的成员对每次调用都生效，各项限制在第一次使用时就固定下来；每个类型怎么写，由它的特性决定。
 - **部分类型没有内置格式化器。** `System.Type` 故意不支持（让数据决定要创建哪个类型，正是反序列化攻击的手法），委托、非泛型集合，以及 Unity 的 `AnimationCurve`、`Gradient`、`RectOffset` 之外的引擎类也没有。参见[支持的类型](/zh/docs/v4/types#not-supported)；用[自定义格式化器](/zh/docs/v4/custom-formatters)可以支持其中任何一种。
 - **不自带压缩，一次流调用只读一个值。** 压缩请在输出外面套 `System.IO.Compression`（[压缩](/zh/docs/v4/advanced/streams#compression)）。`NinoDeserializer.Deserialize<T>(stream)` 会一直读到流结束，所以一个流上要传多条消息，得由你的代码按[帧](/zh/docs/v4/advanced/streams#frames)来写。
-- **生成的 TypeScript、Go 和 Rust 覆盖大多数类型，但不是全部。** 某种语言表达不了的类型，[Nino.Codegen](/zh/docs/v4/advanced/codegen#not-generated) 会连同包含它的类型一起跳过，并给出构建警告：所有语言都跳过槽位里没有任何地方点名的封闭泛型类型；TypeScript 还会跳过多维数组、`DateTimeOffset`、自定义格式化器等成员；Rust 跳过以浮点数为键的字典和集合。各语言的完整清单：[TypeScript](/zh/docs/v4/advanced/typescript#not-supported)、[Go](/zh/docs/v4/advanced/go#not-supported)、[Rust](/zh/docs/v4/advanced/rust#not-supported)。浏览器客户端如果需要这些类型，可以在 [.NET WebAssembly](/zh/docs/v4/advanced/browser) 上直接运行 C# 类型。
+- **生成的 TypeScript、Go 和 Rust 覆盖大多数类型，但不是全部。** 某种语言表达不了的类型，[Nino.Codegen](/zh/docs/v4/advanced/codegen#not-generated) 会连同包含它的类型一起跳过，并给出构建警告：所有语言都跳过槽位里没有任何地方点名的封闭泛型类型；TypeScript 还会跳过多维数组、`DateTimeOffset`、自定义格式化器等成员；Rust 跳过以浮点数为键的字典和集合。各语言的完整清单：[TypeScript](/zh/docs/v4/advanced/typescript#not-supported)、[Go](/zh/docs/v4/advanced/go#not-supported)、[Rust](/zh/docs/v4/advanced/rust#not-supported)。浏览器客户端如果需要这些类型，可以把 C# 类型放进 [.NET WebAssembly 模块](/zh/docs/v4/advanced/browser#jsexport)里运行。
 
 ## 平台说明 [#platform-notes]
 

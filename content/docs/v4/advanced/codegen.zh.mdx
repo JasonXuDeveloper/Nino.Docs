@@ -1,13 +1,27 @@
 ---
-title: TypeScript、Go 与 Rust
-seoTitle: "在 TypeScript、Go 和 Rust 中使用 Nino：从 [NinoType] 生成编解码器 – Nino v4 文档"
-description: "Nino.Codegen 在每次构建后（或用 nino-gen 工具从构建好的程序集）把你的 [NinoType] 写成带编解码器的 TypeScript、Go 或 Rust 类型，浏览器、Node、Go 服务和 Rust 程序由此与 .NET 中的 Nino 互通，字节完全一致；nino-gen 还能检查布局基线，列出一条消息的每个字节是什么。"
+title: 在其他语言中使用
+seoTitle: "在 TypeScript、Go 和 Rust 中使用 Nino：从 [NinoType] 生成代码 – Nino v4 文档"
+description: "在 TypeScript、Go 和 Rust 中使用你的 [NinoType]：Nino.Codegen 在每次构建后（或用 nino-gen 工具从构建好的程序集）把它们写成带编解码器的类型，浏览器、Node、Go 服务和 Rust 程序读写的字节与 .NET 中的 Nino 完全一致。本页讲配置、选项、命令行、查看消息，以及各语言共通的部分。"
 icon: Languages
 ---
 
 <AnchorRedirect map={{ 'example': '/zh/docs/v4/advanced/typescript#example', 'with-aspnet-core': '/zh/docs/v4/advanced/typescript#with-aspnet-core', 'api': '/zh/docs/v4/advanced/typescript#api', 'text-in-browsers': '/zh/docs/v4/advanced/typescript#text-in-browsers', 'type-mapping': '/zh/docs/v4/advanced/typescript#type-mapping', 'typed-arrays': '/zh/docs/v4/advanced/typescript#typed-arrays', 'not-supported': '/zh/docs/v4/advanced/typescript#not-supported', 'performance': '/zh/docs/v4/advanced/typescript#performance', 'compared-with-memorypack': '/zh/docs/v4/advanced/typescript#compared-with-memorypack', 'from-ninotypescript': '/zh/docs/v4/advanced/typescript#from-ninotypescript', 'typescript': '/zh/docs/v4/advanced/typescript', 'compared-with-json': '/zh/docs/v4/advanced/typescript#performance', 'go': '/zh/docs/v4/advanced/go', 'go-generated-code': '/zh/docs/v4/advanced/go#generated-code', 'struct-tags': '/zh/docs/v4/advanced/go#struct-tags', 'go-strings': '/zh/docs/v4/advanced/go#strings', 'go-values': '/zh/docs/v4/advanced/go#values', 'rust': '/zh/docs/v4/advanced/rust', 'rust-generated-code': '/zh/docs/v4/advanced/rust#generated-code', 'rust-types': '/zh/docs/v4/advanced/rust#types', 'rust-values': '/zh/docs/v4/advanced/rust#values', 'rust-derive': '/zh/docs/v4/advanced/rust#derive', 'rust-hand-written': '/zh/docs/v4/advanced/rust#hand-written', 'rust-features': '/zh/docs/v4/advanced/rust#features' }} />
 
-Nino 可以把你的 `[NinoType]` 写成 **TypeScript**、**Go** 或 **Rust**：每个 `[NinoType]` 一个类型，编解码器与 .NET 中的 Nino 字节一致。这样，浏览器、Node 服务端、Go 服务或 Rust 程序不需要 .NET 运行时，就能与你的 .NET 代码互通。生成器是 **nino-gen**，它有两个包，选项相同，输出也相同：
+你的 `[NinoType]` 在 .NET 之外也能用：**TypeScript**、**Go** 和 **Rust**。Nino 把每个 `[NinoType]` 写成对应语言的类型，配上编解码器，读写的字节和 .NET 里的 Nino 完全一致。这样浏览器、Node 服务端、Go 服务或 Rust 程序不需要 .NET 运行时，就能和你的 .NET 代码互通。本页讲各语言共通的部分（配置、选项、命令行、类型规则），各语言的具体用法见各自的页面。
+
+## 语言 [#languages]
+
+| 语言 | 适用场景 | 运行时 | 需要 |
+| --- | --- | --- | --- |
+| [TypeScript](/zh/docs/v4/advanced/typescript) | 浏览器（Web 前端的推荐用法，见[浏览器中的 .NET](/zh/docs/v4/advanced/browser#which-way)）、Node、Bun 和 Deno | `nino.ts`，写在生成的代码旁边；或者 npm 包 `nino-serialization`（[`Runtime`](#options)） | TypeScript 5.7 或更高版本，ES2022 环境：当前的浏览器，或 Node 15 及以上 |
+| [Go](/zh/docs/v4/advanced/go) | 服务和工具：用生成的结构体，或者给自己的结构体加 [`nino` 标签](/zh/docs/v4/advanced/go#struct-tags) | 模块 `github.com/JasonXuDeveloper/Nino/runtimes/go/v4`（包 `nino`） | Go 1.22 或更高版本，除标准库外没有依赖 |
+| [Rust](/zh/docs/v4/advanced/rust) | 服务、客户端和工具：用生成的类型，或者给自己的类型加 [derive](/zh/docs/v4/advanced/rust#derive) | crate `nino-serialization`（库名 `nino`），除非用 [`Maps="std"`](#options)，否则打开它的 `indexmap` 功能 | Rust 1.88 或更高版本 |
+
+各语言的运行时随 Nino 每次发布，版本号与 Nino 相同（[runtimes/](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes)）。
+
+## 生成器 [#generator]
+
+生成器是 **nino-gen**，它有两个包，选项相同，输出也相同：
 
 - **Nino.Codegen**，构建包：引用它的项目每次编译之后，按项目中的 `<NinoCodegen>` 项写出代码（[在构建中生成](#setup)）。
 - **Nino.Codegen.Tool**，即 `nino-gen` .NET 工具，在命令行、脚本或 CI 步骤中处理构建好的程序集。它还能写出、检查[布局基线](/zh/docs/v4/evolving-data#layout-baseline)，[列出一条消息的每个字节是什么](#inspect)（[命令行用法](#command-line)）。
@@ -19,14 +33,6 @@ Nino 可以把你的 `[NinoType]` 写成 **TypeScript**、**Go** 或 **Rust**：
   <NinoCodegen Include="rust" Out="../client/src" Name="model.rs" Serde="true" />
 </ItemGroup>
 ```
-
-每种语言各有一页，也各有一个配合生成代码使用的运行时，随 Nino 每次发布，版本号与 Nino 相同（[runtimes/](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes)）：
-
-| 语言 | 运行时 | 需要 |
-| --- | --- | --- |
-| [TypeScript](/zh/docs/v4/advanced/typescript) | `nino.ts`，写在生成的代码旁边；或者 npm 包 `nino-serialization`（[`Runtime`](#options)） | TypeScript 5.7 或更高版本，ES2022 环境：当前的浏览器，或 Node 15 及以上 |
-| [Go](/zh/docs/v4/advanced/go) | 模块 `github.com/JasonXuDeveloper/Nino/runtimes/go/v4`（包 `nino`） | Go 1.22 或更高版本，除标准库外没有依赖 |
-| [Rust](/zh/docs/v4/advanced/rust) | crate `nino-serialization`（库名 `nino`），除非用 [`Maps="std"`](#options)，否则打开它的 `indexmap` 功能 | Rust 1.88 或更高版本 |
 
 <Callout type="info" title="环境要求">
 

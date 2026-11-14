@@ -7,7 +7,7 @@ icon: Globe
 
 <AnchorRedirect map={{ 'how-it-works': '/en/docs/v4/advanced/codegen#how-it-works', 'setup': '/en/docs/v4/advanced/codegen#setup', 'options': '/en/docs/v4/advanced/codegen#options', 'compared-with-json': '/en/docs/v4/advanced/typescript#performance' }} />
 
-nino-gen writes your `[NinoType]`s as TypeScript classes with codecs, for browsers, Node, Bun and Deno: plain TypeScript (classes, `const` objects and functions), no decorators and no dependencies. Declare a `<NinoCodegen Include="typescript" />` item ([In a Build](/en/docs/v4/advanced/codegen#setup)); its options are `Names`, `ImportExtension`, `Runtime` and `NumericArrays` ([Options](/en/docs/v4/advanced/codegen#options)). The generated code needs TypeScript 5.7 or later (the typed arrays it returns name their `ArrayBuffer`) and an ES2022 environment: a current browser, or Node 15 or later (the npm package is compiled to ES2022, as `engines` in its `package.json` states).
+nino-gen writes your `[NinoType]`s as TypeScript classes with codecs, for browsers, Node, Bun and Deno: plain TypeScript (classes, `const` objects and functions), no decorators and no dependencies. It is the recommended way to use Nino from a web front end; a Blazor WebAssembly app is .NET and calls Nino directly ([.NET in the Browser](/en/docs/v4/advanced/browser#which-way)). Declare a `<NinoCodegen Include="typescript" />` item ([In a Build](/en/docs/v4/advanced/codegen#setup)); its options are `Names`, `ImportExtension`, `Runtime` and `NumericArrays` ([Options](/en/docs/v4/advanced/codegen#options)). The generated code needs TypeScript 5.7 or later (the typed arrays it returns name their `ArrayBuffer`) and an ES2022 environment: a current browser, or Node 15 or later (the npm package is compiled to ES2022, as `engines` in its `package.json` states).
 
 The TypeScript output is two files: `<Assembly>.ts`, with a class per type, an `as const` object per enum and a codec per type, and `nino.ts`, the runtime that reads and writes Nino's format. `nino.ts` is rewritten whenever a new version changes it, and carries that version in `ninoVersion`. The runtime is also the npm package `nino-serialization` ([runtimes/typescript](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript)), the name of the Rust crate too, published with every release under Nino's version: with `Runtime="nino-serialization"` (and `npm install nino-serialization@%NINO_VERSION%`, the version of your Nino packages) the generated code imports it instead of a `nino.ts` next to your code.
 
@@ -329,6 +329,6 @@ The output is the same, except that the header comment names `nino-gen` rather t
 
 <Cards>
   <Card title="ASP.NET Core" href="/en/docs/v4/advanced/aspnetcore">MVC formatters and Minimal API bodies for application/x-nino.</Card>
-  <Card title="Browser Clients" href="/en/docs/v4/advanced/browser">Run the C# types themselves in the browser on .NET WebAssembly, for what TypeScript does not cover.</Card>
+  <Card title=".NET in the Browser" href="/en/docs/v4/advanced/browser">Blazor WebAssembly, and a .NET module for a front end that needs what TypeScript leaves out.</Card>
   <Card title="Evolving Your Data" href="/en/docs/v4/evolving-data">Deployed clients keep their old code until they update: choose a format that tolerates changes.</Card>
 </Cards>
