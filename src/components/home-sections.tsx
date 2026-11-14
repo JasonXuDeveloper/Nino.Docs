@@ -109,6 +109,7 @@ interface Card {
   version: Fact;
   license: Fact;
   speed: string;
+  speedLink: string;
   serialize: string;
   deserialize: string;
 }
@@ -157,6 +158,7 @@ const text: Record<
       speed: hasWorkloads
         ? 'Nino v4 speedup on real-world workloads'
         : 'Nino v4 speedup on classes and polymorphic types',
+      speedLink: 'All benchmark numbers',
       serialize: 'Serialize',
       deserialize: 'Deserialize',
     },
@@ -302,6 +304,7 @@ const text: Record<
       speed: hasWorkloads
         ? 'Nino v4 在真实负载上快多少'
         : 'Nino v4 在类和多态类型上快多少',
+      speedLink: '全部基准测试数据',
       serialize: '序列化',
       deserialize: '反序列化',
     },
@@ -460,7 +463,7 @@ const speedRows = [
   })),
 ];
 
-function FactsCard({ card }: { card: Card }) {
+function FactsCard({ card, docs }: { card: Card; docs: string }) {
   const fact = (f: Fact) => (
     <div>
       <dt className="text-xs text-fd-muted-foreground">{f.label}</dt>
@@ -507,13 +510,19 @@ function FactsCard({ card }: { card: Card }) {
               ))}
             </tbody>
           </table>
+          <Link
+            to={`${docs}/benchmarks#${hasWorkloads ? 'workloads' : 'basic-types'}`}
+            className="mt-3 inline-block text-xs text-fd-primary underline-offset-4 hover:underline"
+          >
+            {card.speedLink}
+          </Link>
         </div>
       )}
     </div>
   );
 }
 
-export function HomeAbout({ lang }: { lang: Locale }) {
+export function HomeAbout({ lang, docs }: { lang: Locale; docs: string }) {
   const t = text[lang];
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] lg:gap-12">
@@ -528,7 +537,7 @@ export function HomeAbout({ lang }: { lang: Locale }) {
           </p>
         ))}
       </div>
-      <FactsCard card={t.card} />
+      <FactsCard card={t.card} docs={docs} />
     </div>
   );
 }

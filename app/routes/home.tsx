@@ -428,7 +428,7 @@ export default function HomePage({ params }: Route.ComponentProps) {
 
         <section className="w-full border-t px-6 py-12 md:py-16">
           <div className="mx-auto max-w-5xl">
-            <HomeAbout lang={lang} />
+            <HomeAbout lang={lang} docs={docs} />
           </div>
         </section>
 

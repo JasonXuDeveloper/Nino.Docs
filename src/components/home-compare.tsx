@@ -109,7 +109,7 @@ function Bar({
   // A floor of 1% keeps a sliver visible; nothing (0 B) draws no bar.
   const pct = value > 0 ? Math.max((value / max) * 100, 1) : 0;
   return (
-    <div className="grid grid-cols-[5.25rem_minmax(0,1fr)_4.25rem] items-center gap-3 text-xs">
+    <div className="grid grid-cols-[7.25rem_minmax(0,1fr)_4.25rem] items-center gap-3 text-xs">
       <span
         className={cn(
           'truncate',
@@ -333,74 +333,63 @@ function memorypackRows(zh: boolean): Row[] {
 }
 
 /** Serialize SimpleClass against each library, then deserialize against both */
+/** The panels' deserialize case: the first workload's, or SimpleClass */
+const simpleDes = hasWorkloads
+  ? x64.workloads.deserialize[0]
+  : find('deserialize', 'SimpleClass');
+
+/**
+ * One row per operation of the panels' case: Nino against every other library
+ * the report timed on it; the multiple is the one against the fastest of them
+ * (the closest race), whose name the note gives.
+ */
 function otherRows(zh: boolean): Row[] {
-  const des = find('deserialize', 'SimpleClass');
-  const [mp, pb] = otherLibs;
-  const serMp = simple?.others[mp.key];
-  const serPb = simple?.others[pb.key];
-  const desMp = des?.others[mp.key];
-  const desPb = des?.others[pb.key];
-  if (
-    !simple ||
-    !des ||
-    !serMp?.ratio ||
-    !serPb?.ratio ||
-    !desMp?.ratio ||
-    !desPb?.ratio
-  )
-    return [];
-  const nino = (row: RuntimeCase) => ({
-    label: 'Nino v4',
-    value: row.v4.ns,
-    text: row.v4.text,
-  });
-  const other = (
-    lib: (typeof otherLibs)[number],
-    v: { time: { ns: number; text: string } },
-  ) => ({
-    label: lib.label,
-    value: v.time.ns,
-    text: v.time.text,
-  });
-  const vs = (lib: (typeof otherLibs)[number]) =>
-    `${zh ? '对比' : 'vs'} ${lib.label} ${lib.version}`;
+  const rows: Row[] = [];
   const faster = zh ? '更快' : 'faster';
-  const serialize = zh ? '序列化 SimpleClass' : 'Serialize SimpleClass';
-  return [
-    {
-      label: serialize,
-      note: vs(mp),
-      ratio: formatRatio(serMp.ratio),
-      unit: faster,
-      body: <Pair a={nino(simple)} b={other(mp, serMp)} />,
-    },
-    {
-      label: serialize,
-      note: vs(pb),
-      ratio: formatRatio(serPb.ratio),
-      unit: faster,
-      body: <Pair a={nino(simple)} b={other(pb, serPb)} />,
-    },
-    {
-      label: zh ? '反序列化 SimpleClass' : 'Deserialize SimpleClass',
+  for (const [row, verb] of [
+    [simple, zh ? '序列化' : 'Serialize'],
+    [simpleDes, zh ? '反序列化' : 'Deserialize'],
+  ] as const) {
+    if (!row) continue;
+    const timed = otherLibs.flatMap((lib) => {
+      const v = row.others[lib.key];
+      return v?.ratio ? [{ lib, v, ratio: v.ratio }] : [];
+    });
+    if (timed.length === 0) continue;
+    const closest = timed.reduce((a, b) => (b.ratio < a.ratio ? b : a));
+    rows.push({
+      label: action(verb, row, zh),
       note: zh
-        ? `对比 ${mp.label}；比 ${pb.label} 快 ${formatRatio(desPb.ratio)}`
-        : `vs ${mp.label}; ${formatRatio(desPb.ratio)} faster than ${pb.label}`,
-      ratio: formatRatio(desMp.ratio),
+        ? `对比其中最快的 ${closest.lib.label} ${closest.lib.version}`
+        : `vs the fastest of them, ${closest.lib.label} ${closest.lib.version}`,
+      ratio: formatRatio(closest.ratio),
       unit: faster,
       body: (
-        <Pair a={nino(des)} b={other(mp, desMp)} more={[other(pb, desPb)]} />
+        <Pair
+          a={{ label: 'Nino v4', value: row.v4.ns, text: row.v4.text }}
+          b={{
+            label: timed[0].lib.label,
+            value: timed[0].v.time.ns,
+            text: timed[0].v.time.text,
+          }}
+          more={timed.slice(1).map(({ lib, v }) => ({
+            label: lib.label,
+            value: v.time.ns,
+            text: v.time.text,
+          }))}
+        />
       ),
-    },
-  ];
+    });
+  }
+  return rows;
 }
 
 function Before({ v3, v4, big }: { v3: string; v4: string; big?: boolean }) {
   return (
     <p
       className={cn(
-        'flex flex-wrap items-baseline gap-x-3 tracking-tight tabular-nums',
-        big ? 'text-3xl sm:text-4xl' : 'text-xl',
+        'flex flex-wrap items-baseline gap-x-3 tracking-tight whitespace-nowrap tabular-nums',
+        big ? 'text-2xl sm:text-3xl' : 'text-xl',
       )}
     >
       <span className="text-fd-muted-foreground">{v3}</span>
@@ -527,14 +516,10 @@ export function HomeCompare({ lang, docs }: { lang: Locale; docs: string }) {
         />
         {otherRows(zh).length > 0 && (
           <Panel
-            title={
-              zh
-                ? '对比 MessagePack、protobuf-net'
-                : 'vs MessagePack, protobuf-net'
-            }
+            title={zh ? '对比其他序列化库' : 'vs other serializers'}
             rows={otherRows(zh)}
-            link={zh ? '对比 MessagePack' : 'Nino vs MessagePack'}
-            href={`${docs}/vs-messagepack`}
+            link={zh ? '各库的全部数据' : 'Every library, every case'}
+            href={`${docs}/benchmarks#${hasWorkloads ? 'workloads' : 'basic-types'}`}
           />
         )}
         <Panel
