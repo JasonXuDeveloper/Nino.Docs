@@ -12,7 +12,7 @@ icon: Swords
   }}
 />
 
-[protobuf-net](https://github.com/protobuf-net/protobuf-net) 用它 README 的话说，是“一个基于契约的 .NET 序列化库，碰巧写出的是 protocol buffers 序列化格式”（"a contract based serializer for .NET code, that happens to write data in the protocol buffers serialization format"）：你给 C# 类型加上特性，它读写所有 protobuf 实现都认识的 [Protocol Buffers](https://protobuf.dev) 二进制格式。本页对比 Nino v4 和 protobuf-net **3.4.40**，也就是 Nino 基准测试所用的版本：protobuf-net 的功能以它的 README、[docs.protobuf-net.dev](https://docs.protobuf-net.dev/) 上的文档和发布说明为准，Nino 的功能以 Nino 源码为准；标注“实测”的行为，是用 3.4.40 写测试程序验证过的。无法核实的功能，一律不列出。两者和 MemoryPack、MessagePack、System.Text.Json 比起来怎样，见[序列化库选型](/zh/docs/v4/compare)。
+[protobuf-net](https://github.com/protobuf-net/protobuf-net) 用它 README 的话说，是“一个基于契约的 .NET 序列化库，碰巧写出的是 protocol buffers 序列化格式”（"a contract based serializer for .NET code, that happens to write data in the protocol buffers serialization format"）：你给 C# 类型加上特性，它读写所有 protobuf 实现都认识的 [Protocol Buffers](https://protobuf.dev) 二进制格式。本页对比 Nino v4 和 protobuf-net **3.4.40**，也就是 Nino 基准测试所用的版本：protobuf-net 的功能以它的 README、[docs.protobuf-net.dev](https://docs.protobuf-net.dev/) 上的文档和发布说明为准，Nino 的功能以 Nino 源码为准；标注“实测”的行为，是用 3.4.40 写测试程序验证过的。无法核实的功能，一律不列出。Google 官方的运行时从 `.proto` schema 出发，写的也是这种格式，见 [Nino 与 Google.Protobuf 对比](/zh/docs/v4/vs-google-protobuf)。所有库放在一起比，见[序列化库选型](/zh/docs/v4/compare)。
 
 ## 两种格式 [#formats]
 
@@ -28,7 +28,7 @@ Protocol Buffers 有自己的 schema 语言（`.proto`），许多语言都有�
 
 ## 性能 [#performance]
 
-用 BenchmarkDotNet 测量，与 Nino 在同一轮测试中运行，数据和类型都相同；protobuf-net 写入复用的 `MemoryStream`（它最快的写入方式），从 `ReadOnlySpan<byte>` 读取，用的是默认的运行时模型（[测试设置](/zh/docs/v4/benchmarks#messagepack-and-protobuf-net)）。<IfWorkloads>在 Nino 领先的[真实负载](/zh/docs/v4/benchmarks#workloads)上，序列化快 <BenchValue k="workloads.protobuf.serialize" />，反序列化快 <BenchValue k="workloads.protobuf.deserialize" />；Google 官方的运行时 Google.Protobuf 在这些负载上写出相同的消息，Nino 比它序列化快 <BenchValue k="workloads.googleprotobuf.serialize" />，反序列化快 <BenchValue k="workloads.googleprotobuf.deserialize" />。</IfWorkloads><IfWorkloads not>在 Nino 领先的类和多态类型上，序列化快 <BenchValue k="protobuf.serialize" />，反序列化快 <BenchValue k="protobuf.deserialize" />。</IfWorkloads>protobuf-net 无法用相同数据表达的用例（引用追踪、读入已有实例）不计在内。
+用 BenchmarkDotNet 测量，与 Nino 在同一轮测试中运行，数据和类型都相同；protobuf-net 写入复用的 `MemoryStream`（它最快的写入方式），从 `ReadOnlySpan<byte>` 读取，用的是默认的运行时模型（[测试设置](/zh/docs/v4/benchmarks#messagepack-and-protobuf-net)）。<IfWorkloads>在 Nino 领先的[真实负载](/zh/docs/v4/benchmarks#workloads)上，序列化快 <BenchValue k="workloads.protobuf.serialize" />，反序列化快 <BenchValue k="workloads.protobuf.deserialize" />。</IfWorkloads><IfWorkloads not>在 Nino 领先的类和多态类型上，序列化快 <BenchValue k="protobuf.serialize" />，反序列化快 <BenchValue k="protobuf.deserialize" />。</IfWorkloads>protobuf-net 无法用相同数据表达的用例（引用追踪、读入已有实例）不计在内。
 
 <LibrarySummary lib="protobuf" lang="zh" />
 
@@ -166,4 +166,5 @@ Message back = NinoDeserializer.Deserialize<Message>(bytes); // 一个 Chat
   <Card title=".NET 基准测试" href="/zh/docs/v4/benchmarks">每个用例对比 protobuf-net 和其他库，以及测量它们的代码。</Card>
   <Card title="序列化库选型" href="/zh/docs/v4/compare">再把 MemoryPack、MessagePack 和 System.Text.Json 放进来比，还有 Nino 的局限和迁移步骤。</Card>
   <Card title="在其他语言中使用" href="/zh/docs/v4/advanced/codegen">用从你的类型生成的代码，在 .NET 之外与 Nino 互通。</Card>
+  <Card title="Nino 与 System.Text.Json 对比" href="/zh/docs/v4/vs-system-text-json">JSON 文本对比 Nino 的二进制，以及怎么迁移。</Card>
 </Cards>

@@ -1,0 +1,132 @@
+---
+title: Nino 与 System.Text.Json 对比
+seoTitle: "Nino 与 System.Text.Json 对比：.NET 里用二进制还是 JSON，速度与迁移 – Nino v4 文档"
+description: "Nino v4 对比 System.Text.Json：System.Text.Json 写 JSON 文本，人能看懂，任何语言都能读；Nino 写紧凑的二进制，供 .NET 以及它生成的 TypeScript、Go 和 Rust 使用。两种格式、各用例组的速度、不可信输入、功能矩阵、System.Text.Json 强在哪里，以及怎么迁移。"
+icon: Swords
+---
+
+[System.Text.Json](https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/overview) 是 .NET 内置的 JSON 序列化库。JSON 是文本，自己描述自己：人能看能改，浏览器和任何语言不需要你的类型就能解析，ASP.NET Core 默认用的也是它。Nino 写的是二进制，只有你的 C# 类型，或者 [nino-gen](/zh/docs/v4/advanced/codegen) 从这些类型生成的 TypeScript、Go 和 Rust 才读得懂，换来的是速度、体积，以及 JSON 表达不了的功能。本页对比 Nino v4 和 .NET 10 上的 System.Text.Json：System.Text.Json 的功能以微软文档为准，Nino 的功能以 Nino 源码为准。无法核实的功能，一律不列出。所有库放在一起比，见[序列化库选型](/zh/docs/v4/compare)。
+
+## 两种格式 [#formats]
+
+| | Nino v4 | System.Text.Json |
+| --- | --- | --- |
+| 一个值 | 只有它的字节 | 文本：数字、字符串、`true`、`false`、`null`、数组或对象 |
+| 一个对象 | 成员依次排列；用 [`NinoFormat.Keyed`](/zh/docs/v4/evolving-data#keyed-members) 时每个成员多一个键和一个长度（8 字节） | `{ "name": value, ... }`，每个属性都带着名字 |
+| 一个子类型 | 4 字节类型 ID，即类型名的哈希 | 一个 `$type` 属性，值是你给这个子类型定的标识 |
+| 整数和浮点数 | 按完整宽度写（`int` 占 4 字节） | 十进制数字 |
+| 字符串 | 所有字符都不超过 U+00FF 时每字符一个字节，否则 UTF-16；加 [`[NinoUtf8]`](/zh/docs/v4/defining-types#string-encoding) 用 UTF-8 | 带引号的 UTF-8 文本；默认编码器把非 ASCII 字符转义成 `\uXXXX` |
+| `byte[]` | 长度加字节 | Base64 字符串 |
+| `Guid`、`DateTime` | 16 字节；tick 和 kind | 36 个字符的字符串；ISO 8601 字符串 |
+
+## 性能 [#performance]
+
+用 BenchmarkDotNet 测量，与 Nino 在同一轮测试中运行，数据和类型都相同。System.Text.Json 用的是源生成（一个 `JsonSerializerContext`），通过复用的 `Utf8JsonWriter` 把 UTF-8 写进 `ArrayBufferWriter<byte>`，从 UTF-8 字节读取（[测试设置](/zh/docs/v4/benchmarks#workloads)）。<IfWorkloads>在 Nino 领先的[真实负载](/zh/docs/v4/benchmarks#workloads)上，序列化快 <BenchValue k="workloads.json.serialize" />，反序列化快 <BenchValue k="workloads.json.deserialize" />。</IfWorkloads>System.Text.Json 跑了真实负载以及基础、多态、可空值三组用例。
+
+<LibrarySummary lib="json" lang="zh" />
+
+文本的载荷更大：每个对象都要写一遍所有属性名，数字也写成一串数字字符。
+
+## 不可信输入 [#untrusted-input]
+
+System.Text.Json 没有专门读不可信数据的模式。它的多态只认基类上声明过的派生类型，所以数据没法指定要创建的类型；它拒绝 `System.Type`；`JsonSerializerOptions.MaxDepth` 限制嵌套深度（默认 64）。请求大小要在宿主上限制，比如 Kestrel 的 `MaxRequestBodySize`。
+
+Nino 的默认模式就能读不可信数据；[`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 再加上那些每次读取都要多花时间的检查。
+
+<Matrix columns={['Nino v4', 'System.Text.Json（.NET 10）']} rows={[
+  { label: '不设任何选项就能安全读取不可信数据', cells: [['yes', <>每次读取都检查长度、深度、类型和哈希桶（<a href="/zh/docs/v4/security#guarantees">保证</a>）</>], 'partial: 没有专门的模式；默认有深度上限；大小要自己限制'] },
+  { label: '数据无法指定要创建的类型', cells: ['yes: 只接受声明类型已注册子类型的类型 ID', ['yes', <><code>$type</code> 只能在基类的 <code>[JsonDerivedType]</code> 里选</>]] },
+  { label: '内存与输入成比例', cells: ['yes: 元素个数先和剩余字节比；集合在读到元素之前最多预先分配剩余字节数的 16 倍', 'n/a: 未见文档说明'] },
+  { label: '嵌套深度上限', cells: [['yes', <><code>NinoSettings.MaxDepth</code>，512，途中还检查线程的栈</>], ['yes', <><code>JsonSerializerOptions.MaxDepth</code>，默认 64</>]] },
+  { label: '字典和集合的哈希洪泛', cells: [['yes', <>每个桶受 <code>MaxHashCollisions</code> 限制；<code>Untrusted</code> 下用带种子的哈希</>], 'partial: 字符串键用 .NET 的随机化字符串哈希；其他键类型未见文档说明'] },
+  { label: '无效数据只抛一种异常', cells: [['yes', <><code>NinoDataException</code></>], ['yes', <><code>JsonException</code></>]] },
+]} />
+
+无论用哪个库，应用都要自己负责的部分（值本身、消息大小、验证发送方），见[不可信数据](/zh/docs/v4/security#what-stays-your-job)。
+
+## 功能矩阵 [#feature-matrix]
+
+<Matrix columns={['Nino v4', 'System.Text.Json（.NET 10）']} rows={[
+  { group: '平台' },
+  { label: '最低 .NET 目标', cells: [['yes', <><code>netstandard2.0</code></>], ['yes', <>内置于 .NET；<code>netstandard2.0</code> 和 .NET Framework 有 NuGet 包</>]] },
+  { label: 'Unity', cells: ['yes: 2022.3+，一个 OpenUPM 包', 'n/a: 未见文档说明'] },
+  { label: 'IL2CPP / Native AOT', cells: ['yes: 源生成，序列化时无反射', ['partial', <>要用源生成（<code>JsonSerializerContext</code>）；默认的反射模式不支持裁剪和 AOT</>]] },
+  { label: '所有运行时和 CPU 上字节一致', cells: ['yes: CoreCLR、Mono 和 IL2CPP，64 位和 32 位都是同一种布局，填充清零', 'yes: 文本'] },
+  { label: '其他语言的读取器', cells: [['partial', <>Go、Rust 和 TypeScript，由 <a href="/zh/docs/v4/advanced/codegen">nino-gen</a> 从你的 C# 类型生成</>], 'yes: 每种语言、每个浏览器都能解析 JSON'] },
+  { group: '定义类型' },
+  { label: '不用给每个成员加特性', cells: ['yes: 按声明顺序写出公共成员', ['yes', <>按名字写公共属性；字段要开 <code>IncludeFields</code></>]] },
+  { label: '不加特性的类型', cells: ['no: 每个类型或其基类型要有 [NinoType]', ['yes', <>走反射，或者在 context 上用 <code>[JsonSerializable]</code> 列一次</>]] },
+  { label: '私有成员', cells: [['yes', <><code>includeNonPublicMembers</code></>], ['yes', <><code>[JsonInclude]</code></>]] },
+  { label: <>构造函数、记录、<code>init</code> 和 <code>required</code></>, cells: ['yes', ['yes', <><code>[JsonConstructor]</code></>]] },
+  { group: '多态' },
+  { label: '抽象类和接口', cells: ['yes', ['yes', <><code>[JsonPolymorphic]</code>、<code>[JsonDerivedType]</code></>]] },
+  { label: '非抽象基类', cells: ['yes', 'yes'] },
+  { label: <>泛型基类型（<code>Box&lt;T&gt;</code>）</>, cells: ['yes: 自动支持任意类型实参', 'partial: 每个封闭的派生类型都要在基类上声明'] },
+  { label: '不用在基类型上列出子类型', cells: ['yes: ID 是类型名的哈希', ['partial', <>每个子类型一个 <code>[JsonDerivedType]</code></>]] },
+  { label: '其他程序集、热更新 DLL 中的子类型', cells: ['yes: 自动发现，无需初始化调用', 'partial: 每个子类型都要在基类上声明或在代码里添加'] },
+  { group: '数据演进' },
+  { label: '增加成员；旧代码读新数据', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>、<code>NinoFormat.Keyed</code></>], 'yes: 默认跳过不认识的属性'] },
+  { label: '删除成员', cells: [['yes', <><code>NinoFormat.Keyed</code></>], 'yes: 按名字'] },
+  { label: '调整顺序或重命名成员', cells: [['yes', <><code>NinoFormat.Keyed</code>，用 <code>[NinoFormerName]</code> 重命名；按位置的类型随便改名</>], ['yes', <>顺序无所谓；改名后用 <code>[JsonPropertyName]</code> 保留旧名字</>]] },
+  { label: '写代码时就报出破坏数据的改动', cells: [['yes', <>项目里放一份<a href="/zh/docs/v4/evolving-data#layout-baseline">布局基线</a>：NINO034–NINO037，带代码修复</>], 'n/a: 未见文档说明'] },
+  { group: '对象图与分配' },
+  { label: '共享引用和循环引用', cells: [['yes', <><code>trackReferences</code></>], ['yes', <><code>ReferenceHandler.Preserve</code>（<code>$id</code> 和 <code>$ref</code>）</>]] },
+  { label: '读入已有实例', cells: ['yes: 填充已有的对象、列表和字典', ['partial', <><code>JsonObjectCreationHandling.Populate</code> 填充正在构造的对象的成员；集合会被追加</>]] },
+  { label: '对象池', cells: [['yes', <><code>[NinoPooled]</code>、工厂、被丢弃实例的回收器</>], 'n/a: 未见文档说明'] },
+  { group: 'I/O 与集成' },
+  { label: <><code>IBufferWriter&lt;byte&gt;</code>、span、<code>ReadOnlySequence&lt;byte&gt;</code></>, cells: [['yes', <>三者都内置（<a href="/zh/docs/v4/advanced/streams#readonlysequence-input">多段输入</a>）</>], ['yes', <>通过 <code>Utf8JsonWriter</code> 和 <code>Utf8JsonReader</code></>]] },
+  { label: <><code>Stream</code> 与异步 I/O</>, cells: [['yes', <>内置（<a href="/zh/docs/v4/advanced/streams#streams">流</a>）；一个流上传多条消息用<a href="/zh/docs/v4/advanced/streams#frames">帧</a></>], ['yes', <><code>SerializeAsync</code>、<code>DeserializeAsync</code>、<code>DeserializeAsyncEnumerable</code></>]] },
+  { label: '序列化回调', cells: [['yes', <><code>[NinoOnSerializing]</code>、<code>[NinoOnDeserialized]</code> 等四个特性，由生成的代码直接调用（<a href="/zh/docs/v4/defining-types#callbacks">回调</a>）</>], ['yes', <><code>IJsonOnSerializing</code>、<code>IJsonOnDeserialized</code> 等四个接口</>]] },
+  { label: '自定义格式化器', cells: [['yes', <>结构体格式化器，可内联（<a href="/zh/docs/v4/custom-formatters">自定义格式化器</a>）</>], ['yes', <><code>JsonConverter&lt;T&gt;</code></>]] },
+  { label: <><code>System.Type</code> 值</>, cells: ['no: 有意不支持，数据永远不会指定类型', 'no: 直接拒绝'] },
+  { label: '按调用传选项', cells: [['no', <>进程级的 <code>NinoSettings</code>，加上类型上的特性</>], ['yes', <><code>JsonSerializerOptions</code></>]] },
+  { label: 'ASP.NET Core', cells: [['yes', <><a href="/zh/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>：在 JSON 旁边加上 <code>application/x-nino</code>，MVC 格式化器和 Minimal API 请求体</>], 'yes: MVC 和 Minimal API 的默认格式'] },
+  { group: '工具' },
+  { label: '不借助你的代码查看一条消息', cells: [['partial', <><a href="/zh/docs/v4/advanced/codegen#inspect"><code>nino-gen inspect</code></a> 按你程序集里的布局逐个成员解读</>], ['yes', <>任何文本编辑器；<code>JsonDocument</code> 和 <code>JsonNode</code> 不需要类型</>]] },
+]} />
+
+## System.Text.Json 领先的地方 [#where-system-text-json-is-ahead]
+
+下面这些 System.Text.Json 能做，Nino v4 不做：
+
+- **人能看能改。** 配置、日志、测试数据，还有在浏览器里查看的 API 响应，不用工具就能读。
+- **任何语言都能读**，不需要生成代码：从没见过你的类型的浏览器、脚本和服务都能解析 JSON。
+- **内置于 .NET**：.NET Core 3.0 及以后不用另装包，也是 ASP.NET Core 和 `HttpClient` 的 JSON 扩展方法默认的格式。
+- **不靠类型读取。** `JsonDocument` 把文档读成只读的树，`JsonNode` 读成可修改的树，代码可以只取出一个值，不必为整个载荷定义类型。
+- **按调用传选项**：`JsonSerializerOptions`，还有 camelCase 之类的命名策略。
+- **给其他工具用的 schema。** .NET 9 及以后可以用 `JsonSchemaExporter` 导出一个类型的 JSON schema。
+
+Nino 不做的事有什么替代做法，见[局限](/zh/docs/v4/compare#limitations)。什么场景选哪个：[怎么选](/zh/docs/v4/compare#which-to-choose)。
+
+## 从 System.Text.Json 迁移 [#switching-from-system-text-json]
+
+两者常常并存：人或其他语言要读的数据继续用 JSON，你自己的 .NET 程序、Unity 客户端以及 nino-gen 覆盖的语言之间用 Nino。在 ASP.NET Core 里，[Nino.AspNetCore](/zh/docs/v4/advanced/aspnetcore) 在 JSON 旁边加上 `application/x-nino`，客户端用 `Content-Type` 和 `Accept` 头来选。
+
+| System.Text.Json | Nino |
+| --- | --- |
+| `JsonSerializerContext` 上的 `[JsonSerializable(typeof(T))]` | `T` 上的 `[NinoType]`：生成器自己找到类型，不用在 context 里列出 |
+| 按名字写公共属性 | 按声明顺序写公共字段和属性（[定义类型](/zh/docs/v4/defining-types)）；要按名字写，用 `[NinoType(format: NinoFormat.Keyed)]`（[键控成员](/zh/docs/v4/evolving-data#keyed-members)） |
+| 改名后用 `[JsonPropertyName("old")]` 保留旧名字 | 键控成员上的 `[NinoFormerName("old")]`；按位置的成员随便改名 |
+| `[JsonIgnore]` | `[NinoIgnore]` |
+| 非公共成员上的 `[JsonInclude]` | `[NinoType(includeNonPublicMembers: true)]`；或者用 `[NinoType(false, true)]`，在每个要写的成员上加 `[NinoMember(index)]` |
+| `[JsonConstructor]` | `[NinoConstructor]`（[构造函数](/zh/docs/v4/constructors)） |
+| `[JsonPolymorphic]` 加上每个子类型一个 `[JsonDerivedType]` | 基类型上的 `[NinoType]`：子类型自动继承，什么都不用列（[多态](/zh/docs/v4/polymorphism)） |
+| `ReferenceHandler.Preserve` | `[NinoType(trackReferences: true)]`（[引用追踪](/zh/docs/v4/reference-tracking)） |
+| `JsonObjectCreationHandling.Populate` | `NinoDeserializer.Deserialize(bytes, ref value)`，原地填充整个对象图（[复用与对象池](/zh/docs/v4/pooling)） |
+| `IJsonOnSerializing`、`IJsonOnSerialized`、`IJsonOnDeserializing`、`IJsonOnDeserialized` | 方法上的 `[NinoOnSerializing]`、`[NinoOnSerialized]`、`[NinoOnDeserializing]`、`[NinoOnDeserialized]`，不用实现接口（[回调](/zh/docs/v4/defining-types#callbacks)） |
+| `JsonConverter<T>` | [自定义格式化器](/zh/docs/v4/custom-formatters) |
+| `JsonSerializer.SerializeToUtf8Bytes(value)` | `NinoSerializer.Serialize(value)` |
+| `JsonSerializer.Deserialize<T>(utf8Bytes)` | `NinoDeserializer.Deserialize<T>(bytes)` |
+| `JsonSerializer.SerializeAsync(stream, value)`、`DeserializeAsync<T>(stream)` | `NinoSerializer.SerializeAsync(value, stream)`、`NinoDeserializer.DeserializeAsync<T>(stream)`：值在前（[流](/zh/docs/v4/advanced/streams#streams)） |
+| `DeserializeAsyncEnumerable` | 在流上读写[帧](/zh/docs/v4/advanced/streams#frames) |
+| `JsonSerializerOptions.MaxDepth` | `NinoSettings.MaxDepth`（[限制](/zh/docs/v4/security#limits)） |
+
+转换期间两者可以标在同一批类型上：JSON 的特性留着，加上 `[NinoType]`，用 System.Text.Json 读出每份存下的文档，再用 Nino 写回去（步骤见[换成 Nino](/zh/docs/v4/compare#switching)）。System.Text.Json 默认只写公共属性：由公共字段组成的类型（大多数 `[NinoType]` 都是这样）要开 `IncludeFields`，JSON 才不会变成空的。
+
+## 下一步 [#next-steps]
+
+<Cards>
+  <Card title="ASP.NET Core" href="/zh/docs/v4/advanced/aspnetcore">在 MVC 和 Minimal API 里，把 application/x-nino 和 JSON 并排提供。</Card>
+  <Card title=".NET 基准测试" href="/zh/docs/v4/benchmarks">每个用例对比 System.Text.Json 和其他库，以及测量它们的代码。</Card>
+  <Card title="序列化库选型" href="/zh/docs/v4/compare">所有库放在一起比，还有 Nino 的局限和迁移步骤。</Card>
+</Cards>

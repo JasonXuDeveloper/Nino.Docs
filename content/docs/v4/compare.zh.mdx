@@ -12,7 +12,7 @@ icon: Scale
   }}
 />
 
-你的数据该用哪个序列化库：Nino v4 和 .NET 开发者常用的几个库有什么不同、比每个快多少、它不做什么，以及怎么换过来。有专门对比页的库，细节都在各自的页面里：[MemoryPack](/zh/docs/v4/vs-memorypack)、[MessagePack](/zh/docs/v4/vs-messagepack) 和 [protobuf-net](/zh/docs/v4/vs-protobuf-net)。
+你的数据该用哪个序列化库：Nino v4 和 .NET 开发者常用的几个库有什么不同、比每个快多少、它不做什么，以及怎么换过来。每个库都有自己的对比页，细节在那里：[MemoryPack](/zh/docs/v4/vs-memorypack)、[MessagePack](/zh/docs/v4/vs-messagepack)、[Google.Protobuf](/zh/docs/v4/vs-google-protobuf)、[protobuf-net](/zh/docs/v4/vs-protobuf-net) 和 [System.Text.Json](/zh/docs/v4/vs-system-text-json)。
 
 ## 一览 [#at-a-glance]
 
@@ -25,7 +25,7 @@ icon: Scale
 | <span className="whitespace-nowrap">反序列化到已有对象</span> | **原地复用，0 B** | 清空集合，重建元素 | 不支持 | 合并，不能覆盖 | 仅成员（`Populate`） |
 | <span className="whitespace-nowrap">其他语言</span> | Go、Rust、TypeScript，从 C# 类型生成 | TypeScript | 任何 MessagePack 库 | 任何 protobuf 库 | 任何语言 |
 
-protobuf 一列指 protobuf-net 和 Google.Protobuf。完整的功能矩阵、两种格式的逐项对照，以及对方强在哪里，在各个库的对比页里。
+protobuf 一列指 [Google.Protobuf](/zh/docs/v4/vs-google-protobuf) 和 [protobuf-net](/zh/docs/v4/vs-protobuf-net)，两者写的是同一种格式。完整的功能矩阵、两种格式的逐项对照，以及对方强在哪里，在各个库的对比页里。
 
 ## 速度 [#speed]
 
@@ -67,9 +67,9 @@ protobuf 一列指 protobuf-net 和 Google.Protobuf。完整的功能矩阵、�
 | 在 .NET 服务器、Unity 或 Godot 上要速度，还不想产生垃圾 | Nino | 见[速度](#speed)；[复用与对象池](/zh/docs/v4/pooling)直接读进你手上已有的对象 |
 | 类继承体系、共享引用，或者数据要跨版本演进 | Nino | 子类型不用标签，`trackReferences` 保留共享对象，键控和版本容错类型改了成员也能读（[数据演进](/zh/docs/v4/evolving-data)） |
 | .NET、Unity、TypeScript、Go 和 Rust 之间字节一致 | Nino | 跨平台、跨运行时字节一致；TypeScript、Go 和 Rust 的代码由 [nino-gen](/zh/docs/v4/advanced/codegen) 生成 |
-| Java、Python、C++ 等语言的程序要用自己的库读数据 | MessagePack 或 Protocol Buffers | 标准格式，许多语言都有库（[与 MessagePack 对比](/zh/docs/v4/vs-messagepack#where-messagepack-is-ahead)、[与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net#where-protobuf-net-is-ahead)） |
-| 用 `.proto` 契约，或者和 .NET 之外的对端走 gRPC | protobuf-net 或 Google.Protobuf | 契约就是 schema 文件（[与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net#where-protobuf-net-is-ahead)） |
-| 数据要给人看或手改 | System.Text.Json（或 YAML、TOML） | 文本格式；Nino 的字节离开你的类型就读不懂 |
+| Java、Python、C++ 等语言的程序要用自己的库读数据 | MessagePack 或 Protocol Buffers | 标准格式，许多语言都有库（[与 MessagePack 对比](/zh/docs/v4/vs-messagepack#where-messagepack-is-ahead)、[与 Google.Protobuf 对比](/zh/docs/v4/vs-google-protobuf#where-google-protobuf-is-ahead)） |
+| 用 `.proto` 契约，或者和 .NET 之外的对端走 gRPC | protobuf-net 或 Google.Protobuf | 契约就是 schema 文件（[与 Google.Protobuf 对比](/zh/docs/v4/vs-google-protobuf#where-google-protobuf-is-ahead)、[与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net#where-protobuf-net-is-ahead)） |
+| 数据要给人看或手改 | System.Text.Json（或 YAML、TOML） | 文本格式；Nino 的字节离开你的类型就读不懂（[与 System.Text.Json 对比](/zh/docs/v4/vs-system-text-json#where-system-text-json-is-ahead)） |
 | 类型没法加特性，要按成员名写 | MessagePack（contractless）或 System.Text.Json | Nino 要求每个类型或其基类型上有 `[NinoType]` |
 | 读可信数据时要 `System.Type` 值，或者按调用传选项 | MemoryPack 或 MessagePack | Nino 两样都不做（[局限](#limitations)） |
 | 读 Nino v3 写的数据 | 先用 Nino v3 读，再转换 | v4 读不了（[转换 v3 数据](/zh/docs/v4/migration#converting-v3-data)） |
@@ -108,7 +108,9 @@ Nino 自己定义字节格式，而不是直接拷贝内存，所以数据可以
 | --- | --- |
 | MemoryPack | [从 MemoryPack 迁移](/zh/docs/v4/vs-memorypack#switching-from-memorypack) |
 | MessagePack | [从 MessagePack 迁移](/zh/docs/v4/vs-messagepack#switching-from-messagepack) |
+| Google.Protobuf | [从 Google.Protobuf 迁移](/zh/docs/v4/vs-google-protobuf#switching-from-google-protobuf) |
 | protobuf-net | [从 protobuf-net 迁移](/zh/docs/v4/vs-protobuf-net#switching-from-protobuf-net) |
+| System.Text.Json | [从 System.Text.Json 迁移](/zh/docs/v4/vs-system-text-json#switching-from-system-text-json) |
 | Nino v3 | [从 v3 迁移](/zh/docs/v4/migration) |
 
 ## 下一步 [#next-steps]

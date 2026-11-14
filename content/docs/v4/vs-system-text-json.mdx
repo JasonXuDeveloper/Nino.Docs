@@ -1,0 +1,132 @@
+---
+title: Nino vs System.Text.Json
+seoTitle: "Nino vs System.Text.Json: Binary or JSON in .NET, Speed and Migration – Nino v4 Docs"
+description: "Nino v4 compared with System.Text.Json: System.Text.Json writes JSON text that people and every language read, Nino writes compact binary for .NET and its generated TypeScript, Go and Rust. The formats, speed per benchmark group, untrusted input, a feature matrix, where System.Text.Json is ahead, and switching."
+icon: Swords
+---
+
+[System.Text.Json](https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/overview) is the JSON serializer built into .NET. JSON is text and describes itself: people read and edit it, browsers and every language parse it without your types, and ASP.NET Core speaks it by default. Nino writes binary that only your C# types, or the TypeScript, Go and Rust [nino-gen](/en/docs/v4/advanced/codegen) generates from them, can read, in exchange for speed, size and features JSON has no form for. This page compares Nino v4 with System.Text.Json on .NET 10, using Microsoft's documentation for its features and Nino's source for Nino's. Where we could not verify a feature, it is left out. How all the libraries compare is on [Choosing a Serializer](/en/docs/v4/compare).
+
+## Two Formats [#formats]
+
+| | Nino v4 | System.Text.Json |
+| --- | --- | --- |
+| A value | its bytes only | text: a number, a string, `true`, `false`, `null`, an array or an object |
+| An object | its members one after another; with [`NinoFormat.Keyed`](/en/docs/v4/evolving-data#keyed-members), a key and a length per member (8 bytes) | `{ "name": value, ... }`, every property under its name |
+| A subtype | a 4-byte type id, a hash of the type's name | a `$type` property holding the discriminator you gave the subtype |
+| Integers and floats | at their full width (an `int` is 4 bytes) | decimal digits |
+| Strings | one byte a char when every char is at most U+00FF, else UTF-16; UTF-8 with [`[NinoUtf8]`](/en/docs/v4/defining-types#string-encoding) | UTF-8 text in quotes; the default encoder escapes non-ASCII chars as `\uXXXX` |
+| `byte[]` | a length and the bytes | a Base64 string |
+| `Guid`, `DateTime` | 16 bytes; ticks and kind | a 36-character string; an ISO 8601 string |
+
+## Performance [#performance]
+
+Measured with BenchmarkDotNet in the same run as Nino, on the same values and the same types. System.Text.Json runs with its source generator (a `JsonSerializerContext`), writing UTF-8 through a reused `Utf8JsonWriter` into an `ArrayBufferWriter<byte>` and reading from the UTF-8 bytes ([setup](/en/docs/v4/benchmarks#workloads)). <IfWorkloads>On the [real workloads](/en/docs/v4/benchmarks#workloads) where Nino leads, it serializes <BenchValue k="workloads.json.serialize" /> faster and deserializes <BenchValue k="workloads.json.deserialize" /> faster.</IfWorkloads> System.Text.Json runs the workloads and the basic, polymorphism and nullable groups.
+
+<LibrarySummary lib="json" lang="en" />
+
+Payloads are larger as text: every property name is written with every object, and numbers as digits.
+
+## Untrusted Input [#untrusted-input]
+
+System.Text.Json has no separate mode for untrusted data. Its polymorphism reads only the derived types declared on the base, so a payload cannot name a type to create, it refuses `System.Type`, and `JsonSerializerOptions.MaxDepth` bounds nesting (64 by default). Bound the size of a request at the host, such as Kestrel's `MaxRequestBodySize`.
+
+Nino reads untrusted data in its default mode; [`NinoSettings.Untrusted`](/en/docs/v4/security#untrusted-mode) adds the checks that cost time on every read.
+
+<Matrix columns={['Nino v4', 'System.Text.Json (.NET 10)']} rows={[
+  { label: 'Safe for untrusted data without an option', cells: [['yes', <>every read checks lengths, depth, types and hash buckets (<a href="/en/docs/v4/security#guarantees">Guarantees</a>)</>], 'partial: no separate mode; a depth limit by default; bound the size yourself'] },
+  { label: 'The data cannot name a type to create', cells: ['yes: type ids of the declared type\'s registered subtypes only', ['yes', <><code>$type</code> picks only among the <code>[JsonDerivedType]</code>s of the base</>]] },
+  { label: 'Memory in proportion to the input', cells: ['yes: counts checked against the bytes left; a collection allocates ahead of its elements at most 16 times the bytes left', 'n/a: not documented'] },
+  { label: 'Nesting limit', cells: [['yes', <><code>NinoSettings.MaxDepth</code>, 512, with the thread's stack checked</>], ['yes', <><code>JsonSerializerOptions.MaxDepth</code>, 64 by default</>]] },
+  { label: 'Hash flooding of dictionaries and sets', cells: [['yes', <><code>MaxHashCollisions</code> per bucket; seeded hashing with <code>Untrusted</code></>], 'partial: string keys use .NET\'s randomized string hashing; other key types not documented'] },
+  { label: 'One exception type for invalid data', cells: [['yes', <><code>NinoDataException</code></>], ['yes', <><code>JsonException</code></>]] },
+]} />
+
+What stays the application's job either way (the values themselves, the size of a message, authenticating the sender) is in [Untrusted Data](/en/docs/v4/security#what-stays-your-job).
+
+## Feature Matrix [#feature-matrix]
+
+<Matrix columns={['Nino v4', 'System.Text.Json (.NET 10)']} rows={[
+  { group: 'Platforms' },
+  { label: 'Minimum .NET target', cells: [['yes', <><code>netstandard2.0</code></>], ['yes', <>built into .NET; a NuGet package for <code>netstandard2.0</code> and .NET Framework</>]] },
+  { label: 'Unity', cells: ['yes: 2022.3+, one OpenUPM package', 'n/a: not documented'] },
+  { label: 'IL2CPP / Native AOT', cells: ['yes: source generated, no reflection when serializing', ['partial', <>with source generation (<code>JsonSerializerContext</code>); the reflection-based default is not trim- or AOT-safe</>]] },
+  { label: 'Same bytes on every runtime and CPU', cells: ['yes: one layout on CoreCLR, Mono and IL2CPP, 64-bit and 32-bit, padding zeroed', 'yes: text'] },
+  { label: 'Readers in other languages', cells: [['partial', <>Go, Rust and TypeScript, generated by <a href="/en/docs/v4/advanced/codegen">nino-gen</a> from your C# types</>], 'yes: every language and every browser parses JSON'] },
+  { group: 'Defining types' },
+  { label: 'No attribute on each member', cells: ['yes: public members in declaration order', ['yes', <>public properties by name; fields with <code>IncludeFields</code></>]] },
+  { label: 'Types without an attribute', cells: ['no: [NinoType] on each type or its base', ['yes', <>by reflection, or listed once with <code>[JsonSerializable]</code> on a context</>]] },
+  { label: 'Private members', cells: [['yes', <><code>includeNonPublicMembers</code></>], ['yes', <><code>[JsonInclude]</code></>]] },
+  { label: <>Constructors, records, <code>init</code> and <code>required</code></>, cells: ['yes', ['yes', <><code>[JsonConstructor]</code></>]] },
+  { group: 'Polymorphism' },
+  { label: 'Abstract classes and interfaces', cells: ['yes', ['yes', <><code>[JsonPolymorphic]</code>, <code>[JsonDerivedType]</code></>]] },
+  { label: 'Non-abstract base classes', cells: ['yes', 'yes'] },
+  { label: <>Generic bases (<code>Box&lt;T&gt;</code>)</>, cells: ['yes: automatic, for any type argument', 'partial: each closed derived type declared on the base'] },
+  { label: 'No list of subtypes on the base', cells: ['yes: ids are hashes of the type names', ['partial', <>a <code>[JsonDerivedType]</code> per subtype</>]] },
+  { label: 'Subtypes in other assemblies, hot-update DLLs', cells: ['yes: found automatically, no init call', 'partial: each subtype declared on the base or added in code'] },
+  { group: 'Evolving data' },
+  { label: 'Add members; old code reads new data', cells: [['yes', <><code>NinoFormat.VersionTolerant</code>, <code>NinoFormat.Keyed</code></>], 'yes: unknown properties are skipped by default'] },
+  { label: 'Remove members', cells: [['yes', <><code>NinoFormat.Keyed</code></>], 'yes: by name'] },
+  { label: 'Reorder or rename members', cells: [['yes', <><code>NinoFormat.Keyed</code>, renames with <code>[NinoFormerName]</code>; positional types rename freely</>], ['yes', <>order does not matter; <code>[JsonPropertyName]</code> keeps the old name</>]] },
+  { label: 'Breaking changes reported while you type', cells: [['yes', <>a <a href="/en/docs/v4/evolving-data#layout-baseline">layout baseline</a> in the project: NINO034–NINO037, with code fixes</>], 'n/a: not documented'] },
+  { group: 'Object graphs and allocation' },
+  { label: 'Shared and circular references', cells: [['yes', <><code>trackReferences</code></>], ['yes', <><code>ReferenceHandler.Preserve</code> (<code>$id</code> and <code>$ref</code>)</>]] },
+  { label: 'Deserialize into an existing instance', cells: ['yes: fills objects, lists and dictionaries in place', ['partial', <><code>JsonObjectCreationHandling.Populate</code> fills the members of the object being built; collections are appended to</>]] },
+  { label: 'Object pools', cells: [['yes', <><code>[NinoPooled]</code>, factories, recycler for dropped instances</>], 'n/a: not documented'] },
+  { group: 'I/O and integrations' },
+  { label: <><code>IBufferWriter&lt;byte&gt;</code>, spans, <code>ReadOnlySequence&lt;byte&gt;</code></>, cells: [['yes', <>all three built in (<a href="/en/docs/v4/advanced/streams#readonlysequence-input">Multi-Segment Input</a>)</>], ['yes', <>through <code>Utf8JsonWriter</code> and <code>Utf8JsonReader</code></>]] },
+  { label: <><code>Stream</code> and async I/O</>, cells: [['yes', <>built in (<a href="/en/docs/v4/advanced/streams#streams">Streams</a>); several messages on one stream as <a href="/en/docs/v4/advanced/streams#frames">frames</a></>], ['yes', <><code>SerializeAsync</code>, <code>DeserializeAsync</code>, <code>DeserializeAsyncEnumerable</code></>]] },
+  { label: 'Serialization callbacks', cells: [['yes', <><code>[NinoOnSerializing]</code>, <code>[NinoOnDeserialized]</code> and two more, called by generated code (<a href="/en/docs/v4/defining-types#callbacks">Callbacks</a>)</>], ['yes', <><code>IJsonOnSerializing</code>, <code>IJsonOnDeserialized</code> and two more</>]] },
+  { label: 'Custom formatters', cells: [['yes', <>struct formatters, inlined (<a href="/en/docs/v4/custom-formatters">Custom Formatters</a>)</>], ['yes', <><code>JsonConverter&lt;T&gt;</code></>]] },
+  { label: <><code>System.Type</code> values</>, cells: ['no: on purpose, data never names a type', 'no: refused'] },
+  { label: 'Options per call', cells: [['no', <>process-wide <code>NinoSettings</code> and attributes on the types</>], ['yes', <><code>JsonSerializerOptions</code></>]] },
+  { label: 'ASP.NET Core', cells: [['yes', <><a href="/en/docs/v4/advanced/aspnetcore">Nino.AspNetCore</a>: <code>application/x-nino</code> next to JSON, MVC formatters and Minimal API bodies</>], 'yes: the default for MVC and Minimal APIs'] },
+  { group: 'Tooling' },
+  { label: 'Read a payload without your code', cells: [['partial', <><a href="/en/docs/v4/advanced/codegen#inspect"><code>nino-gen inspect</code></a> decodes it member by member with your assembly's layouts</>], ['yes', <>any text editor; <code>JsonDocument</code> and <code>JsonNode</code> without the types</>]] },
+]} />
+
+## Where System.Text.Json Is Ahead [#where-system-text-json-is-ahead]
+
+System.Text.Json does these things and Nino v4 does not:
+
+- **People read and edit the data.** Configuration, logs, test fixtures and API responses you look at in a browser stay readable without a tool.
+- **Every language reads it**, without generated code: browsers, scripts and services that have never seen your types parse JSON.
+- **Built into .NET**, with no package to add on .NET Core 3.0 and later, and the default format of ASP.NET Core and `HttpClient`'s JSON extensions.
+- **Reading without types.** `JsonDocument` reads a document as a read-only tree and `JsonNode` as one you can change, so code can pick out one value without a type for the whole payload.
+- **Options per call**, with `JsonSerializerOptions`, and naming policies such as camelCase.
+- **A schema for other tools.** .NET 9 and later export a JSON schema of a type with `JsonSchemaExporter`.
+
+The workaround for what Nino leaves out is on [Limitations](/en/docs/v4/compare#limitations). Which to choose for which job: [Which to Choose](/en/docs/v4/compare#which-to-choose).
+
+## Switching from System.Text.Json [#switching-from-system-text-json]
+
+The two often live side by side: keep JSON where people or other languages read the data, and use Nino between your own .NET programs, Unity clients and the languages nino-gen covers. In ASP.NET Core, [Nino.AspNetCore](/en/docs/v4/advanced/aspnetcore) adds `application/x-nino` next to JSON, so a client chooses with its `Content-Type` and `Accept` headers.
+
+| System.Text.Json | Nino |
+| --- | --- |
+| `[JsonSerializable(typeof(T))]` on a `JsonSerializerContext` | `[NinoType]` on `T`: the generator finds the types, with no context to list them in |
+| public properties by name | public fields and properties in declaration order ([Defining Types](/en/docs/v4/defining-types)); `[NinoType(format: NinoFormat.Keyed)]` for members by name ([Keyed Members](/en/docs/v4/evolving-data#keyed-members)) |
+| `[JsonPropertyName("old")]` to keep a name after a rename | `[NinoFormerName("old")]` on a keyed member; a positional member renames freely |
+| `[JsonIgnore]` | `[NinoIgnore]` |
+| `[JsonInclude]` on a non-public member | `[NinoType(includeNonPublicMembers: true)]`, or `[NinoType(false, true)]` with `[NinoMember(index)]` on each member to write |
+| `[JsonConstructor]` | `[NinoConstructor]` ([Constructors](/en/docs/v4/constructors)) |
+| `[JsonPolymorphic]` and a `[JsonDerivedType]` per subtype | `[NinoType]` on the base: subtypes inherit it, with nothing listed ([Polymorphism](/en/docs/v4/polymorphism)) |
+| `ReferenceHandler.Preserve` | `[NinoType(trackReferences: true)]` ([Reference Tracking](/en/docs/v4/reference-tracking)) |
+| `JsonObjectCreationHandling.Populate` | `NinoDeserializer.Deserialize(bytes, ref value)`, which fills the whole graph in place ([Reuse and Pooling](/en/docs/v4/pooling)) |
+| `IJsonOnSerializing`, `IJsonOnSerialized`, `IJsonOnDeserializing`, `IJsonOnDeserialized` | `[NinoOnSerializing]`, `[NinoOnSerialized]`, `[NinoOnDeserializing]`, `[NinoOnDeserialized]` on methods, with no interface ([Callbacks](/en/docs/v4/defining-types#callbacks)) |
+| `JsonConverter<T>` | [Custom Formatters](/en/docs/v4/custom-formatters) |
+| `JsonSerializer.SerializeToUtf8Bytes(value)` | `NinoSerializer.Serialize(value)` |
+| `JsonSerializer.Deserialize<T>(utf8Bytes)` | `NinoDeserializer.Deserialize<T>(bytes)` |
+| `JsonSerializer.SerializeAsync(stream, value)`, `DeserializeAsync<T>(stream)` | `NinoSerializer.SerializeAsync(value, stream)`, `NinoDeserializer.DeserializeAsync<T>(stream)`: the value comes first ([Streams](/en/docs/v4/advanced/streams#streams)) |
+| `DeserializeAsyncEnumerable` | [frames](/en/docs/v4/advanced/streams#frames) on the stream |
+| `JsonSerializerOptions.MaxDepth` | `NinoSettings.MaxDepth` ([Limits](/en/docs/v4/security#limits)) |
+
+Both can sit on the same types while you convert: keep the JSON attributes, add `[NinoType]`, read each stored document with System.Text.Json and write it again with Nino ([Switching to Nino](/en/docs/v4/compare#switching) has the steps). System.Text.Json writes public properties only by default: a type made of public fields, as most `[NinoType]`s are, needs `IncludeFields` to keep its JSON.
+
+## Next Steps [#next-steps]
+
+<Cards>
+  <Card title="ASP.NET Core" href="/en/docs/v4/advanced/aspnetcore">Serve application/x-nino next to JSON from MVC and Minimal APIs.</Card>
+  <Card title=".NET Benchmarks" href="/en/docs/v4/benchmarks">Every case against System.Text.Json and the other libraries, and the code that measures it.</Card>
+  <Card title="Choosing a Serializer" href="/en/docs/v4/compare">Every library side by side, Nino's limitations and switching.</Card>
+</Cards>

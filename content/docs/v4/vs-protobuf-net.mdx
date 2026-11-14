@@ -12,7 +12,7 @@ icon: Swords
   }}
 />
 
-[protobuf-net](https://github.com/protobuf-net/protobuf-net) is, in its README's words, "a contract based serializer for .NET code, that happens to write data in the protocol buffers serialization format": you annotate your C# types, and it reads and writes the [Protocol Buffers](https://protobuf.dev) wire format that every protobuf implementation understands. This page compares Nino v4 with protobuf-net **3.4.40**, the version Nino's benchmark runs, using protobuf-net's README, its documentation at [docs.protobuf-net.dev](https://docs.protobuf-net.dev/) and its release notes for its features, and Nino's source for Nino's; behavior marked "tested" was checked with 3.4.40 in a test program. Where we could not verify a feature, it is left out. How both compare with MemoryPack, MessagePack and System.Text.Json is on [Choosing a Serializer](/en/docs/v4/compare).
+[protobuf-net](https://github.com/protobuf-net/protobuf-net) is, in its README's words, "a contract based serializer for .NET code, that happens to write data in the protocol buffers serialization format": you annotate your C# types, and it reads and writes the [Protocol Buffers](https://protobuf.dev) wire format that every protobuf implementation understands. This page compares Nino v4 with protobuf-net **3.4.40**, the version Nino's benchmark runs, using protobuf-net's README, its documentation at [docs.protobuf-net.dev](https://docs.protobuf-net.dev/) and its release notes for its features, and Nino's source for Nino's; behavior marked "tested" was checked with 3.4.40 in a test program. Where we could not verify a feature, it is left out. Google's own runtime writes the same format from `.proto` schemas: see [Nino vs Google.Protobuf](/en/docs/v4/vs-google-protobuf). How all of them compare is on [Choosing a Serializer](/en/docs/v4/compare).
 
 ## Two Formats [#formats]
 
@@ -28,7 +28,7 @@ Protocol Buffers is a format with a schema language (`.proto`) and implementatio
 
 ## Performance [#performance]
 
-Measured with BenchmarkDotNet in the same run as Nino, on the same values and the same types, protobuf-net writing to a reused `MemoryStream` (its fastest writer) and reading from a `ReadOnlySpan<byte>` on its default runtime model ([setup](/en/docs/v4/benchmarks#messagepack-and-protobuf-net)). <IfWorkloads>On the [real workloads](/en/docs/v4/benchmarks#workloads) where Nino leads, it serializes <BenchValue k="workloads.protobuf.serialize" /> faster and deserializes <BenchValue k="workloads.protobuf.deserialize" /> faster; Google's own runtime, Google.Protobuf, writes the same messages there, and Nino is <BenchValue k="workloads.googleprotobuf.serialize" /> and <BenchValue k="workloads.googleprotobuf.deserialize" /> faster than it.</IfWorkloads><IfWorkloads not>In the classes and polymorphic types where Nino leads, it serializes <BenchValue k="protobuf.serialize" /> faster and deserializes <BenchValue k="protobuf.deserialize" /> faster.</IfWorkloads> Cases protobuf-net cannot express with the same data (reference tracking, deserializing into existing objects) are left out.
+Measured with BenchmarkDotNet in the same run as Nino, on the same values and the same types, protobuf-net writing to a reused `MemoryStream` (its fastest writer) and reading from a `ReadOnlySpan<byte>` on its default runtime model ([setup](/en/docs/v4/benchmarks#messagepack-and-protobuf-net)). <IfWorkloads>On the [real workloads](/en/docs/v4/benchmarks#workloads) where Nino leads, it serializes <BenchValue k="workloads.protobuf.serialize" /> faster and deserializes <BenchValue k="workloads.protobuf.deserialize" /> faster.</IfWorkloads><IfWorkloads not>In the classes and polymorphic types where Nino leads, it serializes <BenchValue k="protobuf.serialize" /> faster and deserializes <BenchValue k="protobuf.deserialize" /> faster.</IfWorkloads> Cases protobuf-net cannot express with the same data (reference tracking, deserializing into existing objects) are left out.
 
 <LibrarySummary lib="protobuf" lang="en" />
 
@@ -166,4 +166,5 @@ Message back = NinoDeserializer.Deserialize<Message>(bytes); // a Chat
   <Card title=".NET Benchmarks" href="/en/docs/v4/benchmarks">Every case against protobuf-net and the other libraries, and the code that measures it.</Card>
   <Card title="Choosing a Serializer" href="/en/docs/v4/compare">MemoryPack, MessagePack and System.Text.Json beside both, Nino's limitations and switching.</Card>
   <Card title="Use in Other Languages" href="/en/docs/v4/advanced/codegen">Read and write Nino's bytes outside .NET with code generated from your types.</Card>
+  <Card title="Nino vs System.Text.Json" href="/en/docs/v4/vs-system-text-json">JSON text against Nino's binary, and switching.</Card>
 </Cards>
