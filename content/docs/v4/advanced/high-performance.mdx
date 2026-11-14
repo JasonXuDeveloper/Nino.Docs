@@ -117,7 +117,7 @@ NinoSerializer.Serialize(message, pipeWriter); // one copy into the pipe's memor
 await pipeWriter.FlushAsync();
 ```
 
-- **Written in place:** raw values (unmanaged structs, primitives), arrays and lists of them, and [fixed-size types](/en/docs/v4/performance#fixed-size-types). On .NET Standard 2.1 and later builds also `ArraySegment<T>` and array-backed `Memory<T>` and single-segment `ReadOnlySequence<T>` of raw values, and on .NET 8 and later multidimensional arrays of them.
+- **Written in place:** raw values (unmanaged structs, primitives), arrays and lists of them, [fixed-size types](/en/docs/v4/performance#fixed-size-types), and `ArraySegment<T>`, array-backed `Memory<T>` and single-segment `ReadOnlySequence<T>` of raw values. On .NET 8 and later also multidimensional arrays of raw values.
 - **Cost:** at most one copy into the writer's memory; 0 B.
 - Only a `NinoArrayBufferWriter` is written in place whatever the value. Use one when you need to patch bytes after writing (a length prefix, see [framing](/en/docs/v4/advanced/networking#frame-the-stream)).
 - To serialize into memory you already own (a ring-buffer slot, a pre-allocated send buffer), wrap it in a small `IBufferWriter<byte>`: see [Write into Memory You Own](/en/docs/v4/advanced/zero-allocation#write-into-memory-you-own).

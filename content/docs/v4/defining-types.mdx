@@ -185,7 +185,7 @@ public partial class Account
 ```
 
 - On .NET 8 and later, generated code reaches private members through `[UnsafeAccessor]`; in generic types, on .NET 9 and later (the compilation defines `NET9_0_OR_GREATER`).
-- Before that (.NET Standard, .NET Framework and Unity; generic types on .NET 8), it uses an accessor generated **inside** the type, so the type and every type containing it must be `partial` (NINO002, with a code fix). On .NET 9+ a generic type needs `partial` too when it serializes a non-public member of a generic base whose type arguments are not its own leading type parameters in order (`class D<T> : Base<List<T>>` or `Base<int>`, but not `class D<T, U> : Base<T>`).
+- Before that (.NET Standard and Unity; generic types on .NET 8), it uses an accessor generated **inside** the type, so the type and every type containing it must be `partial` (NINO002, with a code fix). On .NET 9+ a generic type needs `partial` too when it serializes a non-public member of a generic base whose type arguments are not its own leading type parameters in order (`class D<T> : Base<List<T>>` or `Base<int>`, but not `class D<T, U> : Base<T>`).
 - A non-public `[NinoMember]` without `includeNonPublicMembers` is an error (NINO009).
 - Private members of a base class are never part of a subtype.
 
@@ -362,7 +362,7 @@ With [`trackReferences`](/en/docs/v4/reference-tracking), an object written agai
 | A `readonly` field that no constructor parameter sets | It is written, and its value is dropped on read | [NINO006](/en/docs/v4/analyzers#nino006), whose code fix adds `[NinoIgnore]` |
 | `[NinoMember]` on a static member, a constant or a get-only property no constructor takes | Nothing is written for it | [NINO028](/en/docs/v4/analyzers#nino028), whose code fix removes the attribute |
 | A member whose type Nino cannot serialize (a delegate, a `Task`) | It is skipped | [NINO007](/en/docs/v4/analyzers#nino007) |
-| Non-public members in a type that is not `partial`, on .NET Standard, .NET Framework or Unity | The generated code does not compile | [NINO002](/en/docs/v4/analyzers#nino002), with a code fix |
+| Non-public members in a type that is not `partial`, on .NET Standard or Unity | The generated code does not compile | [NINO002](/en/docs/v4/analyzers#nino002), with a code fix |
 | `[NinoUtf8]` on a member that holds no strings, that a `[NinoMemberFormatter]` writes, or that is never serialized | No effect | [NINO030](/en/docs/v4/analyzers#nino030) |
 | `[NinoUtf8]` on an interface member | No effect: the implementing member's attributes count | [NINO033](/en/docs/v4/analyzers#nino033), whose code fix moves it |
 | Adding or removing `[NinoUtf8]` on a member whose data is stored or sent | Data written in the other encoding does not read back | nothing: it changes the format, like a new member type |

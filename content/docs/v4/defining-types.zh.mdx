@@ -185,7 +185,7 @@ public partial class Account
 ```
 
 - 在 .NET 8 及以上版本，生成代码通过 `[UnsafeAccessor]` 访问私有成员；泛型类型需要 .NET 9 及以上（编译定义了 `NET9_0_OR_GREATER`）。
-- 更早的平台（.NET Standard、.NET Framework 和 Unity；以及 .NET 8 上的泛型类型）上，生成代码在类型**内部**生成访问器，所以这个类型和它的所有外层类型都必须是 `partial`（NINO002，带代码修复）。在 .NET 9+ 上，泛型类型序列化泛型基类的非公开成员，而基类的类型实参不是它自己按顺序排在前面的类型参数时，也要 `partial`（`class D<T> : Base<List<T>>` 或 `Base<int>` 要，`class D<T, U> : Base<T>` 不要）。
+- 更早的平台（.NET Standard 和 Unity；以及 .NET 8 上的泛型类型）上，生成代码在类型**内部**生成访问器，所以这个类型和它的所有外层类型都必须是 `partial`（NINO002，带代码修复）。在 .NET 9+ 上，泛型类型序列化泛型基类的非公开成员，而基类的类型实参不是它自己按顺序排在前面的类型参数时，也要 `partial`（`class D<T> : Base<List<T>>` 或 `Base<int>` 要，`class D<T, U> : Base<T>` 不要）。
 - 没设置 `includeNonPublicMembers` 却给非公开成员标 `[NinoMember]`，报错（NINO009）。
 - 基类的私有成员永远不属于子类型。
 
@@ -362,7 +362,7 @@ public class Item
 | `readonly` 字段没有对应的构造函数参数 | 照样写出，读取时值直接丢掉 | [NINO006](/zh/docs/v4/analyzers#nino006)，代码修复会加上 `[NinoIgnore]` |
 | 把 `[NinoMember]` 标在静态成员、常量或没有构造函数接收的只读属性上 | 什么都不会写出 | [NINO028](/zh/docs/v4/analyzers#nino028)，代码修复会删掉这个特性 |
 | 成员的类型 Nino 无法序列化（委托、`Task`） | 跳过这个成员 | [NINO007](/zh/docs/v4/analyzers#nino007) |
-| 在 .NET Standard、.NET Framework 或 Unity 上，类型有非公开成员却不是 `partial` | 生成的代码无法编译 | [NINO002](/zh/docs/v4/analyzers#nino002)，带代码修复 |
+| 在 .NET Standard 或 Unity 上，类型有非公开成员却不是 `partial` | 生成的代码无法编译 | [NINO002](/zh/docs/v4/analyzers#nino002)，带代码修复 |
 | `[NinoUtf8]` 加在不含字符串、由 `[NinoMemberFormatter]` 写出或从不序列化的成员上 | 不起作用 | [NINO030](/zh/docs/v4/analyzers#nino030) |
 | `[NinoUtf8]` 加在接口成员上 | 不起作用：只认实现成员上的特性 | [NINO033](/zh/docs/v4/analyzers#nino033)，代码修复会把它移过去 |
 | 数据已经存下或发出后，给成员加上或去掉 `[NinoUtf8]` | 按另一种编码写出的数据读不回来 | 无：这会改变格式，和换掉成员类型一样 |

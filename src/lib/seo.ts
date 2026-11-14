@@ -200,7 +200,7 @@ export function homeMeta({
         author: { '@id': ids.author },
         runtimePlatform: [
           '.NET',
-          '.NET Standard 2.0',
+          '.NET Standard 2.1',
           'Unity',
           'Godot',
           'Node.js',
@@ -225,11 +225,11 @@ export function homeMeta({
           applicationSubCategory: 'Serialization library',
           softwareVersion: release.version,
           operatingSystem:
-            'Cross-platform (any .NET Standard 2.0 runtime, Unity, Godot; Node.js and browsers, Go and Rust through generated code)',
+            'Cross-platform (any .NET Standard 2.1 runtime, Unity, Godot; Node.js and browsers, Go and Rust through generated code)',
           downloadUrl: nugetUrl,
           installUrl: nugetUrl,
           softwareRequirements:
-            '.NET Standard 2.0 or later; Unity 2022.3 or later; Roslyn 4.3 or later and C# 9 or later for the source generator; TypeScript 5.7+, Go 1.22+ or Rust 1.88+ for generated code',
+            '.NET Standard 2.1 or later; Unity 2022.3 or later; Roslyn 4.3 or later and C# 9 or later for the source generator; TypeScript 5.7+, Go 1.22+ or Rust 1.88+ for generated code',
           offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
         },
       },

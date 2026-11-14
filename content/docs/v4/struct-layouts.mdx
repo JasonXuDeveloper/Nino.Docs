@@ -1,7 +1,7 @@
 ---
 title: Struct Layouts
 seoTitle: "Struct Layouts Across Runtimes – Nino v4 Docs"
-description: "Why a raw struct written by Nino on .NET reads back on Mono, IL2CPP, .NET Framework, 32-bit hosts and in Go, Rust and TypeScript: one canonical layout, 64-bit CoreCLR's, and the measured layout of every BCL struct on each runtime."
+description: "Why a raw struct written by Nino on .NET reads back on Mono, IL2CPP, 32-bit hosts and in Go, Rust and TypeScript: one canonical layout, 64-bit CoreCLR's, and the measured layout of every BCL struct on each runtime."
 icon: LayoutGrid
 ---
 
@@ -14,12 +14,12 @@ The canonical layout is the one **64-bit CoreCLR** (.NET on x64 and Arm64) uses,
 ```mermaid
 flowchart LR
   A(64-bit .NET) -->|copies memory| B(Canonical bytes)
-  C(Mono, IL2CPP, .NET Framework, 32-bit) -->|convert field by field| B
+  C(Mono, IL2CPP, 32-bit) -->|convert field by field| B
   B --> D(Go, Rust, TypeScript)
 ```
 
 - **64-bit .NET copies memory.** Where a runtime's layout is the canonical one, which is every struct on .NET x64 and almost every one on Arm64, Nino copies the struct as it lies in memory and clears its padding in the same pass.
-- **Every other runtime converts.** Mono, IL2CPP, .NET Framework and 32-bit runtimes find once where their own layout puts each field (reading an instance) and convert each value field by field: widening a 4-byte `nint` to 8 bytes, moving a tuple's items. 64-bit .NET never adapts to them.
+- **Every other runtime converts.** Mono, IL2CPP and 32-bit runtimes find once where their own layout puts each field (reading an instance) and convert each value field by field: widening a 4-byte `nint` to 8 bytes, moving a tuple's items. 64-bit .NET never adapts to them.
 - **Go, Rust and TypeScript** read and write the same bytes from the published layout ([Code Generation](/en/docs/v4/advanced/codegen)).
 
 `struct { int A; (int, long) B; }` holding `{1, (2, 3)}` is 24 bytes on every runtime: the tuple's `long` comes before its `int`, as 64-bit .NET places them, even on Mono, which keeps the `int` first in memory.
@@ -32,7 +32,7 @@ flowchart LR
   { hex: '00 00 00 00', kind: 'pad', label: 'padding to 24' },
 ] }]} />
 
-So data moves both ways between a .NET 10 server, a Unity IL2CPP client on a 32-bit phone, a .NET Framework tool and a Go service. MemoryPack copies an unmanaged struct as it lies in memory: a struct holding `(int, long)` written by .NET on x64 has the `long` first, and Mono, which keeps the `int` first, reads other values from the same bytes ([Nino vs MemoryPack](/en/docs/v4/vs-memorypack)).
+So data moves both ways between a .NET 10 server, a Unity IL2CPP client on a 32-bit phone, a Mono tool and a Go service. MemoryPack copies an unmanaged struct as it lies in memory: a struct holding `(int, long)` written by .NET on x64 has the `long` first, and Mono, which keeps the `int` first, reads other values from the same bytes ([Nino vs MemoryPack](/en/docs/v4/vs-memorypack)).
 
 ## What Differs Between Runtimes [#differences]
 
@@ -40,10 +40,9 @@ The [tables below](#measured-layouts) are measured: CI runs `tests/Nino.RuntimeT
 
 | Type | 64-bit CoreCLR (the canonical layout) | Where it differs |
 | --- | --- | --- |
-| Value tuples (`LayoutKind.Auto`) | primitive items first, largest first: `(int, long)` is the `long`, then the `int` | Mono and IL2CPP keep declaration order; 32-bit runtimes and .NET Framework pack them otherwise |
-| `DateTimeOffset` | .NET 10: an `int` of minutes at 0, the date at 8 | .NET 8: a `short` at 0; Mono, IL2CPP, .NET Framework: the date first, a `short` at 8 |
-| `decimal` | aligned to 8 (Mono too) | aligned to 4 on .NET Framework and IL2CPP |
-| A struct holding a tuple or `DateTime` | sequential | .NET Framework lays it out as auto-layout: the fields of `{ byte A; DateTime B; int C; }` move |
+| Value tuples (`LayoutKind.Auto`) | primitive items first, largest first: `(int, long)` is the `long`, then the `int` | Mono and IL2CPP keep declaration order; 32-bit runtimes pack them otherwise |
+| `DateTimeOffset` | .NET 10: an `int` of minutes at 0, the date at 8 | .NET 8: a `short` at 0; Mono and IL2CPP: the date first, a `short` at 8 |
+| `decimal` | aligned to 8 (Mono too) | aligned to 4 on IL2CPP |
 | `nint`, `nuint`, pointers, function pointers (`delegate*`) | 8 bytes (`nint` sign-extended, the others zero-extended) | 4 bytes on 32-bit runtimes, which also align some 8-byte fields to 4 (a `DateTime` field on Windows x86); a `delegate*` field is zero-extended on every runtime, Mono and IL2CPP included, because the generated code records it (the generator records the structs declared in its project and in every assembly the project references; a struct no such project references at compile time, such as one in a plugin or HybridCLR hot-update assembly loaded by name, is sign-extended there on 32-bit: [Pitfalls](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/pitfalls.md)) |
 | `Vector256<T>`, `Vector512<T>` | aligned to 32 and 64 (x64) | aligned to 16 on Arm64 |
 | `Vector<T>` | 16, 32 or 64 bytes, chosen by the CPU | [not serializable](#vector-t) |
@@ -54,7 +53,7 @@ The [tables below](#measured-layouts) are measured: CI runs `tests/Nino.RuntimeT
 | Runtime | Raw struct whose layout is canonical there | Raw struct whose layout differs |
 | --- | --- | --- |
 | 64-bit .NET (x64, Arm64) | a memory copy, padding cleared in the same pass | a field-by-field conversion (Arm64: `Vector256`, `Vector512`) |
-| Mono, IL2CPP, .NET Framework, 32-bit | a memory copy | a field-by-field conversion |
+| Mono, IL2CPP, 32-bit | a memory copy | a field-by-field conversion |
 
 Whether a type is copied or converted is decided once per type, before .NET compiles the code that uses it at full speed, as a `static readonly` flag the JIT folds: the fast code of an array, list or value of a canonical struct holds no layout check at all, so 64-bit .NET pays nothing for the other runtimes. A converted struct is not written as one block: arrays and lists of it take a loop over their values instead of a single copy. On Mono and IL2CPP the flag is read once per call.
 
@@ -145,7 +144,7 @@ public sealed partial class Particle
 
 ## Measured Layouts [#measured-layouts]
 
-Measured by Nino's CI (run 41280617045, `tests/Nino.RuntimeTests`): .NET 10 on Linux x64 and Arm64, Windows x86 and Linux Arm32 (under qemu), .NET Framework 4.8 64-bit and 32-bit, Mono 6.14 on Linux x64 and Arm64. The CoreCLR x64 column is the canonical layout, with two exceptions that do not depend on the runtime: `DateTimeOffset` as .NET 10 lays it out, and `nint`/`nuint` as 8 bytes. The last column names only the runtimes whose layout differs from CoreCLR x64, in **bold** (size, then offsets in field order), or that do not have the type; every runtime it does not name has CoreCLR x64's size and field offsets, and — means every runtime does. "32-bit CoreCLR" means x86 and Arm32, "Mono" Mono on x64 and Arm64, ".NET Framework" its 64-bit and 32-bit runs. Field names differ between runtimes; offsets are what count. Every runtime in these tables writes and reads CoreCLR x64's bytes for each type, checked in the same CI run.
+Measured by Nino's CI (run 41280617045, `tests/Nino.RuntimeTests`): .NET 10 on Linux x64 and Arm64, Windows x86 and Linux Arm32 (under qemu), .NET Framework 4.8 64-bit and 32-bit, Mono 6.14 on Linux x64 and Arm64. The .NET Framework entries are the last measurement before 4.0.0-rc.11: Nino no longer runs on Microsoft's .NET Framework 4.x, and CI no longer measures it. The CoreCLR x64 column is the canonical layout, with two exceptions that do not depend on the runtime: `DateTimeOffset` as .NET 10 lays it out, and `nint`/`nuint` as 8 bytes. The last column names only the runtimes whose layout differs from CoreCLR x64, in **bold** (size, then offsets in field order), or that do not have the type; every runtime it does not name has CoreCLR x64's size and field offsets, and — means every runtime does. "32-bit CoreCLR" means x86 and Arm32, "Mono" Mono on x64 and Arm64, ".NET Framework" its 64-bit and 32-bit runs. Field names differ between runtimes; offsets are what count. Every runtime in these tables writes and reads CoreCLR x64's bytes for each type, checked in the same CI run.
 
 <Accordions type="multiple">
 <Accordion title="Each type: size, then the offset of each field" id="each-type" value="each-type">
@@ -315,6 +314,6 @@ Unity's tests log the layouts of a few types (CI: Unity 2022.3 and 6000.6, the e
 ## Next Steps [#next-steps]
 
 <Cards>
-  <Card title="SIMD" href="/en/docs/v4/simd">The vector paths on each platform, and the kernels that copy arrays of raw structs on Unity, Mono and .NET Framework.</Card>
+  <Card title="SIMD" href="/en/docs/v4/simd">The vector paths on each platform, and the kernels that copy arrays of raw structs on Unity and Mono.</Card>
   <Card title="Performance Internals" href="/en/docs/v4/performance">How Nino gets its speed, and how to keep your code on the fast paths.</Card>
 </Cards>

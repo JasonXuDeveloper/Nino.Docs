@@ -1,7 +1,7 @@
 ---
 title: 结构体布局
 seoTitle: "跨运行时的结构体布局 – Nino v4 文档"
-description: "为什么 Nino 在 .NET 上写的原始结构体，能在 Mono、IL2CPP、.NET Framework、32 位平台以及 Go、Rust、TypeScript 里读回来：统一用 64 位 CoreCLR 的规范布局，并附上每个 BCL 结构体在各运行时实测的布局。"
+description: "为什么 Nino 在 .NET 上写的原始结构体，能在 Mono、IL2CPP、32 位平台以及 Go、Rust、TypeScript 里读回来：统一用 64 位 CoreCLR 的规范布局，并附上每个 BCL 结构体在各运行时实测的布局。"
 icon: LayoutGrid
 ---
 
@@ -14,12 +14,12 @@ icon: LayoutGrid
 ```mermaid
 flowchart LR
   A(64 位 .NET) -->|复制内存| B(规范字节)
-  C(Mono、IL2CPP、.NET Framework、32 位) -->|逐字段转换| B
+  C(Mono、IL2CPP、32 位) -->|逐字段转换| B
   B --> D(Go、Rust、TypeScript)
 ```
 
 - **64 位 .NET 直接复制内存。** 运行时的布局和规范布局相同时（.NET x64 上的全部结构体，Arm64 上几乎全部），Nino 按内存原样复制，复制的同时清零填充。
-- **其他运行时负责转换。** Mono、IL2CPP、.NET Framework 和 32 位运行时先读一个实例，找出自己把每个字段放在哪里（只找一次），再逐字段转换：把 4 字节的 `nint` 扩成 8 字节，挪动元组的项。64 位 .NET 从不迁就它们。
+- **其他运行时负责转换。** Mono、IL2CPP 和 32 位运行时先读一个实例，找出自己把每个字段放在哪里（只找一次），再逐字段转换：把 4 字节的 `nint` 扩成 8 字节，挪动元组的项。64 位 .NET 从不迁就它们。
 - **Go、Rust 和 TypeScript** 按发布的布局读写，与 .NET 互通，字节一致（[代码生成](/zh/docs/v4/advanced/codegen)）。
 
 `struct { int A; (int, long) B; }` 存 `{1, (2, 3)}` 时，在每个运行时上都是 24 字节：元组的 `long` 在 `int` 前面，和 64 位 .NET 的放法一样；即使在内存里把 `int` 放在前面的 Mono 上也是如此。
@@ -32,7 +32,7 @@ flowchart LR
   { hex: '00 00 00 00', kind: 'pad', label: '填充到 24' },
 ] }]} />
 
-所以数据可以在 .NET 10 服务器、32 位手机上的 Unity IL2CPP 客户端、.NET Framework 工具和 Go 服务之间双向流动。MemoryPack 按内存原样复制非托管结构体：在 x64 的 .NET 上写一个含 `(int, long)` 的结构体，`long` 在前；Mono 把 `int` 放在前面，读同样的字节会得到别的值（[Nino 对比 MemoryPack](/zh/docs/v4/vs-memorypack)）。
+所以数据可以在 .NET 10 服务器、32 位手机上的 Unity IL2CPP 客户端、Mono 工具和 Go 服务之间双向流动。MemoryPack 按内存原样复制非托管结构体：在 x64 的 .NET 上写一个含 `(int, long)` 的结构体，`long` 在前；Mono 把 `int` 放在前面，读同样的字节会得到别的值（[Nino 对比 MemoryPack](/zh/docs/v4/vs-memorypack)）。
 
 ## 各运行时有哪些不同 [#differences]
 
@@ -40,10 +40,9 @@ flowchart LR
 
 | 类型 | 64 位 CoreCLR（规范布局） | 哪里不同 |
 | --- | --- | --- |
-| 值元组（`LayoutKind.Auto`） | 先放基元类型的项，大的在前：`(int, long)` 是先 `long` 后 `int` | Mono 和 IL2CPP 按声明顺序；32 位运行时和 .NET Framework 又是另一种排法 |
-| `DateTimeOffset` | .NET 10：0 处是 `int` 型分钟数，8 处是时间 | .NET 8：0 处是 `short`；Mono、IL2CPP、.NET Framework：先放时间，8 处放 `short` |
-| `decimal` | 按 8 对齐（Mono 也是） | .NET Framework 和 IL2CPP 上按 4 对齐 |
-| 含元组或 `DateTime` 的结构体 | 顺序布局 | .NET Framework 把它当成自动布局：`{ byte A; DateTime B; int C; }` 的字段会换位置 |
+| 值元组（`LayoutKind.Auto`） | 先放基元类型的项，大的在前：`(int, long)` 是先 `long` 后 `int` | Mono 和 IL2CPP 按声明顺序；32 位运行时又是另一种排法 |
+| `DateTimeOffset` | .NET 10：0 处是 `int` 型分钟数，8 处是时间 | .NET 8：0 处是 `short`；Mono 和 IL2CPP：先放时间，8 处放 `short` |
+| `decimal` | 按 8 对齐（Mono 也是） | IL2CPP 上按 4 对齐 |
 | `nint`、`nuint`、指针、函数指针（`delegate*`） | 8 字节（`nint` 符号扩展，其余零扩展） | 32 位运行时上是 4 字节，部分 8 字节字段也按 4 对齐（Windows x86 上的 `DateTime` 字段）；`delegate*` 字段在所有运行时（包括 Mono 和 IL2CPP）都零扩展，因为生成的代码记录了它（生成器记录本项目及其引用的每个程序集中声明的结构体；没有任何这样的项目在编译时引用的结构体，例如按名称加载的插件或 HybridCLR 热更新程序集中的结构体，在 32 位上仍会符号扩展：[常见陷阱](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/pitfalls.md)） |
 | `Vector256<T>`、`Vector512<T>` | 按 32 和 64 对齐（x64） | Arm64 上按 16 对齐 |
 | `Vector<T>` | 16、32 或 64 字节，由 CPU 决定 | [不能序列化](#vector-t) |
@@ -54,7 +53,7 @@ flowchart LR
 | 运行时 | 布局等于规范布局的原始结构体 | 布局不同的原始结构体 |
 | --- | --- | --- |
 | 64 位 .NET（x64、Arm64） | 一次内存复制，同时清零填充 | 逐字段转换（Arm64 上：`Vector256`、`Vector512`） |
-| Mono、IL2CPP、.NET Framework、32 位 | 一次内存复制 | 逐字段转换 |
+| Mono、IL2CPP、32 位 | 一次内存复制 | 逐字段转换 |
 
 复制还是转换，每个类型只判断一次，在 .NET 用全速编译使用它的代码之前就定下来，是一个 JIT 能折叠掉的 `static readonly` 标志：规范结构体的数组、列表和单个值，全速代码里根本没有布局判断，64 位 .NET 不为其他运行时付出任何代价。需要转换的结构体不能整块写出：它的数组和列表要逐个值循环，不能一次复制。Mono 和 IL2CPP 每次调用读一次这个标志。
 
@@ -145,7 +144,7 @@ public sealed partial class Particle
 
 ## 实测布局 [#measured-layouts]
 
-由 Nino 的 CI 实测（运行 41280617045，`tests/Nino.RuntimeTests`）：Linux x64 和 Arm64、Windows x86、Linux Arm32（qemu 下）上的 .NET 10，64 位和 32 位的 .NET Framework 4.8，Linux x64 和 Arm64 上的 Mono 6.14。CoreCLR x64 一列就是规范布局，只有两处例外与运行时无关：`DateTimeOffset` 按 .NET 10 的布局，`nint`/`nuint` 一律 8 字节。最后一列只列出布局与 CoreCLR x64 不同（**粗体**：大小，然后按字段顺序列出偏移）或没有这个类型的运行时；没列出的运行时，大小和字段偏移都与 CoreCLR x64 相同，— 表示所有运行时都相同。32 位 CoreCLR 指 x86 和 Arm32，Mono 指 x64 和 Arm64 上的 Mono，.NET Framework 指它的 64 位和 32 位运行。各运行时的字段名不同，看偏移即可。表中每个运行时写出、读入的每种类型的字节都和 CoreCLR x64 一致，由同一次 CI 运行检查。
+由 Nino 的 CI 实测（运行 41280617045，`tests/Nino.RuntimeTests`）：Linux x64 和 Arm64、Windows x86、Linux Arm32（qemu 下）上的 .NET 10，64 位和 32 位的 .NET Framework 4.8，Linux x64 和 Arm64 上的 Mono 6.14。表里 .NET Framework 的数据是 4.0.0-rc.11 之前最后一次实测的结果：Nino 已经不能在微软的 .NET Framework 4.x 上运行，CI 也不再测它。CoreCLR x64 一列就是规范布局，只有两处例外与运行时无关：`DateTimeOffset` 按 .NET 10 的布局，`nint`/`nuint` 一律 8 字节。最后一列只列出布局与 CoreCLR x64 不同（**粗体**：大小，然后按字段顺序列出偏移）或没有这个类型的运行时；没列出的运行时，大小和字段偏移都与 CoreCLR x64 相同，— 表示所有运行时都相同。32 位 CoreCLR 指 x86 和 Arm32，Mono 指 x64 和 Arm64 上的 Mono，.NET Framework 指它的 64 位和 32 位运行。各运行时的字段名不同，看偏移即可。表中每个运行时写出、读入的每种类型的字节都和 CoreCLR x64 一致，由同一次 CI 运行检查。
 
 <Accordions type="multiple">
 <Accordion title="单个类型：大小，然后是每个字段的偏移" id="each-type" value="each-type">
@@ -315,6 +314,6 @@ Unity 的测试记录了几个类型的布局（CI：Unity 2022.3 和 6000.6，�
 ## 下一步 [#next-steps]
 
 <Cards>
-  <Card title="SIMD" href="/zh/docs/v4/simd">各平台走哪些向量路径；Unity、Mono 和 .NET Framework 上还有内核，负责复制原始结构体数组。</Card>
+  <Card title="SIMD" href="/zh/docs/v4/simd">各平台走哪些向量路径；Unity 和 Mono 上还有内核，负责复制原始结构体数组。</Card>
   <Card title="性能原理" href="/zh/docs/v4/performance">Nino 为什么快，怎样让你的代码一直走快速路径。</Card>
 </Cards>

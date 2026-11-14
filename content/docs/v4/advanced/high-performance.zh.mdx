@@ -117,7 +117,7 @@ NinoSerializer.Serialize(message, pipeWriter); // 复制一次，写进管道的
 await pipeWriter.FlushAsync();
 ```
 
-- **直接写入的值：** 原始值（非托管结构体、基元类型）、由它们组成的数组和列表，以及[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。.NET Standard 2.1 及以上的版本还包括原始值的 `ArraySegment<T>`，以及背后是数组的 `Memory<T>` 和只有一段的 `ReadOnlySequence<T>`，.NET 8 及以上再加上原始值的多维数组。
+- **直接写入的值：** 原始值（非托管结构体、基元类型）、由它们组成的数组和列表、[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)，还有原始值的 `ArraySegment<T>`、背后是数组的 `Memory<T>` 和只有一段的 `ReadOnlySequence<T>`。.NET 8 及以上再加上原始值的多维数组。
 - **开销：** 最多往写入器的内存拷贝一次；0 B。
 - 只有 `NinoArrayBufferWriter` 不管写什么值都直接写入。需要在写完之后回填字节时（例如长度前缀，参见[分帧](/zh/docs/v4/advanced/networking#frame-the-stream)），请使用它。
 - 要序列化到你已有的内存里（环形缓冲区的槽位、预先分配的发送缓冲区），用一个很小的 `IBufferWriter<byte>` 包住它：见[写入你自己的内存](/zh/docs/v4/advanced/zero-allocation#write-into-memory-you-own)。

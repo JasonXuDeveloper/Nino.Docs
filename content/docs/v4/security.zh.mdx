@@ -16,7 +16,7 @@ Nino 本来就是为读不可信来源的数据设计的：网络对端发来的
 - **栈深度有上限**：嵌套超过 128 层的对象推迟到较浅的层级再读；其他会嵌套的东西（靠构造函数创建或按值比较的类型、包含自己的结构体和集合）到 [`NinoSettings.MaxDepth`](#limits) 就停，途中还会检查线程栈（见[深层对象图](/zh/docs/v4/reference-tracking#deep-object-graphs)）；
 - **只创建你声明过的类型**：数据里只有类型 ID，没有类型名；多态值只能是声明类型已注册的子类型之一；回引用只能指向已经读过、类型和槽位相符的对象（`System.Type` 有意不支持序列化，见[不支持的类型](/zh/docs/v4/types#not-supported)）；
 - **限制它填充的字典和 Set 里每个键的工作量**（[哈希洪泛](#hash-flooding)）；
-- **不让进程级缓存膨胀**：在 .NET 8 及以上（net8.0 和 net10.0 构建），`CultureInfo` 只有运行时自带这个区域性（包括 `zh-CN` 这类别名）、而且名称不带扩展或私有子标记（`-u-`、`-t-`、`-x-`）时才能读回；开了固定区域性（invariant）全球化模式时，只能读回固定区域性（`""`）。.NET 创建过的每个区域性都会保留到进程结束，不这样限制的话，数据里的名称能让堆无限增长。.NET Framework、Mono 和 Unity 只认它们自己表里的区域性；
+- **不让进程级缓存膨胀**：在 .NET 8 及以上（net8.0 和 net10.0 构建），`CultureInfo` 只有运行时自带这个区域性（包括 `zh-CN` 这类别名）、而且名称不带扩展或私有子标记（`-u-`、`-t-`、`-x-`）时才能读回；开了固定区域性（invariant）全球化模式时，只能读回固定区域性（`""`）。.NET 创建过的每个区域性都会保留到进程结束，不这样限制的话，数据里的名称能让堆无限增长。Mono 和 Unity 只认它们自己表里的区域性；
 - **不在你的对象里留下脏内存**：读入已有的值时，读取新分配的数组要等填满之后才放进去，所以数据提前结束，或者读到一半被拒绝（`bool` 或存在字节不是 0 或 1，或者[不可信模式](#untrusted-mode)检查的值不合法），都不会在对象里留下未初始化的内存；
 - **只抛一种异常**：以上全部情况都抛 [`NinoDataException`](#ninodataexception)。
 
@@ -117,9 +117,9 @@ NinoSettings.MaxCollectionLength = 100_000; // 我们的消息不会超过这个
 
 - Nino 自己填充新表时，计数不额外花钱，因为它本来就要遍历哈希桶找重复键；由表自己添加键时（读入已有集合），Nino 在添加之后遍历新键所在的桶。
 - 哈希码正常的键，每个桶大约只有一个键。哈希码质量差的键（比如没有自己的 `GetHashCode` 的结构体键），可以调高这个上限。
-- 字符串键交给那些冲突 100 次后会自己换成随机化比较器的表（.NET 的 `Dictionary`、`HashSet` 和 `ConcurrentDictionary`，.NET Framework 的 `Dictionary` 和 `ConcurrentDictionary`）。
+- 字符串键交给那些冲突 100 次后会自己换成随机化比较器的表（.NET 的 `Dictionary`、`HashSet` 和 `ConcurrentDictionary`）。
 - 其他运行时：Go 的 map 和它的重复检查、Rust 的 `HashMap`、`HashSet` 和 `indexmap` 表，都用每个进程的随机种子算哈希。V8（Node、Chromium、Deno）给 JavaScript `Map` 或 `Set` 的 number 和 `bigint` 键算哈希时不加种子，所以这类键超过 128 个的 map 或 set，TypeScript 读取器会按 V8 建的哈希表逐桶计数，超过 100 就抛 `NinoError`，和这里一样；JavaScriptCore（Safari、Bun）和 SpiderMonkey（Firefox）对数字另有自己的哈希，在那里这个计数跟的是 V8 的桶，不是它们自己的。见[不可信数据](/zh/docs/v4/advanced/typescript#untrusted-data)。
-- `ConcurrentDictionary<TKey, TValue>` 不对外公开它的桶：Nino 靠一份按运行时（.NET、.NET Framework、Mono 和 Unity）声明、启动时检查过的布局找到这些桶；构建新字典时给每个键所在的桶计数，读入已有字典时每次添加之后遍历那个桶。没有匹配的布局时，由字典的构造函数填充，不计数。
+- `ConcurrentDictionary<TKey, TValue>` 不对外公开它的桶：Nino 靠一份按运行时（.NET、Mono 和 Unity）声明、启动时检查过的布局找到这些桶；构建新字典时给每个键所在的桶计数，读入已有字典时每次添加之后遍历那个桶。没有匹配的布局时，由字典的构造函数填充，不计数。
 
 ## 不可信模式 [#untrusted-mode]
 

@@ -25,7 +25,7 @@ static byte[] Save<T>(T value) => NinoSerializer.Serialize(value);
 The saving is a few nanoseconds per call, which matters most when small values are serialized in a tight loop.
 
 - **Always on, nothing to configure, no opt-out.** The `Nino.Generator` package contains generator builds for Roslyn 4.3, 4.8 and 4.12; NuGet picks the newest your compiler can load. The 4.8 and 4.12 builds intercept, and the package's build props add `NinoGen` to `InterceptorsNamespaces` / `InterceptorsPreviewNamespaces` for you.
-- **It depends on the compiler, not the target framework**: a `netstandard2.0` library built with the .NET 8+ SDK is intercepted too.
+- **It depends on the compiler, not the target framework**: a `netstandard2.1` library built with the .NET 8+ SDK is intercepted too.
 - **Older compilers simply use the regular path**, which writes the same bytes. The Unity package ships the generator's Roslyn 4.3 build, so Unity projects never intercept.
 - Some calls are left alone, because intercepting them would gain nothing: raw values and arrays of raw elements (the regular path already copies them directly; only `Deserialize<T>(data)` of a raw value is intercepted, to a single load), `[NinoType]`s declared in another assembly (the calling project reaches their formatter only through the formatter cache, as the regular call does), and calls inside generic code.
 - Every overload can be intercepted, not only the `byte[]` and span ones: `IBufferWriter<byte>`, `Writer` and `Reader`, `Stream` and its async forms, and `ReadOnlySequence<byte>`. The intercepted `Stream` and sequence calls run the generated formatter directly and keep the I/O, the copy of a multi-segment sequence and the async state machine out of line.

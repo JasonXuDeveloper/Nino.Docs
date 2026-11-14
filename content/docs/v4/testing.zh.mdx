@@ -13,9 +13,9 @@ icon: FlaskConical
 
 - .NET 10 在 x64（Linux 和 Windows）与 Arm64 上运行，.NET 8 在 Arm64 上运行，.NET 11 在 x64 上运行（.NET 11 项目用的是 `net10.0` 构建）；
 - 分别关掉 AVX-512、关掉 AVX2、关掉所有 SIMD 指令再跑一遍，确保每条向量路径都和写出相同字节的标量路径对得上；
-- 用 Roslyn 4.8 编译的 netstandard2.0 版本，以及不用[拦截器](/zh/docs/v4/performance#interceptors)的 netstandard2.1 版本（也就是 Unity 用的版本）。
+- 不用[拦截器](/zh/docs/v4/performance#interceptors)的 netstandard2.1 版本（Unity 和 Mono 用的就是它）；.NET 8 那一轮用的是源生成器的 Roslyn 4.8 版本。
 
-通过字段直接读写运行时自带集合的那些路径，会在每个有这些集合的运行时上测试：x64、Arm64、32 位 Windows 和 Arm32（用 qemu）上的 .NET，x64 和 Arm64 上的 Mono，以及 64 位和 32 位的 .NET Framework 4.8。同一个任务还会把测试程序分别做裁剪发布和 NativeAOT 发布，再运行一遍。
+通过字段直接读写运行时自带集合的那些路径，会在每个有这些集合的运行时上测试：x64、Arm64、64 位和 32 位 Windows、Arm32（用 qemu）上的 .NET，以及 x64 和 Arm64 上的 Mono（netstandard2.1 版本）。同一个任务还会把测试程序分别做裁剪发布和 NativeAOT 发布，再运行一遍。
 
 ## Unity [#unity]
 

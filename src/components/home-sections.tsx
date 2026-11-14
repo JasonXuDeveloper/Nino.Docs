@@ -246,7 +246,7 @@ const text: Record<
       {
         question: 'Which platforms does Nino support?',
         answer:
-          'The runtime targets netstandard2.0, netstandard2.1, net8.0 and net10.0, so it runs on .NET Framework 4.6.1+, .NET Core, .NET 5–10 and NativeAOT, as well as Unity 2022.3 and later (Mono, IL2CPP, HybridCLR) and Godot 4. Every platform, 64-bit or 32-bit, writes the same bytes. Nino.AspNetCore reads and writes ASP.NET Core bodies, and Nino.Codegen generates TypeScript, Go and Rust codecs that read and write the same bytes in browsers, Node, Go and Rust.',
+          'The runtime targets netstandard2.1, net8.0 and net10.0, so it runs wherever .NET Standard 2.1 is implemented: .NET 8 and later (NativeAOT included), .NET Core 3.0 to .NET 7 and Mono, as well as Unity 2022.3 and later (Mono, IL2CPP, HybridCLR; either API Compatibility Level) and Godot 4. Only projects that target the Microsoft .NET Framework 4.x cannot use it. Every platform, 64-bit or 32-bit, writes the same bytes. Nino.AspNetCore reads and writes ASP.NET Core bodies, and Nino.Codegen generates TypeScript, Go and Rust codecs that read and write the same bytes in browsers, Node, Go and Rust.',
         href: 'platforms',
       },
       {
@@ -392,7 +392,7 @@ const text: Record<
       {
         question: 'Nino 支持哪些平台？',
         answer:
-          '运行时面向 netstandard2.0、netstandard2.1、net8.0 和 net10.0，因此可运行于 .NET Framework 4.6.1+、.NET Core、.NET 5–10 与 NativeAOT，也支持 Unity 2022.3 及以上（Mono、IL2CPP、HybridCLR）和 Godot 4。所有平台，无论 64 位还是 32 位，写出的字节都相同。Nino.AspNetCore 负责在 ASP.NET Core 中读写请求体与响应，借助 Nino.Codegen 生成的 TypeScript、Go 和 Rust 编解码器，浏览器、Node、Go 和 Rust 都能与之互通。',
+          '运行时面向 netstandard2.1、net8.0 和 net10.0，实现了 .NET Standard 2.1 的运行时都能跑：.NET 8 及以上（含 NativeAOT）、.NET Core 3.0 到 .NET 7 和 Mono，也支持 Unity 2022.3 及以上（Mono、IL2CPP、HybridCLR，两种 API Compatibility Level 都行）和 Godot 4。只有面向微软 .NET Framework 4.x 的项目用不了。所有平台，无论 64 位还是 32 位，写出的字节都相同。Nino.AspNetCore 负责在 ASP.NET Core 中读写请求体与响应，借助 Nino.Codegen 生成的 TypeScript、Go 和 Rust 编解码器，浏览器、Node、Go 和 Rust 都能与之互通。',
         href: 'platforms',
       },
       {

@@ -48,7 +48,7 @@ v4 的二进制格式与 v3 以及更早的 v4 beta/preview 版本**不兼容**�
     所有 API 都可以并发调用，不需要加锁；热路径从不写共享内存。
   </Card>
   <Card icon={<Cpu />} title="跨平台、跨运行时字节一致" href="/zh/docs/v4/platforms">
-    .NET Standard 2.0 以及 .NET 8 起的每个版本，CoreCLR、Mono 和 IL2CPP，64 位和 32 位，x64 和 Arm64；支持裁剪和 Native AOT。
+    .NET Standard 2.1 以及 .NET 8 起的每个版本，CoreCLR、Mono 和 IL2CPP，64 位和 32 位，x64 和 Arm64；支持裁剪和 Native AOT。
   </Card>
   <Card icon={<ScanSearch />} title="分析器 NINO001–NINO044" href="/zh/docs/v4/analyzers">
     写代码时就指出错误，不少还带一键代码修复。
@@ -129,7 +129,7 @@ v3 的生成器会把每个子类型的代码内联到它的每个多态基类�
 - **拦截器**：在 Roslyn 4.8+（.NET 8 SDK 及以上）下，类型已知的 `NinoSerializer`/`NinoDeserializer` 调用会在编译期直接改写为调用生成的格式化器。始终开启；Unity（使用生成器的 Roslyn 4.3 版本）和更旧的编译器走常规路径，写出的字节相同。参见[拦截器](/zh/docs/v4/performance#interceptors)。
 - **JIT 和 AOT 编译器能内联的结构体格式化器**；小型类的主体也会内联到容纳它们的集合循环中。参见[可内联的结构体格式化器](/zh/docs/v4/performance#struct-formatters-inlined)。
 - **整块拷贝，不逐个循环**：非托管 `[NinoType]` 结构体及其数组、列表都按原始内存拷贝。元素是这类结构体的 `Stack<T>`、`Queue<T>` 和声明为接口的集合也一样；`DateTimeOffset` 的数组和列表，以及元素为非托管值的值元组、`KeyValuePair` 的数组和列表也是，内存与字节不一致时用 SIMD 重排。参见[非托管数据按原始内存处理](/zh/docs/v4/performance#raw-memory-for-unmanaged-data)和[集合类型](/zh/docs/v4/types#collection-types)。
-- **每种集合走它自己的内部结构**：`SortedSet<T>`、`SortedDictionary<TKey, TValue>`、`SortedList<TKey, TValue>`、`LinkedList<T>`、并发集合和不可变集合，都通过它们的字段、构造函数和批量方法读写，而不是逐个元素循环。这些字段在某些运行时（.NET Framework 和 Mono）上不一样，所以启动时会检查一次布局，对不上就改用公开 API。参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
+- **每种集合走它自己的内部结构**：`SortedSet<T>`、`SortedDictionary<TKey, TValue>`、`SortedList<TKey, TValue>`、`LinkedList<T>`、并发集合和不可变集合，都通过它们的字段、构造函数和批量方法读写，而不是逐个元素循环。这些字段在某些运行时（Mono 和 Unity）上不一样，所以启动时会检查一次布局，对不上就改用公开 API。参见[可移植的设计](/zh/docs/v4/platforms#portable-by-design)。
 - **CPU 有 SIMD 就用**：AVX-512 上用 64 字节向量和掩码拷贝，AVX2 上用 32 字节向量，Arm64 上用查表指令，.NET 10 的 WebAssembly SIMD 上用字节重排。参见[SIMD](/zh/docs/v4/simd#dotnet)。
 - **固定大小的类型**直接写进大小正好的 `byte[]`；`NinoSerializer.GetFixedSize<T>()` 返回这个大小。参见[固定大小的类型](/zh/docs/v4/performance#fixed-size-types)。
 - **在 x64 和 Arm64 上测量**：每个版本都会在 x64 和 GitHub 的 Arm64 runner 上跑基准测试；见[基准测试：.NET 运行速度](/zh/docs/v4/benchmarks)。

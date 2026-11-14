@@ -5,7 +5,7 @@ description: "Set up Nino in Unity, speed it up with optional Burst-compiled SIM
 icon: Gamepad2
 ---
 
-Nino supports Unity 2022.3 and later on Mono and IL2CPP, every player platform, and HybridCLR hot-update assemblies without any initialization call. This guide covers installation, assembly definitions, the optional Burst kernels, the Unity classes Nino serializes, IL2CPP builds, hot updates and GC-free frames.
+Nino supports Unity 2022.3 and later on Mono and IL2CPP, every player platform, with either API Compatibility Level, and HybridCLR hot-update assemblies without any initialization call. This guide covers installation, assembly definitions, the optional Burst kernels, the Unity classes Nino serializes, IL2CPP builds, hot updates and GC-free frames.
 
 ## Setup
 
@@ -41,6 +41,8 @@ OpenUPM numbers each release candidate rc.N as preview.(200 + N); see [OpenUPM v
 The package OpenUPM serves is signed, so Unity 6.3 and later shows it as signed in the Package Manager window ("Signed (limited)": signed by an organization you are not a member of) instead of warning that it is unsigned. The same signed `.tgz` is attached to the package version's [GitHub release](https://github.com/JasonXuDeveloper/Nino/releases), for **Install package from tarball**. A package added by Git URL is not signed.
 
 The package contains `Nino.Core.dll`, the source generator `Nino.Generator.dll` (labelled `RoslynAnalyzer`, so Unity runs it on your scripts), its code fixes `Nino.Generator.CodeFixes.dll` (for Rider and Visual Studio), `Nino.UnityTypes.dll` (formatters for the [Unity classes](#unity-classes) below), and the `System.Buffers`, `System.Memory` and `System.Runtime.CompilerServices.Unsafe` assemblies Nino.Core needs.
+
+`Nino.Core.dll` is the .NET Standard 2.1 build, and it loads with either **Api Compatibility Level** in Player Settings, **.NET Standard 2.1** or **.NET Framework**: both run on Unity's own class libraries, which implement .NET Standard 2.1. Only projects outside Unity that target Microsoft's .NET Framework 4.x cannot use Nino ([Which Build a Project Gets](/en/docs/v4/platforms#which-build)).
 
 </Step>
 <Step>
@@ -142,7 +144,7 @@ Build the shared project and copy **only** `Game.Shared.dll` into `Assets/Plugin
 
 ## Burst-Accelerated Kernels [#burst-kernels]
 
-Unity runs the netstandard build of `Nino.Core`, which has no hardware intrinsics: on its own it moves tuples, padded structs and Latin-1 text a field or a word at a time and transcodes `[NinoUtf8]` strings with .NET's UTF-8 encoder. IL2CPP and Mono players without Burst stay on those scalar paths, so **install Burst for speed**: Nino then moves them with SIMD instead, with no change to your code:
+Unity runs the netstandard2.1 build of `Nino.Core`, which has no hardware intrinsics: on its own it moves tuples, padded structs and Latin-1 text a field or a word at a time and transcodes `[NinoUtf8]` strings with .NET's UTF-8 encoder. IL2CPP and Mono players without Burst stay on those scalar paths, so **install Burst for speed**: Nino then moves them with SIMD instead, with no change to your code:
 
 1. Open **Window > Package Manager**, select **Unity Registry** and install **Burst** (`com.unity.burst`) 1.8 or later; Burst 2.0, which Unity 6000.6 ships with its editor, works too. Projects that use Entities or Collections have it already, as both depend on it.
 2. That is all. The Nino package's `Nino.Burst` assembly compiles as soon as Burst is in the project (it is skipped without it) and registers its kernels at startup, before the first scene loads, and in the editor after every domain reload.

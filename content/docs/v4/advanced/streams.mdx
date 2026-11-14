@@ -58,7 +58,6 @@ Checkpoint read = await NinoDeserializer.DeserializeAsync<Checkpoint>(stream, ct
 - `SerializeAsync` serializes the value before it returns, so you may change the value while the write is pending. A write that completes at once (a `MemoryStream`, a buffered `FileStream`) allocates nothing; a pending one keeps Nino's buffer until it completes, and the next call on the thread gets another.
 - `DeserializeAsync` from a `MemoryStream` allocates nothing but the value.
 - There is no async form that reads into an existing instance (an `async` method takes no `ref`): call the synchronous `Deserialize(stream, ref value)`, or read the bytes yourself and call `Deserialize(span, ref value)`.
-- The async calls need .NET Standard 2.1 or later: .NET 8 and 10, and every Unity version Nino supports. .NET Framework uses the .NET Standard 2.0 build, which has only the synchronous calls.
 
 ## Multi-Segment Input (`ReadOnlySequence`) [#readonlysequence-input]
 
@@ -321,13 +320,13 @@ public static partial class StreamFrames
 
 An `async` method allocates its state machine only when it actually waits for I/O, and `ReadAsync` returns a new value per frame; for a loop that must not allocate, use the synchronous `TryRead` or a [`PipeReader`](/en/docs/v4/advanced/networking#reading-frames).
 
-`Fill` and `FillAsync` run on every target; on .NET 7 and later, `Stream.ReadAtLeast` and `ReadExactlyAsync` do the same. `stream.Write(span)`, `WriteAsync(memory)` and `ReadAsync(memory)` need .NET Standard 2.1, which every Unity version Nino supports (2022.3 and later) has; on .NET Standard 2.0 only, use the `byte[]` overloads, getting the written array with `MemoryMarshal.TryGetArray(buffer.WrittenMemory, out var segment)`.
+`Fill` and `FillAsync` run on every target; on .NET 7 and later, `Stream.ReadAtLeast` and `ReadExactlyAsync` do the same. `stream.Write(span)`, `WriteAsync(memory)` and `ReadAsync(memory)` are part of .NET Standard 2.1, so every runtime Nino supports has them, Unity included.
 
 With `System.IO.Pipelines`, serialize straight into the `PipeWriter` (it is an `IBufferWriter<byte>`) and read frames from the `PipeReader`; see [Reading Frames](/en/docs/v4/advanced/networking#reading-frames) for the complete loop, which reads each frame with the [sequence overload](#readonlysequence-input).
 
 ## Compression
 
-Nino does not compress: it writes and reads the bytes, and a compression library makes them smaller. With a stream, wrap it and call Nino's stream overloads on the wrapper. `GZipStream` is available everywhere, including .NET Standard 2.0 and Unity:
+Nino does not compress: it writes and reads the bytes, and a compression library makes them smaller. With a stream, wrap it and call Nino's stream overloads on the wrapper. `GZipStream` is available everywhere, Unity included:
 
 ```csharp
 using (var gzip = new GZipStream(File.Create(path), CompressionLevel.Fastest))
@@ -409,7 +408,6 @@ public static class BrotliPayload
 | Several values written to one stream with `Serialize(value, stream)` | `Deserialize<T>(stream)` reads to the end and returns the first value: the bytes after it are ignored, and with [`NinoSettings.Untrusted`](/en/docs/v4/security#untrusted-mode) the call throws `NinoDataException` (bytes after the value) | nothing: write [frames](#frames) |
 | Reading a stream someone else controls without a size limit | Nino holds as much as they send | nothing: cap the stream or the frame ([above](#streams)) |
 | Reusing the buffer of `StreamFrames.WriteAsync` before its task completes | The pending write sends the next frame's bytes | nothing: await the task first |
-| `SerializeAsync` or `DeserializeAsync` in a .NET Framework or .NET Standard 2.0 project | It does not compile: that build has only the synchronous calls | the compiler |
 
 ## Next Steps [#next-steps]
 

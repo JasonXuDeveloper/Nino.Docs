@@ -5,7 +5,7 @@ description: "在 Unity 里配置 Nino：用可选的 Burst SIMD 内核提速，
 icon: Gamepad2
 ---
 
-Nino 支持 Unity 2022.3 及以上版本，Mono 和 IL2CPP 都行，覆盖所有 Player 平台，也支持 HybridCLR 热更新程序集，不需要任何初始化调用。这篇讲安装、程序集定义、可选的 Burst 内核、Nino 能序列化的 Unity 类、IL2CPP 构建、热更新，以及怎样让每一帧都不产生 GC。
+Nino 支持 Unity 2022.3 及以上版本，Mono 和 IL2CPP 都行，两种 API Compatibility Level 都行，覆盖所有 Player 平台，也支持 HybridCLR 热更新程序集，不需要任何初始化调用。这篇讲安装、程序集定义、可选的 Burst 内核、Nino 能序列化的 Unity 类、IL2CPP 构建、热更新，以及怎样让每一帧都不产生 GC。
 
 ## 配置 [#setup]
 
@@ -41,6 +41,8 @@ OpenUPM 把每个候选版本 rc.N 编号为 preview.(200 + N)，见 [OpenUPM �
 OpenUPM 上的包带有签名。Unity 6.3 及以上的 Package Manager 窗口会显示为已签名（"Signed (limited)"，即签名方是你不在其中的组织），不再提示包未签名。签好的 `.tgz` 也附在这个包版本的 [GitHub Release](https://github.com/JasonXuDeveloper/Nino/releases) 上，可以用 **Install package from tarball** 安装。用 Git URL 添加的包没有签名。
 
 包里有 `Nino.Core.dll`、源生成器 `Nino.Generator.dll`（带 `RoslynAnalyzer` 标签，Unity 编译脚本时会运行它）、它的代码修复 `Nino.Generator.CodeFixes.dll`（给 Rider 和 Visual Studio 用）、`Nino.UnityTypes.dll`（下文 [Unity 的类](#unity-classes)的格式化器），以及 Nino.Core 依赖的 `System.Buffers`、`System.Memory` 和 `System.Runtime.CompilerServices.Unsafe` 程序集。
+
+`Nino.Core.dll` 是 .NET Standard 2.1 版本。Player Settings 里的 **Api Compatibility Level** 选 **.NET Standard 2.1** 还是 **.NET Framework**，它都能加载：两个级别跑的都是 Unity 自己的类库，都实现了 .NET Standard 2.1。用不了 Nino 的只有 Unity 之外、面向微软 .NET Framework 4.x 的项目（[项目会用到哪个版本](/zh/docs/v4/platforms#which-build)）。
 
 </Step>
 <Step>
@@ -142,7 +144,7 @@ Unity 客户端和 .NET 服务端交换 Nino 数据，两边必须编译同一�
 
 ## Burst 加速内核 [#burst-kernels]
 
-Unity 跑的是 `Nino.Core` 的 netstandard 构建，里面没有硬件内部函数（hardware intrinsics）：单靠它自己，元组、带填充的结构体和 Latin-1 文本只能一个字段、一个字（word）地搬，`[NinoUtf8]` 字符串用 .NET 的 UTF-8 编码器转码。没有 Burst 的 IL2CPP 和 Mono Player 只能走这些标量路径，所以**要速度，就装 Burst**：装上之后 Nino 改用 SIMD 搬这些数据，代码一行都不用改：
+Unity 跑的是 `Nino.Core` 的 netstandard2.1 构建，里面没有硬件内部函数（hardware intrinsics）：单靠它自己，元组、带填充的结构体和 Latin-1 文本只能一个字段、一个字（word）地搬，`[NinoUtf8]` 字符串用 .NET 的 UTF-8 编码器转码。没有 Burst 的 IL2CPP 和 Mono Player 只能走这些标量路径，所以**要速度，就装 Burst**：装上之后 Nino 改用 SIMD 搬这些数据，代码一行都不用改：
 
 1. 打开 **Window > Package Manager**，选 **Unity Registry**，安装 **Burst**（`com.unity.burst`）1.8 或更高版本；Unity 6000.6 编辑器自带的 Burst 2.0 也能用。用了 Entities 或 Collections 的项目已经有 Burst，这两个包都依赖它。
 2. 这就够了。项目里一有 Burst，Nino 包里的 `Nino.Burst` 程序集就会参与编译（没有 Burst 就跳过），并在启动时（第一个场景加载之前）和编辑器里每次域重载（domain reload）之后注册内核。

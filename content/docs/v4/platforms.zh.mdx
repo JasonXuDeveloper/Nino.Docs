@@ -1,34 +1,42 @@
 ---
 title: 平台
 seoTitle: "支持的平台：.NET、Unity IL2CPP、HybridCLR 与 Godot – Nino v4 文档"
-description: "Nino 能在哪些平台运行（.NET Standard 2.0 及以上、Native AOT、Unity 的 Mono 与 IL2CPP、HybridCLR、Godot 4，以及借助生成代码的 TypeScript、Go 和 Rust），为什么跨平台、跨运行时字节一致，二进制格式长什么样，以及如何查看 Nino 已经注册了什么。"
+description: "Nino 能在哪些平台运行（.NET Standard 2.1 及以上、Native AOT、Unity 的 Mono 与 IL2CPP、HybridCLR、Godot 4，以及借助生成代码的 TypeScript、Go 和 Rust），为什么跨平台、跨运行时字节一致，二进制格式长什么样，以及如何查看 Nino 已经注册了什么。"
 icon: Cpu
 ---
 
-Nino 支持 .NET 8 及以上的每个版本、所有能引用 .NET Standard 2.0 库的项目、Unity 2022.3+（Mono 和 IL2CPP）以及 Godot 4，不管什么运行时、CPU 和指针宽度，写出的字节都一致。本页列出支持的目标平台，并介绍二进制格式。
+Nino 支持 .NET 8 及以上的每个版本、其他实现了 .NET Standard 2.1 的运行时（.NET Core 3.0 到 .NET 7、Mono）、Unity 2022.3+（Mono 和 IL2CPP）以及 Godot 4，不管什么运行时、CPU 和指针宽度，写出的字节都一致。本页列出支持的目标平台，并介绍二进制格式。
 
 ## 支持的平台 [#supported-platforms]
 
 | 组件 | 包内的版本 |
 | --- | --- |
-| `Nino.Core`（运行时） | `netstandard2.0`、`netstandard2.1`、`net8.0`、`net10.0` |
+| `Nino.Core`（运行时） | `netstandard2.1`、`net8.0`、`net10.0` |
 | `Nino.Generator`（源生成器、分析器） | Roslyn 4.3 及以上；同一个包内含 Roslyn 4.3、4.8 和 4.12 三个版本 |
-| `Nino.Immutable`（不可变集合） | `netstandard2.0`、`net8.0` |
+| `Nino.Immutable`（不可变集合） | `netstandard2.1`、`net8.0` |
 | `Nino.AspNetCore`（[ASP.NET Core](/zh/docs/v4/advanced/aspnetcore)） | `net8.0`、`net10.0` |
 | `Nino.Codegen`、`Nino.Codegen.Tool`（[在其他语言中使用](/zh/docs/v4/advanced/codegen)） | 构建工具（任意目标框架的项目都能用）和 .NET 工具，运行在 .NET 8 或更高版本上；生成的代码需要 TypeScript 5.7+（ES2022 环境：当前的浏览器、Node 15+）、Go 1.22+ 或 Rust 1.88+ |
 | 生成的代码 | C# 9 及以上 |
-| Unity | 2022.3 及以上，Mono 和 IL2CPP，所有 Player 平台 |
+| Unity | 2022.3 及以上，Mono 和 IL2CPP，所有 Player 平台，两种 API Compatibility Level 都行 |
 | Godot | Godot 4 .NET 项目（4.4 起为 .NET 8，之前为 .NET 6） |
 | 热更新 | HybridCLR，无需初始化调用 |
 | 裁剪与 Native AOT | `net8.0` 和 `net10.0` 版本带有相应标注（[详情](#trimming-and-native-aot)） |
 
 ### 项目会用到哪个版本 [#which-build]
 
-**.NET 8 及以上的每个版本都支持，包括 .NET 9 和 .NET 11。** 包里有分别针对 .NET 8 和 .NET 10 优化的版本，NuGet 会给项目选不高于其目标框架的最新版本：.NET 8 和 .NET 9 用 `net8.0` 版本，.NET 10、.NET 11 及以后用 `net10.0` 版本，裁剪和 Native AOT 的标注也一起带上（`Nino.Immutable` 没有 `net10.0` 版本，所以 .NET 8 及以上都用它的 `net8.0` 版本）。.NET Framework、.NET 8 之前的 .NET Core、Unity 和 Mono 用 `netstandard` 版本。单元测试在 .NET 8、.NET 10 和 .NET 11 上都会跑（[测试](/zh/docs/v4/testing)）。
+**.NET 8 及以上的每个版本都支持，包括 .NET 9 和 .NET 11。** 包里有分别针对 .NET 8 和 .NET 10 优化的版本，NuGet 会给项目选不高于其目标框架的最新版本：.NET 8 和 .NET 9 用 `net8.0` 版本，.NET 10、.NET 11 及以后用 `net10.0` 版本，裁剪和 Native AOT 的标注也一起带上（`Nino.Immutable` 没有 `net10.0` 版本，所以 .NET 8 及以上都用它的 `net8.0` 版本）。.NET Core 3.0 到 .NET 7、Mono 和 Unity 用 `netstandard2.1` 版本。单元测试在 .NET 8、.NET 10 和 .NET 11 上都会跑（[测试](/zh/docs/v4/testing)）。
 
-**所有目标写出的字节完全一致。** `netstandard2.0`、`netstandard2.1`、`net8.0` 和 `net10.0` 各用本平台上最好的底层手段（[SIMD](#simd)，.NET 8+ 上的 `[UnsafeAccessor]`），测试套件用同一组标准样本数据校验每个版本。.NET 10 服务器写出的数据，32 位 Android 手机上的 Unity IL2CPP 客户端可以直接读，反过来也一样。
+| 运行时 | 用到的 `Nino.Core` 版本 |
+| --- | --- |
+| .NET 10 及以上 | `net10.0` |
+| .NET 8 和 .NET 9 | `net8.0` |
+| .NET Core 3.0 到 .NET 7、Mono 6.4 及以上 | `netstandard2.1` |
+| Unity，API Compatibility Level 选 .NET Standard 2.1 或 .NET Framework 都行 | `netstandard2.1`，已随 Unity 包提供 |
+| 微软的 .NET Framework 4.x（目标框架为 `net462` 到 `net481` 的项目） | 没有：4.0.0-rc.11 起不再支持 |
 
-**异步调用要 `netstandard2.1` 及以上。** .NET Framework 项目用的 `netstandard2.0` 版本没有 `SerializeAsync` 和 `DeserializeAsync`（那里没有 `ValueTask`），同步的 `Serialize(value, stream)` 和 `Deserialize<T>(stream)` 照样能用（[异步](/zh/docs/v4/advanced/streams#async)）。Unity 用的是 `netstandard2.1` 版本，两种都有。
+Unity 里的“.NET Framework”级别和微软的 .NET Framework 不是一回事：两个级别跑的都是 Unity 自己的 Mono 或 IL2CPP 类库，都实现了 .NET Standard 2.1，所以加载的是同一个 `Nino.Core.dll`。微软的 .NET Framework 4.x 只实现了 .NET Standard 2.0，面向它的项目 NuGet 不让引用这个包。目标框架是 `netstandard2.0` 的类库，改成 `netstandard2.1` 就能引用 Nino。
+
+**所有目标写出的字节完全一致。** `netstandard2.1`、`net8.0` 和 `net10.0` 各用本平台上最好的底层手段（[SIMD](#simd)，.NET 8+ 上的 `[UnsafeAccessor]`），测试套件用同一组标准样本数据校验每个版本。.NET 10 服务器写出的数据，32 位 Android 手机上的 Unity IL2CPP 客户端可以直接读，反过来也一样。
 
 ## 二进制格式 [#binary-format]
 
@@ -42,10 +50,10 @@ Nino 自己定义写出的字节，不照搬运行时内存里的内容。各运
 | --- | --- | --- |
 | `T?` | 旧版 Mono（Unity 2019.4 及更早）把值放在标志之前 | 单个 `T?` 先写存在字节，再写值；`T?` 的数组和列表用规范布局，运行时布局不同时逐个转换 |
 | `ValueTuple`、`KeyValuePair` | 元组是 `LayoutKind.Auto`：每个运行时各排各的 | 单独出现时按声明顺序写各项，从不拷贝内存（它们的数组仍然整块搬，布局不同时用 [SIMD 重排](#simd)）；在普通结构体里，用 64 位 CoreCLR 的布局 |
-| `decimal` | CoreCLR 和 Mono 上按 8 对齐，.NET Framework 和 IL2CPP 上按 4 对齐 | 在结构体里用规范布局（按 8 对齐） |
-| `DateTimeOffset` | .NET 10、.NET 8、.NET Framework 和 Mono 各存各的 | 单独出现时写 UTC 刻度加分钟偏移（10 字节）；在结构体里按 .NET 10 的存法写 16 字节 |
+| `decimal` | CoreCLR 和 Mono 上按 8 对齐，IL2CPP 上按 4 对齐 | 在结构体里用规范布局（按 8 对齐） |
+| `DateTimeOffset` | .NET 10、.NET 8 和 Mono 各存各的 | 单独出现时写 UTC 刻度加分钟偏移（10 字节）；在结构体里按 .NET 10 的存法写 16 字节 |
 | `nint`、`nuint`、指针、函数指针 | 32 位运行时上是 4 字节 | 一律 8 字节；32 位运行时负责展宽，放不下的值直接拒绝 |
-| 32 位和 .NET Framework 的结构体 | x86 .NET 把 `DateTime` 字段按 4 对齐（`struct { int a; DateTime b; }` 在那里是 12 字节，x64 上是 16）；.NET Framework 会重排含 `DateTime` 的结构体 | 规范的 64 位布局，运行时布局不同时逐字段转换（那里不做整块拷贝） |
+| 32 位的结构体 | x86 .NET 把 `DateTime` 字段按 4 对齐（`struct { int a; DateTime b; }` 在那里是 12 字节，x64 上是 16） | 规范的 64 位布局，运行时布局不同时逐字段转换（那里不做整块拷贝） |
 | `Vector<T>` | 16、32 或 64 字节，由 CPU 决定 | 不写：不能序列化（错误 NINO029）；改存固定数量的通道（[原因](/zh/docs/v4/struct-layouts#vector-t)） |
 
 <Accordions type="multiple">
@@ -61,16 +69,16 @@ Nino 自己定义写出的字节，不照搬运行时内存里的内容。各运
 </Accordion>
 <Accordion title="集合的内部字段" value="collection-layouts">
 
-Nino 直接读写 `List<T>`、`Stack<T>`、`Queue<T>`、`SortedList<TKey, TValue>`、`SortedSet<T>` 和 `SortedDictionary<TKey, TValue>` 的字段，而这些字段的布局因运行时而异（.NET Framework 和 Mono 多一个 `_syncRoot` 字段）。每种布局在启动时用内容已知的实例检查一次；认不出布局的集合改走它的公共方法。两种方式写出的字节一致。（在 .NET 8 及以上，`List<T>` 通过 `CollectionsMarshal` 访问。）
+Nino 直接读写 `List<T>`、`Stack<T>`、`Queue<T>`、`SortedList<TKey, TValue>`、`SortedSet<T>` 和 `SortedDictionary<TKey, TValue>` 的字段，而这些字段的布局因运行时而异（Mono 和 Unity 多一个 `_syncRoot` 字段）。每种布局在启动时用内容已知的实例检查一次；认不出布局的集合改走它的公共方法。两种方式写出的字节一致。（在 .NET 8 及以上，`List<T>` 通过 `CollectionsMarshal` 访问。）
 
-非托管元素的 `HashSet<T>` 和 `Dictionary<TKey, TValue>`，没删过元素时直接从 entries 数组写出。能识别的布局有三种（.NET 5 及以上的 64 位和 32 位；.NET Framework、Mono 和 Unity），每种都在启动时用一个删过元素又重新填满的集合检查。删过元素的 Set 或字典，或者运行时的布局认不出来（比如布局不同的 IL2CPP 版本），就改走枚举器，写出的字节一致。读取时新建的 Set 或字典（默认比较器）反过来用同样的方式填充：按 `Add` 的方式直接写入条目和桶。运行时怎么算哈希（哈希码是否截成 31 位、空桶存什么）在启动时确定：先填一个集合，再用公开 API 检查；全都不通过时，以及 netstandard2.0 构建里的 Set（没有 `EnsureCapacity` 预设容量），每个元素都走 `Add`。
+非托管元素的 `HashSet<T>` 和 `Dictionary<TKey, TValue>`，没删过元素时直接从 entries 数组写出。能识别的布局有三种（.NET 5 及以上的 64 位和 32 位；Mono 和 Unity），每种都在启动时用一个删过元素又重新填满的集合检查。删过元素的 Set 或字典，或者运行时的布局认不出来（比如布局不同的 IL2CPP 版本），就改走枚举器，写出的字节一致。读取时新建的 Set 或字典（默认比较器）反过来用同样的方式填充：按 `Add` 的方式直接写入条目和桶。运行时怎么算哈希（哈希码是否截成 31 位、空桶存什么）在启动时确定：先填一个集合，再用公开 API 检查；全都不通过时，每个元素都走 `Add`。
 
 </Accordion>
 </Accordions>
 
 ## 各平台的 SIMD [#simd]
 
-`Nino.Core` 的 net8.0 和 net10.0 版本在 CPU 支持时用硬件指令集（x64 上的 AVX-512、AVX2 和 SSSE3，Arm64 上的 AdvSimd，WebAssembly 上的 SIMD），不支持时回退到可移植的代码。Unity、.NET Framework 以及 .NET Core 3.0 到 .NET 7 加载的是 netstandard 版本，里面没有硬件指令集代码；Unity 里由 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)补上。每条路径写出的字节都一致：测试分别在开 AVX-512、不开 AVX-512、关掉 AVX2、关掉全部 SIMD 时以及 Arm64 上运行。每种指令集在 .NET、Unity、Go、Rust 和 TypeScript 里具体做什么，见 [SIMD](/zh/docs/v4/simd)。
+`Nino.Core` 的 net8.0 和 net10.0 版本在 CPU 支持时用硬件指令集（x64 上的 AVX-512、AVX2 和 SSSE3，Arm64 上的 AdvSimd，WebAssembly 上的 SIMD），不支持时回退到可移植的代码。Unity、Mono 以及 .NET Core 3.0 到 .NET 7 加载的是 netstandard2.1 版本，里面没有硬件指令集代码；Unity 里由 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)补上。每条路径写出的字节都一致：测试分别在开 AVX-512、不开 AVX-512、关掉 AVX2、关掉全部 SIMD 时以及 Arm64 上运行。每种指令集在 .NET、Unity、Go、Rust 和 TypeScript 里具体做什么，见 [SIMD](/zh/docs/v4/simd)。
 
 ## Unity [#unity]
 
@@ -149,7 +157,7 @@ NinoRegistry.Remove(logic); // .NET Core 3.0 到 .NET 7
 context.Unload();
 ```
 
-在 .NET 8 及以上版本，`Remove` 做的事不比自动清理多，只在想确保卸载前已经清理干净时才需要调用。Unity（Mono 和 IL2CPP）、HybridCLR 和 .NET Framework 本来就不能单独卸载某个程序集，调用 `Remove` 也不会让它变得能卸载。
+在 .NET 8 及以上版本，`Remove` 做的事不比自动清理多，只在想确保卸载前已经清理干净时才需要调用。Unity（Mono 和 IL2CPP）和 HybridCLR 本来就不能单独卸载某个程序集，调用 `Remove` 也不会让它变得能卸载。
 
 调用 `Remove` 前要确保已经没有代码在序列化或反序列化这个程序集的类型，调用之后 Nino 就处理不了这些类型了。另外，被卸载的程序集如果为**其他**程序集的类型声明了格式化器（比如为共享库里的类型写的 `[assembly: NinoFormatter]`），Nino 用过一次后它就一直保持注册，所以这种格式化器应该放进共享库。
 

@@ -69,7 +69,7 @@ Nino 发布的运行时已经过优化，但生成器写出的格式化器，以
 ## Unity [#unity]
 
 - **IL2CPP，Release 或 Master。** Player 用 IL2CPP 构建，它把 Nino 和生成的格式化器编译成 C++，再编译成原生代码。在 **Player Settings > Other Settings > Configuration** 里把 **C++ Compiler Configuration** 设为 **Release** 或 **Master**：Debug 关掉 C++ 编译器的所有优化；Master 打开全部优化，构建时间可能比 Release 长得多（Unity 建议构建时间可以接受时，正式发布版用 Master）。**IL2CPP Code Generation** 保持默认的 **Optimize for runtime speed**：另一个选项生成的机器码更少，运行时可能更慢。
-- **安装 Burst**（`com.unity.burst` 1.8 或更新版本）。Unity 加载的是 `Nino.Core` 的 netstandard 构建，没有硬件内部函数；装了 Burst，Nino 在启动时为元组、带填充的结构体和字符串注册 SIMD 内核。没装时，IL2CPP 和 Mono Player 停在标量路径上（字节一致）。x64 Player 要在 **Burst AOT Settings** 里勾上 **SSE4** 和 **AVX2** 两个目标，否则没有 AVX2 的 CPU 用不上任何内核。见 [Burst 加速内核](/zh/docs/v4/advanced/unity#burst-kernels)。
+- **安装 Burst**（`com.unity.burst` 1.8 或更新版本）。Unity 加载的是 `Nino.Core` 的 netstandard2.1 构建，没有硬件内部函数；装了 Burst，Nino 在启动时为元组、带填充的结构体和字符串注册 SIMD 内核。没装时，IL2CPP 和 Mono Player 停在标量路径上（字节一致）。x64 Player 要在 **Burst AOT Settings** 里勾上 **SSE4** 和 **AVX2** 两个目标，否则没有 AVX2 的 CPU 用不上任何内核。见 [Burst 加速内核](/zh/docs/v4/advanced/unity#burst-kernels)。
 - **WebGL** 没有 Burst：用 WebAssembly SIMD 构建（Unity 6：**Target WebAssembly 2023**），才能用上 Nino 的 WebGL 内核；见 [WebGL](/zh/docs/v4/advanced/unity#webgl-kernels)。
 - **裁剪。** Nino 不带 `link.xml`，也不要求你加：每个生成的注册表都标了 `[RuntimeInitializeOnLoadMethod]`，IL2CPP 链接器不会把它裁掉。见 [IL2CPP](/zh/docs/v4/advanced/unity#il2cpp)。
 

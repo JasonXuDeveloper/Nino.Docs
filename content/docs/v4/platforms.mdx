@@ -1,34 +1,42 @@
 ---
 title: Platforms
 seoTitle: "Supported Platforms: .NET, Unity IL2CPP, HybridCLR and Godot – Nino v4 Docs"
-description: "Where Nino runs (.NET Standard 2.0 and later, Native AOT, Unity on Mono and IL2CPP, HybridCLR, Godot 4, and TypeScript, Go and Rust through generated code), why every platform writes the same bytes, what the format looks like, and how to check what Nino has registered."
+description: "Where Nino runs (.NET Standard 2.1 and later, Native AOT, Unity on Mono and IL2CPP, HybridCLR, Godot 4, and TypeScript, Go and Rust through generated code), why every platform writes the same bytes, what the format looks like, and how to check what Nino has registered."
 icon: Cpu
 ---
 
-Nino runs on .NET 8 and later, on anything that can use a .NET Standard 2.0 library, on Unity 2022.3+ (Mono and IL2CPP) and Godot 4, and writes the same bytes on every runtime, CPU and pointer size. This page lists the supported targets and describes the binary format.
+Nino runs on .NET 8 and later, on any other runtime that implements .NET Standard 2.1 (.NET Core 3.0 to .NET 7, Mono), on Unity 2022.3+ (Mono and IL2CPP) and Godot 4, and writes the same bytes on every runtime, CPU and pointer size. This page lists the supported targets and describes the binary format.
 
 ## Supported Platforms
 
 | Component | Builds in the package |
 | --- | --- |
-| `Nino.Core` (runtime) | `netstandard2.0`, `netstandard2.1`, `net8.0`, `net10.0` |
+| `Nino.Core` (runtime) | `netstandard2.1`, `net8.0`, `net10.0` |
 | `Nino.Generator` (generator, analyzer) | Roslyn 4.3 and later; builds for Roslyn 4.3, 4.8 and 4.12 in one package |
-| `Nino.Immutable` (immutable collections) | `netstandard2.0`, `net8.0` |
+| `Nino.Immutable` (immutable collections) | `netstandard2.1`, `net8.0` |
 | `Nino.AspNetCore` ([ASP.NET Core](/en/docs/v4/advanced/aspnetcore)) | `net8.0`, `net10.0` |
 | `Nino.Codegen`, `Nino.Codegen.Tool` ([Use in Other Languages](/en/docs/v4/advanced/codegen)) | a build tool for projects of any target framework, and a .NET tool, run on .NET 8 or later; the generated code needs TypeScript 5.7+ (ES2022 environments: current browsers, Node 15+), Go 1.22+ or Rust 1.88+ |
 | Generated code | C# 9 or later |
-| Unity | 2022.3 and later, Mono and IL2CPP, every player platform |
+| Unity | 2022.3 and later, Mono and IL2CPP, every player platform, either API Compatibility Level |
 | Godot | Godot 4 .NET projects (.NET 8 from Godot 4.4, .NET 6 before) |
 | Hot update | HybridCLR, with no initialization call |
 | Trimming and Native AOT | annotated in the `net8.0` and `net10.0` builds ([details](#trimming-and-native-aot)) |
 
 ### Which Build a Project Gets [#which-build]
 
-**Every .NET from .NET 8 on is supported, .NET 9 and .NET 11 included.** The packages carry builds tuned for .NET 8 and .NET 10, and NuGet gives a project the newest build that is not newer than its target framework: .NET 8 and .NET 9 get the `net8.0` build, .NET 10, .NET 11 and later the `net10.0` build, with its trimming and Native AOT annotations (`Nino.Immutable` has no `net10.0` build, so every .NET from 8 on gets its `net8.0` one). .NET Framework, .NET Core before 8, Unity and Mono get a `netstandard` build. The unit tests run on .NET 8, .NET 10 and .NET 11 ([Testing](/en/docs/v4/testing)).
+**Every .NET from .NET 8 on is supported, .NET 9 and .NET 11 included.** The packages carry builds tuned for .NET 8 and .NET 10, and NuGet gives a project the newest build that is not newer than its target framework: .NET 8 and .NET 9 get the `net8.0` build, .NET 10, .NET 11 and later the `net10.0` build, with its trimming and Native AOT annotations (`Nino.Immutable` has no `net10.0` build, so every .NET from 8 on gets its `net8.0` one). .NET Core 3.0 to .NET 7, Mono and Unity get the `netstandard2.1` build. The unit tests run on .NET 8, .NET 10 and .NET 11 ([Testing](/en/docs/v4/testing)).
 
-**Every target writes identical bytes.** `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0` each use the best primitives available to them ([SIMD](#simd), `[UnsafeAccessor]` on .NET 8+), and the test suite checks the same golden payloads against each build. Data written by a .NET 10 server can be read by a Unity IL2CPP client on a 32-bit Android phone, and the other way round.
+| Runtime | Build of `Nino.Core` |
+| --- | --- |
+| .NET 10 and later | `net10.0` |
+| .NET 8 and .NET 9 | `net8.0` |
+| .NET Core 3.0 to .NET 7, Mono 6.4 and later | `netstandard2.1` |
+| Unity, with either API Compatibility Level (.NET Standard 2.1 or .NET Framework) | `netstandard2.1`, in the Unity package |
+| Microsoft's .NET Framework 4.x (projects that target `net462` to `net481`) | none: not supported since 4.0.0-rc.11 |
 
-**The async calls need `netstandard2.1` or later.** The `netstandard2.0` build, which .NET Framework projects get, has no `SerializeAsync` and `DeserializeAsync` (it has no `ValueTask`); its synchronous `Serialize(value, stream)` and `Deserialize<T>(stream)` are there ([Async](/en/docs/v4/advanced/streams#async)). Unity gets the `netstandard2.1` build, which has both.
+Unity's ".NET Framework" level is not Microsoft's .NET Framework: both levels run on Unity's own Mono or IL2CPP class libraries, which implement .NET Standard 2.1, so the same `Nino.Core.dll` loads with either. Microsoft's .NET Framework 4.x implements .NET Standard 2.0 only, and NuGet does not let a project that targets it reference the package. A class library that targets `netstandard2.0` moves to `netstandard2.1` to reference Nino.
+
+**Every target writes identical bytes.** `netstandard2.1`, `net8.0` and `net10.0` each use the best primitives available to them ([SIMD](#simd), `[UnsafeAccessor]` on .NET 8+), and the test suite checks the same golden payloads against each build. Data written by a .NET 10 server can be read by a Unity IL2CPP client on a 32-bit Android phone, and the other way round.
 
 ## Binary Format
 
@@ -42,10 +50,10 @@ Nino defines its bytes instead of copying whatever a runtime has in memory. Runt
 | --- | --- | --- |
 | `T?` | old Mono (Unity 2019.4 and earlier) stored the value before the flag | a single `T?` as a presence byte, then the value; arrays and lists of `T?` in the canonical layout, converted where a runtime differs |
 | `ValueTuple`, `KeyValuePair` | tuples are `LayoutKind.Auto`: each runtime orders the items its own way | on their own, the items in declaration order, never memory (arrays of them still move as blocks, by [SIMD shuffles](#simd) where the layout differs); inside a plain struct, 64-bit CoreCLR's layout |
-| `decimal` | aligned to 8 on CoreCLR and Mono, to 4 on .NET Framework and IL2CPP | inside a struct, the canonical layout (aligned to 8) |
-| `DateTimeOffset` | .NET 10, .NET 8, .NET Framework and Mono each hold it differently | on its own, UTC ticks plus offset minutes (10 bytes); inside a struct, 16 bytes as .NET 10 holds it |
+| `decimal` | aligned to 8 on CoreCLR and Mono, to 4 on IL2CPP | inside a struct, the canonical layout (aligned to 8) |
+| `DateTimeOffset` | .NET 10, .NET 8 and Mono each hold it differently | on its own, UTC ticks plus offset minutes (10 bytes); inside a struct, 16 bytes as .NET 10 holds it |
 | `nint`, `nuint`, pointers, function pointers | 4 bytes on 32-bit runtimes | always 8 bytes; a 32-bit runtime widens them and rejects a value that does not fit |
-| 32-bit and .NET Framework structs | x86 .NET aligns a `DateTime` field to 4 (`struct { int a; DateTime b; }` is 12 bytes there, 16 on x64); .NET Framework reorders a struct holding a `DateTime` | the canonical 64-bit layout, converted field by field where a runtime differs (bulk copies skipped there) |
+| 32-bit structs | x86 .NET aligns a `DateTime` field to 4 (`struct { int a; DateTime b; }` is 12 bytes there, 16 on x64) | the canonical 64-bit layout, converted field by field where a runtime differs (bulk copies skipped there) |
 | `Vector<T>` | 16, 32 or 64 bytes, chosen by the CPU | nothing: not serializable (error NINO029); store fixed lanes ([why](/en/docs/v4/struct-layouts#vector-t)) |
 
 <Accordions type="multiple">
@@ -61,16 +69,16 @@ Not supported. Constructing a `Writer` or `Reader` on a big-endian host throws `
 </Accordion>
 <Accordion title="Collection internals" value="collection-layouts">
 
-Nino reads and writes the fields of `List<T>`, `Stack<T>`, `Queue<T>`, `SortedList<TKey, TValue>`, `SortedSet<T>` and `SortedDictionary<TKey, TValue>` directly, and their layouts differ between runtimes (.NET Framework and Mono add a `_syncRoot` field). Each layout is checked once at startup against instances whose contents are known; a collection whose layout is not recognized goes through its public methods. Either way it writes the same bytes. (On .NET 8 and later, `List<T>` goes through `CollectionsMarshal`.)
+Nino reads and writes the fields of `List<T>`, `Stack<T>`, `Queue<T>`, `SortedList<TKey, TValue>`, `SortedSet<T>` and `SortedDictionary<TKey, TValue>` directly, and their layouts differ between runtimes (Mono and Unity add a `_syncRoot` field). Each layout is checked once at startup against instances whose contents are known; a collection whose layout is not recognized goes through its public methods. Either way it writes the same bytes. (On .NET 8 and later, `List<T>` goes through `CollectionsMarshal`.)
 
-`HashSet<T>` and `Dictionary<TKey, TValue>` of unmanaged elements are written straight from their entries array when no entry has been removed. Three layouts are recognized (.NET 5 and later, 64-bit and 32-bit; .NET Framework, Mono and Unity), each checked at startup against a collection with an entry removed and filled again. A set or dictionary with removed entries, or one on a runtime whose layout is not recognized (an IL2CPP build that differs, for one), goes through its enumerator and writes the same bytes. A new set or dictionary that a read creates (default comparer) is filled the same way in reverse: its entries and buckets are written as `Add` would write them. How a runtime hashes (whether hash codes are masked to 31 bits, what an empty bucket holds) is found at startup by filling a collection and checking it through the public API; where none passes, and in the netstandard2.0 build for sets (no `EnsureCapacity` to size one), each element goes through `Add`.
+`HashSet<T>` and `Dictionary<TKey, TValue>` of unmanaged elements are written straight from their entries array when no entry has been removed. Three layouts are recognized (.NET 5 and later, 64-bit and 32-bit; Mono and Unity), each checked at startup against a collection with an entry removed and filled again. A set or dictionary with removed entries, or one on a runtime whose layout is not recognized (an IL2CPP build that differs, for one), goes through its enumerator and writes the same bytes. A new set or dictionary that a read creates (default comparer) is filled the same way in reverse: its entries and buckets are written as `Add` would write them. How a runtime hashes (whether hash codes are masked to 31 bits, what an empty bucket holds) is found at startup by filling a collection and checking it through the public API; where none passes, each element goes through `Add`.
 
 </Accordion>
 </Accordions>
 
 ## SIMD by Platform [#simd]
 
-The net8.0 and net10.0 builds of `Nino.Core` use hardware intrinsics where the CPU has them (AVX-512, AVX2 and SSSE3 on x64, AdvSimd on Arm64, SIMD on WebAssembly) and portable code where it does not. Unity, .NET Framework and .NET Core 3.0 to .NET 7 load the netstandard builds, which have none; in Unity, [Burst-compiled kernels](/en/docs/v4/advanced/unity#burst-kernels) take their place. Every path writes the same bytes: the tests run with AVX-512, without it, without AVX2, with all SIMD turned off, and on Arm64. What each instruction set does in .NET, Unity, Go, Rust and TypeScript is in [SIMD](/en/docs/v4/simd).
+The net8.0 and net10.0 builds of `Nino.Core` use hardware intrinsics where the CPU has them (AVX-512, AVX2 and SSSE3 on x64, AdvSimd on Arm64, SIMD on WebAssembly) and portable code where it does not. Unity, Mono and .NET Core 3.0 to .NET 7 load the netstandard2.1 build, which has none; in Unity, [Burst-compiled kernels](/en/docs/v4/advanced/unity#burst-kernels) take their place. Every path writes the same bytes: the tests run with AVX-512, without it, without AVX2, with all SIMD turned off, and on Arm64. What each instruction set does in .NET, Unity, Go, Rust and TypeScript is in [SIMD](/en/docs/v4/simd).
 
 ## Unity
 
@@ -149,7 +157,7 @@ NinoRegistry.Remove(logic); // .NET Core 3.0 to .NET 7
 context.Unload();
 ```
 
-On .NET 8 and later, `Remove` does nothing more than the automatic cleanup; call it only to be sure the cleanup has happened before you unload. Unity (Mono and IL2CPP), HybridCLR and .NET Framework cannot unload a single assembly at all, so `Remove` does not make one unloadable there.
+On .NET 8 and later, `Remove` does nothing more than the automatic cleanup; call it only to be sure the cleanup has happened before you unload. Unity (Mono and IL2CPP) and HybridCLR cannot unload a single assembly at all, so `Remove` does not make one unloadable there.
 
 Call `Remove` only once nothing serializes or deserializes the assembly's types any more; Nino cannot handle them afterwards. A formatter that the unloaded assembly declares for a type of **another** assembly (an `[assembly: NinoFormatter]` for a type in a shared library) stays registered once Nino has used it, so put such formatters in the shared library.
 

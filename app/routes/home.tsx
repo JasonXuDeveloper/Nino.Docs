@@ -171,7 +171,7 @@ const copy: Record<
       },
       {
         title: 'Runs everywhere',
-        lead: '.NET 8 and later (tuned for .NET 8 and .NET 10), .NET Standard 2.0, NativeAOT, ASP.NET Core, Unity (IL2CPP, HybridCLR) and Godot 4, and TypeScript, Go and Rust through generated code.',
+        lead: '.NET 8 and later (tuned for .NET 8 and .NET 10), .NET Standard 2.1, NativeAOT, ASP.NET Core, Unity (IL2CPP, HybridCLR) and Godot 4, and TypeScript, Go and Rust through generated code.',
         items: [0, 6, 8],
         href: 'platforms',
         link: 'Platforms',
@@ -271,7 +271,7 @@ const copy: Record<
       },
       {
         title: '哪都能用',
-        lead: '.NET 8 及以上（针对 .NET 8 和 .NET 10 单独优化）、.NET Standard 2.0、NativeAOT、ASP.NET Core、Unity（IL2CPP、HybridCLR）和 Godot 4，TypeScript、Go 和 Rust 通过生成的代码使用。',
+        lead: '.NET 8 及以上（针对 .NET 8 和 .NET 10 单独优化）、.NET Standard 2.1、NativeAOT、ASP.NET Core、Unity（IL2CPP、HybridCLR）和 Godot 4，TypeScript、Go 和 Rust 通过生成的代码使用。',
         items: [0, 6, 8],
         href: 'platforms',
         link: '平台',

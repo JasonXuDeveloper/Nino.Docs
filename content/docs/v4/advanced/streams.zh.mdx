@@ -58,7 +58,6 @@ Checkpoint read = await NinoDeserializer.DeserializeAsync<Checkpoint>(stream, ct
 - `SerializeAsync` 返回之前就已经序列化完了，所以写入还没完成时，你可以放心修改这个值。立刻完成的写入（`MemoryStream`、带缓冲的 `FileStream`）不分配任何内存；还没完成的写入会带走 Nino 的缓冲区，直到写完为止，同一线程的下一次调用换用另一个。
 - 从 `MemoryStream` 调 `DeserializeAsync`，除了值本身什么都不分配。
 - 没有读入已有实例的异步版本（`async` 方法不能带 `ref` 参数）：用同步的 `Deserialize(stream, ref value)`，或者自己读出字节，再调 `Deserialize(span, ref value)`。
-- 异步调用需要 .NET Standard 2.1 及以上：.NET 8、.NET 10，以及 Nino 支持的所有 Unity 版本。.NET Framework 用的是 .NET Standard 2.0 版本，只有同步调用。
 
 ## 多段输入（`ReadOnlySequence`） [#readonlysequence-input]
 
@@ -321,13 +320,13 @@ public static partial class StreamFrames
 
 `async` 方法只有在真正等待 I/O 时才会分配状态机；`ReadAsync` 每帧返回一个新值。不允许分配内存的循环，请用同步的 `TryRead` 或 [`PipeReader`](/zh/docs/v4/advanced/networking#reading-frames)。
 
-`Fill` 和 `FillAsync` 在所有目标上都能用；在 .NET 7 及以上，也可以换成 `Stream.ReadAtLeast` / `ReadExactlyAsync`。`stream.Write(span)`、`WriteAsync(memory)` 和 `ReadAsync(memory)` 需要 .NET Standard 2.1，Nino 支持的所有 Unity 版本（2022.3 及以上）都满足；只面向 .NET Standard 2.0 时，改用 `byte[]` 重载，写入的数组用 `MemoryMarshal.TryGetArray(buffer.WrittenMemory, out var segment)` 取出。
+`Fill` 和 `FillAsync` 在所有目标上都能用；在 .NET 7 及以上，也可以换成 `Stream.ReadAtLeast` / `ReadExactlyAsync`。`stream.Write(span)`、`WriteAsync(memory)` 和 `ReadAsync(memory)` 属于 .NET Standard 2.1，Nino 支持的运行时都有，Unity 也不例外。
 
 使用 `System.IO.Pipelines` 时，直接序列化到 `PipeWriter`（它就是 `IBufferWriter<byte>`），再从 `PipeReader` 中读取帧。完整的读取循环见[读取帧](/zh/docs/v4/advanced/networking#reading-frames)，每一帧都用[序列重载](#readonlysequence-input)读。
 
 ## 压缩 [#compression]
 
-Nino 本身不压缩，它只管读写字节，压缩交给压缩库。用流的话，把流包一层，对外层的流调用 Nino 的流重载即可。`GZipStream` 在所有平台上都能用，包括 .NET Standard 2.0 和 Unity：
+Nino 本身不压缩，它只管读写字节，压缩交给压缩库。用流的话，把流包一层，对外层的流调用 Nino 的流重载即可。`GZipStream` 在所有平台上都能用，Unity 也不例外：
 
 ```csharp
 using (var gzip = new GZipStream(File.Create(path), CompressionLevel.Fastest))
@@ -409,7 +408,6 @@ public static class BrotliPayload
 | 用 `Serialize(value, stream)` 往一个流里写了多个值 | `Deserialize<T>(stream)` 一直读到结尾，返回第一个值：后面的字节直接忽略；开了 [`NinoSettings.Untrusted`](/zh/docs/v4/security#untrusted-mode) 时抛 `NinoDataException`（值后面有多余字节） | 无：改用[分帧](#frames) |
 | 读别人能控制的流，却不限制大小 | 对方发多少，Nino 就占多少内存 | 无：给流或帧设上限（[见上文](#streams)） |
 | `StreamFrames.WriteAsync` 的任务还没完成，就复用它的缓冲区 | 还在进行的写入发出去的是下一帧的字节 | 无：先 await 任务 |
-| 在 .NET Framework 或 .NET Standard 2.0 项目里用 `SerializeAsync` 或 `DeserializeAsync` | 编译不过：那个版本只有同步调用 | 编译器 |
 
 ## 下一步 [#next-steps]
 

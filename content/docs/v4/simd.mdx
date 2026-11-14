@@ -1,7 +1,7 @@
 ---
 title: SIMD
 seoTitle: "SIMD in Nino on .NET, Unity, Go, Rust and TypeScript – Nino v4 Docs"
-description: "Which vector instructions Nino uses on each platform (.NET, Unity with Burst, Go, Rust and TypeScript), how each path is detected, the portable fallback that writes the same bytes, and how to register native kernels with NinoKernels on the netstandard builds."
+description: "Which vector instructions Nino uses on each platform (.NET, Unity with Burst, Go, Rust and TypeScript), how each path is detected, the portable fallback that writes the same bytes, and how to register native kernels with NinoKernels on the netstandard2.1 build."
 icon: Cpu
 ---
 
@@ -35,7 +35,7 @@ The `net8.0` and `net10.0` builds of `Nino.Core` use .NET's hardware intrinsics.
 
 Where a group copy stores to aligned addresses, the unaligned start and end of the output are covered by whole groups that overlap the rest, so its speed does not depend on where the output buffer starts.
 
-.NET Framework and .NET Core 3.0 to .NET 7 load the netstandard builds, which have no intrinsics and convert [one-byte strings](/en/docs/v4/wire-format#strings) four chars at a time; they narrow and widen long Latin-1 strings with `Vector<T>` where the JIT accelerates it (never on Mono or Unity: Mono runs `Vector.Narrow` and `Vector.Widen` in software, slower than the scalar code).
+.NET Core 3.0 to .NET 7 and Mono load the netstandard2.1 build, which has no intrinsics and converts [one-byte strings](/en/docs/v4/wire-format#strings) four chars at a time; it narrows and widens long Latin-1 strings with `Vector<T>` where the JIT accelerates it (.NET Core; never on Mono or Unity: Mono runs `Vector.Narrow` and `Vector.Widen` in software, slower than the scalar code).
 
 On every build and runtime:
 
@@ -47,7 +47,7 @@ On every build and runtime:
 
 ## Unity [#unity]
 
-Unity loads the netstandard build of `Nino.Core`. With `com.unity.burst` 1.8 or later installed, the Unity package registers [Burst-compiled kernels](/en/docs/v4/advanced/unity#burst-kernels) at startup through `NinoKernels`, a table of native function pointers that only the netstandard builds call (each pointer is kept in a static field and called directly, after one compare against its threshold) (every build declares it, so a library that registers kernels loads on .NET 8 and later too, which keep their own paths). Other hosts of the netstandard builds can [register kernels of their own](#registering-kernels). Burst compiles the kernels for each CPU target of its AOT settings, picks the variant the CPU runs at startup, and each checks its instruction set when it is registered.
+Unity loads the netstandard2.1 build of `Nino.Core`. With `com.unity.burst` 1.8 or later installed, the Unity package registers [Burst-compiled kernels](/en/docs/v4/advanced/unity#burst-kernels) at startup through `NinoKernels`, a table of native function pointers that only the netstandard2.1 build calls (each pointer is kept in a static field and called directly, after one compare against its threshold) (every build declares it, so a library that registers kernels loads on .NET 8 and later too, which keep their own paths). Other hosts of the netstandard2.1 build can [register kernels of their own](#registering-kernels). Burst compiles the kernels for each CPU target of its AOT settings, picks the variant the CPU runs at startup, and each checks its instruction set when it is registered.
 
 | Hardware | Vector paths | Benchmark |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ Unity loads the netstandard build of `Nino.Core`. With `com.unity.burst` 1.8 or 
 | x86 and x64 with SSSE3 (in x64 players, the SSE4 target) | `Permute`: arrays and lists of 2 or more tuples, pairs and blocked `[NinoType]` structs written and read with one byte shuffle (`pshufb`) per 16 bytes, and 16 or more raw structs with padding copied with it cleared; `Narrow` and `Widen`: Latin-1 strings of 16 chars or more, 16 chars at a time; `NarrowAscii` and `WidenAscii`: the ASCII text of `[NinoUtf8]` strings of 16 chars or more, up to the first other char, which .NET's UTF-8 encoder and strict decoder take from there; `Interleave32`: `SortedList`s whose keys and values are four-byte raw values, 16 pairs or more, interleaved with SSE2 unpacks; `NormalizeBoolSlots`: arrays and lists of `bool?`, from 16 values when reading and 32 when writing, checked and normalized 16 bytes at a time | [Unity benchmark](/en/docs/v4/benchmarks-unity) |
 | Arm64 (Neon) | the same kernels with `tbl`, and `uzp1`/`zip` for strings | — |
 | WebGL built with WebAssembly SIMD (Unity 6's Target WebAssembly 2023, or `-msimd128` on 2022.3) | no Burst there: the same kernels in C (`Nino.WebGL`) with `i8x16.swizzle` and vector narrowing and widening, for Latin-1 strings and the ASCII text of `[NinoUtf8]` strings of 16 chars or more and 32 values or more of the rest. See [WebGL](/en/docs/v4/advanced/unity#webgl-kernels) | — |
-| Armv7, WebGL without SIMD, x86 and x64 without SSSE3 (or without the target that has it), IL2CPP and Mono players without Burst (install Burst for the kernels) | none: Nino's scalar netstandard paths; the same bytes | [Unity benchmark](/en/docs/v4/benchmarks-unity), "Without Burst" |
+| Armv7, WebGL without SIMD, x86 and x64 without SSSE3 (or without the target that has it), IL2CPP and Mono players without Burst (install Burst for the kernels) | none: the scalar paths of Nino's netstandard2.1 build; the same bytes | [Unity benchmark](/en/docs/v4/benchmarks-unity), "Without Burst" |
 
 ## Go [#go]
 
@@ -94,7 +94,7 @@ The TypeScript runtime reads and writes with `DataView` and typed arrays. Its ve
 
 ## Registering Your Own Kernels [#registering-kernels]
 
-The kernels Unity's package registers ([above](#unity)) go through a public API, `NinoKernels`, which any host of the netstandard builds can use: .NET Framework, Mono, and .NET Core 3.0 to .NET 7. It helps where those builds have no vector path of their own: arrays and lists of tuples, `KeyValuePair`s and blocked `[NinoType]` structs, arrays of raw structs with padding, `SortedList`s of four-byte raw keys and values, arrays and lists of `bool?`, Latin-1 strings and the ASCII text of `[NinoUtf8]` strings. Skip it on .NET 8 and later: their builds use their own vector paths and never call the kernels (registering there does nothing).
+The kernels Unity's package registers ([above](#unity)) go through a public API, `NinoKernels`, which any host of the netstandard2.1 build can use: Mono, and .NET Core 3.0 to .NET 7. It helps where that build has no vector path of its own: arrays and lists of tuples, `KeyValuePair`s and blocked `[NinoType]` structs, arrays of raw structs with padding, `SortedList`s of four-byte raw keys and values, arrays and lists of `bool?`, Latin-1 strings and the ASCII text of `[NinoUtf8]` strings. Skip it on .NET 8 and later: their builds use their own vector paths and never call the kernels (registering there does nothing).
 
 Each kernel is a native `cdecl` function you pass as a function pointer; `NinoKernels.Register` copies the pointers into static fields, and Nino calls them directly. A pointer left `null` keeps Nino's own path for that work.
 
@@ -108,7 +108,7 @@ Each kernel is a native `cdecl` function you pass as a function pointer; `NinoKe
 | `NarrowAscii` | `int (ushort* source, byte* destination, int length)` | Writes the leading chars below U+0080 as a byte each and returns how many (`length` when all are); it may write bytes past those, up to `length`. Nino encodes the rest. |
 | `WidenAscii` | `int (byte* source, ushort* destination, int length)` | Widens the leading bytes below `0x80` to a char each and returns how many (`length` when all are); it may write chars past those, up to `length`. Nino decodes and validates the rest. |
 
-On .NET Framework, Nino already narrows and widens long Latin-1 strings with `Vector<T>` where the JIT accelerates it; a registered `Narrow` or `Widen` is called instead of that path, so measure both.
+On .NET Core 3.0 to .NET 7, Nino already narrows and widens long Latin-1 strings with `Vector<T>` where the JIT accelerates it; a registered `Narrow` or `Widen` is called instead of that path, so measure both.
 
 The rules every kernel follows:
 
@@ -145,7 +145,7 @@ using System;
 using System.Runtime.InteropServices;
 using Nino.Core;
 
-// .NET Framework on Windows: register at startup, before the first serialization.
+// A host of the netstandard2.1 build on Windows (.NET Core 3.0 to .NET 7, Mono): register at startup, before the first serialization.
 public static unsafe class NinoNativeKernels
 {
     [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]

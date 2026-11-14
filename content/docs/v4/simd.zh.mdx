@@ -1,7 +1,7 @@
 ---
 title: SIMD
 seoTitle: "Nino 在 .NET、Unity、Go、Rust 与 TypeScript 上的 SIMD – Nino v4 文档"
-description: "Nino 在各平台（.NET、带 Burst 的 Unity、Go、Rust 和 TypeScript）上用哪些向量指令，怎么检测，回退到哪条字节一致的可移植路径，以及怎样在 netstandard 版本上用 NinoKernels 注册原生内核。"
+description: "Nino 在各平台（.NET、带 Burst 的 Unity、Go、Rust 和 TypeScript）上用哪些向量指令，怎么检测，回退到哪条字节一致的可移植路径，以及怎样在 netstandard2.1 版本上用 NinoKernels 注册原生内核。"
 icon: Cpu
 ---
 
@@ -35,7 +35,7 @@ Nino 在每个平台上写出的字节都一样。平台有向量指令时，各
 
 按组拷贝要对齐存储时，输出开头和结尾没对齐的部分，用与中间重叠的整组来覆盖，所以速度与输出缓冲区的起始地址无关。
 
-.NET Framework 和 .NET Core 3.0 到 .NET 7 加载 netstandard 版本，其中没有硬件内部函数，[单字节形式的字符串](/zh/docs/v4/wire-format#strings)每次转换四个字符；JIT 加速 `Vector<T>` 时，较长的 Latin-1 字符串用它收窄和扩展（Mono 和 Unity 上从不使用：Mono 的 `Vector.Narrow` 和 `Vector.Widen` 是软件实现，比标量代码慢）。
+.NET Core 3.0 到 .NET 7 和 Mono 加载 netstandard2.1 版本，其中没有硬件内部函数，[单字节形式的字符串](/zh/docs/v4/wire-format#strings)每次转换四个字符；JIT 加速 `Vector<T>` 时，较长的 Latin-1 字符串用它收窄和扩展（Mono 和 Unity 上从不使用：Mono 的 `Vector.Narrow` 和 `Vector.Widen` 是软件实现，比标量代码慢）。
 
 在所有版本和运行时上：
 
@@ -47,7 +47,7 @@ Nino 在每个平台上写出的字节都一样。平台有向量指令时，各
 
 ## Unity [#unity]
 
-Unity 加载 `Nino.Core` 的 netstandard 版本。安装 `com.unity.burst` 1.8 或更高版本后，Unity 包会在启动时通过 `NinoKernels` 注册 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)。`NinoKernels` 是一张原生函数指针表，只有 netstandard 版本会调用它（每个指针存在静态字段里，与阈值比较一次后直接调用；每个版本都声明了 `NinoKernels`，所以注册内核的库在 .NET 8 及更高版本上也能加载，这些版本仍走自己的路径）。其他 netstandard 宿主也可以[注册自己的内核](#registering-kernels)。Burst 按 AOT 设置里的每个 CPU 目标各编译一份内核，启动时选出 CPU 能跑的那份，每个内核注册时还会检查指令集。
+Unity 加载 `Nino.Core` 的 netstandard2.1 版本。安装 `com.unity.burst` 1.8 或更高版本后，Unity 包会在启动时通过 `NinoKernels` 注册 [Burst 编译的内核](/zh/docs/v4/advanced/unity#burst-kernels)。`NinoKernels` 是一张原生函数指针表，只有 netstandard2.1 版本会调用它（每个指针存在静态字段里，与阈值比较一次后直接调用；每个版本都声明了 `NinoKernels`，所以注册内核的库在 .NET 8 及更高版本上也能加载，这些版本仍走自己的路径）。netstandard2.1 版本的其他宿主也可以[注册自己的内核](#registering-kernels)。Burst 按 AOT 设置里的每个 CPU 目标各编译一份内核，启动时选出 CPU 能跑的那份，每个内核注册时还会检查指令集。
 
 | 硬件 | 向量路径 | 基准测试 |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ Unity 加载 `Nino.Core` 的 netstandard 版本。安装 `com.unity.burst` 1.8 �
 | 支持 SSSE3 的 x86 和 x64（x64 Player 中需要 SSE4 目标） | `Permute`：2 个及以上的元组、键值对和按块读写的 `[NinoType]` 结构体组成的数组和列表，每 16 字节一次字节重排（`pshufb`）读写，16 个及以上带填充的原始结构体在拷贝时清零填充；`Narrow` 和 `Widen`：16 个字符及以上的 Latin-1 字符串，每次 16 个字符；`NarrowAscii` 和 `WidenAscii`：16 个字符及以上的 `[NinoUtf8]` 字符串中直到第一个非 ASCII 字符为止的 ASCII 文本，其余部分交给 .NET 的 UTF-8 编码器和严格解码器；`Interleave32`：键和值都是四字节原始值的 `SortedList`，16 对及以上，用 SSE2 的 unpack 指令交错写出；`NormalizeBoolSlots`：`bool?` 的数组和列表，读取从 16 个值起、写入从 32 个起，每次检查并规整 16 字节 | [基准测试：Unity 与 Burst](/zh/docs/v4/benchmarks-unity) |
 | Arm64（Neon） | 同样的内核，用 `tbl`，字符串用 `uzp1`/`zip` | — |
 | 用 WebAssembly SIMD 构建的 WebGL（Unity 6 的 Target WebAssembly 2023，或 2022.3 上的 `-msimd128`） | 那里没有 Burst：同样的内核用 C 写成（`Nino.WebGL`），使用 `i8x16.swizzle` 和向量收窄、扩展，处理 16 个字符及以上的 Latin-1 字符串和 `[NinoUtf8]` 字符串中的 ASCII 文本，其余的从 32 个值起。参见 [WebGL](/zh/docs/v4/advanced/unity#webgl-kernels) | — |
-| Armv7、没有 SIMD 的 WebGL、不支持 SSSE3（或没有包含它的目标）的 x86 和 x64、没有 Burst 的 IL2CPP 和 Mono Player（安装 Burst 即可使用内核） | 无：Nino 的 netstandard 标量路径；字节一致 | [基准测试：Unity 与 Burst](/zh/docs/v4/benchmarks-unity)，“不用 Burst”一列 |
+| Armv7、没有 SIMD 的 WebGL、不支持 SSSE3（或没有包含它的目标）的 x86 和 x64、没有 Burst 的 IL2CPP 和 Mono Player（安装 Burst 即可使用内核） | 无：Nino netstandard2.1 版本的标量路径；字节一致 | [基准测试：Unity 与 Burst](/zh/docs/v4/benchmarks-unity)，“不用 Burst”一列 |
 
 ## Go [#go]
 
@@ -94,7 +94,7 @@ TypeScript 运行时用 `DataView` 和类型化数组读写。它的向量代码
 
 ## 注册自己的内核 [#registering-kernels]
 
-Unity 包注册的内核（[见上文](#unity)）走的是公共 API `NinoKernels`，netstandard 版本的任何宿主都能用：.NET Framework、Mono，以及 .NET Core 3.0 到 .NET 7。这些版本自己没有向量路径的地方，内核才有用：元组、`KeyValuePair` 和按块写的 `[NinoType]` 结构体组成的数组和列表，带填充的原始结构体数组，键和值都是四字节原始值的 `SortedList`，`bool?` 的数组和列表，Latin-1 字符串，以及 `[NinoUtf8]` 字符串里的 ASCII 文本。.NET 8 及以上不用管它：这些版本走自己的向量路径，从不调用内核（在那里注册也没有任何效果）。
+Unity 包注册的内核（[见上文](#unity)）走的是公共 API `NinoKernels`，netstandard2.1 版本的任何宿主都能用：Mono，以及 .NET Core 3.0 到 .NET 7。这个版本自己没有向量路径的地方，内核才有用：元组、`KeyValuePair` 和按块写的 `[NinoType]` 结构体组成的数组和列表，带填充的原始结构体数组，键和值都是四字节原始值的 `SortedList`，`bool?` 的数组和列表，Latin-1 字符串，以及 `[NinoUtf8]` 字符串里的 ASCII 文本。.NET 8 及以上不用管它：这些版本走自己的向量路径，从不调用内核（在那里注册也没有任何效果）。
 
 每个内核都是原生的 `cdecl` 函数，以函数指针的形式传入；`NinoKernels.Register` 把这些指针复制到静态字段里，Nino 直接调用。留空（`null`）的指针，对应的工作仍走 Nino 自己的路径。
 
@@ -108,7 +108,7 @@ Unity 包注册的内核（[见上文](#unity)）走的是公共 API `NinoKernel
 | `NarrowAscii` | `int (ushort* source, byte* destination, int length)` | 把开头低于 U+0080 的字符各写成一个字节，返回这样的字符有几个（全是就返回 `length`）；之后的字节也可以写，但不超过 `length`。剩下的由 Nino 编码。 |
 | `WidenAscii` | `int (byte* source, ushort* destination, int length)` | 把开头低于 `0x80` 的字节各扩展成一个字符，返回这样的字节有几个（全是就返回 `length`）；之后的字符也可以写，但不超过 `length`。剩下的由 Nino 解码和校验。 |
 
-在 .NET Framework 上，JIT 能加速 `Vector<T>` 时，Nino 已经用它收窄和扩展较长的 Latin-1 字符串；注册了 `Narrow` 或 `Widen` 后，会改为调用内核，所以两者都要测一测。
+在 .NET Core 3.0 到 .NET 7 上，JIT 能加速 `Vector<T>` 时，Nino 已经用它收窄和扩展较长的 Latin-1 字符串；注册了 `Narrow` 或 `Widen` 后，会改为调用内核，所以两者都要测一测。
 
 每个内核都要遵守这些规则：
 
@@ -145,7 +145,7 @@ using System;
 using System.Runtime.InteropServices;
 using Nino.Core;
 
-// Windows 上的 .NET Framework：启动时、第一次序列化之前注册。
+// Windows 上 netstandard2.1 版本的宿主（.NET Core 3.0 到 .NET 7、Mono）：启动时、第一次序列化之前注册。
 public static unsafe class NinoNativeKernels
 {
     [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
