@@ -7,11 +7,12 @@
  * - Every row is focusable and has a tooltip; a data table sits under the
  *   chart in <details> for screen readers and copy-paste.
  * - Bars grow in when scrolled into view, except with prefers-reduced-motion.
+ * - Each row is scaled to its own largest value, which fills the plot: bars are
+ *   in true proportion within a row, and one row's 200× cannot squeeze the
+ *   others (the owner's rule, WRITING.md "Numbers"). There is no shared axis;
+ *   the labels give the values and `axisLabel` is printed as the scale's note.
  */
-import { AxisBottom } from '@visx/axis';
-import { GridColumns } from '@visx/grid';
 import { Group } from '@visx/group';
-import { scaleLinear } from '@visx/scale';
 import { BarRounded } from '@visx/shape';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useReveal } from '@/components/showcase';
@@ -44,10 +45,8 @@ export interface BarChartProps {
   subtitle?: ReactNode;
   series: ChartSeries[];
   rows: ChartRow[];
+  /** What the bars measure, printed under the chart */
   axisLabel: string;
-  tickFormat?: (value: number) => string;
-  /** Upper end of the axis; defaults to the largest value */
-  max?: number;
   footnotes?: ReactNode[];
   table?: { caption: string; head: string[]; rows: ReactNode[][] };
 }
@@ -57,7 +56,6 @@ const BAR_GAP = 4;
 const HEADER = 20;
 const BADGE_H = 18;
 const ROW_GAP = 20;
-const AXIS_BAND = 44;
 const FALLBACK_WIDTH = 640;
 
 /** Rough text width; CJK characters are about 1em wide. */
@@ -111,8 +109,6 @@ export function BarChart({
   series,
   rows,
   axisLabel,
-  tickFormat = (value) => String(value),
-  max,
   footnotes,
   table,
 }: BarChartProps) {
@@ -134,18 +130,6 @@ export function BarChart({
       ),
     ) + 10;
   const plotWidth = Math.max(width - valueGutter, 80);
-  const domainMax =
-    max ??
-    Math.max(
-      ...rows.flatMap((row) => series.map((s) => row.values[s.key] ?? 0)),
-    );
-  const x = scaleLinear<number>({
-    domain: [0, domainMax],
-    range: [0, plotWidth],
-    nice: max === undefined,
-    // A given max may cut long bars: they stop at the edge, their labels give the value.
-    clamp: max !== undefined,
-  });
 
   // Vertical layout of each row: label (+ badge), then one bar per series.
   const barCount = (row: ChartRow) =>
@@ -163,8 +147,7 @@ export function BarChart({
     y += height + ROW_GAP;
   }
   const plotBottom = y - ROW_GAP + 10;
-  const height = plotBottom + AXIS_BAND;
-  const numTicks = width < 480 ? 4 : 6;
+  const height = plotBottom + 20;
 
   const activeRow = active ? rows[active.index] : undefined;
 
@@ -202,13 +185,6 @@ export function BarChart({
           role="group"
           aria-label={title}
         >
-          <GridColumns
-            scale={x}
-            height={plotBottom}
-            numTicks={numTicks}
-            stroke="var(--color-fd-border)"
-            strokeWidth={1}
-          />
           {rows.map((row, index) => {
             const layout = layouts[index];
             const header = HEADER + (layout.badgeBelow ? BADGE_H + 4 : 0);
@@ -311,7 +287,11 @@ export function BarChart({
                 )}
                 {plotted.map((s, i) => {
                   const value = row.values[s.key] ?? 0;
-                  const barWidth = value > 0 ? Math.max(x(value), 3) : 0;
+                  const rowMax = Math.max(
+                    ...plotted.map((p) => row.values[p.key] ?? 0),
+                  );
+                  const length = rowMax > 0 ? (value / rowMax) * plotWidth : 0;
+                  const barWidth = value > 0 ? Math.max(length, 3) : 0;
                   const barY = header + 6 + i * (BAR + BAR_GAP);
                   const delay = `${index * 60 + i * 90}ms`;
                   return (
@@ -349,21 +329,7 @@ export function BarChart({
               </g>
             );
           })}
-          <AxisBottom
-            top={plotBottom}
-            scale={x}
-            numTicks={numTicks}
-            tickFormat={(value) => tickFormat(Number(value))}
-            stroke="var(--color-fd-border)"
-            tickStroke="var(--color-fd-border)"
-            tickLength={4}
-            tickLabelProps={{
-              fill: 'var(--color-fd-muted-foreground)',
-              fontSize: 11,
-              textAnchor: 'middle',
-            }}
-          />
-          <Group top={plotBottom + 38}>
+          <Group top={plotBottom + 14}>
             <text
               // Centred under the plot, but never past the chart's left edge
               // (a narrow plot is shorter than the label on a phone).

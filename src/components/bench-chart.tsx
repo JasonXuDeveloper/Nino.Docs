@@ -123,7 +123,6 @@ export function BenchChart({
       axisLabel={
         zh ? '相对耗时（MemoryPack = 1.0）' : 'Relative time (MemoryPack = 1.0)'
       }
-      tickFormat={(value) => (value === 0 ? '0' : value.toFixed(1))}
       footnotes={[
         ...(hasMessagePack
           ? [

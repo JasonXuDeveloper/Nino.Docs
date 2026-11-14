@@ -32,8 +32,6 @@ import type { ChartId } from './ids';
 
 export type { ChartId };
 
-const rel = (value: number) => (value === 0 ? '0' : value.toFixed(1));
-
 function caseLabel(row: { name: string; zh?: string }, zh: boolean) {
   return zh && row.zh ? row.zh : row.name;
 }
@@ -109,7 +107,6 @@ function memoryPackChart(
     axisLabel: zh
       ? '相对耗时（MemoryPack = 1.0）'
       : 'Relative time (MemoryPack = 1.0)',
-    tickFormat: rel,
     footnotes: [
       sourceNote(zh, ds, tabbed),
       ...(hasGc ? [zh ? gcNote.zh : gcNote.en] : []),
@@ -174,7 +171,6 @@ function v3Chart(
       badge: v3Badge(e.v3Ns, e.v4Ns, zh),
     })),
     axisLabel: zh ? '相对耗时（v3 = 1.0）' : 'Relative time (v3 = 1.0)',
-    tickFormat: rel,
     footnotes: v3Note ? [v3Note] : undefined,
     table: {
       caption: zh ? '数据表' : 'Data table',
@@ -194,23 +190,33 @@ function v3Chart(
 function compileChart(zh: boolean): BarChartProps {
   const types = buildSmall?.types.toLocaleString('en-US') ?? '';
   return {
-    title: zh
-      ? '构建：v4 比 v3（3.3.13）好多少倍'
-      : 'Build: how many times better v4 is than v3 (3.3.13)',
+    title: zh ? '构建：v4 对比 v3（3.3.13）' : 'Build: v4 vs v3 (3.3.13)',
     subtitle: zh
-      ? `源生成器基准测试，${types} 个类型（N = ${buildSmall?.roots}）。越长越好。`
-      : `Source generator benchmark, ${types} types (N = ${buildSmall?.roots}). Longer is better.`,
+      ? `源生成器基准测试，${types} 个类型（N = ${buildSmall?.roots}）。每项的大小或耗时，越短越好；每项里较大的那条画满一行，按真实比例画。`
+      : `Source generator benchmark, ${types} types (N = ${buildSmall?.roots}). Each measure's size or time, shorter is better; the larger of the two fills the row, drawn to scale.`,
     series: [
-      { key: 'ratio', label: 'v4 vs v3', color: 'var(--nino-chart-v4)' },
+      { key: 'v4', label: 'Nino v4', color: 'var(--nino-chart-v4)' },
+      {
+        key: 'v3',
+        label: 'Nino v3 (3.3.13)',
+        color: 'var(--nino-chart-other-strong)',
+      },
     ],
     rows: build.map((row) => ({
       label: zh ? row.zh : row.en,
-      values: { ratio: row.ratio },
-      text: { ratio: buildRatioText(row, zh) },
+      values: { v4: row.v4n, v3: row.v3n },
+      text: {
+        v4:
+          row.verdict === 'none'
+            ? row.v4
+            : `${row.v4} · ${buildRatioText(row, zh)}`,
+        v3: row.v3,
+      },
       detail: `v3 ${row.v3} → v4 ${row.v4}`,
     })),
-    axisLabel: zh ? 'v4 对比 v3（倍）' : 'v4 vs v3 (×)',
-    tickFormat: (value) => `${value}×`,
+    axisLabel: zh
+      ? '每项按自身最大值缩放（越短越好）'
+      : 'Each measure scaled to its larger value (shorter is better)',
     table: {
       caption: zh ? '数据表' : 'Data table',
       head: zh

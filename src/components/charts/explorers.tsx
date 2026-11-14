@@ -5,7 +5,8 @@
  *
  * - RuntimesChart: per case, every serializer's time (or size) as a multiple
  *   of Nino's generated code, so Nino is 1× and a longer bar costs more, drawn to
- *   scale with no cap (the owner's choice: the real proportions).
+ *   scale per case (BarChart): the slowest fills the row, so the real
+ *   proportions show without one case's 200× squeezing the others.
  * - UnityChart: per case, the time with Burst as a share of the time without
  *   it (100 %), with the speedup beside the case.
  *
@@ -169,13 +170,12 @@ export function RuntimesChart({
         title={`${languageNames[language]}: ${measureNames[current][zh ? 'zh' : 'en']}`}
         subtitle={
           zh
-            ? `每个序列化库的${current === 'size' ? '大小' : '耗时'}是 Nino 生成代码的几倍，按真实比例画，数值见标签。Nino ${table.tag}${table.environment ? `，${table.environment}` : ''}。`
-            : `Each serializer's ${current === 'size' ? 'size' : 'time'} as a multiple of Nino's generated code, drawn to scale; the label gives the value. Nino ${table.tag}${table.environment ? `, ${table.environment}` : ''}.`
+            ? `每个序列化库的${current === 'size' ? '大小' : '耗时'}是 Nino 生成代码的几倍；每个用例里最慢的库画满一行，同一用例内按真实比例画，数值见标签。Nino ${table.tag}${table.environment ? `，${table.environment}` : ''}。`
+            : `Each serializer's ${current === 'size' ? 'size' : 'time'} as a multiple of Nino's generated code; in each case the slowest fills the row and the rest are drawn to scale, the label gives the value. Nino ${table.tag}${table.environment ? `, ${table.environment}` : ''}.`
         }
         series={series}
         rows={rows}
         axisLabel={current === 'size' ? sizeAxis : timeAxis}
-        tickFormat={(value) => `${value}×`}
       />
     </div>
   );
@@ -283,8 +283,6 @@ export function UnityChart({ lang = 'en' }: { lang?: Locale }) {
         axisLabel={
           zh ? '耗时，不用 Burst 为 100%' : 'Time, without Burst = 100 %'
         }
-        tickFormat={(value) => `${Math.round(value * 100)}%`}
-        max={Math.max(1, ...rows.map((r) => r.values.with ?? 0))}
       />
     </div>
   );
@@ -469,8 +467,8 @@ export function DotnetChart({
         }
         subtitle={
           zh
-            ? `每个库的耗时是 Nino v4 的几倍，越短越快；按真实比例画，标签是实测耗时和倍数。条缺失表示这个库表达不了该用例，v3 标 n/a 表示 3.3.13 没有这个用例。`
-            : `Each serializer's time as a multiple of Nino v4's, shorter is faster; bars are drawn to scale, and labels give the measured time and the multiple. A missing bar is a case that library cannot express; v3 n/a, a case 3.3.13 has no port of.`
+            ? `每个库的耗时是 Nino v4 的几倍，越短越快；每个用例里最慢的库画满一行，同一用例内按真实比例画；标签是实测耗时和倍数。条缺失表示这个库表达不了该用例，v3 标 n/a 表示 3.3.13 没有这个用例。`
+            : `Each serializer's time as a multiple of Nino v4's, shorter is faster; in each case the slowest fills the row and the rest are drawn to scale, and labels give the measured time and the multiple. A missing bar is a case that library cannot express; v3 n/a, a case 3.3.13 has no port of.`
         }
         series={series}
         rows={rows}
@@ -479,7 +477,6 @@ export function DotnetChart({
             ? '耗时，Nino v4 为 1×（越短越快）'
             : "Time, Nino v4's = 1× (shorter is faster)"
         }
-        tickFormat={(value) => `${value}×`}
         footnotes={footnotes}
       />
     </div>
