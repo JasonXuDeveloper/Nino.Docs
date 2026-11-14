@@ -333,6 +333,11 @@ function memorypackRows(zh: boolean): Row[] {
 }
 
 /** Serialize SimpleClass against each library, then deserialize against both */
+/** The panels' polymorphic case: the RPC call whose result is an interface (workloads only) */
+const polymorphic = hasWorkloads
+  ? x64.workloads.serialize.find((r) => r.name.startsWith('RPC call'))
+  : undefined;
+
 /** The panels' deserialize case: the first workload's, or SimpleClass */
 const simpleDes = hasWorkloads
   ? x64.workloads.deserialize[0]
@@ -349,6 +354,8 @@ function otherRows(zh: boolean): Row[] {
   for (const [row, verb] of [
     [simple, zh ? '序列化' : 'Serialize'],
     [simpleDes, zh ? '反序列化' : 'Deserialize'],
+    // A polymorphic workload too: the others need a workaround for an interface result
+    [polymorphic, zh ? '序列化' : 'Serialize'],
   ] as const) {
     if (!row) continue;
     const timed = otherLibs.flatMap((lib) => {
