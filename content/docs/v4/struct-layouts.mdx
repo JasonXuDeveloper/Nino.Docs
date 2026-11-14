@@ -144,155 +144,155 @@ public sealed partial class Particle
 
 ## Measured Layouts [#measured-layouts]
 
-Measured by Nino's CI (run 41280617045, `tests/Nino.RuntimeTests`): .NET 10 on Linux x64 and Arm64, Windows x86 and Linux Arm32 (under qemu), .NET Framework 4.8 64-bit and 32-bit, Mono 6.14 on Linux x64 and Arm64. The .NET Framework entries are the last measurement before 4.0.0-rc.11: Nino no longer runs on Microsoft's .NET Framework 4.x, and CI no longer measures it. The CoreCLR x64 column is the canonical layout, with two exceptions that do not depend on the runtime: `DateTimeOffset` as .NET 10 lays it out, and `nint`/`nuint` as 8 bytes. The last column names only the runtimes whose layout differs from CoreCLR x64, in **bold** (size, then offsets in field order), or that do not have the type; every runtime it does not name has CoreCLR x64's size and field offsets, and — means every runtime does. "32-bit CoreCLR" means x86 and Arm32, "Mono" Mono on x64 and Arm64, ".NET Framework" its 64-bit and 32-bit runs. Field names differ between runtimes; offsets are what count. Every runtime in these tables writes and reads CoreCLR x64's bytes for each type, checked in the same CI run.
+Measured by Nino's CI (run 41280617045, `tests/Nino.RuntimeTests`): .NET 10 on Linux x64 and Arm64, Windows x86 and Linux Arm32 (under qemu), Mono 6.14 on Linux x64 and Arm64. The CoreCLR x64 column is the canonical layout, with two exceptions that do not depend on the runtime: `DateTimeOffset` as .NET 10 lays it out, and `nint`/`nuint` as 8 bytes. The last column names only the runtimes whose layout differs from CoreCLR x64, in **bold** (size, then offsets in field order), or that do not have the type; every runtime it does not name has CoreCLR x64's size and field offsets, and — means every runtime does. "32-bit CoreCLR" means x86 and Arm32, "Mono" Mono on x64 and Arm64. Field names differ between runtimes; offsets are what count. Every runtime in these tables writes and reads CoreCLR x64's bytes for each type, checked in the same CI run.
 
 <Accordions type="multiple">
 <Accordion title="Each type: size, then the offset of each field" id="each-type" value="each-type">
 
 | Type | CoreCLR x64 | Where it differs |
 | --- | --- | --- |
-| `(int,long)` | 16: Item1 8, Item2 0 | **12: 8, 0** on CoreCLR x86 and .NET Framework x86; **16: 0, 8** on Mono |
-| `(long,int)` | 16: Item1 0, Item2 8 | **12: 0, 8** on CoreCLR x86 and .NET Framework x86 |
+| `(int,long)` | 16: Item1 8, Item2 0 | **12: 8, 0** on CoreCLR x86; **16: 0, 8** on Mono |
+| `(long,int)` | 16: Item1 0, Item2 8 | **12: 0, 8** on CoreCLR x86 |
 | `(byte,short)` | 4: Item1 2, Item2 0 | **4: 0, 2** on Mono |
 | `(byte,long,int)` | 16: Item1 12, Item2 0, Item3 8 | **24: 0, 8, 16** on Mono |
 | `(byte,int,short)` | 8: Item1 6, Item2 0, Item3 4 | **12: 0, 4, 8** on Mono |
 | `(short,byte,int)` | 8: Item1 4, Item2 6, Item3 0 | **8: 0, 2, 4** on Mono |
 | `(int,int)` | 8: Item1 0, Item2 4 | — |
-| `(int,int,int)` | 16: Item1 0, Item2 4, Item3 8 | **12: 0, 4, 8** on 32-bit CoreCLR, .NET Framework x86 and Mono |
+| `(int,int,int)` | 16: Item1 0, Item2 4, Item3 8 | **12: 0, 4, 8** on 32-bit CoreCLR and Mono |
 | `(byte,byte,byte)` | 4: Item1 0, Item2 1, Item3 2 | **3: 0, 1, 2** on Mono |
 | `(bool,char,byte)` | 4: Item1 2, Item2 0, Item3 3 | **6: 0, 2, 4** on Mono |
-| `(double,float)` | 16: Item1 0, Item2 8 | **12: 0, 8** on CoreCLR x86 and .NET Framework x86 |
-| `(Tag,long)` | 16: Item1 8, Item2 0 | **12: 8, 0** on CoreCLR x86 and .NET Framework x86; **16: 0, 8** on Mono |
-| `(int,IntPtr)` | 16: Item1 8, Item2 0 | **8: 0, 4** on 32-bit CoreCLR and .NET Framework x86; **16: 0, 8** on Mono |
-| `(byte,UIntPtr)` | 16: Item1 8, Item2 0 | **8: 4, 0** on 32-bit CoreCLR and .NET Framework x86; **16: 0, 8** on Mono |
+| `(double,float)` | 16: Item1 0, Item2 8 | **12: 0, 8** on CoreCLR x86 |
+| `(Tag,long)` | 16: Item1 8, Item2 0 | **12: 8, 0** on CoreCLR x86; **16: 0, 8** on Mono |
+| `(int,IntPtr)` | 16: Item1 8, Item2 0 | **8: 0, 4** on 32-bit CoreCLR; **16: 0, 8** on Mono |
+| `(byte,UIntPtr)` | 16: Item1 8, Item2 0 | **8: 4, 0** on 32-bit CoreCLR; **16: 0, 8** on Mono |
 | `ValueTuple<long>` | 8: Item1 0 | — |
-| `(int,DateTime)` | 16: Item1 0, Item2 8 | **12: 0, 4** on CoreCLR x86 and .NET Framework x86 |
+| `(int,DateTime)` | 16: Item1 0, Item2 8 | **12: 0, 4** on CoreCLR x86 |
 | `(byte,DateTime,int)` | 16: Item1 4, Item2 8, Item3 0 | **24: 0, 8, 16** on Mono |
-| `(int,TimeSpan)` | 16: Item1 0, Item2 8 | **12: 0, 4** on .NET Framework x86 |
-| `(byte,decimal)` | 24: Item1 0, Item2 8 | **20: 0, 4** on .NET Framework x86 |
-| `(int,decimal)` | 24: Item1 0, Item2 8 | **20: 0, 4** on .NET Framework x86 |
-| `(byte,Guid)` | 24: Item1 0, Item2 4 | **20: 0, 4** on 32-bit CoreCLR, .NET Framework x86 and Mono; **24: 0, 8** on .NET Framework x64 |
-| `(byte,int?)` | 16: Item1 0, Item2 4 | **12: 0, 4** on 32-bit CoreCLR, .NET Framework x86 and Mono; **16: 0, 8** on .NET Framework x64 |
-| `(long?,byte)` | 24: Item1 8, Item2 0 | **20: 4, 0** on .NET Framework x86; **24: 0, 16** on Mono |
-| `(byte,(int,long))` | 24: Item1 0, Item2 8 | **16: 0, 4** on CoreCLR x86 and .NET Framework x86 |
-| `((byte,short),long)` | 16: Item1 8, Item2 0 | **12: 8, 0** on CoreCLR x86 and .NET Framework x86; **16: 0, 8** on Mono |
-| `(int,(byte,short),long)` | 16: Item1 8, Item2 12, Item3 0 | **24: 8, 16, 0** on .NET Framework x64; **16: 0, 4, 8** on Mono |
-| `(int,KVP<int,long>)` | 24: Item1 0, Item2 8 | **20: 0, 4** on .NET Framework x86 |
-| `(byte,DateTimeOffset)` | 24: Item1 0, Item2 8 | **16: 0, 4** on CoreCLR x86 and .NET Framework x86 |
+| `(int,TimeSpan)` | 16: Item1 0, Item2 8 | — |
+| `(byte,decimal)` | 24: Item1 0, Item2 8 | — |
+| `(int,decimal)` | 24: Item1 0, Item2 8 | — |
+| `(byte,Guid)` | 24: Item1 0, Item2 4 | **20: 0, 4** on 32-bit CoreCLR and Mono |
+| `(byte,int?)` | 16: Item1 0, Item2 4 | **12: 0, 4** on 32-bit CoreCLR and Mono |
+| `(long?,byte)` | 24: Item1 8, Item2 0 | **24: 0, 16** on Mono |
+| `(byte,(int,long))` | 24: Item1 0, Item2 8 | **16: 0, 4** on CoreCLR x86 |
+| `((byte,short),long)` | 16: Item1 8, Item2 0 | **12: 8, 0** on CoreCLR x86; **16: 0, 8** on Mono |
+| `(int,(byte,short),long)` | 16: Item1 8, Item2 12, Item3 0 | **16: 0, 4, 8** on Mono |
+| `(int,KVP<int,long>)` | 24: Item1 0, Item2 8 | — |
+| `(byte,DateTimeOffset)` | 24: Item1 0, Item2 8 | **16: 0, 4** on CoreCLR x86 |
 | `(byte,short,int,long,byte,short,int)` | 24: Item1 20, Item2 16, Item3 8, Item4 0, Item5 21, Item6 18, Item7 12 | **24: 0, 2, 4, 8, 16, 18, 20** on Mono |
-| `(byte,long,byte,long,byte,long,byte,int)` | 32: Item1 24, Item2 0, Item3 25, Item4 8, Item5 26, Item6 16, Item7 27, Rest 28 | **40: 24, 0, 25, 8, 26, 16, 27, 32** on .NET Framework x64; **56: 0, 8, 16, 24, 32, 40, 48, 52** on Mono |
-| `(int,(byte,long),(short,(byte,int)))` | 40: Item1 0, Item2 8, Item3 24 | **28: 0, 4, 16** on CoreCLR x86 and .NET Framework x86 |
+| `(byte,long,byte,long,byte,long,byte,int)` | 32: Item1 24, Item2 0, Item3 25, Item4 8, Item5 26, Item6 16, Item7 27, Rest 28 | **56: 0, 8, 16, 24, 32, 40, 48, 52** on Mono |
+| `(int,(byte,long),(short,(byte,int)))` | 40: Item1 0, Item2 8, Item3 24 | **28: 0, 4, 16** on CoreCLR x86 |
 | `KVP<int,long>` | 16: key 0, value 8 | — |
 | `KVP<byte,long>` | 16: key 0, value 8 | — |
 | `KVP<long,byte>` | 16: key 0, value 8 | — |
-| `KVP<int,DateTime>` | 16: key 0, value 8 | **12: 0, 4** on CoreCLR x86 and .NET Framework x86 |
-| `KVP<byte,(int,long)>` | 24: key 0, value 8 | **16: 0, 4** on CoreCLR x86 and .NET Framework x86 |
-| `DateTimeOffset` | 16: _dateTime 8, _offsetMinutes 0 | **12: 4, 0** on CoreCLR x86 and .NET Framework x86; **16: 0, 8** on Mono |
+| `KVP<int,DateTime>` | 16: key 0, value 8 | **12: 0, 4** on CoreCLR x86 |
+| `KVP<byte,(int,long)>` | 24: key 0, value 8 | **16: 0, 4** on CoreCLR x86 |
+| `DateTimeOffset` | 16: _dateTime 8, _offsetMinutes 0 | **12: 4, 0** on CoreCLR x86; **16: 0, 8** on Mono |
 | `DateTime` | 8: _dateData 0 | — |
 | `TimeSpan` | 8: _ticks 0 | — |
-| `decimal` | 16: _flags 0, _hi32 4, _lo64 8 | **16: 0, 4, 8, 12** on .NET Framework; **16: 0, 4, 8, 12, 8** on Mono |
+| `decimal` | 16: _flags 0, _hi32 4, _lo64 8 | **16: 0, 4, 8, 12, 8** on Mono |
 | `Guid` | 16: _a 0, _b 4, _c 6, _d 8, _e 9, _f 10, _g 11, _h 12, _i 13, _j 14, _k 15 | — |
 | `int?` | 8: hasValue 0, value 4 | — |
 | `long?` | 16: hasValue 0, value 8 | — |
-| `(int,long)?` | 24: hasValue 0, value 8 | **16: 0, 4** on CoreCLR x86 and .NET Framework x86 |
-| `DateTimeOffset?` | 24: hasValue 0, value 8 | **16: 0, 4** on CoreCLR x86 and .NET Framework x86 |
-| `IntPtr` | 8: _value 0 | **4: 0** on 32-bit CoreCLR; **4** on .NET Framework x86 |
+| `(int,long)?` | 24: hasValue 0, value 8 | **16: 0, 4** on CoreCLR x86 |
+| `DateTimeOffset?` | 24: hasValue 0, value 8 | **16: 0, 4** on CoreCLR x86 |
+| `IntPtr` | 8: _value 0 | **4: 0** on 32-bit CoreCLR |
 | `Complex` | 16: m_real 0, m_imaginary 8 | — |
-| `Int128` | 16: _lower 0, _upper 8 | not in .NET Framework or Mono |
-| `(byte,Int128)` | 32: Item1 0, Item2 16 | **24: 0, 8** on CoreCLR Arm32; not in .NET Framework or Mono |
-| `Half` | 2: _value 0 | not in .NET Framework or Mono |
-| `(byte,Half)` | 4: Item1 0, Item2 2 | not in .NET Framework or Mono |
-| `DateOnly` | 4: _dayNumber 0 | not in .NET Framework or Mono |
-| `TimeOnly` | 8: _ticks 0 | not in .NET Framework or Mono |
-| `(byte,DateOnly,TimeOnly)` | 16: Item1 0, Item2 4, Item3 8 | not in .NET Framework or Mono |
-| `Range` | 8: Start 0, End 4 | not in .NET Framework or Mono |
-| `Index` | 4: _value 0 | not in .NET Framework or Mono |
-| `Rune` | 4: _value 0 | not in .NET Framework or Mono |
-| `Vector2` | 8: X 0, Y 4 | not in .NET Framework or Mono |
-| `Vector3` | 12: X 0, Y 4, Z 8 | not in .NET Framework or Mono |
-| `Vector4` | 16: X 0, Y 4, Z 8, W 12 | not in .NET Framework or Mono |
-| `Quaternion` | 16: X 0, Y 4, Z 8, W 12 | not in .NET Framework or Mono |
-| `Plane` | 16: Normal 0, D 12 | not in .NET Framework or Mono |
-| `Matrix3x2` | 24: M11 0, M12 4, M21 8, M22 12, M31 16, M32 20 | not in .NET Framework or Mono |
-| `Matrix4x4` | 64: M11 0, M12 4, M13 8, M14 12, M21 16, M22 20, M23 24, M24 28, M31 32, M32 36, M33 40, M34 44, M41 48, M42 52, M43 56, M44 60 | not in .NET Framework or Mono |
-| `Vector64<int>` | 8: _00 0 | not in .NET Framework or Mono |
-| `Vector128<int>` | 16: _lower 0, _upper 8 | not in .NET Framework or Mono |
-| `Vector256<long>` | 32: _lower 0, _upper 16 | not in .NET Framework or Mono |
-| `Vector512<long>` | 64: _lower 0, _upper 32 | not in .NET Framework or Mono |
+| `Int128` | 16: _lower 0, _upper 8 | not in Mono |
+| `(byte,Int128)` | 32: Item1 0, Item2 16 | **24: 0, 8** on CoreCLR Arm32; not in Mono |
+| `Half` | 2: _value 0 | not in Mono |
+| `(byte,Half)` | 4: Item1 0, Item2 2 | not in Mono |
+| `DateOnly` | 4: _dayNumber 0 | not in Mono |
+| `TimeOnly` | 8: _ticks 0 | not in Mono |
+| `(byte,DateOnly,TimeOnly)` | 16: Item1 0, Item2 4, Item3 8 | not in Mono |
+| `Range` | 8: Start 0, End 4 | not in Mono |
+| `Index` | 4: _value 0 | not in Mono |
+| `Rune` | 4: _value 0 | not in Mono |
+| `Vector2` | 8: X 0, Y 4 | not in Mono |
+| `Vector3` | 12: X 0, Y 4, Z 8 | not in Mono |
+| `Vector4` | 16: X 0, Y 4, Z 8, W 12 | not in Mono |
+| `Quaternion` | 16: X 0, Y 4, Z 8, W 12 | not in Mono |
+| `Plane` | 16: Normal 0, D 12 | not in Mono |
+| `Matrix3x2` | 24: M11 0, M12 4, M21 8, M22 12, M31 16, M32 20 | not in Mono |
+| `Matrix4x4` | 64: M11 0, M12 4, M13 8, M14 12, M21 16, M22 20, M23 24, M24 28, M31 32, M32 36, M33 40, M34 44, M41 48, M42 52, M43 56, M44 60 | not in Mono |
+| `Vector64<int>` | 8: _00 0 | not in Mono |
+| `Vector128<int>` | 16: _lower 0, _upper 8 | not in Mono |
+| `Vector256<long>` | 32: _lower 0, _upper 16 | not in Mono |
+| `Vector512<long>` | 64: _lower 0, _upper 32 | not in Mono |
 
 </Accordion>
 <Accordion title="Inside Around<T> { byte A; T B; int C; }: size, then the offsets of A, B and C" id="around" value="around">
 
 | Type | CoreCLR x64 | Where it differs |
 | --- | --- | --- |
-| `(int,long)` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86; **24: 4, 8, 0** on .NET Framework x64; **20: 4, 8, 0** on .NET Framework x86 |
-| `(long,int)` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86; **24: 4, 8, 0** on .NET Framework x64; **20: 4, 8, 0** on .NET Framework x86 |
-| `(byte,short)` | 12: 0, 4, 8 | **16: 4, 8, 0** on .NET Framework x64; **12: 4, 8, 0** on .NET Framework x86; **12: 0, 2, 8** on Mono |
-| `(byte,long,int)` | 32: 0, 8, 24 | **24: 0, 4, 20** on CoreCLR x86; **24: 4, 8, 0** on .NET Framework; **40: 0, 8, 32** on Mono |
-| `(byte,int,short)` | 24: 0, 8, 16 | **16: 0, 4, 12** on 32-bit CoreCLR; **16: 4, 8, 0** on .NET Framework; **20: 0, 4, 16** on Mono |
-| `(short,byte,int)` | 24: 0, 8, 16 | **16: 0, 4, 12** on 32-bit CoreCLR and Mono; **16: 4, 8, 0** on .NET Framework |
-| `(int,int)` | 24: 0, 8, 16 | **16: 0, 4, 12** on 32-bit CoreCLR and Mono; **16: 4, 8, 0** on .NET Framework |
-| `(int,int,int)` | 32: 0, 8, 24 | **20: 0, 4, 16** on 32-bit CoreCLR and Mono; **24: 4, 8, 0** on .NET Framework x64; **20: 4, 8, 0** on .NET Framework x86 |
-| `(byte,byte,byte)` | 12: 0, 4, 8 | **16: 4, 8, 0** on .NET Framework x64; **12: 4, 8, 0** on .NET Framework x86; **8: 0, 1, 4** on Mono |
-| `(bool,char,byte)` | 12: 0, 4, 8 | **16: 4, 8, 0** on .NET Framework x64; **12: 4, 8, 0** on .NET Framework x86; **12: 0, 2, 8** on Mono |
-| `(double,float)` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86; **24: 4, 8, 0** on .NET Framework x64; **20: 4, 8, 0** on .NET Framework x86 |
-| `(Tag,long)` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86; **24: 4, 8, 0** on .NET Framework x64; **20: 4, 8, 0** on .NET Framework x86 |
-| `(int,IntPtr)` | 32: 0, 8, 24 | **16: 0, 4, 12** on 32-bit CoreCLR; **24: 4, 8, 0** on .NET Framework x64; **16: 4, 8, 0** on .NET Framework x86 |
-| `(byte,UIntPtr)` | 32: 0, 8, 24 | **16: 0, 4, 12** on 32-bit CoreCLR; **24: 4, 8, 0** on .NET Framework x64; **16: 4, 8, 0** on .NET Framework x86 |
+| `(int,long)` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86 |
+| `(long,int)` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86 |
+| `(byte,short)` | 12: 0, 4, 8 | **12: 0, 2, 8** on Mono |
+| `(byte,long,int)` | 32: 0, 8, 24 | **24: 0, 4, 20** on CoreCLR x86; **40: 0, 8, 32** on Mono |
+| `(byte,int,short)` | 24: 0, 8, 16 | **16: 0, 4, 12** on 32-bit CoreCLR; **20: 0, 4, 16** on Mono |
+| `(short,byte,int)` | 24: 0, 8, 16 | **16: 0, 4, 12** on 32-bit CoreCLR and Mono |
+| `(int,int)` | 24: 0, 8, 16 | **16: 0, 4, 12** on 32-bit CoreCLR and Mono |
+| `(int,int,int)` | 32: 0, 8, 24 | **20: 0, 4, 16** on 32-bit CoreCLR and Mono |
+| `(byte,byte,byte)` | 12: 0, 4, 8 | **8: 0, 1, 4** on Mono |
+| `(bool,char,byte)` | 12: 0, 4, 8 | **12: 0, 2, 8** on Mono |
+| `(double,float)` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86 |
+| `(Tag,long)` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86 |
+| `(int,IntPtr)` | 32: 0, 8, 24 | **16: 0, 4, 12** on 32-bit CoreCLR |
+| `(byte,UIntPtr)` | 32: 0, 8, 24 | **16: 0, 4, 12** on 32-bit CoreCLR |
 | `ValueTuple<long>` | 24: 0, 8, 16 | — |
-| `(int,DateTime)` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86; **24: 4, 8, 0** on .NET Framework x64; **20: 4, 8, 0** on .NET Framework x86 |
-| `(byte,DateTime,int)` | 32: 0, 8, 24 | **24: 0, 4, 20** on CoreCLR x86; **24: 4, 8, 0** on .NET Framework; **40: 0, 8, 32** on Mono |
-| `(int,TimeSpan)` | 32: 0, 8, 24 | **24: 4, 8, 0** on .NET Framework x64; **20: 4, 8, 0** on .NET Framework x86 |
-| `(byte,decimal)` | 40: 0, 8, 32 | **32: 4, 8, 0** on .NET Framework x64; **28: 4, 8, 0** on .NET Framework x86 |
-| `(int,decimal)` | 40: 0, 8, 32 | **32: 4, 8, 0** on .NET Framework x64; **28: 4, 8, 0** on .NET Framework x86 |
-| `(byte,Guid)` | 40: 0, 8, 32 | **28: 0, 4, 24** on 32-bit CoreCLR and Mono; **32: 4, 8, 0** on .NET Framework x64; **28: 4, 8, 0** on .NET Framework x86 |
-| `(byte,int?)` | 32: 0, 8, 24 | **20: 0, 4, 16** on 32-bit CoreCLR and Mono; **24: 4, 8, 0** on .NET Framework x64; **20: 4, 8, 0** on .NET Framework x86 |
-| `(long?,byte)` | 40: 0, 8, 32 | **32: 4, 8, 0** on .NET Framework x64; **28: 4, 8, 0** on .NET Framework x86 |
-| `(byte,(int,long))` | 40: 0, 8, 32 | **24: 0, 4, 20** on CoreCLR x86; **32: 4, 8, 0** on .NET Framework x64; **24: 4, 8, 0** on .NET Framework x86 |
-| `((byte,short),long)` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86; **24: 4, 8, 0** on .NET Framework x64; **20: 4, 8, 0** on .NET Framework x86 |
-| `(int,(byte,short),long)` | 32: 0, 8, 24 | **24: 0, 4, 20** on CoreCLR x86; **32: 4, 8, 0** on .NET Framework x64; **24: 4, 8, 0** on .NET Framework x86 |
-| `(int,KVP<int,long>)` | 40: 0, 8, 32 | **32: 4, 8, 0** on .NET Framework x64; **28: 4, 8, 0** on .NET Framework x86 |
-| `(byte,DateTimeOffset)` | 40: 0, 8, 32 | **24: 0, 4, 20** on CoreCLR x86; **32: 4, 8, 0** on .NET Framework x64; **24: 4, 8, 0** on .NET Framework x86 |
-| `(byte,short,int,long,byte,short,int)` | 40: 0, 8, 32 | **32: 0, 4, 28** on CoreCLR x86; **32: 4, 8, 0** on .NET Framework |
-| `(byte,long,byte,long,byte,long,byte,int)` | 48: 0, 8, 40 | **40: 0, 4, 36** on CoreCLR x86; **48: 4, 8, 0** on .NET Framework x64; **40: 4, 8, 0** on .NET Framework x86; **72: 0, 8, 64** on Mono |
-| `(int,(byte,long),(short,(byte,int)))` | 56: 0, 8, 48 | **36: 0, 4, 32** on CoreCLR x86; **48: 4, 8, 0** on .NET Framework x64; **36: 4, 8, 0** on .NET Framework x86 |
+| `(int,DateTime)` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86 |
+| `(byte,DateTime,int)` | 32: 0, 8, 24 | **24: 0, 4, 20** on CoreCLR x86; **40: 0, 8, 32** on Mono |
+| `(int,TimeSpan)` | 32: 0, 8, 24 | — |
+| `(byte,decimal)` | 40: 0, 8, 32 | — |
+| `(int,decimal)` | 40: 0, 8, 32 | — |
+| `(byte,Guid)` | 40: 0, 8, 32 | **28: 0, 4, 24** on 32-bit CoreCLR and Mono |
+| `(byte,int?)` | 32: 0, 8, 24 | **20: 0, 4, 16** on 32-bit CoreCLR and Mono |
+| `(long?,byte)` | 40: 0, 8, 32 | — |
+| `(byte,(int,long))` | 40: 0, 8, 32 | **24: 0, 4, 20** on CoreCLR x86 |
+| `((byte,short),long)` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86 |
+| `(int,(byte,short),long)` | 32: 0, 8, 24 | **24: 0, 4, 20** on CoreCLR x86 |
+| `(int,KVP<int,long>)` | 40: 0, 8, 32 | — |
+| `(byte,DateTimeOffset)` | 40: 0, 8, 32 | **24: 0, 4, 20** on CoreCLR x86 |
+| `(byte,short,int,long,byte,short,int)` | 40: 0, 8, 32 | **32: 0, 4, 28** on CoreCLR x86 |
+| `(byte,long,byte,long,byte,long,byte,int)` | 48: 0, 8, 40 | **40: 0, 4, 36** on CoreCLR x86; **72: 0, 8, 64** on Mono |
+| `(int,(byte,long),(short,(byte,int)))` | 56: 0, 8, 48 | **36: 0, 4, 32** on CoreCLR x86 |
 | `KVP<int,long>` | 32: 0, 8, 24 | — |
 | `KVP<byte,long>` | 32: 0, 8, 24 | — |
 | `KVP<long,byte>` | 32: 0, 8, 24 | — |
-| `KVP<int,DateTime>` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86; **24: 4, 8, 0** on .NET Framework x64; **20: 4, 8, 0** on .NET Framework x86 |
-| `KVP<byte,(int,long)>` | 40: 0, 8, 32 | **24: 0, 4, 20** on CoreCLR x86; **32: 4, 8, 0** on .NET Framework x64; **24: 4, 8, 0** on .NET Framework x86 |
-| `DateTimeOffset` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86; **24: 4, 8, 0** on .NET Framework x64; **20: 4, 8, 0** on .NET Framework x86 |
-| `DateTime` | 24: 0, 8, 16 | **16: 0, 4, 12** on CoreCLR x86; **16: 4, 8, 0** on .NET Framework |
+| `KVP<int,DateTime>` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86 |
+| `KVP<byte,(int,long)>` | 40: 0, 8, 32 | **24: 0, 4, 20** on CoreCLR x86 |
+| `DateTimeOffset` | 32: 0, 8, 24 | **20: 0, 4, 16** on CoreCLR x86 |
+| `DateTime` | 24: 0, 8, 16 | **16: 0, 4, 12** on CoreCLR x86 |
 | `TimeSpan` | 24: 0, 8, 16 | — |
-| `decimal` | 32: 0, 8, 24 | **24: 0, 4, 20** on .NET Framework |
+| `decimal` | 32: 0, 8, 24 | — |
 | `Guid` | 24: 0, 4, 20 | — |
 | `int?` | 16: 0, 4, 12 | — |
 | `long?` | 32: 0, 8, 24 | — |
-| `(int,long)?` | 40: 0, 8, 32 | **24: 0, 4, 20** on CoreCLR x86; **32: 4, 8, 0** on .NET Framework x64; **24: 4, 8, 0** on .NET Framework x86 |
-| `DateTimeOffset?` | 40: 0, 8, 32 | **24: 0, 4, 20** on CoreCLR x86; **32: 4, 8, 0** on .NET Framework x64; **24: 4, 8, 0** on .NET Framework x86 |
-| `IntPtr` | 24: 0, 8, 16 | **12: 0, 4, 8** on 32-bit CoreCLR and .NET Framework x86 |
+| `(int,long)?` | 40: 0, 8, 32 | **24: 0, 4, 20** on CoreCLR x86 |
+| `DateTimeOffset?` | 40: 0, 8, 32 | **24: 0, 4, 20** on CoreCLR x86 |
+| `IntPtr` | 24: 0, 8, 16 | **12: 0, 4, 8** on 32-bit CoreCLR |
 | `Complex` | 32: 0, 8, 24 | — |
-| `Int128` | 48: 0, 16, 32 | **32: 0, 8, 24** on CoreCLR Arm32; not in .NET Framework or Mono |
-| `(byte,Int128)` | 64: 0, 16, 48 | **40: 0, 8, 32** on CoreCLR Arm32; not in .NET Framework or Mono |
-| `Half` | 8: 0, 2, 4 | not in .NET Framework or Mono |
-| `(byte,Half)` | 12: 0, 4, 8 | not in .NET Framework or Mono |
-| `DateOnly` | 12: 0, 4, 8 | not in .NET Framework or Mono |
-| `TimeOnly` | 24: 0, 8, 16 | not in .NET Framework or Mono |
-| `(byte,DateOnly,TimeOnly)` | 32: 0, 8, 24 | not in .NET Framework or Mono |
-| `Range` | 16: 0, 4, 12 | not in .NET Framework or Mono |
-| `Index` | 12: 0, 4, 8 | not in .NET Framework or Mono |
-| `Rune` | 12: 0, 4, 8 | not in .NET Framework or Mono |
-| `Vector2` | 16: 0, 4, 12 | not in .NET Framework or Mono |
-| `Vector3` | 20: 0, 4, 16 | not in .NET Framework or Mono |
-| `Vector4` | 24: 0, 4, 20 | not in .NET Framework or Mono |
-| `Quaternion` | 24: 0, 4, 20 | not in .NET Framework or Mono |
-| `Plane` | 24: 0, 4, 20 | not in .NET Framework or Mono |
-| `Matrix3x2` | 32: 0, 4, 28 | not in .NET Framework or Mono |
-| `Matrix4x4` | 72: 0, 4, 68 | not in .NET Framework or Mono |
-| `Vector64<int>` | 24: 0, 8, 16 | not in .NET Framework or Mono |
-| `Vector128<int>` | 48: 0, 16, 32 | **32: 0, 8, 24** on CoreCLR Arm32; not in .NET Framework or Mono |
-| `Vector256<long>` | 96: 0, 32, 64 | **64: 0, 16, 48** on CoreCLR Arm64; **48: 0, 8, 40** on CoreCLR Arm32; not in .NET Framework or Mono |
-| `Vector512<long>` | 192: 0, 64, 128 | **96: 0, 16, 80** on CoreCLR Arm64; **80: 0, 8, 72** on CoreCLR Arm32; not in .NET Framework or Mono |
+| `Int128` | 48: 0, 16, 32 | **32: 0, 8, 24** on CoreCLR Arm32; not in Mono |
+| `(byte,Int128)` | 64: 0, 16, 48 | **40: 0, 8, 32** on CoreCLR Arm32; not in Mono |
+| `Half` | 8: 0, 2, 4 | not in Mono |
+| `(byte,Half)` | 12: 0, 4, 8 | not in Mono |
+| `DateOnly` | 12: 0, 4, 8 | not in Mono |
+| `TimeOnly` | 24: 0, 8, 16 | not in Mono |
+| `(byte,DateOnly,TimeOnly)` | 32: 0, 8, 24 | not in Mono |
+| `Range` | 16: 0, 4, 12 | not in Mono |
+| `Index` | 12: 0, 4, 8 | not in Mono |
+| `Rune` | 12: 0, 4, 8 | not in Mono |
+| `Vector2` | 16: 0, 4, 12 | not in Mono |
+| `Vector3` | 20: 0, 4, 16 | not in Mono |
+| `Vector4` | 24: 0, 4, 20 | not in Mono |
+| `Quaternion` | 24: 0, 4, 20 | not in Mono |
+| `Plane` | 24: 0, 4, 20 | not in Mono |
+| `Matrix3x2` | 32: 0, 4, 28 | not in Mono |
+| `Matrix4x4` | 72: 0, 4, 68 | not in Mono |
+| `Vector64<int>` | 24: 0, 8, 16 | not in Mono |
+| `Vector128<int>` | 48: 0, 16, 32 | **32: 0, 8, 24** on CoreCLR Arm32; not in Mono |
+| `Vector256<long>` | 96: 0, 32, 64 | **64: 0, 16, 48** on CoreCLR Arm64; **48: 0, 8, 40** on CoreCLR Arm32; not in Mono |
+| `Vector512<long>` | 192: 0, 64, 128 | **96: 0, 16, 80** on CoreCLR Arm64; **80: 0, 8, 72** on CoreCLR Arm32; not in Mono |
 
 </Accordion>
 <Accordion title="Unity: Mono and IL2CPP" id="unity" value="unity">

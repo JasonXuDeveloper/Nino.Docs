@@ -144,155 +144,155 @@ public sealed partial class Particle
 
 ## 实测布局 [#measured-layouts]
 
-由 Nino 的 CI 实测（运行 41280617045，`tests/Nino.RuntimeTests`）：Linux x64 和 Arm64、Windows x86、Linux Arm32（qemu 下）上的 .NET 10，64 位和 32 位的 .NET Framework 4.8，Linux x64 和 Arm64 上的 Mono 6.14。表里 .NET Framework 的数据是 4.0.0-rc.11 之前最后一次实测的结果：Nino 已经不能在微软的 .NET Framework 4.x 上运行，CI 也不再测它。CoreCLR x64 一列就是规范布局，只有两处例外与运行时无关：`DateTimeOffset` 按 .NET 10 的布局，`nint`/`nuint` 一律 8 字节。最后一列只列出布局与 CoreCLR x64 不同（**粗体**：大小，然后按字段顺序列出偏移）或没有这个类型的运行时；没列出的运行时，大小和字段偏移都与 CoreCLR x64 相同，— 表示所有运行时都相同。32 位 CoreCLR 指 x86 和 Arm32，Mono 指 x64 和 Arm64 上的 Mono，.NET Framework 指它的 64 位和 32 位运行。各运行时的字段名不同，看偏移即可。表中每个运行时写出、读入的每种类型的字节都和 CoreCLR x64 一致，由同一次 CI 运行检查。
+由 Nino 的 CI 实测（运行 41280617045，`tests/Nino.RuntimeTests`）：Linux x64 和 Arm64、Windows x86、Linux Arm32（qemu 下）上的 .NET 10，Linux x64 和 Arm64 上的 Mono 6.14。CoreCLR x64 一列就是规范布局，只有两处例外与运行时无关：`DateTimeOffset` 按 .NET 10 的布局，`nint`/`nuint` 一律 8 字节。最后一列只列出布局与 CoreCLR x64 不同（**粗体**：大小，然后按字段顺序列出偏移）或没有这个类型的运行时；没列出的运行时，大小和字段偏移都与 CoreCLR x64 相同，— 表示所有运行时都相同。32 位 CoreCLR 指 x86 和 Arm32，Mono 指 x64 和 Arm64 上的 Mono。各运行时的字段名不同，看偏移即可。表中每个运行时写出、读入的每种类型的字节都和 CoreCLR x64 一致，由同一次 CI 运行检查。
 
 <Accordions type="multiple">
 <Accordion title="单个类型：大小，然后是每个字段的偏移" id="each-type" value="each-type">
 
 | 类型 | CoreCLR x64 | 哪里不同 |
 | --- | --- | --- |
-| `(int,long)` | 16: Item1 8, Item2 0 | CoreCLR x86 和 .NET Framework x86 上为 **12: 8, 0**；Mono 上为 **16: 0, 8** |
-| `(long,int)` | 16: Item1 0, Item2 8 | CoreCLR x86 和 .NET Framework x86 上为 **12: 0, 8** |
+| `(int,long)` | 16: Item1 8, Item2 0 | CoreCLR x86 上为 **12: 8, 0**；Mono 上为 **16: 0, 8** |
+| `(long,int)` | 16: Item1 0, Item2 8 | CoreCLR x86 上为 **12: 0, 8** |
 | `(byte,short)` | 4: Item1 2, Item2 0 | Mono 上为 **4: 0, 2** |
 | `(byte,long,int)` | 16: Item1 12, Item2 0, Item3 8 | Mono 上为 **24: 0, 8, 16** |
 | `(byte,int,short)` | 8: Item1 6, Item2 0, Item3 4 | Mono 上为 **12: 0, 4, 8** |
 | `(short,byte,int)` | 8: Item1 4, Item2 6, Item3 0 | Mono 上为 **8: 0, 2, 4** |
 | `(int,int)` | 8: Item1 0, Item2 4 | — |
-| `(int,int,int)` | 16: Item1 0, Item2 4, Item3 8 | 32 位 CoreCLR、.NET Framework x86 和 Mono 上为 **12: 0, 4, 8** |
+| `(int,int,int)` | 16: Item1 0, Item2 4, Item3 8 | 32 位 CoreCLR 和 Mono 上为 **12: 0, 4, 8** |
 | `(byte,byte,byte)` | 4: Item1 0, Item2 1, Item3 2 | Mono 上为 **3: 0, 1, 2** |
 | `(bool,char,byte)` | 4: Item1 2, Item2 0, Item3 3 | Mono 上为 **6: 0, 2, 4** |
-| `(double,float)` | 16: Item1 0, Item2 8 | CoreCLR x86 和 .NET Framework x86 上为 **12: 0, 8** |
-| `(Tag,long)` | 16: Item1 8, Item2 0 | CoreCLR x86 和 .NET Framework x86 上为 **12: 8, 0**；Mono 上为 **16: 0, 8** |
-| `(int,IntPtr)` | 16: Item1 8, Item2 0 | 32 位 CoreCLR 和 .NET Framework x86 上为 **8: 0, 4**；Mono 上为 **16: 0, 8** |
-| `(byte,UIntPtr)` | 16: Item1 8, Item2 0 | 32 位 CoreCLR 和 .NET Framework x86 上为 **8: 4, 0**；Mono 上为 **16: 0, 8** |
+| `(double,float)` | 16: Item1 0, Item2 8 | CoreCLR x86 上为 **12: 0, 8** |
+| `(Tag,long)` | 16: Item1 8, Item2 0 | CoreCLR x86 上为 **12: 8, 0**；Mono 上为 **16: 0, 8** |
+| `(int,IntPtr)` | 16: Item1 8, Item2 0 | 32 位 CoreCLR 上为 **8: 0, 4**；Mono 上为 **16: 0, 8** |
+| `(byte,UIntPtr)` | 16: Item1 8, Item2 0 | 32 位 CoreCLR 上为 **8: 4, 0**；Mono 上为 **16: 0, 8** |
 | `ValueTuple<long>` | 8: Item1 0 | — |
-| `(int,DateTime)` | 16: Item1 0, Item2 8 | CoreCLR x86 和 .NET Framework x86 上为 **12: 0, 4** |
+| `(int,DateTime)` | 16: Item1 0, Item2 8 | CoreCLR x86 上为 **12: 0, 4** |
 | `(byte,DateTime,int)` | 16: Item1 4, Item2 8, Item3 0 | Mono 上为 **24: 0, 8, 16** |
-| `(int,TimeSpan)` | 16: Item1 0, Item2 8 | .NET Framework x86 上为 **12: 0, 4** |
-| `(byte,decimal)` | 24: Item1 0, Item2 8 | .NET Framework x86 上为 **20: 0, 4** |
-| `(int,decimal)` | 24: Item1 0, Item2 8 | .NET Framework x86 上为 **20: 0, 4** |
-| `(byte,Guid)` | 24: Item1 0, Item2 4 | 32 位 CoreCLR、.NET Framework x86 和 Mono 上为 **20: 0, 4**；.NET Framework x64 上为 **24: 0, 8** |
-| `(byte,int?)` | 16: Item1 0, Item2 4 | 32 位 CoreCLR、.NET Framework x86 和 Mono 上为 **12: 0, 4**；.NET Framework x64 上为 **16: 0, 8** |
-| `(long?,byte)` | 24: Item1 8, Item2 0 | .NET Framework x86 上为 **20: 4, 0**；Mono 上为 **24: 0, 16** |
-| `(byte,(int,long))` | 24: Item1 0, Item2 8 | CoreCLR x86 和 .NET Framework x86 上为 **16: 0, 4** |
-| `((byte,short),long)` | 16: Item1 8, Item2 0 | CoreCLR x86 和 .NET Framework x86 上为 **12: 8, 0**；Mono 上为 **16: 0, 8** |
-| `(int,(byte,short),long)` | 16: Item1 8, Item2 12, Item3 0 | .NET Framework x64 上为 **24: 8, 16, 0**；Mono 上为 **16: 0, 4, 8** |
-| `(int,KVP<int,long>)` | 24: Item1 0, Item2 8 | .NET Framework x86 上为 **20: 0, 4** |
-| `(byte,DateTimeOffset)` | 24: Item1 0, Item2 8 | CoreCLR x86 和 .NET Framework x86 上为 **16: 0, 4** |
+| `(int,TimeSpan)` | 16: Item1 0, Item2 8 | — |
+| `(byte,decimal)` | 24: Item1 0, Item2 8 | — |
+| `(int,decimal)` | 24: Item1 0, Item2 8 | — |
+| `(byte,Guid)` | 24: Item1 0, Item2 4 | 32 位 CoreCLR 和 Mono 上为 **20: 0, 4** |
+| `(byte,int?)` | 16: Item1 0, Item2 4 | 32 位 CoreCLR 和 Mono 上为 **12: 0, 4** |
+| `(long?,byte)` | 24: Item1 8, Item2 0 | Mono 上为 **24: 0, 16** |
+| `(byte,(int,long))` | 24: Item1 0, Item2 8 | CoreCLR x86 上为 **16: 0, 4** |
+| `((byte,short),long)` | 16: Item1 8, Item2 0 | CoreCLR x86 上为 **12: 8, 0**；Mono 上为 **16: 0, 8** |
+| `(int,(byte,short),long)` | 16: Item1 8, Item2 12, Item3 0 | Mono 上为 **16: 0, 4, 8** |
+| `(int,KVP<int,long>)` | 24: Item1 0, Item2 8 | — |
+| `(byte,DateTimeOffset)` | 24: Item1 0, Item2 8 | CoreCLR x86 上为 **16: 0, 4** |
 | `(byte,short,int,long,byte,short,int)` | 24: Item1 20, Item2 16, Item3 8, Item4 0, Item5 21, Item6 18, Item7 12 | Mono 上为 **24: 0, 2, 4, 8, 16, 18, 20** |
-| `(byte,long,byte,long,byte,long,byte,int)` | 32: Item1 24, Item2 0, Item3 25, Item4 8, Item5 26, Item6 16, Item7 27, Rest 28 | .NET Framework x64 上为 **40: 24, 0, 25, 8, 26, 16, 27, 32**；Mono 上为 **56: 0, 8, 16, 24, 32, 40, 48, 52** |
-| `(int,(byte,long),(short,(byte,int)))` | 40: Item1 0, Item2 8, Item3 24 | CoreCLR x86 和 .NET Framework x86 上为 **28: 0, 4, 16** |
+| `(byte,long,byte,long,byte,long,byte,int)` | 32: Item1 24, Item2 0, Item3 25, Item4 8, Item5 26, Item6 16, Item7 27, Rest 28 | Mono 上为 **56: 0, 8, 16, 24, 32, 40, 48, 52** |
+| `(int,(byte,long),(short,(byte,int)))` | 40: Item1 0, Item2 8, Item3 24 | CoreCLR x86 上为 **28: 0, 4, 16** |
 | `KVP<int,long>` | 16: key 0, value 8 | — |
 | `KVP<byte,long>` | 16: key 0, value 8 | — |
 | `KVP<long,byte>` | 16: key 0, value 8 | — |
-| `KVP<int,DateTime>` | 16: key 0, value 8 | CoreCLR x86 和 .NET Framework x86 上为 **12: 0, 4** |
-| `KVP<byte,(int,long)>` | 24: key 0, value 8 | CoreCLR x86 和 .NET Framework x86 上为 **16: 0, 4** |
-| `DateTimeOffset` | 16: _dateTime 8, _offsetMinutes 0 | CoreCLR x86 和 .NET Framework x86 上为 **12: 4, 0**；Mono 上为 **16: 0, 8** |
+| `KVP<int,DateTime>` | 16: key 0, value 8 | CoreCLR x86 上为 **12: 0, 4** |
+| `KVP<byte,(int,long)>` | 24: key 0, value 8 | CoreCLR x86 上为 **16: 0, 4** |
+| `DateTimeOffset` | 16: _dateTime 8, _offsetMinutes 0 | CoreCLR x86 上为 **12: 4, 0**；Mono 上为 **16: 0, 8** |
 | `DateTime` | 8: _dateData 0 | — |
 | `TimeSpan` | 8: _ticks 0 | — |
-| `decimal` | 16: _flags 0, _hi32 4, _lo64 8 | .NET Framework 上为 **16: 0, 4, 8, 12**；Mono 上为 **16: 0, 4, 8, 12, 8** |
+| `decimal` | 16: _flags 0, _hi32 4, _lo64 8 | Mono 上为 **16: 0, 4, 8, 12, 8** |
 | `Guid` | 16: _a 0, _b 4, _c 6, _d 8, _e 9, _f 10, _g 11, _h 12, _i 13, _j 14, _k 15 | — |
 | `int?` | 8: hasValue 0, value 4 | — |
 | `long?` | 16: hasValue 0, value 8 | — |
-| `(int,long)?` | 24: hasValue 0, value 8 | CoreCLR x86 和 .NET Framework x86 上为 **16: 0, 4** |
-| `DateTimeOffset?` | 24: hasValue 0, value 8 | CoreCLR x86 和 .NET Framework x86 上为 **16: 0, 4** |
-| `IntPtr` | 8: _value 0 | 32 位 CoreCLR 上为 **4: 0**；.NET Framework x86 上为 **4** |
+| `(int,long)?` | 24: hasValue 0, value 8 | CoreCLR x86 上为 **16: 0, 4** |
+| `DateTimeOffset?` | 24: hasValue 0, value 8 | CoreCLR x86 上为 **16: 0, 4** |
+| `IntPtr` | 8: _value 0 | 32 位 CoreCLR 上为 **4: 0** |
 | `Complex` | 16: m_real 0, m_imaginary 8 | — |
-| `Int128` | 16: _lower 0, _upper 8 | .NET Framework 和 Mono 没有这个类型 |
-| `(byte,Int128)` | 32: Item1 0, Item2 16 | CoreCLR Arm32 上为 **24: 0, 8**；.NET Framework 和 Mono 没有这个类型 |
-| `Half` | 2: _value 0 | .NET Framework 和 Mono 没有这个类型 |
-| `(byte,Half)` | 4: Item1 0, Item2 2 | .NET Framework 和 Mono 没有这个类型 |
-| `DateOnly` | 4: _dayNumber 0 | .NET Framework 和 Mono 没有这个类型 |
-| `TimeOnly` | 8: _ticks 0 | .NET Framework 和 Mono 没有这个类型 |
-| `(byte,DateOnly,TimeOnly)` | 16: Item1 0, Item2 4, Item3 8 | .NET Framework 和 Mono 没有这个类型 |
-| `Range` | 8: Start 0, End 4 | .NET Framework 和 Mono 没有这个类型 |
-| `Index` | 4: _value 0 | .NET Framework 和 Mono 没有这个类型 |
-| `Rune` | 4: _value 0 | .NET Framework 和 Mono 没有这个类型 |
-| `Vector2` | 8: X 0, Y 4 | .NET Framework 和 Mono 没有这个类型 |
-| `Vector3` | 12: X 0, Y 4, Z 8 | .NET Framework 和 Mono 没有这个类型 |
-| `Vector4` | 16: X 0, Y 4, Z 8, W 12 | .NET Framework 和 Mono 没有这个类型 |
-| `Quaternion` | 16: X 0, Y 4, Z 8, W 12 | .NET Framework 和 Mono 没有这个类型 |
-| `Plane` | 16: Normal 0, D 12 | .NET Framework 和 Mono 没有这个类型 |
-| `Matrix3x2` | 24: M11 0, M12 4, M21 8, M22 12, M31 16, M32 20 | .NET Framework 和 Mono 没有这个类型 |
-| `Matrix4x4` | 64: M11 0, M12 4, M13 8, M14 12, M21 16, M22 20, M23 24, M24 28, M31 32, M32 36, M33 40, M34 44, M41 48, M42 52, M43 56, M44 60 | .NET Framework 和 Mono 没有这个类型 |
-| `Vector64<int>` | 8: _00 0 | .NET Framework 和 Mono 没有这个类型 |
-| `Vector128<int>` | 16: _lower 0, _upper 8 | .NET Framework 和 Mono 没有这个类型 |
-| `Vector256<long>` | 32: _lower 0, _upper 16 | .NET Framework 和 Mono 没有这个类型 |
-| `Vector512<long>` | 64: _lower 0, _upper 32 | .NET Framework 和 Mono 没有这个类型 |
+| `Int128` | 16: _lower 0, _upper 8 | Mono 没有这个类型 |
+| `(byte,Int128)` | 32: Item1 0, Item2 16 | CoreCLR Arm32 上为 **24: 0, 8**；Mono 没有这个类型 |
+| `Half` | 2: _value 0 | Mono 没有这个类型 |
+| `(byte,Half)` | 4: Item1 0, Item2 2 | Mono 没有这个类型 |
+| `DateOnly` | 4: _dayNumber 0 | Mono 没有这个类型 |
+| `TimeOnly` | 8: _ticks 0 | Mono 没有这个类型 |
+| `(byte,DateOnly,TimeOnly)` | 16: Item1 0, Item2 4, Item3 8 | Mono 没有这个类型 |
+| `Range` | 8: Start 0, End 4 | Mono 没有这个类型 |
+| `Index` | 4: _value 0 | Mono 没有这个类型 |
+| `Rune` | 4: _value 0 | Mono 没有这个类型 |
+| `Vector2` | 8: X 0, Y 4 | Mono 没有这个类型 |
+| `Vector3` | 12: X 0, Y 4, Z 8 | Mono 没有这个类型 |
+| `Vector4` | 16: X 0, Y 4, Z 8, W 12 | Mono 没有这个类型 |
+| `Quaternion` | 16: X 0, Y 4, Z 8, W 12 | Mono 没有这个类型 |
+| `Plane` | 16: Normal 0, D 12 | Mono 没有这个类型 |
+| `Matrix3x2` | 24: M11 0, M12 4, M21 8, M22 12, M31 16, M32 20 | Mono 没有这个类型 |
+| `Matrix4x4` | 64: M11 0, M12 4, M13 8, M14 12, M21 16, M22 20, M23 24, M24 28, M31 32, M32 36, M33 40, M34 44, M41 48, M42 52, M43 56, M44 60 | Mono 没有这个类型 |
+| `Vector64<int>` | 8: _00 0 | Mono 没有这个类型 |
+| `Vector128<int>` | 16: _lower 0, _upper 8 | Mono 没有这个类型 |
+| `Vector256<long>` | 32: _lower 0, _upper 16 | Mono 没有这个类型 |
+| `Vector512<long>` | 64: _lower 0, _upper 32 | Mono 没有这个类型 |
 
 </Accordion>
 <Accordion title="放进 Around<T> { byte A; T B; int C; }：大小，然后是 A、B、C 的偏移" id="around" value="around">
 
 | 类型 | CoreCLR x64 | 哪里不同 |
 | --- | --- | --- |
-| `(int,long)` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16**；.NET Framework x64 上为 **24: 4, 8, 0**；.NET Framework x86 上为 **20: 4, 8, 0** |
-| `(long,int)` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16**；.NET Framework x64 上为 **24: 4, 8, 0**；.NET Framework x86 上为 **20: 4, 8, 0** |
-| `(byte,short)` | 12: 0, 4, 8 | .NET Framework x64 上为 **16: 4, 8, 0**；.NET Framework x86 上为 **12: 4, 8, 0**；Mono 上为 **12: 0, 2, 8** |
-| `(byte,long,int)` | 32: 0, 8, 24 | CoreCLR x86 上为 **24: 0, 4, 20**；.NET Framework 上为 **24: 4, 8, 0**；Mono 上为 **40: 0, 8, 32** |
-| `(byte,int,short)` | 24: 0, 8, 16 | 32 位 CoreCLR 上为 **16: 0, 4, 12**；.NET Framework 上为 **16: 4, 8, 0**；Mono 上为 **20: 0, 4, 16** |
-| `(short,byte,int)` | 24: 0, 8, 16 | 32 位 CoreCLR 和 Mono 上为 **16: 0, 4, 12**；.NET Framework 上为 **16: 4, 8, 0** |
-| `(int,int)` | 24: 0, 8, 16 | 32 位 CoreCLR 和 Mono 上为 **16: 0, 4, 12**；.NET Framework 上为 **16: 4, 8, 0** |
-| `(int,int,int)` | 32: 0, 8, 24 | 32 位 CoreCLR 和 Mono 上为 **20: 0, 4, 16**；.NET Framework x64 上为 **24: 4, 8, 0**；.NET Framework x86 上为 **20: 4, 8, 0** |
-| `(byte,byte,byte)` | 12: 0, 4, 8 | .NET Framework x64 上为 **16: 4, 8, 0**；.NET Framework x86 上为 **12: 4, 8, 0**；Mono 上为 **8: 0, 1, 4** |
-| `(bool,char,byte)` | 12: 0, 4, 8 | .NET Framework x64 上为 **16: 4, 8, 0**；.NET Framework x86 上为 **12: 4, 8, 0**；Mono 上为 **12: 0, 2, 8** |
-| `(double,float)` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16**；.NET Framework x64 上为 **24: 4, 8, 0**；.NET Framework x86 上为 **20: 4, 8, 0** |
-| `(Tag,long)` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16**；.NET Framework x64 上为 **24: 4, 8, 0**；.NET Framework x86 上为 **20: 4, 8, 0** |
-| `(int,IntPtr)` | 32: 0, 8, 24 | 32 位 CoreCLR 上为 **16: 0, 4, 12**；.NET Framework x64 上为 **24: 4, 8, 0**；.NET Framework x86 上为 **16: 4, 8, 0** |
-| `(byte,UIntPtr)` | 32: 0, 8, 24 | 32 位 CoreCLR 上为 **16: 0, 4, 12**；.NET Framework x64 上为 **24: 4, 8, 0**；.NET Framework x86 上为 **16: 4, 8, 0** |
+| `(int,long)` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16** |
+| `(long,int)` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16** |
+| `(byte,short)` | 12: 0, 4, 8 | Mono 上为 **12: 0, 2, 8** |
+| `(byte,long,int)` | 32: 0, 8, 24 | CoreCLR x86 上为 **24: 0, 4, 20**；Mono 上为 **40: 0, 8, 32** |
+| `(byte,int,short)` | 24: 0, 8, 16 | 32 位 CoreCLR 上为 **16: 0, 4, 12**；Mono 上为 **20: 0, 4, 16** |
+| `(short,byte,int)` | 24: 0, 8, 16 | 32 位 CoreCLR 和 Mono 上为 **16: 0, 4, 12** |
+| `(int,int)` | 24: 0, 8, 16 | 32 位 CoreCLR 和 Mono 上为 **16: 0, 4, 12** |
+| `(int,int,int)` | 32: 0, 8, 24 | 32 位 CoreCLR 和 Mono 上为 **20: 0, 4, 16** |
+| `(byte,byte,byte)` | 12: 0, 4, 8 | Mono 上为 **8: 0, 1, 4** |
+| `(bool,char,byte)` | 12: 0, 4, 8 | Mono 上为 **12: 0, 2, 8** |
+| `(double,float)` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16** |
+| `(Tag,long)` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16** |
+| `(int,IntPtr)` | 32: 0, 8, 24 | 32 位 CoreCLR 上为 **16: 0, 4, 12** |
+| `(byte,UIntPtr)` | 32: 0, 8, 24 | 32 位 CoreCLR 上为 **16: 0, 4, 12** |
 | `ValueTuple<long>` | 24: 0, 8, 16 | — |
-| `(int,DateTime)` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16**；.NET Framework x64 上为 **24: 4, 8, 0**；.NET Framework x86 上为 **20: 4, 8, 0** |
-| `(byte,DateTime,int)` | 32: 0, 8, 24 | CoreCLR x86 上为 **24: 0, 4, 20**；.NET Framework 上为 **24: 4, 8, 0**；Mono 上为 **40: 0, 8, 32** |
-| `(int,TimeSpan)` | 32: 0, 8, 24 | .NET Framework x64 上为 **24: 4, 8, 0**；.NET Framework x86 上为 **20: 4, 8, 0** |
-| `(byte,decimal)` | 40: 0, 8, 32 | .NET Framework x64 上为 **32: 4, 8, 0**；.NET Framework x86 上为 **28: 4, 8, 0** |
-| `(int,decimal)` | 40: 0, 8, 32 | .NET Framework x64 上为 **32: 4, 8, 0**；.NET Framework x86 上为 **28: 4, 8, 0** |
-| `(byte,Guid)` | 40: 0, 8, 32 | 32 位 CoreCLR 和 Mono 上为 **28: 0, 4, 24**；.NET Framework x64 上为 **32: 4, 8, 0**；.NET Framework x86 上为 **28: 4, 8, 0** |
-| `(byte,int?)` | 32: 0, 8, 24 | 32 位 CoreCLR 和 Mono 上为 **20: 0, 4, 16**；.NET Framework x64 上为 **24: 4, 8, 0**；.NET Framework x86 上为 **20: 4, 8, 0** |
-| `(long?,byte)` | 40: 0, 8, 32 | .NET Framework x64 上为 **32: 4, 8, 0**；.NET Framework x86 上为 **28: 4, 8, 0** |
-| `(byte,(int,long))` | 40: 0, 8, 32 | CoreCLR x86 上为 **24: 0, 4, 20**；.NET Framework x64 上为 **32: 4, 8, 0**；.NET Framework x86 上为 **24: 4, 8, 0** |
-| `((byte,short),long)` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16**；.NET Framework x64 上为 **24: 4, 8, 0**；.NET Framework x86 上为 **20: 4, 8, 0** |
-| `(int,(byte,short),long)` | 32: 0, 8, 24 | CoreCLR x86 上为 **24: 0, 4, 20**；.NET Framework x64 上为 **32: 4, 8, 0**；.NET Framework x86 上为 **24: 4, 8, 0** |
-| `(int,KVP<int,long>)` | 40: 0, 8, 32 | .NET Framework x64 上为 **32: 4, 8, 0**；.NET Framework x86 上为 **28: 4, 8, 0** |
-| `(byte,DateTimeOffset)` | 40: 0, 8, 32 | CoreCLR x86 上为 **24: 0, 4, 20**；.NET Framework x64 上为 **32: 4, 8, 0**；.NET Framework x86 上为 **24: 4, 8, 0** |
-| `(byte,short,int,long,byte,short,int)` | 40: 0, 8, 32 | CoreCLR x86 上为 **32: 0, 4, 28**；.NET Framework 上为 **32: 4, 8, 0** |
-| `(byte,long,byte,long,byte,long,byte,int)` | 48: 0, 8, 40 | CoreCLR x86 上为 **40: 0, 4, 36**；.NET Framework x64 上为 **48: 4, 8, 0**；.NET Framework x86 上为 **40: 4, 8, 0**；Mono 上为 **72: 0, 8, 64** |
-| `(int,(byte,long),(short,(byte,int)))` | 56: 0, 8, 48 | CoreCLR x86 上为 **36: 0, 4, 32**；.NET Framework x64 上为 **48: 4, 8, 0**；.NET Framework x86 上为 **36: 4, 8, 0** |
+| `(int,DateTime)` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16** |
+| `(byte,DateTime,int)` | 32: 0, 8, 24 | CoreCLR x86 上为 **24: 0, 4, 20**；Mono 上为 **40: 0, 8, 32** |
+| `(int,TimeSpan)` | 32: 0, 8, 24 | — |
+| `(byte,decimal)` | 40: 0, 8, 32 | — |
+| `(int,decimal)` | 40: 0, 8, 32 | — |
+| `(byte,Guid)` | 40: 0, 8, 32 | 32 位 CoreCLR 和 Mono 上为 **28: 0, 4, 24** |
+| `(byte,int?)` | 32: 0, 8, 24 | 32 位 CoreCLR 和 Mono 上为 **20: 0, 4, 16** |
+| `(long?,byte)` | 40: 0, 8, 32 | — |
+| `(byte,(int,long))` | 40: 0, 8, 32 | CoreCLR x86 上为 **24: 0, 4, 20** |
+| `((byte,short),long)` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16** |
+| `(int,(byte,short),long)` | 32: 0, 8, 24 | CoreCLR x86 上为 **24: 0, 4, 20** |
+| `(int,KVP<int,long>)` | 40: 0, 8, 32 | — |
+| `(byte,DateTimeOffset)` | 40: 0, 8, 32 | CoreCLR x86 上为 **24: 0, 4, 20** |
+| `(byte,short,int,long,byte,short,int)` | 40: 0, 8, 32 | CoreCLR x86 上为 **32: 0, 4, 28** |
+| `(byte,long,byte,long,byte,long,byte,int)` | 48: 0, 8, 40 | CoreCLR x86 上为 **40: 0, 4, 36**；Mono 上为 **72: 0, 8, 64** |
+| `(int,(byte,long),(short,(byte,int)))` | 56: 0, 8, 48 | CoreCLR x86 上为 **36: 0, 4, 32** |
 | `KVP<int,long>` | 32: 0, 8, 24 | — |
 | `KVP<byte,long>` | 32: 0, 8, 24 | — |
 | `KVP<long,byte>` | 32: 0, 8, 24 | — |
-| `KVP<int,DateTime>` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16**；.NET Framework x64 上为 **24: 4, 8, 0**；.NET Framework x86 上为 **20: 4, 8, 0** |
-| `KVP<byte,(int,long)>` | 40: 0, 8, 32 | CoreCLR x86 上为 **24: 0, 4, 20**；.NET Framework x64 上为 **32: 4, 8, 0**；.NET Framework x86 上为 **24: 4, 8, 0** |
-| `DateTimeOffset` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16**；.NET Framework x64 上为 **24: 4, 8, 0**；.NET Framework x86 上为 **20: 4, 8, 0** |
-| `DateTime` | 24: 0, 8, 16 | CoreCLR x86 上为 **16: 0, 4, 12**；.NET Framework 上为 **16: 4, 8, 0** |
+| `KVP<int,DateTime>` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16** |
+| `KVP<byte,(int,long)>` | 40: 0, 8, 32 | CoreCLR x86 上为 **24: 0, 4, 20** |
+| `DateTimeOffset` | 32: 0, 8, 24 | CoreCLR x86 上为 **20: 0, 4, 16** |
+| `DateTime` | 24: 0, 8, 16 | CoreCLR x86 上为 **16: 0, 4, 12** |
 | `TimeSpan` | 24: 0, 8, 16 | — |
-| `decimal` | 32: 0, 8, 24 | .NET Framework 上为 **24: 0, 4, 20** |
+| `decimal` | 32: 0, 8, 24 | — |
 | `Guid` | 24: 0, 4, 20 | — |
 | `int?` | 16: 0, 4, 12 | — |
 | `long?` | 32: 0, 8, 24 | — |
-| `(int,long)?` | 40: 0, 8, 32 | CoreCLR x86 上为 **24: 0, 4, 20**；.NET Framework x64 上为 **32: 4, 8, 0**；.NET Framework x86 上为 **24: 4, 8, 0** |
-| `DateTimeOffset?` | 40: 0, 8, 32 | CoreCLR x86 上为 **24: 0, 4, 20**；.NET Framework x64 上为 **32: 4, 8, 0**；.NET Framework x86 上为 **24: 4, 8, 0** |
-| `IntPtr` | 24: 0, 8, 16 | 32 位 CoreCLR 和 .NET Framework x86 上为 **12: 0, 4, 8** |
+| `(int,long)?` | 40: 0, 8, 32 | CoreCLR x86 上为 **24: 0, 4, 20** |
+| `DateTimeOffset?` | 40: 0, 8, 32 | CoreCLR x86 上为 **24: 0, 4, 20** |
+| `IntPtr` | 24: 0, 8, 16 | 32 位 CoreCLR 上为 **12: 0, 4, 8** |
 | `Complex` | 32: 0, 8, 24 | — |
-| `Int128` | 48: 0, 16, 32 | CoreCLR Arm32 上为 **32: 0, 8, 24**；.NET Framework 和 Mono 没有这个类型 |
-| `(byte,Int128)` | 64: 0, 16, 48 | CoreCLR Arm32 上为 **40: 0, 8, 32**；.NET Framework 和 Mono 没有这个类型 |
-| `Half` | 8: 0, 2, 4 | .NET Framework 和 Mono 没有这个类型 |
-| `(byte,Half)` | 12: 0, 4, 8 | .NET Framework 和 Mono 没有这个类型 |
-| `DateOnly` | 12: 0, 4, 8 | .NET Framework 和 Mono 没有这个类型 |
-| `TimeOnly` | 24: 0, 8, 16 | .NET Framework 和 Mono 没有这个类型 |
-| `(byte,DateOnly,TimeOnly)` | 32: 0, 8, 24 | .NET Framework 和 Mono 没有这个类型 |
-| `Range` | 16: 0, 4, 12 | .NET Framework 和 Mono 没有这个类型 |
-| `Index` | 12: 0, 4, 8 | .NET Framework 和 Mono 没有这个类型 |
-| `Rune` | 12: 0, 4, 8 | .NET Framework 和 Mono 没有这个类型 |
-| `Vector2` | 16: 0, 4, 12 | .NET Framework 和 Mono 没有这个类型 |
-| `Vector3` | 20: 0, 4, 16 | .NET Framework 和 Mono 没有这个类型 |
-| `Vector4` | 24: 0, 4, 20 | .NET Framework 和 Mono 没有这个类型 |
-| `Quaternion` | 24: 0, 4, 20 | .NET Framework 和 Mono 没有这个类型 |
-| `Plane` | 24: 0, 4, 20 | .NET Framework 和 Mono 没有这个类型 |
-| `Matrix3x2` | 32: 0, 4, 28 | .NET Framework 和 Mono 没有这个类型 |
-| `Matrix4x4` | 72: 0, 4, 68 | .NET Framework 和 Mono 没有这个类型 |
-| `Vector64<int>` | 24: 0, 8, 16 | .NET Framework 和 Mono 没有这个类型 |
-| `Vector128<int>` | 48: 0, 16, 32 | CoreCLR Arm32 上为 **32: 0, 8, 24**；.NET Framework 和 Mono 没有这个类型 |
-| `Vector256<long>` | 96: 0, 32, 64 | CoreCLR Arm64 上为 **64: 0, 16, 48**；CoreCLR Arm32 上为 **48: 0, 8, 40**；.NET Framework 和 Mono 没有这个类型 |
-| `Vector512<long>` | 192: 0, 64, 128 | CoreCLR Arm64 上为 **96: 0, 16, 80**；CoreCLR Arm32 上为 **80: 0, 8, 72**；.NET Framework 和 Mono 没有这个类型 |
+| `Int128` | 48: 0, 16, 32 | CoreCLR Arm32 上为 **32: 0, 8, 24**；Mono 没有这个类型 |
+| `(byte,Int128)` | 64: 0, 16, 48 | CoreCLR Arm32 上为 **40: 0, 8, 32**；Mono 没有这个类型 |
+| `Half` | 8: 0, 2, 4 | Mono 没有这个类型 |
+| `(byte,Half)` | 12: 0, 4, 8 | Mono 没有这个类型 |
+| `DateOnly` | 12: 0, 4, 8 | Mono 没有这个类型 |
+| `TimeOnly` | 24: 0, 8, 16 | Mono 没有这个类型 |
+| `(byte,DateOnly,TimeOnly)` | 32: 0, 8, 24 | Mono 没有这个类型 |
+| `Range` | 16: 0, 4, 12 | Mono 没有这个类型 |
+| `Index` | 12: 0, 4, 8 | Mono 没有这个类型 |
+| `Rune` | 12: 0, 4, 8 | Mono 没有这个类型 |
+| `Vector2` | 16: 0, 4, 12 | Mono 没有这个类型 |
+| `Vector3` | 20: 0, 4, 16 | Mono 没有这个类型 |
+| `Vector4` | 24: 0, 4, 20 | Mono 没有这个类型 |
+| `Quaternion` | 24: 0, 4, 20 | Mono 没有这个类型 |
+| `Plane` | 24: 0, 4, 20 | Mono 没有这个类型 |
+| `Matrix3x2` | 32: 0, 4, 28 | Mono 没有这个类型 |
+| `Matrix4x4` | 72: 0, 4, 68 | Mono 没有这个类型 |
+| `Vector64<int>` | 24: 0, 8, 16 | Mono 没有这个类型 |
+| `Vector128<int>` | 48: 0, 16, 32 | CoreCLR Arm32 上为 **32: 0, 8, 24**；Mono 没有这个类型 |
+| `Vector256<long>` | 96: 0, 32, 64 | CoreCLR Arm64 上为 **64: 0, 16, 48**；CoreCLR Arm32 上为 **48: 0, 8, 40**；Mono 没有这个类型 |
+| `Vector512<long>` | 192: 0, 64, 128 | CoreCLR Arm64 上为 **96: 0, 16, 80**；CoreCLR Arm32 上为 **80: 0, 8, 72**；Mono 没有这个类型 |
 
 </Accordion>
 <Accordion title="Unity：Mono 和 IL2CPP" id="unity" value="unity">
