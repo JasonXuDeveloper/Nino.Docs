@@ -290,6 +290,10 @@ numbers), `LibrarySummary` (one library against Nino per group, for its comparis
 on par and is written so; never call Nino "slower"; v3 means 3.3.13. A multiple has one decimal below 10 and is a
 whole number from 10 ("1.4×", "77×", the components' `times()`); prose that names one goes through `BenchValue`.
 
+Draw comparison charts to scale: a linear axis from 0 with no cap and no logarithmic scale, so a 221× bar is 221
+times as long as Nino's (`DotnetChart`, `RuntimesChart`). Why: the owner (rc.10: "不要 log scale，按真实比例，这样才震撼");
+a 10× cap had drawn 14× and 221× as the same full bar, and a log axis hid the size of the gap.
+
 ## Headings and links
 
 - Headings say what the section answers, in title case on English pages (as the site does now).

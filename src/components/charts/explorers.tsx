@@ -4,7 +4,8 @@
  * read the bars against one baseline.
  *
  * - RuntimesChart: per case, every serializer's time (or size) as a multiple
- *   of Nino's generated code, so Nino is 1× and a longer bar costs more.
+ *   of Nino's generated code, so Nino is 1× and a longer bar costs more, drawn to
+ *   scale with no cap (the owner's choice: the real proportions).
  * - UnityChart: per case, the time with Burst as a share of the time without
  *   it (100 %), with the speedup beside the case.
  *
@@ -58,9 +59,6 @@ const otherColors = [
   'color-mix(in oklab, var(--nino-chart-faint) 60%, transparent)',
   'color-mix(in oklab, var(--nino-chart-faint) 35%, transparent)',
 ];
-
-/** Bars past this many times Nino's are cut at the edge; their labels give the value */
-const RELATIVE_CAP = 10;
 
 type Measure = 'serialize' | 'serializeInto' | 'deserialize' | 'size';
 
@@ -171,20 +169,13 @@ export function RuntimesChart({
         title={`${languageNames[language]}: ${measureNames[current][zh ? 'zh' : 'en']}`}
         subtitle={
           zh
-            ? `每个序列化库的${current === 'size' ? '大小' : '耗时'}是 Nino 生成代码的几倍；超过 ${RELATIVE_CAP}× 的条在边缘截断，数值见标签。Nino ${table.tag}${table.environment ? `，${table.environment}` : ''}。`
-            : `Each serializer's ${current === 'size' ? 'size' : 'time'} as a multiple of Nino's generated code; bars past ${RELATIVE_CAP}× stop at the edge, the label gives the value. Nino ${table.tag}${table.environment ? `, ${table.environment}` : ''}.`
+            ? `每个序列化库的${current === 'size' ? '大小' : '耗时'}是 Nino 生成代码的几倍，按真实比例画，数值见标签。Nino ${table.tag}${table.environment ? `，${table.environment}` : ''}。`
+            : `Each serializer's ${current === 'size' ? 'size' : 'time'} as a multiple of Nino's generated code, drawn to scale; the label gives the value. Nino ${table.tag}${table.environment ? `, ${table.environment}` : ''}.`
         }
         series={series}
         rows={rows}
         axisLabel={current === 'size' ? sizeAxis : timeAxis}
         tickFormat={(value) => `${value}×`}
-        max={Math.min(
-          RELATIVE_CAP,
-          Math.max(
-            1,
-            ...rows.flatMap((r) => Object.values(r.values).map((v) => v ?? 0)),
-          ),
-        )}
       />
     </div>
   );
@@ -427,10 +418,6 @@ export function DotnetChart({
     ];
   });
   if (!op) return null;
-  const largest = Math.max(
-    1,
-    ...rows.flatMap((r) => Object.values(r.values).map((v) => v ?? 0)),
-  );
   const footnotes = [
     sourceNote(zh, ds, datasets.length > 1),
     shown.includes('v3') ? v3SourceNote(zh) : null,
@@ -482,8 +469,8 @@ export function DotnetChart({
         }
         subtitle={
           zh
-            ? `每个库的耗时是 Nino v4 的几倍，越短越快；标签是实测耗时和倍数，超过 ${RELATIVE_CAP}× 的条在边缘截断。条缺失表示这个库表达不了该用例，v3 标 n/a 表示 3.3.13 没有这个用例。`
-            : `Each serializer's time as a multiple of Nino v4's, shorter is faster; labels give the measured time and the multiple, and bars past ${RELATIVE_CAP}× stop at the edge. A missing bar is a case that library cannot express; v3 n/a, a case 3.3.13 has no port of.`
+            ? `每个库的耗时是 Nino v4 的几倍，越短越快；按真实比例画，标签是实测耗时和倍数。条缺失表示这个库表达不了该用例，v3 标 n/a 表示 3.3.13 没有这个用例。`
+            : `Each serializer's time as a multiple of Nino v4's, shorter is faster; bars are drawn to scale, and labels give the measured time and the multiple. A missing bar is a case that library cannot express; v3 n/a, a case 3.3.13 has no port of.`
         }
         series={series}
         rows={rows}
@@ -493,7 +480,6 @@ export function DotnetChart({
             : "Time, Nino v4's = 1× (shorter is faster)"
         }
         tickFormat={(value) => `${value}×`}
-        max={Math.min(RELATIVE_CAP, largest)}
         footnotes={footnotes}
       />
     </div>
