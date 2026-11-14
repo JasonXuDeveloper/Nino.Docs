@@ -71,7 +71,7 @@ protobuf 一列指 [Google.Protobuf](/zh/docs/v4/vs-google-protobuf) 和 [protob
 | 团队以 `.proto` 文件为契约，或者要用 gRPC | protobuf-net 或 Google.Protobuf | gRPC 和 `.proto` 工具链都建立在 Protocol Buffers 上，Nino 没有 `.proto` schema；如果两端都是你自己的 .NET、TypeScript、Go 或 Rust 代码，Nino 每一端都能用（见上一行）（[与 Google.Protobuf 对比](/zh/docs/v4/vs-google-protobuf#where-google-protobuf-is-ahead)、[与 protobuf-net 对比](/zh/docs/v4/vs-protobuf-net#where-protobuf-net-is-ahead)） |
 | 数据要给人看或手改 | System.Text.Json（或 YAML、TOML） | 文本格式；Nino 的字节离开你的类型就读不懂（[与 System.Text.Json 对比](/zh/docs/v4/vs-system-text-json#where-system-text-json-is-ahead)） |
 | 大量没法加特性的类型，想按成员名直接写，不为每个类型单独写代码 | MessagePack（contractless）或 System.Text.Json | Nino 直接支持内置类型，自己的类型加 `[NinoType]`；没法加特性的类型要写[自定义格式化器](/zh/docs/v4/custom-formatters#for-a-type-assembly-ninoformatter)，一个类型一个 |
-| 数据里要存 `System.Type` 值（仅限可信来源） | MemoryPack 或 MessagePack | Nino 有意不支持 `System.Type`：自己存一个类型 ID，或者写[自定义格式化器](/zh/docs/v4/custom-formatters#for-a-type-assembly-ninoformatter)（[局限](#limitations)） |
+| 序列化/反序列化 `System.Type` | MemoryPack 或 MessagePack | 只适合可信数据（让数据指定类型是反序列化攻击的手法）；Nino 有意不支持 `System.Type`：自己存一个类型 ID，或者写[自定义格式化器](/zh/docs/v4/custom-formatters#for-a-type-assembly-ninoformatter)（[局限](#limitations)） |
 | 每次调用要用不同的设置 | MemoryPack 或 MessagePack | 两者都能按调用传选项；Nino 的 [`NinoSettings`](/zh/docs/v4/settings) 对整个进程生效，单个类型的行为用特性配置 |
 | 读 Nino v3 写的数据 | 先用 Nino v3 读，再转换 | v4 读不了（[转换 v3 数据](/zh/docs/v4/migration#converting-v3-data)） |
 
