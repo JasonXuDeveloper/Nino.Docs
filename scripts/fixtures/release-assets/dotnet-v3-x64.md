@@ -75,6 +75,22 @@ IterationCount=15  LaunchCount=1  WarmupCount=5
 | MemoryPackSerializeNullableObjects | 56,000.0000 ns | 53,200.0000 ns | 58,800.0000 ns | 1.40 | 90,000 B | - | - | - | - | NA |
 | NinoDeserializeNullableObjects | 74,800.0000 ns | 71,060.0000 ns | 78,540.0000 ns | 1.70 | - | - | - | - | - | NA |
 | MemoryPackDeserializeNullableObjects | 61,600.0000 ns | 58,520.0000 ns | 64,680.0000 ns | 1.40 | - | - | - | - | - | NA |
+| NinoSerializeManagedStruct | 136.0000 ns | 129.2000 ns | 142.8000 ns | 1.70 | 90,000 B | - | - | - | - | NA |
+| MemoryPackSerializeManagedStruct | 112.0000 ns | 106.4000 ns | 117.6000 ns | 1.40 | 90,000 B | - | - | - | - | NA |
+| NinoDeserializeManagedStruct | 149.6000 ns | 142.1200 ns | 157.0800 ns | 1.70 | - | - | - | - | - | NA |
+| MemoryPackDeserializeManagedStruct | 123.2000 ns | 117.0400 ns | 129.3600 ns | 1.40 | - | - | - | - | - | NA |
+| NinoSerializeManagedStructs | 14,280.0000 ns | 13,566.0000 ns | 14,994.0000 ns | 1.70 | 90,000 B | - | - | - | - | NA |
+| MemoryPackSerializeManagedStructs | 11,760.0000 ns | 11,172.0000 ns | 12,348.0000 ns | 1.40 | 90,000 B | - | - | - | - | NA |
+| NinoDeserializeManagedStructs | 15,708.0000 ns | 14,922.6000 ns | 16,493.4000 ns | 1.70 | - | - | - | - | - | NA |
+| MemoryPackDeserializeManagedStructs | 12,936.0000 ns | 12,289.2000 ns | 13,582.8000 ns | 1.40 | - | - | - | - | - | NA |
+| NinoSerializeNullableManagedStruct | 156.4000 ns | 148.5800 ns | 164.2200 ns | 1.70 | 90,000 B | - | - | - | - | NA |
+| MemoryPackSerializeNullableManagedStruct | 128.8000 ns | 122.3600 ns | 135.2400 ns | 1.40 | 90,000 B | - | - | - | - | NA |
+| NinoDeserializeNullableManagedStruct | 172.0400 ns | 163.4380 ns | 180.6420 ns | 1.70 | - | - | - | - | - | NA |
+| MemoryPackDeserializeNullableManagedStruct | 141.6800 ns | 134.5960 ns | 148.7640 ns | 1.40 | - | - | - | - | - | NA |
+| NinoSerializeNullableManagedStructs | 16,320.0000 ns | 15,504.0000 ns | 17,136.0000 ns | 1.70 | 90,000 B | - | - | - | - | NA |
+| MemoryPackSerializeNullableManagedStructs | 13,440.0000 ns | 12,768.0000 ns | 14,112.0000 ns | 1.40 | 90,000 B | - | - | - | - | NA |
+| NinoDeserializeNullableManagedStructs | 17,952.0000 ns | 17,054.4000 ns | 18,849.6000 ns | 1.70 | - | - | - | - | - | NA |
+| MemoryPackDeserializeNullableManagedStructs | 14,784.0000 ns | 14,044.8000 ns | 15,523.2000 ns | 1.40 | - | - | - | - | - | NA |
 | NinoSerializeNullableLongs | 1,530.0000 ns | 1,453.5000 ns | 1,606.5000 ns | 1.70 | 16,004 B | - | - | - | - | NA |
 | MemoryPackSerializeNullableLongs | 1,260.0000 ns | 1,197.0000 ns | 1,323.0000 ns | 1.40 | 16,004 B | - | - | - | - | NA |
 | NinoDeserializeNullableLongs | 1,683.0000 ns | 1,598.8500 ns | 1,767.1500 ns | 1.70 | - | - | - | - | - | NA |
@@ -87,3 +103,7 @@ IterationCount=15  LaunchCount=1  WarmupCount=5
 | MemoryPackSerializeNullableDecimals | 2,100.0000 ns | 1,995.0000 ns | 2,205.0000 ns | 1.40 | 24,004 B | - | - | - | - | NA |
 | NinoDeserializeNullableDecimals | 2,805.0000 ns | 2,664.7500 ns | 2,945.2500 ns | 1.70 | - | - | - | - | - | NA |
 | MemoryPackDeserializeNullableDecimals | 2,310.0000 ns | 2,194.5000 ns | 2,425.5000 ns | 1.40 | - | - | - | - | - | NA |
+| NinoSerializeNullableVec3s | 9,690.0000 ns | 9,205.5000 ns | 10,174.5000 ns | 1.70 | 1,300 B | - | - | - | - | NA |
+| MemoryPackSerializeNullableVec3s | 7,980.0000 ns | 7,581.0000 ns | 8,379.0000 ns | 1.40 | 1,300 B | - | - | - | - | NA |
+| NinoDeserializeNullableVec3s | 10,659.0000 ns | 10,126.0500 ns | 11,191.9500 ns | 1.70 | - | - | - | - | - | NA |
+| MemoryPackDeserializeNullableVec3s | 8,778.0000 ns | 8,339.1000 ns | 9,216.9000 ns | 1.40 | - | - | - | - | - | NA |

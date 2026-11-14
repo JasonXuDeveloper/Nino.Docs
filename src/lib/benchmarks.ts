@@ -355,6 +355,24 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
     { name: 'long?[1000]', code: true, key: 'NullableLongs' },
     { name: 'List<int?> (1,000)', code: true, key: 'NullableInts' },
     { name: 'decimal?[1000]', code: true, key: 'NullableDecimals' },
+    {
+      name: 'Vec3?[1000] (three floats)',
+      zh: 'Vec3?[1000]（三个 float）',
+      key: 'NullableVec3s',
+    },
+    // NullableTest's struct that holds a reference (not raw), with a value and nullable
+    {
+      name: 'ManagedStruct (int, string, double)',
+      zh: 'ManagedStruct（int、string、double）',
+      key: 'ManagedStruct',
+    },
+    { name: 'ManagedStruct[100]', code: true, key: 'ManagedStructs' },
+    { name: 'ManagedStruct?', code: true, key: 'NullableManagedStruct' },
+    {
+      name: 'ManagedStruct?[100], every fifth null',
+      zh: 'ManagedStruct?[100]，每 5 个有 1 个 null',
+      key: 'NullableManagedStructs',
+    },
   ],
   deserialize: [
     { name: 'SimpleClass', code: true, key: 'SimpleClass' },
@@ -399,6 +417,24 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
     { name: 'long?[1000]', code: true, key: 'NullableLongs' },
     { name: 'List<int?> (1,000)', code: true, key: 'NullableInts' },
     { name: 'decimal?[1000]', code: true, key: 'NullableDecimals' },
+    {
+      name: 'Vec3?[1000] (three floats)',
+      zh: 'Vec3?[1000]（三个 float）',
+      key: 'NullableVec3s',
+    },
+    // NullableTest's struct that holds a reference (not raw), with a value and nullable
+    {
+      name: 'ManagedStruct (int, string, double)',
+      zh: 'ManagedStruct（int、string、double）',
+      key: 'ManagedStruct',
+    },
+    { name: 'ManagedStruct[100]', code: true, key: 'ManagedStructs' },
+    { name: 'ManagedStruct?', code: true, key: 'NullableManagedStruct' },
+    {
+      name: 'ManagedStruct?[100], every fifth null',
+      zh: 'ManagedStruct?[100]，每 5 个有 1 个 null',
+      key: 'NullableManagedStructs',
+    },
   ],
 };
 
@@ -858,6 +894,14 @@ export type DotnetGroupId =
   | 'others';
 
 /**
+ * The main cases of the nullable group: NullableTest's, with the struct that
+ * holds a reference beside its nullable form (ManagedStruct…), and
+ * CollectionsTest's nullable collections (Nino's readme.py, group_of).
+ */
+const isNullableCase = (info: CaseInfo) =>
+  info.key.startsWith('Nullable') || info.key.startsWith('ManagedStruct');
+
+/**
  * Every .NET case in eight groups (the owner's, 2026-11-13; Nino's README and
  * release notes chart the same groups, readme.py's GROUPS): the one place
  * the site's grouped charts and their Markdown tables read. A case shows only
@@ -913,9 +957,7 @@ export const dotnetGroups: {
     name: 'Nullable values',
     zh: '可空值',
     forms: true,
-    cases: bothOps(
-      cases.serialize.filter((info) => info.key.startsWith('Nullable')),
-    ),
+    cases: bothOps(cases.serialize.filter(isNullableCase)),
   },
   {
     id: 'collections',

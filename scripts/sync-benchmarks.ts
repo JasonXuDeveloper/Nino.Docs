@@ -52,7 +52,9 @@
  * NullableTest and CollectionsTest's nullable collections, with the other
  * nullable forms' rows (`NinoNullable…`, `MemoryPackConverted…`,
  * `MemoryPackUnsafe…`) in both reports, numbers invented: for reader tests
- * only).
+ * only; the rows of NullableTest's `ManagedStruct` cases and of
+ * `NullableVec3s` were added to the three reports by hand, in the same
+ * format).
  * Bodies of releases without the manifest: scripts/fixtures/release-body.md
  * (made-up numbers, the methods the site requires), release-body-v3.md (with
  * the v3 section), release-body-new.md (a sample of the ReferenceTest,

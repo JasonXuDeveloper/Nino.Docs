@@ -139,9 +139,9 @@ MessagePack 3（MessagePack-CSharp）和 protobuf-net 3 用同样的类型，读
 
 ### 可空值 [#nullable-values]
 
-可空的成员和元素（[`NullableTest`](#nullabletest) 和 `CollectionsTest` 里的可空集合）：一个有 8 个可空成员、一半为 null 的类，单个和 100 个的数组；一个 `SimpleStruct?` 和 `SimpleStruct?[100]`；一个为 null 的 `SimpleClass` 引用，和每 5 个有 1 个 null 的 `SimpleClass[100]`；以及 `long?[1000]`、`List<int?>` 和 `decimal?[1000]`，每 5 个值有 1 个 null。各库都按自己用户的惯用写法来写。MessagePack 和 System.Text.Json 原生就能写 null。MemoryPack 用 `SafeNullable<T>`：它直接写 `Nullable<T>` 时会把值的内存原样拷出去，填充字节没有初始化，同一个值可能写出不同的字节；`SafeNullable<T>` 没有填充，和 Nino 的字节一样确定。protobuf 的 repeated 字段里没有 null，顶层也没有 null，所以 protobuf-net 给每个元素套一层带可选值的消息（`[NullWrappedValue]`），单个可空值写成只有一个可选字段的消息（为 null 时是空消息），Google.Protobuf 读写同样的消息；可空结构体在 repeated 字段里 protobuf-net 套不了包装，`SimpleStruct?[100]` 就写成这种单字段消息的数组，字节完全一样。可空字段则用 `google.protobuf` 的包装类型（`Int32Value` 等）、`Timestamp`，`Guid` 和 `decimal` 写成字符串。
+可空的成员和元素（[`NullableTest`](#nullabletest) 和 `CollectionsTest` 里的可空集合）：一个有 8 个可空成员、一半为 null 的类，单个和 100 个的数组；一个 `SimpleStruct?` 和 `SimpleStruct?[100]`；一个为 null 的 `SimpleClass` 引用，和每 5 个有 1 个 null 的 `SimpleClass[100]`；`ManagedStruct` 是带 string 的结构体，只能逐个成员写，测了单个值、`ManagedStruct[100]`、单个 `ManagedStruct?` 和 `ManagedStruct?[100]`，两两对照就能看出可空这层包装对这种结构体的开销；以及 `long?[1000]`、`List<int?>`、`decimal?[1000]` 和 `Vec3?[1000]`（三个 float 的结构体，它的 `T?` 占 16 字节、按 4 对齐），每 5 个值有 1 个 null。每一种 Nino 写出什么，见[可空值](/zh/docs/v4/nullable-values)。各库都按自己用户的惯用写法来写。MessagePack 和 System.Text.Json 原生就能写 null。MemoryPack 用 `SafeNullable<T>`：它直接写 `Nullable<T>` 时会把值的内存原样拷出去，填充字节没有初始化，同一个值可能写出不同的字节；`SafeNullable<T>` 没有填充，和 Nino 的字节一样确定。`ManagedStruct?` 走的是 MemoryPack 自己的可空格式化器（一个标志，然后是成员）：`SafeNullable<T>` 只接受非托管的 `T`，而含引用的结构体本来就不会按内存拷贝。protobuf 的 repeated 字段里没有 null，顶层也没有 null，所以 protobuf-net 给每个元素套一层带可选值的消息（`[NullWrappedValue]`），单个可空值写成只有一个可选字段的消息（为 null 时是空消息），Google.Protobuf 读写同样的消息；可空结构体在 repeated 字段里 protobuf-net 套不了包装，`SimpleStruct?[100]`、`ManagedStruct?[100]` 和 `Vec3?[1000]` 就写成这种单字段消息的数组，字节完全一样。可空字段则用 `google.protobuf` 的包装类型（`Int32Value` 等）、`Timestamp`，`Guid` 和 `decimal` 写成字符串。
 
-可空结构体和可空集合还按用户可能选的其他写法各测了一组，单独成柱：**Nino (NinoNullable)** 是模型里用 [`NinoNullable<T>`](/zh/docs/v4/nullable-values#nino-nullable) 代替 `T?`（字节相同）；**MemoryPack (converted)** 是在计时内把模型的 `T?` 转成 `SafeNullable<T>`、读完再转回来，也就是模型本来用 `T?` 时 MemoryPack 安全写法的真实成本；**MemoryPack (T?, unsafe)** 是直接把 `T?` 交给 MemoryPack，快，但字节里带着未初始化的填充。普通的 MemoryPack 柱子写的是事先转好的 `SafeNullable<T>`。Nino 的 `T?` 始终是安全的。
+可空结构体和可空集合还按用户可能选的其他写法各测了一组，单独成柱：**Nino (NinoNullable)** 是模型里用 [`NinoNullable<T>`](/zh/docs/v4/nullable-values#nino-nullable) 代替 `T?`（字节相同）；**MemoryPack (converted)** 是在计时内把模型的 `T?` 转成 `SafeNullable<T>`、读完再转回来，也就是模型本来用 `T?` 时 MemoryPack 安全写法的真实成本；**MemoryPack (T?, unsafe)** 是直接把 `T?` 交给 MemoryPack，快，但字节里带着未初始化的填充。普通的 MemoryPack 柱子写的是事先转好的 `SafeNullable<T>`。Nino 的 `T?` 始终是安全的。`ManagedStruct` 这几项没有其他写法：`NinoNullable<T>` 和 `SafeNullable<T>` 都只接受非托管的 `T`。什么时候该用哪种声明，见[哪种写法在哪里快](/zh/docs/v4/nullable-values#which-form)。
 
 <BenchGroup group="nullable" lang="zh" />
 
@@ -149,7 +149,7 @@ MessagePack 3（MessagePack-CSharp）和 protobuf-net 3 用同样的类型，读
 
 基础类库里的集合和类型，凡是能写出相同数据的库都一起比，序列化到复用的缓冲区写入器，反序列化成新实例：
 
-- **集合**（[`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CollectionsTest.cs)），各 1,000 个元素：`List<(int, long)>`、`KeyValuePair<int, int>[]`、`HashSet<int>`、`Dictionary<int, int>`、`Queue<int>`、`LinkedList<int>`、`SortedSet<int>`、`SortedDictionary<int, int>`、`SortedList<int, int>` 和 `ConcurrentDictionary<int, int>`；另有 `SelfTree`，一个包含自身的 `List` 子类，6 层、每层 4 个。
+- **集合**（[`CollectionsTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CollectionsTest.cs)），各 1,000 个元素：`List<(int, long)>`、`KeyValuePair<int, int>[]`、`HashSet<int>`、`Dictionary<int, int>`、`Queue<int>`、`LinkedList<int>`、`SortedSet<int>`、`SortedDictionary<int, int>`、`SortedList<int, int>` 和 `ConcurrentDictionary<int, int>`；另有 `SelfTree`，一个包含自身的 `List` 子类，6 层、每层 4 个。它的可空集合（`long?[1000]`、`List<int?>`、`decimal?[1000]`、`Vec3?[1000]`）归在[可空值](#nullable-values)一组。
 - **常用类型**（[`CommonTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/CommonTypesTest.cs)）：一棵 `TreeNode` 树（1,365 个节点）、`InventoryItem[1000]`（带填充的结构体）、`Waypoint[1000]`（含一个元组的固定大小结构体，写出 15 字节，内存里占 20 字节）和 `Dictionary<string, string>`（1,000 项）。
 - **BCL 类型**（[`BclTypesTest`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Cases/Collections/BclTypesTest.cs)）：`BigInteger`（3^1000）、`Uri`、`Version`、`StringBuilder`（1,000 个字符）、`BitArray`（1,000 位）、`CultureInfo`、`TimeZoneInfo`、`Lazy<string>`，以及各 1,000 个元素的 `Memory<int>`、`ReadOnlySequence<int>`、`ReadOnlyCollection<int>`、`IReadOnlyList<string>`（藏在接口后面、要逐个写的字符串）、`ILookup<int, int>`、`BlockingCollection<int>` 和 `Nino.Immutable` 里的不可变集合。
 
@@ -454,7 +454,7 @@ public PolymorphicClassBase NinoDeserializePolymorphicClass()
 
 ### NullableTest [#nullabletest]
 
-可空字段：一个有 8 个常见类型可空成员的类，一半成员为 null；单个对象测一次，100 个的数组再测一次，数组里相邻对象为 null 的那一半正好错开（`NullableFields`、`NullableFieldsArray`）。单独的可空值：一个有值的 `SimpleStruct?`（`NullableStruct`），每 5 个有 1 个 null 的 `SimpleStruct?[100]`（`NullableStructs`），一个为 null 的 `SimpleClass` 引用（`NullableObject`；有值的情况就是 [`SimpleTest`](#simpletest) 里的 `SimpleClass`），以及每 5 个有 1 个 null 的 `SimpleClass[100]`（`NullableObjects`）。各库写的是同样的值：可空结构体在 MemoryPack 里用 `SafeNullable<T>`，protobuf 把 null 写成缺省的消息字段（见 [MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)）。
+可空字段：一个有 8 个常见类型可空成员的类，一半成员为 null；单个对象测一次，100 个的数组再测一次，数组里相邻对象为 null 的那一半正好错开（`NullableFields`、`NullableFieldsArray`）。单独的可空值：一个有值的 `SimpleStruct?`（`NullableStruct`），每 5 个有 1 个 null 的 `SimpleStruct?[100]`（`NullableStructs`），一个为 null 的 `SimpleClass` 引用（`NullableObject`；有值的情况就是 [`SimpleTest`](#simpletest) 里的 `SimpleClass`），以及每 5 个有 1 个 null 的 `SimpleClass[100]`（`NullableObjects`）。含引用的结构体，有值的和可空的各测一遍：单个 `ManagedStruct`（`ManagedStruct`）、`ManagedStruct[100]`（`ManagedStructs`）、一个有值的 `ManagedStruct?`（`NullableManagedStruct`），以及每 5 个有 1 个 null 的 `ManagedStruct?[100]`（`NullableManagedStructs`）。各库写的是同样的值：可空的非托管结构体在 MemoryPack 里用 `SafeNullable<T>`，`ManagedStruct?` 用它自己的可空格式化器，protobuf 把 null 写成缺省的消息字段（见 [MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)）。
 
 ```csharp title="NullableBenchmarkData.cs" nocheck
 [NinoType]
@@ -476,6 +476,18 @@ public sealed partial class NullableFields
 // MemoryPack：同样的成员，类型换成 SafeNullable<int>、SafeNullable<long> 等
 [MemoryPackable]
 public sealed partial class NullableFieldsMemoryPack { /* ... */ }
+
+// 含引用的结构体：不是原始值，每个库都逐个成员写
+[NinoType]
+[MemoryPackable]
+[MessagePackObject]
+[ProtoContract]
+public partial struct ManagedStruct
+{
+    [Key(0)] [ProtoMember(1)] public int Id;
+    [Key(1)] [ProtoMember(2)] public string Name;
+    [Key(2)] [ProtoMember(3)] public double Score;
+}
 ```
 
 ### PooledTest [#pooledtest]
