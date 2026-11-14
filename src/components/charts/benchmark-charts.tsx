@@ -298,6 +298,11 @@ export default function BenchmarkCharts({
     // The build tables next to it (BuildTables) carry the source line.
     if (current === 'compile') props.footnotes = undefined;
   }
+  // Under the serialize / deserialize switch, the source line (the run and its machine) goes between the switch and
+  // the chart, so a page needs no second set of architecture tabs for it.
+  const switched = ids.length > 1 && props?.footnotes?.length;
+  const source = switched ? props.footnotes?.[0] : undefined;
+  if (switched) props.footnotes = props.footnotes?.slice(1);
   const body = props ? (
     <BarChart key={current} {...props} />
   ) : (
@@ -315,6 +320,9 @@ export default function BenchmarkCharts({
           label: zh ? tabLabels[id].zh : tabLabels[id].en,
         }))}
       />
+      {source && (
+        <p className="mt-3 text-xs text-fd-muted-foreground">{source}</p>
+      )}
       <div className="-mt-6">{body}</div>
     </div>
   );

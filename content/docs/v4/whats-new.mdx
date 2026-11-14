@@ -112,8 +112,6 @@ The baseline is v3 **3.3.13**, the last release of the v3 API (the 3.9.x release
 
 <IfWorkloads>Measured against MemoryPack in the same run. On [real-world workloads](/en/docs/v4/benchmarks#workloads), Nino serializes up to <BenchValue k="workloads.memorypack.serialize.max" /> faster and deserializes up to <BenchValue k="workloads.memorypack.deserialize.max" /> faster; the charts below show the smaller cases of `SimpleTest` and `PolymorphicTest`.</IfWorkloads><IfWorkloads not>Measured against MemoryPack in the same run. Nino wins clearly when serializing (up to <BenchValue k="serialize.max" />), leads on classes and polymorphic graphs when deserializing (up to <BenchValue k="deserialize.max" />), and is at least on par on arrays of unmanaged values, where both do a single `memcpy`.</IfWorkloads>
 
-<BenchSource lang="en" />
-
 <BenchmarkChart chart={['serialize', 'deserialize']} lang="en" />
 
 Deserializing by `ref` into the objects you already have, with new instances taken from [`[NinoPooled]`](/en/docs/v4/pooling) pools, is up to **<BenchValue k="reuse.max" /> faster** than MemoryPack's overwrite mode and allocates **0 B** per call on the pooled paths ([pooling results](/en/docs/v4/benchmarks#pooling)). Neither library allocates when serializing, and payloads are about the same size (`SimpleClass`: <BenchValue k="payload.v4" /> bytes in Nino, <BenchValue k="payload.memorypack" /> in MemoryPack). See the [full comparison](/en/docs/v4/vs-memorypack), including [where MemoryPack is still ahead](/en/docs/v4/vs-memorypack#where-memorypack-is-ahead).

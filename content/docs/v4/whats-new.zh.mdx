@@ -112,8 +112,6 @@ v3（3.3.13）与 v4 的全部差异列在一张表里，下面各节再按领�
 
 <IfWorkloads>在同一轮测试中与 MemoryPack 对比。在[真实负载](/zh/docs/v4/benchmarks#workloads)上，Nino 序列化最高快 <BenchValue k="workloads.memorypack.serialize.max" />，反序列化最高快 <BenchValue k="workloads.memorypack.deserialize.max" />；下面的图是 `SimpleTest` 和 `PolymorphicTest` 里更小的用例。</IfWorkloads><IfWorkloads not>在同一轮测试中与 MemoryPack 对比。序列化时 Nino 明显领先（最高快 <BenchValue k="serialize.max" />）；反序列化类和多态对象图时也领先（最高快 <BenchValue k="deserialize.max" />）；非托管值的数组两者至少持平，都只做一次 `memcpy`。</IfWorkloads>
 
-<BenchSource lang="zh" />
-
 <BenchmarkChart chart={['serialize', 'deserialize']} lang="zh" />
 
 用 `ref` 反序列化进已有的对象、新实例从 [`[NinoPooled]`](/zh/docs/v4/pooling) 对象池取时，比 MemoryPack 的覆盖模式最高**快 <BenchValue k="reuse.max" />**，池化路径上每次调用分配 **0 B**（见[池化测试结果](/zh/docs/v4/benchmarks#pooling)）。两个库序列化时都不分配内存，数据大小也基本相同（`SimpleClass`：Nino <BenchValue k="payload.v4" /> 字节，MemoryPack <BenchValue k="payload.memorypack" /> 字节）。详见[完整对比](/zh/docs/v4/vs-memorypack)，包括 [MemoryPack 仍然领先的地方](/zh/docs/v4/vs-memorypack#where-memorypack-is-ahead)。
