@@ -200,7 +200,8 @@ useWasm(true);  // 重新打开（在引擎允许的地方）
 | `Dictionary<TKey, TValue>` 和其他字典 | `Map<K, V> \| null` | |
 | `ValueTuple`、`KeyValuePair` | `[A, B, ...]` | TypeScript 元组，最多 7 项 |
 | `Tuple<...>` | `[A, ...] \| null` | |
-| `T?`、`Lazy<T>` | `T \| null` | |
+| `T?`、`Lazy<T>` | `T \| null` | 原始 `T` 的 `T?` 作为集合元素时声明成 `NullableSlot<T>`（`NullableSlot<number>[]`），它是 `T \| null` 的别名，只用来标明编码：固定大小的槽位（[可空值](/zh/docs/v4/nullable-values#other-languages)） |
+| `NinoNullable<T>` | `NinoNullable<T>` | `T \| null` 的别名，标明编码：占 `T` 的两倍；读取时检查存在标记和空值 |
 | 枚举 | `as const` 对象，以及由它的取值组成的类型 | `[Flags]` 枚举是 `number`（64 位的是 `bigint`）；64 位枚举的取值是 `bigint` |
 | `[NinoType]` 类 | 类 | `extends` 生成的基类，`implements` 生成的接口；抽象类仍是抽象类 |
 | `[NinoType]` 接口 | 接口 | |

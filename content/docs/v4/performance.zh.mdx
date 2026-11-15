@@ -119,7 +119,7 @@ public partial struct PackedSample // 12 字节，没有填充
 
 </Callout>
 
-非托管值的 `T?[]` 和 `List<T?>` 也是一整块，按固定步长写，顺带把每个元素的填充和空值清零；改用 `NinoNullable<T>` 声明，基元类型、枚举、`DateTime`、`TimeSpan` 就是单纯的块拷贝。两种写法和各自的字节见[可空值](/zh/docs/v4/nullable-values#nino-nullable)。
+可空的非托管值也是整块读写。装 `T?` 的集合（数组、列表、Set、队列、接口等）都是一整块固定大小的槽位，顺带把每个元素的填充和空值清零，带 `T?` 字段的原始结构体也一样；改用 `NinoNullable<T>` 声明，就是单纯的拷贝，什么都不用清，代价是占 `T` 的两倍。两种写法各自的字节、各在什么情况下更快，见[可空值](/zh/docs/v4/nullable-values#which-form)。
 
 ## 固定大小的类型 [#fixed-size-types]
 

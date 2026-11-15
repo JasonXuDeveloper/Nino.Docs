@@ -257,14 +257,17 @@ Each `[NinoType]` becomes one type, and each member the type its language has fo
 | `HashSet<string>` | `Set<string \| null> \| null` | `[]*string` | `Option<IndexSet<Option<String>>>` |
 | `Dictionary<K, V>` | `Map<K, V> \| null` | `[]nino.Entry[K, V]` | `Option<IndexMap<K, V>>` |
 | `decimal`, `Guid`, `DateTime` | `string`, `string`, `Date` | `nino.Decimal`, `nino.Guid`, `nino.DateTime` | `nino::Decimal`, `nino::Guid`, `nino::DateTime` |
+| `int?`, a single value | `number \| null` | `*int32` | `Option<i32>` |
+| `int?[]`, `List<int?>`, `HashSet<int?>` | `NullableSlot<number>[] \| null`, `Set<NullableSlot<number>> \| null` | `[]nino.NullableSlot[int32]` | `Option<Vec<nino::NullableSlot<i32>>>`, `Option<IndexSet<nino::NullableSlot<i32>>>` |
+| `NinoNullable<int>` | `NinoNullable<number>` | `nino.NinoNullable[int32]` | `nino::NinoNullable<i32>` |
 
-A set's strings may be null in every language, as in .NET, where a `HashSet<string>` holds one null; a dictionary's keys never are, since .NET throws on a null key.
+A set's strings may be null in every language, as in .NET, where a `HashSet<string>` holds one null; a dictionary's keys never are, since .NET throws on a null key. A nullable number has a type for each of its three encodings (a single `T?`, the fixed-size slot of a `T?` in a collection, `NinoNullable<T>`), so a generated type shows which bytes a member has: [Nullable Values](/en/docs/v4/nullable-values#other-languages).
 
 Every type, and how to build the .NET values: [TypeScript](/en/docs/v4/advanced/typescript#type-mapping), [Go](/en/docs/v4/advanced/go#values), [Rust](/en/docs/v4/advanced/rust#types).
 
 ## Fields of Raw Structs [#raw-struct-fields]
 
-A raw struct (an unmanaged struct written as one block, [Raw Values](/en/docs/v4/wire-format#raw-values)) is generated as a type of its fields at their offsets in the canonical layout, padding zeroed. The fields whose .NET size or layout depends on the host (`nint`, `nuint`, pointers, `Int128`, `DateTimeOffset`, a `T?` of a raw `T`) have the fixed bytes the wire format gives them, and a fixed type in each language: [TypeScript](/en/docs/v4/advanced/typescript#type-mapping), [Go](/en/docs/v4/advanced/go#values), [Rust](/en/docs/v4/advanced/rust#types). TypeScript has no type for a `DateTimeOffset` field and leaves its struct out ([What TypeScript Leaves Out](/en/docs/v4/advanced/typescript#not-supported)). An array of `Int128?` has a stride of 32 bytes (the flag, 15 zeros, the value). The `Vector64<T>` to `Vector512<T>` fields are NINOGEN002 in every language, as is a layout from an older build that holds a `System.Numerics.Vector<T>`: `Vector<T>` is [not serializable](/en/docs/v4/struct-layouts#vector-t).
+A raw struct (an unmanaged struct written as one block, [Raw Values](/en/docs/v4/wire-format#raw-values)) is generated as a type of its fields at their offsets in the canonical layout, padding zeroed. The fields whose .NET size or layout depends on the host (`nint`, `nuint`, pointers, `Int128`, `DateTimeOffset`, a `T?` of a raw `T`, which is the slot a `T?` takes in a collection) have the fixed bytes the wire format gives them, and a fixed type in each language: [TypeScript](/en/docs/v4/advanced/typescript#type-mapping), [Go](/en/docs/v4/advanced/go#values), [Rust](/en/docs/v4/advanced/rust#types). TypeScript has no type for a `DateTimeOffset` field and leaves its struct out ([What TypeScript Leaves Out](/en/docs/v4/advanced/typescript#not-supported)). An array of `Int128?` has a stride of 32 bytes (the flag, 15 zeros, the value). The `Vector64<T>` to `Vector512<T>` fields are NINOGEN002 in every language, as is a layout from an older build that holds a `System.Numerics.Vector<T>`: `Vector<T>` is [not serializable](/en/docs/v4/struct-layouts#vector-t).
 
 ## Generic Types [#generics]
 

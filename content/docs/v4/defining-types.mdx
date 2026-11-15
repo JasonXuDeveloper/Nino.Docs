@@ -234,7 +234,7 @@ A `[NinoType]` struct has no header at all. It is written as its <Term id="raw">
 
 - is unmanaged and has sequential layout (the default, with or without `Pack` and `Size`; `LayoutKind.Explicit` and `LayoutKind.Auto` structs are not raw);
 - is neither `NinoFormat.VersionTolerant` nor `NinoFormat.Keyed`, and has no custom member formatters;
-- serializes every instance field, and each field is itself written as raw bytes (not a `Nullable<T>`, tuple, `nint`, `DateTimeOffset` or non-raw `[NinoType]` struct).
+- serializes every instance field, and each field is itself written as raw bytes, or is a `T?` of such a value or a `NinoNullable<T>` (not a value tuple, `KeyValuePair`, `nint`, `DateTimeOffset` or non-raw `[NinoType]` struct). A `T?` field then lies in the block as a fixed-size slot, not a presence byte and the value ([Raw Structs with Nullable Fields](/en/docs/v4/nullable-values#raw-structs)).
 
 Otherwise it is written member by member. Either way, a positional struct (neither version-tolerant nor keyed) whose members are all raw values or such structs is [fixed-size](/en/docs/v4/performance#fixed-size-types): `NinoSerializer.Serialize(value)` writes it straight into a `byte[]` of its size.
 

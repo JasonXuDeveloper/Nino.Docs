@@ -257,14 +257,17 @@ xxd -p frame.bin | nino-gen inspect --assembly publish/Shop.Contracts.dll --type
 | `HashSet<string>` | `Set<string \| null> \| null` | `[]*string` | `Option<IndexSet<Option<String>>>` |
 | `Dictionary<K, V>` | `Map<K, V> \| null` | `[]nino.Entry[K, V]` | `Option<IndexMap<K, V>>` |
 | `decimal`、`Guid`、`DateTime` | `string`、`string`、`Date` | `nino.Decimal`、`nino.Guid`、`nino.DateTime` | `nino::Decimal`、`nino::Guid`、`nino::DateTime` |
+| `int?`，单个值 | `number \| null` | `*int32` | `Option<i32>` |
+| `int?[]`、`List<int?>`、`HashSet<int?>` | `NullableSlot<number>[] \| null`、`Set<NullableSlot<number>> \| null` | `[]nino.NullableSlot[int32]` | `Option<Vec<nino::NullableSlot<i32>>>`、`Option<IndexSet<nino::NullableSlot<i32>>>` |
+| `NinoNullable<int>` | `NinoNullable<number>` | `nino.NinoNullable[int32]` | `nino::NinoNullable<i32>` |
 
-Set 中的字符串在每种语言里都可以是 null，与 .NET 一致（`HashSet<string>` 可以包含一个 null）；字典的键则不会是 null，因为 .NET 遇到 null 键会抛出异常。
+Set 中的字符串在每种语言里都可以是 null，与 .NET 一致（`HashSet<string>` 可以包含一个 null）；字典的键则不会是 null，因为 .NET 遇到 null 键会抛出异常。可空的数字有三种编码（单个 `T?`、集合里 `T?` 的固定大小槽位、`NinoNullable<T>`），每种都有自己的类型，所以看生成的类型就知道成员是哪种字节：见[可空值](/zh/docs/v4/nullable-values#other-languages)。
 
 完整的类型表，以及怎样构造 .NET 的值：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。
 
 ## 原始结构体的字段 [#raw-struct-fields]
 
-原始结构体（按一整块写出的非托管结构体，见[原始值](/zh/docs/v4/wire-format#raw-values)）生成的类型由它的字段组成，每个字段放在规范布局里的偏移处，填充字节为 0。在 .NET 里大小或布局随主机变化的字段（`nint`、`nuint`、指针、`Int128`、`DateTimeOffset`、原始类型 `T` 的 `T?`）按二进制格式规定的固定字节写出，在每种语言里也有固定的类型：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。TypeScript 表达不了 `DateTimeOffset` 字段，含它的结构体会跳过（[TypeScript 不支持的内容](/zh/docs/v4/advanced/typescript#not-supported)）。`Int128?` 数组的步长是 32 字节（存在字节、15 个 0、值）。`Vector64<T>` 到 `Vector512<T>` 字段在每种语言里都报 NINOGEN002；旧版本构建的布局里如果有 `System.Numerics.Vector<T>`，也一样：`Vector<T>` [不能序列化](/zh/docs/v4/struct-layouts#vector-t)。
+原始结构体（按一整块写出的非托管结构体，见[原始值](/zh/docs/v4/wire-format#raw-values)）生成的类型由它的字段组成，每个字段放在规范布局里的偏移处，填充字节为 0。在 .NET 里大小或布局随主机变化的字段（`nint`、`nuint`、指针、`Int128`、`DateTimeOffset`、原始类型 `T` 的 `T?`，也就是 `T?` 在集合里的那种槽位）按二进制格式规定的固定字节写出，在每种语言里也有固定的类型：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。TypeScript 表达不了 `DateTimeOffset` 字段，含它的结构体会跳过（[TypeScript 不支持的内容](/zh/docs/v4/advanced/typescript#not-supported)）。`Int128?` 数组的步长是 32 字节（存在字节、15 个 0、值）。`Vector64<T>` 到 `Vector512<T>` 字段在每种语言里都报 NINOGEN002；旧版本构建的布局里如果有 `System.Numerics.Vector<T>`，也一样：`Vector<T>` [不能序列化](/zh/docs/v4/struct-layouts#vector-t)。
 
 ## 泛型类型 [#generics]
 

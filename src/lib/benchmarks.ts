@@ -206,7 +206,7 @@ export const nullableForms: {
   prefix: string;
   label: string;
 }[] = [
-  // NinoNullable<T> in place of T?: the same bytes
+  // NinoNullable<T> in place of T?: its own bytes, its memory (twice T's size)
   { key: 'ninonullable', prefix: 'NinoNullable', label: 'Nino (NinoNullable)' },
   // The model's T? converted to SafeNullable<T> and back inside the timed region
   {
@@ -224,8 +224,8 @@ export const nullableForms: {
 
 /** The footnote of every chart and table with a bar or column of nullableForms (Nino's readme.py, FORM_NOTE) */
 export const formNote = {
-  en: "Nullable cases: MemoryPack writes SafeNullable<T> data the model already holds; MemoryPack (converted) converts the model's T? to it and back inside the timed region; MemoryPack (T?, unsafe) copies T? with its uninitialized padding (one value can give different bytes, with leftover memory in them). Nino (NinoNullable) is NinoNullable<T> in place of T?, the same bytes. Nino's T? is always safe.",
-  zh: '可空值：MemoryPack 写的是模型里已备好的 SafeNullable<T>；MemoryPack (converted) 在计时内把模型的 T? 转成它、读完再转回；MemoryPack (T?, unsafe) 直接拷贝 T?，连同未初始化的填充字节（同一个值可能写出不同的字节，还会带出进程里残留的内存）。Nino (NinoNullable) 是用 NinoNullable<T> 代替 T?，字节相同。Nino 的 T? 始终安全。',
+  en: "Nullable cases: MemoryPack writes SafeNullable<T> data the model already holds; MemoryPack (converted) converts the model's T? to it and back inside the timed region; MemoryPack (T?, unsafe) copies T? with its uninitialized padding (one value can give different bytes, with leftover memory in them). Nino (NinoNullable) is NinoNullable<T> in place of T?: its memory, twice T's size, a format of its own. Nino's T? is always safe.",
+  zh: '可空值：MemoryPack 写的是模型里已备好的 SafeNullable<T>；MemoryPack (converted) 在计时内把模型的 T? 转成它、读完再转回；MemoryPack (T?, unsafe) 直接拷贝 T?，连同未初始化的填充字节（同一个值可能写出不同的字节，还会带出进程里残留的内存）。Nino (NinoNullable) 是用 NinoNullable<T> 代替 T?：写它的内存，占 T 的两倍，自成一种格式。Nino 的 T? 始终安全。',
 };
 
 /** Nino against one other serializer in one case */
@@ -352,6 +352,17 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
       zh: 'SimpleClass[100]，每 5 个有 1 个 null',
       key: 'NullableObjects',
     },
+    {
+      name: 'string[1000], every fifth null',
+      zh: 'string[1000]，每 5 个有 1 个 null',
+      key: 'NullableStrings',
+    },
+    {
+      name: 'RawNullable (int, long?, double?)',
+      zh: 'RawNullable（int、long?、double?）',
+      key: 'RawNullable',
+    },
+    { name: 'RawNullable[1000]', code: true, key: 'RawNullables' },
     { name: 'long?[1000]', code: true, key: 'NullableLongs' },
     { name: 'List<int?> (1,000)', code: true, key: 'NullableInts' },
     { name: 'decimal?[1000]', code: true, key: 'NullableDecimals' },
@@ -360,6 +371,27 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
       zh: 'Vec3?[1000]（三个 float）',
       key: 'NullableVec3s',
     },
+    // CollectionsTest's other collections of int? (every fifth null): reports from rc.11
+    { name: 'Queue<int?> (1,000)', code: true, key: 'NullableQueueInts' },
+    { name: 'HashSet<int?> (1,000)', code: true, key: 'NullableHashSetInts' },
+    {
+      name: 'LinkedList<int?> (1,000)',
+      code: true,
+      key: 'NullableLinkedListInts',
+    },
+    {
+      name: 'Collection<int?> (1,000)',
+      code: true,
+      key: 'NullableCollectionInts',
+    },
+    {
+      name: 'ConcurrentQueue<int?> (1,000)',
+      code: true,
+      key: 'NullableConcurrentQueueInts',
+    },
+    { name: 'int?[40, 25]', code: true, key: 'NullableGridInts' },
+    { name: 'Memory<int?> (1,000)', code: true, key: 'NullableMemoryInts' },
+    { name: 'IList<int?> (1,000)', code: true, key: 'NullableIListInts' },
     // NullableTest's struct that holds a reference (not raw), with a value and nullable
     {
       name: 'ManagedStruct (int, string, double)',
@@ -414,6 +446,17 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
       zh: 'SimpleClass[100]，每 5 个有 1 个 null',
       key: 'NullableObjects',
     },
+    {
+      name: 'string[1000], every fifth null',
+      zh: 'string[1000]，每 5 个有 1 个 null',
+      key: 'NullableStrings',
+    },
+    {
+      name: 'RawNullable (int, long?, double?)',
+      zh: 'RawNullable（int、long?、double?）',
+      key: 'RawNullable',
+    },
+    { name: 'RawNullable[1000]', code: true, key: 'RawNullables' },
     { name: 'long?[1000]', code: true, key: 'NullableLongs' },
     { name: 'List<int?> (1,000)', code: true, key: 'NullableInts' },
     { name: 'decimal?[1000]', code: true, key: 'NullableDecimals' },
@@ -422,6 +465,27 @@ const cases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
       zh: 'Vec3?[1000]（三个 float）',
       key: 'NullableVec3s',
     },
+    // CollectionsTest's other collections of int? (every fifth null): reports from rc.11
+    { name: 'Queue<int?> (1,000)', code: true, key: 'NullableQueueInts' },
+    { name: 'HashSet<int?> (1,000)', code: true, key: 'NullableHashSetInts' },
+    {
+      name: 'LinkedList<int?> (1,000)',
+      code: true,
+      key: 'NullableLinkedListInts',
+    },
+    {
+      name: 'Collection<int?> (1,000)',
+      code: true,
+      key: 'NullableCollectionInts',
+    },
+    {
+      name: 'ConcurrentQueue<int?> (1,000)',
+      code: true,
+      key: 'NullableConcurrentQueueInts',
+    },
+    { name: 'int?[40, 25]', code: true, key: 'NullableGridInts' },
+    { name: 'Memory<int?> (1,000)', code: true, key: 'NullableMemoryInts' },
+    { name: 'IList<int?> (1,000)', code: true, key: 'NullableIListInts' },
     // NullableTest's struct that holds a reference (not raw), with a value and nullable
     {
       name: 'ManagedStruct (int, string, double)',
@@ -895,11 +959,14 @@ export type DotnetGroupId =
 
 /**
  * The main cases of the nullable group: NullableTest's, with the struct that
- * holds a reference beside its nullable form (ManagedStruct…), and
- * CollectionsTest's nullable collections (Nino's readme.py, group_of).
+ * holds a reference beside its nullable form (ManagedStruct…) and the raw
+ * struct with nullable fields (RawNullable…), and CollectionsTest's nullable
+ * collections (Nino's readme.py, group_of).
  */
 const isNullableCase = (info: CaseInfo) =>
-  info.key.startsWith('Nullable') || info.key.startsWith('ManagedStruct');
+  info.key.startsWith('Nullable') ||
+  info.key.startsWith('RawNullable') ||
+  info.key.startsWith('ManagedStruct');
 
 /**
  * Every .NET case in eight groups (the owner's, 2026-11-13; Nino's README and

@@ -299,13 +299,14 @@ By what it formats (`TF`, `TKF` and `TVF` are element, key and value formatters;
 | Formatter | Formats | Writes |
 | --- | --- | --- |
 | `UnmanagedFormatter<T>` | an unmanaged `T` | its raw bytes |
-| `NullableFormatter<T, TF>` | `T?` | a presence byte, then the value |
+| `NullableFormatter<T, TF>` | `T?` | a presence byte, then the value, alone and as an element |
+| `UnmanagedNullableFormatter<T>` | `T?` of a raw `T` | alone, a presence byte, then the value; as the element formatter of a collection formatter, a [slot](/en/docs/v4/nullable-values#collections) per element, the whole run as one block (what Nino uses for every collection of raw `T?`) |
 | `StringFormatter`, `Utf8StringFormatter` | `string` | Nino's default string encoding, or UTF-8 |
 | `IntPtrFormatter`, `UIntPtrFormatter` | `nint`, `nuint` | 8 bytes on every platform |
 | `DateTimeOffsetFormatter` | `DateTimeOffset` | UTC ticks (`long`), then the offset in minutes (`short`) |
 | `ObjectFormatter` | `object` holding `[NinoType]`s | a type id, then the body |
 | `ArrayFormatter<T, TF>`, `UnmanagedArrayFormatter<T>` | `T[]` | the length (`-1` for `null`), then the elements; the unmanaged one as one block |
-| `NullableArrayFormatter<T>`, `NullableListFormatter<TList, T>` | `T?[]`, `List<T?>` of raw `T` | every element at a fixed stride (not the bytes of `ArrayFormatter` with `NullableFormatter`) |
+| `NullableArrayFormatter<T>`, `NullableListFormatter<TList, T>` | `T?[]`, `List<T?>` of raw `T` | every element as a slot: the bytes of `ArrayFormatter` with `UnmanagedNullableFormatter`, not with `NullableFormatter` |
 | `ArraySegmentFormatter<T, TF>` | `ArraySegment<T>` | as an array; read into a new array |
 | `Array2DFormatter<T, TF>`, `Array3DFormatter<T, TF>`, `Array4DFormatter<T, TF>` | `T[,]`, `T[,,]`, `T[,,,]` | each length (the first `-1` for `null`), then the elements in row-major order |
 | `ListFormatter<TList, T, TF>`, `UnmanagedListFormatter<TList, T>` | `List<T>` or a class derived from it | the count (`-1` for `null`), then the elements; the unmanaged one as one block |

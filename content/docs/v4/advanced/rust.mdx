@@ -59,13 +59,14 @@ The codecs are written out in full (`NinoRead`, `NinoWrite`, `NinoReadBody` and 
 | `sbyte` … `ulong`, `Int128`, `UInt128`, `float`, `double`, `bool` | `i8` … `u64`, `i128`, `u128`, `f32`, `f64`, `bool` |
 | `char` | `u16`, a UTF-16 code unit (a Rust `char` is a `Rune`) |
 | `string` | `Option<String>`, `Option<WideString>`, or `Option<Utf8>` for `[NinoUtf8]` |
-| `T?` (a struct), a class | `Option<T>`; `Option<Box<T>>` for a recursive class |
+| a single `T?` (also a `T?` field of a raw struct), a class | `Option<T>`; `Option<Box<T>>` for a recursive class |
 | `T[]`, `List<T>`, `Queue<T>`, … | `Option<Vec<T>>`, `VecDeque<T>` |
 | `HashSet<T>`, `SortedSet<T>` | `HashSet<T>`, `BTreeSet<T>`, `IndexSet<T>` |
 | `Dictionary<K, V>`, `SortedDictionary<K, V>` | `HashMap<K, V>`, `BTreeMap<K, V>`, `IndexMap<K, V>` |
 | `ValueTuple<…>` (1 to 7 items) | tuples |
 | `T[,]` and other multi-dimensional arrays | `Grid<T, R>` |
-| `T?[]` of raw structs (written as raw memory) | `RawNullables<T>` |
+| `T?` of a raw `T` as the element of any collection, a slot of a fixed size ([Nullable Values](/en/docs/v4/nullable-values#other-languages)) | `NullableSlot<T>`: `Vec<NullableSlot<i32>>` for an `int?[]` or a `List<int?>`, `VecDeque<NullableSlot<i64>>`, `HashSet<NullableSlot<i32>>`, `Grid<NullableSlot<i32>, 2>`; each collection is one block |
+| `NinoNullable<T>` | `NinoNullable<T>`, a wrapper of `Option<T>` (`.0`, `From` both ways, `Deref`) |
 | `nint`; `nuint`, pointers and function pointers, inside a raw struct | `i64`; `u64` |
 | `DateTimeOffset` inside a raw struct | a struct `{ date_time, offset_minutes }` |
 | `decimal`, `Guid`, `DateTime`, `DateTimeOffset`, `TimeSpan`, `DateOnly`, `TimeOnly`, `Half`, `Rune`, `Version`, `BigInteger`, `BitArray` | types of the same names; `DateTimeKind` is the kind of a `DateTime` |

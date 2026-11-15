@@ -299,13 +299,14 @@ public sealed class Trade
 | 格式化器 | 格式化的类型 | 写法 |
 | --- | --- | --- |
 | `UnmanagedFormatter<T>` | 非托管的 `T` | 原始字节 |
-| `NullableFormatter<T, TF>` | `T?` | 存在字节，然后是值 |
+| `NullableFormatter<T, TF>` | `T?` | 存在字节，然后是值，单独出现和作为元素都一样 |
+| `UnmanagedNullableFormatter<T>` | 原始 `T` 的 `T?` | 单独出现时是存在字节加值；作为集合格式化器的元素格式化器时，每个元素一个[槽位](/zh/docs/v4/nullable-values#collections)，整串一块读写（Nino 给所有装原始 `T?` 的集合用的就是它） |
 | `StringFormatter`、`Utf8StringFormatter` | `string` | Nino 默认的字符串编码，或 UTF-8 |
 | `IntPtrFormatter`、`UIntPtrFormatter` | `nint`、`nuint` | 在所有平台上都是 8 字节 |
 | `DateTimeOffsetFormatter` | `DateTimeOffset` | UTC 刻度（`long`），然后是以分钟计的偏移（`short`） |
 | `ObjectFormatter` | 装着 `[NinoType]` 的 `object` | 类型 ID，然后是主体 |
 | `ArrayFormatter<T, TF>`、`UnmanagedArrayFormatter<T>` | `T[]` | 长度（`null` 写 `-1`），然后是元素；非托管版整块写 |
-| `NullableArrayFormatter<T>`、`NullableListFormatter<TList, T>` | 原始 `T` 的 `T?[]`、`List<T?>` | 每个元素占固定步长（和 `ArrayFormatter` 配 `NullableFormatter` 写出的字节不同） |
+| `NullableArrayFormatter<T>`、`NullableListFormatter<TList, T>` | 原始 `T` 的 `T?[]`、`List<T?>` | 每个元素一个槽位：和 `ArrayFormatter` 配 `UnmanagedNullableFormatter` 的字节相同，和配 `NullableFormatter` 的不同 |
 | `ArraySegmentFormatter<T, TF>` | `ArraySegment<T>` | 和数组一样；读成新数组 |
 | `Array2DFormatter<T, TF>`、`Array3DFormatter<T, TF>`、`Array4DFormatter<T, TF>` | `T[,]`、`T[,,]`、`T[,,,]` | 各维长度（第一个为 `-1` 表示 `null`），然后按行优先顺序写元素 |
 | `ListFormatter<TList, T, TF>`、`UnmanagedListFormatter<TList, T>` | `List<T>` 或它的派生类 | 个数（`null` 写 `-1`），然后是元素；非托管版整块写 |

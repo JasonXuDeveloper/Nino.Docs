@@ -515,12 +515,12 @@
       "severity": "warning",
       "codeFix": true,
       "en": {
-        "problem": "A change to a type in the [layout baseline](/en/docs/v4/evolving-data#layout-baseline) breaks data written before it, data written after it for builds before it, or both: for example a member inserted, removed or moved in a version-tolerant type, any member change in a positional type that stored data reaches, `sealed` added or removed, a member's encoding changed, `format` or `trackReferences` changed, a type whose id is written renamed or moved, or a type removed (reported on its section of the baseline)",
-        "fix": "Undo the break as the message says: `[NinoFormerName(\"Old.Name\")]` on a renamed type, `sealed` back as it was, an inserted member moved to the end. When old data and old builds no longer matter, accept the change into the baseline (Fix All accepts every change at once)"
+        "problem": "A change to a type in the [layout baseline](/en/docs/v4/evolving-data#layout-baseline) breaks data written before it, data written after it for builds before it, or both: for example a member inserted, removed or moved in a version-tolerant type, any member change in a positional type that stored data reaches, `sealed` added or removed, a member's encoding changed, `format` or `trackReferences` changed, a type whose id is written renamed or moved, or a type removed (reported on its section of the baseline). A member changed between `T?` and `NinoNullable<T>` is reported with why: the two are different formats, the same bytes only in a collection of a `T` as large as its alignment, which is not reported",
+        "fix": "Undo the break as the message says: `[NinoFormerName(\"Old.Name\")]` on a renamed type, `sealed` back as it was, an inserted member moved to the end, values converted between `T?` and `NinoNullable<T>`. When old data and old builds no longer matter, accept the change into the baseline (Fix All accepts every change at once)"
       },
       "zh": {
-        "problem": "[布局基线](/zh/docs/v4/evolving-data#layout-baseline)里某个类型的改动会让改动之前写的数据读不出来，或者让改动之前的版本读不了改动之后写的数据，或两者都有。例如：版本容错类型里插入、删除或调换了成员；被存储数据用到的按位置类型改了成员；加上或去掉了 `sealed`；成员的编码变了；`format` 或 `trackReferences` 变了；写出类型 ID 的类型改了名或换了命名空间；删掉了某个类型（报在基线里它那一段上）",
-        "fix": "按消息里说的撤销改动：给改名的类型加 `[NinoFormerName(\"旧全名\")]`、把 `sealed` 恢复原样、把插入的成员挪到末尾。旧数据和旧版本都不用再管时，把改动接受进基线（全部修复会一次接受所有改动）"
+        "problem": "[布局基线](/zh/docs/v4/evolving-data#layout-baseline)里某个类型的改动会让改动之前写的数据读不出来，或者让改动之前的版本读不了改动之后写的数据，或两者都有。例如：版本容错类型里插入、删除或调换了成员；被存储数据用到的按位置类型改了成员；加上或去掉了 `sealed`；成员的编码变了；`format` 或 `trackReferences` 变了；写出类型 ID 的类型改了名或换了命名空间；删掉了某个类型（报在基线里它那一段上）。成员在 `T?` 和 `NinoNullable<T>` 之间改声明时，消息会说明原因：两者是不同的格式，只有 `T` 大小等于对齐的集合字节相同，这种情况不报",
+        "fix": "按消息里说的撤销改动：给改名的类型加 `[NinoFormerName(\"旧全名\")]`、把 `sealed` 恢复原样、把插入的成员挪到末尾、在 `T?` 和 `NinoNullable<T>` 之间转换值。旧数据和旧版本都不用再管时，把改动接受进基线（全部修复会一次接受所有改动）"
       }
     },
     {

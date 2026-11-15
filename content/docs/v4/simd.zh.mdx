@@ -42,7 +42,7 @@ Nino 在每个平台上写出的字节都一样。平台有向量指令时，各
 - 64 位运行时内联拷贝不超过 64 字节的块（大多数字符串）；32 位 x86、WebAssembly 和 Arm32 上的 .NET 也这样拷贝，只是放在一次调用里（这些平台上非对齐的 8 字节加载不会出错）；Arm32 上的 Mono 和 IL2CPP 调用 `memmove`。
 - 6 KB 及以上的原始值块读取（无论读入新数组还是已有数组）用 `memmove` 拷贝：Intel x64 上它的 `rep movsb` 写入新的缓存行时不必先读入；AMD x64 CPU 上它比向量写入慢，改用 Nino 的向量循环。
 - 填充字节在支持 AVX-512 时用 512 位向量清零，否则在运行时加速 `Vector<T>` 时用它清零（Mono 上仅限装有 System.Numerics.Vectors 包时；Unity 上从不使用：Unity 的 Mono 并不加速 `Vector<T>`，即使它报告已加速），再不行就每次 8 字节。
-- [不可信模式](/zh/docs/v4/security#untrusted-mode)下，连续原始值中的 `bool`、`DateTime`、`decimal`、`DateOnly` 和 `TimeOnly` 字段，在 .NET 8 及以上且这些字段足够密集时整段按 `Vector<T>` 检查，掩码按值的步长重复；否则逐个字段扫过整段，不对每个值分支。`[NinoUtf8]` 字符串由 .NET 自带的 UTF-8 转换器转码（.NET 8+ 上是 `Utf8.FromUtf16` 和 `Utf8.ToUtf16`），用的是它们的向量路径。
+- [不可信模式](/zh/docs/v4/security#untrusted-mode)下，连续原始值中的 `bool`、`DateTime`、`decimal`、`DateOnly` 和 `TimeOnly` 字段，以及每个 `NinoNullable<T>` 的存在标记和空值，在 .NET 8 及以上且这些字段足够密集时整段按 `Vector<T>` 检查，掩码按值的步长重复；否则逐个字段扫过整段，不对每个值分支。`[NinoUtf8]` 字符串由 .NET 自带的 UTF-8 转换器转码（.NET 8+ 上是 `Utf8.FromUtf16` 和 `Utf8.ToUtf16`），用的是它们的向量路径。
 - Intel Ice Lake 一代（Ice Lake、Tiger Lake 和 Rocket Lake，按 CPU 型号识别）上，跨两个缓存行的 64 字节读取大约是对齐读取的两倍开销：填充字节改用 32 字节向量而不是 64 字节向量清零，按整个 4 字节字移动分组的元组和键值对从缓存行起点开始读取，在 Linux 上约 2 到 32 KB 的块交给 C 库的 `rep movsb` 拷贝。其他 CPU 仍走上面的路径；写出的字节一致。
 
 ## Unity [#unity]
