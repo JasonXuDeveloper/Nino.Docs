@@ -1,4 +1,4 @@
-// What content/docs/v4/benchmarks.mdx leaves to the reader: the usings of Nino's benchmark files (benchmarks/Nino.Benchmark),
+// What content/docs/v4/benchmarks.mdx leaves to the reader: the usings of Nino's benchmark files (runtimes/csharp/benchmarks/Nino.Benchmark),
 // and the fields and Create methods of the parts of them the page leaves out.
 using System.Buffers;
 using System.Numerics;
