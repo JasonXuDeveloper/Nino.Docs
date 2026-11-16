@@ -13,7 +13,8 @@
  * - DotnetChart: one group of dotnetGroups, each case's MemoryPack, other
  *   libraries (otherLibs), the nullable group's other forms of a nullable
  *   value (nullableForms) and v3 as multiples of Nino v4's time, per
- *   architecture and operation.
+ *   architecture and operation; v3 and LuminPack (RuntimeCase.na) show n/a in
+ *   a case they have no time of.
  *
  * The default selection is prerendered; the rest is drawn after a click.
  */
@@ -34,8 +35,10 @@ import {
   gcNote,
   hasForms,
   hasV3,
+  isNa,
   type Opponent as Library,
   type NullableForm,
+  naNote,
   nullableForms,
   otherLibs,
   type RuntimeLang,
@@ -65,6 +68,7 @@ const otherColors = [
   'var(--nino-chart-faint)',
   'color-mix(in oklab, var(--nino-chart-faint) 60%, transparent)',
   'color-mix(in oklab, var(--nino-chart-faint) 35%, transparent)',
+  'color-mix(in oklab, var(--nino-chart-faint) 20%, transparent)',
 ];
 
 type Measure = 'serialize' | 'serializeInto' | 'deserialize' | 'size';
@@ -348,6 +352,10 @@ function opponentOf(row: TableCase, key: Exclude<Opponent, 'all'>) {
   return versusOf(row, key);
 }
 
+/** A library with no time in a case that shows it as n/a (RuntimeCase.na), not a missing bar */
+const naOf = (row: TableCase, key: Exclude<Opponent, 'all'>) =>
+  key !== 'v3' && !isForm(key) && isNa(row, key);
+
 /** Nino under FLOOR_NS against a measurable time `ns`: faster by more than ns / FLOOR_NS (formatBound) */
 function boundBadge(ns: number, zh: boolean) {
   const bound = formatBound(ns);
@@ -404,7 +412,9 @@ export function DotnetChart({
   // v3 ran on x64 only: there it is a series wherever the site has v3 numbers, n/a in the cases without
   const v3Shown = ds.arch === 'x64' && hasV3;
   const keys = opponentKeys.filter((key) =>
-    key === 'v3' ? v3Shown : cases.some((row) => opponentOf(row, key)),
+    key === 'v3'
+      ? v3Shown
+      : cases.some((row) => opponentOf(row, key) || naOf(row, key)),
   );
   const opponent: Opponent =
     pickedOpponent !== 'all' && keys.includes(pickedOpponent)
@@ -428,14 +438,15 @@ export function DotnetChart({
       if (v) {
         values[key] = v.time.ns / base;
         text[key] = `${v.time.text} · ${versusText(v, zh)}`;
-      } else if (key === 'v3') {
-        // no bar, a label: 3.3.13 has no port of this case
+      } else if (key === 'v3' || naOf(row, key)) {
+        // no bar, a label: 3.3.13 has no port of this case, or LuminPack cannot run it
         values[key] = 0;
         text[key] = 'n/a';
       }
     }
     const single = opponent === 'all' ? undefined : opponentOf(row, opponent);
-    if (opponent !== 'all' && !single) return [];
+    // One library picked: its n/a cases stay, as rows without a badge
+    if (opponent !== 'all' && !single && !naOf(row, opponent)) return [];
     return [
       {
         label: zh && row.zh ? row.zh : row.name,
@@ -453,6 +464,7 @@ export function DotnetChart({
     shown.includes('v3') ? v3SourceNote(zh) : null,
     rows.some((r) => r.mark) ? t(gcNote) : null,
     shown.some((key) => isForm(key)) && hasForms(cases) ? t(formNote) : null,
+    cases.some((row) => shown.some((key) => naOf(row, key))) ? t(naNote) : null,
   ].filter((note): note is string => Boolean(note));
   const opName =
     op === 'serialize' ? t(measureNames.serialize) : t(deserializeNew);

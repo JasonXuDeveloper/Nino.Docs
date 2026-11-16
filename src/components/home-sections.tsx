@@ -24,8 +24,8 @@ import {
   formatRatio,
   formatWorkloadRange,
   hasWorkloads,
+  headlineLibs,
   type Opponent,
-  otherLibs,
   reuseSpeedup,
   workloadCases,
 } from '@/lib/benchmarks';
@@ -48,7 +48,7 @@ const serializeRange = range('serialize', 'memorypack');
 const deserializeRange = range('deserialize', 'memorypack');
 
 /** The same ranges against the other libraries the report measured */
-const otherRanges = otherLibs
+const otherRanges = headlineLibs
   .map((other) => ({
     ...other,
     serialize: range('serialize', other.key),

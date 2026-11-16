@@ -18,12 +18,15 @@
  * so the same rules (FLOOR_NS, on par, ratios) apply to both; `arm64` is null
  * until a release has that section. Comparisons with v3 are x64 only.
  *
- * The other serializers (`otherLibs`: MessagePack-CSharp, protobuf-net,
- * Google.Protobuf, System.Text.Json): their rows of the same reports, by
- * method prefix, in releases since they joined the benchmark; a case a library
- * cannot express has no row. `libraries` lists the ones a dataset has, so pages
- * show their columns only when the synced release measured them. Every
- * comparison goes through `versus()`, with the same FLOOR_NS and on-par rules.
+ * The other serializers (`otherLibs`: LuminPack, MessagePack-CSharp,
+ * protobuf-net, Google.Protobuf, System.Text.Json): their rows of the same
+ * reports, by method prefix, in releases since they joined the benchmark; a
+ * case a library cannot express has no row. `libraries` lists the ones a
+ * dataset has, so pages show their columns only when the synced release
+ * measured them. A library marked `na` (LuminPack) runs every case MemoryPack
+ * runs but the ones it cannot: once a report has any row of it, such a case is
+ * n/a (`RuntimeCase.na`, `naNote`) rather than left out. Every comparison goes
+ * through `versus()`, with the same FLOOR_NS and on-par rules.
  *
  * Workloads (WorkloadTest, `workloadCases`): payloads shaped like real ones,
  * every library on each. Once the synced report has them (`hasWorkloads`),
@@ -146,17 +149,41 @@ export function times(value: number): string {
 /* ------------------------------------------------------------------ */
 
 /** The .NET serializers besides Nino and MemoryPack, by their method prefix */
-export type OtherLib = 'messagepack' | 'protobuf' | 'googleprotobuf' | 'json';
+export type OtherLib =
+  | 'luminpack'
+  | 'messagepack'
+  | 'protobuf'
+  | 'googleprotobuf'
+  | 'json';
 
 /** The versions Nino's Directory.Packages.props pins (the `benchmark` skill: update them with an upgrade) */
-// In the order the owner chose for every chart and table: the binary serializers closest to Nino first, then both
-// Protobuf libraries, then JSON (Nino's README chart, benchmarks/reports/readme.py, uses the same order).
+// In the order the owner chose for every chart and table: the binary serializers closest to Nino first (LuminPack,
+// derived from MemoryPack, right after it), then both Protobuf libraries, then JSON (Nino's README chart,
+// reports/readme.py's OTHERS, uses the same order).
 export const otherLibs: {
   key: OtherLib;
   prefix: string;
   label: string;
   version: string;
+  /**
+   * A case MemoryPack ran and this library did not is n/a (RuntimeCase.na,
+   * naNote) once the report has any row of it, rather than left out: it runs
+   * every case MemoryPack runs but the ones it cannot (Nino's readme.py, NA)
+   */
+  na?: true;
+  /** Left out of every headline (the home page, hasWorkloads, BenchValue's workloads.*): Nino's README gives it no range */
+  headline?: false;
 }[] = [
+  // Every class that declares its cases, but the cases its 1.1.9 cannot run (Nino's
+  // runtimes/csharp/benchmarks/README.md, LuminPack); its bytes are not canonical
+  {
+    key: 'luminpack',
+    prefix: 'LuminPack',
+    label: 'LuminPack',
+    version: '1.1.9',
+    na: true,
+    headline: false,
+  },
   {
     key: 'messagepack',
     prefix: 'MessagePack',
@@ -187,6 +214,15 @@ export const otherLibs: {
 
 /** Every serializer Nino is compared with, MemoryPack first */
 export type Opponent = 'memorypack' | OtherLib;
+
+/** otherLibs that a headline may name (the home page, hasWorkloads, BenchValue's workloads.*) */
+export const headlineLibs = otherLibs.filter((lib) => lib.headline !== false);
+
+/** The footnote of every chart and table with an n/a of a library marked `na` (Nino's readme.py, NA_NOTE) */
+export const naNote = {
+  en: "LuminPack n/a: a case its 1.1.9 cannot run (a generator error, its own bytes read back wrong, a crash), or a scenario the suite times through each library's own API, which has no LuminPack form.",
+  zh: 'LuminPack 标 n/a 的用例：要么是 1.1.9 版跑不了（生成器报错、自己写的字节读不回来、进程崩溃），要么是按各库自家 API 计时的场景，LuminPack 没有对应的写法。',
+};
 
 /** The other forms of a nullable value, by their method prefix (nullableForms) */
 export type NullableForm =
@@ -267,6 +303,8 @@ export interface RuntimeCase {
   v3?: Measure;
   /** The other libraries, for the cases they can express */
   others: Partial<Record<OtherLib, Versus>>;
+  /** The libraries marked `na` the report ran, without this case MemoryPack has: n/a, with naNote */
+  na: OtherLib[];
   /** nullableForms, in the nullable group's cases that have their rows (never a headline) */
   forms: Partial<Record<NullableForm, Versus>>;
   /** Payload (serialize rows) and bytes allocated per call, per library and form */
@@ -1083,6 +1121,11 @@ type V3Rows = (typeof V3_RUNTIME)['rows'];
 /** Derives every runtime number from one report; `v3` only for x64 */
 function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
   const rows = new Map(file.rows.map((row) => [row.method, row] as const));
+  // The other libraries the report has any rows of
+  const libraries = otherLibs
+    .filter((lib) => file.rows.some((row) => row.method.startsWith(lib.prefix)))
+    .map((lib) => lib.key);
+  const ran = new Set(libraries);
   const measure = (method: string): Measure | undefined => {
     const row = rows.get(method);
     return row ? { text: formatTime(row.meanNs), ns: row.meanNs } : undefined;
@@ -1129,6 +1172,12 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
       if (time) others[lib.key] = versus(v4, time);
       caseBytes[lib.key] = sizes(of(lib.prefix));
     }
+    // The one n/a rule (Nino's readme.py, missing()): a library marked `na` that ran, without the case MemoryPack has
+    const na = memorypack
+      ? otherLibs
+          .filter((lib) => lib.na && ran.has(lib.key) && !others[lib.key])
+          .map((lib) => lib.key)
+      : [];
     const forms: RuntimeCase['forms'] = {};
     for (const form of withForms ? nullableForms : []) {
       const time = measure(of(form.prefix));
@@ -1144,6 +1193,7 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
       ratio,
       tooFast,
       others,
+      na,
       forms,
       bytes: caseBytes,
       rerun: nino.rerun,
@@ -1246,11 +1296,7 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
         ]),
       ) as Record<OtherLib, number | null>),
     },
-    libraries: otherLibs
-      .filter((lib) =>
-        file.rows.some((row) => row.method.startsWith(lib.prefix)),
-      )
-      .map((lib) => lib.key),
+    libraries,
   };
 }
 
@@ -1407,6 +1453,14 @@ export function formVersusOf(
   return row.forms[form];
 }
 
+/** Whether `lib` is n/a in this case (RuntimeCase.na): its chart and tables then carry naNote */
+export const isNa = (row: TableCase, lib: Opponent) =>
+  lib !== 'memorypack' && row.na.includes(lib);
+
+/** Whether any of these cases has a library n/a: their chart or tables then carry naNote */
+export const hasNa = (rows: TableCase[]) =>
+  rows.some((row) => row.na.length > 0);
+
 /** Whether any of these cases has a form's row: their chart or tables then carry formNote */
 export const hasForms = (rows: TableCase[]) =>
   rows.some((row) => Object.keys(row.forms).length > 0);
@@ -1458,7 +1512,7 @@ export function formatWorkloadRange(
  */
 export const hasWorkloads =
   workloadsMeasured &&
-  (['memorypack', ...otherLibs.map((lib) => lib.key)] as Opponent[])
+  (['memorypack', ...headlineLibs.map((lib) => lib.key)] as Opponent[])
     .filter((lib) =>
       x64.workloads.serialize.some((row) => versusOf(row, lib) !== undefined),
     )

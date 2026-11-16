@@ -24,9 +24,9 @@ import {
 } from '@/components/home-sections';
 import {
   build,
+  headlineLibs,
   headlineMax,
   headlineSerialize,
-  otherLibs,
 } from '@/lib/benchmarks';
 import { cn } from '@/lib/cn';
 import { getLocale, type Locale } from '@/lib/i18n';
@@ -40,7 +40,7 @@ import type { Route } from './+types/home';
 const generatedSourceRatio = build[0].ratio;
 
 /** The best serialize win over each other library the report measured (headlineMax), e.g. "9.81" */
-const otherHeadlines = otherLibs.flatMap((lib) => {
+const otherHeadlines = headlineLibs.flatMap((lib) => {
   const max = headlineMax('serialize', lib.key);
   return max ? [{ label: lib.label, max }] : [];
 });

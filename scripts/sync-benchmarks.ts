@@ -32,8 +32,8 @@
  * the body had no room for it), and the runtime, Unity and build sections.
  *
  * The x64 and Arm64 reports have a row per method, and every row is kept,
- * whatever its method prefix (`MessagePack…`, `Protobuf…`, `GoogleProtobuf…`,
- * `Json…`) or benchmark class (WorkloadTest's workloads, SimpleTest and
+ * whatever its method prefix (`LuminPack…`, `MessagePack…`, `Protobuf…`,
+ * `GoogleProtobuf…`, `Json…`) or benchmark class (WorkloadTest's workloads, SimpleTest and
  * PolymorphicTest among them), the nullable cases' other forms of a nullable
  * value among them (`NinoNullable…`, `MemoryPackConverted…`,
  * `MemoryPackUnsafe…`, from rc.11). `requiredMethods` never asks for the
@@ -54,7 +54,9 @@
  * `MemoryPackUnsafe…`) in both reports, numbers invented: for reader tests
  * only; the rows of NullableTest's `ManagedStruct` cases and of
  * `NullableVec3s` were added to the three reports by hand, in the same
- * format).
+ * format); scripts/fixtures/release-assets-luminpack/ (release-assets/ plus
+ * LuminPack rows in dotnet-x64.md only, numbers invented: for parser and
+ * rendering tests of LuminPack's n/a only).
  * Bodies of releases without the manifest: scripts/fixtures/release-body.md
  * (made-up numbers, the methods the site requires), release-body-v3.md (with
  * the v3 section), release-body-new.md (a sample of the ReferenceTest,
