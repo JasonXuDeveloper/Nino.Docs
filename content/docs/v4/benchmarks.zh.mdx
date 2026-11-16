@@ -1,7 +1,7 @@
 ---
 title: 基准测试：.NET 运行速度
 seoTitle: "Nino .NET 基准测试：序列化与反序列化速度对比 MemoryPack、MessagePack、Protobuf 和 System.Text.Json – Nino v4 文档"
-description: "Nino v4 在 .NET 10 上对比 v3（3.3.13）、MemoryPack 1.22.0、MessagePack 3.1.12、protobuf-net 3.4.40、Google.Protobuf 3.36.2 和 System.Text.Json 的序列化与反序列化耗时，涵盖真实负载和单个类型，附测量方法和复现代码。"
+description: "Nino v4 在 .NET 10 上对比 v3（3.3.13）、MemoryPack 1.22.0、LuminPack 1.1.9、MessagePack 3.1.12、protobuf-net 3.4.40、Google.Protobuf 3.36.2 和 System.Text.Json 的序列化与反序列化耗时，涵盖真实负载和单个类型，附测量方法和复现代码。"
 icon: ChartColumn
 ---
 
@@ -43,6 +43,7 @@ icon: ChartColumn
 | 对比对象 | 原因 | 测量内容 |
 | --- | --- | --- |
 | [MemoryPack](https://github.com/Cysharp/MemoryPack) **1.22.0** | .NET 上用得最广的二进制序列化库里最快的一个，和 Nino 一样基于源生成器 | 所有分组：[真实负载](#workloads)、[基础类型](#basic-types)、[多态](#polymorphism)、[可空值](#nullable-values)、[集合](#common-types-and-collections)、[复用实例](#pooling)、[引用追踪与版本容错](#reference-tracking-and-version-tolerance)、[其他](#others) |
+| [LuminPack](https://github.com/TheLight-233/LuminPack) **1.1.9** | 从 MemoryPack 派生出来的二进制序列化库，同样基于源生成器 | 自己声明用例的测试类里，MemoryPack 跑的用例它都跑；1.1.9 跑不了的标 n/a（[LuminPack](#luminpack)） |
 | [MessagePack for C#](https://github.com/MessagePack-CSharp/MessagePack-CSharp) **3.1.12** | .NET 里最常用的二进制格式 | [真实负载](#workloads)，以及它的格式能写出的所有用例（[MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)） |
 | [protobuf-net](https://github.com/protobuf-net/protobuf-net) **3.4.40** | .NET 里最常用的 Protocol Buffers 库 | [真实负载](#workloads)，以及它的格式能写出的所有用例（[MessagePack 与 protobuf-net](#messagepack-and-protobuf-net)） |
 | [Google.Protobuf](https://github.com/protocolbuffers/protobuf/tree/main/csharp) **3.36.2** | Google 官方的 Protocol Buffers 运行时 | [真实负载](#workloads)、[基础类型](#basic-types)、[多态](#polymorphism)和[可空值](#nullable-values)，用 protoc 生成的类型 |
@@ -62,7 +63,7 @@ icon: ChartColumn
 | 测试框架 | BenchmarkDotNet 0.15.8，每个用例跑 3 个进程，每个进程预热 5 次、测量 15 次，取三个进程的平均（只跑一个进程时，一个 12 ns 的用例最多偏差 13%）；各基准测试类分到每种架构的多台 runner 上并行跑（[`benchmarks/shards.json`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/shards.json)），同一个用例的所有序列化库都在同一台 runner 上 |
 | 项目 | [`benchmarks/Nino.Benchmark`](https://github.com/JasonXuDeveloper/Nino/tree/main/benchmarks/Nino.Benchmark) |
 
-- **序列化**测试写进一个缓冲区写入器，它只创建一次，每次调用前重置（Nino 用 `NinoArrayBufferWriter`，其他库用 `ArrayBufferWriter<byte>`），所以测的是序列化本身，不是数组分配。每个库用的都是它能直接写入的写入器：换成其他 `IBufferWriter<byte>`，原始值和固定大小的值 Nino 照样直接写入，其他值先写进池化的缓冲区再整体复制过去，比这些表格多一次复制。
+- **序列化**测试写进一个缓冲区写入器，它只创建一次，每次调用前重置（Nino 用 `NinoArrayBufferWriter`，LuminPack 用它自己的 `LuminBufferWriter`，其他库用 `ArrayBufferWriter<byte>`），所以测的是序列化本身，不是数组分配。每个库用的都是它能直接写入的写入器：换成其他 `IBufferWriter<byte>`，原始值和固定大小的值 Nino 照样直接写入，其他值先写进池化的缓冲区再整体复制过去，比这些表格多一次复制。
 - **反序列化**测试读的是各个库启动时写好的字节，每次调用都创建新对象。
 - **先验证**：跑基准测试之前，`--verify`（[`Verify.cs`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Harness/Verify.cs)）把每个用例跑一遍，检查每个序列化用例写出的正是载荷的字节，各个库读回的值也逐层比较、完全相同。测试数据用固定种子，每次跑序列化的都是同样的值。
 - **1 ns 以下**（大约三个时钟周期）的耗时分不出快慢：读一个 40 字节的结构体，扣掉 BenchmarkDotNet 的空方法开销后，两个库测出来都在 0.05 到 0.8 ns 之间晃。两边都低于 1 ns 记为持平；Nino 低于 1 ns、对方测得出时，写成下限“> 1.4×”，即对方耗时除以 1 ns：Nino 用时不到 1 ns，这个倍数只会更大；直接相除只会得到噪声。区间统计不计入这类用例。相差 5% 以内也记为持平。
@@ -90,13 +91,21 @@ MessagePack 3（MessagePack-CSharp）和 protobuf-net 3 用同样的类型，读
 
 各种格式写的内容不一样，载荷大小就看得出来：MessagePack 把 `Guid` 写成 36 个字符的字符串，把 `DateTime` 写成 UTC 时间戳；protobuf-net 给类层次的每一层套一条消息，`DateTime` 也单独写成一条消息。
 
+### LuminPack [#luminpack]
+
+[LuminPack](https://github.com/TheLight-233/LuminPack) 1.1.9 是从 MemoryPack 派生出来的二进制序列化库，同样基于源生成器。它和 MemoryPack 共用一套模型（`[MemoryPackable]` 旁边加上 `[LuminPackable]`，`[LuminPackUnion]` 沿用 MemoryPack 的标签），序列化用 `LuminPackSerializer.Serialize(in value, LuminBufferWriter)` 写进事先分配好大小、反复复用的写入器，反序列化用 `LuminPackSerializer.Deserialize(ReadOnlySpan<byte>, ref value)`，和其他库一样每次读出新对象。
+
+- **字节不唯一**：非托管值它按内存原样拷贝，填充字节和没有值的 `T?` 也照拷不误，所以同一个值可能写出不同的字节，这一点和 MemoryPack 的 `T?` 一样。它没有别的可空值写法，可空值用例测的就是它的 `T?`。
+- **标 n/a，不是 “—”**：1.1.9 跑不了的用例（生成器报错、自己写的字节读不回来、进程崩溃），以及按各库自家 API 计时的场景类（对象池、引用追踪、不可信输入、外部缓冲区、分散对象），它的条和单元格都标 n/a，图表和表格下方附说明。具体是哪些用例、为什么跑不了，见基准测试项目 README 的 [LuminPack](https://github.com/JasonXuDeveloper/Nino/blob/main/runtimes/csharp/benchmarks/README.md#luminpack) 一节。
+- **不进标题数字**：首页和 Nino README 里的倍数区间都不算它，它的耗时只出现在图表和表格里。
+
 每个基准测试的代码见[基准测试代码](#benchmark-code)。
 
 <BenchSource lang="zh" />
 
 ## 运行时结果 [#runtime]
 
-所有用例分成八组，下面每组一节，结构都一样：先说这组测什么、该看哪里，再是图表，最后是数据。图表里可以选架构、序列化或反序列化，单看某个库或全部一起看；每根条是那个库的耗时相当于 Nino v4 的几倍（Nino 为 1×），条越长耗时越多，悬停或聚焦柱条能看到具体耗时。v3 3.3.13 没有移植的用例标 n/a。图表下方的**数据**展开后是这一组的表格：每个库每次操作的耗时，时间后面的 “· 2.1×” 表示 Nino 快几倍；报告里有的话，还有序列化后的大小和每次调用分配的字节数。“—” 表示这个库表达不了这个用例。
+所有用例分成八组，下面每组一节，结构都一样：先说这组测什么、该看哪里，再是图表，最后是数据。图表里可以选架构、序列化或反序列化，单看某个库或全部一起看；每根条是那个库的耗时相当于 Nino v4 的几倍（Nino 为 1×），条越长耗时越多，悬停或聚焦柱条能看到具体耗时。v3 3.3.13 没有移植的用例标 n/a，LuminPack 1.1.9 跑不了的用例也标 n/a（[LuminPack](#luminpack)）。图表下方的**数据**展开后是这一组的表格：每个库每次操作的耗时，时间后面的 “· 2.1×” 表示 Nino 快几倍；报告里有的话，还有序列化后的大小和每次调用分配的字节数。“—” 表示这个库表达不了这个用例，n/a 表示 LuminPack 跑不了。
 
 ### 真实负载 [#workloads]
 
