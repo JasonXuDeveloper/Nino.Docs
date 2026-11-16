@@ -26,6 +26,10 @@
         <!-- Godot.SourceGenerators reads the Godot project directory. -->
         <GodotProjectDir>$(MSBuildProjectDirectory)</GodotProjectDir>
         <NinoDir Condition="'$(NinoDir)' == ''">$(MSBuildThisFileDirectory)../../../Nino</NinoDir>
+        <!-- Nino's .NET root: runtimes/csharp since Nino #273, the checkout's root before. NinoDir arrives as a global
+             property (-p:NinoDir=), which a project cannot override, hence a property of its own. -->
+        <NinoCSharpDir Condition="Exists('$(NinoDir)/runtimes/csharp/src/Nino.Core')">$(NinoDir)/runtimes/csharp</NinoCSharpDir>
+        <NinoCSharpDir Condition="'$(NinoCSharpDir)' == ''">$(NinoDir)</NinoCSharpDir>
     </PropertyGroup>
 
     <!-- check-csharp.ts compiles a copy of each Context file, with the implicit usings in front of it. -->
@@ -34,11 +38,11 @@
     </ItemGroup>
 
     <!-- Nino from source, the way its own tests take it: Nino.Core, the generator as an analyzer with interceptors. -->
-    <Import Project="$(NinoDir)/tools/UseNinoGenerator.props"/>
+    <Import Project="$(NinoCSharpDir)/tools/UseNinoGenerator.props"/>
     <ItemGroup>
-        <ProjectReference Include="$(NinoDir)/src/Nino.Core/Nino.Core.csproj"/>
-        <ProjectReference Include="$(NinoDir)/src/Nino.Immutable/Nino.Immutable.csproj"/>
-        <ProjectReference Include="$(NinoDir)/src/Nino.AspNetCore/Nino.AspNetCore.csproj"/>
+        <ProjectReference Include="$(NinoCSharpDir)/src/Nino.Core/Nino.Core.csproj"/>
+        <ProjectReference Include="$(NinoCSharpDir)/src/Nino.Immutable/Nino.Immutable.csproj"/>
+        <ProjectReference Include="$(NinoCSharpDir)/src/Nino.AspNetCore/Nino.AspNetCore.csproj"/>
     </ItemGroup>
 
     <!-- The libraries the guides integrate with, and the ones the benchmark pages compare Nino with. -->
