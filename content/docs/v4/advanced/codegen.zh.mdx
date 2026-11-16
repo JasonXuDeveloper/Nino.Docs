@@ -133,6 +133,7 @@ dotnet build Shop.Contracts
 | --- | --- | --- | --- | --- |
 | `Out` | `--out` | 全部 | 项目旁的 `ts/`、`go/` 或 `rust/` | 输出目录，相对于项目。 |
 | `Name` | `--name` | 全部 | `<Assembly>.ts`、`nino_types.go`、`nino_types.rs` | 生成文件的名字。 |
+| `Roots` | `--roots` | 全部 | 无 | 本身没有布局的顶层值，写成 `Name=Type`，多个用 `;` 隔开，类型用 .NET 全名（`Items=System.Collections.Generic.List<MyGame.Item>;Score=System.Nullable<System.Int64>`）。直接发一个集合或可空值时用它起名：TypeScript 生成 `ItemsCodec`，Go 生成 `ReadItems` 和 `WriteItems`，Rust 生成 `type Items`。`[NinoType]` 自带编解码器，不用写在这里。 |
 | `Names` | `--names` | TypeScript | `camel` | `camel` 把成员名写成 camelCase（`UnitPrice` → `unitPrice`，`URL` → `url`）；`keep` 保留 C# 中的名字。 |
 | `ImportExtension` | `--import-extension` | TypeScript | 空 | 生成的文件导入 `nino.ts` 时用的扩展名：空适用于打包工具（Vite、webpack、esbuild），`.js` 适用于用 `tsc` 编译的 Node ESM，`.ts` 适用于 Deno 和 Node 的类型剥离，也可以是 `.mjs`、`.mts`。 |
 | `Runtime` | `--runtime` | TypeScript | 空 | 从这个模块导入运行时，而不是在代码旁边写出 `nino.ts`。 |
@@ -174,7 +175,7 @@ nino-gen layouts --assembly publish/Shop.Contracts.dll --out Shop.Contracts/Nino
 每个命令都接受 `--references`（见下表），加 `--help` 会打印用法。本节下面讲的是生成代码：
 
 ```text
-nino-gen --assembly <dll> --lang ts|go|rust --out <dir> [--references <file>] [--name <file name>]
+nino-gen --assembly <dll> --lang ts|go|rust --out <dir> [--references <file>] [--name <file name>] [--roots <Name=Type;...>]
   ts:   [--names camel|keep] [--import-extension <.js|.ts|.mjs|.mts>] [--runtime <module>] [--numeric-arrays plain|typed]
   go:   [--package <name>] [--tags json,yaml] [--tag-names camel|snake|original]
   rust: [--serde] [--serde-names camel|snake|original] [--strings string|wide] [--maps indexmap|std]
