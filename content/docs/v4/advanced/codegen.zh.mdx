@@ -251,6 +251,7 @@ xxd -p frame.bin | nino-gen inspect --assembly publish/Shop.Contracts.dll --type
 | 密封类 | `X \| null` | `*X` | `Option<X>` |
 | 非密封类、抽象类、接口 | `X \| null`，可以是任何生成的子类型 | 接口，由每个允许的类型实现 | `Option<XRef>`，由允许的类型组成的枚举 |
 | `object` | `unknown` | `nino.Typed` | `Option<AnyObject>` |
+| C# `union` | 带 `case` 和 `value` 的类 | 接口，每个分支一个实现它的结构体 | 枚举，每个分支一个变体，外加 `Empty` |
 | 枚举 | `as const` 对象和它的值的类型 | 带常量的具名整数类型 | 整数，外加一个列出具名值的单元结构体 |
 | `string` | `string \| null` | `*string` | `Option<String>` |
 | `T[]`、`List<T>` | `T[] \| null` | `[]T` | `Option<Vec<T>>` |
@@ -319,6 +320,49 @@ public sealed class Box<T>
 
 派生自集合的 `[NinoType]` 类（带有自己成员的 `class Bag : List<int>`）先按集合本身的方式写出元素，再写出成员。每种语言都给这个类型加一个元素字段，放在成员之前：TypeScript 中是 `$elements`（数组、`Map` 或 `Set`），Go 中是 `Elements`（标签 `nino:"-"`，JSON 中为 `$elements`），Rust 中是 `elements`（serde 中为 `$elements`）。元素永远不是 null，因为集合就是这个对象本身：数据里把它们标成 null 的，一律拒绝，和 .NET 一样。
 
+## C# union [#unions]
+
+[C# union](/zh/docs/v4/polymorphism#csharp-unions) 在每种语言里都是它自己的和类型（sum type）：要么是某个分支的一个值，要么是空 union。nino-gen 从 union 的构造函数取得分支，先写分支类型的类型 ID，再按 .NET 为这个分支类型找到的格式化器写值。
+
+```csharp nocheck title="Reply.cs"
+using Nino.Core;
+
+[NinoType]
+public union Reply(Order, string, int);
+```
+
+```ts tab="TypeScript" tab-group="codegen-lang"
+const reply = Reply.Int32(42);             // reply.case === "Int32"，reply.value === 42
+const empty = new Reply();                 // case 为 null：空 union
+switch (reply.case) {
+  case "Order": showOrder(reply.value as Order | null); break;
+  case "String": showError(reply.value as string); break;
+}
+```
+
+```go tab="Go" tab-group="codegen-lang"
+var reply protocol.Reply = protocol.ReplyInt32{Value: 42} // nil 就是空 union
+switch r := reply.(type) {
+case protocol.ReplyOrder:
+	showOrder(r.Value)
+case protocol.ReplyString:
+	showError(*r.Value)
+}
+```
+
+```rust tab="Rust" tab-group="codegen-lang"
+let reply = Reply::Int32(42); // Reply::Empty（默认值）就是空 union
+match &reply {
+    Reply::Order(Some(order)) => show_order(order),
+    Reply::String(Some(text)) => show_error(text),
+    _ => {}
+}
+```
+
+分支值的类型就是这个分支类型作为成员时的类型（`Order | null`、`*Order`、`Option<Box<Order>>`），但数据里不会出现 null：分支值为 null 时写成空 union，和 .NET 一样；数据里带着分支 ID 却是 null 值的，以及 ID 不属于任何分支的，都会被拒绝。在 `object` 槽位里，union 先写自己的类型 ID，再写分支的；Go 在这里用 nil 接口表示空 union，所以写回去会变成 null 对象。
+
+每种语言都会跳过下面两种并给出 NINOGEN002：泛型 union（`union Option<T>(T, None)`），它的分支 ID 取决于类型实参；以及分支是元组或 `KeyValuePair`（或者包含它们）的 union，布局里没有公开这种分支的编码。
+
 ## 不可信数据 [#untrusted-data]
 
 TypeScript、Go 和 Rust 的读取器与 .NET 读取器一样，按不可信输入处理数据（[不可信数据](/zh/docs/v4/security)）：数据如果不是所读类型的有效值，就以这个运行时唯一的错误类型报错，不会抛出其他异常或 panic，也不会越界读取、无限制地递归，或者分配比数据本身还多的内存。
@@ -338,7 +382,8 @@ nino-gen 会跳过目标语言无法表达的类型以及包含它们的类型�
 - 槽位中，程序集和槽位都没有提到的封闭泛型类型：它们的 ID 是未知的（[槽位中的封闭泛型类型](#closed-generic-types-in-slots)）；
 - 带 `trackReferences` 的泛型类型；
 - 由 Nino.Core 以外的格式化器写出的成员：[自定义格式化器](/zh/docs/v4/custom-formatters)、`Nino.Immutable` 的不可变集合，以及 Unity 的 `AnimationCurve`、`Gradient` 和 `RectOffset`，布局里没有描述它们的字节；
-- 原始结构体的 `Vector64<T>` 到 `Vector512<T>` 字段（[原始结构体的字段](#raw-struct-fields)），以及旧版本构建的、含 `System.Numerics.Vector<T>` 的布局。
+- 原始结构体的 `Vector64<T>` 到 `Vector512<T>` 字段（[原始结构体的字段](#raw-struct-fields)），以及旧版本构建的、含 `System.Numerics.Vector<T>` 的布局；
+- 泛型 C# union，以及分支是元组或 `KeyValuePair`（或者包含它们）的 union（[C# union](#unions)）。
 
 [序列化回调](/zh/docs/v4/defining-types#callbacks)（`[NinoOnSerializing]` 等四个特性）不改变任何字节，有没有它们，生成的代码都一样，而且生成的代码不会调用这类方法：回调在 .NET 里做的事（检查值、填缓存），在 TypeScript、Go 或 Rust 里由调用编解码器的代码来做。
 

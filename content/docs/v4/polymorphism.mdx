@@ -192,6 +192,24 @@ Two alternatives exist, and both cost more:
 - **`object` as the declared type** (a member, element or `Serialize<object>` call): only `[NinoType]` values are accepted, a type id is written, and reading dispatches through the global registry of every `[NinoType]` instead of the generated dispatch of one base. Prefer the common base.
 - **The [boxed API](/en/docs/v4/basic#the-boxed-api)** (`SerializeBoxed` / `DeserializeBoxed` with a `Type`): finds the formatter by `Type` and boxes value types. Use it only when the type is known only at run time, as a `Type`, and the types share no common `[NinoType]` base, as in reflection-driven tooling over arbitrary types.
 
+## C# Unions [#csharp-unions]
+
+On .NET 11 with C# 15, a `union` declaration marked `[NinoType]` holds one value of a closed set of case types that need not share a base: a reply that is an order or an error message, a setting that is a number or a text. Each case is written as its type's Nino type id, then the value as its own type's formatter writes it, so a case can be anything Nino serializes: a primitive, a string, a collection, a nullable value or a `[NinoType]` (a subtype of a base-class case keeps its own type id after the case's).
+
+```csharp nocheck
+using Nino.Core;
+
+[NinoType]
+public union Reply(Order, string, int); // [!code highlight]
+
+byte[] bytes = NinoSerializer.Serialize(new Reply(42));
+Reply reply = NinoDeserializer.Deserialize<Reply>(bytes); // reply.Value is the int 42
+```
+
+`new Reply(42)` is the type id of `System.Int32`, then the `int`: `A4 A2 97 20 2A 00 00 00`. The empty union (`default(Reply)`, or a case given `null`) is the id 0 alone. A case is named by its type's id, not by its position, so reordering or adding cases keeps old data readable; removing a case makes the data that holds it unreadable, and a renamed case type keeps its id with [`[NinoFormerName]`](/en/docs/v4/evolving-data#former-name). Reading checks that the id is one of the union's cases and that the value is not null.
+
+Every case needs a formatter: [NINO045](/en/docs/v4/analyzers#nino045) names a case that has none. A union with a case that can hold it again (an array of it, a class) counts toward the [depth limit](/en/docs/v4/security#limits), as a struct that holds itself does. The bytes are in the [wire format specification](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#712-c-union-structs). TypeScript, Go and Rust read and write unions through the code nino-gen generates: [C# Unions](/en/docs/v4/advanced/codegen#unions).
+
 ## Subtypes in Other Assemblies
 
 Subtypes are found automatically wherever they are declared, including assemblies loaded later (plugins, HybridCLR hot-update DLLs): when a type id is unknown, Nino looks in the registries of newly loaded assemblies before it fails. There is no registration call. For example, a plugin or hot-update DLL adds `public sealed class OrderRefunded : OrderEvent`. Once the DLL is loaded, the code in the main (AOT) assembly reads a `List<OrderEvent>` that contains an `OrderRefunded`, with no change to that code. The generator must run in the subtype's assembly too (install the `Nino` package in that project; in Unity, its assembly must reference `Nino.Core`); an id whose type is in no loaded assembly throws `NinoDataException`.

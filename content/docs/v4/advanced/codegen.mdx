@@ -251,6 +251,7 @@ Each `[NinoType]` becomes one type, and each member the type its language has fo
 | sealed class | `X \| null` | `*X` | `Option<X>` |
 | class that is not sealed, abstract class, interface | `X \| null`, any generated subtype | an interface, implemented by each allowed type | `Option<XRef>`, an enum of the allowed types |
 | `object` | `unknown` | `nino.Typed` | `Option<AnyObject>` |
+| C# `union` | class with `case` and `value` | an interface, implemented by a struct per case | an enum with a variant per case and `Empty` |
 | enum | an `as const` object and a type of its values | a named integer type with constants | an integer, and a unit struct of the named values |
 | `string` | `string \| null` | `*string` | `Option<String>` |
 | `T[]`, `List<T>` | `T[] \| null` | `[]T` | `Option<Vec<T>>` |
@@ -319,6 +320,49 @@ A header other than -1, 0 or the number of an object read so far is rejected, as
 
 A `[NinoType]` class deriving from a collection (`class Bag : List<int>` with members of its own) is written as its elements, as the collection they are, then its members. Each language gives the type a field for the elements, before its members: `$elements` in TypeScript (an array, `Map` or `Set`), `Elements` in Go (tagged `nino:"-"`, `$elements` in JSON) and `elements` in Rust (`$elements` in serde). The elements are never null, since the collection is the object: data that marks them null is rejected, as .NET rejects it.
 
+## C# Unions [#unions]
+
+A [C# union](/en/docs/v4/polymorphism#csharp-unions) is each language's sum type: one value of its cases, or the empty union. nino-gen takes the cases from the union's constructors and writes each one's value as .NET's formatter for the case's type writes it, after the case's type id.
+
+```csharp nocheck title="Reply.cs"
+using Nino.Core;
+
+[NinoType]
+public union Reply(Order, string, int);
+```
+
+```ts tab="TypeScript" tab-group="codegen-lang"
+const reply = Reply.Int32(42);             // reply.case === "Int32", reply.value === 42
+const empty = new Reply();                 // case null: the empty union
+switch (reply.case) {
+  case "Order": showOrder(reply.value as Order | null); break;
+  case "String": showError(reply.value as string); break;
+}
+```
+
+```go tab="Go" tab-group="codegen-lang"
+var reply protocol.Reply = protocol.ReplyInt32{Value: 42} // nil is the empty union
+switch r := reply.(type) {
+case protocol.ReplyOrder:
+	showOrder(r.Value)
+case protocol.ReplyString:
+	showError(*r.Value)
+}
+```
+
+```rust tab="Rust" tab-group="codegen-lang"
+let reply = Reply::Int32(42); // Reply::Empty (the default) is the empty union
+match &reply {
+    Reply::Order(Some(order)) => show_order(order),
+    Reply::String(Some(text)) => show_error(text),
+    _ => {}
+}
+```
+
+A case's value has the type a member of the case's type has (`Order | null`, `*Order`, `Option<Box<Order>>`), but data never holds a null one: a case given null is written as the empty union, as .NET writes it, and data with a case's id and a null value is rejected, as is an id that is not one of the cases. In an `object` slot a union is written behind its own type id, then its case's; in Go an empty union is a nil interface there, so it is written back as a null object.
+
+Left out with NINOGEN002 in every language: a generic union (`union Option<T>(T, None)`), whose case ids depend on its type arguments, and a union with a case that is or holds a tuple or a `KeyValuePair`, whose encoding the layouts do not publish.
+
 ## Untrusted Data [#untrusted-data]
 
 The TypeScript, Go and Rust readers take untrusted input, as the .NET reader does ([Untrusted Data](/en/docs/v4/security)): data that is not a value of the type read fails with the runtime's one error type, never another exception or a panic, and never reads out of bounds, recurses without a bound or allocates more than the data holds.
@@ -338,7 +382,8 @@ nino-gen leaves out, with warning NINOGEN002, every type its language cannot exp
 - closed generic types in slots that neither the assembly nor a slot names: their ids are unknown ([Closed Generic Types in Slots](#closed-generic-types-in-slots));
 - a generic type with `trackReferences`;
 - members written by a formatter outside Nino.Core: a [custom formatter](/en/docs/v4/custom-formatters), the immutable collections of `Nino.Immutable`, and Unity's `AnimationCurve`, `Gradient` and `RectOffset`, whose bytes the layouts do not describe;
-- the `Vector64<T>` to `Vector512<T>` fields of raw structs ([Fields of Raw Structs](#raw-struct-fields)), and layouts from an older build that hold a `System.Numerics.Vector<T>`.
+- the `Vector64<T>` to `Vector512<T>` fields of raw structs ([Fields of Raw Structs](#raw-struct-fields)), and layouts from an older build that hold a `System.Numerics.Vector<T>`;
+- a generic C# union, and a union with a case that is or holds a tuple or a `KeyValuePair` ([C# Unions](#unions)).
 
 [Serialization callbacks](/en/docs/v4/defining-types#callbacks) (`[NinoOnSerializing]` and the three others) change no byte, so the generated code is the same with or without them, and it calls nothing of the kind: work a callback does in .NET (checking values, filling a cache) is done in TypeScript, Go or Rust by the code that calls the codec.
 
