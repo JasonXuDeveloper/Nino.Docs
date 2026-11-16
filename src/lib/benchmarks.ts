@@ -49,6 +49,7 @@
  * those the section publishes.
  */
 
+import brokenData from '@/data/bench-broken.json';
 import benchBuild from '@/data/bench-build.json';
 import benchRuntimes from '@/data/bench-runtimes.json';
 import benchUnity from '@/data/bench-unity.json';
@@ -220,9 +221,45 @@ export const headlineLibs = otherLibs.filter((lib) => lib.headline !== false);
 
 /** The footnote of every chart and table with an n/a of a library marked `na` (Nino's readme.py, NA_NOTE) */
 export const naNote = {
-  en: "LuminPack n/a: a case its 1.1.9 cannot run (a generator error, its own bytes read back wrong, a crash), or a scenario the suite times through each library's own API, which has no LuminPack form.",
-  zh: 'LuminPack 标 n/a 的用例：要么是 1.1.9 版跑不了（生成器报错、自己写的字节读不回来、进程崩溃），要么是按各库自家 API 计时的场景，LuminPack 没有对应的写法。',
+  en: "LuminPack n/a: a scenario the suite times through each library's own API, which has no LuminPack form (or, in a release before the case manifest, a case its 1.1.9 cannot run).",
+  zh: 'LuminPack 标 n/a 的用例：按各库自家 API 计时的场景，LuminPack 没有对应的写法（没有用例清单的旧版本里，也包括 1.1.9 版跑不了的用例）。',
 };
+
+/** Why a library breaks on a case, by kind (Nino's readme.py, ERROR_KINDS) */
+const errorKinds = {
+  compile: {
+    en: 'its generator cannot build the model',
+    zh: '生成器编译不过模型',
+  },
+  throws: { en: 'it throws', zh: '抛异常' },
+  crash: { en: 'the process dies', zh: '进程崩溃' },
+  'wrong-read': {
+    en: 'it reads back other values than it wrote',
+    zh: '读回的值和写入的不同',
+  },
+} as const;
+
+/**
+ * The cases a library breaks on, from the release's case manifest
+ * (src/data/bench-broken.json, Nino's bench-cases.json): `<prefix>:<case>` ->
+ * kind and reason. Such a case is n/a (RuntimeCase.na) shown as error
+ * (RuntimeCase.error, errorNote) with its reason.
+ */
+const brokenCases = new Map(
+  (brokenData as BrokenData).cases.map((c) => [
+    `${c.library}:${c.case}`,
+    { kind: c.kind, reason: c.reason },
+  ]),
+);
+
+interface BrokenData {
+  cases: {
+    library: string;
+    case: string;
+    kind: keyof typeof errorKinds;
+    reason: string;
+  }[];
+}
 
 /** The other forms of a nullable value, by their method prefix (nullableForms) */
 export type NullableForm =
@@ -305,6 +342,10 @@ export interface RuntimeCase {
   others: Partial<Record<OtherLib, Versus>>;
   /** The libraries marked `na` the report ran, without this case MemoryPack has: n/a, with naNote */
   na: OtherLib[];
+  /** Those of `na` the case manifest declares broken on the case: error, with errorNote's reason */
+  error: Partial<
+    Record<OtherLib, { kind: keyof typeof errorKinds; reason: string }>
+  >;
   /** nullableForms, in the nullable group's cases that have their rows (never a headline) */
   forms: Partial<Record<NullableForm, Versus>>;
   /** Payload (serialize rows) and bytes allocated per call, per library and form */
@@ -1305,6 +1346,12 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
           .filter((lib) => lib.na && ran.has(lib.key) && !others[lib.key])
           .map((lib) => lib.key)
       : [];
+    const error: RuntimeCase['error'] = {};
+    for (const key of na) {
+      const lib = otherLibs.find((l) => l.key === key);
+      const broken = lib && brokenCases.get(`${lib.prefix}:${info.key}`);
+      if (broken) error[key] = broken;
+    }
     const forms: RuntimeCase['forms'] = {};
     for (const form of withForms ? nullableForms : []) {
       const time = measure(of(form.prefix));
@@ -1321,6 +1368,7 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
       tooFast,
       others,
       na,
+      error,
       forms,
       bytes: caseBytes,
       rerun: nino.rerun,
@@ -1584,9 +1632,42 @@ export function formVersusOf(
 export const isNa = (row: TableCase, lib: Opponent) =>
   lib !== 'memorypack' && row.na.includes(lib);
 
-/** Whether any of these cases has a library n/a: their chart or tables then carry naNote */
+/** Whether any of these cases has a library n/a and not broken: their chart or tables then carry naNote */
 export const hasNa = (rows: TableCase[]) =>
-  rows.some((row) => row.na.length > 0);
+  rows.some((row) => row.na.some((lib) => !row.error[lib]));
+
+/** What a library n/a in a case shows (isNa): error when the case manifest declares it broken, else n/a */
+export const naText = (row: TableCase, lib: string) =>
+  row.error[lib as OtherLib] ? 'error' : 'n/a';
+
+/**
+ * The note of these cases' error cells and bars (Nino's readme.py,
+ * error_note): per library, each case it breaks on with the kind and reason;
+ * null without any.
+ */
+export function errorNote(rows: TableCase[], zh: boolean): string | null {
+  const byLib = new Map<OtherLib, Map<string, string>>();
+  for (const row of rows)
+    for (const [key, broken] of Object.entries(row.error) as [
+      OtherLib,
+      { kind: keyof typeof errorKinds; reason: string },
+    ][]) {
+      const kind = errorKinds[broken.kind][zh ? 'zh' : 'en'];
+      const cases = byLib.get(key) ?? new Map<string, string>();
+      cases.set(row.key, `${row.key} (${kind}: ${broken.reason})`);
+      byLib.set(key, cases);
+    }
+  if (byLib.size === 0) return null;
+  return [...byLib]
+    .map(([key, cases]) => {
+      const label = otherLibs.find((l) => l.key === key)?.label ?? key;
+      const items = [...cases.values()].join('; ');
+      return zh
+        ? `${label} 标 error 的用例，跑不了的原因：${items}。`
+        : `${label} error, a case it breaks on: ${items}.`;
+    })
+    .join(' ');
+}
 
 /** Whether any of these cases has a form's row: their chart or tables then carry formNote */
 export const hasForms = (rows: TableCase[]) =>

@@ -26,6 +26,7 @@ import {
   type DotnetGroupId,
   datasets,
   dotnetGroups,
+  errorNote,
   FLOOR_NS,
   formatBound,
   formatRatio,
@@ -39,6 +40,7 @@ import {
   type Opponent as Library,
   type NullableForm,
   naNote,
+  naText,
   nullableForms,
   otherLibs,
   type RuntimeLang,
@@ -441,7 +443,7 @@ export function DotnetChart({
       } else if (key === 'v3' || naOf(row, key)) {
         // no bar, a label: 3.3.13 has no port of this case, or LuminPack cannot run it
         values[key] = 0;
-        text[key] = 'n/a';
+        text[key] = key === 'v3' ? 'n/a' : naText(row, key);
       }
     }
     const single = opponent === 'all' ? undefined : opponentOf(row, opponent);
@@ -464,7 +466,15 @@ export function DotnetChart({
     shown.includes('v3') ? v3SourceNote(zh) : null,
     rows.some((r) => r.mark) ? t(gcNote) : null,
     shown.some((key) => isForm(key)) && hasForms(cases) ? t(formNote) : null,
-    cases.some((row) => shown.some((key) => naOf(row, key))) ? t(naNote) : null,
+    cases.some((row) =>
+      shown.some((key) => naOf(row, key) && naText(row, key) === 'n/a'),
+    )
+      ? t(naNote)
+      : null,
+    errorNote(
+      cases.filter((row) => shown.some((key) => naOf(row, key))),
+      zh,
+    ),
   ].filter((note): note is string => Boolean(note));
   const opName =
     op === 'serialize' ? t(measureNames.serialize) : t(deserializeNew);

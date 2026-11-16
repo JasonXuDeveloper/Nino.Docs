@@ -40,6 +40,7 @@ import {
   type DotnetGroupId,
   datasets,
   dotnetGroups,
+  errorNote,
   formatBound,
   formatBytes,
   formatClassRange,
@@ -56,6 +57,7 @@ import {
   isNa,
   type NullableForm,
   naNote,
+  naText,
   nullableForms,
   type Opponent,
   type OtherLib,
@@ -400,7 +402,7 @@ function groupTables(
     field: 'payload' | 'allocated',
   ) =>
     row && key !== 'v4' && !isForm(key) && isNa(row, key)
-      ? 'n/a'
+      ? naText(row, key)
       : size(row?.bytes[key]?.[field]);
   const table = (
     rows: TableCase[],
@@ -448,7 +450,11 @@ function groupTables(
           ? formVersusOf(row, key)
           : versusOf(row, key);
     if (!vs)
-      return key === 'v3' || (!isForm(key) && isNa(row, key)) ? 'n/a' : '—';
+      return key === 'v3'
+        ? 'n/a'
+        : !isForm(key) && isNa(row, key)
+          ? naText(row, key)
+          : '—';
     const note = versusNote(vs, zh);
     // On the page the multiple goes on a line of its own, so the table fits the column
     return (
@@ -550,6 +556,11 @@ function groupTables(
       {hasNa([...serialize, ...deserialize]) && (
         <p className="text-sm text-fd-muted-foreground">
           {zh ? naNote.zh : naNote.en}
+        </p>
+      )}
+      {errorNote([...serialize, ...deserialize], zh) && (
+        <p className="text-sm text-fd-muted-foreground">
+          {errorNote([...serialize, ...deserialize], zh)}
         </p>
       )}
     </>
