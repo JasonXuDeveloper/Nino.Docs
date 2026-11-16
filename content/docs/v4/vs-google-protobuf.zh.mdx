@@ -20,7 +20,7 @@ Protocol Buffers 给每个字段写上字段号和 wire type，读取方遇到�
 
 ## 性能 [#performance]
 
-用 BenchmarkDotNet 测量，与 Nino 在同一轮测试中运行，数据相同。Google.Protobuf 用的是自己的消息类型，由 `protoc` 从基准测试的 [`workloads.proto`](https://github.com/JasonXuDeveloper/Nino/blob/main/benchmarks/Nino.Benchmark/Workloads/workloads.proto) 和 `cases.proto` 生成，写出的 protobuf 消息和 protobuf-net 相同。写入用 `WriteTo` 写进复用的 `ArrayBufferWriter<byte>`，读取用 `Parser.ParseFrom(ReadOnlySpan<byte>)`（[测试设置](/zh/docs/v4/benchmarks#workloads)）。<IfWorkloads>在 Nino 领先的[真实负载](/zh/docs/v4/benchmarks#workloads)上，序列化快 <BenchValue k="workloads.googleprotobuf.serialize" />，反序列化快 <BenchValue k="workloads.googleprotobuf.deserialize" />。</IfWorkloads>Google.Protobuf 跑了真实负载以及基础、多态、可空值三组用例。
+用 BenchmarkDotNet 测量，与 Nino 在同一轮测试中运行，数据相同。Google.Protobuf 用的是自己的消息类型，由 `protoc` 从基准测试的 [`workloads.proto`](https://github.com/JasonXuDeveloper/Nino/blob/main/runtimes/csharp/benchmarks/Nino.Benchmark/Workloads/workloads.proto) 和 `cases.proto` 生成，写出的 protobuf 消息和 protobuf-net 相同。写入用 `WriteTo` 写进复用的 `ArrayBufferWriter<byte>`，读取用 `Parser.ParseFrom(ReadOnlySpan<byte>)`（[测试设置](/zh/docs/v4/benchmarks#workloads)）。<IfWorkloads>在 Nino 领先的[真实负载](/zh/docs/v4/benchmarks#workloads)上，序列化快 <BenchValue k="workloads.googleprotobuf.serialize" />，反序列化快 <BenchValue k="workloads.googleprotobuf.deserialize" />。</IfWorkloads>Google.Protobuf 跑了真实负载以及基础、多态、可空值三组用例。
 
 <LibrarySummary lib="googleprotobuf" lang="zh" />
 

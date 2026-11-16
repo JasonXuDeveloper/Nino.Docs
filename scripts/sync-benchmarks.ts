@@ -2,7 +2,7 @@
  * Syncs the benchmarks of Nino's newest v4 release into src/data. Nino's
  * report workflow attaches every result to the release as an asset and lists
  * them in benchmarks-manifest.json (Nino's
- * benchmarks/reports/release_assets.py); the body only charts them. From
+ * runtimes/csharp/benchmarks/reports/release_assets.py); the body only charts them. From
  * the assets (`assetNames`):
  *
  * - dotnet-x64.md, the merged BenchmarkDotNet report of every class (v4,
@@ -14,7 +14,7 @@
  *   src/data/bench-v4-arm64.json;
  * - runtime-go-x64.md, runtime-rust-x64.md and runtime-typescript-x64.md, the
  *   sections of the runtimes outside .NET ("🐹 Go runtime benchmark", ...,
- *   written by Nino's benchmarks/reports/runtimes_report.py), into
+ *   written by Nino's runtimes/csharp/benchmarks/reports/runtimes_report.py), into
  *   src/data/bench-runtimes.json;
  * - unity-x64.md, the Unity section ("🎮 Unity benchmark (Burst, IL2CPP)": an
  *   IL2CPP player on GitHub's Linux x64 runner, each case timed without and
@@ -23,7 +23,7 @@
  * - build-x64.md, the build section ("🏗️ Build: v3 3.3.13 vs v4 (source
  *   generator)": Nino v3 3.3.13's source generator against the release's on
  *   one x64 runner, at 330 and 1,100 types, written by Nino's
- *   benchmarks/reports/generator_report.py), into src/data/bench-build.json.
+ *   runtimes/csharp/benchmarks/reports/generator_report.py), into src/data/bench-build.json.
  *
  * A release without the manifest (v4.0.0-rc.9 and older) had these as
  * sections of its body, which are parsed instead: the "Performance Report",
@@ -71,7 +71,7 @@
  * for every library in the x64 report and the Arm64 section, with invented
  * numbers: for parser tests only) and release-body-build.md
  * (release-body-workloads.md plus the build section, its numbers from Nino's
- * benchmarks/reports/fixtures/generator: for parser tests only).
+ * runtimes/csharp/benchmarks/reports/fixtures/generator: for parser tests only).
  *
  * Runs before every build. It never fails the build: on any error (network,
  * rate limit, no matching release, an asset or table it cannot read) it prints
@@ -124,7 +124,7 @@ export const arm64Heading = '## 📊 Arm64 benchmark';
 /** The release asset that held the Arm64 section of a body with no room for it (releases before the manifest) */
 export const arm64Asset = 'arm64-benchmark.md';
 
-/** The manifest of a release's benchmark assets (Nino's benchmarks/reports/release_assets.py, MANIFEST) */
+/** The manifest of a release's benchmark assets (Nino's runtimes/csharp/benchmarks/reports/release_assets.py, MANIFEST) */
 export const manifestAsset = 'benchmarks-manifest.json';
 
 /** The assets the site reads (release_assets.py, NAMES): fixed names, the same for every release */
@@ -174,7 +174,7 @@ export type RuntimeLang = keyof typeof runtimeHeadings;
 export const unityHeading = '## 🎮 Unity benchmark (Burst, IL2CPP)';
 
 /**
- * Heading of the build section (Nino's benchmarks/reports/generator_report.py,
+ * Heading of the build section (Nino's runtimes/csharp/benchmarks/reports/generator_report.py,
  * HEADING): v3 3.3.13's source generator against the release's, one
  * "### <types> types (N = <roots>)" table per workload.
  */

@@ -98,7 +98,7 @@ export const archLabels: Record<Arch, string> = { x64: 'x64', arm64: 'Arm64' };
  * time gets a lower bound instead of a ratio, which would only reflect noise:
  * v4 took less than the floor, so the other time is more than its time /
  * FLOOR_NS times as long ("> 1.4×", formatBound). Both under it is on par.
- * Nino's benchmarks/reports/bdn.py holds the same floor and bound (charts.py,
+ * Nino's runtimes/csharp/benchmarks/reports/bdn.py holds the same floor and bound (charts.py,
  * readme.py and compare_v3.py use them).
  */
 export const FLOOR_NS = 1;
@@ -159,7 +159,7 @@ export type OtherLib =
 /** The versions Nino's Directory.Packages.props pins (the `benchmark` skill: update them with an upgrade) */
 // In the order the owner chose for every chart and table: the binary serializers closest to Nino first (LuminPack,
 // derived from MemoryPack, right after it), then both Protobuf libraries, then JSON (Nino's README chart,
-// reports/readme.py's OTHERS, uses the same order).
+// runtimes/csharp/benchmarks/reports/readme.py's OTHERS, uses the same order).
 export const otherLibs: {
   key: OtherLib;
   prefix: string;
