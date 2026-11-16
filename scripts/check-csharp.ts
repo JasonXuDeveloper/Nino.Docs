@@ -662,7 +662,12 @@ function ninoDir(): string {
       : (process.env.NINO_DIR ?? join(root, '../Nino'));
   const resolved = resolve(dir);
   // Nino's .NET projects moved to runtimes/csharp (Nino #273); either layout is a Nino checkout.
-  if (!['tools/UseNinoGenerator.props', 'runtimes/csharp/tools/UseNinoGenerator.props'].some((p) => existsSync(join(resolved, p)))) {
+  if (
+    ![
+      'tools/UseNinoGenerator.props',
+      'runtimes/csharp/tools/UseNinoGenerator.props',
+    ].some((p) => existsSync(join(resolved, p)))
+  ) {
     console.error(
       `No Nino checkout at ${resolved}: pass --nino <dir> or set NINO_DIR.`,
     );
