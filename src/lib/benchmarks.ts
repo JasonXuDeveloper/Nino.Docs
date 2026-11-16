@@ -666,15 +666,20 @@ const extraCases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
 const bothOps = (list: CaseInfo[]) => ({ serialize: list, deserialize: list });
 
 /**
- * The benchmark classes of common types, collections, BCL types, scattered
- * objects and untrusted reads (CommonTypesTest, CollectionsTest, BclTypesTest,
- * ScatteredTest, UntrustedTest), against every library that can express each
- * case. They join their groups in `dotnetGroups`.
+ * The benchmark classes of common types, collections, BCL types, text, block
+ * copies, application data, scattered objects and untrusted reads
+ * (CommonTypesTest, CollectionsTest, BclTypesTest, StringsTest, RawArraysTest,
+ * AppDataTest, ScatteredTest, UntrustedTest), against every library that can
+ * express each case. They join their groups in `dotnetGroups`, as Nino's
+ * readme.py GROUPS puts their classes.
  */
 export type MoreSet =
   | 'common'
   | 'collections'
   | 'bcl'
+  | 'strings'
+  | 'rawArrays'
+  | 'appData'
   | 'scattered'
   | 'untrusted';
 
@@ -695,10 +700,6 @@ const moreCases: Record<
       code: true,
       key: 'StringDictionary',
     },
-    // Reports up to v4.0.0-rc.9 (the workloads replaced them)
-    { name: 'List<Player> (100)', code: true, key: 'Players' },
-    { name: 'List<Order> (100)', code: true, key: 'Orders' },
-    { name: 'List<Shape> (1,000)', code: true, key: 'Shapes' },
   ]),
   collections: bothOps([
     { name: 'List<(int, long)>', code: true, key: 'TupleList' },
@@ -716,6 +717,121 @@ const moreCases: Record<
       key: 'ConcurrentDictionary',
     },
     { name: 'SelfTree', code: true, key: 'SelfTree' },
+    {
+      name: 'HashSet<int>, random order',
+      zh: 'HashSet<int>，随机顺序',
+      key: 'RandomIntSet',
+    },
+    { name: 'HashSet<string>', code: true, key: 'StringSet' },
+  ]),
+  strings: bothOps([
+    {
+      name: '1,000 ASCII strings',
+      zh: '1,000 个 ASCII 字符串',
+      key: 'AsciiStrings',
+    },
+    {
+      name: '1,000 mixed strings',
+      zh: '1,000 个混合字符串',
+      key: 'MixedStrings',
+    },
+    {
+      name: '1,000 mixed strings, [NinoUtf8]',
+      zh: '1,000 个混合字符串，[NinoUtf8]',
+      key: 'Utf8MixedStrings',
+    },
+    {
+      name: 'ASCII string, 32 chars',
+      zh: 'ASCII 字符串，32 字符',
+      key: 'AsciiString32',
+    },
+    {
+      name: 'ASCII string, 1,000 chars',
+      zh: 'ASCII 字符串，1,000 字符',
+      key: 'AsciiString1000',
+    },
+    {
+      name: 'ASCII string, 100,000 chars',
+      zh: 'ASCII 字符串，100,000 字符',
+      key: 'AsciiString100000',
+    },
+    {
+      name: 'CJK string, 32 chars',
+      zh: '中文字符串，32 字符',
+      key: 'CjkString32',
+    },
+    {
+      name: 'CJK string, 1,000 chars',
+      zh: '中文字符串，1,000 字符',
+      key: 'CjkString1000',
+    },
+    {
+      name: 'CJK string, 100,000 chars',
+      zh: '中文字符串，100,000 字符',
+      key: 'CjkString100000',
+    },
+    {
+      name: 'ASCII string, 32 chars, [NinoUtf8]',
+      zh: 'ASCII 字符串，32 字符，[NinoUtf8]',
+      key: 'Utf8AsciiString32',
+    },
+    {
+      name: 'ASCII string, 1,000 chars, [NinoUtf8]',
+      zh: 'ASCII 字符串，1,000 字符，[NinoUtf8]',
+      key: 'Utf8AsciiString1000',
+    },
+    {
+      name: 'ASCII string, 100,000 chars, [NinoUtf8]',
+      zh: 'ASCII 字符串，100,000 字符，[NinoUtf8]',
+      key: 'Utf8AsciiString100000',
+    },
+    {
+      name: 'CJK string, 1,000 chars, [NinoUtf8]',
+      zh: '中文字符串，1,000 字符，[NinoUtf8]',
+      key: 'Utf8CjkString1000',
+    },
+    {
+      name: 'List<string>, 1,000 ASCII words',
+      zh: 'List<string>，1,000 个 ASCII 单词',
+      key: 'AsciiWords',
+    },
+  ]),
+  rawArrays: bothOps([
+    ...[32, 1000, 100000].flatMap((n) => {
+      const count = n.toLocaleString('en-US');
+      return [
+        { name: `(int, long)[${count}]`, code: true, key: `IntLongPairs${n}` },
+        { name: `(byte, int)[${count}]`, code: true, key: `ByteIntPairs${n}` },
+        {
+          name: `(double, long, double, float, byte)[${count}]`,
+          code: true,
+          key: `FiveTuples${n}`,
+        },
+        { name: `PaddedRaw[${count}]`, code: true, key: `PaddedRaws${n}` },
+      ];
+    }),
+    { name: 'double[10,000]', code: true, key: 'Doubles10000' },
+    { name: 'int[10,000]', code: true, key: 'Ints10000' },
+    { name: 'Box<long>[1,000] (generic)', code: true, key: 'GenericBoxes' },
+    { name: 'LongBox[1,000]', code: true, key: 'LongBoxes' },
+  ]),
+  appData: bothOps([
+    { name: '1,000 players', zh: '1,000 个玩家', key: 'Players' },
+    {
+      name: '50 zoos of 100 animals',
+      zh: '50 个动物园，各 100 只动物',
+      key: 'Zoos',
+    },
+    {
+      name: '100 order books of 50 orders',
+      zh: '100 个订单簿，各 50 单',
+      key: 'OrderBooks',
+    },
+    { name: '200 articles', zh: '200 篇文章', key: 'Articles' },
+    { name: '20 meshes', zh: '20 个网格', key: 'Meshes' },
+    { name: '20 sample sets', zh: '20 组采样', key: 'SampleSets' },
+    { name: '50 lookups', zh: '50 个查找表', key: 'Lookups' },
+    { name: '1,000 events', zh: '1,000 个事件', key: 'Events' },
   ]),
   bcl: bothOps([
     { name: 'BigInteger', code: true, key: 'BigInteger' },
@@ -963,7 +1079,13 @@ export const dotnetGroups: {
     id: 'collections',
     name: 'Collections and common types',
     zh: '集合与常用类型',
-    cases: join(moreCases.collections, moreCases.common, moreCases.bcl),
+    cases: join(
+      moreCases.collections,
+      moreCases.common,
+      moreCases.bcl,
+      moreCases.strings,
+      moreCases.rawArrays,
+    ),
   },
   {
     id: 'reuse',
@@ -981,7 +1103,12 @@ export const dotnetGroups: {
     id: 'others',
     name: 'Others',
     zh: '其他',
-    cases: join(moreCases.scattered, moreCases.untrusted, externalCases),
+    cases: join(
+      moreCases.scattered,
+      moreCases.untrusted,
+      externalCases,
+      moreCases.appData,
+    ),
   },
 ];
 
