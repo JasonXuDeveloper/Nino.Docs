@@ -131,6 +131,42 @@ Unity 客户端和 .NET 服务端交换 Nino 数据，两边必须编译同一�
 </Tab>
 </Tabs>
 
+### C# union [#shared-unions]
+
+[C# union](/zh/docs/v4/polymorphism#csharp-unions) 需要 C# 15，还要用到 .NET 11 的两个类型（编译器给每个 union 加上的 `UnionAttribute` 和 `IUnion`），所以 Unity 编译不了 union，Unity 里的 Nino 生成器也就不会为它生成代码。共享类型里有 union 时，只能以预编译 DLL 的形式交给 Unity：用 .NET 11 SDK 和 C# 15 编译共享项目，在项目里自己声明这两个类型（`internal`），再按上面"预编译 DLL"标签页的做法拷贝 DLL。
+
+```xml title="Game.Shared/Game.Shared.csproj" tab="项目文件"
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>preview</LangVersion> <!-- union 需要 C# 15，用 .NET 11 SDK 编译 -->
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Nino" Version="%NINO_VERSION%" />
+  </ItemGroup>
+</Project>
+```
+
+```csharp nocheck title="Game.Shared/UnionTypes.cs" tab="UnionTypes.cs"
+namespace System.Runtime.CompilerServices
+{
+    // .NET 11 自带、.NET Standard 2.1 没有的两个类型；声明成 internal，别的程序集看不到
+    [AttributeUsage(AttributeTargets.Struct | AttributeTargets.Class)] internal sealed class UnionAttribute : Attribute { }
+    internal interface IUnion { object Value { get; } }
+}
+```
+
+```csharp nocheck title="Game.Shared/Reply.cs" tab="Reply.cs"
+using Nino.Core;
+
+[NinoType]
+public union Reply(Order, string, int);
+```
+
+union 的格式化器由 .NET 构建生成，就在这个 DLL 里，写出的字节和 .NET 11 完全一样（`new Reply(42)` 是 `A4 A2 97 20 2A 00 00 00`）。在 Unity 代码里，union 就是它编译出来的那个结构体：用 `new Reply(42)` 构造，读 `reply.Value`（类型是 `object`），再用 `is` 模式判断是哪个分支。服务端引用同一个 DLL 即可；也可以让项目同时面向 `net11.0`，在那个目标下去掉这两个声明（`#if !NET11_0_OR_GREATER`）。
+
+用多态的 `[NinoType]` 基类配上同样的子类型来代替是不行的，字节不一样。union 先写分支类型的类型 ID，再按分支类型自己的方式写值：分支是密封类时，ID 后面多一个存在字节；分支是非密封类时，先写分支的 ID，再写子类型的 ID；而基类槽位只写子类型的 ID 和主体。两端要么都用预编译 DLL 里的 union，要么都用基类，不能一边一种。
+
 ### 常见陷阱 [#shared-pitfalls]
 
 | 错误做法 | 后果 | 由谁发现 |
@@ -141,6 +177,7 @@ Unity 客户端和 .NET 服务端交换 Nino 数据，两边必须编译同一�
 | 把 `Nino.Core.dll` 复制进 `Assets`，和包里那份并存 | Unity 报程序集重复 | Unity 的编译器 |
 | 预编译 DLL 用的 Nino 版本和 Unity 包不同 | 生成的代码调用了那个版本可能没有的 API | 运行时的 `MissingMethodException` 或 `TypeLoadException` |
 | 同一批类型既有源码、又有 DLL | 每个类型都有两份定义 | Unity 的编译器 |
+| 共享源码文件夹里有 C# union | Unity 编译不了 `union` | Unity 的编译器；改用[预编译 DLL](#shared-unions) |
 
 ## Burst 加速内核 [#burst-kernels]
 

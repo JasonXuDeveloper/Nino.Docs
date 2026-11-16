@@ -322,29 +322,38 @@ public sealed class Box<T>
 
 ## C# union [#unions]
 
-[C# union](/zh/docs/v4/polymorphism#csharp-unions) 在每种语言里都是它自己的和类型（sum type）：要么是某个分支的一个值，要么是空 union。nino-gen 从 union 的构造函数取得分支，先写分支类型的类型 ID，再按 .NET 为这个分支类型找到的格式化器写值。
+[C# union](/zh/docs/v4/polymorphism#csharp-unions) 包着一个值，是哪个分支取决于这个值的运行时类型。每种语言都用自己的和类型（sum type）来表示，空 union 是 null（Go 的 nil、Rust 的 `Empty`）；nino-gen 从 union 的构造函数取得分支，先写分支类型的类型 ID，再按 .NET 为这个分支类型找到的格式化器写值。
 
-```csharp nocheck title="Reply.cs"
+```csharp nocheck title="Unions.cs"
+using System.Collections.Generic;
 using Nino.Core;
 
 [NinoType]
-public union Reply(Order, string, int);
+public union Reply(Order, string, int);              // 每个分支都能靠值本身区分
+
+[NinoType]
+public union Measure(int, double, List<int>, List<string>); // 两个都是数字，两个都是列表
 ```
 
+**TypeScript** 本身就有类型联合，所以只要写入时能在运行时靠值区分出每个分支，union 就直接生成成类型联合：每个分支的判断方式都得不一样（数字、字符串、布尔值或 bigint 的 `typeof`，`Array.isArray`，`Map`、`Set`、`Date`、类型化数组或生成类的 `instanceof`；子类先于基类判断）。`Reply` 就是 `Order | string | number`，读出来是值本身，写入时判断值的类型。如果两个分支的判断方式相同（`int` 和 `double` 都是 number，两个列表都是数组，`char` 和 `string` 都是字符串），或者某个分支没法判断（接口、`object`），就给分支加上标签：`Measure` 是 `{ case: "Int32", value: number } | { case: "Double", value: number } | ...`，每个分支有一个构造函数，`switch (m.case)` 能正确收窄类型。union 的 `T?` 在 TypeScript 里没有对应形式（null 既表示没有值，又表示空 union）。
+
+**Go** 没有和类型，惯用写法是一个封闭接口加上每个分支一个类型。分支值本身就是生成的结构体或类（`*Order`）时，这个类型直接就是分支，只加上 union 的标记方法，值不再包一层（同一个类型可以是多个 union 的分支）；其他分支是一个装着 `Value` 的结构体。**Rust** 有枚举：按值存放，`Empty` 是默认值。
+
 ```ts tab="TypeScript" tab-group="codegen-lang"
-const reply = Reply.Int32(42);             // reply.case === "Int32"，reply.value === 42
-const empty = new Reply();                 // case 为 null：空 union
-switch (reply.case) {
-  case "Order": showOrder(reply.value as Order | null); break;
-  case "String": showError(reply.value as string); break;
+const reply: Reply | null = 42;                     // number：Int32 分支
+if (typeof reply === "string") showError(reply);
+const measure = Measure.Double(2.5);                // { case: "Double", value: 2.5 }
+switch (measure.case) {
+  case "Int32": useInt(measure.value); break;
+  case "ListString": useNames(measure.value); break;
 }
 ```
 
 ```go tab="Go" tab-group="codegen-lang"
 var reply protocol.Reply = protocol.ReplyInt32{Value: 42} // nil 就是空 union
 switch r := reply.(type) {
-case protocol.ReplyOrder:
-	showOrder(r.Value)
+case *protocol.Order: // 生成的类自己就是分支
+	showOrder(r)
 case protocol.ReplyString:
 	showError(*r.Value)
 }
@@ -359,7 +368,7 @@ match &reply {
 }
 ```
 
-分支值的类型就是这个分支类型作为成员时的类型（`Order | null`、`*Order`、`Option<Box<Order>>`），但数据里不会出现 null：分支值为 null 时写成空 union，和 .NET 一样；数据里带着分支 ID 却是 null 值的，以及 ID 不属于任何分支的，都会被拒绝。在 `object` 槽位里，union 先写自己的类型 ID，再写分支的；Go 在这里用 nil 接口表示空 union，所以写回去会变成 null 对象。
+数据里不会出现 null 的分支值：分支值为 null 时写成空 union，和 .NET 一样；数据里带着分支 ID 却是 null 值的，以及 ID 不属于任何分支的，都会被拒绝。读写 union 只有一次按分支 ID 的 `switch`，加上一串类型判断、一个类型 switch 或一个 `match`，除了值本身不额外分配（带标签的 TypeScript 分支是一个小对象）。在 `object` 槽位里，union 先写自己的类型 ID；TypeScript 和 Go 在这里用一个专门的类 `ReplyObject` 来装它，这样空 union 和 null 对象就能区分开。
 
 每种语言都会跳过下面两种并给出 NINOGEN002：泛型 union（`union Option<T>(T, None)`），它的分支 ID 取决于类型实参；以及分支是元组或 `KeyValuePair`（或者包含它们）的 union，布局里没有公开这种分支的编码。
 

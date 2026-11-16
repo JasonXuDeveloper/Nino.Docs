@@ -208,7 +208,7 @@ Reply reply = NinoDeserializer.Deserialize<Reply>(bytes); // reply.Value 是 int
 
 `new Reply(42)` 写出 `System.Int32` 的类型 ID，再写这个 `int`：`A4 A2 97 20 2A 00 00 00`。空 union（`default(Reply)`，或者分支构造时传入 `null`）只有一个 0。分支靠类型 ID 识别，不看声明顺序，所以调整顺序、新增分支，旧数据都还能读；删掉一个分支后，含有它的数据就读不了了；分支类型改名时，用 [`[NinoFormerName]`](/zh/docs/v4/evolving-data#former-name) 保留原来的 ID。读取时会检查 ID 是否属于这个 union 的分支，以及值是否为 null。
 
-每个分支都要有格式化器，没有的话 [NINO045](/zh/docs/v4/analyzers#nino045) 会指出来。如果某个分支能再装下这个 union（比如它自己的数组、一个类），union 的嵌套会和能装下自己的结构体一样，计入[深度上限](/zh/docs/v4/security#limits)。字节格式见[二进制格式规范](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#712-c-union-structs)。TypeScript、Go 和 Rust 通过 nino-gen 生成的代码读写 union：见 [C# union](/zh/docs/v4/advanced/codegen#unions)。
+每个分支都要有格式化器，没有的话 [NINO045](/zh/docs/v4/analyzers#nino045) 会指出来。如果某个分支能再装下这个 union（比如它自己的数组、一个类），union 的嵌套会和能装下自己的结构体一样，计入[深度上限](/zh/docs/v4/security#limits)。字节格式见[二进制格式规范](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#712-c-union-structs)。TypeScript、Go 和 Rust 通过 nino-gen 生成的代码读写 union：见 [C# union](/zh/docs/v4/advanced/codegen#unions)。Unity 编译不了 union，Unity 客户端要通过预编译的库来用（见 [Unity 里的 C# union](/zh/docs/v4/advanced/unity#shared-unions)），而且多态基类写出的字节和 union 不一样，不能拿来代替。
 
 ## 其他程序集里的子类型 [#subtypes-in-other-assemblies]
 
