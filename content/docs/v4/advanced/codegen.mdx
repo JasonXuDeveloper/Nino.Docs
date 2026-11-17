@@ -133,6 +133,7 @@ Each metadata of a `<NinoCodegen>` item is the nino-gen option of the same name 
 | --- | --- | --- | --- | --- |
 | `Out` | `--out` | all | `ts/`, `go/` or `rust/` next to the project | The directory to write to, relative to the project. |
 | `Name` | `--name` | all | `<Assembly>.ts`, `nino_types.go`, `nino_types.rs` | The generated file's name. |
+| `Roots` | `--roots` | all | none | Top-level values whose type has no layout of its own, as `Name=Type` separated by `;` with .NET type names (`Items=System.Collections.Generic.List<MyGame.Item>;Score=System.Nullable<System.Int64>`): a payload sent as a bare collection or nullable gets `ItemsCodec` in TypeScript, `ReadItems` and `WriteItems` in Go, `type Items` in Rust. A `[NinoType]` has its codec already. |
 | `Names` | `--names` | TypeScript | `camel` | `camel` writes member names in camelCase (`UnitPrice` → `unitPrice`, `URL` → `url`); `keep` keeps them as in C#. |
 | `ImportExtension` | `--import-extension` | TypeScript | empty | The extension of the generated file's import of `nino.ts`: empty for bundlers (Vite, webpack, esbuild), `.js` for Node ESM compiled with `tsc`, `.ts` for Deno and Node's type stripping, or `.mjs`, `.mts`. |
 | `Runtime` | `--runtime` | TypeScript | empty | Import the runtime from this module instead of writing `nino.ts` next to the code. |
@@ -174,7 +175,7 @@ nino-gen layouts --assembly publish/Shop.Contracts.dll --out Shop.Contracts/Nino
 Each command takes `--references` (below) and prints its usage with `--help`. The rest of this section is code generation:
 
 ```text
-nino-gen --assembly <dll> --lang ts|go|rust --out <dir> [--references <file>] [--name <file name>]
+nino-gen --assembly <dll> --lang ts|go|rust --out <dir> [--references <file>] [--name <file name>] [--roots <Name=Type;...>]
   ts:   [--names camel|keep] [--import-extension <.js|.ts|.mjs|.mts>] [--runtime <module>] [--numeric-arrays plain|typed]
   go:   [--package <name>] [--tags json,yaml] [--tag-names camel|snake|original]
   rust: [--serde] [--serde-names camel|snake|original] [--strings string|wide] [--maps indexmap|std]
