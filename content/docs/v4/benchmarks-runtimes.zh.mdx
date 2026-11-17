@@ -5,19 +5,25 @@ description: "Nino 的 Go、Rust 和 TypeScript 运行时对比 Protocol Buffers
 icon: Languages
 ---
 
-Nino 在 Go、Rust 和 TypeScript 中与 .NET 互通，字节完全一致，用的代码由 [Nino.Codegen](/zh/docs/v4/advanced/codegen) 根据你的 C# 类型生成。这几个运行时在 Nino 仓库里各有一个基准测试，用本语言的标准工具测量，对比 Protocol Buffers、MessagePack 和这门语言常用的序列化库。.NET 的基准测试（对比 MemoryPack、MessagePack、protobuf-net 和 v3）见[基准测试：.NET 运行速度](/zh/docs/v4/benchmarks)。
+Nino 在 Go、Rust 和 TypeScript 中与 .NET 互通，字节完全一致，用的代码由 [Nino.Codegen](/zh/docs/v4/advanced/codegen) 根据你的 C# 类型生成。这几个运行时在 Nino 仓库里各有一个基准测试，跑的都是 [.NET 基准测试](/zh/docs/v4/benchmarks)的用例（只在 C# 里定义一次），用本语言的标准工具测量，对比 Protocol Buffers、MessagePack 和这门语言常用的序列化库。.NET 的基准测试（对比 MemoryPack、MessagePack、protobuf-net 和 v3）见[基准测试：.NET 运行速度](/zh/docs/v4/benchmarks)。
 
 ## 对比对象 [#what-is-compared]
 
 | | Go | Rust | TypeScript |
 | --- | --- | --- | --- |
 | 计时工具 | `testing.B`，由 benchstat 汇总 | criterion | tinybench，在 Node 中运行 |
-| Nino | 按 nino-gen 生成的形式写的编解码器，以及[结构体标签](/zh/docs/v4/advanced/go#struct-tags) | 按 nino-gen 生成的形式写的编解码器 | nino-gen 生成的代码 |
+| Nino | nino-gen 生成的代码，以及[结构体标签](/zh/docs/v4/advanced/go#struct-tags) | nino-gen 生成的代码 | nino-gen 生成的代码 |
 | Protocol Buffers | `google.golang.org/protobuf` | `prost` | `protobuf-es` |
 | MessagePack | `vmihailenco/msgpack` | `rmp-serde` | `msgpackr` |
 | 其他 | `encoding/json`、`encoding/gob` | `bincode`、`postcard`、`serde_json` | `JSON` |
 
-每个用例里，各序列化库拿到的数据都相同：protobuf 消息和类型逐字段对应；开始计时前，先验证每个序列化库都能读回自己写的数据。
+用例就是 .NET 基准测试的用例：`Nino.Benchmark --write-data` 写出每个用例的字节，nino-gen 为每种语言生成用例的类型。各基准测试按 .NET 类型名找到用例对应的代码，所以在 C# 里加一个用例，三种语言都会跑，别处不用改。开始计时前：
+
+- 生成的代码读入 .NET 写的 Nino 字节，必须原样写回。
+- Protocol Buffers 读的是 protobuf-net 为这个用例写的消息，消息来自基准测试的 `.proto` 文件。
+- 其他序列化库拿 Nino 读出的值，必须能读回自己写的数据。
+
+某个序列化库表达不了某个用例，或读回的值不一样，就不参加这个用例，输出里写明原因。语言本身装不下的用例也一样跳过：比如对象里装着这门语言没有对应类型的 .NET 类型；又比如 TypeScript 里的 `DateTime`，它用 `Date` 存，只精确到毫秒，也不保留 kind。v4.0.0-rc.10 及更早的版本里，每个基准测试只测自己的几个用例（一条记录、字符串、数字）；下面的结果用的是数据来源那个版本的用例。
 
 ## 测量方法 [#setup]
 
@@ -31,31 +37,24 @@ Nino 在 Go、Rust 和 TypeScript 中与 .NET 互通，字节完全一致，用�
 
 [`runtimes/go/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/go/bench) 是单独的模块，这样运行时自己的模块不带任何依赖。每个基准测试名为 `Benchmark{Serialize,Deserialize}/<case>/<serializer>`，用 `b.Loop`、`ReportAllocs`，并把编码后的大小记为一项指标；发布时每个基准测试跑六次，由 benchstat 给出中位数 ± 95% 置信区间，以及每次操作的分配次数。
 
-- **用例：** .NET 基准测试里的 `SimpleClass`（`simple-class`）、100 个 `SimpleClass` 组成的列表（`simple-class-100`），以及两个[字符串用例](#strings)。
-- **序列化库：** `Nino`，按 nino-gen 生成的形式写的编解码器（不用反射）；`Nino (tags)`，同一组 Go 类型用 `nino` 结构体标签映射，每个类型只构建一次读写计划；Protocol Buffers（`MarshalAppend` 写进复用的缓冲区）；MessagePack（复用同一个编码器）；`encoding/json`；以及 `gob`，像一次性序列化那样，每个值都新建编码器和解码器。
+- **序列化库：** `Nino`，nino-gen 生成的代码；`NinoTags`，同一组 Go 类型用 `nino` 结构体标签映射，每个类型只构建一次读写计划；Protocol Buffers（`google.golang.org/protobuf`，`MarshalAppend` 写进复用的缓冲区）；MessagePack（复用同一个编码器）；`encoding/json`；以及 `gob`，像一次性序列化那样，每个值都新建编码器和解码器。
 
 ### Rust [#rust]
 
-[`runtimes/rust/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust/bench) 用 criterion：每个用例一组，吞吐量按值的个数计，每个输入和输出都过一遍 `black_box`。时间是 criterion 的均值估计 ± 95% 置信区间的一半。
+[`runtimes/rust/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/rust/bench) 用 criterion：每个用例一组，每个输入和输出都过一遍 `black_box`。时间是 criterion 的均值估计 ± 95% 置信区间的一半。
 
-- **用例：** 一条记录（`record`）、1,000 条记录（`records-1000`）、10,000 个 `i32`（`i32-10000`）、10,000 个 `f64`（`f64-10000`），以及两个[字符串用例](#strings)。
-- **序列化库：** Nino，按模板生成的形式写的编解码器；Protocol Buffers（prost，消息在基准测试里派生，不需要 protoc）；MessagePack（rmp-serde）；bincode（2，标准配置）；postcard；serde_json。
+- **序列化库：** Nino，nino-gen 加 `--serde` 生成的代码；Protocol Buffers（prost，消息由构建脚本从基准测试的 `.proto` 文件编译，不需要 protoc）；以及通过 serde 读写同一组生成类型的 MessagePack（rmp-serde）、bincode（2，标准配置）、postcard 和 serde_json。
 
 ### TypeScript [#typescript]
 
-[`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench) 测的是 nino-gen 根据基准测试的 C# 类型生成的 TypeScript，在 Node 里用 [tinybench](https://github.com/tinylibs/tinybench) 计时：先预热，再在设定的时间内采样。时间是均值 ± 相对误差。
+[`runtimes/typescript/bench`](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/typescript/bench) 测的是 nino-gen 生成的 TypeScript，在 Node 里用 [tinybench](https://github.com/tinylibs/tinybench) 计时：先预热，再在设定的时间内采样。时间是均值 ± 相对误差。Nino 多一行 `serializeInto`：把值写进同一个复用的 `NinoWriter`。
 
-- **数据：** 每个场景的值都由 .NET 里的 Nino 写出。计时前，每个值都要在 TypeScript 里读出再写回，结果必须和 .NET 写的字节完全一致；每条 protobuf 消息也必须读回相同的值。一个任务就是把场景里的值全部过一遍。
-- **输入轮换：** .NET 为每个场景写出 64 个变体，结构和大小相同、内容不同（第一个就是上面的数据）；计时前，每个序列化库都把全部变体准备好，每个任务（序列化和反序列化都一样）每遍历一次就换下一个变体。V8 再次读同一份输入时会复用之前的工作：重复的 JSON 文本会沿用上次解析的隐藏类和内部化的键，比新文本快很多倍，`JSON.parse` 就会显得比处理真实数据时快。
-- **场景：** 玩家、按类型 ID 区分的动物园动物、订单簿、长文本文章、由向量和整数组成的网格、数字样本、由两个短字符串映射组成的查找表、带 64 位整数的事件，以及两个[字符串用例](#strings)。
-- **序列化库：** Nino；Protocol Buffers（protobuf-es，代码由基准测试的 `.proto` 生成）；MessagePack（msgpackr，用标准映射，不用 msgpackr 的 records），拿到的是 Nino 读出的原样的值（`bigint` 按 64 位整数写，读回仍是 `bigint`）；以及 `JSON`，拿到的是普通 JSON 数据（64 位整数是字符串，映射是对象），读出后也不转回 `bigint` 或 `Map`，所以做的工作比生成的读取代码少；和二进制格式一样，它的计时也包括转成 UTF-8 字节、再从 UTF-8 字节读出（`TextEncoder`、`TextDecoder`）。MessagePack 和 JSON 都不记录多态值的类型，Nino 和 protobuf（`oneof`）会记录。
+- **输入轮换：** 每个用例的值做出最多 64 个变体，结构和大小相同、文本不同（每个字符串的字母都轮转一下）；计时前，每个序列化库都把全部变体准备好，每个任务（序列化和反序列化都一样）每遍历一次就换下一个变体。V8 再次读同一份输入时会复用之前的工作：重复的 JSON 文本会沿用上次解析的隐藏类和内部化的键，比新文本快很多倍，`JSON.parse` 就会显得比处理真实数据时快。
+- **序列化库：** Nino；Protocol Buffers（protobuf-es，用基准测试 `.proto` 文件里的消息）；MessagePack（msgpackr，用标准映射，不用 msgpackr 的 records），拿到的是 Nino 读出的原样的值（`bigint` 按 64 位整数写，读回仍是 `bigint`）；以及 `JSON`，拿到的是普通 JSON 数据（64 位整数是字符串，映射是对象），读出后也不转回 `bigint` 或 `Map`，所以做的工作比生成的读取代码少；和二进制格式一样，它的计时也包括转成 UTF-8 字节、再从 UTF-8 字节读出（`TextEncoder`、`TextDecoder`）。MessagePack 和 JSON 都不记录多态值的类型，Nino 和 protobuf（`oneof`）会记录。
 
 ## 字符串 [#strings]
 
-三种语言的字符串用例相同：
-
-- **ASCII：** 1,000 个短 ASCII 字符串，从 `"string 0"` 到 `"string 999"`。
-- **混合：** 1,000 个字符串，三类轮流出现：ASCII（`"string i"`）、Latin-1（`"crème brûlée i"`），以及含 BMP 以外字符的其他文字（`"строка 字符串 🎉 i"`）。
+字符串用例来自 .NET 基准测试的 `StringsTest`，其中有 1,000 个短 ASCII 字符串；1,000 个 ASCII、Latin-1（`"crème brûlée i"`）和含 BMP 以外字符的其他文字（`"строка 字符串 🎉 i"`）轮流出现的字符串；以及长度为 32、1,000 和 100,000 个字符的单个 ASCII 或中日韩字符串。
 
 Nino 的[二进制格式](/zh/docs/v4/wire-format)按 .NET 在内存里存字符串的方式写字符串：所有字符都不超过 U+00FF 时写成 Latin-1，每个字符一个字节，否则写成 UTF-16。.NET 的字符串本来就是 UTF-16，所以写入只是一次收窄拷贝，读取只是一次展宽拷贝，都用 SIMD；长度就是字符数，读的一方可以先分配好字符串，再解码内容。
 
@@ -74,19 +73,21 @@ Go 和 Rust 的字符串是 UTF-8。Nino 的运行时写字符串时，要先检
 克隆 [Nino 仓库](https://github.com/JasonXuDeveloper/Nino)后：
 
 ```shell
-# Go：运行六次，用 benchstat 汇总
+# Go：运行六次，用 benchstat 汇总（先生成用例数据）
+runtimes/go/bench/generate.sh --data
 cd runtimes/go/bench
 go test -run='^$' -bench=. -benchmem -count=6 . | tee bench.txt
 go run golang.org/x/perf/cmd/benchstat@latest bench.txt
 
 # Rust（在 runtimes/rust 下运行）
-cargo bench -p nino-bench
+bench/generate.sh --data
+cargo bench -p nino-bench --bench compare
 
-# TypeScript：需要 .NET 10 SDK 和 Node 22.18+
+# TypeScript：需要 Node 22.18+
 runtimes/typescript/bench/run.sh
 ```
 
-`runtimes/typescript/bench/run.sh` 先在 Node 里、再在无头 Chromium 里跑 TypeScript 基准测试，后者要装 Playwright 和 Chromium；发布说明里是 Node 的结果。各项选项和发布流程见 [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/csharp/benchmarks#runtimes-outside-net)。自己机器上测出的数字，只适合在同一台机器上前后对比改动。
+用例的字节来自 .NET 基准测试，所以每个 `generate.sh` 都需要 .NET SDK。`runtimes/typescript/bench/run.sh` 先在 Node 里、再在无头 Chromium 里跑 TypeScript 基准测试，后者要装 Playwright 和 Chromium；发布说明里是 Node 的结果。各项选项和发布流程见 [benchmarks README](https://github.com/JasonXuDeveloper/Nino/tree/main/runtimes/csharp/benchmarks#runtimes-outside-net)。自己机器上测出的数字，只适合在同一台机器上前后对比改动。
 
 ## 下一步 [#next-steps]
 

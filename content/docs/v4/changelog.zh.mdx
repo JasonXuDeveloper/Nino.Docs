@@ -26,12 +26,18 @@ icon: RotateCcwClock
 - **Go、Rust 和 TypeScript 里每种可空编码各有一个类型**：单个 `T?`、集合里 `T?` 的槽位、`NinoNullable<T>`，在生成的代码和运行时里都有自己的类型。**Rust 有破坏性变更**：`nino::NullableSlot<T>` 是所有 `T?` 集合的元素（`int?[]` 或 `List<int?>` 是 `Vec<NullableSlot<i32>>`，`VecDeque`、Set 和 `Grid` 里也一样），取代已删除的 `nino::RawNullables<T>`，改写成 `Vec<NullableSlot<T>>` 即可；`nino::NinoNullable<T>` 对应 .NET 的 `NinoNullable<T>`；单个 `T?` 仍是 `Option<T>`。**Go 有破坏性变更**：生成的代码和结构体标签里，`T?` 集合的元素从 `[]*T` 换成值类型 `nino.NullableSlot[T]`（`HasValue`、`Value`、`nino.NullableSlotOf`、`Get`），`[]*T` 现在表示每个元素一个单个 `T?`；数字切片用 `ReadNullableSlots` / `WriteNullableSlots` 整块读写；`nino.NinoNullable[T]`（`nino.NinoNullableOf`、`Get`、`ReadNinoNullables` / `WriteNinoNullables`）对应 .NET 的 `NinoNullable<T>`，有没有 `NinoLayout` 都认得；单个 `T?` 仍是 `*T`。TypeScript：运行时导出 `T | null` 的别名 `NullableSlot<T>` 和 `NinoNullable<T>`，生成的声明用它们标明编码（运行时行为不变），另有 `NinoReader.ninoNullableAt`。三个运行时每次读 `NinoNullable<T>` 都全部检查，`nino-gen inspect` 也能读它。见[其他语言](/zh/docs/v4/nullable-values#other-languages)。
 
 - **C# union**：在 .NET 11 的 C# 15 项目里，加了 `[NinoType]` 的 `union` 声明（`[NinoType] public union Reply(Order, string, int);`）可以序列化了。union 先写所存分支的 Nino 类型 ID，再按分支类型自己的格式化器写值；空 union 只写 0。分支靠类型 ID 识别，所以调整分支顺序或新增分支，旧数据照样能读；读取时 ID 不属于任何分支、或者带着分支 ID 却是 null 值的数据，都会被拒绝（二进制格式规范 4.6 版 §7.12）。分支类型没有格式化器时，[NINO045](/zh/docs/v4/analyzers#nino045) 会指出来。nino-gen 也会为 TypeScript（各分支类型的联合；值区分不了分支时给分支加名字作标签）、Go（接口，由生成的类型自己或每个分支一个结构体实现）和 Rust（枚举）生成 union，`nino-gen inspect` 也能读；泛型 union 和分支是元组或 `KeyValuePair` 的 union 会以 NINOGEN002 跳过。Unity 客户端通过预编译的库使用 union（见 [Unity 里的 C# union](/zh/docs/v4/advanced/unity#shared-unions)）。见 [C# union](/zh/docs/v4/polymorphism#csharp-unions) 和[其他语言中的 C# union](/zh/docs/v4/advanced/codegen#unions)（[#309](https://github.com/JasonXuDeveloper/Nino/pull/309)、[#313](https://github.com/JasonXuDeveloper/Nino/issues/313)）。
+- **其他语言里的顶层集合和可空值**：nino-gen 的 `--roots "Name=Type;..."`（`<NinoCodegen>` 项上的 `Roots`）为本身没有布局的负载类型生成编解码器，比如直接发送的 `List<Item>` 或 `long?`：TypeScript 里是 `NameCodec`，Go 里是 `ReadName` 和 `WriteName`，Rust 里是 `type Name`。Nino 按序列或映射写的集合都支持（`Queue`、`LinkedList`、`SortedSet`、`SortedDictionary`、`ConcurrentDictionary`、各种集合接口）；nino-gen 建模不了的根类型会给出警告并跳过。生成的代码还能按 .NET 类型名找到编解码器：TypeScript 用 `ninoCodecOf(name)`，Go 用 `NinoCodecOf`，Rust 用 `with_nino_type`；加了 `--serde` 时还有 `with_nino_serde_type`，同时带上类型的 serde trait。见[选项](/zh/docs/v4/advanced/codegen#options)（[#336](https://github.com/JasonXuDeveloper/Nino/issues/336)）。
 
 ### 性能 [#performance-6]
 
 - **可空值的集合**：装原始 `T?` 的集合都把槽位当一整串读写，走数组和列表用的向量内核。在 GitHub 的 runner 上（AMD EPYC 7763、9V74 和 9V45，Intel Xeon 8573C 和 6975P-C，Neoverse-N2；运行 43630719107，1,000 个 `int?`，每 5 个有 1 个 null），与改动前的代码相比：`Queue<int?>` 序列化快 2.5-10 倍、反序列化快 1.8-2.7 倍，`HashSet<int?>` 分别快 2.6-6.0 倍和 1.8-4.3 倍，`Collection<int?>` 快 13-27 倍和 5.6-8.3 倍，`int?[40, 25]` 快 2.1-12 倍和 1.9-2.5 倍，`Memory<int?>` 和 `IList<int?>` 反序列化快 1.7-2.6 倍。任意元素类型的 `Collection<T>` 都通过它包着的列表读写，`HashSet<T?>` 直接走它的 entry，新建的 `ConcurrentBag<T>` 用读出的元素一次建好（[#295](https://github.com/JasonXuDeveloper/Nino/issues/295)）。
 - **带可空字段的原始结构体**：带 `T?` 字段的非托管 `[NinoType]` 结构体，它的数组和列表一次向量化拷贝写完，不再逐个成员循环；CPU 支持 AVX-512 VBMI 和 GFNI 时，拷贝的同时按向量把空值清零。
 - **可空值**：非托管 `T` 的 `T?`（`int?`、`long?`、`DateTime?`、原始结构体）一次预留就完成读写，不再把值拆开；带可空原始成员的类型体把写入器留在寄存器里；顶层为 null 的类读写时不再创建读取器和写入器。在 GitHub 的 runner 上（AMD EPYC 7763 和 9V74、Intel Xeon 8370C、Neoverse-N2），有 8 个可空成员的类序列化比 rc.10 快 1.7-3.3 倍，反序列化快 1.04-1.25 倍，100 个这样的对象反序列化快 1.13-1.30 倍，`SimpleStruct?` 序列化快 1.14-4.3 倍，null 类引用快 1.3-1.7 倍（[#275](https://github.com/JasonXuDeveloper/Nino/issues/275)）。
+
+### 修复 [#fixes-8]
+
+- nino-gen 对同一命名空间里同名的类和泛型类生成了同一个名字；对一个不允许任何类型的泛型槽位生成的 Go 代码编译不过。
+- Go 现在会拒绝含重复值或两个 null 的 `HashSet<T?>`，和 .NET、Rust、TypeScript 一致。
 
 </Release>
 
