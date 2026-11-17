@@ -23,7 +23,10 @@
  * - build-x64.md, the build section ("🏗️ Build: v3 3.3.13 vs v4 (source
  *   generator)": Nino v3 3.3.13's source generator against the release's on
  *   one x64 runner, at 330 and 1,100 types, written by Nino's
- *   runtimes/csharp/benchmarks/reports/generator_report.py), into src/data/bench-build.json.
+ *   runtimes/csharp/benchmarks/reports/generator_report.py), into src/data/bench-build.json;
+ * - bench-cases.json, the case manifest (Nino's BenchGen): the cases a library
+ *   breaks on, with kind and reason, into src/data/bench-broken.json (the
+ *   charts and tables show them as error).
  *
  * A release without the manifest (v4.0.0-rc.9 and older) had these as
  * sections of its body, which are parsed instead: the "Performance Report",
@@ -32,8 +35,8 @@
  * the body had no room for it), and the runtime, Unity and build sections.
  *
  * The x64 and Arm64 reports have a row per method, and every row is kept,
- * whatever its method prefix (`MessagePack…`, `Protobuf…`, `GoogleProtobuf…`,
- * `Json…`) or benchmark class (WorkloadTest's workloads, SimpleTest and
+ * whatever its method prefix (`LuminPack…`, `MessagePack…`, `Protobuf…`,
+ * `GoogleProtobuf…`, `Json…`) or benchmark class (WorkloadTest's workloads, SimpleTest and
  * PolymorphicTest among them), the nullable cases' other forms of a nullable
  * value among them (`NinoNullable…`, `MemoryPackConverted…`,
  * `MemoryPackUnsafe…`, from rc.11). `requiredMethods` never asks for the
@@ -54,7 +57,9 @@
  * `MemoryPackUnsafe…`) in both reports, numbers invented: for reader tests
  * only; the rows of NullableTest's `ManagedStruct` cases and of
  * `NullableVec3s` were added to the three reports by hand, in the same
- * format).
+ * format); scripts/fixtures/release-assets-luminpack/ (release-assets/ plus
+ * LuminPack rows in dotnet-x64.md only, numbers invented: for parser and
+ * rendering tests of LuminPack's n/a only).
  * Bodies of releases without the manifest: scripts/fixtures/release-body.md
  * (made-up numbers, the methods the site requires), release-body-v3.md (with
  * the v3 section), release-body-new.md (a sample of the ReferenceTest,
@@ -109,6 +114,9 @@ const unityDataFile = fileURLToPath(
 const buildDataFile = fileURLToPath(
   new URL('../src/data/bench-build.json', import.meta.url),
 );
+const brokenDataFile = fileURLToPath(
+  new URL('../src/data/bench-broken.json', import.meta.url),
+);
 
 /** Heading of the v3 section in the release body (report.yml's V3_HEADING) */
 export const v3Heading = 'v3 3.3.13 vs v4 (same machine)';
@@ -133,6 +141,7 @@ export const assetNames = {
   runtime: (lang: RuntimeLang) => `runtime-${lang}-x64.md`,
   unity: 'unity-x64.md',
   build: 'build-x64.md',
+  cases: 'bench-cases.json',
 } as const;
 
 /** One asset of the manifest; release_body.py adds the chart fields, which the site does not read */
@@ -287,6 +296,50 @@ export interface UnityVersion {
  * is the committed file before any release had a Unity section. The report's
  * Speedup column is not kept: src/lib/benchmarks.ts computes it from the times.
  */
+/** A case a library breaks on (Nino's bench-cases.json, [BenchCase(Broken = ...)]): drawn as error with its reason */
+export interface BrokenCase {
+  /** The library's method prefix (LuminPack) */
+  library: string;
+  case: string;
+  kind: 'compile' | 'throws' | 'crash' | 'wrong-read';
+  reason: string;
+}
+
+/** src/data/bench-broken.json: the broken cases of the release the numbers came from (origin none: no manifest yet) */
+export interface BrokenFile {
+  origin: 'release' | 'fixture' | 'none';
+  tag: string;
+  url: string;
+  publishedAt: string | null;
+  cases: BrokenCase[];
+}
+
+/**
+ * The broken cases of Nino's case manifest (runtimes/csharp/benchmarks/bench-cases.json, BenchGen): every case's
+ * `broken` entries, flattened. Throws on a file that is not one.
+ */
+export function parseCaseManifest(text: string): BrokenCase[] {
+  const manifest = JSON.parse(text) as {
+    cases?: { case: string; broken?: Omit<BrokenCase, 'case'>[] }[];
+  };
+  if (!Array.isArray(manifest.cases))
+    throw new Error(`${assetNames.cases}: no "cases" list`);
+  return manifest.cases.flatMap((c) =>
+    (c.broken ?? []).map((b) => {
+      if (!['compile', 'throws', 'crash', 'wrong-read'].includes(b.kind))
+        throw new Error(
+          `${assetNames.cases}: ${c.case}: unknown kind ${b.kind}`,
+        );
+      return {
+        library: b.library,
+        case: c.case,
+        kind: b.kind,
+        reason: b.reason,
+      };
+    }),
+  );
+}
+
 export interface UnityFile {
   origin: 'release' | 'fixture' | 'none';
   tag: string;
@@ -971,6 +1024,7 @@ async function releaseAssets(release: Release, manifest: Manifest) {
     assetNames.v3,
     assetNames.unity,
     assetNames.build,
+    assetNames.cases,
     ...(Object.keys(runtimeHeadings) as RuntimeLang[]).map(assetNames.runtime),
   ]);
   const names = manifest.assets
@@ -1016,6 +1070,8 @@ interface Sources {
   runtimes(tag: string): RuntimeSection[];
   unity(): ReturnType<typeof parseUnitySection>;
   build(): ReturnType<typeof parseBuildSection>;
+  /** The case manifest's broken cases; null without the manifest (a release before Nino's #335) */
+  broken(): BrokenCase[] | null;
 }
 
 /** The sections of a body from before the manifest (arm64Text: arm64-benchmark.md, when it was attached) */
@@ -1028,6 +1084,7 @@ function bodySources(body: string, arm64Text?: string): Sources {
     runtimes: (tag) => parseRuntimeSections(body, tag),
     unity: () => parseUnitySection(body),
     build: () => parseBuildSection(body),
+    broken: () => null,
   };
 }
 
@@ -1076,6 +1133,10 @@ function assetSources(files: Map<string, string | Error>): Sources {
     build: () => {
       const section = text(assetNames.build);
       return section === null ? null : parseBuildSection(section);
+    },
+    broken: () => {
+      const manifest = text(assetNames.cases);
+      return manifest === null ? null : parseCaseManifest(manifest);
     },
   };
 }
@@ -1418,6 +1479,40 @@ function syncBuild(
   }
 }
 
+/**
+ * The broken cases of the release the .NET numbers came from; keeps the
+ * committed file when it has no case manifest or it cannot be read.
+ */
+function syncBroken(
+  release: Release,
+  sources: Sources,
+  out: string | undefined,
+) {
+  const kept = () => {
+    const file = JSON.parse(readFileSync(brokenDataFile, 'utf8')) as BrokenFile;
+    return `keeping src/data/bench-broken.json (${brokenSummary(file)})`;
+  };
+  try {
+    const cases = sources.broken();
+    if (!cases) {
+      console.warn(
+        `[benchmarks] ${release.tag_name} has no ${assetNames.cases} in ${sources.from}; ${kept()}`,
+      );
+      return;
+    }
+    const file: BrokenFile = { ...releaseOrigin(release), cases };
+    write(out ?? brokenDataFile, file);
+    console.log(`[benchmarks] synced broken cases: ${brokenSummary(file)}`);
+  } catch (error) {
+    console.warn(`[benchmarks] warning: ${message(error)}; ${kept()}`);
+  }
+}
+
+function brokenSummary(file: BrokenFile) {
+  if (file.origin === 'none') return 'no case manifest yet';
+  return `${file.cases.length} broken cases from ${file.tag} (${file.origin})`;
+}
+
 /** Keys in the committed file's order */
 function buildFile(file: BuildFile): BuildFile {
   const { origin, tag, url, publishedAt, environment, note, sizes } = file;
@@ -1501,6 +1596,12 @@ function fixture(path: string) {
     const file = buildFile({ ...fixtureOrigin, ...build, note: null });
     output('--out-build', file, `build: ${buildSummary(file)}`);
   } else console.log('[benchmarks] fixture has no build section');
+
+  const broken = sources.broken();
+  if (broken) {
+    const file: BrokenFile = { ...fixtureOrigin, cases: broken };
+    output('--out-broken', file, `broken cases: ${brokenSummary(file)}`);
+  } else console.log(`[benchmarks] fixture has no ${assetNames.cases}`);
 }
 
 async function main() {
@@ -1524,6 +1625,7 @@ async function main() {
     syncRuntimes(release, sources, argument('--out-runtimes'));
     syncUnity(release, sources, argument('--out-unity'));
     syncBuild(release, sources, argument('--out-build'));
+    syncBroken(release, sources, argument('--out-broken'));
   } catch (error) {
     const kept = JSON.parse(readFileSync(dataFile, 'utf8')) as BenchFile;
     console.warn(

@@ -4,7 +4,8 @@
  *
  * The .NET tables compare Nino with MemoryPack, and with the other libraries
  * (`otherLibs`) in a column each once the synced release measured them ("—"
- * for a case a library cannot express), and the nullable group with the other
+ * for a case a library cannot express, "n/a" with naNote for a case LuminPack
+ * cannot run: RuntimeCase.na), and the nullable group with the other
  * forms of a nullable value (`nullableForms`) beside Nino and MemoryPack, with
  * their footnote; LibrarySummary sums up Nino against
  * one library per group, for that library's comparison page; GroupTables prints one group of
@@ -39,6 +40,7 @@ import {
   type DotnetGroupId,
   datasets,
   dotnetGroups,
+  errorNote,
   formatBound,
   formatBytes,
   formatClassRange,
@@ -49,8 +51,13 @@ import {
   formVersusOf,
   gcNote,
   hasForms,
+  hasNa,
   hasWorkloads,
+  headlineLibs,
+  isNa,
   type NullableForm,
+  naNote,
+  naText,
   nullableForms,
   type Opponent,
   type OtherLib,
@@ -363,7 +370,7 @@ function groupColumns(rows: TableCase[]) {
     columns.push({ key: 'memorypack', label: 'MemoryPack' });
   forms('MemoryPack');
   for (const lib of otherLibs)
-    if (rows.some((row) => row.others[lib.key]))
+    if (rows.some((row) => row.others[lib.key] || isNa(row, lib.key)))
       columns.push({ key: lib.key, label: lib.label });
   return columns;
 }
@@ -388,6 +395,15 @@ function groupTables(
   };
   const size = (value: number | null | undefined) =>
     value === null || value === undefined ? '—' : formatBytes(value);
+  // A byte cell: n/a where the library is (RuntimeCase.na), as in the time tables
+  const bytesOf = (
+    row: TableCase | undefined,
+    key: Exclude<GroupColumn, 'v3'>,
+    field: 'payload' | 'allocated',
+  ) =>
+    row && key !== 'v4' && !isForm(key) && isNa(row, key)
+      ? naText(row, key)
+      : size(row?.bytes[key]?.[field]);
   const table = (
     rows: TableCase[],
     keys: typeof columns,
@@ -433,7 +449,12 @@ function groupTables(
         : isForm(key)
           ? formVersusOf(row, key)
           : versusOf(row, key);
-    if (!vs) return key === 'v3' ? 'n/a' : '—';
+    if (!vs)
+      return key === 'v3'
+        ? 'n/a'
+        : !isForm(key) && isNa(row, key)
+          ? naText(row, key)
+          : '—';
     const note = versusNote(vs, zh);
     // On the page the multiple goes on a line of its own, so the table fits the column
     return (
@@ -484,7 +505,7 @@ function groupTables(
           {label('Payload', '序列化后的大小')}
           {table(serialize, byteColumns, (row, key) => (
             <span className="whitespace-nowrap">
-              {size(row.bytes[key as Exclude<GroupColumn, 'v3'>]?.payload)}
+              {bytesOf(row, key as Exclude<GroupColumn, 'v3'>, 'payload')}
             </span>
           ))}
         </>
@@ -503,14 +524,14 @@ function groupTables(
             : label('Allocated per call', '每次调用分配')}
           {table(allocRows, byteColumns, (row, key) => {
             const lib = key as Exclude<GroupColumn, 'v3'>;
-            const first = row.bytes[lib]?.allocated;
-            if (!both) return size(first);
-            const second = deserializeOf(row)?.bytes[lib]?.allocated;
-            if (markdown) return `${size(first)} / ${size(second)}`;
+            const first = bytesOf(row, lib, 'allocated');
+            if (!both) return first;
+            const second = bytesOf(deserializeOf(row), lib, 'allocated');
+            if (markdown) return `${first} / ${second}`;
             return (
               <>
-                <span className="block whitespace-nowrap">{size(first)}</span>
-                <span className="block whitespace-nowrap">{size(second)}</span>
+                <span className="block whitespace-nowrap">{first}</span>
+                <span className="block whitespace-nowrap">{second}</span>
               </>
             );
           })}
@@ -530,6 +551,16 @@ function groupTables(
             .map((part, i) =>
               i % 2 === 1 ? <code key={part}>{part}</code> : part,
             )}
+        </p>
+      )}
+      {hasNa([...serialize, ...deserialize]) && (
+        <p className="text-sm text-fd-muted-foreground">
+          {zh ? naNote.zh : naNote.en}
+        </p>
+      )}
+      {errorNote([...serialize, ...deserialize], zh) && (
+        <p className="text-sm text-fd-muted-foreground">
+          {errorNote([...serialize, ...deserialize], zh)}
         </p>
       )}
     </>
@@ -1068,7 +1099,7 @@ export function benchValue(k: string): string {
   if (
     workload &&
     (workload[1] === 'memorypack' ||
-      otherLibs.some((lib) => lib.key === workload[1]))
+      headlineLibs.some((lib) => lib.key === workload[1]))
   ) {
     const lib = workload[1] as Opponent;
     const verb = workload[2] as Op;

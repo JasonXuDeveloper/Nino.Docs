@@ -9,7 +9,7 @@ import {
   formatBuildRatio,
   formatRatio,
   hasWorkloads,
-  otherLibs,
+  headlineLibs,
   type RuntimeCase,
   runtime,
   x64,
@@ -150,7 +150,7 @@ function Pair({
 
 /** A case's MessagePack and protobuf-net times, where the report has them */
 const otherTimes = (row: RuntimeCase): Measured[] =>
-  otherLibs.flatMap((lib) => {
+  headlineLibs.flatMap((lib) => {
     const v = row.others[lib.key];
     return v ? [{ label: lib.label, value: v.time.ns, text: v.time.text }] : [];
   });
@@ -256,7 +256,7 @@ function Panel({
 /* Rows                                                                */
 /* ------------------------------------------------------------------ */
 
-/** Every library a case timed besides Nino: MemoryPack, then the others in otherLibs' order */
+/** Every library a case timed besides Nino: MemoryPack, then the others in headlineLibs' order */
 interface Opponent {
   label: string;
   ns: number;
@@ -274,7 +274,7 @@ function opponents(row: RuntimeCase): Opponent[] {
       ratio: row.ratio,
     },
   ];
-  for (const lib of otherLibs) {
+  for (const lib of headlineLibs) {
     const v = row.others[lib.key];
     if (v)
       out.push({

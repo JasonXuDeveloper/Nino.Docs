@@ -18,12 +18,15 @@
  * so the same rules (FLOOR_NS, on par, ratios) apply to both; `arm64` is null
  * until a release has that section. Comparisons with v3 are x64 only.
  *
- * The other serializers (`otherLibs`: MessagePack-CSharp, protobuf-net,
- * Google.Protobuf, System.Text.Json): their rows of the same reports, by
- * method prefix, in releases since they joined the benchmark; a case a library
- * cannot express has no row. `libraries` lists the ones a dataset has, so pages
- * show their columns only when the synced release measured them. Every
- * comparison goes through `versus()`, with the same FLOOR_NS and on-par rules.
+ * The other serializers (`otherLibs`: LuminPack, MessagePack-CSharp,
+ * protobuf-net, Google.Protobuf, System.Text.Json): their rows of the same
+ * reports, by method prefix, in releases since they joined the benchmark; a
+ * case a library cannot express has no row. `libraries` lists the ones a
+ * dataset has, so pages show their columns only when the synced release
+ * measured them. A library marked `na` (LuminPack) runs every case MemoryPack
+ * runs but the ones it cannot: once a report has any row of it, such a case is
+ * n/a (`RuntimeCase.na`, `naNote`) rather than left out. Every comparison goes
+ * through `versus()`, with the same FLOOR_NS and on-par rules.
  *
  * Workloads (WorkloadTest, `workloadCases`): payloads shaped like real ones,
  * every library on each. Once the synced report has them (`hasWorkloads`),
@@ -46,6 +49,7 @@
  * those the section publishes.
  */
 
+import brokenData from '@/data/bench-broken.json';
 import benchBuild from '@/data/bench-build.json';
 import benchRuntimes from '@/data/bench-runtimes.json';
 import benchUnity from '@/data/bench-unity.json';
@@ -146,17 +150,41 @@ export function times(value: number): string {
 /* ------------------------------------------------------------------ */
 
 /** The .NET serializers besides Nino and MemoryPack, by their method prefix */
-export type OtherLib = 'messagepack' | 'protobuf' | 'googleprotobuf' | 'json';
+export type OtherLib =
+  | 'luminpack'
+  | 'messagepack'
+  | 'protobuf'
+  | 'googleprotobuf'
+  | 'json';
 
 /** The versions Nino's Directory.Packages.props pins (the `benchmark` skill: update them with an upgrade) */
-// In the order the owner chose for every chart and table: the binary serializers closest to Nino first, then both
-// Protobuf libraries, then JSON (Nino's README chart, runtimes/csharp/benchmarks/reports/readme.py, uses the same order).
+// In the order the owner chose for every chart and table: the binary serializers closest to Nino first (LuminPack,
+// derived from MemoryPack, right after it), then both Protobuf libraries, then JSON (Nino's README chart,
+// runtimes/csharp/benchmarks/reports/readme.py's OTHERS, uses the same order).
 export const otherLibs: {
   key: OtherLib;
   prefix: string;
   label: string;
   version: string;
+  /**
+   * A case MemoryPack ran and this library did not is n/a (RuntimeCase.na,
+   * naNote) once the report has any row of it, rather than left out: it runs
+   * every case MemoryPack runs but the ones it cannot (Nino's readme.py, NA)
+   */
+  na?: true;
+  /** Left out of every headline (the home page, hasWorkloads, BenchValue's workloads.*): Nino's README gives it no range */
+  headline?: false;
 }[] = [
+  // Every class that declares its cases, but the cases its 1.1.9 cannot run (Nino's
+  // runtimes/csharp/benchmarks/README.md, LuminPack); its bytes are not canonical
+  {
+    key: 'luminpack',
+    prefix: 'LuminPack',
+    label: 'LuminPack',
+    version: '1.1.9',
+    na: true,
+    headline: false,
+  },
   {
     key: 'messagepack',
     prefix: 'MessagePack',
@@ -187,6 +215,51 @@ export const otherLibs: {
 
 /** Every serializer Nino is compared with, MemoryPack first */
 export type Opponent = 'memorypack' | OtherLib;
+
+/** otherLibs that a headline may name (the home page, hasWorkloads, BenchValue's workloads.*) */
+export const headlineLibs = otherLibs.filter((lib) => lib.headline !== false);
+
+/** The footnote of every chart and table with an n/a of a library marked `na` (Nino's readme.py, NA_NOTE) */
+export const naNote = {
+  en: "LuminPack n/a: a scenario the suite times through each library's own API, which has no LuminPack form (or, in a release before the case manifest, a case its 1.1.9 cannot run).",
+  zh: 'LuminPack 标 n/a 的用例：按各库自家 API 计时的场景，LuminPack 没有对应的写法（没有用例清单的旧版本里，也包括 1.1.9 版跑不了的用例）。',
+};
+
+/** Why a library breaks on a case, by kind (Nino's readme.py, ERROR_KINDS) */
+const errorKinds = {
+  compile: {
+    en: 'its generator cannot build the model',
+    zh: '生成器编译不过模型',
+  },
+  throws: { en: 'it throws', zh: '抛异常' },
+  crash: { en: 'the process dies', zh: '进程崩溃' },
+  'wrong-read': {
+    en: 'it reads back other values than it wrote',
+    zh: '读回的值和写入的不同',
+  },
+} as const;
+
+/**
+ * The cases a library breaks on, from the release's case manifest
+ * (src/data/bench-broken.json, Nino's bench-cases.json): `<prefix>:<case>` ->
+ * kind and reason. Such a case is n/a (RuntimeCase.na) shown as error
+ * (RuntimeCase.error, errorNote) with its reason.
+ */
+const brokenCases = new Map(
+  (brokenData as BrokenData).cases.map((c) => [
+    `${c.library}:${c.case}`,
+    { kind: c.kind, reason: c.reason },
+  ]),
+);
+
+interface BrokenData {
+  cases: {
+    library: string;
+    case: string;
+    kind: keyof typeof errorKinds;
+    reason: string;
+  }[];
+}
 
 /** The other forms of a nullable value, by their method prefix (nullableForms) */
 export type NullableForm =
@@ -267,6 +340,12 @@ export interface RuntimeCase {
   v3?: Measure;
   /** The other libraries, for the cases they can express */
   others: Partial<Record<OtherLib, Versus>>;
+  /** The libraries marked `na` the report ran, without this case MemoryPack has: n/a, with naNote */
+  na: OtherLib[];
+  /** Those of `na` the case manifest declares broken on the case: error, with errorNote's reason */
+  error: Partial<
+    Record<OtherLib, { kind: keyof typeof errorKinds; reason: string }>
+  >;
   /** nullableForms, in the nullable group's cases that have their rows (never a headline) */
   forms: Partial<Record<NullableForm, Versus>>;
   /** Payload (serialize rows) and bytes allocated per call, per library and form */
@@ -666,15 +745,20 @@ const extraCases: Record<'serialize' | 'deserialize', CaseInfo[]> = {
 const bothOps = (list: CaseInfo[]) => ({ serialize: list, deserialize: list });
 
 /**
- * The benchmark classes of common types, collections, BCL types, scattered
- * objects and untrusted reads (CommonTypesTest, CollectionsTest, BclTypesTest,
- * ScatteredTest, UntrustedTest), against every library that can express each
- * case. They join their groups in `dotnetGroups`.
+ * The benchmark classes of common types, collections, BCL types, text, block
+ * copies, application data, scattered objects and untrusted reads
+ * (CommonTypesTest, CollectionsTest, BclTypesTest, StringsTest, RawArraysTest,
+ * AppDataTest, ScatteredTest, UntrustedTest), against every library that can
+ * express each case. They join their groups in `dotnetGroups`, as Nino's
+ * readme.py GROUPS puts their classes.
  */
 export type MoreSet =
   | 'common'
   | 'collections'
   | 'bcl'
+  | 'strings'
+  | 'rawArrays'
+  | 'appData'
   | 'scattered'
   | 'untrusted';
 
@@ -695,10 +779,6 @@ const moreCases: Record<
       code: true,
       key: 'StringDictionary',
     },
-    // Reports up to v4.0.0-rc.9 (the workloads replaced them)
-    { name: 'List<Player> (100)', code: true, key: 'Players' },
-    { name: 'List<Order> (100)', code: true, key: 'Orders' },
-    { name: 'List<Shape> (1,000)', code: true, key: 'Shapes' },
   ]),
   collections: bothOps([
     { name: 'List<(int, long)>', code: true, key: 'TupleList' },
@@ -716,6 +796,121 @@ const moreCases: Record<
       key: 'ConcurrentDictionary',
     },
     { name: 'SelfTree', code: true, key: 'SelfTree' },
+    {
+      name: 'HashSet<int>, random order',
+      zh: 'HashSet<int>，随机顺序',
+      key: 'RandomIntSet',
+    },
+    { name: 'HashSet<string>', code: true, key: 'StringSet' },
+  ]),
+  strings: bothOps([
+    {
+      name: '1,000 ASCII strings',
+      zh: '1,000 个 ASCII 字符串',
+      key: 'AsciiStrings',
+    },
+    {
+      name: '1,000 mixed strings',
+      zh: '1,000 个混合字符串',
+      key: 'MixedStrings',
+    },
+    {
+      name: '1,000 mixed strings, [NinoUtf8]',
+      zh: '1,000 个混合字符串，[NinoUtf8]',
+      key: 'Utf8MixedStrings',
+    },
+    {
+      name: 'ASCII string, 32 chars',
+      zh: 'ASCII 字符串，32 字符',
+      key: 'AsciiString32',
+    },
+    {
+      name: 'ASCII string, 1,000 chars',
+      zh: 'ASCII 字符串，1,000 字符',
+      key: 'AsciiString1000',
+    },
+    {
+      name: 'ASCII string, 100,000 chars',
+      zh: 'ASCII 字符串，100,000 字符',
+      key: 'AsciiString100000',
+    },
+    {
+      name: 'CJK string, 32 chars',
+      zh: '中文字符串，32 字符',
+      key: 'CjkString32',
+    },
+    {
+      name: 'CJK string, 1,000 chars',
+      zh: '中文字符串，1,000 字符',
+      key: 'CjkString1000',
+    },
+    {
+      name: 'CJK string, 100,000 chars',
+      zh: '中文字符串，100,000 字符',
+      key: 'CjkString100000',
+    },
+    {
+      name: 'ASCII string, 32 chars, [NinoUtf8]',
+      zh: 'ASCII 字符串，32 字符，[NinoUtf8]',
+      key: 'Utf8AsciiString32',
+    },
+    {
+      name: 'ASCII string, 1,000 chars, [NinoUtf8]',
+      zh: 'ASCII 字符串，1,000 字符，[NinoUtf8]',
+      key: 'Utf8AsciiString1000',
+    },
+    {
+      name: 'ASCII string, 100,000 chars, [NinoUtf8]',
+      zh: 'ASCII 字符串，100,000 字符，[NinoUtf8]',
+      key: 'Utf8AsciiString100000',
+    },
+    {
+      name: 'CJK string, 1,000 chars, [NinoUtf8]',
+      zh: '中文字符串，1,000 字符，[NinoUtf8]',
+      key: 'Utf8CjkString1000',
+    },
+    {
+      name: 'List<string>, 1,000 ASCII words',
+      zh: 'List<string>，1,000 个 ASCII 单词',
+      key: 'AsciiWords',
+    },
+  ]),
+  rawArrays: bothOps([
+    ...[32, 1000, 100000].flatMap((n) => {
+      const count = n.toLocaleString('en-US');
+      return [
+        { name: `(int, long)[${count}]`, code: true, key: `IntLongPairs${n}` },
+        { name: `(byte, int)[${count}]`, code: true, key: `ByteIntPairs${n}` },
+        {
+          name: `(double, long, double, float, byte)[${count}]`,
+          code: true,
+          key: `FiveTuples${n}`,
+        },
+        { name: `PaddedRaw[${count}]`, code: true, key: `PaddedRaws${n}` },
+      ];
+    }),
+    { name: 'double[10,000]', code: true, key: 'Doubles10000' },
+    { name: 'int[10,000]', code: true, key: 'Ints10000' },
+    { name: 'Box<long>[1,000] (generic)', code: true, key: 'GenericBoxes' },
+    { name: 'LongBox[1,000]', code: true, key: 'LongBoxes' },
+  ]),
+  appData: bothOps([
+    { name: '1,000 players', zh: '1,000 个玩家', key: 'Players' },
+    {
+      name: '50 zoos of 100 animals',
+      zh: '50 个动物园，各 100 只动物',
+      key: 'Zoos',
+    },
+    {
+      name: '100 order books of 50 orders',
+      zh: '100 个订单簿，各 50 单',
+      key: 'OrderBooks',
+    },
+    { name: '200 articles', zh: '200 篇文章', key: 'Articles' },
+    { name: '20 meshes', zh: '20 个网格', key: 'Meshes' },
+    { name: '20 sample sets', zh: '20 组采样', key: 'SampleSets' },
+    { name: '50 lookups', zh: '50 个查找表', key: 'Lookups' },
+    { name: '1,000 events', zh: '1,000 个事件', key: 'Events' },
   ]),
   bcl: bothOps([
     { name: 'BigInteger', code: true, key: 'BigInteger' },
@@ -963,7 +1158,13 @@ export const dotnetGroups: {
     id: 'collections',
     name: 'Collections and common types',
     zh: '集合与常用类型',
-    cases: join(moreCases.collections, moreCases.common, moreCases.bcl),
+    cases: join(
+      moreCases.collections,
+      moreCases.common,
+      moreCases.bcl,
+      moreCases.strings,
+      moreCases.rawArrays,
+    ),
   },
   {
     id: 'reuse',
@@ -981,7 +1182,12 @@ export const dotnetGroups: {
     id: 'others',
     name: 'Others',
     zh: '其他',
-    cases: join(moreCases.scattered, moreCases.untrusted, externalCases),
+    cases: join(
+      moreCases.scattered,
+      moreCases.untrusted,
+      externalCases,
+      moreCases.appData,
+    ),
   },
 ];
 
@@ -1083,6 +1289,11 @@ type V3Rows = (typeof V3_RUNTIME)['rows'];
 /** Derives every runtime number from one report; `v3` only for x64 */
 function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
   const rows = new Map(file.rows.map((row) => [row.method, row] as const));
+  // The other libraries the report has any rows of
+  const libraries = otherLibs
+    .filter((lib) => file.rows.some((row) => row.method.startsWith(lib.prefix)))
+    .map((lib) => lib.key);
+  const ran = new Set(libraries);
   const measure = (method: string): Measure | undefined => {
     const row = rows.get(method);
     return row ? { text: formatTime(row.meanNs), ns: row.meanNs } : undefined;
@@ -1129,6 +1340,18 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
       if (time) others[lib.key] = versus(v4, time);
       caseBytes[lib.key] = sizes(of(lib.prefix));
     }
+    // The one n/a rule (Nino's readme.py, missing()): a library marked `na` that ran, without the case MemoryPack has
+    const na = memorypack
+      ? otherLibs
+          .filter((lib) => lib.na && ran.has(lib.key) && !others[lib.key])
+          .map((lib) => lib.key)
+      : [];
+    const error: RuntimeCase['error'] = {};
+    for (const key of na) {
+      const lib = otherLibs.find((l) => l.key === key);
+      const broken = lib && brokenCases.get(`${lib.prefix}:${info.key}`);
+      if (broken) error[key] = broken;
+    }
     const forms: RuntimeCase['forms'] = {};
     for (const form of withForms ? nullableForms : []) {
       const time = measure(of(form.prefix));
@@ -1144,6 +1367,8 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
       ratio,
       tooFast,
       others,
+      na,
+      error,
       forms,
       bytes: caseBytes,
       rerun: nino.rerun,
@@ -1246,11 +1471,7 @@ function dataset(arch: Arch, file: BenchFile, v3: V3Rows = {}): BenchDataset {
         ]),
       ) as Record<OtherLib, number | null>),
     },
-    libraries: otherLibs
-      .filter((lib) =>
-        file.rows.some((row) => row.method.startsWith(lib.prefix)),
-      )
-      .map((lib) => lib.key),
+    libraries,
   };
 }
 
@@ -1407,6 +1628,47 @@ export function formVersusOf(
   return row.forms[form];
 }
 
+/** Whether `lib` is n/a in this case (RuntimeCase.na): its chart and tables then carry naNote */
+export const isNa = (row: TableCase, lib: Opponent) =>
+  lib !== 'memorypack' && row.na.includes(lib);
+
+/** Whether any of these cases has a library n/a and not broken: their chart or tables then carry naNote */
+export const hasNa = (rows: TableCase[]) =>
+  rows.some((row) => row.na.some((lib) => !row.error[lib]));
+
+/** What a library n/a in a case shows (isNa): error when the case manifest declares it broken, else n/a */
+export const naText = (row: TableCase, lib: string) =>
+  row.error[lib as OtherLib] ? 'error' : 'n/a';
+
+/**
+ * The note of these cases' error cells and bars (Nino's readme.py,
+ * error_note): per library, each case it breaks on with the kind and reason;
+ * null without any.
+ */
+export function errorNote(rows: TableCase[], zh: boolean): string | null {
+  const byLib = new Map<OtherLib, Map<string, string>>();
+  for (const row of rows)
+    for (const [key, broken] of Object.entries(row.error) as [
+      OtherLib,
+      { kind: keyof typeof errorKinds; reason: string },
+    ][]) {
+      const kind = errorKinds[broken.kind][zh ? 'zh' : 'en'];
+      const cases = byLib.get(key) ?? new Map<string, string>();
+      cases.set(row.key, `${row.key} (${kind}: ${broken.reason})`);
+      byLib.set(key, cases);
+    }
+  if (byLib.size === 0) return null;
+  return [...byLib]
+    .map(([key, cases]) => {
+      const label = otherLibs.find((l) => l.key === key)?.label ?? key;
+      const items = [...cases.values()].join('; ');
+      return zh
+        ? `${label} 标 error 的用例，跑不了的原因：${items}。`
+        : `${label} error, a case it breaks on: ${items}.`;
+    })
+    .join(' ');
+}
+
 /** Whether any of these cases has a form's row: their chart or tables then carry formNote */
 export const hasForms = (rows: TableCase[]) =>
   rows.some((row) => Object.keys(row.forms).length > 0);
@@ -1458,7 +1720,7 @@ export function formatWorkloadRange(
  */
 export const hasWorkloads =
   workloadsMeasured &&
-  (['memorypack', ...otherLibs.map((lib) => lib.key)] as Opponent[])
+  (['memorypack', ...headlineLibs.map((lib) => lib.key)] as Opponent[])
     .filter((lib) =>
       x64.workloads.serialize.some((row) => versusOf(row, lib) !== undefined),
     )
