@@ -596,6 +596,7 @@ const runtimeNames: Record<RuntimeLang, string> = {
 
 const operationNames: Record<string, { en: string; zh: string }> = {
   serialize: { en: 'serialize', zh: '序列化' },
+  serializeInto: { en: 'serialize into a buffer', zh: '序列化到缓冲区' },
   deserialize: { en: 'deserialize', zh: '反序列化' },
   'serialize allocs': { en: 'serialize allocs', zh: '序列化分配次数' },
   'deserialize allocs': { en: 'deserialize allocs', zh: '反序列化分配次数' },
