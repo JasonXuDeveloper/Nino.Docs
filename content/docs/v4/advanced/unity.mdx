@@ -131,6 +131,42 @@ Build the shared project and copy **only** `Game.Shared.dll` into `Assets/Plugin
 </Tab>
 </Tabs>
 
+### C# Unions [#shared-unions]
+
+A [C# union](/en/docs/v4/polymorphism#csharp-unions) needs C# 15 and two types of .NET 11 (`UnionAttribute` and `IUnion`, which the compiler puts on every union), so Unity cannot compile one, and Nino's generator in Unity finds none to write. A union in the shared types reaches Unity only as a prebuilt DLL: build the shared project with the .NET 11 SDK and C# 15, declare those two types in it, `internal`, and copy the DLL as the Prebuilt DLL tab above says.
+
+```xml title="Game.Shared/Game.Shared.csproj" tab="Project"
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>preview</LangVersion> <!-- C# 15 for the union; the .NET 11 SDK -->
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Nino" Version="%NINO_VERSION%" />
+  </ItemGroup>
+</Project>
+```
+
+```csharp nocheck title="Game.Shared/UnionTypes.cs" tab="UnionTypes.cs"
+namespace System.Runtime.CompilerServices
+{
+    // What .NET 11 declares and .NET Standard 2.1 lacks; internal, so no other assembly sees them.
+    [AttributeUsage(AttributeTargets.Struct | AttributeTargets.Class)] internal sealed class UnionAttribute : Attribute { }
+    internal interface IUnion { object Value { get; } }
+}
+```
+
+```csharp nocheck title="Game.Shared/Reply.cs" tab="Reply.cs"
+using Nino.Core;
+
+[NinoType]
+public union Reply(Order, string, int);
+```
+
+The DLL holds the union's formatter, which the .NET build generated, and writes the bytes .NET 11 writes (`new Reply(42)` is `A4 A2 97 20 2A 00 00 00`). Unity code uses the union as the struct it compiles to: `new Reply(42)` and `reply.Value` (an `object`), with `is` patterns for the cases. The server references the same DLL, or targets `net11.0` too and leaves the two declarations out there (`#if !NET11_0_OR_GREATER`).
+
+A polymorphic `[NinoType]` base with the same subtypes is no substitute: it writes other bytes. A union writes the case's type id, then the value as the case's own type writes it, so a sealed class case has a presence byte after the id, and a non-sealed class case writes the case's id and then the subtype's; a base slot writes only the subtype's id and its body. Keep a union in a prebuilt DLL, or a base class on both sides, not one on each.
+
 ### Pitfalls [#shared-pitfalls]
 
 | Mistake | What happens | Caught by |
@@ -141,6 +177,7 @@ Build the shared project and copy **only** `Game.Shared.dll` into `Assets/Plugin
 | `Nino.Core.dll` copied into `Assets` beside the package's | Unity reports duplicate assemblies | Unity's compiler |
 | A prebuilt DLL built with another Nino version than the Unity package | Its generated code calls APIs that version may not have | A `MissingMethodException` or `TypeLoadException` at runtime |
 | The same types both as source and as a DLL | Two definitions of every type | Unity's compiler |
+| A C# union in the shared source folder | Unity cannot compile `union` | Unity's compiler; use a [prebuilt DLL](#shared-unions) |
 
 ## Burst-Accelerated Kernels [#burst-kernels]
 

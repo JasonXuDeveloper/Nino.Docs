@@ -200,10 +200,12 @@ useWasm(true);  // back on, where the engine allows it
 | `Dictionary<TKey, TValue>` and other dictionaries | `Map<K, V> \| null` | |
 | `ValueTuple`, `KeyValuePair` | `[A, B, ...]` | a TypeScript tuple, up to 7 items |
 | `Tuple<...>` | `[A, ...] \| null` | |
-| `T?`, `Lazy<T>` | `T \| null` | |
+| `T?`, `Lazy<T>` | `T \| null` | a `T?` of a raw `T` as the element of a collection is declared `NullableSlot<T>` (`NullableSlot<number>[]`), an alias of `T \| null` that names its encoding, a slot of a fixed size ([Nullable Values](/en/docs/v4/nullable-values#other-languages)) |
+| `NinoNullable<T>` | `NinoNullable<T>` | an alias of `T \| null` that names its encoding, twice `T`'s size; its presence and absent value are checked on read |
 | enum | `as const` object and a type of its values | a `[Flags]` enum is `number` (`bigint` for a 64-bit one); 64-bit enums have `bigint` values |
 | `[NinoType]` class | class | `extends` its generated base class, `implements` its generated interfaces; abstract stays abstract |
 | `[NinoType]` interface | interface | |
+| C# `union` | `A \| B \| ...`, or `{ case, value }` tagged | a union of the cases' types when their values tell them apart, else tagged with each case's name and a constructor per case (`Measure.Int32(42)`); null is the empty union: [C# Unions](/en/docs/v4/advanced/codegen#unions) |
 | struct, `[NinoType]` or copied as raw memory | class | a raw struct is read and written field by field at its offsets, padding zeroed |
 | pointers and function pointers inside a raw struct | `bigint` | |
 | `Int128`, `UInt128` inside a raw struct | a class of its two halves (`bigint`) | |

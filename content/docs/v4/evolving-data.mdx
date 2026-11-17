@@ -250,7 +250,7 @@ Members are listed in the order they are written, separated by `;`. Each member 
 - `raw(n)` or `raw(n){...}`: a value copied as raw memory (see below); `raw` alone: one whose size is known only at run time;
 - `string`: a string in the default encoding; `utf8`: a `[NinoUtf8]` string;
 - `type(T)`: a `[NinoType]`, as its own layout describes it; `object`: a `[NinoType]` behind its type id;
-- `nullable(E)`: a presence byte, then `E`;
+- `nullable(E)`: a presence byte, then `E` (a single `T?`); a `T?` of a raw `T` in a collection or a raw struct is a slot, `raw(S){hasValue:bool@0:raw(1),value:T@A:...}` with the value at `T`'s alignment, and a `NinoNullable<T>` is `raw(2n){hasValue:bool@0:raw(1),value:T@n:...}` with the value at `T`'s size ([Nullable Values](/en/docs/v4/nullable-values#two-formats));
 - `seq(E)`: an `int32` count (`-1` = null), then the elements; `map(K,V)`: a count, then each key and value; `grid(rank,E)`: each dimension's length, then the elements in row-major order;
 - `pair(K,V)` and `tuple(E,...)`: the items in order; `group(K,E)`: an element count, the key, then the elements;
 - `datetimeoffset`, `bigint`, `version`, `bits`, `timezone`: those built-in types;
@@ -272,6 +272,7 @@ A `Dictionary<string, int[]> Inventory` reads `Inventory:System.Collections.Gene
 | --- | --- | --- |
 | Appending a member to a version-tolerant base class that has `[NinoType]` subclasses | The subclasses' data reads wrong values, or throws `NinoDataException` | a [layout baseline](#layout-baseline) (NINO034 on the subclass); see [Appending to a Base Class](#appending-to-a-base-class) |
 | Changing a member's type, or a type's format, once data exists | Old data is misread or does not read | a [layout baseline](#layout-baseline) (NINO034) |
+| Changing a stored member between `T?` and `NinoNullable<T>` | Old data does not read, except a collection of a `T` as large as its alignment (`long?[]` and `NinoNullable<long>[]`) | a [layout baseline](#layout-baseline) (NINO034, whose message says the two are different formats); [convert the values](/en/docs/v4/nullable-values#two-formats) |
 | Renaming or moving a type that is written with its type id | Old data's type id is unknown: `NinoDataException` | a [layout baseline](#layout-baseline) (NINO034, whose code fix adds [`[NinoFormerName]`](#former-name)) |
 | `[NinoFormerName]` on a generic type written with its type id | Every instantiation writes the same id, and reads cannot tell them apart | [NINO027](/en/docs/v4/analyzers#nino027) |
 | Renaming a keyed member without `[NinoFormerName]` | Old data's value for it is skipped as an unknown key | a [layout baseline](#layout-baseline) (NINO035, whose code fix adds the former name) |

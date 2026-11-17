@@ -17,7 +17,7 @@ Nino 仓库的 [docs/spec/wire-format.md](https://github.com/JasonXuDeveloper/Ni
 
 ## 约定 [#conventions]
 
-- **小端序，不对齐。** 所有多字节值都是小端序，每个值紧接在上一个值之后。字节里只有两处填充，都写零：原始结构体内部，以及原始数组的可空元素内部。.NET 实现拒绝在大端主机上运行。
+- **小端序，不对齐。** 所有多字节值都是小端序，每个值紧接在上一个值之后。字节里只有两处填充，都写零：原始结构体内部，以及原始值集合里的可空元素内部。.NET 实现拒绝在大端主机上运行。
 - **没有信封。** 一段数据就是按声明类型写出的顶层值，后面跟着推迟的主体（如果有）。没有魔数、版本、长度或类型描述：这些字节怎么读，只由声明类型决定。值后面的字节默认忽略，在[不可信模式](/zh/docs/v4/security#untrusted-mode)下拒绝。`Serialize(value, stream)` 也不额外加任何东西，所以多条消息共用一个流时要[分帧](/zh/docs/v4/advanced/streams#frames)。
 - **定长整数。** 长度和数量是 `int32`，`-1` 表示 null；密封类和可空值带一个存在字节（`0` 或 `1`）。唯一的变长整数是[字符串头](#strings)，由第一个字节决定它的大小。
 - **版本。** 格式版本跟着 Nino 的主版本走：v4 不读 v3 的数据。v4 之内对字节的改动，会写在[更新日志](/zh/docs/v4/changelog)的“二进制格式”一节。给类型加成员靠的是各类型自己的[版本容错和键控格式](/zh/docs/v4/evolving-data)，而不是格式版本。
@@ -69,11 +69,11 @@ Nino 仓库的 [docs/spec/wire-format.md](https://github.com/JasonXuDeveloper/Ni
 
 ## 原始值 [#raw-values]
 
-非托管值（基元类型、枚举、不是 `[NinoType]` 的非托管结构体，或符合条件的 `[NinoType]` 结构体）按**规范布局**整块写出。规范布局就是 64 位 CoreCLR 给它的布局：每个字段按自然对齐（`decimal` 对齐到 8，`Int128` 对齐到 16），填充写零；`Nullable` 字段没有值时，值的部分也写零。所有运行时写出的字节都一样：自身布局不同时（32 位平台、Mono 和 IL2CPP 上的部分结构体），Nino 逐字段转换。`Nullable<T>`、`ValueTuple`、`KeyValuePair` 和 `DateTimeOffset` 单独出现时从不按原始值写，而是逐项写。放在非托管结构体里时，它们属于结构体的那一整块，同样用规范布局：值元组的各项放在 64 位 CoreCLR 放的位置（较大的基元项在前，所以 `(int, long)` 先 `long` 后 `int`）；`KeyValuePair` 先键后值；`DateTimeOffset` 按 .NET 10 的存法（先是 `int` 型的偏移分钟数，UTC 时间从第 8 字节开始）；`nint`/`nuint` 占 8 字节。SIMD 向量（`Vector64<T>` 到 `Vector512<T>`）按 x64 的方式对齐；`Vector<T>` 的宽度由 CPU 决定（16、32 或 64 字节），[不能序列化](/zh/docs/v4/struct-layouts#vector-t)。各运行时的差异见[结构体布局](/zh/docs/v4/struct-layouts)。
+非托管值（基元类型、枚举、不是 `[NinoType]` 的非托管结构体、[符合条件的 `[NinoType]` 结构体](/zh/docs/v4/defining-types#structs)，以及 `NinoNullable<T>`）按**规范布局**整块写出。规范布局就是 64 位 CoreCLR 给它的布局：每个字段按自然对齐（`decimal` 对齐到 8，`Int128` 对齐到 16），填充写零；`Nullable` 字段没有值时，值的部分也写零。所有运行时写出的字节都一样：自身布局不同时（32 位平台、Mono 和 IL2CPP 上的部分结构体），Nino 逐字段转换。`Nullable<T>`、`ValueTuple`、`KeyValuePair` 和 `DateTimeOffset` 单独出现时从不按原始值写，而是逐项写。放在非托管结构体里时，它们属于结构体的那一整块，同样用规范布局（符合条件的 `[NinoType]` 结构体可以有 `T?` 字段，另外三种和 `nint` 都不行）：`T?` 和集合里可空元素的槽位一样（标志、补到 `T` 对齐的零、值）；值元组的各项放在 64 位 CoreCLR 放的位置（较大的基元项在前，所以 `(int, long)` 先 `long` 后 `int`）；`KeyValuePair` 先键后值；`DateTimeOffset` 按 .NET 10 的存法（先是 `int` 型的偏移分钟数，UTC 时间从第 8 字节开始）；`nint`/`nuint` 占 8 字节。SIMD 向量（`Vector64<T>` 到 `Vector512<T>`）按 x64 的方式对齐；`Vector<T>` 的宽度由 CPU 决定（16、32 或 64 字节），[不能序列化](/zh/docs/v4/struct-layouts#vector-t)。各运行时的差异见[结构体布局](/zh/docs/v4/struct-layouts)。
 
 <Callout type="warn" title="原始字节按原样复制">
 
-读原始结构体就是复制它的整块字节：默认模式下，里面的 `bool` 字段和 `Nullable` 存在字节都不检查，那里出现不是 0 或 1 的字节，对 .NET JIT 是未定义行为（这个值可能和自己都不相等）。来源不可信的数据，要设 `NinoSettings.Untrusted = true` 再读（见[会被拒绝的数据](/zh/docs/v4/security#what-is-rejected)）。
+读原始结构体就是复制它的整块字节：默认模式下，里面的 `bool` 字段、`Nullable` 存在字节、`NinoNullable<T>`（还有单独的 `NinoNullable<T>`）都不检查，那里出现不是 0 或 1 的字节，对 .NET JIT 是未定义行为（这个值可能和自己都不相等）。来源不可信的数据，要设 `NinoSettings.Untrusted = true` 再读（见[会被拒绝的数据](/zh/docs/v4/security#what-is-rejected)）。
 
 </Callout>
 
@@ -81,7 +81,7 @@ Nino 仓库的 [docs/spec/wire-format.md](https://github.com/JasonXuDeveloper/Ni
 
 - **序列**（数组、列表、Set、队列、栈、`Memory<T>`、不可变序列，以及你自己写的集合）是一个 `int32` 数量（`-1` 为 null），然后是各元素。原始元素是一整块 `数量 × 大小` 字节。栈从底到顶写出。
 - **映射**是一个数量，然后是每个键和值。有序映射按键的顺序写出；哈希映射按枚举顺序写出，读取器不能依赖这个顺序。
-- **原始 `T` 的 `T?[]` 和 `List<T?>`** 使用固定步长：一个存在字节，填充到 `T` 的对齐，然后是 `T`（为 null 时全为零）。声明为接口的成员（`IList<int?>`）则把每个元素作为单独的 `T?` 写出。各种可空值的字节见[可空值](/zh/docs/v4/nullable-values)。
+- **原始 `T` 的 `T?` 作为任何序列的元素**（数组、列表、Set、队列、各种接口、`Memory<T?>`、多维数组等）是固定大小的槽位：一个存在字节，填充到 `T` 的对齐，然后是 `T`（为 null 时全为零），所以同样的值，`int?[]`、`Queue<int?>` 和 `IList<int?>` 写出的字节相同。字典里的 `T?` 值、元组里的 `T?` 项按单个 `T?` 写。`NinoNullable<T>` 放在哪里都是它自己的内存，占 `T` 的两倍。各种可空值的字节见[可空值](/zh/docs/v4/nullable-values)。
 - **元组和键值对**按顺序写出各项；`Tuple<...>`、`T?` 和 `Lazy<T>` 前面有一个存在字节。多维数组先写每一维的长度，再按行优先顺序写元素。
 
 ## 对象 [#objects]

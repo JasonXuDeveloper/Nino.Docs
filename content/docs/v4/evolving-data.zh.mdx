@@ -250,7 +250,7 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
 - `raw(n)` 或 `raw(n){...}`：按原始内存拷贝的值（见下文）；单独的 `raw`：大小要到运行时才知道的这类值；
 - `string`：默认编码的字符串；`utf8`：`[NinoUtf8]` 字符串；
 - `type(T)`：一个 `[NinoType]`，按它自己的布局写出；`object`：带类型 ID 的 `[NinoType]`；
-- `nullable(E)`：一个存在字节，然后是 `E`；
+- `nullable(E)`：一个存在字节，然后是 `E`（单个 `T?`）；原始 `T` 的 `T?` 在集合或原始结构体里是槽位，写作 `raw(S){hasValue:bool@0:raw(1),value:T@A:...}`，值在 `T` 的对齐处；`NinoNullable<T>` 写作 `raw(2n){hasValue:bool@0:raw(1),value:T@n:...}`，值在 `T` 的大小处（[可空值](/zh/docs/v4/nullable-values#two-formats)）；
 - `seq(E)`：`int32` 元素个数（`-1` = null），然后是各元素；`map(K,V)`：元素个数，然后是每个键和值；`grid(rank,E)`：每一维的长度，然后按行优先顺序排列的元素；
 - `pair(K,V)` 和 `tuple(E,...)`：按顺序排列的各项；`group(K,E)`：元素个数、键，然后是各元素；
 - `datetimeoffset`、`bigint`、`version`、`bits`、`timezone`：这几种内置类型；
@@ -272,6 +272,7 @@ foreach (var layout in typeof(Move).Assembly.GetCustomAttributes<NinoTypeLayoutA
 | --- | --- | --- |
 | 给有 `[NinoType]` 子类的版本容错基类追加成员 | 子类的数据读出错误的值，或抛出 `NinoDataException` | [布局基线](#layout-baseline)（在子类上报 NINO034）；参见[向基类追加成员](#appending-to-a-base-class) |
 | 数据已经存在后，修改成员的类型或类型的格式 | 旧数据读错或读不出来 | [布局基线](#layout-baseline)（NINO034） |
+| 已存数据的成员在 `T?` 和 `NinoNullable<T>` 之间改声明 | 旧数据读不出来；只有 `T` 大小等于对齐的集合例外（`long?[]` 与 `NinoNullable<long>[]`） | [布局基线](#layout-baseline)（NINO034，消息里会说明这是两种格式）；[转换值](/zh/docs/v4/nullable-values#two-formats) |
 | 重命名或移动一个连同类型 ID 写出的类型 | 旧数据的类型 ID 认不出来：`NinoDataException` | [布局基线](#layout-baseline)（NINO034，代码修复会加上 [`[NinoFormerName]`](#former-name)） |
 | 在连同类型 ID 写出的泛型类型上用 `[NinoFormerName]` | 所有封闭泛型类型写出同一个 ID，读取时分不清 | [NINO027](/zh/docs/v4/analyzers#nino027) |
 | 重命名键控成员却不加 `[NinoFormerName]` | 旧数据里这个成员的值当作未知的键跳过 | [布局基线](#layout-baseline)（NINO035，代码修复会加上旧名） |

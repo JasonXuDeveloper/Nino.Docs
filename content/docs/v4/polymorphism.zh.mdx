@@ -192,6 +192,24 @@ public sealed class CommandChannel
 - **把 `object` 作为声明类型**（成员、元素，或 `Serialize<object>` 调用）：只接受 `[NinoType]` 的值，会写类型 ID，读取时通过包含所有 `[NinoType]` 的全局注册表分派，用不上某个基类型生成的分派。请优先用共同基类型。
 - **[装箱 API](/zh/docs/v4/basic#the-boxed-api)**（带 `Type` 的 `SerializeBoxed` / `DeserializeBoxed`）：按 `Type` 查找格式化器，值类型会装箱。只在类型要到运行时才以 `Type` 的形式知道、而且这些类型没有共同的 `[NinoType]` 基类型时才用，比如基于反射、处理任意类型的工具。
 
+## C# union [#csharp-unions]
+
+在 .NET 11 的 C# 15 项目里，给 `union` 声明加上 `[NinoType]`，就能存放一组固定分支类型中的某一个值，这些类型不需要有共同的基类：比如一次回复要么是订单、要么是错误信息，一项设置要么是数字、要么是文本。每个分支先写它的类型的 Nino 类型 ID，再用这个类型自己的格式化器写值，所以分支可以是 Nino 能序列化的任何类型：基元类型、字符串、集合、可空值，或者 `[NinoType]`（分支是基类时，子类型在分支 ID 之后还会写上自己的类型 ID）。
+
+```csharp nocheck
+using Nino.Core;
+
+[NinoType]
+public union Reply(Order, string, int); // [!code highlight]
+
+byte[] bytes = NinoSerializer.Serialize(new Reply(42));
+Reply reply = NinoDeserializer.Deserialize<Reply>(bytes); // reply.Value 是 int 42
+```
+
+`new Reply(42)` 写出 `System.Int32` 的类型 ID，再写这个 `int`：`A4 A2 97 20 2A 00 00 00`。空 union（`default(Reply)`，或者分支构造时传入 `null`）只有一个 0。分支靠类型 ID 识别，不看声明顺序，所以调整顺序、新增分支，旧数据都还能读；删掉一个分支后，含有它的数据就读不了了；分支类型改名时，用 [`[NinoFormerName]`](/zh/docs/v4/evolving-data#former-name) 保留原来的 ID。读取时会检查 ID 是否属于这个 union 的分支，以及值是否为 null。
+
+每个分支都要有格式化器，没有的话 [NINO045](/zh/docs/v4/analyzers#nino045) 会指出来。如果某个分支能再装下这个 union（比如它自己的数组、一个类），union 的嵌套会和能装下自己的结构体一样，计入[深度上限](/zh/docs/v4/security#limits)。字节格式见[二进制格式规范](https://github.com/JasonXuDeveloper/Nino/blob/main/docs/spec/wire-format.md#712-c-union-structs)。TypeScript、Go 和 Rust 通过 nino-gen 生成的代码读写 union：见 [C# union](/zh/docs/v4/advanced/codegen#unions)。Unity 编译不了 union，Unity 客户端要通过预编译的库来用（见 [Unity 里的 C# union](/zh/docs/v4/advanced/unity#shared-unions)），而且多态基类写出的字节和 union 不一样，不能拿来代替。
+
 ## 其他程序集里的子类型 [#subtypes-in-other-assemblies]
 
 子类型不管声明在哪里，Nino 都能自动找到，包括之后才加载的程序集（插件、HybridCLR 热更新 DLL）：遇到不认识的类型 ID，Nino 先去新加载的程序集的注册表里找，找不到才报错。不需要任何注册调用。比如某个插件或热更新 DLL 新增了 `public sealed class OrderRefunded : OrderEvent`。DLL 加载后，主程序集（AOT 程序集）里的代码一行不改，就能读取含有 `OrderRefunded` 的 `List<OrderEvent>`。源生成器也必须在子类型所在的程序集里运行（在那个项目里安装 `Nino` 包；在 Unity 里，那个程序集必须引用 `Nino.Core`）；类型 ID 对应的类型不在任何已加载的程序集里时，抛出 `NinoDataException`。

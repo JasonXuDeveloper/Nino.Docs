@@ -51,8 +51,9 @@ catch (NinoDataException e)
   { label: '未知的类型 ID、不是声明类型子类型的 ID、无效的回引用', cells: ['yes', 'yes'] },
   { label: <>读取时从空开始填充的字典、Set 或查找表里出现重复的键；某个键在其哈希桶中遇到超过 <a href="#hash-flooding"><code>MaxHashCollisions</code></a> 个键</>, cells: ['yes', 'yes'] },
   { label: '特意挑选落进同一哈希桶的键（整数、char、Guid 和 string 键）', cells: ['partial: 由 MaxHashCollisions 限制', 'yes: 带种子的哈希'] },
-  { label: '不是 0 或 1 的 bool 或存在字节（值、成员、bool 数组、元组和 KeyValuePair 的项）', cells: ['yes', 'yes'] },
+  { label: '不是 0 或 1 的 bool 或存在字节（值、成员、bool 数组、集合里可空元素的槽位、元组和 KeyValuePair 的项）', cells: ['yes', 'yes'] },
   { label: <><strong>原始结构体里</strong>不是 0 或 1 的 <code>bool</code> 字段或 <code>Nullable</code> 存在字节</>, cells: ['no: 原样复制，不检查', 'yes'] },
+  { label: <>存在标记不是 0 或 1、首字节以外有非零字节，或者没有值时值不全为零的 <code>NinoNullable&lt;T&gt;</code></>, cells: ['no: 原样复制，不检查', 'yes'] },
   { label: '超过 DateTime.MaxValue 的 DateTime，有其他标志位或小数位数超过 28 的 decimal，超出范围的 DateOnly 或 TimeOnly', cells: ['no', 'yes'] },
   { label: '值之后的字节（接收整段数据的 API）', cells: ['no: 忽略', 'yes'] },
   { label: '条目字节多于其值的键控成员、超出区域末尾的成员、与所在区域不符的推迟主体段', cells: ['yes', 'yes'] },
@@ -62,7 +63,7 @@ catch (NinoDataException e)
 
 <Callout type="error" title="不可信的数据要用 NinoSettings.Untrusted 读">
 
-默认模式把原始结构体（整块写出的非托管结构体）原样复制，所以里面的 `bool` 字段和 `Nullable` 存在字节都不检查。那里出现 0 和 1 以外的字节，对 .NET JIT 来说是未定义行为，不只是值不对：代码重新编译后，这个结构体可能连和自己都不相等（一个存在字节为 2 的 `long?`，一个编译后的方法读成 null，另一个读成有值），放进 `Dictionary` 当键或值就再也找不到了。可能被人伪造的数据，必须设 `NinoSettings.Untrusted = true` 再读，它会拒绝这种字节。Go、Rust 和 TypeScript 的读取器一律拒绝。
+默认模式把原始结构体（整块写出的非托管结构体）原样复制，所以里面的 `bool` 字段和 `Nullable` 存在字节都不检查；`NinoNullable<T>` 也是原始结构体，同样不查。那里出现 0 和 1 以外的字节，对 .NET JIT 来说是未定义行为，不只是值不对：代码重新编译后，这个结构体可能连和自己都不相等（一个存在字节为 2 的 `long?`，一个编译后的方法读成 null，另一个读成有值），放进 `Dictionary` 当键或值就再也找不到了。可能被人伪造的数据，必须设 `NinoSettings.Untrusted = true` 再读，它会拒绝这种字节。Go、Rust 和 TypeScript 的读取器一律拒绝。
 
 </Callout>
 
@@ -126,7 +127,7 @@ NinoSettings.MaxCollectionLength = 100_000; // 我们的消息不会超过这个
 `NinoSettings.Untrusted = true` 加上每次读取都要花时间、可信数据又用不着的检查。关闭时（默认）这些检查一点开销都没有：读取路径把这个开关当常量判断。打开后：
 
 - **带种子的哈希。** Nino 创建的字典和 Set（包括 `IDictionary`、`ISet` 和查找表），对整数、`char`、`Guid` 和 `string` 键用一个比较器（SipHash-1-3），它的密钥每个进程随机生成一次，所以根本没法挑出会冲突的键。它们的 `Comparer` 不是默认比较器，但判断相等的结果一样。你传进来的集合保留自己的比较器；其他键类型，以及 `ConcurrentDictionary`、`ImmutableDictionary` 和 `ImmutableHashSet`，靠 `MaxHashCollisions` 兜底。
-- **按字节复制的值也要检查**，查法和它自己的构造函数一样，原始结构体和元组里面也查：0 和 1 以外的 `bool` 或 `Nullable` 存在字节、超过 `DateTime.MaxValue` 的 `DateTime`、标志位里除了符号还有别的位或者小数位数超过 28 的 `decimal`、超出范围的 `DateOnly` 或 `TimeOnly`。枚举不查：底层类型的任何值都是有效的枚举值（标志可以组合，新版本也可能加成员）。`TimeSpan`、`Guid`、`char` 和数字没有无效值。这类值组成的数组和列表，检查时不会每个值一个分支，在 .NET 8+ 上还用 SIMD 一次查好几个。
+- **按字节复制的值也要检查**，查法和它自己的构造函数一样，原始结构体和元组里面也查：0 和 1 以外的 `bool` 或 `Nullable` 存在字节，存在标记不是 0 或 1、首字节以外有非零字节、没有值时值不全为零的 `NinoNullable<T>`，超过 `DateTime.MaxValue` 的 `DateTime`、标志位里除了符号还有别的位或者小数位数超过 28 的 `decimal`、超出范围的 `DateOnly` 或 `TimeOnly`。枚举不查：底层类型的任何值都是有效的枚举值（标志可以组合，新版本也可能加成员）。`TimeSpan`、`Guid`、`char` 和数字没有无效值。这类值组成的数组和列表，检查时不会每个值一个分支，在 .NET 8+ 上还用 SIMD 一次查好几个。
 - **值之后的字节**，对接收整段数据（span 或数组）的 API（`NinoDeserializer.Deserialize` 和生成的重载）来说是无效数据。从你自己创建的 `Reader` 读时，剩下的字节由你处理，所以照样能从一个缓冲区里读多个值。
 
 ### 开销 [#untrusted-cost]

@@ -59,13 +59,15 @@ fn main() -> nino::Result<()> {
 | `sbyte` … `ulong`、`Int128`、`UInt128`、`float`、`double`、`bool` | `i8` … `u64`、`i128`、`u128`、`f32`、`f64`、`bool` |
 | `char` | `u16`，即一个 UTF-16 码元（Rust 的 `char` 对应 `Rune`） |
 | `string` | `Option<String>`、`Option<WideString>`；`[NinoUtf8]` 是 `Option<Utf8>` |
-| `T?`（结构体）、类 | `Option<T>`；递归的类是 `Option<Box<T>>` |
+| C# `union` | 枚举：`Empty`（默认值，即空 union），外加每个分支一个装着分支值的变体（`Reply::Int32(42)`；名叫 `Empty` 的分支变成 `EmptyCase`）：见 [C# union](/zh/docs/v4/advanced/codegen#unions) |
+| 单个 `T?`（原始结构体里的 `T?` 字段也算）、类 | `Option<T>`；递归的类是 `Option<Box<T>>` |
 | `T[]`、`List<T>`、`Queue<T>`…… | `Option<Vec<T>>`、`VecDeque<T>` |
 | `HashSet<T>`、`SortedSet<T>` | `HashSet<T>`、`BTreeSet<T>`、`IndexSet<T>` |
 | `Dictionary<K, V>`、`SortedDictionary<K, V>` | `HashMap<K, V>`、`BTreeMap<K, V>`、`IndexMap<K, V>` |
 | `ValueTuple<…>`（1 到 7 项） | 元组 |
 | `T[,]` 等多维数组 | `Grid<T, R>` |
-| 原始结构体的 `T?[]`（按原始内存写入） | `RawNullables<T>` |
+| 原始 `T` 的 `T?` 作为任何集合的元素，即固定大小的槽位（[可空值](/zh/docs/v4/nullable-values#other-languages)） | `NullableSlot<T>`：`int?[]` 或 `List<int?>` 是 `Vec<NullableSlot<i32>>`，还有 `VecDeque<NullableSlot<i64>>`、`HashSet<NullableSlot<i32>>`、`Grid<NullableSlot<i32>, 2>`；每个集合整块读写 |
+| `NinoNullable<T>` | `NinoNullable<T>`，包着一个 `Option<T>`（`.0`、双向 `From`、`Deref`） |
 | 原始结构体里的 `nint`；`nuint`、指针和函数指针 | `i64`；`u64` |
 | 原始结构体里的 `DateTimeOffset` | 结构体 `{ date_time, offset_minutes }` |
 | `decimal`、`Guid`、`DateTime`、`DateTimeOffset`、`TimeSpan`、`DateOnly`、`TimeOnly`、`Half`、`Rune`、`Version`、`BigInteger`、`BitArray` | 同名类型；`DateTimeKind` 表示 `DateTime` 的 Kind |

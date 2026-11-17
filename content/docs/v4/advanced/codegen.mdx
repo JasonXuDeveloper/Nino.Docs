@@ -252,20 +252,24 @@ Each `[NinoType]` becomes one type, and each member the type its language has fo
 | sealed class | `X \| null` | `*X` | `Option<X>` |
 | class that is not sealed, abstract class, interface | `X \| null`, any generated subtype | an interface, implemented by each allowed type | `Option<XRef>`, an enum of the allowed types |
 | `object` | `unknown` | `nino.Typed` | `Option<AnyObject>` |
+| C# `union` | class with `case` and `value` | an interface, implemented by a struct per case | an enum with a variant per case and `Empty` |
 | enum | an `as const` object and a type of its values | a named integer type with constants | an integer, and a unit struct of the named values |
 | `string` | `string \| null` | `*string` | `Option<String>` |
 | `T[]`, `List<T>` | `T[] \| null` | `[]T` | `Option<Vec<T>>` |
 | `HashSet<string>` | `Set<string \| null> \| null` | `[]*string` | `Option<IndexSet<Option<String>>>` |
 | `Dictionary<K, V>` | `Map<K, V> \| null` | `[]nino.Entry[K, V]` | `Option<IndexMap<K, V>>` |
 | `decimal`, `Guid`, `DateTime` | `string`, `string`, `Date` | `nino.Decimal`, `nino.Guid`, `nino.DateTime` | `nino::Decimal`, `nino::Guid`, `nino::DateTime` |
+| `int?`, a single value | `number \| null` | `*int32` | `Option<i32>` |
+| `int?[]`, `List<int?>`, `HashSet<int?>` | `NullableSlot<number>[] \| null`, `Set<NullableSlot<number>> \| null` | `[]nino.NullableSlot[int32]` | `Option<Vec<nino::NullableSlot<i32>>>`, `Option<IndexSet<nino::NullableSlot<i32>>>` |
+| `NinoNullable<int>` | `NinoNullable<number>` | `nino.NinoNullable[int32]` | `nino::NinoNullable<i32>` |
 
-A set's strings may be null in every language, as in .NET, where a `HashSet<string>` holds one null; a dictionary's keys never are, since .NET throws on a null key.
+A set's strings may be null in every language, as in .NET, where a `HashSet<string>` holds one null; a dictionary's keys never are, since .NET throws on a null key. A nullable number has a type for each of its three encodings (a single `T?`, the fixed-size slot of a `T?` in a collection, `NinoNullable<T>`), so a generated type shows which bytes a member has: [Nullable Values](/en/docs/v4/nullable-values#other-languages).
 
 Every type, and how to build the .NET values: [TypeScript](/en/docs/v4/advanced/typescript#type-mapping), [Go](/en/docs/v4/advanced/go#values), [Rust](/en/docs/v4/advanced/rust#types).
 
 ## Fields of Raw Structs [#raw-struct-fields]
 
-A raw struct (an unmanaged struct written as one block, [Raw Values](/en/docs/v4/wire-format#raw-values)) is generated as a type of its fields at their offsets in the canonical layout, padding zeroed. The fields whose .NET size or layout depends on the host (`nint`, `nuint`, pointers, `Int128`, `DateTimeOffset`, a `T?` of a raw `T`) have the fixed bytes the wire format gives them, and a fixed type in each language: [TypeScript](/en/docs/v4/advanced/typescript#type-mapping), [Go](/en/docs/v4/advanced/go#values), [Rust](/en/docs/v4/advanced/rust#types). TypeScript has no type for a `DateTimeOffset` field and leaves its struct out ([What TypeScript Leaves Out](/en/docs/v4/advanced/typescript#not-supported)). An array of `Int128?` has a stride of 32 bytes (the flag, 15 zeros, the value). The `Vector64<T>` to `Vector512<T>` fields are NINOGEN002 in every language, as is a layout from an older build that holds a `System.Numerics.Vector<T>`: `Vector<T>` is [not serializable](/en/docs/v4/struct-layouts#vector-t).
+A raw struct (an unmanaged struct written as one block, [Raw Values](/en/docs/v4/wire-format#raw-values)) is generated as a type of its fields at their offsets in the canonical layout, padding zeroed. The fields whose .NET size or layout depends on the host (`nint`, `nuint`, pointers, `Int128`, `DateTimeOffset`, a `T?` of a raw `T`, which is the slot a `T?` takes in a collection) have the fixed bytes the wire format gives them, and a fixed type in each language: [TypeScript](/en/docs/v4/advanced/typescript#type-mapping), [Go](/en/docs/v4/advanced/go#values), [Rust](/en/docs/v4/advanced/rust#types). TypeScript has no type for a `DateTimeOffset` field and leaves its struct out ([What TypeScript Leaves Out](/en/docs/v4/advanced/typescript#not-supported)). An array of `Int128?` has a stride of 32 bytes (the flag, 15 zeros, the value). The `Vector64<T>` to `Vector512<T>` fields are NINOGEN002 in every language, as is a layout from an older build that holds a `System.Numerics.Vector<T>`: `Vector<T>` is [not serializable](/en/docs/v4/struct-layouts#vector-t).
 
 ## Generic Types [#generics]
 
@@ -317,6 +321,58 @@ A header other than -1, 0 or the number of an object read so far is rejected, as
 
 A `[NinoType]` class deriving from a collection (`class Bag : List<int>` with members of its own) is written as its elements, as the collection they are, then its members. Each language gives the type a field for the elements, before its members: `$elements` in TypeScript (an array, `Map` or `Set`), `Elements` in Go (tagged `nino:"-"`, `$elements` in JSON) and `elements` in Rust (`$elements` in serde). The elements are never null, since the collection is the object: data that marks them null is rejected, as .NET rejects it.
 
+## C# Unions [#unions]
+
+A [C# union](/en/docs/v4/polymorphism#csharp-unions) wraps one value, and its case is that value's runtime type. Each language writes the sum type it has, with null (nil, `Empty`) for the empty union; nino-gen takes the cases from the union's constructors and writes each one's value as .NET's formatter for the case's type writes it, after the case's type id.
+
+```csharp nocheck title="Unions.cs"
+using System.Collections.Generic;
+using Nino.Core;
+
+[NinoType]
+public union Reply(Order, string, int);              // every case told apart by its value
+
+[NinoType]
+public union Measure(int, double, List<int>, List<string>); // two numbers, two lists
+```
+
+**TypeScript** has unions of types, so a union is one when the writer can tell every case's values apart at run time: each case needs its own test (`typeof` a number, string, boolean or bigint, `Array.isArray`, `instanceof` a `Map`, `Set`, `Date`, typed array or generated class; a subclass is tested before its base). `Reply` is `Order | string | number`, read as the bare value and written by testing it. Where two cases share a test (an `int` and a `double` are both numbers, two lists are both arrays, a `char` and a `string` both strings) or a case has none (an interface, `object`), the case is a tag: `Measure` is `{ case: "Int32", value: number } | { case: "Double", value: number } | ...`, with a constructor per case, so `switch (m.case)` narrows. A `T?` of a union has no TypeScript form (null would be both no value and the empty union).
+
+**Go** has no sum types; a sealed interface with a type per case is the idiom. A case whose value is a generated struct or class (`*Order`) is that type itself, marked with the union's method, so the value is not wrapped again (one type can be a case of several unions); any other case is a struct holding its `Value`. **Rust** has enums: one, by value, with `Empty` the default.
+
+```ts tab="TypeScript" tab-group="codegen-lang"
+const reply: Reply | null = 42;                     // a number: the Int32 case
+if (typeof reply === "string") showError(reply);
+const measure = Measure.Double(2.5);                // { case: "Double", value: 2.5 }
+switch (measure.case) {
+  case "Int32": useInt(measure.value); break;
+  case "ListString": useNames(measure.value); break;
+}
+```
+
+```go tab="Go" tab-group="codegen-lang"
+var reply protocol.Reply = protocol.ReplyInt32{Value: 42} // nil is the empty union
+switch r := reply.(type) {
+case *protocol.Order: // a generated class is its own case
+	showOrder(r)
+case protocol.ReplyString:
+	showError(*r.Value)
+}
+```
+
+```rust tab="Rust" tab-group="codegen-lang"
+let reply = Reply::Int32(42); // Reply::Empty (the default) is the empty union
+match &reply {
+    Reply::Order(Some(order)) => show_order(order),
+    Reply::String(Some(text)) => show_error(text),
+    _ => {}
+}
+```
+
+Data never holds a null case value: a case given null is written as the empty union, as .NET writes it, and data with a case's id and a null value is rejected, as is an id that is not one of the cases. Reading and writing a union is one `switch` on the case's id and one chain of type tests, a type switch or a `match`, with no allocation beyond the value (a tagged TypeScript case is one small object). In an `object` slot a union is written behind its own type id; TypeScript and Go hold it there in a class of their own, `ReplyObject`, which keeps the empty union apart from a null object.
+
+Left out with NINOGEN002 in every language: a generic union (`union Option<T>(T, None)`), whose case ids depend on its type arguments, and a union with a case that is or holds a tuple or a `KeyValuePair`, whose encoding the layouts do not publish.
+
 ## Untrusted Data [#untrusted-data]
 
 The TypeScript, Go and Rust readers take untrusted input, as the .NET reader does ([Untrusted Data](/en/docs/v4/security)): data that is not a value of the type read fails with the runtime's one error type, never another exception or a panic, and never reads out of bounds, recurses without a bound or allocates more than the data holds.
@@ -336,7 +392,8 @@ nino-gen leaves out, with warning NINOGEN002, every type its language cannot exp
 - closed generic types in slots that neither the assembly nor a slot names: their ids are unknown ([Closed Generic Types in Slots](#closed-generic-types-in-slots));
 - a generic type with `trackReferences`;
 - members written by a formatter outside Nino.Core: a [custom formatter](/en/docs/v4/custom-formatters), the immutable collections of `Nino.Immutable`, and Unity's `AnimationCurve`, `Gradient` and `RectOffset`, whose bytes the layouts do not describe;
-- the `Vector64<T>` to `Vector512<T>` fields of raw structs ([Fields of Raw Structs](#raw-struct-fields)), and layouts from an older build that hold a `System.Numerics.Vector<T>`.
+- the `Vector64<T>` to `Vector512<T>` fields of raw structs ([Fields of Raw Structs](#raw-struct-fields)), and layouts from an older build that hold a `System.Numerics.Vector<T>`;
+- a generic C# union, and a union with a case that is or holds a tuple or a `KeyValuePair` ([C# Unions](#unions)).
 
 [Serialization callbacks](/en/docs/v4/defining-types#callbacks) (`[NinoOnSerializing]` and the three others) change no byte, so the generated code is the same with or without them, and it calls nothing of the kind: work a callback does in .NET (checking values, filling a cache) is done in TypeScript, Go or Rust by the code that calls the codec.
 

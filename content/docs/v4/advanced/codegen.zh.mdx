@@ -252,20 +252,24 @@ xxd -p frame.bin | nino-gen inspect --assembly publish/Shop.Contracts.dll --type
 | 密封类 | `X \| null` | `*X` | `Option<X>` |
 | 非密封类、抽象类、接口 | `X \| null`，可以是任何生成的子类型 | 接口，由每个允许的类型实现 | `Option<XRef>`，由允许的类型组成的枚举 |
 | `object` | `unknown` | `nino.Typed` | `Option<AnyObject>` |
+| C# `union` | 带 `case` 和 `value` 的类 | 接口，每个分支一个实现它的结构体 | 枚举，每个分支一个变体，外加 `Empty` |
 | 枚举 | `as const` 对象和它的值的类型 | 带常量的具名整数类型 | 整数，外加一个列出具名值的单元结构体 |
 | `string` | `string \| null` | `*string` | `Option<String>` |
 | `T[]`、`List<T>` | `T[] \| null` | `[]T` | `Option<Vec<T>>` |
 | `HashSet<string>` | `Set<string \| null> \| null` | `[]*string` | `Option<IndexSet<Option<String>>>` |
 | `Dictionary<K, V>` | `Map<K, V> \| null` | `[]nino.Entry[K, V]` | `Option<IndexMap<K, V>>` |
 | `decimal`、`Guid`、`DateTime` | `string`、`string`、`Date` | `nino.Decimal`、`nino.Guid`、`nino.DateTime` | `nino::Decimal`、`nino::Guid`、`nino::DateTime` |
+| `int?`，单个值 | `number \| null` | `*int32` | `Option<i32>` |
+| `int?[]`、`List<int?>`、`HashSet<int?>` | `NullableSlot<number>[] \| null`、`Set<NullableSlot<number>> \| null` | `[]nino.NullableSlot[int32]` | `Option<Vec<nino::NullableSlot<i32>>>`、`Option<IndexSet<nino::NullableSlot<i32>>>` |
+| `NinoNullable<int>` | `NinoNullable<number>` | `nino.NinoNullable[int32]` | `nino::NinoNullable<i32>` |
 
-Set 中的字符串在每种语言里都可以是 null，与 .NET 一致（`HashSet<string>` 可以包含一个 null）；字典的键则不会是 null，因为 .NET 遇到 null 键会抛出异常。
+Set 中的字符串在每种语言里都可以是 null，与 .NET 一致（`HashSet<string>` 可以包含一个 null）；字典的键则不会是 null，因为 .NET 遇到 null 键会抛出异常。可空的数字有三种编码（单个 `T?`、集合里 `T?` 的固定大小槽位、`NinoNullable<T>`），每种都有自己的类型，所以看生成的类型就知道成员是哪种字节：见[可空值](/zh/docs/v4/nullable-values#other-languages)。
 
 完整的类型表，以及怎样构造 .NET 的值：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。
 
 ## 原始结构体的字段 [#raw-struct-fields]
 
-原始结构体（按一整块写出的非托管结构体，见[原始值](/zh/docs/v4/wire-format#raw-values)）生成的类型由它的字段组成，每个字段放在规范布局里的偏移处，填充字节为 0。在 .NET 里大小或布局随主机变化的字段（`nint`、`nuint`、指针、`Int128`、`DateTimeOffset`、原始类型 `T` 的 `T?`）按二进制格式规定的固定字节写出，在每种语言里也有固定的类型：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。TypeScript 表达不了 `DateTimeOffset` 字段，含它的结构体会跳过（[TypeScript 不支持的内容](/zh/docs/v4/advanced/typescript#not-supported)）。`Int128?` 数组的步长是 32 字节（存在字节、15 个 0、值）。`Vector64<T>` 到 `Vector512<T>` 字段在每种语言里都报 NINOGEN002；旧版本构建的布局里如果有 `System.Numerics.Vector<T>`，也一样：`Vector<T>` [不能序列化](/zh/docs/v4/struct-layouts#vector-t)。
+原始结构体（按一整块写出的非托管结构体，见[原始值](/zh/docs/v4/wire-format#raw-values)）生成的类型由它的字段组成，每个字段放在规范布局里的偏移处，填充字节为 0。在 .NET 里大小或布局随主机变化的字段（`nint`、`nuint`、指针、`Int128`、`DateTimeOffset`、原始类型 `T` 的 `T?`，也就是 `T?` 在集合里的那种槽位）按二进制格式规定的固定字节写出，在每种语言里也有固定的类型：[TypeScript](/zh/docs/v4/advanced/typescript#type-mapping)、[Go](/zh/docs/v4/advanced/go#values)、[Rust](/zh/docs/v4/advanced/rust#types)。TypeScript 表达不了 `DateTimeOffset` 字段，含它的结构体会跳过（[TypeScript 不支持的内容](/zh/docs/v4/advanced/typescript#not-supported)）。`Int128?` 数组的步长是 32 字节（存在字节、15 个 0、值）。`Vector64<T>` 到 `Vector512<T>` 字段在每种语言里都报 NINOGEN002；旧版本构建的布局里如果有 `System.Numerics.Vector<T>`，也一样：`Vector<T>` [不能序列化](/zh/docs/v4/struct-layouts#vector-t)。
 
 ## 泛型类型 [#generics]
 
@@ -317,6 +321,58 @@ public sealed class Box<T>
 
 派生自集合的 `[NinoType]` 类（带有自己成员的 `class Bag : List<int>`）先按集合本身的方式写出元素，再写出成员。每种语言都给这个类型加一个元素字段，放在成员之前：TypeScript 中是 `$elements`（数组、`Map` 或 `Set`），Go 中是 `Elements`（标签 `nino:"-"`，JSON 中为 `$elements`），Rust 中是 `elements`（serde 中为 `$elements`）。元素永远不是 null，因为集合就是这个对象本身：数据里把它们标成 null 的，一律拒绝，和 .NET 一样。
 
+## C# union [#unions]
+
+[C# union](/zh/docs/v4/polymorphism#csharp-unions) 包着一个值，是哪个分支取决于这个值的运行时类型。每种语言都用自己的和类型（sum type）来表示，空 union 是 null（Go 的 nil、Rust 的 `Empty`）；nino-gen 从 union 的构造函数取得分支，先写分支类型的类型 ID，再按 .NET 为这个分支类型找到的格式化器写值。
+
+```csharp nocheck title="Unions.cs"
+using System.Collections.Generic;
+using Nino.Core;
+
+[NinoType]
+public union Reply(Order, string, int);              // 每个分支都能靠值本身区分
+
+[NinoType]
+public union Measure(int, double, List<int>, List<string>); // 两个都是数字，两个都是列表
+```
+
+**TypeScript** 本身就有类型联合，所以只要写入时能在运行时靠值区分出每个分支，union 就直接生成成类型联合：每个分支的判断方式都得不一样（数字、字符串、布尔值或 bigint 的 `typeof`，`Array.isArray`，`Map`、`Set`、`Date`、类型化数组或生成类的 `instanceof`；子类先于基类判断）。`Reply` 就是 `Order | string | number`，读出来是值本身，写入时判断值的类型。如果两个分支的判断方式相同（`int` 和 `double` 都是 number，两个列表都是数组，`char` 和 `string` 都是字符串），或者某个分支没法判断（接口、`object`），就给分支加上标签：`Measure` 是 `{ case: "Int32", value: number } | { case: "Double", value: number } | ...`，每个分支有一个构造函数，`switch (m.case)` 能正确收窄类型。union 的 `T?` 在 TypeScript 里没有对应形式（null 既表示没有值，又表示空 union）。
+
+**Go** 没有和类型，惯用写法是一个封闭接口加上每个分支一个类型。分支值本身就是生成的结构体或类（`*Order`）时，这个类型直接就是分支，只加上 union 的标记方法，值不再包一层（同一个类型可以是多个 union 的分支）；其他分支是一个装着 `Value` 的结构体。**Rust** 有枚举：按值存放，`Empty` 是默认值。
+
+```ts tab="TypeScript" tab-group="codegen-lang"
+const reply: Reply | null = 42;                     // number：Int32 分支
+if (typeof reply === "string") showError(reply);
+const measure = Measure.Double(2.5);                // { case: "Double", value: 2.5 }
+switch (measure.case) {
+  case "Int32": useInt(measure.value); break;
+  case "ListString": useNames(measure.value); break;
+}
+```
+
+```go tab="Go" tab-group="codegen-lang"
+var reply protocol.Reply = protocol.ReplyInt32{Value: 42} // nil 就是空 union
+switch r := reply.(type) {
+case *protocol.Order: // 生成的类自己就是分支
+	showOrder(r)
+case protocol.ReplyString:
+	showError(*r.Value)
+}
+```
+
+```rust tab="Rust" tab-group="codegen-lang"
+let reply = Reply::Int32(42); // Reply::Empty（默认值）就是空 union
+match &reply {
+    Reply::Order(Some(order)) => show_order(order),
+    Reply::String(Some(text)) => show_error(text),
+    _ => {}
+}
+```
+
+数据里不会出现 null 的分支值：分支值为 null 时写成空 union，和 .NET 一样；数据里带着分支 ID 却是 null 值的，以及 ID 不属于任何分支的，都会被拒绝。读写 union 只有一次按分支 ID 的 `switch`，加上一串类型判断、一个类型 switch 或一个 `match`，除了值本身不额外分配（带标签的 TypeScript 分支是一个小对象）。在 `object` 槽位里，union 先写自己的类型 ID；TypeScript 和 Go 在这里用一个专门的类 `ReplyObject` 来装它，这样空 union 和 null 对象就能区分开。
+
+每种语言都会跳过下面两种并给出 NINOGEN002：泛型 union（`union Option<T>(T, None)`），它的分支 ID 取决于类型实参；以及分支是元组或 `KeyValuePair`（或者包含它们）的 union，布局里没有公开这种分支的编码。
+
 ## 不可信数据 [#untrusted-data]
 
 TypeScript、Go 和 Rust 的读取器与 .NET 读取器一样，按不可信输入处理数据（[不可信数据](/zh/docs/v4/security)）：数据如果不是所读类型的有效值，就以这个运行时唯一的错误类型报错，不会抛出其他异常或 panic，也不会越界读取、无限制地递归，或者分配比数据本身还多的内存。
@@ -336,7 +392,8 @@ nino-gen 会跳过目标语言无法表达的类型以及包含它们的类型�
 - 槽位中，程序集和槽位都没有提到的封闭泛型类型：它们的 ID 是未知的（[槽位中的封闭泛型类型](#closed-generic-types-in-slots)）；
 - 带 `trackReferences` 的泛型类型；
 - 由 Nino.Core 以外的格式化器写出的成员：[自定义格式化器](/zh/docs/v4/custom-formatters)、`Nino.Immutable` 的不可变集合，以及 Unity 的 `AnimationCurve`、`Gradient` 和 `RectOffset`，布局里没有描述它们的字节；
-- 原始结构体的 `Vector64<T>` 到 `Vector512<T>` 字段（[原始结构体的字段](#raw-struct-fields)），以及旧版本构建的、含 `System.Numerics.Vector<T>` 的布局。
+- 原始结构体的 `Vector64<T>` 到 `Vector512<T>` 字段（[原始结构体的字段](#raw-struct-fields)），以及旧版本构建的、含 `System.Numerics.Vector<T>` 的布局；
+- 泛型 C# union，以及分支是元组或 `KeyValuePair`（或者包含它们）的 union（[C# union](#unions)）。
 
 [序列化回调](/zh/docs/v4/defining-types#callbacks)（`[NinoOnSerializing]` 等四个特性）不改变任何字节，有没有它们，生成的代码都一样，而且生成的代码不会调用这类方法：回调在 .NET 里做的事（检查值、填缓存），在 TypeScript、Go 或 Rust 里由调用编解码器的代码来做。
 

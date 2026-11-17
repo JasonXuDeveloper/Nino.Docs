@@ -39,7 +39,7 @@ icon: ListChecks
 - **在保存的数据前面加上你自己的文件头**：一个魔数和一个格式版本号，让以后的版本知道自己读的是什么。参见[添加文件头](/zh/docs/v4/advanced/persistence#add-a-file-header)。
 - **改名时使用 `[NinoFormerName]`。** 用在类型上，它保留已有数据使用的类型 ID；用在键控类型的成员上，它继续读取旧名称。参见[重命名](/zh/docs/v4/evolving-data#renaming)。
 - **维护一份布局基线。** 类型要存盘或发出去的项目，提交一个 [`NinoLayouts.cs`](/zh/docs/v4/evolving-data#layout-baseline)：改出会破坏已有数据的改动时，分析器在写代码时就会指出来，`nino-gen layouts --check` 在 CI 里做同样的检查。测试里也留几份旧数据（[测试旧文件](/zh/docs/v4/advanced/persistence#test-old-files)），哪份读不了，就用 [`nino-gen inspect`](/zh/docs/v4/advanced/codegen#inspect) 看看。
-- **谨慎修改字符串编码和集合的声明。** 增加或去掉 `[NinoUtf8]`，或者把可空元素的列表在数组、`List<T?>` 与接口之间改来改去，都会改变字节。参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)和[集合类型](/zh/docs/v4/types#collection-types)。
+- **谨慎修改字符串编码和集合的声明。** 增加或去掉 `[NinoUtf8]`，或者把成员在 `T?` 和 `NinoNullable<T>` 之间改来改去，都会改变字节。参见[字符串编码](/zh/docs/v4/defining-types#string-encoding)和[两种格式](/zh/docs/v4/nullable-values#two-formats)。
 - **两端分别升级时，只用容错的格式。** 客户端和服务器分开发布时，消息要用 `NinoFormat.VersionTolerant` 或 `NinoFormat.Keyed`。参见[网络](/zh/docs/v4/advanced/networking)。
 
 ## 不可信的输入 [#untrusted-input]
