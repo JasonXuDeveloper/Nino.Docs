@@ -73,7 +73,10 @@ import {
   sourceNote,
   type TableCase,
   type UnityCase,
+  type UnityGroup,
   unity,
+  unityGroupName,
+  unityGroupOrder,
   unitySource,
   type Versus,
   v3VersusOf,
@@ -754,6 +757,22 @@ function unityNoData(zh: boolean) {
   );
 }
 
+/** A Unity version's rows by group (unityGroupOrder), each in the report's order */
+function unityGroupsOf(rows: UnityCase[]): [UnityGroup, UnityCase[]][] {
+  return unityGroupOrder
+    .map((group): [UnityGroup, UnityCase[]] => [
+      group,
+      rows.filter((row) => row.group === group),
+    ])
+    .filter(([, of]) => of.length > 0);
+}
+
+/** A Unity case as the .NET pages name it */
+function unityLabel(row: UnityCase, zh: boolean) {
+  const label = zh ? row.labelZh : row.label;
+  return row.code ? <code>{label}</code> : label;
+}
+
 /**
  * The Unity benchmark (src/data/bench-unity.json, synced from the newest v4
  * release): one table per Unity version, times without and with the Burst
@@ -792,22 +811,29 @@ export function UnityTables({
                 </tr>
               </thead>
               <tbody>
-                {version.rows.map((row) => (
-                  <tr key={`${row.case}:${row.operation}`}>
-                    <td>
-                      <code>{row.case}</code>
-                    </td>
-                    <td>{unityOperation(row.operation, zh)}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">
-                      {row.without.text}
-                    </td>
-                    <td className="text-right tabular-nums whitespace-nowrap">
-                      {row.with.text}
-                    </td>
-                    <td className="text-right tabular-nums">
-                      {speedupCell(row, zh)}
-                    </td>
-                  </tr>
+                {unityGroupsOf(version.rows).map(([group, rows], _at, all) => (
+                  <Fragment key={group}>
+                    {all.length > 1 && (
+                      <tr>
+                        <th colSpan={5}>{unityGroupName(group, zh)}</th>
+                      </tr>
+                    )}
+                    {rows.map((row) => (
+                      <tr key={`${row.case}:${row.operation}`}>
+                        <td>{unityLabel(row, zh)}</td>
+                        <td>{unityOperation(row.operation, zh)}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">
+                          {row.without.text}
+                        </td>
+                        <td className="text-right tabular-nums whitespace-nowrap">
+                          {row.with.text}
+                        </td>
+                        <td className="text-right tabular-nums">
+                          {speedupCell(row, zh)}
+                        </td>
+                      </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -835,15 +861,29 @@ export function UnityHighlights({
   if (unity.length === 0) return null;
   // The Markdown copies link absolutely, as src/lib/markdown.tsx does for MDX links.
   const page = `${markdown ? siteUrl : ''}/${zh ? 'zh' : 'en'}/docs/v4/benchmarks-unity`;
-  const keys: { case: string; operation: string }[] = [];
+  // The cases where Burst changes the time in some version (beyond 5%, both
+  // ways), in the tables' order: the .NET suite's cases are many, and the
+  // kernels reach only some (strings, raw arrays); the rest are on the page.
+  const keys: UnityCase[] = [];
   const seen = new Set<string>();
+  const differs = (c: string, operation: string) =>
+    unity.some((version) =>
+      version.rows.some(
+        (r) =>
+          r.case === c &&
+          r.operation === operation &&
+          (r.speedup !== undefined || r.tooFast),
+      ),
+    );
   for (const version of unity)
-    for (const row of version.rows) {
-      const key = `${row.case}:${row.operation}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      keys.push({ case: row.case, operation: row.operation });
-    }
+    for (const [, rows] of unityGroupsOf(version.rows))
+      for (const row of rows) {
+        const key = `${row.case}:${row.operation}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (differs(row.case, row.operation)) keys.push(row);
+      }
+  const left = seen.size - keys.length;
   return (
     <>
       <div className="relative overflow-auto prose-no-margin my-6">
@@ -864,9 +904,7 @@ export function UnityHighlights({
           <tbody>
             {keys.map((key) => (
               <tr key={`${key.case}:${key.operation}`}>
-                <td>
-                  <code>{key.case}</code>
-                </td>
+                <td>{unityLabel(key, zh)}</td>
                 <td>{unityOperation(key.operation, zh)}</td>
                 {unity.map((version) => {
                   const row = version.rows.find(
@@ -886,13 +924,16 @@ export function UnityHighlights({
       <p className="text-sm text-fd-muted-foreground">
         {zh ? (
           <>
-            不用 Burst 的时间除以使用 Burst 的时间（相差 5%
-            以内为持平）。两边的时间见
+            不用 Burst 的时间除以使用 Burst 的时间（相差 5% 以内为持平）。
+            {left > 0 && `其余 ${left} 项用 Burst 前后持平，未列出。`}
+            两边的时间见
             <a href={page}>基准测试：Unity 与 Burst</a>。
           </>
         ) : (
           <>
             Time without Burst divided by time with it (within 5% is on par).
+            {left > 0 &&
+              ` The other ${left} cases and operations are on par and not listed.`}{' '}
             For both times, see <a href={page}>Benchmarks: Unity and Burst</a>.
           </>
         )}

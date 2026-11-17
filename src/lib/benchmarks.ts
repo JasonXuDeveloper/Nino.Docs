@@ -1991,6 +1991,11 @@ interface UnityFile {
 
 export interface UnityCase {
   case: string;
+  /** Its group (unityCaseOf), and its name as the .NET pages show it */
+  group: UnityGroup;
+  label: string;
+  labelZh: string;
+  code: boolean;
   /** As the report names it: "Serialize", "Deserialize" */
   operation: string;
   without: Measure;
@@ -2007,6 +2012,58 @@ export interface UnityCase {
 export interface UnityVersionTable {
   unity: string;
   rows: UnityCase[];
+}
+
+/**
+ * A Unity case's group: since Nino #340 the player times the .NET suite's
+ * cases, under their names, grouped as dotnetGroups groups them; releases
+ * before it timed cases of the Unity benchmark's own, grouped by name.
+ */
+type OwnGroup = 'arrays' | 'strings' | 'classes';
+export type UnityGroup = DotnetGroupId | OwnGroup;
+
+const ownGroupNames: Record<OwnGroup, { en: string; zh: string }> = {
+  arrays: { en: 'Struct arrays', zh: '结构体数组' },
+  strings: { en: 'Strings', zh: '字符串' },
+  classes: { en: 'Classes', zh: '类' },
+};
+
+function unityCaseOf(name: string): {
+  group: UnityGroup;
+  label: string;
+  labelZh: string;
+  code: boolean;
+} {
+  for (const g of dotnetGroups) {
+    const info = [...g.cases.serialize, ...g.cases.deserialize].find(
+      (c) => c.key === name,
+    );
+    if (info)
+      return {
+        group: g.id,
+        label: info.name,
+        labelZh: info.zh ?? info.name,
+        code: info.code ?? false,
+      };
+  }
+  const own: OwnGroup = /string/i.test(name)
+    ? 'strings'
+    : /SimpleClass/.test(name)
+      ? 'classes'
+      : 'arrays';
+  return { group: own, label: name, labelZh: name, code: true };
+}
+
+/** The groups in the order the charts and tables show them */
+export const unityGroupOrder: UnityGroup[] = [
+  ...dotnetGroups.map((g) => g.id),
+  ...(Object.keys(ownGroupNames) as OwnGroup[]),
+];
+
+export function unityGroupName(group: UnityGroup, zh: boolean): string {
+  const dotnet = dotnetGroups.find((g) => g.id === group);
+  if (dotnet) return zh ? dotnet.zh : dotnet.name;
+  return ownGroupNames[group as OwnGroup][zh ? 'zh' : 'en'];
 }
 
 const unityFile = benchUnity as unknown as UnityFile;
@@ -2030,6 +2087,7 @@ export const unity: UnityVersionTable[] = unityFile.versions.map((version) => ({
     const vs = versus(measure(row.withNs), measure(row.withoutNs));
     return {
       case: row.case,
+      ...unityCaseOf(row.case),
       operation: row.operation,
       without: measure(row.withoutNs),
       with: measure(row.withNs),

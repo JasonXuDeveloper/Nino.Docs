@@ -47,7 +47,10 @@ import {
   runtimes,
   sourceNote,
   type TableCase,
+  type UnityGroup,
   unity,
+  unityGroupName,
+  unityGroupOrder,
   type Versus,
   v3SourceNote,
   v3VersusOf,
@@ -193,27 +196,17 @@ export function RuntimesChart({
   );
 }
 
-type UnityGroup = 'arrays' | 'strings' | 'classes';
-
-const groupNames: Record<UnityGroup, { en: string; zh: string }> = {
-  arrays: { en: 'Struct arrays', zh: '结构体数组' },
-  strings: { en: 'Strings', zh: '字符串' },
-  classes: { en: 'Classes', zh: '类' },
-};
-
-function unityGroup(name: string): UnityGroup {
-  if (/string/i.test(name)) return 'strings';
-  if (/SimpleClass/.test(name)) return 'classes';
-  return 'arrays';
-}
-
 export function UnityChart({ lang = 'en' }: { lang?: Locale }) {
   const zh = lang === 'zh';
   const [version, setVersion] = useState(unity.at(-1)?.unity ?? '');
   const [operation, setOperation] = useState('Serialize');
-  const [group, setGroup] = useState<UnityGroup>('arrays');
+  const [chosen, setGroup] = useState<UnityGroup | null>(null);
   const table = unity.find((v) => v.unity === version);
   if (!table) return null;
+  // The groups this version's rows have, in dotnetGroups' order.
+  const present = new Set(table.rows.map((row) => row.group));
+  const groups = unityGroupOrder.filter((g) => present.has(g));
+  const group = chosen && present.has(chosen) ? chosen : groups[0];
   const without = zh ? '不用 Burst' : 'Without Burst';
   const withBurst = zh ? '使用 Burst' : 'With Burst';
   const series: ChartSeries[] = [
@@ -224,7 +217,7 @@ export function UnityChart({ lang = 'en' }: { lang?: Locale }) {
     .filter(
       (row) =>
         row.operation.toLowerCase() === operation.toLowerCase() &&
-        unityGroup(row.case) === group,
+        row.group === group,
     )
     .map((row) => {
       const share = row.with.ns / row.without.ns;
@@ -246,8 +239,8 @@ export function UnityChart({ lang = 'en' }: { lang?: Locale }) {
                 tone: 'loss' as const,
               };
       return {
-        label: row.case,
-        code: true,
+        label: zh ? row.labelZh : row.label,
+        code: row.code,
         values: { without: 1, with: share },
         text: { without: row.without.text, with: row.with.text },
         badge,
@@ -274,17 +267,19 @@ export function UnityChart({ lang = 'en' }: { lang?: Locale }) {
           value={operation}
           onChange={setOperation}
         />
-        <Segmented
-          options={(Object.keys(groupNames) as UnityGroup[]).map((g) => ({
-            value: g,
-            label: groupNames[g][zh ? 'zh' : 'en'],
-          }))}
-          value={group}
-          onChange={setGroup}
-        />
+        {groups.length > 1 && (
+          <Segmented
+            options={groups.map((g) => ({
+              value: g,
+              label: unityGroupName(g, zh),
+            }))}
+            value={group}
+            onChange={setGroup}
+          />
+        )}
       </div>
       <BarChart
-        title={`Unity ${version}: ${measureNames[operation.toLowerCase() as Measure][zh ? 'zh' : 'en']}${zh ? '，' : ', '}${groupNames[group][zh ? 'zh' : 'en']}`}
+        title={`Unity ${version}: ${measureNames[operation.toLowerCase() as Measure][zh ? 'zh' : 'en']}${zh ? '，' : ', '}${unityGroupName(group, zh)}`}
         subtitle={
           zh
             ? '使用 Burst 内核后的耗时占不用 Burst 时的比例：灰条是 100%，蓝条越短，Burst 省下的时间越多。IL2CPP 播放器，GitHub 托管的 Linux x64 runner。'
